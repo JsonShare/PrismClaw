@@ -1,0 +1,95 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+frontend/build/
+*.spec
+.eggs/
+*.egg
+.venv/
+venv/
+.env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+.vscode/
+.opencode/
+openspec/
+DailyWork/
+.sisyphus/
+.superpowers/
+
+frontend/.vite/
+node_modules/
+logs/
+
+.worktrees/
+
+# Taro 移动端构建产物
+frontend-app/dist/
+frontend-app/.swc/
+
+# OS / IDE junk
+.DS_Store
+Thumbs.db
+.idea/
+
+.dbg/
+benchmarks/
+
+# 真实配置文件不入库，只提交脱敏模板（*.example.yaml）
+# 首次部署：cp backend/configs/*.example.yaml 到同名 *.yaml 后填写实际值
+backend/configs/*.yaml
+!backend/configs/*.example.yaml
+deploy/configs/*.yaml
+!deploy/configs/*.example.yaml
+deploy/.env
+mcp_servers/web-search-mcp/.env
+
+# 含凭据的域配置
+backend/src/subpackages/science/configs/science.json
+frontend/.vite/deps/_metadata.json
+frontend/.vite/deps/package.json
+.tmp/
+
+# 真实医疗报告与解析结果（含患者隐私，禁止提交）
+backend/tests/**/*.docx
+backend/tests/**/*.pdf
+backend/tests/proton_direct_results.json
+backend/tests/proton_reports_e2e_results.json
+
+# PrismClaw runtime mutable state (TODO plugin data, etc.)
+backend/.prismclaw/todo/
+backend/.prismclaw/cache/
+
+# Skill runtime artifacts (docx/pdf project dirs, etc.)
+backend/cache/
+backend/.prismclaw/skills/*/.prismclaw/
+
+.dumate/
+.trae/
+.workbuddy/
+.trae-html-share-packages/
+.vite/
+
+# 构建时自动生成的域映射（每次构建时由 domains-registry.mjs 生成）
+frontend/src/domains/_lazy_map.generated.ts
+backend/src/subpackages/*/_manifest_generated.py
+backend/src/prismclaw_*/_manifest_generated.py
+scripts/compile/out/.domains.env
+
+# 医疗域上传原件（域自有存储，非工作区）
+var/
+
+# science 域本地运行态：知网登录 cookie / HTTP 会话副本（含登录凭证，禁止提交）
+.scholar-kit/
+
+# 本地调试产物
+.screenshots/
+frontend/test-results/
+*.log
+.bash_state
+.extracted/

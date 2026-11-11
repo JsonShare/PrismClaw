@@ -1,0 +1,56 @@
+# This file is a Chinese translation of the original by Anthropic PBC.
+# Original: https://github.com/anthropics/legal-chineselaw
+# Licensed under Apache License 2.0
+
+# 诊所截止日期账本 — legal-clinic（中国法律诊所适配版）
+#
+# 由 /legal-clinic:deadlines --add 填充（或在 /client-intake、
+# /draft、/status 等 skill 发现截止日期时自动提取）。由
+# /legal-clinic:deadlines --report 读取，用于跨案件汇总。
+#
+# 诊所工作中遗漏截止日期将使督导律师承担渎职风险。
+# 请将此文件视为操作记录。
+#
+# ──────────────────────────────────────────────────────────────────────────
+# 中国法律期限参考（《民事诉讼法》《劳动争议调解仲裁法》《法律援助法》）
+# ──────────────────────────────────────────────────────────────────────────
+# 民事诉讼（《民事诉讼法》）：
+#   答辩期：收到起诉状副本后 15 日（第128条）
+#   民事上诉期：判决书送达后 15 日（第180条）
+#   刑事上诉期：判决书送达后 10 日
+#   申请再审：裁判生效后 6 个月内（第212条）
+#
+# 劳动争议（《劳动争议调解仲裁法》）：
+#   申请仲裁时效：1 年（第27条，知道或应当知道权利受到侵害之日起）
+#   特殊情形（追索劳动报酬）：劳动关系存续期间不受时效限制
+#   仲裁裁决书：自收到之日起 15 日内可向法院起诉（第50条）
+#
+# 法律援助（《法律援助法》）：
+#   法律援助机构审查申请：7 个工作日内（第31条）
+#   律师接受指派后：应及时与受援人联系（第36条）
+#
+# ──────────────────────────────────────────────────────────────────────────
+# Schema（数据结构）
+# ──────────────────────────────────────────────────────────────────────────
+# - id:             string（slug：[case]-[简短描述]-[YYYY-MM]）
+#   case_id:        string — 引用接案系统中的案件/当事人
+#   case_name:      string — 便于阅读的案件名称
+#   practice_area:  劳动争议 | 刑事辩护 | 婚姻家庭 | 消费者维权 | 土地房屋 | 行政诉讼 | 其他
+#   type:           filing | hearing | statute-of-limitations | response | notice | arbitration | other
+#                   （filing=提交材料; hearing=开庭; statute-of-limitations=诉讼时效/仲裁时效;
+#                     response=答辩期; notice=通知; arbitration=仲裁程序期限; other=其他）
+#   description:    string — 一行说明应交付什么
+#   due_date:       YYYY-MM-DD
+#   time:           HH:MM（可选；适用于有特定截止时间的听证或提交截止日期）
+#   timezone:       string（可选；默认 Asia/Shanghai）
+#   source:         string — 截止日期来源（法院通知、仲裁委通知、法规规定、当事人文件等）
+#   owner_student:  string — 负责此截止日期的学生
+#   owner_attorney: string — 督导律师（通常来自 PRISMCLAW.md）
+#   status:         upcoming | today | overdue | completed | closed
+#   completed_date: YYYY-MM-DD | null
+#   notes:          string | null
+#   created:        YYYY-MM-DD
+#   created_by:     string — 录入的学生
+# ──────────────────────────────────────────────────────────────────────────
+
+deadlines: []

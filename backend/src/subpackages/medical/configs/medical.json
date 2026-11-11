@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "_comment": [
+    "医疗域配置。",
+    "本文件刻意【不】进入核心的 _MODULE_CONFIG_FILES（backend/src/prismclaw/infra/settings/_helpers.py）——",
+    "由 subpackages/medical 自己读取，因此新增域配置依然是零核心改动。"
+  ]
+}

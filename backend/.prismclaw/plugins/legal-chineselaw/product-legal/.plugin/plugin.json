@@ -1,0 +1,11 @@
+{
+  "name": "product-legal",
+  "version": "1.0.0",
+  "description": "根据你的风险校准审查产品发布，在几分钟内回答'这是个问题吗？'问题，检查营销文案中需要证实的声明，并在有人询问之前标记即将需要法律关注的发布。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

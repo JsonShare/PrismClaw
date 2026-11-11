@@ -1,0 +1,29 @@
+# MCP 服务器注册表。
+# 归属顶层键：mcp
+#
+# 兼容 Claude Desktop 风格的 {"mcpServers": {...}} 写法：
+# 加载器会自动归一化为 mcp.servers，因此两种写法都能用。
+#
+# 使用方式：复制为同目录下的 mcp.yaml 后按需增删服务器。
+#   cp backend/configs/mcp.example.yaml backend/configs/mcp.yaml
+
+mcp:
+  enabled: true
+  servers:
+    web-search-mcp:
+      command: "uv"
+      args:
+        - "run"
+        - "--directory"
+        - "mcp_servers/web-search-mcp"
+        - "python"
+        - "-m"
+        - "web_search_mcp"
+      # 信任 MCP 工具自带的注解（readOnly/destructive 等）
+      trust_annotations: true
+      # 是否延迟加载：true 时不常驻 tools schema，走 tool_search 发现
+      deferred: false
+      connect_timeout_seconds: 30.0
+      call_timeout_seconds: 60.0
+      sandbox:
+        enabled: false

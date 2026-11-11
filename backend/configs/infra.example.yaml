@@ -1,0 +1,17 @@
+# 外部依赖基础设施：Redis（会话/事件流）与 PostgreSQL（持久化）。
+# 归属顶层键：redis / storage
+#
+# 使用方式：复制为同目录下的 infra.yaml 后填写实际连接信息。
+#   cp backend/configs/infra.example.yaml backend/configs/infra.yaml
+
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: ""            # 无密码时留空；有密码请显式填写
+  database: 15            # 独立 DB index，避免与其它应用共用造成键冲突
+  # 键前缀必须加引号：YAML 中未加引号的 "prismClaw:" 可能被误解析
+  key_prefix: "prismClaw:"
+
+storage:
+  # asyncpg 驱动；格式：postgresql+asyncpg://<user>:<password>@<host>:<port>/<db>
+  postgres_dsn: "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/prismclaw"

@@ -1,0 +1,12 @@
+{
+  "name": "medical-clinical",
+  "version": "1.0.0",
+  "description": "临床诊疗工作台：患者病史摘要、症状分诊、生命体征、用药与过敏审查、检验解读，以及病例结构化复盘、病历字段抽取、治疗计划编写、临床试验检索四类专项技能。所有输出均为草稿，须经执业医师审核后方可使用。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

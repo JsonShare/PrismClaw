@@ -1,0 +1,234 @@
+# PrismClaw single-node Docker deployment.
+#
+# All-in-one stack: PostgreSQL (VectorChord Suite) + Redis + PrismClaw app
+# + Runtime-Agent (SafetyGate 容器化集成).
+# Containers / volumes / network are grouped under the "prismclaw" project name.
+#
+# Usage:
+#   docker compose up -d                # start
+#   docker compose down                 # stop
+#   docker compose down -v              # stop + wipe data
+#   docker compose logs -f prismclaw    # tail app logs
+#
+# The app reads backend/configs/server.yaml (mounted read-only). The 127.0.0.1
+# addresses in that file are overridden via env vars below so the container
+# connects to the sibling `postgres` / `redis` services by name.
+#
+# SafetyGate + Runtime-Agent:
+#   Each workspace gets its own Runtime-Agent container with SafetyGate
+#   enforcement. The main app communicates via WorkspaceRuntimeClient (HMAC).
+#   Workspace kind determines SandboxTier and resource limits.
+
+name: prismclaw
+
+services:
+  postgres:
+    image: tensorchord/vchord-suite:pg17-latest
+    # NOTE: pin to an immutable digest in production, e.g.
+    #   tensorchord/vchord-suite@sha256:<digest>
+    # `latest` above is the vendor's controlled release tag; lock it before prod.
+    environment:
+      POSTGRES_DB: prismclaw
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../deploy/sql/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "prismclaw"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --timeout 0 --tcp-keepalive 30
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512m
+    restart: unless-stopped
+
+  # ── Runtime-Agent: default workspace (SafetyGate STANDARD tier) ────
+  runtime-agent-default:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.runtime-agent
+      args:
+        TEMPLATE_ID: default-v1
+    image: prismclaw/runtime-agent:default-v1
+    environment:
+      PRISMCLAW_WORKSPACE_ID: ws-default
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:-dev-secret}
+      PRISMCLAW_RUNTIME_HMAC_KEY_VERSION: "1"
+      PRISMCLAW_ALLOW_NET: "true"
+    volumes:
+      - ws-default-data:/workspace
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    restart: unless-stopped
+
+  # ── Runtime-Agent: restricted workspace (SafetyGate STRICT tier) ──
+  runtime-agent-restricted:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.runtime-agent
+      args:
+        TEMPLATE_ID: restricted-v1
+    image: prismclaw/runtime-agent:restricted-v1
+    environment:
+      PRISMCLAW_WORKSPACE_ID: ws-restricted
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:-dev-secret}
+      PRISMCLAW_RUNTIME_HMAC_KEY_VERSION: "1"
+      PRISMCLAW_ALLOW_NET: "false"
+      PRISMCLAW_DENY_PID_NS: "true"
+    volumes:
+      - ws-restricted-data:/workspace
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1g
+    restart: unless-stopped
+
+  # ── web-search-mcp: standalone MCP web search/fetch service ───────
+  # Serves the single `search` tool over streamable-http; not published
+  # to the host — only the prismclaw app reaches it via the compose network.
+  web-search-mcp:
+    build:
+      context: ../mcp_servers/web-search-mcp
+      dockerfile: Dockerfile
+    image: prismclaw/web-search-mcp:latest
+    environment:
+      WSM_TOKEN: ${WEB_SEARCH_MCP_TOKEN:?set WEB_SEARCH_MCP_TOKEN in deploy/.env}
+      WSM_TAVILY_API_KEYS: ${TAVILY_API_KEYS:-}
+      WSM_ANYSEARCH_API_KEY: ${ANYSEARCH_API_KEY:-}
+      WSM_LOG_LEVEL: ${WEB_SEARCH_MCP_LOG_LEVEL:-INFO}
+    expose:
+      - "9002"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512m
+    restart: unless-stopped
+
+  # ── Main app ──────────────────────────────────────────────────────
+  prismclaw:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: prismclaw:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # Override 127.0.0.1 in server.yaml → container service names
+      PRISMCLAW_REDIS_HOST: redis
+      PRISMCLAW_STORAGE_POSTGRES_DSN: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/prismclaw
+      # 首次启动管理员（users 表为空时写入一次；留空则不创建）
+      PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID:-}
+      PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD:-}
+      # JWT 签名密钥：设置后覆盖 server.yaml 中的 jwt_secret
+      PRISMCLAW_WEB_JWT_SECRET: ${PRISMCLAW_WEB_JWT_SECRET:-}
+      # SafetyGate + Runtime-Agent 连接（P10-SEC-04: template_id → agent URL 路由表）
+      PRISMCLAW_RUNTIME_AGENT_URLS: '{"default-v1":"http://runtime-agent-default:9001","restricted-v1":"http://runtime-agent-restricted:9001"}'
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:-dev-secret}
+      # web-search-mcp (streamable-http, token authenticated)
+      WEB_SEARCH_MCP_URL: http://web-search-mcp:9002/mcp
+      WEB_SEARCH_MCP_TOKEN: ${WEB_SEARCH_MCP_TOKEN:?set WEB_SEARCH_MCP_TOKEN in deploy/.env}
+      # P10-OBS-01: structured JSON logs in production containers
+      PRISMCLAW_LOG_FORMAT: json
+      # 容器内不落盘文件，日志统一走 stdout 由 docker logs / 采集端收集
+      PRISMCLAW_LOG_DIR: "off"
+    volumes:
+      - ../backend/configs:/app/backend/configs:ro
+      # Overlay the production MCP config onto the dev-oriented repo default
+      - ./configs/mcp.prod.yaml:/app/backend/configs/mcp.yaml:ro
+      - prismclaw-workspaces:/app/workspaces
+      # Non-root home (container runs as UID 10001, HOME=/app/home)
+      - prismclaw-home:/app/home
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      runtime-agent-default:
+        condition: service_healthy
+      web-search-mcp:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+    restart: unless-stopped
+
+  # ── PG backup (on-demand via profile) ─────────────────────────────
+  # Run with: docker compose --profile backup run --rm backup
+  # Requires PGPASSWORD / POSTGRES_PASSWORD and optional S3_BUCKET.
+  backup:
+    image: postgres:17-alpine
+    profiles: ["backup"]
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: prismclaw
+      BACKUP_DIR: /backups
+      S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    volumes:
+      - ../scripts/pg_backup.sh:/pg_backup.sh:ro
+      - pg-backups:/backups
+    command: ["sh", "-c", "apk add --no-cache aws-cli 2>/dev/null; sh /pg_backup.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  postgres-data:
+  redis-data:
+  prismclaw-workspaces:
+  prismclaw-home:
+  ws-default-data:
+  ws-restricted-data:
+  pg-backups:

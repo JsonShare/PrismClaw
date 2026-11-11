@@ -1,0 +1,22 @@
+"""会话网关 — Takeover 子系统"""
+from prismclaw.app.gateway.takeover.service import (  # noqa: F401
+    auto_takeover_loop,
+    evaluate_takeover_eligibility,
+    spawn_takeover_recovery,
+    consume_takeover_recovery,
+    takeover_reason_policy,
+    takeover_reason_catalog,
+    preferred_takeover_worker,
+    worker_status_map,
+    session_user_id,
+    resolve_takeover_workspace_path,
+    auto_takeover_status_snapshot,
+    latest_persisted_takeover_state,
+    persisted_takeover_history,
+    latest_persisted_takeover_states_for_ownerships,
+    persisted_takeover_histories_for_ownerships,
+    serialize_takeover_task,
+    cluster_takeover_tasks,
+    takeover_task_running,
+    takeover_task_name,
+)

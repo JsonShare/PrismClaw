@@ -1,0 +1,130 @@
+/* ============================================================
+   医疗域 · 患者详情视图样式（PatientDetailView / MedicalSummary）
+   ------------------------------------------------------------
+   来源：原在宿主主题层 web/src/theme/base.css 尾部（394–521 行整段都是本域规则）。
+   那属于「核心承载业务域样式」—— 与「新增域 = 零核心改动」相悖，故整体回迁到域内。
+   回迁未改动任何一条声明（纯搬运），已验证：18 页 × 明暗回归度量逐值一致、像素零差异。
+
+   类名保持原样（无 mw- 前缀），因为 domains.yaml / 文档均未引用它们，
+   改名收益为零而风险为正；待有真实改名需求时再统一。
+
+   本域自己的分割线有两种：**令牌** `--c-divider`（记录页行线，见 medical.css）与
+   本目录的 `.mw-divider`（虚线发丝）。宿主曾另有一份同名「渐变原语」，
+   已随本次回迁删除 —— 同名全局类两份定义时，级联逐条声明生效，
+   会得到「渐变底 + 虚线边」的怪体，且域页与聊天页含义不同。
+   ============================================================ */
+
+/* ══ MedicalSummary 两列布局 ══ */
+.medical-split-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+@container (min-width: 640px) {
+  .medical-split-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+}
+/* ══ PatientDetailView 响应式布局（grid + 拖拽） ══ */
+.patient-detail-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  height: 100%;
+  background: var(--c-surface-2);
+}
+/* 移动端拖拽把手隐藏 */
+.patient-detail-layout > .layout-drag-handle {
+  display: none;
+}
+@media (min-width: 768px) {
+  .patient-detail-layout {
+    /* 左栏(var) | 把手6px | 右栏(var) */
+    grid-template-columns: var(--detail-left, 1fr) 1px var(--detail-right, 800px);
+  }
+  .patient-detail-layout > .layout-drag-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+  }
+  /* 发丝竖线：1px 全高 */
+  .patient-detail-layout > .layout-drag-handle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    left: 0;
+    width: 1px;
+    background: var(--c-border);
+    transition: background-color 0.2s;
+  }
+  .patient-detail-layout > .layout-drag-handle:hover::before {
+    background: color-mix(in srgb, var(--c-accent) 40%, transparent);
+  }
+  .patient-detail-layout > .layout-drag-handle:active::before {
+    background: color-mix(in srgb, var(--c-accent) 60%, transparent);
+  }
+  /* 竖向三点拖拽标记 */
+  .patient-detail-layout > .layout-drag-handle .grip-dots {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    transition: border-color 0.2s, background-color 0.2s;
+  }
+  .patient-detail-layout > .layout-drag-handle:hover .grip-dots {
+    border-color: color-mix(in srgb, var(--c-accent) 40%, transparent);
+    background: color-mix(in srgb, var(--c-accent) 8%, var(--c-surface));
+  }
+  .patient-detail-layout > .layout-drag-handle:active .grip-dots {
+    border-color: color-mix(in srgb, var(--c-accent) 60%, transparent);
+    background: color-mix(in srgb, var(--c-accent) 12%, var(--c-surface));
+  }
+  .patient-detail-layout > .layout-drag-handle .grip-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--c-text-tertiary);
+    transition: background-color 0.2s;
+  }
+  .patient-detail-layout > .layout-drag-handle:hover .grip-dot {
+    background: var(--c-accent);
+  }
+  .patient-detail-layout > .layout-drag-handle:active .grip-dot {
+    background: var(--c-accent);
+  }
+}
+.patient-detail-left {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--c-surface);
+}
+.patient-detail-chat {
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+  border-top: 1px solid var(--c-border);
+  max-height: 50vh;
+}
+.patient-detail-chat .chat-inner {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 768px) {
+  .patient-detail-chat {
+    border-top: none;
+    max-height: none;
+  }
+}

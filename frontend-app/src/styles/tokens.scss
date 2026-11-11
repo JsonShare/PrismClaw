@@ -1,0 +1,186 @@
+// 设计令牌 · CSS 变量（支持运行时主题切换，默认跟随系统）
+// 亮色与 PC 端（frontend/src/theme/light.css）保持同一套色阶；
+// 深色对齐 PC 端 dark.css 的角色语义（面 / 线 / 字 / 动作）。
+
+@mixin dark-tokens {
+  --primary: #3167dc;
+  --primary-pressed: #3d70de;
+  --primary-soft: rgba(49, 103, 220, 0.18);
+
+  /* 页面纯黑；面只做极轻抬升，避免弹层/面板与背景糊成一片 */
+  --bg: #000000;
+  --surface: #0b0d10;
+  --surface-2: #15181d;
+  --surface-3: #1f232a;
+
+  --border: #343c47;
+  --border-strong: #414a57;
+  --hairline: #262d37;
+
+  --text: #e9edf4;
+  --text-sub: #adb1b9;
+  --text-3: #98a2b5;
+
+  --success: #3fb950;
+  --success-soft: rgba(63, 185, 80, 0.14);
+  --warning: #d29922;
+  --danger: #f85149;
+  --danger-soft: rgba(248, 81, 73, 0.16);
+  --info: #6e9bff;
+  --info-soft: rgba(49, 103, 220, 0.18);
+
+  --surface-trans: rgba(32, 38, 48, 0.82);
+  --hover: rgba(255, 255, 255, 0.07);
+
+  /* 玻璃拟态：近黑底 + 蓝紫粉极淡光斑，玻璃才透得出层次 */
+  --backdrop-wash: linear-gradient(
+    165deg,
+    rgba(49, 103, 220, 0.16) 0%,
+    rgba(168, 85, 247, 0.10) 46%,
+    rgba(56, 189, 248, 0.12) 100%
+  );
+  --backdrop-glow-1: rgba(49, 103, 220, 0.22);
+  --backdrop-glow-2: rgba(168, 85, 247, 0.14);
+  --backdrop-glow-3: rgba(255, 77, 148, 0.10);
+
+  --glass-sheet: rgba(255, 255, 255, 0.10);
+  --glass-modal: rgba(30, 32, 38, 0.92);
+  --glass-card: rgba(255, 255, 255, 0.08);
+  --glass-soft: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-blur: 16px;
+  --glass-blur-strong: 20px;
+  --glass-scrim: rgba(6, 8, 12, 0.42);
+  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 18px 48px rgba(0, 0, 0, 0.55);
+  --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 1px rgba(255, 255, 255, 0.05), 0 10px 28px rgba(0, 0, 0, 0.45);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+:root,
+page {
+  --primary: #2c59bc;
+  --primary-pressed: #002fa7;
+  --primary-soft: #e9eef9;
+
+  /* 近白冷灰底：只留极淡冷调，避免蓝紫与白色卡片频繁交织 */
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #f5f6f8;
+  --surface-3: #eceef1;
+
+  --border: #d7dde6;
+  --border-strong: #cbd1db;
+  --hairline: #e2e6ee;
+
+  --text: #1f232b;
+  --text-sub: #575b62;
+  --text-3: #555d6f;
+
+  --success: #1a7f37;
+  --success-soft: #e7f5ec;
+  --warning: #9a6700;
+  --danger: #d12224;
+  --danger-soft: #fdecea;
+  --info: #2c59bc;
+  --info-soft: #e9eef9;
+
+  --surface-trans: rgba(255, 255, 255, 0.78);
+  --hover: rgba(23, 25, 28, 0.05);
+
+  /* 玻璃拟态：极淡冷色调 + 大面积柔光；玻璃之下有层次但不抢眼 */
+  --backdrop-wash: linear-gradient(
+    165deg,
+    rgba(88, 122, 210, 0.05) 0%,
+    rgba(122, 112, 200, 0.04) 46%,
+    rgba(72, 150, 215, 0.05) 100%
+  );
+  --backdrop-glow-1: rgba(70, 115, 220, 0.12);
+  --backdrop-glow-2: rgba(130, 100, 210, 0.08);
+  --backdrop-glow-3: rgba(60, 150, 220, 0.10);
+
+  --glass-sheet: rgba(255, 255, 255, 0.58);
+  /* 弹层要承载正文与列表：不透明些，避免被深色遮罩染成灰黄 */
+  --glass-modal: rgba(255, 255, 255, 0.88);
+  --glass-card: rgba(255, 255, 255, 0.48);
+  --glass-soft: rgba(255, 255, 255, 0.32);
+  --glass-border: rgba(255, 255, 255, 0.68);
+  --glass-blur: 16px;
+  --glass-blur-strong: 20px;
+  --glass-scrim: rgba(17, 19, 24, 0.28);
+  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(24, 28, 36, 0.04),
+    0 16px 40px rgba(31, 35, 40, 0.10);
+  --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    0 0 0 1px rgba(24, 28, 36, 0.04), 0 8px 22px rgba(31, 35, 40, 0.07);
+
+  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.05);
+}
+
+.theme-dark {
+  @include dark-tokens;
+}
+
+// H5：主题同步写到 documentElement，覆盖 body 与弹层之外的第一层背景
+[data-theme='dark'] {
+  @include dark-tokens;
+}
+
+$primary: var(--primary);
+$primary-pressed: var(--primary-pressed);
+$primary-soft: var(--primary-soft);
+
+$bg: var(--bg);
+$surface: var(--surface);
+$surface-2: var(--surface-2);
+$surface-3: var(--surface-3);
+
+$border: var(--border);
+$border-strong: var(--border-strong);
+$hairline: var(--hairline);
+
+$text: var(--text);
+$text-sub: var(--text-sub);
+$text-3: var(--text-3);
+
+$success: var(--success);
+$success-soft: var(--success-soft);
+$warning: var(--warning);
+$danger: var(--danger);
+$danger-soft: var(--danger-soft);
+$info: var(--info);
+$info-soft: var(--info-soft);
+
+$surface-trans: var(--surface-trans);
+$hover: var(--hover);
+
+$glass-sheet: var(--glass-sheet);
+$glass-modal: var(--glass-modal);
+$glass-card: var(--glass-card);
+$glass-soft: var(--glass-soft);
+$glass-border: var(--glass-border);
+$glass-blur: var(--glass-blur);
+$glass-blur-strong: var(--glass-blur-strong);
+$glass-scrim: var(--glass-scrim);
+$glass-elevation: var(--glass-elevation);
+$glass-elevation-soft: var(--glass-elevation-soft);
+
+$backdrop-wash: var(--backdrop-wash);
+
+/* 圆角标尺：6 / 10 / 12 / 16 / 20 / 24 六档 + 药丸。
+   小元素取小档；同一容器内层比外层小 4px，保证同心。 */
+$radius-xs: 6px; // 徽标、行内标记、代码片段
+$radius-sm: 10px; // 图标容器、小按钮、次级块
+$radius-md: 12px; // 输入框、按钮、列表行
+$radius-lg: 16px; // 卡片、分组、气泡
+$radius-xl: 20px; // 大浮层、对话框、搜索胶囊
+$radius-2xl: 24px; // 底部弹层
+$radius-pill: 999px; // 胶囊：切换器、标签、圆形按钮
+
+$shadow-sm: var(--shadow-sm);
+
+$font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'HarmonyOS Sans SC',
+  'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+$font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
+$ease: cubic-bezier(0.2, 0.8, 0.2, 1);

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismClaw — 运行时管理 Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.amber { background: #fbbf24; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>运行时管理 Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">Transport-Executor separation · ContainerBackend Protocol · PreWarmPool</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1060 780">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowViolet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ====== TRANSPORT LAYER (top) ====== -->
+        <rect x="30" y="30" width="1000" height="120" rx="12" fill="rgba(6, 78, 59, 0.08)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="42" y="48" fill="#34d399" font-size="10" font-weight="600">Transport Layer</text>
+
+        <!-- HttpRuntimeClient -->
+        <rect x="120" y="60" width="230" height="70" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <rect x="120" y="60" width="230" height="70" rx="6" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="235" y="88" fill="white" font-size="12" font-weight="600" text-anchor="middle">WorkspaceRuntimeClient</text>
+        <text x="235" y="106" fill="#94a3b8" font-size="9" text-anchor="middle">HTTP + HMAC-SHA256 签名</text>
+        <text x="235" y="120" fill="#34d399" font-size="8" text-anchor="middle">生产路径</text>
+
+        <!-- InProcessRuntimeClient -->
+        <rect x="420" y="60" width="230" height="70" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <rect x="420" y="60" width="230" height="70" rx="6" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="535" y="88" fill="white" font-size="12" font-weight="600" text-anchor="middle">InProcessRuntimeClient</text>
+        <text x="535" y="106" fill="#94a3b8" font-size="9" text-anchor="middle">进程内直调（无网络开销）</text>
+        <text x="535" y="120" fill="#fb7185" font-size="8" text-anchor="middle">生产环境禁用</text>
+
+        <!-- Arrow: WorkspaceRuntimeClient → Runtime-Agent -->
+        <line x1="235" y1="130" x2="235" y2="190" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+        <text x="248" y="165" fill="#94a3b8" font-size="8">HTTP</text>
+
+        <!-- Arrow: InProcessRuntimeClient → RuntimeExecutor -->
+        <path d="M 535 130 L 535 170 Q 535 190 515 190 L 470 190" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arrowGreen)"/>
+        <text x="545" y="165" fill="#94a3b8" font-size="8">直调</text>
+
+        <!-- ====== RUNTIME-AGENT ====== -->
+        <rect x="120" y="190" width="230" height="55" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <rect x="120" y="190" width="230" height="55" rx="6" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="235" y="215" fill="white" font-size="12" font-weight="600" text-anchor="middle">Runtime-Agent</text>
+        <text x="235" y="232" fill="#94a3b8" font-size="9" text-anchor="middle">FastAPI · HMAC 校验中间件</text>
+
+        <!-- Arrow: Runtime-Agent → RuntimeExecutor -->
+        <line x1="235" y1="245" x2="235" y2="290" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+        <text x="248" y="272" fill="#94a3b8" font-size="8">dispatch</text>
+
+        <!-- ====== EXECUTOR CORE ====== -->
+        <rect x="30" y="280" width="1000" height="130" rx="12" fill="rgba(6, 78, 59, 0.08)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="42" y="298" fill="#34d399" font-size="10" font-weight="600">Executor Core</text>
+
+        <rect x="60" y="310" width="940" height="80" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <rect x="60" y="310" width="940" height="80" rx="8" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="530" y="338" fill="white" font-size="13" font-weight="700" text-anchor="middle">RuntimeExecutor</text>
+        <text x="530" y="358" fill="#94a3b8" font-size="9" text-anchor="middle">RuleGate → BwrapPolicy → subprocess · 唯一执行核心 · bash / file I/O / HTTP / MCP</text>
+        <text x="530" y="375" fill="#34d399" font-size="8" text-anchor="middle">Transport-Executor 分离：生产(HTTP)与开发(进程内)共用，保证逐字节一致执行语义</text>
+
+        <!-- Arrow: RuntimeExecutor → ContainerManager -->
+        <line x1="530" y1="390" x2="530" y2="440" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ====== CONTAINER ORCHESTRATION ====== -->
+        <rect x="30" y="430" width="1000" height="220" rx="12" fill="rgba(76, 29, 149, 0.08)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="42" y="448" fill="#a78bfa" font-size="10" font-weight="600">Container Orchestration</text>
+
+        <!-- WorkspaceContainerManager -->
+        <rect x="180" y="460" width="660" height="60" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="180" y="460" width="660" height="60" rx="8" fill="rgba(76, 29, 149, 0.4)"/>
+        <text x="510" y="488" fill="white" font-size="12" font-weight="600" text-anchor="middle">WorkspaceContainerManager（编排层）</text>
+        <text x="510" y="506" fill="#94a3b8" font-size="9" text-anchor="middle">ContainerBackend Protocol · 校验唯一性 · 跟踪活跃工作区</text>
+
+        <!-- Arrow: ContainerManager → Backends -->
+        <line x1="340" y1="520" x2="200" y2="570" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowViolet)"/>
+        <line x1="510" y1="520" x2="510" y2="570" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowViolet)"/>
+        <line x1="680" y1="520" x2="820" y2="570" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowViolet)"/>
+
+        <!-- SwarmBackend -->
+        <rect x="60" y="570" width="220" height="60" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="60" y="570" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)"/>
+        <text x="170" y="596" fill="white" font-size="11" font-weight="600" text-anchor="middle">SwarmBackend</text>
+        <text x="170" y="614" fill="#94a3b8" font-size="9" text-anchor="middle">Docker Swarm API</text>
+
+        <!-- K8sJobBackend -->
+        <rect x="340" y="570" width="220" height="60" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="340" y="570" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)"/>
+        <text x="450" y="596" fill="white" font-size="11" font-weight="600" text-anchor="middle">K8sJobBackend</text>
+        <text x="450" y="614" fill="#94a3b8" font-size="9" text-anchor="middle">Kubernetes Job + PVC</text>
+
+        <!-- FirecrackerBackend -->
+        <rect x="620" y="570" width="220" height="60" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="620" y="570" width="220" height="60" rx="6" fill="rgba(76, 29, 149, 0.4)"/>
+        <text x="730" y="596" fill="white" font-size="11" font-weight="600" text-anchor="middle">FirecrackerBackend</text>
+        <text x="730" y="614" fill="#94a3b8" font-size="9" text-anchor="middle">Firecracker microVM</text>
+
+        <!-- ====== PREWARMPOOL (right side) ====== -->
+        <rect x="860" y="460" width="160" height="100" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <rect x="860" y="460" width="160" height="100" rx="8" fill="rgba(76, 29, 149, 0.4)"/>
+        <text x="940" y="490" fill="white" font-size="11" font-weight="600" text-anchor="middle">PreWarmPool</text>
+        <text x="940" y="510" fill="#94a3b8" font-size="8" text-anchor="middle">record_startup()</text>
+        <text x="940" y="525" fill="#94a3b8" font-size="8" text-anchor="middle">adjust_pool()</text>
+        <text x="940" y="545" fill="#a78bfa" font-size="8" text-anchor="middle">动态伸缩</text>
+
+        <!-- Arrow: ContainerManager → PreWarmPool -->
+        <line x1="840" y1="490" x2="858" y2="490" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowViolet)"/>
+
+        <!-- ====== RESOURCE TIERS (bottom) ====== -->
+        <rect x="30" y="670" width="1000" height="90" rx="12" fill="rgba(6, 78, 59, 0.08)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="42" y="688" fill="#34d399" font-size="10" font-weight="600">ResourceTiers</text>
+
+        <rect x="60" y="698" width="180" height="45" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <rect x="60" y="698" width="180" height="45" rx="4" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="150" y="718" fill="white" font-size="9" font-weight="600" text-anchor="middle">STANDARD</text>
+        <text x="150" y="733" fill="#94a3b8" font-size="8" text-anchor="middle">1CPU / 1g / 允许网络</text>
+
+        <rect x="260" y="698" width="180" height="45" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <rect x="260" y="698" width="180" height="45" rx="4" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="350" y="718" fill="white" font-size="9" font-weight="600" text-anchor="middle">TIGHT</text>
+        <text x="350" y="733" fill="#94a3b8" font-size="8" text-anchor="middle">1CPU / 1g / 域名白名单</text>
+
+        <rect x="460" y="698" width="180" height="45" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <rect x="460" y="698" width="180" height="45" rx="4" fill="rgba(6, 78, 59, 0.4)"/>
+        <text x="550" y="718" fill="white" font-size="9" font-weight="600" text-anchor="middle">STRICT</text>
+        <text x="550" y="733" fill="#94a3b8" font-size="8" text-anchor="middle">2CPU / 2g / 完全禁止</text>
+
+        <rect x="660" y="698" width="180" height="45" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <rect x="660" y="698" width="180" height="45" rx="4" fill="rgba(136, 19, 55, 0.4)"/>
+        <text x="750" y="718" fill="white" font-size="9" font-weight="600" text-anchor="middle">MEDICAL_PHI</text>
+        <text x="750" y="733" fill="#94a3b8" font-size="8" text-anchor="middle">WORM + 四眼 + PID隔离</text>
+
+        <!-- Legend -->
+        <text x="870" y="700" fill="white" font-size="10" font-weight="600">Legend</text>
+        <rect x="870" y="712" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="892" y="720" fill="#94a3b8" font-size="8">Engine</text>
+        <rect x="870" y="728" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="892" y="736" fill="#94a3b8" font-size="8">Persistence</text>
+        <rect x="870" y="744" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="892" y="752" fill="#94a3b8" font-size="8">Security</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Transport-Executor 分离</h3>
+        </div>
+        <ul>
+          <li>• 生产: HTTP + HMAC → Runtime-Agent → Executor</li>
+          <li>• 开发: InProcessRuntimeClient 直调 Executor</li>
+          <li>• 保证逐字节一致的执行语义</li>
+          <li>• 生产环境禁用 InProcessRuntimeClient</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>ContainerBackend Protocol</h3>
+        </div>
+        <ul>
+          <li>• create/destroy/get/list/health_check</li>
+          <li>• SwarmBackend: Docker Swarm service</li>
+          <li>• K8sJobBackend: Job + PVC + NetworkPolicy</li>
+          <li>• FirecrackerBackend: microVM 隔离</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>PreWarmPool 动态伸缩</h3>
+        </div>
+        <ul>
+          <li>• 峰值因子: 月末×1.5, 周末×0.5</li>
+          <li>• 时段因子: 工作日9-11×1.5, 夜间×0.3</li>
+          <li>• 利用率因子: &lt;30%×0.7, &gt;90%×1.3</li>
+          <li>• 空池紧急扩容: ×1.5</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      PrismClaw · Module 13: 运行时管理 · Transport-Executor Separation
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPNG(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = '13-runtime-management.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPDF(btn) {
+      const orig = btn.textContent; btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('13-runtime-management.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) { btn.textContent = '✗ Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

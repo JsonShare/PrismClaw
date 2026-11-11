@@ -1,0 +1,20 @@
+# 生产环境 MCP 覆盖层：容器内通过 docker-compose 挂载到
+# /app/backend/configs/mcp.yaml，覆盖仓库默认（uv run 本地启动 web-search-mcp）。
+# 模板变量 {env:X} 由容器 env 提供（见 docker-compose.yml 的 environment 段）。
+#
+# 使用方式：复制为同目录下的 mcp.prod.yaml，并在 deploy/.env 中提供对应变量。
+#   cp deploy/configs/mcp.prod.example.yaml deploy/configs/mcp.prod.yaml
+
+mcp:
+  enabled: true
+  servers:
+    web-search-mcp:
+      type: "streamable-http"
+      url: "{env:WEB_SEARCH_MCP_URL}"
+      headers:
+        X-WSM-Token: "{env:WEB_SEARCH_MCP_TOKEN}"
+      trust_annotations: true
+      forced_tool_class: "read"
+      deferred: false
+      connect_timeout_seconds: 15.0
+      call_timeout_seconds: 90.0

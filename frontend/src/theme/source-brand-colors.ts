@@ -1,0 +1,73 @@
+/* ─── 已知站点精确字符映射（圆角方块 squircle + 柔和品牌色，年轻化简约风） ─── */
+
+export const KNOWN_DOMAINS: Record<string, { char: string; color: string }> = {
+  'baidu.com': { char: '百', color: '#5B7CFA' },
+  'baijiahao.baidu.com': { char: '百', color: '#5B7CFA' },
+  'm.baidu.com': { char: '百', color: '#5B7CFA' },
+  'www.baidu.com': { char: '百', color: '#5B7CFA' },
+  'toutiao.com': { char: '头', color: '#FF7A45' },
+  'www.toutiao.com': { char: '头', color: '#FF7A45' },
+  'web.toutiao.com': { char: '头', color: '#FF7A45' },
+  'thepaper.cn': { char: '澎', color: '#3FA9E8' },
+  'm.thepaper.cn': { char: '澎', color: '#3FA9E8' },
+  'thirdpage.thepaper.cn': { char: '澎', color: '#3FA9E8' },
+  'sina.com.cn': { char: '新', color: '#E5484D' },
+  'finance.sina.com.cn': { char: '新', color: '#E5484D' },
+  'sohu.com': { char: '搜', color: '#F2555A' },
+  'www.sohu.com': { char: '搜', color: '#F2555A' },
+  'qq.com': { char: '腾', color: '#38BDF8' },
+  'news.qq.com': { char: '腾', color: '#38BDF8' },
+  'tencent.com': { char: '腾', color: '#38BDF8' },
+  'xinhuanet.com': { char: '新', color: '#E5484D' },
+  'csdn.net': { char: 'C', color: '#E5484D' },
+  'zhihu.com': { char: '知', color: '#3B82F6' },
+  'bilibili.com': { char: 'B', color: '#2BC4E8' },
+  '163.com': { char: '网', color: '#E5484D' },
+  'eastmoney.com': { char: '东', color: '#E5705B' },
+  'wap.eastmoney.com': { char: '东', color: '#E5705B' },
+  'tianyancha.com': { char: '天', color: '#5B7CFA' },
+  'zhipin.com': { char: '招', color: '#16B8A6' },
+  '36kr.com': { char: '36', color: '#6C8EF5' },
+  'ithome.com': { char: 'IT', color: '#E5484D' },
+  'stcn.com': { char: '证', color: '#E5484D' },
+  'cnstock.com': { char: '证', color: '#E5484D' },
+  'cninfo.com.cn': { char: '巨', color: '#4F8EF7' },
+  'cninfo.com': { char: '巨', color: '#4F8EF7' },
+  'cbminfo.org': { char: 'C', color: '#4F8EF7' },
+  'cbmf.org': { char: 'C', color: '#4F8EF7' },
+  'cfbond.com': { char: '债', color: '#4F8EF7' },
+  'mdirli.com': { char: 'M', color: '#7C6FF0' },
+  'wenshannet.com': { char: '文', color: '#4F8EF7' },
+  /* ── 设计图出现的来源（1:1 还原品牌色） ── */
+  'aiqicha.com': { char: '爱', color: '#3B82F6' },
+  'aiqicha.baidu.com': { char: '爱', color: '#3B82F6' },
+  'qcc.com': { char: '企', color: '#3B82F6' },
+  'm.toutiao.com': { char: '头', color: '#FF7A45' },
+  'baike.baidu.com': { char: '百', color: '#5B7CFA' },
+  'm.tianyancha.com': { char: '天', color: '#5B7CFA' },
+  'vbdata.cn': { char: '动', color: '#F97316' },
+  'forexbnb.com': { char: 'F', color: '#3B5BDB' },
+}
+
+/* 已知 sourceIcon 类型的精确字符（向后兼容） */
+export const SOURCE_ICON_CHAR: Record<string, string> = {
+  link: '链',
+  company: '企',
+  zhipin: '招',
+  tianyancha: '天',
+  baidu: '百',
+  tencent: '腾',
+  hexin: '和',
+}
+
+/* 已知 sourceIcon 类型的颜色（向后兼容，柔和版） */
+export const SOURCE_ICON_COLOR: Record<string, string> = {
+  link: '#8A8A8A',
+  company: '#4FB477',
+  zhipin: '#16B8A6',
+  tianyancha: '#5B7CFA',
+  baidu: '#5B7CFA',
+  tencent: '#38BDF8',
+  hexin: '#4FB477',
+  generic: '#8A8A8A',
+}

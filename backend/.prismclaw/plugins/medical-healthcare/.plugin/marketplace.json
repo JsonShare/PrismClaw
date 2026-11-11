@@ -1,0 +1,14 @@
+{
+  "name": "medical-healthcare",
+  "version": "2.0.0",
+  "description": "医疗健康综合插件包：涵盖临床、合规、运营、科研、信息学及合同分析六大领域，集成 FHIR R4 电子病历对接、欺诈检测、合同分析等核心能力。",
+  "plugins": [
+    {"name": "medical-clinical", "source": "./medical-clinical"},
+    {"name": "medical-operations", "source": "./medical-operations"},
+    {"name": "medical-compliance", "source": "./medical-compliance"},
+    {"name": "medical-research", "source": "./medical-research"},
+    {"name": "medical-informatics", "source": "./medical-informatics"},
+    {"name": "medical-contracts", "source": "./medical-contracts"},
+    {"name": "medical-wellness", "source": "./medical-wellness"}
+  ]
+}

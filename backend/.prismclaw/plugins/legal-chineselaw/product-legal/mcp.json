@@ -1,0 +1,42 @@
+{
+  "mcpServers": {
+    "Slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "title": "Slack",
+      "description": "在你的工作区中搜索消息、阅读频道、查找讨论。"
+    },
+    "Google Drive": {
+      "type": "http",
+      "url": "https://drivemcp.googleapis.com/mcp/v1",
+      "title": "Google Drive",
+      "description": "从 Google Drive 搜索、阅读和获取文档。"
+    },
+    "Linear": {
+      "type": "http",
+      "url": "https://mcp.linear.app/mcp",
+      "title": "Linear",
+      "description": "问题跟踪和项目管理。"
+    },
+    "Atlassian": {
+      "type": "http",
+      "url": "https://mcp.atlassian.com/v1/sse",
+      "title": "Atlassian",
+      "description": "Jira 问题和 Confluence 页面。"
+    },
+    "Asana": {
+      "type": "http",
+      "url": "https://mcp.asana.com/sse",
+      "title": "Asana",
+      "description": "任务和项目跟踪。"
+    }
+  },
+  "recommendedCategories": [
+    "project-management",
+    "issue-tracking",
+    "documents",
+    "chat",
+    "email",
+    "outside-counsel-network"
+  ]
+}

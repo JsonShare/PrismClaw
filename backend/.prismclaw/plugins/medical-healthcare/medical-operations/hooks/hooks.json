@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "care-gap-analysis|update-care-gap",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/confidence_scorer.py --stdin",
+            "timeout": 5.0
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "insurance-claim|record-management",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/claim_verifier.py --stdin",
+            "timeout": 5.0
+          }
+        ]
+      }
+    ]
+  }
+}

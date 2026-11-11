@@ -1,0 +1,20 @@
+[project]
+name = "prismclaw-medical"
+version = "0.1.0"
+description = "PrismClaw Medical Domain Bundle — AI-assisted diagnosis, report interpretation, PHI redaction"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+
+dependencies = [
+    "prismclaw>=0.1.0,<2.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.entry-points."prismclaw.domains"]
+medical = "subpackages.medical.integration.bundle:MedicalBundle"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

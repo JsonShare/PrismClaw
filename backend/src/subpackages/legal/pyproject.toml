@@ -1,0 +1,20 @@
+[project]
+name = "prismclaw-legal"
+version = "0.1.0"
+description = "PrismClaw Legal Domain Bundle — 合同审查 · 合规检查"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+
+dependencies = [
+    "prismclaw>=0.1.0,<2.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.entry-points."prismclaw.domains"]
+legal = "subpackages.legal.integration.bundle:LegalBundle"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

@@ -1,0 +1,11 @@
+{
+  "name": "ai-governance-legal",
+  "version": "1.0.0",
+  "description": "根据你的注册表对提议的 AI 使用案例进行分类，跨范围内的制度进行影响评估，审查供应商 AI 条款以查找数据训练和责任差距，并使你的 AI 政策与实践保持同步。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "skills": "./skills",
+  "agents": "./agents"
+}

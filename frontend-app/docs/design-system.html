@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PrismClaw · Mobile Design System v1.0</title>
+<style>
+  :root {
+    --bg: #ebeef2;
+    --surface: #fdfbf7;
+    --surface-2: #f2f5fa;
+    --surface-3: #eaeef5;
+    --line: #e2e6ee;
+    --line-strong: #d7dde6;
+    --text: #1f232b;
+    --sub: #575b62;
+    --muted: #838c9e;
+    --primary: #2c59bc;
+    --primary-press: #002fa7;
+    --primary-soft: #e9eef9;
+    --success: #1a7f37;
+    --success-soft: #e7f5ec;
+    --warning: #9a6700;
+    --warning-soft: #fdf1e3;
+    --danger: #d12224;
+    --danger-soft: #fdecea;
+    --info: #2c59bc;
+    --info-soft: #e9eef9;
+    --r-sm: 8px;
+    --r-md: 10px;
+    --r-lg: 12px;
+    --r-xl: 16px;
+    --r-card: 20px;
+    --r-modal: 24px;
+    --r-pill: 999px;
+    --shadow-sm: 0 1px 2px rgba(31, 35, 40, .05);
+    --shadow-md: 0 8px 24px rgba(31, 35, 40, .08);
+    --shadow-lg: 0 24px 60px rgba(31, 35, 40, .18);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+    --side: 232px;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection { background: var(--primary-soft); color: var(--primary-press); }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; }
+  code, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ── 框架 ───────────────────────────────────────────── */
+  .shell { display: flex; min-height: 100vh; }
+
+  .side {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    width: var(--side);
+    flex: 0 0 var(--side);
+    padding: 28px 20px 24px;
+    border-right: 1px solid var(--line);
+    background: rgba(253, 251, 247, .72);
+    backdrop-filter: blur(18px);
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    overflow-y: auto;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
+  .brand-mark {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: var(--text); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; letter-spacing: -.5px;
+  }
+  .brand-name { font-size: 14px; font-weight: 650; letter-spacing: -.2px; }
+  .brand-sub { font-size: 10.5px; color: var(--muted); letter-spacing: .3px; }
+
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-label {
+    font-size: 10px; font-weight: 600; letter-spacing: .14em;
+    color: var(--muted); text-transform: uppercase; padding: 0 10px 8px;
+  }
+  .nav a {
+    display: flex; align-items: center; gap: 10px;
+    height: 32px; padding: 0 10px; border-radius: 8px;
+    font-size: 12.5px; color: var(--sub);
+    transition: background .18s var(--ease), color .18s var(--ease);
+  }
+  .nav a:hover { background: rgba(23, 25, 28, .04); color: var(--text); }
+  .nav a.active { background: var(--surface-3); color: var(--text); font-weight: 600; }
+  .nav a .idx { width: 16px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .nav a.active .idx { color: var(--primary); }
+
+  .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
+  .side-foot .meta-line { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+  .side-foot .meta-line b { color: var(--sub); font-weight: 500; }
+  .side-btn {
+    height: 32px; border: 1px solid var(--line-strong); border-radius: 8px;
+    background: transparent; color: var(--text); font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background .18s var(--ease);
+  }
+  .side-btn:hover { background: rgba(23, 25, 28, .04); }
+
+  .main { flex: 1; min-width: 0; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 56px 56px 96px; }
+
+  /* ── 顶部 ───────────────────────────────────────────── */
+  .hero { padding-bottom: 44px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 18px;
+  }
+  .eyebrow::before { content: ""; width: 18px; height: 1px; background: var(--muted); }
+  h1 {
+    margin: 0 0 14px; font-size: 44px; line-height: 1.1;
+    font-weight: 700; letter-spacing: -1.6px;
+  }
+  .hero p { max-width: 720px; margin: 0; font-size: 15px; line-height: 1.75; color: var(--sub); }
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px; border-radius: var(--r-pill);
+    border: 1px solid var(--line-strong); background: rgba(253, 251, 247, .7);
+    font-size: 11.5px; color: var(--sub);
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.is-on { background: var(--primary-soft); border-color: transparent; color: var(--primary-press); }
+
+  /* ── 章节 ───────────────────────────────────────────── */
+  .sec { padding-top: 64px; scroll-margin-top: 24px; }
+  .sec-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 8px; }
+  .sec-no {
+    flex: 0 0 auto; font-family: var(--mono); font-size: 11px; color: var(--primary);
+    background: var(--primary-soft); border-radius: 6px; padding: 3px 7px; line-height: 1.2;
+  }
+  .sec h2 { margin: 0; font-size: 27px; line-height: 1.2; letter-spacing: -.7px; font-weight: 650; }
+  .sec-desc { max-width: 760px; margin: 10px 0 30px; font-size: 13.5px; color: var(--sub); line-height: 1.75; }
+
+  h3 { margin: 36px 0 14px; font-size: 15px; font-weight: 650; letter-spacing: -.15px; }
+  h4 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+  .note {
+    margin: 18px 0 0; padding: 13px 16px; border-radius: 12px;
+    background: rgba(253, 251, 247, .6); border: 1px solid var(--line);
+    font-size: 12.5px; color: var(--sub); line-height: 1.7;
+  }
+  .note b { color: var(--text); font-weight: 600; }
+  .note.is-warn { background: var(--warning-soft); border-color: transparent; color: #6b4a00; }
+  .note.is-warn b { color: #4a3300; }
+
+  /* ── 网格 ───────────────────────────────────────────── */
+  .grid { display: grid; gap: 12px; }
+  .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .g5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 18px;
+  }
+  .panel.is-flat { background: rgba(253, 251, 247, .55); }
+
+  /* ── 色板 ───────────────────────────────────────────── */
+  .swatch {
+    border-radius: var(--r-lg); overflow: hidden; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface);
+    transition: transform .18s var(--ease), box-shadow .18s var(--ease);
+    position: relative; text-align: left; width: 100%; padding: 0;
+    color: inherit;
+  }
+  .swatch:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .swatch:active { transform: translateY(0); }
+  .swatch-color { height: 74px; display: flex; align-items: flex-end; justify-content: space-between; padding: 9px 10px; }
+  .swatch-color span {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .02em;
+    padding: 2px 5px; border-radius: 4px; background: rgba(255, 255, 255, .82); color: #1f232b;
+    opacity: 0; transition: opacity .16s var(--ease);
+  }
+  .swatch:hover .swatch-color span { opacity: 1; }
+  .swatch-body { padding: 10px 12px 12px; }
+  .swatch-body b { display: block; font-size: 12px; font-weight: 600; letter-spacing: -.1px; }
+  .swatch-body code { display: block; margin-top: 2px; font-size: 10.5px; color: var(--muted); }
+  .swatch-body em { display: block; margin-top: 6px; font-style: normal; font-size: 10.5px; color: var(--sub); line-height: 1.5; }
+
+  .rule-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 9px; }
+  .rule-list li { position: relative; padding-left: 16px; font-size: 12.5px; color: var(--sub); line-height: 1.65; }
+  .rule-list li::before {
+    content: ""; position: absolute; left: 0; top: 8px; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--line-strong);
+  }
+  .rule-list li b { color: var(--text); font-weight: 600; }
+  .rule-list.is-do li::before { background: var(--success); }
+  .rule-list.is-dont li::before { background: var(--danger); }
+
+  /* ── 字体 ───────────────────────────────────────────── */
+  .type-row {
+    display: grid; grid-template-columns: 150px 1fr; gap: 20px;
+    padding: 18px 0; border-bottom: 1px solid var(--line); align-items: baseline;
+  }
+  .type-row:last-child { border-bottom: 0; }
+  .type-meta b { display: block; font-family: var(--mono); font-size: 11px; color: var(--primary); font-weight: 500; }
+  .type-meta span { display: block; margin-top: 3px; font-size: 10.5px; color: var(--muted); line-height: 1.6; }
+  .type-sample { min-width: 0; }
+  .type-sample .cn { display: block; color: var(--text); }
+  .type-sample .en { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
+  .t-display { font-size: 28px; line-height: 36px; font-weight: 700; letter-spacing: -.5px; }
+  .t-h1 { font-size: 22px; line-height: 30px; font-weight: 650; letter-spacing: -.3px; }
+  .t-h2 { font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: -.2px; }
+  .t-h3 { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.1px; }
+  .t-body-lg { font-size: 15px; line-height: 24px; font-weight: 400; }
+  .t-body { font-size: 14px; line-height: 22px; font-weight: 400; }
+  .t-body-sm { font-size: 13px; line-height: 20px; font-weight: 400; }
+  .t-caption { font-size: 12px; line-height: 18px; font-weight: 400; }
+  .t-micro { font-size: 11px; line-height: 16px; font-weight: 500; letter-spacing: .1px; }
+  .t-button { font-size: 14px; line-height: 20px; font-weight: 600; }
+  .t-mono { font-family: var(--mono); font-size: 12px; line-height: 18px; }
+
+  .scale-strip { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  .scale-strip span { color: var(--text); }
+
+  /* ── 图标 ───────────────────────────────────────────── */
+  .icon-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+  #icon-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .icon-cell {
+    aspect-ratio: 1; border-radius: 12px; border: 1px solid var(--line);
+    background-color: var(--surface);
+    background-image:
+      linear-gradient(to right, rgba(44, 89, 188, .07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(44, 89, 188, .07) 1px, transparent 1px);
+    background-size: 25% 25%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text); position: relative;
+  }
+  .icon-cell small {
+    position: absolute; bottom: 5px; left: 0; right: 0; text-align: center;
+    font-family: var(--mono); font-size: 8.5px; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;
+  }
+  .icon-cell svg { width: 24px; height: 24px; }
+  .icon-lg { width: 28px; height: 28px; }
+
+  .icon-ladder { display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; }
+  .icon-ladder figure { margin: 0; text-align: center; }
+  .icon-ladder figcaption { margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .icon-ladder svg { display: block; color: var(--text); }
+
+  .stroke-compare { display: flex; gap: 28px; flex-wrap: wrap; }
+  .stroke-compare figure { margin: 0; text-align: center; }
+  .stroke-compare figcaption { margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  .usage-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .usage-pair .panel h4 { display: flex; align-items: center; gap: 6px; }
+  .dot-good, .dot-bad { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot-good { background: var(--success); }
+  .dot-bad { background: var(--danger); }
+
+  /* ── 表格 ───────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    text-align: left; font-weight: 600; color: var(--muted); font-size: 10.5px;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 0 10px 9px; border-bottom: 1px solid var(--line);
+  }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--line); color: var(--sub); vertical-align: top; line-height: 1.6; }
+  tr:last-child td { border-bottom: 0; }
+  td b { color: var(--text); font-weight: 600; }
+  td code { font-size: 10.5px; background: var(--surface-3); border-radius: 4px; padding: 1px 5px; color: var(--text); }
+  .tbl-wrap {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card);
+    padding: 16px 8px 6px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .tag {
+    display: inline-flex; align-items: center; height: 19px; padding: 0 7px;
+    border-radius: 5px; background: var(--surface-3); color: var(--sub);
+    font-size: 10px; font-weight: 500; white-space: nowrap;
+  }
+  .tag.ok { background: var(--success-soft); color: var(--success); }
+  .tag.new { background: var(--primary-soft); color: var(--primary-press); }
+  .tag.warn { background: var(--warning-soft); color: var(--warning); }
+
+  /* ── 弹框演示 ───────────────────────────────────────── */
+  .demo-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+  .btn {
+    height: 34px; padding: 0 14px; border-radius: 9px; border: 1px solid var(--line-strong);
+    background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 500;
+    cursor: pointer; transition: background .16s var(--ease), transform .16s var(--ease);
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { background: var(--primary-press); }
+  .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--primary); }
+
+  .phone-stage {
+    margin-top: 16px; border-radius: 24px; border: 1px solid var(--line);
+    background:
+      radial-gradient(120% 80% at 50% 0%, rgba(233, 238, 249, .9), transparent 60%),
+      var(--surface-2);
+    padding: 26px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 260px;
+  }
+  .modal-specimen {
+    width: 300px; background: var(--surface); border-radius: var(--r-modal);
+    box-shadow: var(--shadow-lg); padding: 22px 20px 16px;
+  }
+  .modal-specimen .m-title { font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -.2px; }
+  .modal-specimen .m-body { margin-top: 8px; font-size: 13.5px; line-height: 1.65; color: var(--sub); }
+  .modal-specimen .m-input {
+    margin-top: 14px; height: 40px; border-radius: 9px; border: 1px solid var(--line-strong);
+    background: var(--surface-2); display: flex; align-items: center; padding: 0 12px;
+    font-size: 13px; color: var(--muted);
+  }
+  .modal-specimen .m-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-specimen .m-btn {
+    flex: 1; height: 42px; border-radius: 10px; border: 1px solid var(--line-strong);
+    background: transparent; color: var(--text); font-size: 13.5px; font-weight: 600; cursor: default;
+  }
+  .modal-specimen .m-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .modal-specimen .m-btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+  /* 交互弹层 */
+  .overlay {
+    position: fixed; inset: 0; z-index: 300; display: none;
+    background: rgba(17, 19, 24, .42);
+    align-items: center; justify-content: center; padding: 24px;
+    backdrop-filter: blur(2px);
+  }
+  .overlay.is-open { display: flex; animation: fadeIn .18s var(--ease); }
+  .overlay.is-sheet { align-items: flex-end; padding: 0; }
+  .overlay.is-sheet .dialog {
+    width: 100%; max-width: 480px; border-radius: 24px 24px 0 0;
+    animation: sheetUp .28s var(--ease);
+  }
+  .dialog {
+    width: 100%; max-width: 320px; background: var(--surface);
+    border-radius: var(--r-modal); box-shadow: var(--shadow-lg);
+    padding: 24px 22px 18px; animation: popIn .22s var(--ease);
+  }
+  .dialog h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -.2px; }
+  .dialog p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.65; color: var(--sub); }
+  .dialog .field { margin-top: 14px; }
+  .dialog .field label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+  .dialog .field input, .dialog .field select {
+    width: 100%; height: 40px; border-radius: 9px; border: 1px solid var(--line-strong);
+    background: var(--surface-2); padding: 0 12px; font-size: 13px; color: var(--text); outline: none;
+  }
+  .dialog .field input:focus, .dialog .field select:focus { border-color: var(--primary); background: #fff; }
+  .dialog .actions { display: flex; gap: 10px; margin-top: 20px; }
+  .dialog .actions .btn { flex: 1; height: 42px; border-radius: 10px; font-size: 13.5px; font-weight: 600; }
+  .dialog .actions .btn.ghost { flex: 0 0 auto; padding: 0 6px; color: var(--sub); font-weight: 500; }
+  .sheet-list { margin-top: 4px; }
+  .sheet-item {
+    width: 100%; height: 50px; border: 0; background: transparent; border-bottom: 1px solid var(--line);
+    font-size: 14px; color: var(--text); text-align: center; cursor: pointer;
+  }
+  .sheet-item:last-child { border-bottom: 0; }
+  .sheet-item.danger { color: var(--danger); }
+  .sheet-item.cancel { margin-top: 8px; border-radius: 12px; background: var(--surface-2); border: 0; font-weight: 600; }
+  .sheet-grab { width: 34px; height: 4px; border-radius: 999px; background: var(--line-strong); margin: 8px auto 12px; }
+
+  /* ── 反馈演示 ───────────────────────────────────────── */
+  .feed-card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card);
+    padding: 16px; display: flex; flex-direction: column; gap: 12px; min-height: 168px;
+  }
+  .feed-card > h4 { margin: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .feed-card > h4 code { font-size: 9.5px; color: var(--muted); font-weight: 400; }
+  .feed-body { flex: 1; display: flex; align-items: center; justify-content: center; }
+
+  .spinner {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--surface-3); border-top-color: var(--primary);
+    animation: spin .8s linear infinite;
+  }
+  .skeleton { width: 100%; display: grid; gap: 8px; }
+  .sk-line { height: 10px; border-radius: 5px; background: linear-gradient(90deg, var(--surface-3) 25%, #f5f7fa 50%, var(--surface-3) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; }
+  .sk-line.w60 { width: 60%; }
+  .sk-line.w85 { width: 85%; }
+
+  .empty { text-align: center; }
+  .empty-ico {
+    width: 44px; height: 44px; border-radius: 14px; background: var(--surface-3);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; color: var(--muted);
+  }
+  .empty b { display: block; font-size: 13.5px; font-weight: 600; }
+  .empty span { display: block; margin-top: 3px; font-size: 11.5px; color: var(--muted); }
+
+  .offline-bar {
+    width: 100%; border-radius: 10px; background: var(--warning-soft); color: #6b4a00;
+    padding: 10px 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;
+  }
+  .offline-bar button { margin-left: auto; border: 0; background: transparent; color: #6b4a00; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+  .progress-track { width: 100%; height: 4px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+  .progress-fill { height: 100%; width: 68%; border-radius: inherit; background: var(--primary); }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 7px; }
+
+  .field-demo { width: 100%; }
+  .field-demo label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; }
+  .field-demo .inp {
+    height: 40px; border-radius: 9px; border: 1px solid var(--danger); background: #fff;
+    display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--text);
+  }
+  .field-demo .err { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 11.5px; color: var(--danger); }
+
+  .toast-stack { position: fixed; left: 50%; bottom: 42px; transform: translateX(-50%); z-index: 400; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+  .toast {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(31, 35, 43, .92); color: #fff;
+    border-radius: 999px; padding: 9px 16px; font-size: 12.5px;
+    box-shadow: var(--shadow-md); animation: toastIn .2s var(--ease);
+  }
+  .toast svg { width: 14px; height: 14px; }
+
+  /* ── 覆盖矩阵 ───────────────────────────────────────── */
+  .matrix-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 12px; font-size: 11px; color: var(--muted); }
+  .matrix-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .matrix-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .m-ok { background: var(--success); }
+  .m-new { background: var(--primary); }
+  .m-na { background: var(--line-strong); }
+  .matrix td:not(:first-child) { text-align: center; }
+  .matrix td:first-child b { display: block; }
+  .matrix td:first-child span { font-size: 10px; color: var(--muted); }
+  .matrix .yes { color: var(--success); font-weight: 600; }
+  .matrix .add { color: var(--primary); font-weight: 600; }
+  .matrix .na { color: var(--muted); }
+
+  /* ── 清单 ───────────────────────────────────────────── */
+  .checklist { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+  .check {
+    display: flex; gap: 9px; align-items: flex-start; font-size: 12.5px; color: var(--sub);
+    padding: 9px 0; border-bottom: 1px solid var(--line);
+  }
+  .check:last-child, .check:nth-last-child(2) { border-bottom: 0; }
+  .check .box {
+    flex: 0 0 auto; width: 15px; height: 15px; border-radius: 4px; margin-top: 2px;
+    border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: center; color: transparent;
+  }
+  .check.done .box { background: var(--success); border-color: var(--success); color: #fff; }
+  .check.done span { color: var(--text); }
+
+  .foot {
+    margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;
+    font-size: 11px; color: var(--muted);
+  }
+
+  /* ── 动效 ───────────────────────────────────────────── */
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.96); } to { opacity: 1; transform: none; } }
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+
+  @media (max-width: 1080px) {
+    .side { display: none; }
+    .wrap { padding: 40px 28px 80px; }
+    h1 { font-size: 34px; letter-spacing: -1.2px; }
+    .g4, .g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .icon-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    #icon-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  }
+  @media (max-width: 720px) {
+    .wrap { padding: 28px 18px 64px; }
+    h1 { font-size: 28px; letter-spacing: -.9px; }
+    .g2, .g3, .g4, .g5 { grid-template-columns: 1fr 1fr; }
+    .type-row { grid-template-columns: 1fr; gap: 8px; }
+    .usage-pair, .checklist { grid-template-columns: 1fr; }
+    .icon-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    #icon-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .phone-stage { padding: 16px; }
+    .tbl-wrap table { min-width: 560px; }
+    .tbl-wrap table.matrix { min-width: 680px; }
+  }
+  @media (max-width: 560px) {
+    .g2 { grid-template-columns: 1fr; }
+  }
+  @media print {
+    .side, .demo-bar, .overlay, .toast-stack { display: none !important; }
+    .wrap { max-width: none; padding: 0; }
+    .sec { padding-top: 34px; break-inside: avoid; }
+    body { background: #fff; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="3"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></symbol>
+  </defs>
+</svg>
+
+<div class="shell">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">PC</div>
+      <div>
+        <div class="brand-name">PrismClaw</div>
+        <div class="brand-sub">Mobile Design System</div>
+      </div>
+    </div>
+
+    <nav class="nav" id="nav">
+      <div class="nav-label">规范目录</div>
+      <a href="#overview" class="active"><span class="idx">00</span>概览与原则</a>
+      <a href="#color"><span class="idx">01</span>颜色系统</a>
+      <a href="#type"><span class="idx">02</span>字体系统</a>
+      <a href="#icon"><span class="idx">03</span>图标规范</a>
+      <a href="#modal"><span class="idx">04</span>弹框规范</a>
+      <a href="#feedback"><span class="idx">05</span>反馈与状态</a>
+      <a href="#coverage"><span class="idx">06</span>场景覆盖矩阵</a>
+      <a href="#delivery"><span class="idx">07</span>落地与验收</a>
+    </nav>
+
+    <div class="side-foot">
+      <div class="meta-line"><span>版本</span><b>v1.0</b></div>
+      <div class="meta-line"><span>更新</span><b>2026-11-09</b></div>
+      <div class="meta-line"><span>平台</span><b>iOS / Android / 小程序</b></div>
+      <button class="side-btn" onclick="window.print()">打印 / 导出 PDF</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="wrap">
+
+      <header class="hero" id="overview">
+        <div class="eyebrow">Design Standard · v1.0</div>
+        <h1>移动端设计系统<br />与交互标准</h1>
+        <p>面向 PrismClaw 移动端的标准化设计交付物。统一颜色、字体、图标、弹框与反馈状态，确保所有交互场景遵循同一套设计语言。</p>
+        <div class="hero-meta">
+          <span class="chip is-on"><b>4</b> 类设计令牌</span>
+          <span class="chip"><b>7</b> 类弹框</span>
+          <span class="chip"><b>9</b> 类反馈状态</span>
+          <span class="chip"><b>8</b> 个页面 × 7 类状态覆盖</span>
+        </div>
+        <div class="note">
+          <b>与现有实现的关系：</b>本规范以 <code>tokens.scss</code> 的色阶和字号为基础收敛，不改变既有品牌观感；新增令牌与弹框/反馈模板可直接映射到 <code>global.scss</code>。
+        </div>
+      </header>
+
+      <!-- ── 01 颜色 ───────────────────────────────────── -->
+      <section class="sec" id="color">
+        <div class="sec-head"><span class="sec-no">01</span><h2>颜色系统</h2></div>
+        <p class="sec-desc">颜色按「品牌 / 功能 / 中性」三层组织。品牌色只用于主操作与选中态；功能色只表达状态；界面层级由中性色与背景面构成，不靠阴影堆叠。</p>
+
+        <h3>品牌色</h3>
+        <div class="grid g3" id="sw-brand"></div>
+
+        <h3>功能色</h3>
+        <div class="grid g4" id="sw-functional"></div>
+
+        <h3>中性色与界面层级</h3>
+        <div class="grid g5" id="sw-neutral"></div>
+
+        <h3>使用规则</h3>
+        <div class="usage-pair">
+          <div class="panel">
+            <h4><span class="dot-good"></span>推荐</h4>
+            <ul class="rule-list is-do">
+              <li><b>单屏一个主色操作：</b>主按钮、选中态、链接共用 <code>--primary</code>，同屏填充主色块不超过 2 处。</li>
+              <li><b>正文不用纯黑：</b>正文 <code>#1F232B</code>，辅助 <code>#575B62</code>，弱化 <code>#838C9E</code>。</li>
+              <li><b>状态色只做状态：</b>成功、警告、错误色不用于装饰性图形或品牌表达。</li>
+              <li><b>卡片优先描边：</b>白卡用 <code>--surface</code> + 1px <code>--line</code>，阴影仅用于浮层。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><span class="dot-bad"></span>禁止</h4>
+            <ul class="rule-list is-dont">
+              <li>在同一视图混用两套主色（例如蓝色主按钮 + 紫色发送键）。</li>
+              <li>用红色表达「删除入口」以外的强调，造成危险暗示。</li>
+              <li>在 <code>--bg</code> 上直接放纯白大面积卡片而不加描边，层级会断裂。</li>
+              <li>低于 11px 的正文使用 <code>#838C9E</code>，对比度不足。</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="note">
+          <b>对比度基线：</b>正文与背景 ≥ 4.5:1；11–13px 辅助文字 ≥ 4.5:1；图标与背景 ≥ 3:1。禁用态可降至 3:1，但需同时配合透明度或状态文案。
+        </div>
+      </section>
+
+      <!-- ── 02 字体 ───────────────────────────────────── -->
+      <section class="sec" id="type">
+        <div class="sec-head"><span class="sec-no">02</span><h2>字体系统</h2></div>
+        <p class="sec-desc">以 4pt 为基线建立 9 级字阶。中文优先 PingFang SC / HarmonyOS Sans SC；数字与代码使用等宽字体并开启 tabular-nums，保证数据对齐。</p>
+
+        <div class="panel">
+          <div class="type-row">
+            <div class="type-meta"><b>display / 28</b><span>28 / 36 · 700<br />字距 -0.5</span></div>
+            <div class="type-sample"><span class="cn t-display">随时聊聊，从这里开始</span><span class="en">用于首页问候、空状态大标题，单屏仅一处</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>h1 / 22</b><span>22 / 30 · 650<br />字距 -0.3</span></div>
+            <div class="type-sample"><span class="cn t-h1">全部任务</span><span class="en">页面主标题，配合返回与右侧操作</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>h2 / 18</b><span>18 / 26 · 600<br />字距 -0.2</span></div>
+            <div class="type-sample"><span class="cn t-h2">运行记录</span><span class="en">模块标题、弹框标题（移动端可降至 17）</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>h3 / 16</b><span>16 / 24 · 600<br />字距 -0.1</span></div>
+            <div class="type-sample"><span class="cn t-h3">门诊随访名单汇总</span><span class="en">卡片标题、列表主信息、时间轴标题</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>body-lg / 15</b><span>15 / 24 · 400<br />字距 0</span></div>
+            <div class="type-sample"><span class="cn t-body-lg">我先合并 3 个院区的门诊病历导出表，再按质控标准逐条核对。</span><span class="en">聊天正文、主要说明文字</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>body / 14</b><span>14 / 22 · 400<br />字距 0</span></div>
+            <div class="type-sample"><span class="cn t-body">该任务由服务器端调度执行，与 Chat 会话共用同一份任务定义。</span><span class="en">通用正文、表单值、按钮文字</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>body-sm / 13</b><span>13 / 20 · 400<br />字距 0</span></div>
+            <div class="type-sample"><span class="cn t-body-sm">合同原文为 90 天，标准模板为 30 天。你的选择会作为回复发送给 AI。</span><span class="en">卡片描述、弹框说明、次要信息</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>caption / 12</b><span>12 / 18 · 400<br />字距 0</span></div>
+            <div class="type-sample"><span class="cn t-caption">今天 08:31 · 耗时 42s</span><span class="en">时间、元信息、输入提示</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>micro / 11</b><span>11 / 16 · 500<br />字距 0.1</span></div>
+            <div class="type-sample"><span class="cn t-micro">Work · 每天 08:30 · 已暂停</span><span class="en">标签、角标、状态徽标，系统最小字号</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>button / 14</b><span>14 / 20 · 600<br />字距 0</span></div>
+            <div class="type-sample"><span class="cn t-button">通过并继续</span><span class="en">主按钮；小按钮使用 12.5 / 18 · 600</span></div>
+          </div>
+          <div class="type-row">
+            <div class="type-meta"><b>mono / 12</b><span>12 / 18 · 400<br />tabular-nums</span></div>
+            <div class="type-sample"><span class="cn t-mono">$ groupby(['store','week']).sum()</span><span class="en">代码、命令、金额与指标对齐</span></div>
+          </div>
+        </div>
+
+        <h3>字重与排版规则</h3>
+        <div class="grid g3">
+          <div class="panel">
+            <h4>字重</h4>
+            <ul class="rule-list">
+              <li><b>400：</b>正文、说明、长文本。</li>
+              <li><b>500：</b>辅助强调、标签、次级按钮。</li>
+              <li><b>600：</b>标题、卡片标题、按钮、弹框标题。</li>
+              <li><b>700：</b>仅用于 display 与数字强调。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4>行高</h4>
+            <ul class="rule-list">
+              <li>标题行高为字号的 1.3–1.4 倍。</li>
+              <li>正文行高 1.55–1.7 倍，中文长文取 1.7。</li>
+              <li>单行控件（按钮、标签）使用固定行高，垂直居中。</li>
+              <li>同一区块内行高统一，禁止 1.2 与 1.7 混排。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4>适配与截断</h4>
+            <ul class="rule-list">
+              <li>系统最小字号 11px，低于 11px 仅用于角标且需高对比。</li>
+              <li>标题单行省略；描述最多 2–3 行，超出 <code>-webkit-line-clamp</code>。</li>
+              <li>数字使用 <code>font-variant-numeric: tabular-nums</code>。</li>
+              <li>不通过缩放字号适配窄屏，改为截断或换行。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 03 图标 ───────────────────────────────────── -->
+      <section class="sec" id="icon">
+        <div class="sec-head"><span class="sec-no">03</span><h2>图标规范</h2></div>
+        <p class="sec-desc">全部图标采用 24×24 网格、线性描边、圆角端点。统一线宽 1.7，视觉重量一致；不使用双色、填充或 emoji 替代。</p>
+
+        <h3>24px 网格与安全区</h3>
+        <div class="panel">
+          <div class="icon-grid" id="icon-grid"></div>
+          <div class="note" style="margin-top:14px">网格 24×24，内容安全区 20×20（四周留 2px）；圆角端点 <code>stroke-linecap: round</code>，转角 <code>stroke-linejoin: round</code>。</div>
+        </div>
+
+        <div class="grid g2" style="margin-top:14px">
+          <div class="panel">
+            <h4>尺寸阶梯</h4>
+            <div class="icon-ladder">
+              <figure><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-settings"/></svg><figcaption>16 · 行内</figcaption></figure>
+              <figure><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-settings"/></svg><figcaption>20 · 工具栏</figcaption></figure>
+              <figure><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-settings"/></svg><figcaption>24 · 导航/主图标</figcaption></figure>
+              <figure><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-settings"/></svg><figcaption>28 · 空状态</figcaption></figure>
+              <figure><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-settings"/></svg><figcaption>40 · 功能入口</figcaption></figure>
+            </div>
+          </div>
+          <div class="panel">
+            <h4>线宽对比</h4>
+            <div class="stroke-compare">
+              <figure><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><use href="#i-message"/></svg><figcaption>1.5 · 禁用</figcaption></figure>
+              <figure><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-message"/></svg><figcaption>1.7 · 默认</figcaption></figure>
+              <figure><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"><use href="#i-message"/></svg><figcaption>2.0 · 强调/小程序</figcaption></figure>
+            </div>
+          </div>
+        </div>
+
+        <h3>使用场景</h3>
+        <div class="grid g4">
+          <div class="panel"><h4>导航与操作</h4><p style="margin:0;font-size:12px;color:var(--sub)">返回、更多、加号、设置。默认 20–24，颜色继承文字色，主操作可用主色。</p></div>
+          <div class="panel"><h4>状态与徽标</h4><p style="margin:0;font-size:12px;color:var(--sub)">成功、警告、失败使用功能色；仅图标不承载状态含义时使用 <code>--text-sub</code>。</p></div>
+          <div class="panel"><h4>列表与卡片</h4><p style="margin:0;font-size:12px;color:var(--sub)">16–20，置于 36–40 的圆角容器中；容器圆角 12，图标与容器同心。</p></div>
+          <div class="panel"><h4>空状态</h4><p style="margin:0;font-size:12px;color:var(--sub)">28–40，放入 <code>--surface-3</code> 的 44–56 容器；不叠加第二层装饰图形。</p></div>
+        </div>
+
+        <div class="usage-pair" style="margin-top:14px">
+          <div class="panel">
+            <h4><span class="dot-good"></span>规范</h4>
+            <ul class="rule-list is-do">
+              <li>同一页面只使用一套图标族，线宽保持 1.7。</li>
+              <li>图标与文字间距 6–8px，垂直视觉居中。</li>
+              <li>可点击图标热区不小于 44×44。</li>
+              <li>禁用态使用 38% 透明度，不更换颜色。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><span class="dot-bad"></span>禁止</h4>
+            <ul class="rule-list is-dont">
+              <li>同一行混用线性与面性图标。</li>
+              <li>把 24px 图标缩放到 12px 以下使用。</li>
+              <li>用 emoji 或位图替代系统图标。</li>
+              <li>在功能色图标上再叠加阴影或描边。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 04 弹框 ───────────────────────────────────── -->
+      <section class="sec" id="modal">
+        <div class="sec-head"><span class="sec-no">04</span><h2>弹框与浮层规范</h2></div>
+        <p class="sec-desc">按「是否需要用户决策」分为轻提示与模态弹框。模态弹框统一 320px 宽、24px 圆角、24px 内边距；底部操作固定，主操作唯一。</p>
+
+        <h3>类型与适用场景</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th style="width:18%">类型</th><th style="width:26%">使用场景</th><th style="width:22%">结构</th><th>交互规则</th></tr></thead>
+            <tbody>
+              <tr><td><b>Toast 轻提示</b></td><td>操作成功、复制成功、提交反馈</td><td>图标 + 单行文案，圆角胶囊</td><td>不阻断操作，2.2s 自动消失；同屏最多 1 条</td></tr>
+              <tr><td><b>Alert 信息提示</b></td><td>结果告知、权限说明、版本更新</td><td>标题 + 说明 + 单个主按钮</td><td>必须显式关闭；点遮罩不关闭</td></tr>
+              <tr><td><b>Confirm 确认操作</b></td><td>暂停任务、切换工作区、放弃编辑</td><td>标题 + 说明 + 取消 / 主操作</td><td>默认焦点在取消；点遮罩仅非破坏性场景可关闭</td></tr>
+              <tr><td><b>Danger 危险确认</b></td><td>删除会话、退出登录、停止运行</td><td>标题 + 后果说明 + 取消 / 危险按钮</td><td>禁止点遮罩关闭；危险按钮不使用主色</td></tr>
+              <tr><td><b>Form 表单弹框</b></td><td>新建自动化、重命名、填写参数</td><td>标题 + 1–3 个字段 + 取消 / 保存</td><td>校验失败聚焦首个错误；有未保存内容时二次确认</td></tr>
+              <tr><td><b>Sheet 底部操作表</b></td><td>更多操作、分享、选择来源</td><td>拖拽条 + 操作项 + 取消</td><td>点击遮罩关闭；危险项单独置底并标红</td></tr>
+              <tr><td><b>Full 全屏浮层</b></td><td>复杂表单、文件预览、长列表选择</td><td>导航栏 + 内容区 + 底部主操作</td><td>独立页面栈；返回时校验未保存状态</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>视觉规格</h3>
+        <div class="grid g3">
+          <div class="panel">
+            <h4>尺寸</h4>
+            <ul class="rule-list">
+              <li>弹框宽 320px（390 视口约 82%），最大 360px。</li>
+              <li>圆角 24px，内边距 24 / 22 / 18。</li>
+              <li>按钮高 42px，间距 10px；单按钮占满。</li>
+              <li>表单字段高 40px，字段间距 12px。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4>层级</h4>
+            <ul class="rule-list">
+              <li>遮罩 <code>rgba(17,19,24,.42)</code>，可选 2px 背景模糊。</li>
+              <li>弹框阴影 <code>0 24px 60px rgba(31,35,40,.18)</code>。</li>
+              <li>z-index：导航 100 / 弹框 300 / Toast 400。</li>
+              <li>底部 Sheet 圆角 24px 24px 0 0，含安全区内边距。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4>按钮层级</h4>
+            <ul class="rule-list">
+              <li>每个弹框只允许一个主按钮（填充主色）。</li>
+              <li>取消使用描边或文字按钮，置于左侧。</li>
+              <li>危险操作使用 <code>--danger</code> 填充，文案写明后果。</li>
+              <li>按钮文案使用动词，2–4 字优先。</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>动效</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th style="width:22%">元素</th><th style="width:22%">进入</th><th style="width:22%">退出</th><th>曲线</th></tr></thead>
+            <tbody>
+              <tr><td><b>遮罩</b></td><td>透明度 0 → 1，180ms</td><td>180ms</td><td><code>cubic-bezier(.2,.8,.2,1)</code></td></tr>
+              <tr><td><b>中心弹框</b></td><td>透明度 0→1，缩放 .96→1，220ms</td><td>160ms 反向</td><td>同上；位移不超过 6px</td></tr>
+              <tr><td><b>底部 Sheet</b></td><td>translateY(100%)→0，280ms</td><td>240ms</td><td>同上</td></tr>
+              <tr><td><b>Toast</b></td><td>上移 6px + 淡入，200ms</td><td>150ms</td><td>同上</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="note">开启「减弱动态效果」时，取消缩放与位移，仅保留透明度过渡；不使用弹跳、旋转或超过 300ms 的进入动画。</div>
+
+        <h3>交互演示</h3>
+        <p style="margin:0;font-size:12.5px;color:var(--sub)">点击下方按钮查看标准弹框：信息提示、确认、危险确认、表单与底部操作表。</p>
+        <div class="demo-bar">
+          <button class="btn" data-demo="alert">信息提示</button>
+          <button class="btn" data-demo="confirm">确认操作</button>
+          <button class="btn danger" data-demo="danger">危险确认</button>
+          <button class="btn" data-demo="form">表单填写</button>
+          <button class="btn" data-demo="sheet">底部操作表</button>
+        </div>
+
+        <div class="phone-stage">
+          <div class="modal-specimen">
+            <div class="m-title">删除这条会话？</div>
+            <div class="m-body">删除后会话记录与产出物将无法恢复，关联的定时任务不会受影响。</div>
+            <div class="m-actions">
+              <button class="m-btn">取消</button>
+              <button class="m-btn danger">删除会话</button>
+            </div>
+          </div>
+        </div>
+
+        <h3>行为规则</h3>
+        <div class="usage-pair">
+          <div class="panel">
+            <h4><span class="dot-good"></span>必须</h4>
+            <ul class="rule-list is-do">
+              <li>危险操作必须二次确认，且默认焦点在「取消」。</li>
+              <li>弹框打开后焦点锁定在弹框内，关闭后回到触发元素。</li>
+              <li>表单弹框提交前校验；校验失败滚动并聚焦首个错误字段。</li>
+              <li>异步提交时主按钮进入 loading 并禁用，防重复提交。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><span class="dot-bad"></span>禁止</h4>
+            <ul class="rule-list is-dont">
+              <li>一个弹框出现两个填充主按钮。</li>
+              <li>用弹框承载超过 5 个字段的表单（改用全屏浮层）。</li>
+              <li>危险确认点遮罩即关闭。</li>
+              <li>Toast 承载需要用户决策的内容。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 05 反馈 ───────────────────────────────────── -->
+      <section class="sec" id="feedback">
+        <div class="sec-head"><span class="sec-no">05</span><h2>操作反馈与状态</h2></div>
+        <p class="sec-desc">每个异步动作都必须有「进行中、成功、失败」三态；每个列表都必须有「加载、空、错误、离线」四态。状态出现在内容原位，不用弹框代替页面状态。</p>
+
+        <div class="grid g3">
+          <div class="feed-card">
+            <h4>Toast 轻提示 <code>2.2s</code></h4>
+            <div class="feed-body" style="flex-direction:column;gap:10px">
+              <button class="btn primary" onclick="showToast('已保存到服务器')">显示成功 Toast</button>
+              <button class="btn" onclick="showToast('网络异常，请稍后重试', 'warn')">显示警告 Toast</button>
+            </div>
+          </div>
+          <div class="feed-card">
+            <h4>加载中 <code>spinner</code></h4>
+            <div class="feed-body"><div class="spinner"></div></div>
+          </div>
+          <div class="feed-card">
+            <h4>骨架屏 <code>shimmer</code></h4>
+            <div class="feed-body"><div class="skeleton"><div class="sk-line w85"></div><div class="sk-line"></div><div class="sk-line w60"></div></div></div>
+          </div>
+          <div class="feed-card">
+            <h4>空状态 <code>empty</code></h4>
+            <div class="feed-body">
+              <div class="empty">
+                <div class="empty-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-message"/></svg></div>
+                <b>暂无会话</b><span>发出第一条消息后会出现在这里</span>
+              </div>
+            </div>
+          </div>
+          <div class="feed-card">
+            <h4>错误与重试 <code>error</code></h4>
+            <div class="feed-body">
+              <div class="empty">
+                <div class="empty-ico" style="background:var(--danger-soft);color:var(--danger)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-alert"/></svg></div>
+                <b>加载失败</b><span>服务器连接超时</span>
+                <button class="btn" style="margin-top:10px;height:30px;font-size:12px">重新加载</button>
+              </div>
+            </div>
+          </div>
+          <div class="feed-card">
+            <h4>离线提示 <code>offline</code></h4>
+            <div class="feed-body" style="align-items:flex-start">
+              <div class="offline-bar">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-alert"/></svg>
+                当前处于离线状态
+                <button>重试</button>
+              </div>
+            </div>
+          </div>
+          <div class="feed-card">
+            <h4>字段校验 <code>inline error</code></h4>
+            <div class="feed-body">
+              <div class="field-demo">
+                <label>任务名称</label>
+                <div class="inp">门诊随访名单汇总</div>
+                <div class="err"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-alert"/></svg>名称已存在，请换一个</div>
+              </div>
+            </div>
+          </div>
+          <div class="feed-card">
+            <h4>上传进度 <code>progress</code></h4>
+            <div class="feed-body" style="flex-direction:column;width:100%">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:12px;color:var(--sub)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-file"/></svg>
+                抗凝方案核对报告.pdf
+              </div>
+              <div class="progress-track"><div class="progress-fill"></div></div>
+              <div class="progress-meta"><span>上传中</span><span>68%</span></div>
+            </div>
+          </div>
+          <div class="feed-card">
+            <h4>已回复态 <code>answered</code></h4>
+            <div class="feed-body">
+              <div class="empty">
+                <div class="empty-ico" style="background:var(--success-soft);color:var(--success)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check-circle"/></svg></div>
+                <b>已回复「改为 30 天」</b><span>AI 继续执行，结果会写入本任务</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h3>反馈规则</h3>
+        <div class="grid g2">
+          <div class="panel">
+            <h4>出现位置</h4>
+            <ul class="rule-list">
+              <li>页面级加载 / 空 / 错误：内容区原位，占位高度不小于 160px。</li>
+              <li>字段级错误：字段下方 6px，使用 11.5px 危险色。</li>
+              <li>操作结果：Toast 或按钮内联状态，不使用阻塞弹框。</li>
+              <li>网络状态：顶部内联条或页面级提示，不用 Toast 重复打扰。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4>行为</h4>
+            <ul class="rule-list">
+              <li>超过 300ms 的请求才显示加载态，避免闪烁。</li>
+              <li>失败必须提供重试或明确后续动作。</li>
+              <li>成功提示不阻断下一步操作，2.2s 自动消失。</li>
+              <li>同一错误不连续弹多个 Toast，合并为一条。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 06 覆盖矩阵 ───────────────────────────────── -->
+      <section class="sec" id="coverage">
+        <div class="sec-head"><span class="sec-no">06</span><h2>场景覆盖矩阵</h2></div>
+        <p class="sec-desc">对现有原型逐页盘点交互状态，标出已覆盖与本次补齐的标准化节点。补齐项均复用本规范的弹框与反馈模板，不新增独立样式。</p>
+
+        <div class="matrix-legend">
+          <span><i class="m-ok"></i>已覆盖</span>
+          <span><i class="m-new"></i>本次补齐</span>
+          <span><i class="m-na"></i>不适用</span>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="matrix">
+            <thead>
+              <tr><th style="width:22%">页面 / 模块</th><th>默认</th><th>加载</th><th>空状态</th><th>错误</th><th>弹框</th><th>操作反馈</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><b>首页 · 新对话</b><span>home</span></td><td class="yes">✓</td><td class="na">—</td><td class="na">—</td><td class="add">离线条</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+              <tr><td><b>全部任务</b><span>tasks</span></td><td class="yes">✓</td><td class="add">骨架屏</td><td class="yes">✓</td><td class="add">重试</td><td class="add">删除确认</td><td class="yes">✓</td></tr>
+              <tr><td><b>自动化</b><span>automations</span></td><td class="yes">✓</td><td class="add">骨架屏</td><td class="add">空状态</td><td class="add">重试</td><td class="add">新建 / 删除</td><td class="yes">✓</td></tr>
+              <tr><td><b>会话详情</b><span>chat</span></td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="add">断线重连</td><td class="add">长按操作</td><td class="yes">✓</td></tr>
+              <tr><td><b>定时任务详情</b><span>scheduled</span></td><td class="yes">✓</td><td class="add">骨架屏</td><td class="yes">✓</td><td class="add">重试</td><td class="add">停止运行确认</td><td class="yes">✓</td></tr>
+              <tr><td><b>我的</b><span>me</span></td><td class="yes">✓</td><td class="na">—</td><td class="na">—</td><td class="add">离线条</td><td class="add">退出登录确认</td><td class="yes">✓</td></tr>
+              <tr><td><b>设置</b><span>settings</span></td><td class="yes">✓</td><td class="na">—</td><td class="na">—</td><td class="na">—</td><td class="add">清除缓存确认</td><td class="yes">✓</td></tr>
+              <tr><td><b>登录</b><span>login</span></td><td class="yes">✓</td><td class="add">提交 loading</td><td class="na">—</td><td class="add">字段校验</td><td class="na">—</td><td class="yes">✓</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>本次补齐的标准化节点</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th style="width:26%">缺失节点</th><th style="width:20%">类型</th><th>标准做法</th></tr></thead>
+            <tbody>
+              <tr><td><b>删除会话 / 任务</b></td><td><span class="tag new">危险确认</span></td><td>标题写明对象，说明不可恢复；取消在左，红色危险按钮在右。</td></tr>
+              <tr><td><b>退出登录</b></td><td><span class="tag new">危险确认</span></td><td>提示会退出当前账号并断开服务器连接；确认后回到登录页。</td></tr>
+              <tr><td><b>停止任务 / 停止生成</b></td><td><span class="tag new">确认操作</span></td><td>说明已生成内容会保留；主按钮「停止」，次按钮「继续」。</td></tr>
+              <tr><td><b>新建 / 编辑自动化</b></td><td><span class="tag new">表单弹框</span></td><td>名称、指令、周期三个字段；周期使用底部选择器；保存前校验。</td></tr>
+              <tr><td><b>更多操作</b></td><td><span class="tag new">底部操作表</span></td><td>立即运行 / 查看记录 / 暂停或启用；删除单独置底标红。</td></tr>
+              <tr><td><b>网络断开</b></td><td><span class="tag new">离线反馈</span></td><td>页面顶部内联条 + 重试；恢复后自动消失，不弹 Toast。</td></tr>
+              <tr><td><b>请求失败</b></td><td><span class="tag new">错误状态</span></td><td>内容区原位展示图标、原因与「重新加载」，保留页面导航。</td></tr>
+              <tr><td><b>长列表加载</b></td><td><span class="tag new">骨架屏</span></td><td>按最终布局给出 3 行骨架，避免 spinner 造成布局跳动。</td></tr>
+              <tr><td><b>字段校验</b></td><td><span class="tag new">行内错误</span></td><td>错误字段红框 + 下方说明；提交时聚焦首个错误。</td></tr>
+              <tr><td><b>文件上传</b></td><td><span class="tag new">进度反馈</span></td><td>文件名 + 4px 进度条 + 百分比；失败可重试，成功 Toast。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="note is-warn">
+          <b>落地顺序建议：</b>先统一颜色与字体令牌（全局生效，风险最低），再接入弹框组件（危险确认 → 表单 → 操作表），最后逐页补齐加载、空、错误与离线状态。每接入一类，按本页验收清单回归一次。
+        </div>
+      </section>
+
+      <!-- ── 07 落地 ───────────────────────────────────── -->
+      <section class="sec" id="delivery">
+        <div class="sec-head"><span class="sec-no">07</span><h2>落地与验收</h2></div>
+        <p class="sec-desc">规范以设计令牌、组件模板与验收清单三部分交付。代码侧对应 Taro 的 <code>tokens.scss</code> / <code>global.scss</code>。</p>
+
+        <h3>令牌映射</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th style="width:24%">令牌</th><th style="width:22%">值</th><th>代码位置</th></tr></thead>
+            <tbody>
+              <tr><td><b>颜色</b></td><td><code>$primary / $success / $warning / $danger</code></td><td><code>src/styles/tokens.scss</code></td></tr>
+              <tr><td><b>字体</b></td><td><code>$font / $font-mono</code> + 字阶</td><td>字阶以组件类落地；新增 <code>.t-*</code> 工具类或 SCSS mixin</td></tr>
+              <tr><td><b>圆角</b></td><td><code>$radius-control / sm / md / card / lg / pill</code></td><td><code>tokens.scss</code>；弹框新增 <code>$radius-modal: 24px</code></td></tr>
+              <tr><td><b>阴影</b></td><td><code>$shadow-sm / md / lg</code></td><td><code>tokens.scss</code>；弹框使用 lg，卡片使用描边</td></tr>
+              <tr><td><b>动效</b></td><td><code>$ease: cubic-bezier(.2,.8,.2,1)</code></td><td>全局统一；弹框/Sheet/Toast 时长见 04 节</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>交付验收清单</h3>
+        <div class="checklist">
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>颜色令牌与使用规则已定义，含对比度基线</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>9 级字阶、字重、行高与截断规则已定义</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>图标网格、线宽、尺寸与场景已定义</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>7 类弹框的结构、尺寸、动效与行为已定义</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>9 类反馈状态与出现位置已定义</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>8 个页面 × 7 类状态覆盖矩阵已盘点</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>弹框组件接入 Taro 主工程并替换原生弹窗</span></div>
+          <div class="check"><span class="box"></span><span>全页面按矩阵补齐加载 / 空 / 错误 / 离线态</span></div>
+          <div class="check"><span class="box"></span><span>逐页完成交互回归与无障碍检查</span></div>
+        </div>
+
+        <div class="note">
+          <b>验收口径：</b>任一页面通过验收需同时满足——颜色仅使用本规范令牌；字号不低于 11px；所有异步操作有三态；所有危险操作有二次确认；键盘与读屏可完成主流程。
+        </div>
+      </section>
+
+      <footer class="foot">
+        <span>PrismClaw · Mobile Design System v1.0</span>
+        <span>基础令牌来源：tokens.scss · 最后更新 2026-11-09</span>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<!-- 交互弹层 -->
+<div class="overlay" id="overlay" aria-hidden="true">
+  <div class="dialog" id="dialog" role="dialog" aria-modal="true"></div>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<script>
+  /* ── 色板数据 ───────────────────────────────────────── */
+  const SWATCHES = {
+    brand: [
+      { name: 'Primary · 主色', hex: '#2C59BC', token: '--primary', use: '主按钮、选中态、链接', dark: true },
+      { name: 'Primary Pressed · 按下', hex: '#002FA7', token: '--primary-press', use: '主按钮按下 / 强调文字', dark: true },
+      { name: 'Primary Soft · 主色浅底', hex: '#E9EEF9', token: '--primary-soft', use: '选中背景、信息底色', dark: false }
+    ],
+    functional: [
+      { name: 'Success · 成功', hex: '#1A7F37', token: '--success', use: '成功状态、通过', dark: true },
+      { name: 'Warning · 警告', hex: '#9A6700', token: '--warning', use: '待处理、风险提示', dark: true },
+      { name: 'Danger · 错误', hex: '#D12224', token: '--danger', use: '失败、删除、驳回', dark: true },
+      { name: 'Info · 信息', hex: '#2C59BC', token: '--info', use: '中性提示、引导', dark: true }
+    ],
+    neutral: [
+      { name: 'Text · 正文', hex: '#1F232B', token: '--text', use: '标题、正文', dark: true },
+      { name: 'Text Sub · 辅助', hex: '#575B62', token: '--sub', use: '说明、次要正文', dark: true },
+      { name: 'Text 3 · 弱化', hex: '#838C9E', token: '--muted', use: '时间、占位、元信息', dark: true },
+      { name: 'Hairline · 发丝线', hex: '#E2E6EE', token: '--line', use: '分割线、卡片描边', dark: false },
+      { name: 'Surface 3 · 三级面', hex: '#EAEEF5', token: '--surface-3', use: '标签底、图标容器', dark: false },
+      { name: 'Surface 2 · 二级面', hex: '#F2F5FA', token: '--surface-2', use: '输入框、内嵌区块', dark: false },
+      { name: 'Surface · 卡片面', hex: '#FDFBF7', token: '--surface', use: '卡片、弹框、浮层', dark: false },
+      { name: 'Background · 页面底', hex: '#EBEEF2', token: '--bg', use: '页面背景', dark: false },
+      { name: 'Border · 控件描边', hex: '#D7DDE6', token: '--line-strong', use: '输入框、次级按钮', dark: false },
+      { name: 'Danger Soft · 错误浅底', hex: '#FDECEA', token: '--danger-soft', use: '错误提示底色', dark: false }
+    ]
+  };
+
+  function renderSwatches(key, el) {
+    el.innerHTML = SWATCHES[key].map(function (s) {
+      return '<button class="swatch" data-hex="' + s.hex + '" title="点击复制 ' + s.hex + '">' +
+        '<div class="swatch-color" style="background:' + s.hex + '">' +
+          '<span>' + s.hex + '</span>' +
+        '</div>' +
+        '<div class="swatch-body">' +
+          '<b>' + s.name + '</b>' +
+          '<code>' + s.hex + ' · ' + s.token + '</code>' +
+          '<em>' + s.use + '</em>' +
+        '</div>' +
+      '</button>';
+    }).join('');
+  }
+  renderSwatches('brand', document.getElementById('sw-brand'));
+  renderSwatches('functional', document.getElementById('sw-functional'));
+  renderSwatches('neutral', document.getElementById('sw-neutral'));
+
+  document.addEventListener('click', function (e) {
+    var sw = e.target.closest('.swatch');
+    if (!sw) return;
+    var hex = sw.getAttribute('data-hex');
+    if (navigator.clipboard) navigator.clipboard.writeText(hex).catch(function () {});
+    showToast('已复制 ' + hex);
+  });
+
+  /* ── 图标网格 ───────────────────────────────────────── */
+  var ICON_LIST = ['chevron-left', 'plus', 'x', 'check', 'check-circle', 'alert', 'info', 'clock',
+    'message', 'download', 'mic', 'keyboard', 'search', 'trash', 'settings', 'bell',
+    'folder', 'file', 'more', 'lock', 'calendar', 'refresh', 'arrow-up', 'message'];
+  document.getElementById('icon-grid').innerHTML = ICON_LIST.map(function (n) {
+    return '<div class="icon-cell" title="' + n + '">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><use href="#i-' + n + '"/></svg>' +
+      '<small>' + n + '</small></div>';
+  }).join('');
+
+  /* ── 弹框演示 ───────────────────────────────────────── */
+  var overlay = document.getElementById('overlay');
+  var dialog = document.getElementById('dialog');
+  var lastFocus = null;
+
+  var DEMOS = {
+    alert: function () {
+      return '<h3>已保存到服务器</h3>' +
+        '<p>任务配置已更新，将在下一次调度时生效。你可以在任意端继续编辑。</p>' +
+        '<div class="actions"><button class="btn primary" data-close>知道了</button></div>';
+    },
+    confirm: function () {
+      return '<h3>暂停这个自动化？</h3>' +
+        '<p>暂停后将不再按周期运行，已有运行记录与产出物会保留。</p>' +
+        '<div class="actions"><button class="btn" data-close>取消</button>' +
+        '<button class="btn primary" data-close>暂停任务</button></div>';
+    },
+    danger: function () {
+      return '<h3>删除这条会话？</h3>' +
+        '<p>删除后会话记录与产出物将无法恢复，关联的定时任务不会受影响。</p>' +
+        '<div class="actions"><button class="btn" data-close>取消</button>' +
+        '<button class="btn danger" data-close>删除会话</button></div>';
+    },
+    form: function () {
+      return '<h3>新建自动化</h3>' +
+        '<p>设置名称与运行周期，保存后由服务器调度执行。</p>' +
+        '<div class="field"><label>名称</label><input value="门诊随访名单汇总" /></div>' +
+        '<div class="field"><label>运行周期</label><select><option>每天 17:30</option><option>每周一 09:00</option></select></div>' +
+        '<div class="actions"><button class="btn" data-close>取消</button>' +
+        '<button class="btn primary" data-save>保存</button></div>';
+    },
+    sheet: function () {
+      return '<div class="sheet-grab"></div>' +
+        '<div class="sheet-list">' +
+        '<button class="sheet-item" data-close>立即运行</button>' +
+        '<button class="sheet-item" data-close>查看运行记录</button>' +
+        '<button class="sheet-item" data-close>暂停自动化</button>' +
+        '<button class="sheet-item danger" data-close>删除自动化</button>' +
+        '</div>' +
+        '<div class="sheet-list"><button class="sheet-item cancel" data-close>取消</button></div>';
+    }
+  };
+
+  function openDemo(type) {
+    lastFocus = document.activeElement;
+    dialog.innerHTML = DEMOS[type]();
+    overlay.classList.toggle('is-sheet', type === 'sheet');
+    overlay.classList.add('is-open');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    var first = dialog.querySelector('button, input, select');
+    first && first.focus();
+  }
+
+  function closeDemo() {
+    overlay.classList.remove('is-open', 'is-sheet');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    lastFocus && lastFocus.focus();
+  }
+
+  document.querySelectorAll('[data-demo]').forEach(function (btn) {
+    btn.addEventListener('click', function () { openDemo(btn.getAttribute('data-demo')); });
+  });
+
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) { closeDemo(); return; }
+    if (e.target.closest('[data-close]')) { closeDemo(); return; }
+    if (e.target.closest('[data-save]')) { closeDemo(); showToast('自动化已保存'); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay.classList.contains('is-open')) closeDemo();
+  });
+
+  /* ── Toast ──────────────────────────────────────────── */
+  var toastStack = document.getElementById('toastStack');
+  function showToast(text, kind) {
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<use href="#i-' + (kind === 'warn' ? 'alert' : 'check-circle') + '"/></svg><span>' + text + '</span>';
+    toastStack.appendChild(el);
+    setTimeout(function () {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(4px)';
+      el.style.transition = 'all .16s ease';
+      setTimeout(function () { el.remove(); }, 180);
+    }, 2200);
+  }
+
+  /* ── 导航高亮 ───────────────────────────────────────── */
+  var links = Array.prototype.slice.call(document.querySelectorAll('.nav a'));
+  var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+  function syncNav() {
+    var y = window.scrollY + 120;
+    var active = 0;
+    sections.forEach(function (sec, i) { if (sec && sec.offsetTop <= y) active = i; });
+    links.forEach(function (a, i) { a.classList.toggle('active', i === active); });
+  }
+  window.addEventListener('scroll', syncNav, { passive: true });
+  syncNav();
+</script>
+</body>
+</html>

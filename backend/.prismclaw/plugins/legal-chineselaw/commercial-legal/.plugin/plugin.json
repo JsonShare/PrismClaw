@@ -1,0 +1,11 @@
+{
+  "name": "commercial-legal",
+  "version": "1.0.2",
+  "description": "依据团队剧本审查供应商协议、NDA 及 SaaS 订阅，在截止日期前追踪续约与取消通知，路由升级至正确审批人，并将审查结果转化为业务利益相关方能够直接阅读的摘要。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

@@ -1,0 +1,88 @@
+# 法律元力（yuanli.ailaw.cn）skillpack 静态目录（离线/无 API 时兜底）
+# 在线优先：PRISMCLAW.md ## 法律元力 → base_url + 参考 yuanli-api.md
+#   GET {BASE}/api/toolkits/catalog | ?search= | {id}/download
+# 来源：yuanli.ailaw.cn 工具包目录（摘录）；安装见 skill-installer
+
+schema_version: "0.1.0"
+catalog_id: yuanli-cn
+title: 法律元力（华宇元典 · yuanli.ailaw.cn）
+default_base_url: "https://yuanli.ailaw.cn"
+base_url_note: "中国法发行默认站点（法律元力）。profile 未填 base_url 时，skill 先试此默认再回退本静态目录。"
+
+toolkits:
+  - id: legal-skillpack-legal-research-cn
+    name: 中国法法律研究
+    skill_count: 4
+    package_dir: legal-skillpack-legal-research-cn
+    author: 华宇元典
+    tags: [法律研究, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: prc-legal-research-deep-research
+    description: "中国法律研究四技能套件：法规检索/案例分析/类案检索/研究报告生成。适合需要频繁检索法律法规和裁判文书的律师/法务。"
+
+  - id: legal-skillpack-commercial-legal
+    name: 商事合同法务
+    skill_count: 12
+    package_dir: legal-skillpack-commercial-legal
+    author: 华宇元典
+    tags: [商事合同, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: commercial-review
+    description: "商事合同审查/谈判/管理全流程套件：保密协议分级、供应商协议审查、SaaS协议审查、续约跟踪、条款修订历史。适合企业法务和商事律师。"
+
+  - id: legal-skillpack-corporate-legal
+    name: 公司法务
+    skill_count: 13
+    package_dir: legal-skillpack-corporate-legal
+    author: 华宇元典
+    tags: [公司法务, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: corporate-matter-workspace
+    description: "公司并购/治理/实体管理全流程套件：尽调问题提取、三会会议纪要、书面决议、交割清单、实体合规跟踪。适合公司法务团队和并购律师。"
+
+  - id: legal-skillpack-regulatory-legal
+    name: 监管合规法务
+    skill_count: 10
+    package_dir: legal-skillpack-regulatory-legal
+    author: 华宇元典
+    tags: [监管合规, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: regulatory-reg-feed-watcher
+    description: "监管合规全流程套件：法规追踪/合规差距分析/许可资质管理/监管应对。适合需要跟踪监管动态的法务和合规团队。"
+
+  - id: legal-skillpack-litigation-legal
+    name: 诉讼业务管理
+    skill_count: 19
+    package_dir: legal-skillpack-litigation-legal
+    author: 华宇元典
+    tags: [诉讼业务, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: litigation-matter-intake
+    description: "诉讼/仲裁全流程套件：案件接入/证据分析/文书起草/庭审准备/结案管理。适合诉讼律师和诉讼支持团队。"
+
+  - id: legal-skillpack-ai-governance-legal
+    name: AI 治理合规
+    skill_count: 9
+    package_dir: legal-skillpack-ai-governance-legal
+    author: 华宇元典
+    tags: [AI治理, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: ai-governance-use-case-triage
+    description: "AI 治理合规套件：AI 使用场景分类/风险评估/政策起草/监管合规。适合需要应对《生成式AI管理暂行办法》等AI法规的团队。"
+
+  - id: legal-skillpack-law-student
+    name: 法学学习与法考备考
+    skill_count: 13
+    package_dir: legal-skillpack-law-student
+    author: 华宇元典
+    tags: [法学学习, 法考, agents-for-legal-cn]
+    published_at: "2026-05-18"
+    install_type: portable_zip
+    entry_skill_hint: law-student-session
+    description: "法学学习与法考备考套件：知识点精讲/真题解析/模拟考试/学习计划。适合法学生和备考法律职业资格考试的学员。"

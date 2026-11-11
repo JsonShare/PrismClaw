@@ -1,0 +1,11 @@
+{
+  "name": "medical-research",
+  "version": "1.0.0",
+  "description": "医学文献综述、研究设计方案、统计分析方法及临床试验工作流辅助。支持系统评价、荟萃分析、随机对照试验设计与统计检验选择。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "skills": "./skills"
+}

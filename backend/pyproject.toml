@@ -1,0 +1,132 @@
+[project]
+name = "prismclaw"
+version = "0.1.0"
+description = "a multi-channel AI assistant gateway with compute-storage separation"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [
+    { name = "PrismClaw Contributors" },
+]
+
+dependencies = [
+    "fastapi>=0.136.3",
+    "uvicorn[standard]>=0.48.0",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.1",
+    "redis[hiredis]>=7.4.0",
+    "httpx>=0.28.1,<1.0",
+    "websockets>=15.0.1",
+    "aiohttp>=3.14.3",
+    "litellm>=1.106.1",
+    "pyyaml>=6.0.3",
+    "ruamel-yaml>=0.18.0",
+    "apscheduler>=3.11.2",
+    "croniter>=6.2.4",
+    "mcp>=2.3.0",
+    "beautifulsoup4>=4.14.3",
+    "defusedxml>=0.7.1",
+    "python-docx>=1.2.0",
+    "openpyxl>=3.1.5",
+    "python-pptx>=1.0.2",
+    "pathspec>=1.1.1",
+    "jieba>=0.42.1",
+    "rjieba>=0.2.1",
+    "sqlalchemy>=2.0.51",
+    # Observability (P10-OBS-01): structured JSON logs + Prometheus metrics
+    "python-json-logger>=2.0.0",
+    "prometheus-fastapi-instrumentator>=8.1.0",
+    # API security (P10-SEC-05): rate limiting
+    "slowapi>=0.1.10",
+    # Distributed tracing (P10-OBS-02): OpenTelemetry instrumentation
+    "opentelemetry-api>=1.44.0",
+    "opentelemetry-sdk>=1.44.0",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
+]
+
+[project.optional-dependencies]
+postgres = [
+    "asyncpg>=0.31.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "pgvector>=0.5.0",
+]
+browser = [
+    "playwright>=1.63.0",
+    "Pillow>=12.2.0",
+    "numpy>=2.4.6",
+]
+# 业务域模块由 scripts/compile/domains.yaml + scripts/compile/domains-registry.mjs 统一管理
+# 安装方式：make build-cloud 或 Dockerfile 自动按 .domains.env 裁剪安装
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.1.0",
+    "testcontainers[redis,postgres]>=4.14.2",
+    "respx>=0.23.1",
+    "ruff>=0.15.14",
+    "mypy>=2.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+exclude = [
+    "tests/helpers/**",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prismclaw"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: requires real Redis at PRISMCLAW_TEST_REDIS_* env vars",
+    "e2e: end-to-end tests requiring real LLM API (PRISMCLAW_LLM_API_KEY env var)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:websockets.legacy",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC", "B", "SIM"]
+ignore = [
+    "ANN101",
+    "ANN102",
+    # Existing codebase carries pre-existing type-annotation gaps. Requiring
+    # them on every commit would mass-rewrite touched files. New code SHOULD
+    # add annotations but the linter doesn't fail on the legacy gap.
+    "ANN001",  # missing-type-function-argument
+    "ANN201",  # missing-return-type-undocumented-public-function
+    "ANN202",  # missing-return-type-private-function
+    "ANN204",  # missing-return-type-special-method
+    "ANN205",  # missing-return-type-static-method
+    "ANN206",  # missing-return-type-class-method
+    "ANN002",  # missing-type-args (*args)
+    "ANN003",  # missing-type-kwargs (**kwargs)
+    "ANN401",  # any-type — required for SDK interop and legacy untyped surfaces
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately need wide-open patterns (Exception assertions, magic
+# variable names from fixtures, multi-with-statements). Keep these errors
+# off the test path so signal-vs-noise stays high in production code.
+"tests/**/*.py" = [
+    "E501",     # line-too-long (test data + parametrize ids run wide)
+    "B017",     # pytest.raises(Exception) — sometimes a deliberate breadth
+    "E741",     # ambiguous-variable-name (l, I, O are common in test math)
+    "SIM117",   # multiple-with-statements
+    "F841",     # unused-variable (test setup may keep references for clarity)
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]

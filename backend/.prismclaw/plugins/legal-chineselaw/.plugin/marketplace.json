@@ -1,0 +1,19 @@
+{
+  "name": "legal-chineselaw",
+  "version": "2.0.0",
+  "description": "中国法律综合插件包：涵盖商事合同、公司治理、劳动用工、知识产权、诉讼仲裁、隐私合规、产品合规、监管合规及AI治理等领域，集成法律文书审查、合规风险评估、案例分析等核心能力。",
+  "plugins": [
+    {"name": "commercial-legal", "source": "./commercial-legal"},
+    {"name": "corporate-legal", "source": "./corporate-legal"},
+    {"name": "employment-legal", "source": "./employment-legal"},
+    {"name": "ip-legal", "source": "./ip-legal"},
+    {"name": "law-student", "source": "./law-student"},
+    {"name": "legal-builder-hub", "source": "./legal-builder-hub"},
+    {"name": "legal-clinic", "source": "./legal-clinic"},
+    {"name": "litigation-legal", "source": "./litigation-legal"},
+    {"name": "privacy-legal", "source": "./privacy-legal"},
+    {"name": "product-legal", "source": "./product-legal"},
+    {"name": "regulatory-legal", "source": "./regulatory-legal"},
+    {"name": "ai-governance-legal", "source": "./ai-governance-legal"}
+  ]
+}

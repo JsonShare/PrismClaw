@@ -1,0 +1,67 @@
+# PrismClaw Runtime-Agent — 通用办公场景
+# 
+# 标准 Dockerfile 变体：default-v1 / legal-v1 / restricted-v1
+# 通过 BUILD_ARG TEMPLATE_ID 切换安全配置。
+#
+# 构建：
+#   docker build -f deploy/Dockerfile.runtime-agent --build-arg TEMPLATE_ID=default-v1 -t prismclaw/runtime-agent:default-v1 .
+#   docker build -f deploy/Dockerfile.runtime-agent --build-arg TEMPLATE_ID=restricted-v1 -t prismclaw/runtime-agent:restricted-v1 .
+#
+# 运行（Swarm 模式）：
+#   docker service create --name prismclaw-ws-001 prismclaw/runtime-agent:restricted-v1
+
+# Pin Python patch version to avoid :slim (mutable) tag drift between builds.
+ARG PYTHON_VERSION=3.12.7
+
+# ── Stage 1: 构建依赖 ────────────────────────────────────────────────
+FROM python:${PYTHON_VERSION}-slim AS builder
+
+WORKDIR /build
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir --prefix=/install .
+
+# ── Stage 2: Runtime ────────────────────────────────────────────────
+FROM python:${PYTHON_VERSION}-slim
+
+ARG TEMPLATE_ID=default-v1
+
+# 安全标签（嵌入镜像元数据）
+LABEL prismclaw.template_id=${TEMPLATE_ID}
+LABEL prismclaw.component=runtime-agent
+
+# 系统依赖（tini 用于信号转发；运行时不保留 curl）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 依赖（从 builder 阶段复制）
+COPY --from=builder /install /usr/local
+
+# 源码
+COPY src/ ./src/
+
+# 工作区目录（非 root 归属）
+RUN groupadd --system --gid 10002 agentuser \
+    && useradd --system --uid 10002 --gid 10002 --home-dir /workspace --shell /usr/sbin/nologin agentuser \
+    && mkdir -p /workspace \
+    && chown -R agentuser:agentuser /workspace /usr/local
+USER agentuser
+
+# Runtime-Agent 端口
+EXPOSE 9001
+
+# 环境变量默认值（Swarm 部署时覆盖）
+ENV PRISMCLAW_WORKSPACE_ROOT=/workspace
+ENV PRISMCLAW_TEMPLATE_ID=${TEMPLATE_ID}
+ENV PRISMCLAW_RUNTIME_AGENT_PORT=9001
+ENV HOME=/workspace
+
+# Health check via Python (no curl in runtime image).
+HEALTHCHECK --interval=15s --timeout=3s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)" || exit 1
+
+# 启动 Runtime-Agent（tini 处理信号）
+CMD ["tini", "--", "python", "-m", "uvicorn", \
+     "prismclaw.runtime.agent.server:app", \
+     "--host", "0.0.0.0", "--port", "9001", \
+     "--no-access-log"]

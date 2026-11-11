@@ -1,0 +1,11 @@
+{
+  "name": "legal-builder-hub",
+  "version": "1.0.0",
+  "description": "发现、评估并安装社区法律技能——在任何内容进入你的环境之前都经过安全审查关卡。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

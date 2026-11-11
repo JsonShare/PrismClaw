@@ -1,0 +1,54 @@
+# 进程与部署面配置：服务监听、运行时根、工作区根、Web 通道。
+# 本文件同时是配置加载的“锚点文件”（find_config_file 首先查找 server.yaml）。
+# 归属顶层键：server / affinity / runtime / workspaces / channels
+#
+# 使用方式：复制为同目录下的 server.yaml 后按需修改。
+#   cp backend/configs/server.example.yaml backend/configs/server.yaml
+
+server:
+  host: "0.0.0.0"          # 监听地址；容器内通常保持 0.0.0.0
+  port: 8017               # 后端 HTTP 端口
+
+affinity:
+  # 多副本时是否按会话亲和调度（单机部署保持 false，避免额外粘性开销）
+  enabled: false
+
+runtime:
+  # 全局技能/插件运行时根（共享依赖安装点，所有用户共用）
+  # node_modules、fonts、pip --target 包等重资产存这里，一次安装全 workspace 生效
+  default: "~/.prismclaw/runtime"
+
+workspaces:
+  # 新建工作区的默认父目录
+  default: "~/.prismclaw/workspaces"
+  # 新工作区创建时自动写入的引导文件
+  bootstrap_files:
+    - "AGENTS.md"
+
+channels:
+  web:
+    enabled: true
+    heartbeat_interval: 30          # 秒；前端 WebSocket 心跳间隔
+    pong_timeout: 10                # 秒；心跳无响应判定超时
+    max_connections_per_user: 12    # 单用户并发连接上限
+    cors_origins:
+      - "http://localhost:5173"
+      - "http://127.0.0.1:5173"
+    # JWT 签发参数（归属本文件，不拆分到 security.yaml，避免同一顶层键跨文件归属）
+    # 若需轮换，直接改这里并重启；旧 token 会立即失效
+    # 生成方式：python -c "import secrets; print(secrets.token_urlsafe(64))"
+    jwt_secret: "change-me-use-a-random-64-byte-string"
+    jwt_expires: 2592000            # 秒；默认 30 天
+    # 邮箱验证码通道（注册 / 找回密码）。enabled=false 时登录页仍显示入口，
+    # 但表单内提示“邮箱服务未配置”并禁用发送按钮。
+    # 生产环境请用环境变量注入密码：password: "{env:PRISMCLAW_SMTP_PASSWORD}"
+    smtp:
+      enabled: false
+      host: ""
+      port: 587
+      username: ""
+      password: ""
+      from_addr: ""
+      from_name: "PrismClaw"
+      encryption: "starttls"     # none | starttls | ssl
+      timeout_seconds: 15

@@ -1,0 +1,8 @@
+{
+  "recommendedCategories": [
+    "contract-analysis",
+    "contract-reasoning",
+    "procurement-review"
+  ],
+  "_notes": "合同分析 MCP 服务器已移除。SKILL.md 已改造为纯 Read/Grep/SearchCodebase 方案，无需外部 MCP 服务。"
+}

@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrismClaw — 企业私有化部署的多域 AI Agent 平台</title>
+<meta name="description" content="PrismClaw 是开箱即用的企业级多域 AI Agent 平台：私有化部署、五层单向架构、四层记忆 + Dreaming、全链路安全治理。一条命令启动，覆盖医疗、法律、办公三大专业场景。">
+<meta name="theme-color" content="#FDF2D8">
+<meta property="og:type" content="website">
+<meta property="og:title" content="PrismClaw — 把你的 AI 团队装进自己的服务器">
+<meta property="og:description" content="企业私有化部署 · 开箱即用的多域 AI Agent 平台">
+<meta property="og:url" content="https://jsonshare.github.io/PrismClaw/">
+<meta property="og:image" content="https://jsonshare.github.io/PrismClaw/assets/readme/pc-light.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="./assets/readme/logo.png" type="image/png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./site.css">
+<script>document.documentElement.classList.add('js');</script>
+</head>
+<body id="top">
+<a class="skip-link" href="#main">跳到主要内容</a>
+
+<header class="nav" id="site-nav">
+  <div class="nav__inner container">
+    <a class="brand" href="#top" aria-label="PrismClaw 首页">
+      <span class="brand__mark"><img src="./assets/readme/logo.png" width="46" height="46" alt=""></span>
+      <span class="brand__text">PrismClaw<span class="brand__sub">PRIVATE AGENT OS</span></span>
+    </a>
+
+    <nav class="nav__links" id="nav-menu" aria-label="主导航">
+      <a href="#scenarios">场景</a>
+      <a href="#capabilities">能力</a>
+      <a href="#workflow">工作流</a>
+      <a href="#experience">双端</a>
+      <a href="#architecture">架构</a>
+      <a href="#start">快速开始</a>
+      <a class="nav__gh" href="https://github.com/JsonShare/PrismClaw" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
+    </nav>
+
+    <a class="btn btn--sm btn--pink nav__cta" href="#start">立刻部署</a>
+
+    <button class="nav__toggle" type="button" aria-label="打开导航菜单" aria-expanded="false" aria-controls="nav-menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- HERO -->
+  <section class="hero container" aria-labelledby="hero-title">
+    <div class="hero__copy">
+      <span class="badge"><span class="badge__dot" aria-hidden="true"></span>企业私有化部署 · MIT License</span>
+
+      <h1 id="hero-title">把你的 <span class="hl">AI 团队</span><br>装进自己的服务器。</h1>
+
+      <p class="lede">PrismClaw 是开箱即用的多域 AI Agent 平台——记得住团队每一份经验，<strong>用得越久越懂你</strong>；敏感操作层层审批、全程可追溯，<strong>安全无需你操心</strong>。</p>
+
+      <div class="hero__ctas">
+        <a class="btn btn--yellow" href="#start">一条命令跑起来 <span aria-hidden="true">→</span></a>
+        <a class="btn btn--ghost" href="#architecture">看看架构</a>
+      </div>
+
+      <ul class="hero__meta">
+        <li>7×24 全场景</li>
+        <li>零客户端</li>
+        <li>数据不出内网</li>
+      </ul>
+    </div>
+
+    <div class="hero__art reveal" aria-label="PrismClaw PC 端与移动端界面预览">
+      <span class="dots dots--hero" aria-hidden="true"></span>
+
+      <figure class="window window--main">
+        <div class="window__bar" aria-hidden="true">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="window__url">prismclaw.local:8000</span>
+        </div>
+        <img src="./assets/readme/pc-light.png" width="1600" height="1000" alt="PrismClaw PC 端登录页：品牌介绍、四领域能力与登录表单" fetchpriority="high" decoding="async">
+      </figure>
+
+      <figure class="phone phone--hero">
+        <img src="./assets/readme/mobile-light.png" width="780" height="1688" alt="PrismClaw 移动端 H5 首页" loading="lazy" decoding="async">
+      </figure>
+
+      <div class="sticker sticker--pink" aria-hidden="true">越用越懂你</div>
+      <div class="sticker sticker--green" aria-hidden="true">7×24<span>在线干活</span></div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="container" aria-label="项目概览">
+    <div class="stats reveal">
+      <div class="stat">
+        <span class="stat__k" style="--c:var(--blue)" aria-hidden="true"></span>
+        <div class="stat__value">3<em>大专业场景</em></div>
+        <div class="stat__label">医疗 / 法律 / 办公</div>
+      </div>
+      <div class="stat">
+        <span class="stat__k" style="--c:var(--green)" aria-hidden="true"></span>
+        <div class="stat__value">5<em>层单向架构</em></div>
+        <div class="stat__label">SCHEMA → APP</div>
+      </div>
+      <div class="stat">
+        <span class="stat__k" style="--c:var(--pink)" aria-hidden="true"></span>
+        <div class="stat__value">4<em>层记忆体系</em></div>
+        <div class="stat__label">+ DREAMING 策展</div>
+      </div>
+      <div class="stat">
+        <span class="stat__k" style="--c:var(--yellow)" aria-hidden="true"></span>
+        <div class="stat__value">1<em>条命令启动</em></div>
+        <div class="stat__label">DOCKER COMPOSE</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TICKER -->
+  <div class="ticker-wrap" aria-hidden="true">
+    <div class="ticker">
+      <div class="ticker__group">
+        <span class="ticker__item">私有化部署</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">开箱即用</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">多域 Agent</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">四层记忆</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">Dreaming</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">安全治理</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">MCP</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">水平扩展</span><span class="ticker__star">✱</span>
+      </div>
+      <div class="ticker__group">
+        <span class="ticker__item">私有化部署</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">开箱即用</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">多域 Agent</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">四层记忆</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">Dreaming</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">安全治理</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">MCP</span><span class="ticker__star">✱</span>
+        <span class="ticker__item">水平扩展</span><span class="ticker__star">✱</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCENARIOS -->
+  <section class="section container" id="scenarios" aria-labelledby="scenarios-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">01 / Scenarios</p>
+        <h2 id="scenarios-title">一套系统，<span class="hl">三个专业现场。</span></h2>
+      </div>
+      <p>医疗、法律、办公共享同一个垂直大模型基座。不是三个割裂的工具，而是一套可复用的能力底座。</p>
+    </div>
+
+    <div class="scenario-grid">
+      <article class="scenario scenario--blue reveal">
+        <div class="scenario__top">
+          <span class="scenario__icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <path d="M3 12h4l2.5-6 4 12L16 12h5"/>
+            </svg>
+          </span>
+          <span class="scenario__index">01</span>
+        </div>
+        <h3>医疗 AI</h3>
+        <p>融合权威医学指南与循证文献库，构建专业医学知识底座。辅助医生诊疗决策，提供有循证依据的临床支持。</p>
+        <p class="scenario__foot"><span>MEDICAL</span><span>循证知识库</span><span>临床决策</span></p>
+      </article>
+
+      <article class="scenario scenario--pink reveal" style="--d:.06s">
+        <div class="scenario__top">
+          <span class="scenario__icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3v18M5 7h14M5 7 2 14h6L5 7Zm14 0-3 7h6l-3-7Z"/>
+              <path d="M8 20h8"/>
+            </svg>
+          </span>
+          <span class="scenario__index">02</span>
+        </div>
+        <h3>法律 AI</h3>
+        <p>覆盖法规检索、合同审查与案例分析全链路，提供精准法律意见与合规审查，构建完整法律技能生态。</p>
+        <p class="scenario__foot"><span>LEGAL</span><span>合同审查</span><span>合规意见</span></p>
+      </article>
+
+      <article class="scenario scenario--yellow reveal">
+        <div class="scenario__top">
+          <span class="scenario__icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/>
+            </svg>
+          </span>
+          <span class="scenario__index">03</span>
+        </div>
+        <h3>办公 AI</h3>
+        <p>智能文档处理、会议摘要生成与工作流自动化，全面提升协作效率。支持 IM 对话与多模态交互。</p>
+        <p class="scenario__foot"><span>OFFICE</span><span>文档 × 流程</span><span>多模态</span></p>
+      </article>
+
+      <article class="scenario scenario--green reveal" style="--d:.06s">
+        <div class="scenario__top">
+          <span class="scenario__icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>
+            </svg>
+          </span>
+          <span class="scenario__index">04</span>
+        </div>
+        <h3>更多领域，值得探索</h3>
+        <p>医疗、法律、办公只是起点。同一套垂直大模型基座与技能体系，可按行业快速扩展——金融、制造、政务……下一个领域，由你定义。</p>
+        <p class="scenario__foot"><span>MORE DOMAINS</span><span>按行业扩展</span><span>由你定义</span></p>
+      </article>
+    </div>
+  </section>
+
+  <!-- CAPABILITIES -->
+  <section class="section section--rule container" id="capabilities" aria-labelledby="capabilities-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">02 / Capabilities</p>
+        <h2 id="capabilities-title">平台该有的，<span class="hl">全部开箱即用。</span></h2>
+      </div>
+      <p>从部署、记忆到安全治理，不需要再东拼西凑一堆开源件，也不用为每家企业重写一遍底座。</p>
+    </div>
+
+    <div class="bento">
+      <article class="cap cap--wide reveal">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--blue)">01</span>
+          <span class="cap__tag">DATA STAYS HOME</span>
+        </div>
+        <h3>私有化部署</h3>
+        <p>数据、记忆与审计全部留在企业自己的服务器。模型通过 OpenAI 兼容端点接入，可指向内网自建推理服务，无需外网。</p>
+        <div class="cap__chips"><span>数据不出内网</span><span>内网推理</span><span>自有 PostgreSQL / Redis</span></div>
+      </article>
+
+      <article class="cap reveal" style="--d:.05s">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--yellow)">02</span>
+          <span class="cap__tag">ZERO INSTALL</span>
+        </div>
+        <h3>开箱即用</h3>
+        <p>8 份 YAML 配置 + 一条 <code>docker compose up -d</code>。浏览器登录即用，PC 与移动 H5 双端，用户零安装。</p>
+        <div class="cap__chips"><span>8 份 YAML</span><span>单机起全套</span></div>
+      </article>
+
+      <article class="cap reveal">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--green)">03</span>
+          <span class="cap__tag">ONE-WAY DEPS</span>
+        </div>
+        <h3>五层单向架构</h3>
+        <p><code>schema → engine → runtime → assembly → app</code>，依赖严格单向；<code>app</code> 只能经 <code>runtime.facade</code> 访问引擎，改一处不牵一片。</p>
+        <div class="cap__chips"><span>单向依赖</span><span>边界清晰</span></div>
+      </article>
+
+      <article class="cap cap--wide reveal" style="--d:.05s">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--pink)">04</span>
+          <span class="cap__tag">MEMORY + DREAMING</span>
+        </div>
+        <h3>四层记忆 + Dreaming</h3>
+        <p>L1 工作 / L2 会话 / L3 语义（pgvector）/ L4 归档。空闲窗口执行 Light → Deep → REM 三阶段整理，把经验沉淀成可复用的团队记忆。</p>
+        <div class="cap__chips"><span>pgvector</span><span>三阶段策展</span><span>越用越懂你</span></div>
+      </article>
+
+      <article class="cap cap--wide reveal">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--orange)">05</span>
+          <span class="cap__tag">SERVER-SIDE ENFORCED</span>
+        </div>
+        <h3>安全治理</h3>
+        <p>SafetyGate 五步链、bwrap 内核级沙箱、DLP、ConsentGate、4-Eyes 审批、WORM 哈希链审计——全部在服务端强制，客户端无法绕过。</p>
+        <div class="cap__chips"><span>4-Eyes 审批</span><span>WORM 审计</span><span>bwrap 沙箱</span></div>
+      </article>
+
+      <article class="cap reveal" style="--d:.05s">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--blue)">06</span>
+          <span class="cap__tag">SCALE OUT</span>
+        </div>
+        <h3>可水平扩展</h3>
+        <p>Worker 无状态，Redis 维护 <code>session_key → worker_id</code> 亲和；宕机经 TTL 过期自动接管。技能、插件、MCP、子代理均可插拔。</p>
+        <div class="cap__chips"><span>active-active</span><span>可插拔</span></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- WORKFLOW -->
+  <section class="section container section--rule" id="workflow" aria-labelledby="workflow-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">03 / Workflow</p>
+        <h2 id="workflow-title">说一句话，<span class="hl">换一份可交付文件。</span></h2>
+      </div>
+      <p>输入框里写清目标，Agent 自主规划步骤、调用技能与工具；产出物在右侧实时预览，确认后直接下载。</p>
+    </div>
+
+    <div class="shots">
+      <figure class="shot reveal">
+        <div class="window">
+          <div class="window__bar" aria-hidden="true">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="window__url">prismclaw.local — 新任务</span>
+          </div>
+          <img src="./assets/readme/pc-index.png" width="2555" height="1213" alt="PrismClaw PC 工作台：对话输入框、工作方式切换，以及医疗、法律、科研三个场景示例" loading="lazy" decoding="async">
+        </div>
+        <figcaption><b>工作台</b> · 场景示例一键填入，工作方式与协作区随手切换</figcaption>
+      </figure>
+
+      <figure class="shot reveal">
+        <div class="window">
+          <div class="window__bar" aria-hidden="true">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="window__url">prismclaw.local — 会话 · 交付预览</span>
+          </div>
+          <img src="./assets/readme/pc-index2.png" width="2552" height="1213" alt="PrismClaw 会话页：左侧任务流与追问建议，右侧实时预览生成的 HTML 宣发方案" loading="lazy" decoding="async">
+        </div>
+        <figcaption><b>会话</b> · 左侧任务流与追问建议，右侧实时预览 HTML 交付物并可直接下载</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- EXPERIENCE -->
+  <section class="experience" id="experience" aria-labelledby="experience-title">
+    <div class="container exp-grid">
+      <div class="exp__copy reveal">
+        <p class="eyebrow">04 / Experience</p>
+        <h2 id="experience-title">一套设计语言，<span class="hl">两端无缝接力。</span></h2>
+        <p class="exp__lede">PC 工作台与移动端 H5 共享同一套主题令牌与信息层级：亮色近白冷灰，暗色靛蓝黑。登录、对话、任务、文件、自动化，在两端都在熟悉的位置。</p>
+        <ul class="exp__list">
+          <li>浏览器登录即用，不装任何客户端</li>
+          <li>亮色 / 暗色随系统自动切换</li>
+          <li>PC <code>:5173</code> · H5 <code>:10086</code> 本地预览</li>
+        </ul>
+        <div class="exp__chips"><span>PC 端</span><span>移动端 H5</span><span>同一套主题令牌</span></div>
+      </div>
+
+      <div class="exp__art reveal" aria-label="PrismClaw 暗色模式界面预览">
+        <span class="dots dots--exp" aria-hidden="true"></span>
+        <figure class="window window--exp">
+          <div class="window__bar" aria-hidden="true">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="window__url">prismclaw.local — dark</span>
+          </div>
+          <img src="./assets/readme/pc-dark.png" width="1600" height="1000" alt="PrismClaw PC 端暗色模式登录页" loading="lazy" decoding="async">
+        </figure>
+        <figure class="phone phone--exp">
+          <img src="./assets/readme/mobile-dark.png" width="780" height="1688" alt="PrismClaw 移动端 H5 暗色模式首页" loading="lazy" decoding="async">
+        </figure>
+        <div class="sticker sticker--yellow" aria-hidden="true">暗色模式</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section class="section container" id="architecture" aria-labelledby="architecture-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">05 / Architecture</p>
+        <h2 id="architecture-title">五层单向，<span class="hl">改一处不牵一片。</span></h2>
+      </div>
+      <p>依赖严格单向：L4 → L3 → L2 → L1 → L0。L1 承载全部业务逻辑且无状态，存储独立于 Worker——这是水平扩展的支点。</p>
+    </div>
+
+    <div class="arch-grid">
+      <a class="arch-figure reveal" href="./architecture/diagrams/system-architecture.html" aria-label="打开交互式系统架构图解">
+        <img src="./assets/readme/architecture.png" width="1531" height="1600" alt="PrismClaw 五层单向架构与数据流图解：Schema、Engine、Runtime、Assembly、App" loading="lazy" decoding="async">
+        <span class="arch-figure__badge">交互式图解 ↗</span>
+      </a>
+
+      <div class="arch-side">
+        <ol class="layers reveal">
+          <li class="layer" style="--c:var(--orange)">
+            <span class="layer__tag">L4</span>
+            <div><h3>app <span>通信层</span></h3><p>WebSocket · Auth · Gateway · HTTP Routes</p></div>
+          </li>
+          <li class="layer" style="--c:var(--blue)">
+            <span class="layer__tag">L3</span>
+            <div><h3>assembly <span>编配层</span></h3><p>Bundle 组装：Infrastructure → Runtime → Lifecycle</p></div>
+          </li>
+          <li class="layer" style="--c:var(--pink)">
+            <span class="layer__tag">L2</span>
+            <div><h3>runtime <span>运行时层</span></h3><p>engine facade · 记忆编排 · 能力刷新 · ChatService</p></div>
+          </li>
+          <li class="layer" style="--c:var(--green)">
+            <span class="layer__tag">L1</span>
+            <div><h3>engine <span>引擎层 · 无状态</span></h3><p>执行 · 沙箱 · 技能 · 插件 · 记忆 · Dreaming · MCP</p></div>
+          </li>
+          <li class="layer" style="--c:var(--yellow)">
+            <span class="layer__tag">L0</span>
+            <div><h3>schema <span>契约层 · 零依赖</span></h3><p>Protocol + 类型 + 配置</p></div>
+          </li>
+        </ol>
+
+        <p class="arch-note">任意数量 Worker 可共享同一套 Redis / PostgreSQL；会话、记忆、向量、审计全部落在企业自有存储，备份与迁移只需管这两处。</p>
+
+        <div class="arch-actions">
+          <a class="btn btn--sm btn--blue" href="./architecture/diagrams/system-architecture.html">打开交互式图解 <span aria-hidden="true">↗</span></a>
+          <a class="btn btn--sm btn--ghost" href="https://github.com/JsonShare/PrismClaw/blob/main/docs/architecture/architecture-prismclaw.md">架构文档 <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICKSTART -->
+  <section class="section section--rule container" id="start" aria-labelledby="start-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">06 / Quickstart</p>
+        <h2 id="start-title">一条命令，<span class="hl">把平台跑起来。</span></h2>
+      </div>
+      <p>Docker 单机起全套：PostgreSQL + Redis + 应用 + Runtime-Agent，首次启动会构建镜像。</p>
+    </div>
+
+    <div class="start-grid">
+      <div class="reveal">
+        <ol class="start-steps" aria-label="启动步骤">
+          <li><span>01</span>生成配置</li>
+          <li><span>02</span>填写密钥</li>
+          <li><span>03</span>一键启动</li>
+        </ol>
+
+        <div class="terminal">
+          <div class="terminal__bar">
+            <span class="dot dot--pink" aria-hidden="true"></span>
+            <span class="dot dot--yellow" aria-hidden="true"></span>
+            <span class="dot dot--green" aria-hidden="true"></span>
+            <span class="terminal__title">bash — prismclaw</span>
+            <button class="copy" type="button" data-copy="docker-cmd" aria-label="复制启动命令">复制</button>
+          </div>
+          <pre><code id="docker-cmd"><span class="t-c"># 1 · 生成配置（仓库只提交脱敏模板）</span>
+cd backend/configs
+for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done
+cd ../..
+cp deploy/configs/mcp.prod.example.yaml deploy/configs/mcp.prod.yaml
+
+<span class="t-c"># 2 · 填写部署密钥（PG 密码 / HMAC / MCP token / JWT）</span>
+cd deploy && cp .env.example .env && vim .env
+
+<span class="t-c"># 3 · 一键启动</span>
+docker compose up -d
+
+<span class="t-g"># → 打开 http://&lt;服务器IP&gt;:8000 登录</span></code></pre>
+        </div>
+
+        <div class="start-actions">
+          <a class="btn btn--sm btn--yellow" href="https://github.com/JsonShare/PrismClaw/blob/main/deploy/DEPLOY.md">部署手册 <span aria-hidden="true">↗</span></a>
+          <a class="btn btn--sm btn--ghost" href="https://github.com/JsonShare/PrismClaw">查看源码 <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+
+      <aside class="start-side reveal" style="--d:.08s">
+        <div class="side-card side-card--yellow">
+          <h3>环境要求</h3>
+          <ul class="req">
+            <li><strong>Docker 24+</strong>（推荐，单机起全套）</li>
+            <li>或源码：Python 3.12+ / uv / Node 18+</li>
+            <li>Redis 7 · PostgreSQL 16+（含 pgvector）</li>
+            <li>首次启动构建镜像，需可访问镜像源</li>
+          </ul>
+        </div>
+
+        <div class="side-card side-card--paper">
+          <h3>本地入口</h3>
+          <table class="entries">
+            <tbody>
+              <tr><td>PC 端</td><td><code>localhost:5173</code></td></tr>
+              <tr><td>移动端 H5</td><td><code>localhost:10086</code></td></tr>
+              <tr><td>后端 API</td><td><code>localhost:8000</code></td></tr>
+            </tbody>
+          </table>
+          <p class="side-note">管理员账号由 <code>.env</code> 中的 bootstrap 变量初始化，仅在 users 表为空时写入一次。</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container">
+    <div class="footer__grid">
+      <div class="footer__brand">
+        <div class="footer__logo">
+          <img src="./assets/readme/logo.png" width="44" height="44" alt="">
+          <strong>PrismClaw</strong>
+        </div>
+        <p>企业私有化部署 · 开箱即用的多域 AI Agent 平台。一个组织一套，数据、记忆与审计全部留在本地。</p>
+      </div>
+
+      <nav class="footer__links" aria-label="页脚导航">
+        <div class="footer__col">
+          <h4>产品</h4>
+          <a href="#scenarios">应用场景</a>
+          <a href="#capabilities">平台能力</a>
+          <a href="#architecture">系统架构</a>
+          <a href="#start">快速开始</a>
+        </div>
+        <div class="footer__col">
+          <h4>资源</h4>
+          <a href="https://github.com/JsonShare/PrismClaw/blob/main/deploy/DEPLOY.md">部署手册 <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/JsonShare/PrismClaw/blob/main/docs/architecture/architecture-prismclaw.md">架构文档 <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/JsonShare/PrismClaw/blob/main/README.md">README <span aria-hidden="true">↗</span></a>
+          <a href="./architecture/diagrams/system-architecture.html">交互式图解</a>
+        </div>
+        <div class="footer__col">
+          <h4>项目</h4>
+          <a href="https://github.com/JsonShare/PrismClaw" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/JsonShare/PrismClaw/issues" target="_blank" rel="noopener">Issues <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/JsonShare/PrismClaw/blob/main/LICENSE" target="_blank" rel="noopener">MIT License <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/JsonShare/PrismClaw/blob/main/SECURITY.md" target="_blank" rel="noopener">安全策略 <span aria-hidden="true">↗</span></a>
+        </div>
+      </nav>
+    </div>
+
+    <div class="footer__word" aria-hidden="true">PRISMCLAW</div>
+
+    <div class="footer__bottom">
+      <span>MIT License · © 2026 PrismClaw</span>
+      <span>粗黑描边 · 实心硬阴影 · 无模糊</span>
+      <a class="footer__top" href="#top">回到顶部 ↑</a>
+    </div>
+  </div>
+</footer>
+
+<script src="./site.js" defer></script>
+</body>
+</html>

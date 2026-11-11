@@ -1,0 +1,12 @@
+{
+  "name": "medical-compliance",
+  "version": "1.0.0",
+  "description": "HIPAA 合规审查、数据隐私审计、数据泄露响应、病历审计追踪及隐私影响评估。覆盖患者数据处理活动的全生命周期合规管理。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

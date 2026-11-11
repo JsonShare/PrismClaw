@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "literature-review|study-design|statistics",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/confidence_scorer.py --stdin",
+            "timeout": 5.0
+          }
+        ]
+      }
+    ]
+  }
+}

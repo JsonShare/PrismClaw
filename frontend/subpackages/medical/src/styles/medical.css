@@ -1,0 +1,634 @@
+/* ============================================================
+   医疗域 · 临床工作台样式层（mw-* 命名空间）
+   ------------------------------------------------------------
+   全部颜色取自 PrismClaw 主题 token（web/src/theme/{light,dark}.css），
+   随 data-theme 明暗翻转，不写死任何十六进制色值。
+
+   语义色对照（原设计 → 主题 token）：
+     #4a7fc9 品牌蓝   → --c-accent
+     #4c9e57 绿       → --c-success
+     #e05c7e 粉/红    → --c-danger
+     #b8863b 琥珀     → --c-warning
+     #7c5fc9 紫       → --c-tag-purple-fg
+     #1c2333 深色主CTA → 反色按钮（--c-text 底 / --c-surface 字）
+     slate-* 灰阶      → --c-text / --c-text-secondary / --c-text-tertiary
+
+   画布：本域不铺任何底色，直接露宿主中间栏面（亮 #FFFFFF / 暗 #000000）。
+   分层改用**底色阶梯**（2026-09-18 方案 A）：白画布上「白卡」必须靠描边才看得见，
+   于是每个块都得勾一圈线 —— 这正是「线条过多」的根因。内容块退一档到 --c-surface-2 后，
+   分层由底色承担，块描边与行分隔线可以整体去掉。
+   浮层（脱离文档流：模态 / 抽屉 / 解析队列）仍走 --c-surface + 宿主影，是另一套体系。
+   ============================================================ */
+
+/* ── 表面三分法（2026-09-18 定稿）─────────────────────────────
+   容器 / 分组          → 不铺底（transparent），只做布局
+   最小可视单元(卡/行)  → --c-surface-2（亮 #F6F8FA / 暗 #161B22）
+   单元内嵌             → --c-surface-3（亮 #EAEEF2 / 暗 #1C2128）输入 / 槽 / 悬停 / 选中
+   不再自建面色令牌：上面两组值在明暗两主题下都与宿主令牌**逐值相同**，
+   自建别名只是 1:1 转发（胶水），故整层删除，规则直接引宿主令牌。 */
+/* 域内主题值（遮罩 / 抽屉左向影）已按主题拆到 light.css / dark.css，
+   与宿主 web/src/theme/ 同构。侧栏导航的 hover / active 直接用宿主
+   --c-surface-2 / --c-surface-3 —— 导航的底是画布，而卡片本身就是 --c-surface-2，
+   两者的相对关系已经一致，不再需要另立一套令牌。 */
+
+/* ── 语义色 tone：供胶囊 / 图标 / 徽章 / 数字徽标复用 ────────────
+   旧名 .mw-pill-* 已删：Pill 组件改走 TONE_CLASS 后不再产出该名（全域零引用）。
+   tone 是「语义」不是「胶囊专有」——图标 / 徽章 / 数字徽标同样消费它，
+   把 tone 挂在 .mw-pill-* 名下本身就是把语义绑死在一个组件上。 */
+.mw-tone-accent { --mw-tone: var(--c-accent); --mw-tone-soft: var(--c-accent-soft); }
+.mw-tone-success { --mw-tone: var(--c-success); --mw-tone-soft: var(--c-success-soft); }
+.mw-tone-warning { --mw-tone: var(--c-warning); --mw-tone-soft: var(--c-warning-soft); }
+.mw-tone-danger { --mw-tone: var(--c-danger); --mw-tone-soft: var(--c-danger-soft); }
+.mw-tone-purple { --mw-tone: var(--c-tag-purple-fg); --mw-tone-soft: var(--c-tag-purple-bg); }
+.mw-tone-neutral { --mw-tone: var(--c-text-secondary); --mw-tone-soft: var(--c-surface-3); }
+
+/* ── 卡片表面 ────────────────────────────────────────────────
+   原「soft / strong 两档」的差别只是半透程度（58% / 86%），前提是灰画布能透出来；
+   画布改纯白后两者底色相同、只剩影的档位之差。改为底色阶梯后这个差别失去意义 ——
+   两个类合并为 .mw-glass，tone 属性一并从 Panel 移除（两个取值渲染相同 = 配置谎言）。
+   悬浮态退一档到 --c-surface-3；选中态用 accent 混色填充。
+   选中态不能用外扩 ring：main 的 overflow-y:auto 会把 overflow-x 强制算成 auto，
+   外扩的 1px 落在裁剪框外会整段消失（ui.tsx 里有原始记录）。 */
+.mw-glass {
+  background: var(--c-surface-2);
+}
+/* 行/卡悬浮：只变底色与描边，不做位移（避免列表行跳动） */
+.mw-glass-hover { transition: background-color 0.2s ease; }
+.mw-glass-hover:hover {
+  background: var(--c-surface-3);
+}
+/* 选中态：给既有 1px 边框上主题色。
+   双类选择器压过 :hover 的 border-color（同特异性、声明更靠后），
+   选中行 hover 时保持 accent 描边不回灰。 */
+.mw-glass.mw-glass-active {  background: color-mix(in srgb, var(--c-accent) 16%, var(--c-surface-2));}
+
+/* 拖拽投放区：虚线框是「可投放」的必要 affordance。
+   Tailwind `border-dashed` 只设 border-style，宽度原本由 .mw-glass 的 border 提供 ——
+   .mw-glass 去掉描边后必须自带宽度，否则整个虚线框会消失。 */
+.mw-dropzone { border: 1px dashed var(--c-border); }
+.mw-dropzone:hover { border-color: var(--c-border-strong); }
+
+/* ── 胶囊 / 状态徽章 ───────────────────────────────────────── */
+.mw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--mw-tone-soft, var(--c-surface-3));
+  color: var(--mw-tone, var(--c-text-secondary));
+}
+
+/* ── 按钮：尺寸两档 + 样式三型，全部胶囊形 ────────────────────
+   尺寸：mw-btn-sm 卡片内次要操作 / mw-btn-md 页面级操作（默认）
+   样式：mw-btn-glass 玻璃次级 · mw-btn-dark 反色主 CTA · mw-btn-primary 品牌蓝
+
+   原第三档 lg（40px）已删，Btn 的 size 联合类型同步收窄为 'sm' | 'md'。
+   判据（不是「看着没人用」）：① 静态 + 18 页 × 2 主题运行时（含条件渲染的
+   待指派抽屉、患者详情空态）双向零命中；② 科研域按钮**连尺寸档都没有**
+   （只有 .sci-btn / -solid / -quiet 三种「型」）⇒「三档」并非跨域一致性要求；
+   ③ 12 个调用点无一用 className 绕过尺寸 ⇒ 不存在「想要大按钮却无档可用」。
+
+   ⚠️ 做「零引用类」扫描时勿删 mw-btn-md / mw-btn-dark —— 它们是**活的**，
+   只是仅在条件渲染的界面里出现，页面级截图/class 普查扫不到：
+     mw-btn-md  ← Btn 的 size 默认值，凡未显式写 size 的调用点都产出它
+                  （records/AssignDrawer 的 4 个按钮即如此）
+     mw-btn-dark ← pages/PatientDetailPage.tsx 的返回键（variant="dark"）
+   判「死」必须同时过两关：全部调用点核实 + 运行时可达（含条件渲染分支的触发）。 */
+.mw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+.mw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mw-btn-sm { height: 32px; padding: 0 14px; font-size: var(--fs-sm); }
+.mw-btn-md { height: 36px; padding: 0 16px; font-size: var(--fs-md); }
+
+/* 次级按钮：透明底 + 描边，对齐科研域 .sci-btn-quiet。
+   原实现是半透白底，画布转白后与卡面逐字节相同 —— 按钮整体消失、只剩描边。
+   透明底是同一个视觉结果，但不再假装自己有一层底（少一层要维护的假设）。 */
+.mw-btn-glass {
+  background: transparent;
+  border-color: var(--c-border);
+  color: var(--c-text-secondary);
+}
+.mw-btn-glass:hover:not(:disabled) {
+  background: var(--c-surface-3);
+  color: var(--c-text);
+}
+
+/* 反色主 CTA：亮色黑底白字 / 暗色白底黑字，双主题均高对比 */
+.mw-btn-dark {
+  background: var(--c-text);
+  color: var(--c-surface);
+  border-color: var(--c-text);
+}
+.mw-btn-dark:hover:not(:disabled) { filter: brightness(1.18); }
+
+.mw-btn-primary {
+  background: var(--c-btn-primary-bg);
+  color: var(--c-btn-primary-fg);
+  border-color: var(--c-btn-primary-bg);
+}
+.mw-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* ── 输入框 ────────────────────────────────────────────────── */
+.mw-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  height: 32px;
+  padding: 0 14px;
+  background: var(--c-surface-3);
+}
+.mw-input:focus-within {  box-shadow: 0 0 0 2px var(--c-input-ring);}
+.mw-input > input {
+  background: transparent;
+  outline: none;
+  border: none;
+  width: 100%;
+  min-width: 0;
+  color: var(--c-text);
+  font-size: var(--fs-sm);
+}
+.mw-input > input::placeholder { color: var(--c-text-secondary); }
+
+.mw-select {
+  appearance: none;
+  border-radius: 999px;
+  height: 32px;
+  padding: 0 28px 0 12px;
+  font-size: var(--fs-sm);
+  outline: none;
+  cursor: pointer;
+  color: var(--c-text);
+  background: var(--c-surface-3);
+}
+.mw-select:focus {  box-shadow: 0 0 0 2px var(--c-input-ring);}
+
+/* ── 文本层级 ──────────────────────────────────────────────── */
+.mw-strong { color: var(--c-text); }
+.mw-muted { color: var(--c-text-secondary); }
+.mw-faint { color: var(--c-text-secondary); }
+/* 数值/时间统一等宽，保持纵向对齐 */
+.mw-num { font-family: var(--font-mono); letter-spacing: 0.02em; }
+
+/* ── 分隔线 ──────────────────────────────────────────────────
+   ⚠️ 本域**当前零调用点**（记录页行线走 .mw-pat-row 的 --c-divider 边框，
+   见本文件末段），原注释「贯穿全站」与事实不符，已改。
+   ⚠️ 且与宿主 web/src/theme/base.css 的同名 .mw-divider（中心渐隐渐变原语）
+   **同名冲突**：两者都是无作用域的全局选择器，谁生效取决于样式表加载顺序 ——
+   同 --radius-lg 踩过的坑（见 v3-records.css 记录）。
+   为什么不直接删：它是本域的「分割线」表达，去留属设计决策（不删除可见分割线，
+   只删一条无人调用的规则 —— 但该规则是否作废应由设计侧确认）。
+   若确认不要，连同本注释删。
+   （2026-09-18 运行时普查：8 页 × 明暗共 16 组合的真实 DOM 中均未出现该类） */
+.mw-divider { border: 0; border-top: 1px dashed var(--c-border); }
+
+/* ── 细滚动条 ──────────────────────────────────────────────── */
+.mw-scroll { scrollbar-width: thin; scrollbar-color: var(--c-border-strong) transparent; }
+.mw-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.mw-scroll::-webkit-scrollbar-track { background: transparent; }
+.mw-scroll::-webkit-scrollbar-thumb { background: var(--c-border-strong); border-radius: 20px; }
+
+/* ── 容器查询流式布局：按内容区实际宽度（而非窗口）自适应 ────────
+   域面板宽度随侧栏/任务面板开合变化，容器查询比媒体查询更准确 */
+.mw-cq { container-type: inline-size; }
+
+/* 三栏知识库：facet 220 / 行流 520 / 阅读器 1fr
+   断点 1000 而非 1080 —— 实测域内容容器常在 1040~1070（受宿主侧栏 + 域导航挤压），
+   原值 1080 会让它在只差十几像素时退化成单栏：facet 面板横跨整宽、大而空，
+   行流也没变宽，白白损失一档布局。1000 起三栏，阅读器仍有 ~290px。 */
+.mw-cols-kb { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@container (min-width: 1000px) { .mw-cols-kb { grid-template-columns: 220px minmax(0, 520px) minmax(0, 1fr); } }
+
+/* 阅读器吸顶：仅在宽容器下生效，窄容器下随流滚动。
+   断点必须与 .mw-cols-kb 的三栏断点一致 —— 只有三栏布局里才有独立的阅读器列可吸顶，
+   两者错位就会出现「吸顶了但没有独立列」的中间态。 */
+@container (min-width: 1000px) { .mw-sticky { position: sticky; top: 0; } }
+
+/* ── 窄屏导航抽屉 ──────────────────────────────────────────
+   <lg（1024）侧栏转为抽屉，默认移出画布，由顶部开关条唤出。
+   注意：原型 MainLayout 的 aside 只写了 transform 过渡却漏了 -translate-x-full，
+   导致窄屏侧栏永久浮在内容之上、汉堡按钮只切换遮罩 —— 属原型缺陷，此处按抽屉意图补全。 */
+/* 遮罩：中性深色，不跟 --c-bg 走 —— 亮色下 --c-bg 就是画布白，
+   白遮罩叠白画布等于没有遮罩，只剩点击穿透（画布改白后暴露的问题）。 */
+.mw-scrim { background: var(--mw-scrim); backdrop-filter: blur(2px); }
+
+/* ── 模态层 ────────────────────────────────────────────────── */
+.mw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--mw-scrim);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* ── 全局解析队列浮层（mw-pqf = Parse Queue Float）──────────
+   两形态：迷你条（收起）↔ 面板（仅上传/解析队列）→ 无事淡出。
+   职责单一：只展示上传/解析进度与汇总；待归档交由病历页「待指派」区块。
+   顶栏按钮：— 收起 / × 本批静默。createPortal → document.body。 */
+.mw-pqf {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9000;
+  width: 340px;
+  border-radius: 14px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-xl);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  animation: mw-pqf-in 0.25s ease-out;
+  overflow: hidden;
+}
+@keyframes mw-pqf-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 顶栏（不可点击折叠，折叠走 — 按钮） */
+.mw-pqf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  user-select: none;
+}
+.mw-pqf-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mw-pqf-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* 旋转 spinner（小号，与进度条视觉一致） */
+.mw-pqf-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--c-accent-soft);
+  border-top-color: var(--c-accent);
+  border-radius: 50%;
+  animation: mw-pqf-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes mw-pqf-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 标题 */
+.mw-pqf-title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 失败徽章 */
+.mw-pqf-badge-danger {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+  flex-shrink: 0;
+}
+
+/* ── 迷你条（收起态）──────────────────────────── */
+.mw-pqf-mini {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-lg);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  cursor: pointer;
+  animation: mw-pqf-in 0.25s ease-out;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.mw-pqf-mini:hover {
+  border-color: var(--c-border-strong);
+  box-shadow: var(--shadow-xl);
+  transform: translateY(-1px);
+}
+.mw-pqf-mini-text {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--c-text);
+  white-space: nowrap;
+}
+
+/* 图标按钮（— 收起 / × 静默） */
+.mw-pqf-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--c-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mw-pqf-icon-btn:hover {
+  background: var(--c-surface-3);
+  color: var(--c-text-secondary);
+}
+
+/* 展开态主体（分段控件已提供分隔，不再加 border-top） */
+.mw-pqf-body {
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+}
+.mw-pqf-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border-strong) transparent;
+}
+.mw-pqf-list::-webkit-scrollbar { width: 4px; }
+.mw-pqf-list::-webkit-scrollbar-thumb { background: var(--c-border-strong); border-radius: 4px; }
+
+/* 列头（文件名 | 进度 | 状态，与任务行同 grid 对齐） */
+.mw-pqf-cols {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 96px 48px;
+  gap: 8px;
+  margin: 0 10px;
+  padding: 8px 6px 6px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.02em;
+  color: var(--c-text-secondary);
+  border-bottom: 1px solid var(--c-divider, var(--c-border));
+}
+.mw-pqf-cols span:last-child { text-align: right; }
+
+/* 单条任务：三列网格（内缩圆角行，悬浮柔和） */
+.mw-pqf-task {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 96px 48px;
+  gap: 8px;
+  align-items: center;
+  margin: 0 10px;
+  padding: 9px 6px;
+  border-radius: 8px;
+  transition: background-color 0.12s;
+}
+.mw-pqf-task:hover {
+  background: var(--c-surface-3);
+}
+.mw-pqf-task-failed {
+  background: color-mix(in srgb, var(--c-danger-soft) 40%, transparent);
+}
+.mw-pqf-task-failed:hover {
+  background: color-mix(in srgb, var(--c-danger-soft) 60%, transparent);
+}
+.mw-pqf-task-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.mw-pqf-task-name {
+  font-size: var(--fs-sm);
+  color: var(--c-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* 进度列：迷你进度条 + 百分比 */
+.mw-pqf-task-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mw-pqf-task-progress .mw-pqf-bar-track {
+  flex: 1;
+}
+.mw-pqf-task-percent {
+  font-size: var(--fs-xs, 12px);
+  color: var(--c-text-secondary);
+  font-variant-numeric: tabular-nums;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* 状态列：按语义色区分阶段 */
+.mw-pqf-task-status {
+  font-size: var(--fs-xs, 12px);
+  text-align: right;
+  white-space: nowrap;
+}
+.mw-pqf-task-status.st-active { color: var(--c-accent); }
+.mw-pqf-task-status.st-wait   { color: var(--c-text-secondary); }
+.mw-pqf-task-status.st-done   { color: var(--c-success); }
+.mw-pqf-task-status.st-failed { color: var(--c-danger); }
+
+/* 进度条（在 .mw-pqf-task-progress 内水平填充） */
+.mw-pqf-bar-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--c-surface-3);
+  overflow: hidden;
+}
+.mw-pqf-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--c-accent);
+  transition: width 0.4s ease;
+}
+
+/* 失败/完成行进度列占位，保证状态列对齐 */
+.mw-pqf-task-progress:empty {
+  display: block;
+}
+
+/* "还有 N 份..." */
+.mw-pqf-more {
+  padding: 8px 14px 10px;
+  font-size: var(--fs-xs);
+  color: var(--c-text-secondary);
+  text-align: center;
+}
+
+/* 底栏汇总 */
+.mw-pqf-footer {
+  padding: 9px 14px;
+  border-top: 1px solid var(--c-divider, var(--c-border));
+  font-size: var(--fs-xs);
+  color: var(--c-text-secondary);
+  text-align: center;
+}
+
+/* ============================================================
+   域内二级侧栏（菜单）—— 与科研域 `.sci-nav*` 逐项对齐（2026-09-17）
+   ------------------------------------------------------------
+   下列几何值即科研域菜单的**浏览器实测值**，且都落在宿主 Tailwind 步长上
+   （1rem = html font-size = --fs-md = 15px）：
+     --mw-nav-pad    0.75rem  = 11.25px = 宿主 p-3 / px-3
+     --mw-nav-item-y 0.625rem = 9.375px = 宿主 py-2.5
+     --mw-nav-gap    0.5rem   =  7.5px  = 宿主 gap-2
+     --mw-nav-r      0.375rem = 5.625px = 宿主 rounded-md
+   侧栏不铺任何底色 —— 直接露宿主中间栏面（亮 #FFFFFF / 暗 #000000），靠右侧 1px 发丝边分层。
+   激活态 = --c-surface-3 浅底块 + 竖条 + 600 字重（不用「白底浮起」：画布是纯白，白底不可见）。
+   强调色用 --c-accent（医疗域在域内一律用它；不写死十六进制）。
+   ============================================================ */
+.mw-nav {
+  --mw-nav-pad: 0.75rem;
+  --mw-nav-item-y: 0.625rem;
+  --mw-nav-item-x: 0.75rem;
+  --mw-nav-gap: 0.5rem;
+  --mw-nav-r: 0.375rem;
+
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--mw-nav-pad);
+  border-right: 1px solid var(--c-border);
+}
+
+/* 品牌区：18px/600 标题 + 8px 强调色圆点（与科研域同构） */
+.mw-nav-title {
+  display: flex;
+  align-items: center;
+  gap: var(--mw-nav-gap);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--c-text);
+  margin-bottom: var(--mw-nav-pad);
+}
+.mw-nav-title i {
+  display: block;
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-accent);
+}
+
+/* 分组：标签 12px/500，无装饰横线 */
+.mw-nav-group { margin-top: var(--mw-nav-pad); }
+.mw-nav-group-label {
+  padding: 0 var(--mw-nav-item-x) var(--mw-nav-gap);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--c-text-secondary);
+}
+
+/* 导航项：13px，透明底；hover 走 surface-3 */
+.mw-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--mw-nav-gap);
+  width: 100%;
+  padding: var(--mw-nav-item-y) var(--mw-nav-item-x);
+  border: 0;
+  border-radius: var(--mw-nav-r);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--c-text);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+/* 图标 1.25rem(=18.75px) = 宿主 h-5 w-5，与科研域同值 */
+.mw-nav-item svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: 0 0 1.25rem;
+  stroke: currentColor;
+  opacity: 0.9;
+}
+.mw-nav-item:hover { background: var(--c-surface-2); }
+
+/* 激活：浅底块 + 600 字重 + 左侧竖条，与科研域逐项同构。
+   不用「白底浮起」：域画布已改为宿主中间栏面（亮 #FFFFFF / 暗 #000000），
+   白底在纯白画布上不可见；--c-surface-3 亮 #EAEEF2 / 暗 #1C2128，
+   在两种画布上均有真实明度差，且与科研域逐值相同。 */
+.mw-nav-item.on {
+  background: var(--c-surface-3);
+  font-weight: 600;
+}
+
+/* 激活竖条：偏移量刻意与科研域同一字面量（源自设计稿原型），非节奏值 */
+.mw-nav-item .rail {
+  position: absolute;
+  left: -12px;
+  top: 8px;
+  bottom: 8px;
+  display: block;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--c-accent);
+}
+
+/* <lg 抽屉态：侧栏浮在内容之上，需要完整描边 + 圆角 + 投影才算一块面板
+   （≥lg 是常驻列，只有右发丝边 —— 与科研域一致）。lg 断点 = 1024px */
+@media (max-width: 1023px) {
+  .mw-nav {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius-xl, 12px);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* ── 花名册表格行线 ────────────────────────────────────────────
+   8 列数据表靠行线横向扫读；无行线时 44px 行距的相邻行只能靠列对齐去猜。
+   与科研域 .sci-tbl 同口径（tbody 行 border-top + --c-divider 级发丝）：
+   --c-divider 比 --c-border 淡一档 —— 行线是辅助线，不能压过表头线。
+   表头线同步从虚线改实线：同一张表里两种线型并存时，
+   虚线表头会显得比行线更「弱」，层级反而倒挂。
+   行改为直角：直线穿过 8px 圆角会在两端露出缺口。悬停填充随之铺满整行。 */
+.mw-pat-row + .mw-pat-row { border-top: 1px solid var(--c-divider); }
+

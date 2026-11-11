@@ -1,0 +1,60 @@
+# 记忆与进化（curator）：L1 索引、分层检索、经验固化的参数。
+# 归属顶层键：memory / evolution
+#
+# 使用方式：复制为同目录下的 memory.yaml。
+#   cp backend/configs/memory.example.yaml backend/configs/memory.yaml
+
+memory:
+  base_dir: "~/.prismclaw/memory"
+  # L1 是“常驻上下文”的记忆索引，直接进入 prompt 尾部
+  l1_max_entries: 30
+  l1_max_chars: 3000
+  l1_ttl_seconds: 2592000          # 30 天；过期条目不再注入
+  # L2/L3 检索配额：分别对应“摘要层”和“原文层”
+  search_l2_quota: 3
+  search_l3_quota: 2
+  archive_max_results: 5
+  archive_min_similarity: 0.5
+  archive_enabled: true
+  # 意图偏置（context_router 动态配额）：意图×目标维度的加项
+  intent_bias:
+    prefers_tooling_l3: 3
+    prefers_tooling_l2: -1
+    prefers_tooling_archive: -1
+    requires_grounding_l2: 3
+    requires_grounding_archive: 2
+    requires_grounding_l3: -1
+    cold_start_l3: 1
+    follow_up_l2: -2
+    follow_up_l3: -1
+
+evolution:
+  enabled: true
+  # 经验抽取使用的模型（可独立于主对话模型）；null 表示沿用当前会话模型
+  extraction_model: null
+  max_candidates: 100
+  # 至少 N 次工具调用才值得抽取 SOP，避免噪声
+  min_tool_calls_for_extraction: 2
+  dedup_overlap_threshold: 0.6
+  max_sops_per_extraction: 5
+  description_max_chars: 150
+  procedure_max_chars: 5000
+
+  curator:
+    enabled: true
+    check_interval_seconds: 3600
+    interval_seconds: 604800       # 7 天
+    # 超过 N 天未使用的条目标记 stale；再超过 N 天归档
+    stale_after_days: 30
+    archive_after_days: 90
+    graduation_enabled: true
+    graduation_mode: "template"
+    # 晋升为正式 SOP 的门槛：使用次数 + 沉淀天数
+    promotion_min_use_count: 5
+    promotion_min_days: 7
+    llm_review_enabled: false
+    llm_review_model: null
+    llm_review_interval_seconds: 1209600   # 14 天
+    llm_review_actions:
+      - "promote"
+    llm_review_max_batch: 20

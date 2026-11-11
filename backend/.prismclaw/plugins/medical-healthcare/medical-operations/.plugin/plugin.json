@@ -1,0 +1,12 @@
+{
+  "name": "medical-operations",
+  "version": "1.0.0",
+  "description": "病历管理、保险理赔处理、库存检查及医疗机构日常运营工作流。覆盖病历归档与调取、医保索赔提交与追踪、药品耗材库存盘点等非临床诊疗类运营场景。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

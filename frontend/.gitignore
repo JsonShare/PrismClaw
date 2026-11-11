@@ -1,0 +1,36 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Playwright E2E 运行产物（失败截图 / error-context / 报告）
+test-results/
+playwright-report/
+blob-report/
+
+# @file-viewer/vite-plugin 构建生成的资源清单和 vendor 资源
+public/flyfish-viewer-assets.json
+public/vendor/
+
+# @file-viewer/assets-drawing 离线 drawio viewer 运行时（bin/install.mjs 安装）
+public/file-viewer/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

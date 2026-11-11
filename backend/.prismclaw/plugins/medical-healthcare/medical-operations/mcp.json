@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "his-integration": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "his-mcp-server"],
+      "enabled": false,
+      "title": "HIS 集成 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何 API 凭据。填入真实 command/凭据并将 enabled 改为 true 后启用。"
+    }
+  },
+  "recommendedCategories": [
+    "records-management",
+    "insurance-claims",
+    "inventory"
+  ],
+  "_notes": "HIS 集成用于病历和运营数据访问。保险理赔通过医保系统 MCP 接入。"
+}

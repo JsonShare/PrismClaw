@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [],
+    "PostToolUse": [
+      {
+        "matcher": "fhir|doc-extract",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/confidence_scorer.py --stdin",
+            "timeout": 5.0
+          }
+        ]
+      }
+    ]
+  }
+}

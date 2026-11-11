@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "yuandian-medical": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "yuandian-medical-mcp-server"
+      ],
+      "env": {
+        "YUANDIAN_MEDICAL_API_KEY": "<请在本地填入自己的元典医疗 API Key>"
+      },
+      "title": "元典医疗 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何 API 凭据。使用前请在本地环境变量或私有配置中填入自己的元典医疗开放平台凭据。"
+    }
+  },
+  "recommendedCategories": [
+    "clinical-assessment",
+    "prescription-review",
+    "vital-signs-monitoring",
+    "patient-summary",
+    "medical-reference"
+  ],
+  "_notes": "元典医疗提供药品说明书、临床指南、医学文献及诊疗路径查询。电子病历集成通过 HL7 FHIR 标准或本地文件路径访问。"
+}

@@ -1,0 +1,36 @@
+# 能力装载：技能、子代理、插件、内置工具的开关与路径。
+# 归属顶层键：skills / subagent / plugins / builtin_tools
+#
+# 路径契约（SDD v2.2）：
+#   asset_*_dir    — 静态发现链（repo 管控、sync 到 home/.prismclaw/assets/，绝对 home 路径）
+#   workspace_*_dir — 运行时安装链（graduation / ClawHub 安装落点，相对 workspace_root）
+#   plugins 与 subagents 无 workspace 级落点——静态发现链唯一。
+#
+# 使用方式：复制为同目录下的 capabilities.yaml。
+#   cp backend/configs/capabilities.example.yaml backend/configs/capabilities.yaml
+
+skills:
+  asset_skills_dir: "~/.prismclaw/assets/skills"
+  workspace_skills_dir: ".work/skills"
+  clawhub_base_url: "https://clawhub.ai"
+  # 单个技能文件（SKILL.md/脚本）大小上限，防止恶意大文件
+  max_skill_file_bytes: 256000
+  # 每个根目录最多扫描的候选数量；防止超大目录拖慢启动
+  max_candidates_per_root: 300
+  # 单个来源最多加载的技能数
+  max_skills_loaded_per_source: 200
+
+subagent:
+  enabled: true
+  # 子代理嵌套深度上限；每层都会放大 token 消耗与调试复杂度
+  max_depth: 3
+  asset_subagents_dir: "~/.prismclaw/assets/agents"
+
+plugins:
+  asset_plugins_dir: "~/.prismclaw/assets/plugins"
+  # 受信任插件 ID 由 /plugins trust 运行时写回本文件（ruamel 保留注释）
+  # trusted_plugins: []
+
+builtin_tools:
+  # 是否暴露"读取 MCP 资源"的内置工具；默认关闭，避免与 MCP 工具重复
+  fetch_mcp_resource_enabled: false

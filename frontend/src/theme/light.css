@@ -1,0 +1,261 @@
+/* ============================================================
+   PrismClaw 主题 · 亮色 —— 靛蓝 12 阶
+   ------------------------------------------------------------
+   一套色阶解决所有面与字：面用靛蓝阶（i1–i5），线用 i6–i8，
+   动作 i9 / 按下 i10，字用中性阶（n10–n12）。
+   约束（来自 docs/PrismClaw色彩与控件规范_设计稿.html）：
+     · 满彩度只允许出现在 L ≤ 0.40；9 阶 #2C59BC 是白字 6.44 的动作色，
+       10 阶 #002FA7 是克莱因蓝原值，只作按下与大面积品牌场。
+     · 面与线一律不透明，不用「主色 + 透明度」——透明度随底色漂移会显脏。
+     · 材质只有两种：画布纯色 + 1px 线；浮层才允许玻璃与柔影。
+   ============================================================ */
+[data-theme="light"] {
+  /* ── 面（靛蓝阶 1–5）──────────────────────────────── */
+  --c-bg: #EBEEF2;                      /* 全局背景：冷调蓝灰，与左右侧栏同色（三合一） */
+  --c-surface: #FDFBF7;                 /* 中间栏：暖乳白（实心，浮在冷灰蓝之上） */
+  --c-surface-2: #F2F5FA;               /* 02 次面 / 轻微悬停 */
+  --c-surface-3: #EAEEF5;               /* 04 悬停 / inset */
+  --c-exec-block: #F1F1F2;              /* 执行过程展开卡：中性浅灰（去蓝调，降视觉重心） */
+  --c-exec-block-inset: #EAEAEC;        /* 展开卡内嵌子块（检索结果）：略深中性灰 */
+  --c-select-bg: #CEDBF5;               /* 03 选中行底（列表选中） */
+  --c-sidebar: #EBEEF2;                 /* 侧栏：与全局背景同色（左右+页面三合一） */
+  --c-canvas: #EBEEF2;                  /* 主界面画布：与全局背景同色，中间栏暖乳白浮其上 */
+
+  /* ── 线与环（靛蓝阶 6–8）──────────────────────────── */
+  --c-divider: #E2E6EE;                 /* 06 分隔线 */
+  --c-border: #D7DDE6;                  /* 07 边框：输入框、次级按钮 */
+  --c-border-strong: #CBD1DB;           /* 08 强边：focus-visible 外环 */
+  --c-ring: rgba(44, 89, 188, 0.32);    /* 聚焦外环（键盘） */
+
+  /* ── 字（中性阶 10–12，染 2–3% 靛蓝）─────────────── */
+  --c-text: #1F232B;                    /* 12 主字：对底 15.3:1 */
+  --c-text-primary: #1F232B;
+  --c-text-secondary: #575B62;          /* 11 次字：6.6:1 */
+  --c-text-tertiary: #838C9E;           /* 10 三字：仅辅助信息 */
+
+  /* === 输入框呼吸灯光环（亮蓝 #1A7FFB，纯 rgba） === */
+  --c-glow-ring-idle:       rgba(0, 0, 0, 0);
+  --c-glow-ring-soft-base:  rgba(0, 0, 0, 0);
+  --c-glow-ring-soft-peak:  rgba(26, 127, 251, 0.30);
+  --c-glow-ring-focus-base: rgba(26, 127, 251, 0.38);
+  --c-glow-ring-focus-peak: rgba(26, 127, 251, 0.46);
+  --c-glow-ring-strong:     rgba(26, 127, 251, 0.68);
+  --c-glow-halo-near-idle:       rgba(26, 127, 251, 0.26);
+  --c-glow-halo-near-soft-peak:  rgba(26, 127, 251, 0.42);
+  --c-glow-halo-near-focus-base: rgba(26, 127, 251, 0.48);
+  --c-glow-halo-near-focus-peak: rgba(26, 127, 251, 0.54);
+  --c-glow-halo-far-idle:        rgba(26, 127, 251, 0.12);
+  --c-glow-halo-far-soft-peak:   rgba(26, 127, 251, 0.24);
+  --c-glow-halo-far-focus-base:  rgba(26, 127, 251, 0.28);
+  --c-glow-halo-far-focus-peak:  rgba(26, 127, 251, 0.34);
+  --c-glow-border-idle:     rgba(26, 127, 251, 0.18);
+  --c-glow-border-soft:     rgba(26, 127, 251, 0.32);
+  --c-glow-border-focus:    rgba(26, 127, 251, 0.44);
+  --c-glow-border-strong:   rgba(26, 127, 251, 0.64);
+  --c-shadow-float:         0 1px 2px rgba(31, 35, 40, 0.04);
+  --c-hair-line:            rgba(31, 35, 40, 0.10);
+  --c-hair-line-hover:      rgba(31, 35, 40, 0.16);
+
+  /* ── 动作与品牌 ──────────────────────────────────── */
+  --c-accent: #2C59BC;                  /* 09 动作：链接、选中图标、光标 */
+  --c-brand: #002FA7;                   /* 10 颜料：仅大面积品牌场，不做按钮常态 */
+  --c-btn-primary-bg: #2C59BC;
+  --c-btn-primary-hover: #002FA7;
+  --c-btn-primary-fg: #FFFFFF;
+
+  /* ── 语义 ────────────────────────────────────────── */
+  --c-success: #1A7F37;
+  --c-warning: #9A6700;
+  --c-danger: #D12224;                  /* 白字 5.30，再亮一档即跌破 4.5 */
+  --c-error: #D12224;
+  --c-danger-soft: rgba(209, 34, 36, 0.10);
+  --c-success-soft: rgba(26, 127, 55, 0.10);
+  --c-accent-soft: rgba(44, 89, 188, 0.10);
+
+  /* ── 组件专属点缀（技能卡色相）────────────────────── */
+  --c-tag-pink-bg: rgba(209, 34, 36, 0.10);
+  --c-tag-pink-fg: #D12224;
+  --c-icon-blue: #2C59BC;
+  --c-icon-blue-soft: rgba(44, 89, 188, 0.10);
+  --c-icon-soft-blue: #6E8FD9;
+
+  /* ── 阴影：只给浮层（画布内为零）──────────────────── */
+  --shadow-sm: 0 1px 3px -1px rgba(31, 35, 43, 0.18);
+  --shadow-md: 0 8px 20px -12px rgba(31, 35, 43, 0.14);
+  --shadow-lg: 0 12px 32px -14px rgba(31, 35, 43, 0.18);
+
+  /* ── 浮层玻璃（仅模态 / 下拉 / toast）─────────────── */
+  --overlay-bg: rgba(255, 255, 255, 0.82);
+  --overlay-border: rgba(31, 35, 43, 0.10);
+  --overlay-blur: blur(12px) saturate(120%);
+  --overlay-scrim: rgba(15, 20, 32, 0.42);
+
+  /* ── 登录页（品牌场，允许大色块与光晕）────────────── */
+  --c-login-left: linear-gradient(160deg, #FAFCFF 0%, #F1F6FF 55%, #E6EEFD 100%);
+  --c-login-right: #FFFFFF;
+  --c-login-orb-opacity: 0.55;
+  --c-login-orb-1: rgba(0, 47, 167, 0.26);
+  --c-login-orb-2: rgba(44, 89, 188, 0.20);
+  --c-login-orb-3: rgba(110, 143, 217, 0.20);
+  --c-login-card-bg: rgba(255, 255, 255, 0.62);
+  --c-login-card-highlight: rgba(255, 255, 255, 0.72);
+  --c-login-card-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.7),
+    0 6px 18px -12px rgba(31, 35, 43, 0.16);
+  --c-login-card-shadow-hover:
+    inset 0 1px 1px rgba(255, 255, 255, 0.8),
+    0 10px 26px -14px rgba(31, 35, 43, 0.20);
+}
+
+/* ── 画布材质：纯色 + 1px 线，无模糊、无噪点、无柔影 ── */
+[data-theme="light"] .app-sidebar {
+  background: var(--c-sidebar);
+}
+
+[data-theme="light"] .app-panel {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+
+[data-theme="light"] .app-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+[data-theme="light"] .app-card:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border-strong);
+}
+/* 容器型卡片（内部条目自带 hover 高亮）：卡片本身不做块级 hover，避免整卡色块 + 条目高亮双层叠加 */
+[data-theme="light"] .app-card--passive:hover {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+}
+
+/* 主输入框：静态发丝边，聚焦时 1px 8 阶边 + 3px 30% 外环。不呼吸。 */
+[data-theme="light"] .input-surface {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+}
+[data-theme="light"] .input-surface:focus-within {
+  border-color: var(--c-glow-border-focus);
+  box-shadow:
+    0 0 0 1px var(--c-hair-line-hover),
+    0 0 0 0.6px var(--c-glow-ring-focus-base),
+    0 0 30px 1.5px var(--c-glow-halo-near-focus-base),
+    0 0 80px 5px var(--c-glow-halo-far-focus-base),
+    var(--c-shadow-float);
+}
+[data-theme="light"] .input-surface.is-dragging {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px rgba(44, 89, 188, 0.24);
+  animation: none;
+}
+
+/* 浮层：唯一允许磨砂与柔影的层 */
+[data-theme="light"] .overlay-panel {
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  backdrop-filter: var(--overlay-blur);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 模态遮罩：只给颜色，结构（fixed / inset / 居中）在 index.css */
+[data-theme="light"] .overlay-scrim {
+  background: var(--overlay-scrim);
+}
+
+/* 侧栏选中/悬停：底色分档，不做反色 */
+[data-theme="light"] .sidebar-nav-row:hover {
+  background: var(--c-surface-3);
+}
+[data-theme="light"] .sidebar-nav-row.is-active {
+  background: var(--c-select-bg);
+  color: var(--c-text);
+}
+
+/* 引用块 */
+[data-theme="light"] .markdown-content blockquote {
+  background-color: var(--c-surface-2);
+  border-left-color: var(--c-border-strong);
+}
+
+
+/* 单色 UI 图标纯黑；彩色文件类型图标保持原色 */
+[data-theme="light"] img.app-icon:not(.file-type-icon) {
+  filter: brightness(0);
+}
+[data-theme="light"] img.file-type-icon,
+[data-theme="dark"] img.file-type-icon {
+  filter: none;
+}
+
+/* 全站底：纯色，去掉双角辉光 */
+[data-theme="light"] body {
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+/* ============================================================
+   Highlight.js · 亮色
+   ============================================================ */
+[data-theme="light"] .code-block-body pre {
+  background: transparent !important;
+}
+[data-theme="light"] .code-block-body .hljs {
+  background: transparent !important;
+  color: #1F232B !important;
+}
+[data-theme="light"] .code-block-body .hljs-keyword,
+[data-theme="light"] .code-block-body .hljs-selector-tag,
+[data-theme="light"] .code-block-body .hljs-literal,
+[data-theme="light"] .code-block-body .hljs-section,
+[data-theme="light"] .code-block-body .hljs-link {
+  color: #D12224 !important;
+}
+[data-theme="light"] .code-block-body .hljs-string,
+[data-theme="light"] .code-block-body .hljs-title,
+[data-theme="light"] .code-block-body .hljs-attribute,
+[data-theme="light"] .code-block-body .hljs-template-tag,
+[data-theme="light"] .code-block-body .hljs-template-variable,
+[data-theme="light"] .code-block-body .hljs-type,
+[data-theme="light"] .code-block-body .hljs-addition {
+  color: #0A7F2E !important;
+}
+[data-theme="light"] .code-block-body .hljs-number,
+[data-theme="light"] .code-block-body .hljs-symbol,
+[data-theme="light"] .code-block-body .hljs-bullet,
+[data-theme="light"] .code-block-body .hljs-attr {
+  color: #953800 !important;
+}
+[data-theme="light"] .code-block-body .hljs-built_in,
+[data-theme="light"] .code-block-body .hljs-builtin-name,
+[data-theme="light"] .code-block-body .hljs-function,
+[data-theme="light"] .code-block-body .hljs-name {
+  color: #8250DF !important;
+}
+[data-theme="light"] .code-block-body .hljs-variable,
+[data-theme="light"] .code-block-body .hljs-class .hljs-title {
+  color: #953800 !important;
+}
+[data-theme="light"] .code-block-body .hljs-tag,
+[data-theme="light"] .code-block-body .hljs-tag .hljs-name,
+[data-theme="light"] .code-block-body .hljs-tag .hljs-attr {
+  color: #116329 !important;
+}
+[data-theme="light"] .code-block-body .hljs-regexp {
+  color: #0A6EAD !important;
+}
+[data-theme="light"] .code-block-body .hljs-comment,
+[data-theme="light"] .code-block-body .hljs-quote,
+[data-theme="light"] .code-block-body .hljs-meta {
+  color: #6E7781 !important;
+  font-style: italic;
+}
+[data-theme="light"] .code-block-body .hljs-deletion,
+[data-theme="light"] .code-block-body .hljs-emphasis,
+[data-theme="light"] .code-block-body .hljs-strong {
+  color: #D12224 !important;
+}
+[data-theme="light"] .code-block-body .hljs-emphasis { font-style: italic; }
+[data-theme="light"] .code-block-body .hljs-strong { font-weight: bold; }

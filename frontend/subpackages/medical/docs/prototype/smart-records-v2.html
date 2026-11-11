@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-page-node-id="31FkXcRPQCoVk73noe1It1">
+<head data-page-node-id="dxUTYHPfhNeA88Px67rlnH">
+<meta charset="UTF-8" data-page-node-id="JtSrAGRu0zz2pTG8cqoBIc">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="6Y8yGmqaRw9cluxvfJIec8">
+<title>智能病历 · 设计稿 v2</title>
+<style>
+/* ── 主题 token ── */
+:root {
+  --c-accent: #0969DA;
+  --c-accent-soft: rgba(9,105,218,0.08);
+  --c-accent-mid: rgba(9,105,218,0.15);
+  --c-surface: #FFFFFF;
+  --c-surface-2: #F6F8FA;
+  --c-surface-3: #EAEEF2;
+  --c-bg: #EBEEF2;
+  --c-text: #1F2328;
+  --c-text-2: #59636E;
+  --c-text-3: #818B98;
+  --c-border: rgba(31,35,40,0.08);
+  --c-border-s: rgba(31,35,40,0.15);
+  --c-success: #1A7F37; --c-success-s: rgba(26,127,55,0.10);
+  --c-warning: #9A6700; --c-warning-s: rgba(154,103,0,0.10);
+  --c-danger: #CF222E;  --c-danger-s: rgba(207,34,46,0.10);
+  --c-purple: #8250DF;  --c-purple-s: rgba(130,80,223,0.10);
+  --c-teal: #0969DA;
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 22px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, monospace;
+  --radius: 10px;
+  --shadow-card: 0 1px 3px rgba(31,35,40,0.06), 0 4px 12px rgba(31,35,40,0.04);
+  --shadow-float: 0 2px 8px rgba(31,35,40,0.06), 0 12px 32px -8px rgba(31,35,40,0.12);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--c-bg); color: var(--c-text); height: 100vh; overflow: hidden; }
+
+/* ── 全局容器 ── */
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── 页面头 ── */
+.page-header {
+  padding: 16px 24px;
+  background: linear-gradient(135deg, var(--c-surface) 0%, color-mix(in srgb, var(--c-surface) 92%, var(--c-accent) 8%) 100%);
+  border-bottom: 1px solid var(--c-border);
+  display: flex; align-items: center; gap: 16px;
+}
+.header-brand {
+  display: flex; align-items: center; gap: 10px;
+}
+.header-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--c-accent) 0%, #54AEFF 100%);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 18px; font-weight: 700;
+  box-shadow: 0 4px 12px -2px rgba(9,105,218,0.35);
+}
+.header-title {
+  font-size: var(--fs-xl); font-weight: 700; color: var(--c-text);
+  letter-spacing: -0.3px;
+}
+.header-subtitle {
+  font-size: var(--fs-xs); color: var(--c-text-3); margin-top: 1px;
+}
+.header-stats {
+  display: flex; gap: 8px; margin-left: auto;
+}
+.stat-card {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-card);
+}
+.stat-num {
+  font-size: var(--fs-lg); font-weight: 700; color: var(--c-accent);
+  font-family: var(--font-mono); letter-spacing: -0.5px;
+}
+.stat-label { font-size: var(--fs-xs); color: var(--c-text-3); }
+.stat-icon {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.stat-icon.blue { background: var(--c-accent-soft); color: var(--c-accent); }
+.stat-icon.green { background: var(--c-success-s); color: var(--c-success); }
+.stat-icon.amber { background: var(--c-warning-s); color: var(--c-warning); }
+
+/* ── 三栏主体 ── */
+.main-cols {
+  flex: 1; display: grid; min-height: 0;
+  grid-template-columns: 260px 340px 1fr;
+}
+
+/* ── 一栏：患者列表 ── */
+.col-patients {
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  display: flex; flex-direction: column;
+}
+.col-header {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--c-border);
+}
+.search-box {
+  display: flex; align-items: center; gap: 8px;
+  height: 34px; padding: 0 12px;
+  border-radius: 8px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-border);
+  margin-bottom: 10px;
+}
+.search-box input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-size: var(--fs-sm); color: var(--c-text);
+}
+.search-box input::placeholder { color: var(--c-text-3); }
+.search-icon { color: var(--c-text-3); font-size: 14px; }
+.upload-btn {
+  width: 100%; height: 36px; border-radius: 8px;
+  border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--c-accent) 0%, #54AEFF 100%);
+  color: #fff; font-size: var(--fs-sm); font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  box-shadow: 0 4px 12px -4px rgba(9,105,218,0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.upload-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -4px rgba(9,105,218,0.5); }
+
+.patient-list {
+  flex: 1; overflow-y: auto; padding: 6px 8px;
+}
+.patient-list::-webkit-scrollbar { width: 4px; }
+.patient-list::-webkit-scrollbar-thumb { background: var(--c-border-s); border-radius: 4px; }
+
+/* ── 患者卡片 ── */
+.patient-card {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 12px; border-radius: 10px;
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: 4px; position: relative;
+  border: 1.5px solid transparent;
+}
+.patient-card:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+.patient-card.active {
+  background: var(--c-accent-soft);
+  border-color: rgba(9,105,218,0.2);
+  box-shadow: 0 2px 8px -4px rgba(9,105,218,0.15);
+}
+.patient-card.active::before {
+  content: ''; position: absolute; left: -1px; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--c-accent);
+}
+
+/* 头像 */
+.avatar {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 700; color: #fff;
+  position: relative;
+}
+.avatar.danger { background: linear-gradient(135deg, #CF222E, #F85149); }
+.avatar.warning { background: linear-gradient(135deg, #9A6700, #D29922); }
+.avatar.success { background: linear-gradient(135deg, #1A7F37, #3FB950); }
+.avatar::after {
+  content: ''; position: absolute; inset: -1px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.patient-info { flex: 1; min-width: 0; }
+.patient-name-row { display: flex; align-items: center; gap: 6px; }
+.patient-name { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); }
+.patient-card.active .patient-name { color: var(--c-accent); }
+
+.risk-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+}
+.risk-pill.high { background: var(--c-danger-s); color: var(--c-danger); }
+.risk-pill.mid  { background: var(--c-warning-s); color: var(--c-warning); }
+.risk-pill.low  { background: var(--c-success-s); color: var(--c-success); }
+
+.patient-diagnosis {
+  font-size: var(--fs-sm); color: var(--c-text-2);
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.patient-meta {
+  font-size: var(--fs-xs); color: var(--c-text-3);
+  margin-top: 2px;
+}
+
+/* 分页 */
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px; border-top: 1px solid var(--c-border);
+  font-size: var(--fs-xs); color: var(--c-text-2);
+}
+.pager-btn {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 12px; color: var(--c-text-2);
+  transition: all 0.15s;
+}
+.pager-btn:hover { background: var(--c-surface-2); border-color: var(--c-border-s); }
+.pager-btn.disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── 二栏：报告列表 ── */
+.col-reports {
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  display: flex; flex-direction: column;
+}
+.report-header {
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--c-border);
+  background: linear-gradient(180deg, var(--c-surface) 0%, color-mix(in srgb, var(--c-surface) 96%, var(--c-accent) 4%) 100%);
+}
+.report-patient-row {
+  display: flex; align-items: center; gap: 10px;
+}
+.report-patient-avatar {
+  width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #fff;
+}
+.report-patient-avatar.danger { background: linear-gradient(135deg, #CF222E, #F85149); }
+.report-patient-info { flex: 1; min-width: 0; }
+.report-patient-name { font-size: var(--fs-lg); font-weight: 700; }
+.report-patient-sub { font-size: var(--fs-xs); color: var(--c-text-3); margin-top: 1px; }
+.upload-sm {
+  height: 32px; padding: 0 14px; border-radius: 8px;
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-size: var(--fs-sm); font-weight: 500; color: var(--c-text-2);
+  cursor: pointer; display: flex; align-items: center; gap: 5px;
+  transition: all 0.15s;
+}
+.upload-sm:hover { background: var(--c-surface-2); border-color: var(--c-border-s); }
+
+.report-list { flex: 1; overflow-y: auto; padding: 6px 8px; }
+
+/* ── 报告卡片 ── */
+.report-card {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: 3px; position: relative;
+  border: 1.5px solid transparent;
+}
+.report-card:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+.report-card.active {
+  background: var(--c-accent-soft);
+  border-color: rgba(9,105,218,0.2);
+  box-shadow: 0 2px 8px -4px rgba(9,105,218,0.15);
+}
+.report-card.active::before {
+  content: ''; position: absolute; left: -1px; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--c-accent);
+}
+
+.report-type-icon {
+  width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.report-type-icon.narrative { background: var(--c-accent-soft); color: var(--c-accent); }
+.report-type-icon.imaging   { background: var(--c-purple-s); color: var(--c-purple); }
+.report-type-icon.genomic   { background: var(--c-warning-s); color: var(--c-warning); }
+.report-type-icon.lab       { background: var(--c-success-s); color: var(--c-success); }
+.report-type-icon.treatment { background: var(--c-danger-s); color: var(--c-danger); }
+.report-type-icon.other     { background: var(--c-surface-3); color: var(--c-text-3); }
+
+.report-info { flex: 1; min-width: 0; }
+.report-name-row { display: flex; align-items: center; gap: 6px; }
+.report-name { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); }
+.report-card.active .report-name { color: var(--c-accent); }
+.state-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+}
+.state-pill.done { background: var(--c-success-s); color: var(--c-success); }
+.state-pill.processing { background: var(--c-accent-soft); color: var(--c-accent); }
+.report-sub { font-size: var(--fs-xs); color: var(--c-text-3); margin-top: 2px; }
+
+/* ── 三栏：报告详情 ── */
+.col-detail {
+  background: var(--c-surface-2);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.detail-scroll {
+  flex: 1; overflow-y: auto; padding: 20px 28px;
+}
+.detail-scroll::-webkit-scrollbar { width: 5px; }
+.detail-scroll::-webkit-scrollbar-thumb { background: var(--c-border-s); border-radius: 4px; }
+
+.detail-inner { max-width: 660px; margin: 0 auto; }
+
+/* 关闭按钮 */
+.close-btn {
+  float: right; width: 30px; height: 30px; border-radius: 8px;
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px; color: var(--c-text-3);
+  transition: all 0.15s; box-shadow: var(--shadow-card);
+}
+.close-btn:hover { background: var(--c-surface-2); color: var(--c-text); }
+
+/* 详情头 */
+.detail-header {
+  margin-bottom: 20px; clear: both;
+}
+.detail-title-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.detail-title { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+
+/* 元信息网格 */
+.meta-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px;
+  margin-bottom: 12px;
+}
+.meta-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+.meta-icon { color: var(--c-text-3); font-size: 14px; flex-shrink: 0; }
+.meta-label { font-size: var(--fs-xs); color: var(--c-text-3); }
+.meta-value { font-size: var(--fs-sm); color: var(--c-text); font-weight: 500; }
+
+/* 患者条 */
+.patient-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-card);
+}
+.patient-bar-avatar {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, #CF222E, #F85149);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff;
+}
+.patient-bar-name { font-size: var(--fs-sm); color: var(--c-text); font-weight: 600; }
+.patient-bar-link {
+  margin-left: auto; font-size: var(--fs-sm); color: var(--c-accent);
+  font-weight: 500; cursor: pointer; text-decoration: none;
+}
+.patient-bar-link:hover { text-decoration: underline; }
+
+/* 标签 */
+.tag-row { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.tag {
+  padding: 3px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 500;
+  background: var(--c-surface-3); color: var(--c-text-2);
+  border: 1px solid var(--c-border);
+}
+
+/* ── 区块 ── */
+.section {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-card);
+}
+.section-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 14px;
+}
+.section-icon {
+  width: 28px; height: 28px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.section-icon.green { background: var(--c-success-s); color: var(--c-success); }
+.section-icon.blue  { background: var(--c-accent-soft); color: var(--c-accent); }
+.section-icon.amber { background: var(--c-warning-s); color: var(--c-warning); }
+.section-title { font-size: var(--fs-md); font-weight: 600; }
+.section-badge {
+  margin-left: auto; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 6px;
+  background: var(--c-success-s); color: var(--c-success);
+}
+
+/* ── 质控 ── */
+.qc-bar-wrap {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.qc-bar { flex: 1; height: 6px; border-radius: 3px; background: var(--c-surface-3); overflow: hidden; }
+.qc-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--c-success), #3FB950); transition: width 0.4s; }
+.qc-pct { font-size: var(--fs-sm); font-weight: 700; color: var(--c-success); font-family: var(--font-mono); }
+.qc-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.qc-item {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: var(--fs-xs); font-weight: 500;
+}
+.qc-item.pass { background: var(--c-success-s); color: var(--c-success); }
+.qc-item.fail { background: var(--c-warning-s); color: var(--c-warning); }
+
+/* ── 摘要 KV ── */
+.kv-grid { display: grid; grid-template-columns: 72px 1fr; gap: 6px 12px; }
+.kv-key { font-size: var(--fs-sm); color: var(--c-accent); font-weight: 500; text-align: right; }
+.kv-val { font-size: var(--fs-md); color: var(--c-text); line-height: 1.5; }
+
+/* ── AI 草稿 ── */
+.ai-draft {
+  background: linear-gradient(135deg, var(--c-accent-soft) 0%, color-mix(in srgb, var(--c-accent-soft) 40%, var(--c-surface)) 100%);
+  border: 1px solid rgba(9,105,218,0.12);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 14px;
+  position: relative; overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+.ai-draft::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--c-accent), #54AEFF, transparent);
+}
+.ai-draft-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.ai-draft-icon {
+  width: 28px; height: 28px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--c-accent), #54AEFF);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: #fff;
+  box-shadow: 0 2px 8px -2px rgba(9,105,218,0.3);
+}
+.ai-draft-title { font-size: var(--fs-md); font-weight: 600; color: var(--c-accent); }
+.ai-draft-badge {
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+  background: var(--c-accent-mid); color: var(--c-accent);
+}
+.ai-draft-body { font-size: var(--fs-md); color: var(--c-text-2); line-height: 1.7; }
+
+/* ── 原文 ── */
+.raw-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-sm); color: var(--c-text-3); cursor: pointer;
+  padding: 8px 0;
+}
+.raw-toggle:hover { color: var(--c-text-2); }
+.raw-arrow { transition: transform 0.2s; display: inline-block; font-size: 10px; }
+.raw-content {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.7;
+  max-height: 200px; overflow-y: auto;
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* ── 空状态 ── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; color: var(--c-text-3);
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+.empty-title { font-size: var(--fs-md); font-weight: 500; margin-bottom: 4px; }
+.empty-hint { font-size: var(--fs-sm); }
+</style>
+</head>
+<body data-page-node-id="bZC6Ls0N939VkAxb2v5nKk">
+<div class="app" data-page-node-id="KuC8UBjTcZ46e46EZL7ays">
+  <!-- ── 页面头 ── -->
+  <div class="page-header" data-page-node-id="v3LiCCFNmugQOFuzbhlbzh">
+    <div class="header-brand" data-page-node-id="u7sChu6H3ClJ3A3ibZ2rsw">
+      <div class="header-icon" data-page-node-id="ACoHbtQKchFEcUl2d3KTQC">病</div>
+      <div data-page-node-id="vEriXD7Z5E05zHCkmmCj5Z">
+        <div class="header-title" data-page-node-id="vkFajbSsO5k8RLEgW98ODO">智能病历</div>
+        <div class="header-subtitle" data-page-node-id="IBqN8vOmR8vqFYsUK3wnbR">AI 驱动的临床病历管理</div>
+      </div>
+    </div>
+    <div class="header-stats" data-page-node-id="3oAEtdjcEn0SmglIUjpFai">
+      <div class="stat-card" data-page-node-id="EeAbwulP4fXt8gukHUJc1E">
+        <div class="stat-icon blue" data-page-node-id="mQcLHAKolUBavBkQF5bnFB">👤</div>
+        <div data-page-node-id="Ocq3zuAr9zxCe33sefDWAM">
+          <div class="stat-num" data-page-node-id="LoSIIycGWx4ehDRWxLpZ2v">128</div>
+          <div class="stat-label" data-page-node-id="GScuZ7HCGHBhW8QLyuop6X">患者总数</div>
+        </div>
+      </div>
+      <div class="stat-card" data-page-node-id="pHXnhAXgOKExNwi3Kcu8d0">
+        <div class="stat-icon green" data-page-node-id="MGCQ75HyaQC222ylATsd1j">📄</div>
+        <div data-page-node-id="kR75wy065tbo5koNUpUZTf">
+          <div class="stat-num" data-page-node-id="pq6nRSdxV7q3cNiLezPvIS">24</div>
+          <div class="stat-label" data-page-node-id="sjrivbDNNnraWvxj4oUPM5">今日报告</div>
+        </div>
+      </div>
+      <div class="stat-card" data-page-node-id="JbwdgTDpLTYbJMsYGaBbbB">
+        <div class="stat-icon amber" data-page-node-id="FVpWYUctfKKMLSeQMm4O4m">⏳</div>
+        <div data-page-node-id="AbWfq9y1QYXeXSjeFHEyRZ">
+          <div class="stat-num" data-page-node-id="gVUoTGoVzS4Ele4bpfcOWE">7</div>
+          <div class="stat-label" data-page-node-id="CFz5G0XhzY7xR4FQjEmUtB">待审核</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 三栏 ── -->
+  <div class="main-cols" data-page-node-id="Ig2KgZmwehPs73lujN4txJ">
+    <!-- 一栏：患者列表 -->
+    <div class="col-patients" data-page-node-id="CQHxYtT4xZc6lL3aoukAlM">
+      <div class="col-header" data-page-node-id="8Mwy7gTC7Vexl0TF59QnQU">
+        <div class="search-box" data-page-node-id="wNbzCWGOFnHKlj3CixkN9R">
+          <span class="search-icon" data-page-node-id="99bDFprjB5fSaF1OC6nNsc">🔍</span>
+          <input placeholder="搜索患者姓名、诊断..." data-page-node-id="nxzmomWHe3EQeYTBeOxKET" />
+        </div>
+        <button class="upload-btn" data-page-node-id="Kmng0auYpvwfgR9icjp53o">📤 上传病历</button>
+      </div>
+      <div class="patient-list" data-page-node-id="cDlsP1molL9bc9NZyf8d74">
+        <!-- 患者 1 - 选中态 -->
+        <div class="patient-card active" data-page-node-id="KxVZMIAUlHui5TYW4CAA3k">
+          <div class="avatar danger" data-page-node-id="gJSYXcyRUTz9gpYPPyADpw">张</div>
+          <div class="patient-info" data-page-node-id="532FSTBN8RdAAsmvk4VfuE">
+            <div class="patient-name-row" data-page-node-id="AZOHHkFb4JePIUmC8TIUF4">
+              <span class="patient-name" data-page-node-id="oHuFqsNJba8ehaucGRMTM4">张明远</span>
+              <span class="risk-pill high" data-page-node-id="Z4nSU00ymkgGSUBtqzLS2I">高危</span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="R5H9paXouPXkKJtGJCZpKM">非小细胞肺癌 IIIA 期</div>
+            <div class="patient-meta" data-page-node-id="KEY9aSpCt69qVcJbZT1J9p">肿瘤内科 · 男 67岁</div>
+          </div>
+        </div>
+        <!-- 患者 2 -->
+        <div class="patient-card" data-page-node-id="ocClQFMMx69ktHVJQD7PrK">
+          <div class="avatar warning" data-page-node-id="FDbqb1WJuPe3eC1D3RCOkW">李</div>
+          <div class="patient-info" data-page-node-id="EwaFwOj2ev1K5quDgooSzP">
+            <div class="patient-name-row" data-page-node-id="VngOGfHTQSzW6drWGDx4Df">
+              <span class="patient-name" data-page-node-id="io1Vb8LdF3P4dL8vYqKZ38">李秀兰</span>
+              <span class="risk-pill mid" data-page-node-id="Z1jeUpHNB2ZiigJmNBlB5N">中危</span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="fR4sWub8FpevElQ4jHnQGV">胃腺癌 IIB 期</div>
+            <div class="patient-meta" data-page-node-id="bivodtF1mbgcJiJa6sJMy4">消化内科 · 女 54岁</div>
+          </div>
+        </div>
+        <!-- 患者 3 -->
+        <div class="patient-card" data-page-node-id="3WzRPDe0yDjsYC1MXSHy94">
+          <div class="avatar success" data-page-node-id="mU46HxyjZiJDVFqGYOUVg9">王</div>
+          <div class="patient-info" data-page-node-id="3hSZUXtQhrDeEWEEttfFAr">
+            <div class="patient-name-row" data-page-node-id="IjAf0BnkGNFaNNdGuTe5Ty">
+              <span class="patient-name" data-page-node-id="InF6REJWP0wsWzUeMBIHlV">王建国</span>
+              <span class="risk-pill low" data-page-node-id="6A2g3NhXgEWGuISYyGftXJ">低危</span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="HbxzPBHSTe757kyHJppL16">结直肠癌 IIA 期</div>
+            <div class="patient-meta" data-page-node-id="niQTYfdFEfNk8V7jV8rfaF">胃肠外科 · 男 48岁</div>
+          </div>
+        </div>
+        <!-- 患者 4 -->
+        <div class="patient-card" data-page-node-id="zS2Q3sGN2kLfCk4AyyfBCB">
+          <div class="avatar warning" data-page-node-id="q2djns2a9oMH4H7Qc3VZIG">赵</div>
+          <div class="patient-info" data-page-node-id="dJGmKOLvyNI0ZTaFzklfDG">
+            <div class="patient-name-row" data-page-node-id="Gm1i1ckYvMheByCfTGvCEJ">
+              <span class="patient-name" data-page-node-id="Uglv9PZLQF3pqspIrQWxuA">赵雪梅</span>
+              <span class="risk-pill mid" data-page-node-id="3271OUHXNPuTC5o4kbxkOu">中危</span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="YExFixlEoeAPNqzQM1UBMr">乳腺癌 IIA 期</div>
+            <div class="patient-meta" data-page-node-id="VvMDQFHE9i0liYAZ9xyzkP">乳腺外科 · 女 42岁</div>
+          </div>
+        </div>
+        <!-- 患者 5 -->
+        <div class="patient-card" data-page-node-id="RDfuRF2EglcdA4sgAV5vRu">
+          <div class="avatar success" data-page-node-id="XXVi5vaRDsGSTgpry5i9Ha">陈</div>
+          <div class="patient-info" data-page-node-id="YPBWuet19SnvEu5QU6cCxC">
+            <div class="patient-name-row" data-page-node-id="ZDB3Q0sXZoFsjSG6mXOE6T">
+              <span class="patient-name" data-page-node-id="mA1XKpbn7PB0KVs2TxYPXT">陈伟华</span>
+              <span class="risk-pill low" data-page-node-id="vl7XCKe3BaaRLhdSZxyaYY">低危</span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="copP0n9F8SQWXtAJhyPECZ">甲状腺乳头状癌 I 期</div>
+            <div class="patient-meta" data-page-node-id="yzCZu5yJJ09ufjCVYdZVI3">头颈外科 · 男 35岁</div>
+          </div>
+        </div>
+        <!-- 患者 6 -->
+        <div class="patient-card" data-page-node-id="5u4dnAPGG4BcwgTV4YMGGd">
+          <div class="avatar danger" data-page-node-id="tfaFNlo3eZQWNT9nqiPDZD">刘</div>
+          <div class="patient-info" data-page-node-id="ywDRK7WhoaDK0VvmhlXVFX">
+            <div class="patient-name-row" data-page-node-id="NhlAYauq1l9fldktVc0mMs">
+              <span class="patient-name" data-page-node-id="joGLp1aCI5DhHO34mzAzB9">刘芳</span>
+              <span class="risk-pill high" data-page-node-id="6U0v9FuyBH4F0Qik26DgDv">高危</span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="RYRG4gF8T4JWU5zPQWPpXe">肝细胞癌 IIIB 期</div>
+            <div class="patient-meta" data-page-node-id="F7t5wOYtJkNbMCOVdt60i0">肝胆外科 · 女 61岁</div>
+          </div>
+        </div>
+      </div>
+      <div class="pager" data-page-node-id="3HaV6yRCF2cwJgZY60CD2P">
+        <button class="pager-btn disabled" data-page-node-id="GFV7b7WCH9rjysh0CtjdzE">‹</button>
+        <span style="font-family:var(--font-mono)" data-page-node-id="BWDkVtDNQSelm2TMW9GSLN">1 / 13</span>
+        <button class="pager-btn" data-page-node-id="WgOOwz6wAieWpX5Zf3DWOW">›</button>
+      </div>
+    </div>
+
+    <!-- 二栏：报告列表 -->
+    <div class="col-reports" data-page-node-id="SCyafUrDQoQsVxy72Keh7y">
+      <div class="report-header" data-page-node-id="tvlLTZMKVazD4MLCUurEuo">
+        <div class="report-patient-row" data-page-node-id="YmuMRzRLWbCCrZLnN9BBpc">
+          <div class="report-patient-avatar danger" data-page-node-id="FeE9kx4TKEzliAidFav0MW">张</div>
+          <div class="report-patient-info" data-page-node-id="LTA9luqgDN4UWRRl8BgtTq">
+            <div class="report-patient-name" data-page-node-id="z0qqGGHAt4JSbA9CBdV7Pw">张明远</div>
+            <div class="report-patient-sub" data-page-node-id="GdrludCFLoAB29dlLBsx3d">非小细胞肺癌 IIIA 期 · 肿瘤内科</div>
+          </div>
+          <button class="upload-sm" data-page-node-id="lEGkXXFQ8U8Y40mG0chmxH">📤 上传</button>
+        </div>
+      </div>
+      <div class="report-list" data-page-node-id="nVOiHxZB4piHbVQoj7UA1b">
+        <!-- 报告 1 - 选中态 -->
+        <div class="report-card active" data-page-node-id="lBBMPp97kiLszH5gDxeiyn">
+          <div class="report-type-icon narrative" data-page-node-id="1IDcqe5UDqeoBrAaeW1gWE">📋</div>
+          <div class="report-info" data-page-node-id="8gX6KOlxYyX2oojXyH9E8w">
+            <div class="report-name-row" data-page-node-id="rpCuhuDrUmNS69Bl7Kzzx1">
+              <span class="report-name" data-page-node-id="R1PqNvhzSmchxTGylrxqwj">入院记录</span>
+              <span class="state-pill done" data-page-node-id="1Ay8rFY0nwhPEB2q8nDniM">✓ 已解析</span>
+            </div>
+            <div class="report-sub" data-page-node-id="RF7dhVjLjC0AjkrcCg55D8">病理报告 · 协和医院 · 2026-08-15</div>
+          </div>
+        </div>
+        <!-- 报告 2 -->
+        <div class="report-card" data-page-node-id="OPuvLzRi2dLvxHIa0CYPRh">
+          <div class="report-type-icon imaging" data-page-node-id="ecWoUOMyYGSGmita4KLtRy">🫁</div>
+          <div class="report-info" data-page-node-id="TNSd3KeAdJRX5G1LyhWwjr">
+            <div class="report-name-row" data-page-node-id="FsPd36m6ezoan3D2IgPoj6">
+              <span class="report-name" data-page-node-id="bjn0qBCuEqgQBku9y70D16">胸部 CT 报告</span>
+              <span class="state-pill done" data-page-node-id="Eq7joz1atP0iLokF6I9HW4">✓ 已解析</span>
+            </div>
+            <div class="report-sub" data-page-node-id="yFJCU0GqvyK1QVBG4h9x4D">影像报告 · 协和医院 · 2026-08-12</div>
+          </div>
+        </div>
+        <!-- 报告 3 -->
+        <div class="report-card" data-page-node-id="fNtBNjQKam7q435x6sjmnY">
+          <div class="report-type-icon genomic" data-page-node-id="2nQPkzqlWpHSDBUSRDAuzA">🧬</div>
+          <div class="report-info" data-page-node-id="nRmB3qNPzp60UHQeqhdGbW">
+            <div class="report-name-row" data-page-node-id="BulYJG7RsQpL6OwL03GGEp">
+              <span class="report-name" data-page-node-id="sBvd0zCY1N2fHFDrnMakJR">EGFR 基因检测</span>
+              <span class="state-pill processing" data-page-node-id="C5r0mG7VAZAbDtau8A9XYQ">◉ 解析中</span>
+            </div>
+            <div class="report-sub" data-page-node-id="5GYKmIBWpqQ8EfCDXIoHoJ">基因检测 · 金域医学 · 2026-08-10</div>
+          </div>
+        </div>
+        <!-- 报告 4 -->
+        <div class="report-card" data-page-node-id="rTdgGSewPk8JZNgr2j7ohs">
+          <div class="report-type-icon lab" data-page-node-id="oM5n2B3cHbOcNkEOzCS75a">🧪</div>
+          <div class="report-info" data-page-node-id="ssnFDGvpAFgHjDRW2DOcEp">
+            <div class="report-name-row" data-page-node-id="aC612PXyF3qFUkFPoA4B5v">
+              <span class="report-name" data-page-node-id="rd39iNDSHdMyMCB00tOCvJ">血常规 + 肝肾功能</span>
+              <span class="state-pill done" data-page-node-id="k08BHuPs8BcCmh2STHy8nG">✓ 已解析</span>
+            </div>
+            <div class="report-sub" data-page-node-id="kMdaitIoNUfI0ueijN9AJQ">检验报告 · 协和医院 · 2026-08-08</div>
+          </div>
+        </div>
+        <!-- 报告 5 -->
+        <div class="report-card" data-page-node-id="QWVZ9v5IMIZH7hb7OtsAYo">
+          <div class="report-type-icon treatment" data-page-node-id="zlAtkUgZ8qP4tbcJiG2oUq">💉</div>
+          <div class="report-info" data-page-node-id="4g8VNHmHb7pvbkjgbw6CTn">
+            <div class="report-name-row" data-page-node-id="hxjJNG361UiGSxrWMetfMy">
+              <span class="report-name" data-page-node-id="Rl5NBghw7dBB8aa2EB7VNQ">第一次化疗记录</span>
+              <span class="state-pill done" data-page-node-id="yTHMgv5Gz5IX5XLKjBGdAl">✓ 已解析</span>
+            </div>
+            <div class="report-sub" data-page-node-id="6rhwOPKnIc8gTgxaCTvXRn">治疗记录 · 协和医院 · 2026-08-05</div>
+          </div>
+        </div>
+      </div>
+      <div class="pager" data-page-node-id="WZDLg9JtitS8gBXuAuGhDu">
+        <button class="pager-btn disabled" data-page-node-id="WhcvH9CALgosJ1I6vtma4G">‹</button>
+        <span style="font-family:var(--font-mono)" data-page-node-id="uyiQVsZ32vAzAcYXCChhMJ">1 / 3</span>
+        <button class="pager-btn" data-page-node-id="Jg8S3RULnHiPO82gCyCC2t">›</button>
+      </div>
+    </div>
+
+    <!-- 三栏：报告详情 -->
+    <div class="col-detail" data-page-node-id="CVJWsIuiu0xxaFoRcAJ4FH">
+      <div class="detail-scroll" data-page-node-id="55PD7v08fx8p552M3grHct">
+        <div class="detail-inner" data-page-node-id="cGGDJpGILtV3pFlZRT2sCy">
+          <!-- 关闭 -->
+          <button class="close-btn" data-page-node-id="wNL7CKv6rLtlfp8N7Gt1vY">✕</button>
+
+          <!-- 详情头 -->
+          <div class="detail-header" data-page-node-id="wM4wEdseNgar6UqGAa1brJ">
+            <div class="detail-title-row" data-page-node-id="5BkDxyb3qt2WloUx92wPLu">
+              <span class="detail-title" data-page-node-id="ohBGcAWQzY5ZOzNyrgMlUg">入院记录</span>
+              <span class="state-pill done" data-page-node-id="wwy1z32PL64IKW4emzUq0z">✓ 已解析</span>
+            </div>
+
+            <!-- 元信息网格 -->
+            <div class="meta-grid" data-page-node-id="9QgdmD7mT9UzKs3UaDuOY9">
+              <div class="meta-item" data-page-node-id="uAiRRBva4XZNo7Hz5jzJot">
+                <span class="meta-icon" data-page-node-id="C8wM5sCzgKrKkozHWpgLSP">📋</span>
+                <div data-page-node-id="OuEpcBJRL1lN90kqtWMeTw">
+                  <div class="meta-label" data-page-node-id="pSlYFphMb6r4gqKJGuG5hl">报告类型</div>
+                  <div class="meta-value" data-page-node-id="NpMmFCkN4SQvVC5PHRYEvd">病理报告</div>
+                </div>
+              </div>
+              <div class="meta-item" data-page-node-id="Wm3jH5i8DJow2RfllIxd83">
+                <span class="meta-icon" data-page-node-id="9c2OThweZKWknQ5nWRXhPc">🏥</span>
+                <div data-page-node-id="Gaiu3ptZnGZmziYeDrEQHr">
+                  <div class="meta-label" data-page-node-id="v2oZFetG2Bvgi5WUmTdAa9">就诊医院</div>
+                  <div class="meta-value" data-page-node-id="6KldDfHiZvjKGhwJTQWF6e">北京协和医院</div>
+                </div>
+              </div>
+              <div class="meta-item" data-page-node-id="jdnY4DdaVt0o0qdKTD5kRg">
+                <span class="meta-icon" data-page-node-id="0I8iAlrOLFUYGhY9hRl1US">📅</span>
+                <div data-page-node-id="BpSRXj4ieOAHsJnoQwXc6W">
+                  <div class="meta-label" data-page-node-id="SSCiHFbYPXcYP4ADHnFcCG">就诊日期</div>
+                  <div class="meta-value" data-page-node-id="g3AjyFVlDKKC4ebUrUZVTb">2026-08-15</div>
+                </div>
+              </div>
+              <div class="meta-item" data-page-node-id="fivh0tYMKyPp5VRvzS95KA">
+                <span class="meta-icon" data-page-node-id="oDrxmHowaHUTInCogWfLo2">👨‍⚕️</span>
+                <div data-page-node-id="a1ZWMhMDz6TgYty1Dqj5ao">
+                  <div class="meta-label" data-page-node-id="LlZzltDUwlCumf8lHGAqnq">主治医师</div>
+                  <div class="meta-value" data-page-node-id="JHRVQObvhzgO01K3zQBERJ">王主任</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 患者条 -->
+            <div class="patient-bar" data-page-node-id="vWq4XGRqEQBuYO2XNjvL19">
+              <div class="patient-bar-avatar" data-page-node-id="VVdMq4MBxjaGleXsUWEd5o">张</div>
+              <span class="patient-bar-name" data-page-node-id="ixISWgiZPXkF0aWOotCrk0">张明远</span>
+              <a class="patient-bar-link" data-page-node-id="LrtFYvNbNOrHbAdAvtezQw">查看档案 →</a>
+            </div>
+
+            <!-- 标签 -->
+            <div class="tag-row" data-page-node-id="c2S2CMYkI0Po2z3ZhOnYyg">
+              <span class="tag" data-page-node-id="iW5JWqjFlIi3urXv49J4ON">非小细胞肺癌</span>
+              <span class="tag" data-page-node-id="LRnrEjuwJZiqegBZVob65y">IIIA 期</span>
+              <span class="tag" data-page-node-id="5TSu5mHkL9FDoQAYQO8tNI">EGFR 19del</span>
+            </div>
+          </div>
+
+          <!-- AI 质控 -->
+          <div class="section" data-page-node-id="JfbzGqzeVY5174NWP1BvPA">
+            <div class="section-head" data-page-node-id="kFsUsaNxu4X5KyMCLoAIzA">
+              <div class="section-icon green" data-page-node-id="Xlr5nzqbHvExs0WaZAuE15">✅</div>
+              <span class="section-title" data-page-node-id="fE34UZ9o61wqRA3jZVg1wH">AI 质控</span>
+              <span class="section-badge" data-page-node-id="8gRS3T5JQm545Fv5MSZQVC">4/5 通过</span>
+            </div>
+            <div class="qc-bar-wrap" data-page-node-id="Q10xBMsP4CepFqDb5yUs7M">
+              <div class="qc-bar" data-page-node-id="roClC84DK3gZUIKiu0cbxu">
+                <div class="qc-bar-fill" style="width: 80%" data-page-node-id="do4wHOwVFUxhafDJ65urgq"></div>
+              </div>
+              <span class="qc-pct" data-page-node-id="xeM5cqrUonWmWzNF6X5RZf">80%</span>
+            </div>
+            <div class="qc-items" data-page-node-id="H9hmISg9kNNAZpMrw1crmu">
+              <span class="qc-item pass" data-page-node-id="jBGjWFbHFZ4l7NhMYevKOU">✓ 主诉完整性</span>
+              <span class="qc-item pass" data-page-node-id="dsBz9JYiAJ0pznz1Gt5F5o">✓ 病史采集完整</span>
+              <span class="qc-item pass" data-page-node-id="PoefVYayDPxUGaVbAG9gxj">✓ 必要检查合理性</span>
+              <span class="qc-item fail" data-page-node-id="ke18tbmbnH9x6A9FK49VfM">⚠ 用药合理性</span>
+              <span class="qc-item pass" data-page-node-id="uiCvMnFY2tA4SBT8RSFeZ3">✓ 医嘱完整性</span>
+            </div>
+          </div>
+
+          <!-- 结构化摘要 -->
+          <div class="section" data-page-node-id="BWtis4GIh8OACwBgEP5Fpm">
+            <div class="section-head" data-page-node-id="9AAIgMNoqVqLYIo1crDwqT">
+              <div class="section-icon blue" data-page-node-id="DlQWWHzxHoBBT9xC2NdJLF">📊</div>
+              <span class="section-title" data-page-node-id="XcKZScNxcrWYe3g6tLo7Dw">结构化摘要</span>
+            </div>
+            <div class="kv-grid" data-page-node-id="mzJ05i4NmpH63TZ2VP0QxO">
+              <span class="kv-key" data-page-node-id="ukDBJ4QHtDk5ZbauoNDtTc">主诉</span>
+              <span class="kv-val" data-page-node-id="nq20gT4AFowZVa9GDZDWhG">反复咳嗽 2 月余，加重伴痰中带血 1 周</span>
+              <span class="kv-key" data-page-node-id="gKrSbsSP1oeutP2kTdBGYB">现病史</span>
+              <span class="kv-val" data-page-node-id="gK3lZ3xclwjV64QZr08yXr">患者 2 月前无明显诱因出现咳嗽，为阵发性干咳，未重视。1 周前咳嗽加重，痰中带血丝</span>
+              <span class="kv-key" data-page-node-id="t0hQIpstEUsRgwaeVbsvzc">诊断</span>
+              <span class="kv-val" data-page-node-id="M4k0EwBHkCFdDQmBF5IXnJ">右肺上叶非小细胞肺癌（腺癌）IIIA 期（cT3N1M0）</span>
+              <span class="kv-key" data-page-node-id="qMGvhUfvEbQkEVtqBfoLQk">治疗计划</span>
+              <span class="kv-val" data-page-node-id="AGCHWwEwu8R753rgpgpAJ9">建议先行新辅助化疗 2 周期后评估手术可能性</span>
+            </div>
+          </div>
+
+          <!-- AI 草稿 -->
+          <div class="ai-draft" data-page-node-id="Eu7yCDujA4uB0uFIiKdLGA">
+            <div class="ai-draft-head" data-page-node-id="xewNubKPYUUoNCEbWIgDyA">
+              <div class="ai-draft-icon" data-page-node-id="fURL0Zg9ZbOZUtQlYh1aO6">✦</div>
+              <span class="ai-draft-title" data-page-node-id="t0HNDWrVUWngHiOjWD54dj">本次诊疗摘要</span>
+              <span class="ai-draft-badge" data-page-node-id="EwPNPA37hrlSIGPHeE8vPJ">AI 草稿</span>
+            </div>
+            <div class="ai-draft-body" data-page-node-id="Oee3ubxDp6AvM5ElIdfc0M">
+              患者张明远，2026-08-15 就诊于肿瘤内科。诊断：右肺上叶非小细胞肺癌（腺癌）IIIA 期（cT3N1M0）。主诉：反复咳嗽 2 月余，加重伴痰中带血 1 周；现病史：患者 2 月前无明显诱因出现咳嗽，为阵发性干咳，未重视。1 周前咳嗽加重，痰中带血丝；治疗计划：建议先行新辅助化疗 2 周期后评估手术可能性。建议按周期复查评估疗效。
+            </div>
+          </div>
+
+          <!-- 原文 -->
+          <div class="section" style="background: transparent; border: none; box-shadow: none; padding: 0;" data-page-node-id="MPfXMmbVwT0GffE42UeY8m">
+            <div class="raw-toggle" data-page-node-id="nEd94Bhn4ZtodmiM68uDbU">
+              <span class="raw-arrow" data-page-node-id="COEGxuvKyqKHed06RkL4ry">▶</span> 查看原文
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

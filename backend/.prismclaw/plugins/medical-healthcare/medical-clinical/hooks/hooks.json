@@ -1,0 +1,43 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "symptom-lookup|allergy-check|fda-drug-safety|drug-recall-check|lab-results-analysis",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/allergy_safety_verifier.py --stdin",
+            "timeout": 10.0
+          }
+        ]
+      },
+      {
+        "matcher": "prescription-review|vital-signs",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/drug_safety_verifier.py --stdin",
+            "timeout": 10.0
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "symptom-lookup|allergy-check|fda-drug-safety|drug-recall-check|lab-results-analysis|prescription-review|vital-signs",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/confidence_scorer.py --stdin",
+            "timeout": 5.0
+          },
+          {
+            "type": "command",
+            "command": "python ${PRISMCLAW_PLUGIN_ROOT}/../safety/claim_verifier.py --stdin",
+            "timeout": 5.0
+          }
+        ]
+      }
+    ]
+  }
+}

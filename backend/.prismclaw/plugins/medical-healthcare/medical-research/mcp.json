@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "pubmed-search": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "pubmed-mcp-server"],
+      "enabled": false,
+      "title": "PubMed 文献检索 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何 API 凭据。使用前请在本地环境变量或私有配置中填入自己的凭据，并将 enabled 改为 true。"
+    }
+  },
+  "recommendedCategories": [
+    "literature-search",
+    "meta-analysis",
+    "trial-design",
+    "statistics"
+  ],
+  "_notes": "文献检索可通过 PubMed、Semantic Scholar 等 MCP 接入。统计分析通过 Python/R 脚本或专用统计 MCP 实现。"
+}

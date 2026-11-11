@@ -1,0 +1,11 @@
+{
+  "name": "employment-legal",
+  "version": "1.0.0",
+  "description": "审查招聘和解雇以查找司法管辖区特定的风险标志，根据控制州测试对工人进行分类，在错过截止日期之前跟踪请假截止日期，运行内部调查，并在法律不同的地方起草带有州补充的政策。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

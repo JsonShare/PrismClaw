@@ -1,0 +1,55 @@
+# 模型与端点：主对话模型注册表 + 多模态（向量/视觉/语音）端点。
+# 归属顶层键：embedding / vision / speech / models
+#
+# 运行时由 /models 管理接口写回本文件（models_registry.save）；
+# 写回使用 ruamel round-trip，因此本文件的注释与键顺序会被保留。
+#
+# 使用方式：复制为同目录下的 models.yaml 后填写自己的服务地址与密钥。
+#   cp backend/configs/models.example.yaml backend/configs/models.yaml
+
+embedding:
+  model: "your-embedding-model"
+  api_key: "YOUR_API_KEY"
+  base_url: "https://api.openai.com/v1"
+  llm_provider: "openai"
+  dimensions: 1024
+
+vision:
+  model: "your-vision-model"
+  api_key: "YOUR_API_KEY"
+  base_url: "https://api.openai.com/v1"
+  llm_provider: "openai"
+  # 单张内联图片的 token 估算（ratio 模式 A_eff 扣除项）
+  tokens_per_image: 1024
+  # 单轮可内联进主模型的图片上限
+  max_images_inline: 4
+
+speech:
+  # 实际 ASR 服务（FunASR / SenseVoice 类），协议见 src/prismclaw/app/web/routers/speech.py
+  # 服务端只接受 JSON 包裹的 base64 PCM，不接受 binary WS frame
+  language: "Chinese"
+  stream_url: "ws://127.0.0.1:8020/ws/asr"
+  stream_connect_timeout: 10
+
+models:
+  # 默认模型为裸模型名（不带 provider 前缀）
+  default_model: "your-model"
+  default_provider: null
+  # 未知 provider 前缀的处置：fail（启动即报错）| default
+  unknown_prefix_policy: "fail"
+
+  providers:
+    your-model:
+      api_key: "YOUR_API_KEY"
+      base_url: "https://api.openai.com/v1"
+      llm_provider: "openai"
+      models:
+        your-model:
+          modalities:
+            input: ["text"]
+            output: ["text"]
+          # 上下文窗口决定全部 prompt 区域的预算（见 docs/context-layout-design.md）
+          context_window: 131072
+          # 单次生成上限；同时参与输出预留计算，不要设为窗口值
+          max_output_tokens: 32768
+          builtin: true

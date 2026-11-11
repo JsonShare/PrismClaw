@@ -1,0 +1,1110 @@
+@import "tailwindcss";
+
+/* ── 主题 token / 主题专属样式已拆分至 web/src/theme/{base,dark,light}.css ──
+   由 web/src/main.tsx 在 index.css 之后按顺序引入，确保主题覆盖在 cascade 上占优。
+   base.css : 共享原语（字体/字号/玻璃公共原语）
+   dark.css : [data-theme="dark"] 作用域内的暗色 token + 暗色专属样式
+   light.css: [data-theme="light"] 作用域内的亮色 token + 亮色专属样式 */
+
+/* 暗色主题 token 与暗色专属样式：见 web/src/theme/dark.css */
+
+/* 亮色主题 token 与亮色专属样式：见 web/src/theme/light.css */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: hidden;
+  font-size: var(--fs-md);
+}
+
+body {
+  overflow-x: hidden;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+}
+
+:focus-visible {
+  outline: none;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+@keyframes animate-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-in {
+  animation: animate-in 200ms ease-out;
+}
+
+/* ============================================================
+   PrismClaw 主题原语（pc-*）
+   ============================================================ */
+@layer components {
+  .pc-surface {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    color: var(--c-text);
+  }
+  .pc-surface-subtle {
+    background: var(--c-surface-2);
+    color: var(--c-text);
+  }
+}
+
+/* ============================================================
+   Markdown · frakio rich-content styles (照抄 frakio-work-main/styles.css:8686-8892)
+   变量采用 PrismClaw 主题 token，Mac 特定选择器保留为通用回退
+   ============================================================ */
+.message-text {
+  overflow-wrap: anywhere;
+}
+
+/* ── 思考过程滚动容器：独立于 grid 布局，确保 max-height + overflow 生效 ── */
+.reasoning-scroll-wrap {
+  max-height: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+.reasoning-scroll-wrap:hover {
+  scrollbar-color: var(--c-border) transparent;
+}
+.reasoning-scroll-wrap::-webkit-scrollbar {
+  width: 4px;
+}
+.reasoning-scroll-wrap::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 2px;
+  transition: background 0.3s ease;
+}
+.reasoning-scroll-wrap:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-text-secondary) 25%, transparent);
+}
+.reasoning-scroll-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── .markdown-content：独立 markdown 内容容器（用于 SkillDetailModal、ReasoningBlock 等） ── */
+.markdown-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  min-width: 0;
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.85;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.markdown-content > * { margin: 0; }
+.markdown-content p { margin: 0; line-height: inherit; }
+
+/* strikethrough 已在 remarkGfm 层关闭（`{ strikethrough: false }`），
+   ~~...~~ 会原样显示为波浪号包裹的文字内容。
+   这里的 del 样式保留兜底（如果以后 markdown 渲染器变了）。 */
+.markdown-content del {
+  color: var(--c-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--c-text-tertiary);
+  text-decoration-style: solid;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  margin: 4px 0 0;
+  color: var(--c-text);
+  line-height: 1.35;
+  font-weight: 750;
+}
+.markdown-content h1 { font-size: 20px; }
+.markdown-content h2 { font-size: 17px; }
+.markdown-content h3 { font-size: 15px; }
+.markdown-content h4 { font-size: 14px; }
+
+.markdown-content ul,
+.markdown-content ol {
+  display: grid;
+  gap: 5px;
+  padding-left: 20px;
+}
+.markdown-content li { padding-left: 2px; }
+
+.markdown-content table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.markdown-content th,
+.markdown-content td {
+  border-bottom: 1px solid var(--c-border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.markdown-content th {
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  font-weight: 700;
+}
+.markdown-content tr:last-child td { border-bottom: 0; }
+
+.markdown-content code {
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  font-size: .92em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.markdown-content pre {
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--c-surface-2);
+  white-space: pre;
+}
+.markdown-content pre code {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-content blockquote {
+  margin: 0;
+  border-left: 3px solid var(--c-border);
+  padding-left: 12px;
+  color: var(--c-text-secondary);
+}
+
+.markdown-content hr,
+.markdown-message hr {
+  border: 0;
+  height: 1px;
+  margin: 6px 0;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--c-border) 50%,
+    transparent 100%
+  );
+  opacity: 0.4;
+}
+
+/* ── .markdown-message：聊天消息容器 ── */
+.markdown-message {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  min-width: 0;
+  color: var(--c-text);
+  font-size: 14px;
+  line-height: 1.85;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.markdown-message > * { margin: 0; }
+.markdown-message p { margin: 0; line-height: inherit; }
+
+.markdown-message h1,
+.markdown-message h2,
+.markdown-message h3 {
+  margin: 4px 0 0;
+  color: var(--c-text);
+  line-height: 1.35;
+  font-weight: 750;
+}
+.markdown-message h1 { font-size: 20px; }
+.markdown-message h2 { font-size: 17px; }
+.markdown-message h3 { font-size: 15px; }
+
+.markdown-message ul,
+.markdown-message ol {
+  display: grid;
+  gap: 5px;
+  padding-left: 20px;
+}
+.markdown-message li { padding-left: 2px; }
+
+.markdown-message table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.markdown-message th,
+.markdown-message td {
+  border-bottom: 1px solid var(--c-border);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.markdown-message th {
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  font-weight: 700;
+}
+.markdown-message tr:last-child td { border-bottom: 0; }
+
+.markdown-message code {
+  border: 1px solid var(--c-border);
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--c-text);
+  background: var(--c-surface-2);
+  font-size: .92em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.markdown-message pre {
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--c-surface-2);
+  white-space: pre;
+}
+.markdown-message pre code {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.markdown-message blockquote {
+  margin: 0;
+  border-left: 3px solid var(--c-border);
+  padding-left: 12px;
+  color: var(--c-text-secondary);
+}
+
+.rich-markdown {
+  --rich-text: var(--c-text);
+  --rich-muted: var(--c-text-secondary);
+  --rich-surface: var(--c-surface);
+  --rich-raised: var(--c-surface-2);
+  --rich-border: var(--c-border);
+  --rich-accent: var(--c-accent);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rich-markdown > * { min-width: 0; }
+.rich-markdown h4 { margin: 4px 0 0; color: var(--rich-text); font-size: 14px; line-height: 1.35; font-weight: 650; }
+.rich-markdown a { color: var(--rich-accent); text-underline-offset: 2px; }
+.rich-markdown input[type='checkbox'] { accent-color: var(--rich-accent); }
+.rich-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 3px 0; }
+
+.markdown-message .markdown-table-scroll,
+.rich-table-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--rich-border);
+  border-radius: 7px;
+  background: var(--rich-surface);
+}
+
+.markdown-message .markdown-table-scroll table,
+.rich-table-scroll table {
+  display: table;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+  border: 0;
+  border-collapse: collapse;
+  border-radius: 0;
+  background: transparent;
+}
+
+.rich-frame {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--rich-border);
+  border-radius: 8px;
+  color: var(--rich-text);
+  background: var(--rich-surface);
+}
+
+.rich-frame-header {
+  display: flex;
+  min-height: 35px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--rich-border);
+  padding: 0 7px 0 11px;
+  color: var(--rich-muted);
+  background: var(--rich-raised);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: none;
+}
+
+.rich-frame-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; }
+.rich-frame-body { min-width: 0; }
+
+.rich-icon-button {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  color: var(--rich-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.rich-icon-button:hover { color: var(--rich-text); background: color-mix(in srgb, var(--rich-text) 7%, transparent); }
+.rich-icon-button:disabled { opacity: .42; cursor: default; }
+.rich-icon-button:focus-visible { outline: 1px solid color-mix(in srgb, var(--rich-accent) 62%, transparent); outline-offset: 1px; }
+
+.rich-code-frame .rich-frame-body,
+.rich-diff-frame .rich-frame-body { overflow-x: auto; }
+
+.rich-html-render-frame .rich-frame-body { overflow: auto; }
+
+.rich-shiki pre,
+.markdown-message .rich-code-fallback {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 13px 14px;
+  background: var(--rich-surface) !important;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.62;
+  tab-size: 2;
+  white-space: pre;
+  overflow-x: auto;
+}
+.rich-shiki code { display: block; border: 0; padding: 0; background: transparent; font-size: inherit; }
+
+.rich-diff-frame [data-diffs] { --diffs-font-size: 12px; --diffs-line-height: 1.55; }
+.rich-json-frame .rich-frame-body { max-height: 420px; overflow: auto; padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; }
+.rich-json-frame .rich-frame-body > div { color: var(--rich-text) !important; background: transparent !important; }
+
+.rich-mermaid-canvas {
+  min-width: 100%;
+  min-height: 220px;
+  overflow: auto;
+  padding: 18px;
+  background: var(--rich-surface);
+  scrollbar-width: thin;
+}
+.rich-mermaid-zoom { width: max-content; min-width: 100%; transform-origin: top center; }
+.rich-mermaid-canvas svg { display: block; width: max-content; min-width: 100%; max-width: none; height: auto; margin: auto; }
+.rich-math-frame .rich-frame-body { overflow-x: auto; padding: 16px; text-align: center; }
+
+.rich-loading,
+.rich-preview-error,
+.rich-error-frame > .rich-frame-body > p { margin: 0; padding: 14px; color: var(--rich-muted); font-size: 12px; }
+.rich-preview-error,
+.rich-error-frame > .rich-frame-body > p { color: var(--c-danger); }
+
+.rich-pending-frame .rich-loading {
+  margin: 0;
+  padding: 13px 14px;
+  font-size: 12px;
+  color: var(--rich-muted);
+}
+
+/* Rich data table components */
+.rich-data-content { min-width: 0; }
+.rich-data-toolbar { display: flex; min-height: 39px; align-items: center; gap: 8px; border-bottom: 1px solid var(--rich-border); padding: 5px 8px; color: var(--rich-muted); font-size: 11px; }
+.rich-data-toolbar label { display: flex; min-width: 130px; max-width: 280px; flex: 1 1 180px; align-items: center; gap: 6px; border: 1px solid var(--rich-border); border-radius: 5px; padding: 0 7px; background: var(--rich-surface); }
+.rich-data-toolbar input,
+.rich-data-toolbar select { min-width: 0; width: 100%; height: 26px; border: 0; outline: 0; color: var(--rich-text); background: transparent; font: inherit; }
+.rich-data-toolbar .rich-select { position: relative; max-width: 150px; flex-basis: 120px; }
+.rich-data-toolbar .rich-select select { appearance: none; padding-right: 16px; }
+.rich-data-toolbar .rich-select svg { position: absolute; right: 6px; pointer-events: none; }
+.rich-data-toolbar > span { flex: 0 0 auto; }
+.rich-data-frame .rich-table-scroll { max-height: 430px; border: 0; border-radius: 0; }
+
+/* Table scroll with sticky header */
+.rich-table-scroll th { position: sticky; top: 0; z-index: 1; padding: 0; background: var(--rich-raised); }
+.rich-table-scroll th button { width: 100%; border: 0; padding: 8px 10px; color: inherit; background: transparent; font: inherit; font-weight: 650; text-align: left; white-space: nowrap; cursor: pointer; }
+.rich-table-scroll td { max-width: 360px; padding: 8px 10px; overflow-wrap: anywhere; }
+.rich-filter-row th { top: 31px; padding: 4px 6px; border-top: 1px solid var(--rich-border); }
+.rich-filter-row input { width: 100%; min-width: 92px; height: 25px; border: 1px solid var(--rich-border); border-radius: 4px; padding: 0 6px; color: var(--rich-text); background: var(--rich-surface); font: inherit; font-weight: 400; outline: 0; }
+.rich-filter-row input:focus { border-color: var(--rich-accent); }
+.rich-group-row { cursor: pointer; }
+.rich-group-row td { position: sticky; left: 0; color: var(--rich-muted); background: var(--rich-raised); font-size: 11px; font-weight: 650; }
+.rich-group-row td svg { display: inline-block; margin-right: 5px; vertical-align: -2px; transition: transform .15s ease; }
+.rich-group-row td svg.expanded { transform: rotate(90deg); }
+.rich-group-row small { color: var(--rich-muted); font-weight: 400; }
+.rich-data-badge { display: inline-flex; min-height: 20px; align-items: center; border-radius: 999px; padding: 1px 7px; background: color-mix(in srgb, var(--rich-accent) 12%, transparent); color: var(--rich-accent); font-size: 11px; }
+.rich-data-positive { color: var(--c-success); }
+.rich-data-negative { color: var(--c-danger); }
+
+/* Image, HTML, PDF, Markdown preview frames */
+.rich-image-frame .rich-frame-body { display: grid; max-height: 520px; justify-items: center; overflow: auto; background: var(--rich-raised); }
+.rich-image-frame .rich-preview-tabs { width: 100%; justify-self: stretch; }
+.rich-image-frame img { display: block; max-width: 100%; max-height: 520px; object-fit: contain; }
+.rich-html-frame iframe { display: block; width: 100%; height: 420px; border: 0; background: #fff; }
+.rich-pdf-frame .rich-frame-body { display: grid; max-height: 520px; place-items: start center; overflow: auto; padding: 12px; background: var(--rich-raised); }
+.rich-pdf-frame .rich-preview-tabs { width: calc(100% + 24px); margin: -12px -12px 0; }
+.rich-pdf-frame canvas { max-width: 100%; height: auto !important; }
+.rich-markdown-preview > .rich-frame-body > .rich-markdown { padding: 14px; }
+
+/* Preview tabs */
+.rich-preview-tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--rich-border); padding: 5px 7px; }
+.rich-preview-tabs button { height: 27px; border: 0; border-radius: 5px; padding: 0 9px; color: var(--rich-muted); background: transparent; font-size: 11px; white-space: nowrap; }
+.rich-preview-tabs button.active { color: var(--rich-text); background: color-mix(in srgb, var(--rich-text) 8%, transparent); }
+
+/* Preview errors */
+.rich-preview-error,
+.rich-error-frame > .rich-frame-body > p { margin: 0; padding: 14px; color: #a6473c; font-size: 12px; }
+
+/* Fullscreen preview elements */
+.rich-fullscreen-image { display: block; width: 100%; height: 100%; object-fit: contain; }
+.rich-fullscreen-iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.rich-preview-fullscreen-stack { display: grid; width: 100%; height: 100%; min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
+.rich-preview-fullscreen-stack > .rich-fullscreen-image { min-height: 0; }
+.rich-preview-fullscreen-stack > .rich-fullscreen-iframe { min-height: 0; }
+.rich-preview-fullscreen-stack > :only-child { grid-row: 1 / -1; }
+
+/* PDF reader */
+.rich-pdf-reader { position: relative; min-height: 0; overflow: auto; padding: 56px 18px 18px; }
+.rich-pdf-reader .react-pdf__Document { display: grid; justify-items: center; }
+.rich-pdf-reader canvas { max-width: 100%; height: auto !important; box-shadow: 0 4px 18px rgb(0 0 0 / 12%); }
+.rich-pdf-navigation { position: sticky; top: -46px; z-index: 3; display: flex; width: max-content; align-items: center; gap: 7px; margin: -46px auto 10px; border: 1px solid var(--rich-border); border-radius: 7px; padding: 3px 5px; color: var(--rich-muted); background: color-mix(in srgb, var(--rich-surface) 94%, transparent); font-size: 11px; box-shadow: 0 4px 14px rgb(0 0 0 / 8%); backdrop-filter: blur(8px); }
+.rich-pdf-navigation .previous { transform: rotate(180deg); }
+.rich-markdown-fullscreen { min-height: 0; overflow: auto; padding: 18px 22px; }
+.rich-fullscreen .rich-data-content { min-height: 100%; }
+.rich-fullscreen .rich-table-scroll { max-height: calc(100vh - 140px); border: 0; border-radius: 0; }
+
+/* stream-reveal animation — tail of streaming markdown */
+@keyframes stream-reveal-tail-in {
+  from { opacity: .6; transform: translateY(1px); filter: blur(.6px); }
+  to   { opacity: 1;  transform: translateY(0);    filter: blur(0); }
+}
+
+/* Fullscreen (Mermaid and other rich previews) — frakio 风格 */
+.rich-fullscreen-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(8px);
+}
+
+.rich-fullscreen {
+  --rich-text: var(--c-text);
+  --rich-muted: var(--c-text-secondary);
+  --rich-surface: var(--c-surface);
+  --rich-raised: var(--c-surface-2);
+  --rich-border: var(--c-border);
+  --rich-accent: var(--c-accent);
+  display: grid;
+  width: min(1180px, 100%);
+  height: min(820px, 100%);
+  grid-template-rows: 43px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--rich-border);
+  border-radius: 8px;
+  color: var(--rich-text);
+  background: var(--rich-surface);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 24%);
+}
+.rich-fullscreen > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--rich-border);
+  padding: 0 9px 0 14px;
+  font-size: 13px;
+}
+.rich-fullscreen-content { min-width: 0; min-height: 0; overflow: auto; }
+.rich-fullscreen-content > .rich-mermaid-canvas { min-height: 100%; }
+.rich-mermaid-fullscreen-view { position: relative; min-width: 0; min-height: 100%; }
+.rich-mermaid-fullscreen-view > .rich-mermaid-canvas { min-height: 100%; }
+.rich-mermaid-fullscreen-tools {
+  position: sticky;
+  top: 10px;
+  left: 100%;
+  z-index: 2;
+  display: flex;
+  width: max-content;
+  gap: 2px;
+  margin: 10px 10px -47px auto;
+  border: 1px solid var(--rich-border);
+  border-radius: 6px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--rich-surface) 92%, transparent);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 8%);
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 720px) {
+  .rich-fullscreen-backdrop { padding: 8px; }
+  .rich-fullscreen { width: 100%; height: 100%; }
+}
+
+/* Reasoning variant — scoped override */
+.markdown-content.markdown-content--reasoning {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.markdown-content.markdown-content--reasoning > *:first-child { margin-top: 0 !important; }
+.markdown-content.markdown-content--reasoning > *:last-child { margin-bottom: 0 !important; }
+
+@keyframes typing-dot {
+  0%, 100% {
+    transform: scale(0.75);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.9;
+  }
+}
+
+.typing-dot {
+  animation: typing-dot 900ms infinite ease-in-out;
+  transform-origin: center;
+}
+
+.typing-dots .typing-dot:nth-child(1) {
+  animation-delay: -0ms;
+}
+
+.typing-dots .typing-dot:nth-child(2) {
+  animation-delay: -300ms;
+}
+
+.typing-dots .typing-dot:nth-child(3) {
+  animation-delay: -600ms;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* ── 聊天区域滚动条：默认细且半透明，hover 时变明显 ── */
+.chat-scroller::-webkit-scrollbar {
+  width: 4px;
+}
+.chat-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
+.chat-scroller::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-border) 50%, transparent);
+  border-radius: 2px;
+}
+.chat-scroller:hover::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+}
+.chat-scroller::-webkit-scrollbar-thumb:hover {
+  background: var(--c-text-secondary);
+}
+.chat-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--c-border) 50%, transparent) transparent;
+  /* 滚动完全由 useChatScroll 状态机接管：禁用浏览器 scroll-anchoring，
+     否则视口上方内容异步增高（图片延迟加载/虚拟器补测高）会自动改写
+     scrollTop，把钉顶问题推出视口并把程序性位移伪装成用户滚动。 */
+  overflow-anchor: none;
+}
+.chat-scroller:hover {
+  scrollbar-color: var(--c-border) transparent;
+}
+
+/* ── 全局滚动条（非聊天区域） ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-text-secondary);
+}
+
+/* ── Markdown 排版统一由 .markdown-content 选择器定义（上方），chat-area 不再覆盖 ── */
+
+/* ───────── 材质原语：画布只有一层，浮层才抬起 ─────────
+   颜色 / 阴影由主题层给（theme/light.css、theme/dark.css），
+   这里只定义结构：定位、圆角、过渡。命名不再叫 glass——
+   画布内的面板已经不是玻璃了，名字必须说实话。 */
+
+/* 侧栏：与页面同底，不悬浮、不模糊 */
+.app-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 0;
+}
+.app-sidebar-right {
+  border-radius: var(--radius-card);
+}
+
+/* 主面板 / 卡片：画布中的面，纯色 + 1px 线（颜色见主题层） */
+.app-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+}
+.app-card {
+  position: relative;
+  border-radius: var(--radius-card);
+}
+
+/* 主输入框：静态边 + 聚焦外环，不呼吸 */
+.input-surface {
+  position: relative;
+  border: 1px solid;
+  border-radius: var(--radius-card);
+  animation: breathe-blue-soft 4s ease-in-out infinite;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.input-surface:focus-within {
+  animation: breathe-blue-focus 3.4s ease-in-out infinite;
+}
+
+/* 富文本输入区：正文与内联卡片混排（技能 / 专家 / 引用文件）。
+   卡片是 contenteditable=false 的原子节点，随正文一起排版，可整体删除。 */
+.rich-input {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  /* 仅作 JS 计算前的兜底：默认预留 1.5 行（行高 1.625 × 1.5 行 + 上下内边距），
+     实际高度由 RichInput 按计算后的行高/内边距动态设置，最大仍为 400px */
+  min-height: calc(1.5 * 1.625em + 24px);
+  max-height: 400px;
+}
+.rich-input[data-empty='true']::before {
+  content: attr(data-placeholder);
+  color: var(--c-text-secondary);
+  opacity: .75;
+  pointer-events: none;
+  user-select: none;
+}
+/* 卡片尺寸取自设计稿实测（截图 @2x：卡片高 40px、圆角 ~9.5px、左右内边距 15px、
+   图标与文字间距 10px，换算 1x 即高 20px / 圆角 5px / 内边距 7px / 间距 5px）。
+   15px 字号 × 1.2 行高 = 18px，加 1px 描边正好 20px，文字直接撑满卡片高度。 */
+.rich-input .input-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  /* 卡片与前后文字之间：正文空格 + 3px 外边距 ≈ 设计稿实测的 8px 间隙 */
+  margin: 0 3px;
+  /* 左内边距 = 7px 内边距 + 14px 图标 + 5px 间距 */
+  padding: 0 7px 0 26px;
+  max-width: 240px;
+  vertical-align: baseline;
+  border: 1px solid color-mix(in srgb, var(--c-accent) 22%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+  color: var(--c-text);
+  font-size: var(--fs-md);
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.rich-input .input-chip > svg,
+.rich-input .input-chip > img {
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  /* 与文字同为墨色（设计稿无降低透明度）；文件用彩色图标，不参与着色 */
+}
+.rich-input .input-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 已发送气泡里的内联卡片：淡蓝底 + 主题蓝字 + 无描边（气泡本身是 accent/10%，
+   卡片用略高浓度确保仍能区分），尺寸与输入框卡片一致（15px 字号、20px 高、5px 圆角）。
+   结构与输入框相同：标签是唯一 flex item（决定基线），图标绝对定位居中。 */
+.msg-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  padding: 1px 6px 1px 24px;
+  max-width: 240px;
+  vertical-align: baseline;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--c-accent) 20%, transparent);
+  color: var(--c-accent);
+  font-size: var(--fs-md);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.msg-chip > svg,
+.msg-chip > img {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.msg-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 输入框蓝色呼吸灯：细蓝边 + 双层外发光（近浓 + 远大弥散）。
+   颜色走 --c-glow-* 令牌（Klein 蓝），波谷:波峰浓度 ≈ 1:1.6。 */
+@keyframes breathe-blue-soft {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px var(--c-hair-line),
+      0 0 0 0 var(--c-glow-ring-idle),
+      0 0 16px 0 var(--c-glow-halo-near-idle),
+      0 0 40px 2px var(--c-glow-halo-far-idle),
+      var(--c-shadow-float);
+    border-color: var(--c-glow-border-idle);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px var(--c-hair-line),
+      0 0 0 0.7px var(--c-glow-ring-soft-peak),
+      0 0 36px 2px var(--c-glow-halo-near-soft-peak),
+      0 0 100px 6px var(--c-glow-halo-far-soft-peak),
+      var(--c-shadow-float);
+    border-color: var(--c-glow-border-soft);
+  }
+}
+
+@keyframes breathe-blue-focus {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px var(--c-hair-line-hover),
+      0 0 0 0.6px var(--c-glow-ring-focus-base),
+      0 0 30px 1.5px var(--c-glow-halo-near-focus-base),
+      0 0 80px 5px var(--c-glow-halo-far-focus-base),
+      var(--c-shadow-float);
+    border-color: var(--c-glow-border-focus);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px var(--c-hair-line-hover),
+      0 0 0 1.1px var(--c-glow-ring-focus-peak),
+      0 0 52px 3px var(--c-glow-halo-near-focus-peak),
+      0 0 160px 10px var(--c-glow-halo-far-focus-peak),
+      var(--c-shadow-float);
+    border-color: var(--c-glow-border-strong);
+  }
+}
+
+/* 模态遮罩：浮层的伴生层。只给结构与模糊，颜色在主题层。
+   刻意不设 position —— 调用点自己写 fixed inset-0。 */
+.overlay-scrim {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* 浮层：模态 / 下拉 / toast —— 唯一使用磨砂与柔影的层。
+   样式全部在主题层（background / border / backdrop-filter / box-shadow）。
+   这里刻意不设 position —— 无层级规则会压制 Tailwind 的 .absolute，
+   浮层怎么定位必须由调用点决定。 */
+
+/* 文字 tooltip 气泡：不透明实心，不用磨砂（半透 + backdrop-filter 会让文字
+   背景发灰、与页面混色、下层内容透出）。颜色在主题层。 */
+.tooltip-bubble {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ───────── 控件原语 ─────────
+   按钮只有三档尺寸 + 一档图标；尺寸归组件所有，调用点不再传 h- / px- / rounded-。
+   颜色由主题层按变体给值，这里只管结构。 */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font-family: inherit;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.btn:disabled {
+  opacity: .40;
+  cursor: not-allowed;
+}
+.btn:focus-visible {
+  outline: 1px solid var(--c-border-strong);
+  outline-offset: 2px;
+}
+
+/* 尺寸：sm 28 / md 36 / lg 40 / icon 28×28 */
+.btn-sm   { height: 28px; padding: 0 10px; font-size: var(--fs-sm); }
+.btn-md   { height: 36px; padding: 0 14px; font-size: var(--fs-sm); }
+.btn-lg   { height: 40px; padding: 0 16px; font-size: var(--fs-md); }
+.btn-icon { width: 28px; height: 28px; padding: 0; font-size: var(--fs-sm); }
+
+/* 变体 */
+.btn-primary   { background: var(--c-btn-primary-bg); color: var(--c-btn-primary-fg); }
+.btn-primary:hover:not(:disabled) { background: var(--c-btn-primary-hover); }
+
+.btn-secondary { background: var(--c-surface); color: var(--c-text); border-color: var(--c-border); }
+.btn-secondary:hover:not(:disabled) { background: var(--c-surface-2); border-color: var(--c-border-strong); }
+
+.btn-ghost     { background: transparent; color: var(--c-text-secondary); }
+.btn-ghost:hover:not(:disabled) { background: var(--c-surface-2); color: var(--c-text); }
+
+.btn-danger    { background: var(--c-danger); color: var(--c-btn-primary-fg); }
+/* 悬停向文字色混合：浅色变深、深色变亮，同一行同时适配两套主题 */
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--c-danger) 86%, var(--c-text)); }
+
+/* 反色填充：输入框发送 / 停止簇，字色作底、页面色作字 */
+.btn-inverse   { background: var(--c-text); color: var(--c-bg); }
+.btn-inverse:hover:not(:disabled) { background: color-mix(in srgb, var(--c-text) 88%, var(--c-bg)); }
+
+/* 圆形键：输入框工具簇（36×36），非通用按钮尺寸 */
+.btn-circle {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-pill);
+}
+/* 输入栏圆形键：仅停止/发送等实心填充键保留极轻阴影维持量感；
+   透明 ghost 图标键（附件「+」/优化/语音）按需求去阴影 */
+.input-surface .btn-circle.btn-stop,
+.input-surface .btn-circle.btn-inverse {
+  box-shadow: var(--shadow-sm);
+}
+/* 停止（暂停生成）：红色实心，白色图标 */
+.btn-stop {
+  background: var(--c-danger);
+  color: #FFFFFF;
+}
+.btn-stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--c-danger) 88%, #000);
+}
+
+/* 状态：用属性表达，不用调用点的条件色工具类 */
+.btn-ghost[data-state="accent"] { color: var(--c-accent); }
+.btn-ghost[data-state="error"]  { color: var(--c-error); }
+.btn-ghost[aria-pressed="true"] { color: var(--c-accent); background: var(--c-surface-2); }
+.btn-ghost[aria-pressed="true"][data-state="error"] { color: var(--c-error); }
+.btn-ghost[aria-expanded="true"] { color: var(--c-text); background: var(--c-surface-2); }
+
+/* 整卡可点：不是按钮尺寸问题，卡片自带 hover 语义 */
+.app-card[role="button"],
+button.app-card {
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 表单文本输入：与 .btn 同一套控件语言 */
+.field-input {
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-control);
+  background: var(--c-surface);
+  color: var(--c-text);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+.field-input::placeholder {
+  color: var(--c-text-tertiary);
+}
+/* HITL 澄清输入框的占位提示：比输入文字（fs-sm）更轻一级，避免提示喧宾夺主 */
+.clarify-input::placeholder {
+  font-size: var(--fs-xs);
+}
+.field-input:focus {
+  border-color: var(--c-border-strong);
+  box-shadow: 0 0 0 1px var(--c-ring);
+}
+
+/* 对话宽度滑块：发丝轨道 + 胶囊旋钮，颜色走主题令牌 */
+.width-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+}
+.width-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--c-border-strong);
+}
+.width-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--c-surface-3);
+  border: 1px solid var(--c-border-strong);
+  margin-top: -10px; /* (track 2px - thumb 22px) / 2 */
+  transition: border-color .15s ease;
+}
+.width-slider:hover::-webkit-slider-thumb {
+  border-color: var(--c-accent);
+}
+.width-slider:focus-visible {
+  outline: 1px solid var(--c-ring);
+  outline-offset: 2px;
+}
+.width-slider::-moz-range-track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--c-border-strong);
+}
+.width-slider::-moz-range-thumb {
+  width: 14px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--c-surface-3);
+  border: 1px solid var(--c-border-strong);
+}
+.width-slider:hover::-moz-range-thumb {
+  border-color: var(--c-accent);
+}
+
+
+/* 横向滑动 tab 条：隐藏滚动条但保留滑动能力 */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── 文件预览器容器 ──
+   @file-viewer/react 使用 Shadow DOM 隔离，
+   内部样式通过 ::part() / CSS tokens 定制，外部选择器不穿透。 */
+
+/* ── Reasoning 变体：思考区容器使用 markdown-content--reasoning 时，
+      对默认 .markdown-content 的大字号/大间距做"瘦身覆盖"——
+      保留 table / task-list / dl 全部语义样式，
+      只把块级间距、标题大小、正文文本颜色往"淡色小字"方向收窄，
+      与 ReasoningBlock 原先 reasoning-markdown 的浅灰斜体视觉保持一致。 */
+.markdown-content.markdown-content--reasoning {
+  font-size: var(--fs-sm) !important;
+  line-height: 1.65 !important;
+  color: var(--c-text-secondary);
+}
+.markdown-content.markdown-content--reasoning > *:first-child { margin-top: 0 !important; }
+.markdown-content.markdown-content--reasoning > *:last-child  { margin-bottom: 0 !important; }
+
+.markdown-content.markdown-content--reasoning p,
+.markdown-content.markdown-content--reasoning li,
+.markdown-content.markdown-content--reasoning dd {
+  font-size: var(--fs-sm) !important;
+  line-height: 1.65 !important;
+}
+
+.markdown-content.markdown-content--reasoning > ul,
+.markdown-content.markdown-content--reasoning > ol,
+.markdown-content.markdown-content--reasoning > p,
+.markdown-content.markdown-content--reasoning > blockquote,
+.markdown-content.markdown-content--reasoning > pre,
+.markdown-content.markdown-content--reasoning > dl,
+.markdown-content.markdown-content--reasoning > figure,
+.markdown-content.markdown-content--reasoning > table,
+.markdown-content.markdown-content--reasoning > hr {
+  margin-top: 0.55em !important;
+  margin-bottom: 0.55em !important;
+}
+
+.markdown-content.markdown-content--reasoning h1 { font-size: 1.05em !important; margin: 0.9em 0 0.4em !important; }
+.markdown-content.markdown-content--reasoning h2 { font-size: 1.00em !important; margin: 0.8em 0 0.35em !important; }
+.markdown-content.markdown-content--reasoning h3 { font-size: 0.98em !important; margin: 0.7em 0 0.3em !important; }
+.markdown-content.markdown-content--reasoning h4,
+.markdown-content.markdown-content--reasoning h5,
+.markdown-content.markdown-content--reasoning h6 { font-size: 0.96em !important; margin: 0.6em 0 0.25em !important; }
+
+/* 思考区表格同样瘦身，避免过大外框留白 */
+.markdown-content.markdown-content--reasoning table {
+  margin: 0.8em 0 !important;
+  border-radius: 8px !important;
+}
+.markdown-content.markdown-content--reasoning th,
+.markdown-content.markdown-content--reasoning td {
+  padding: 0.5em 0.7em !important;
+  font-size: var(--fs-sm) !important;
+}
+
+/* 思考区 code block：去掉默认 shadow，让浅灰盒更贴合思考区整体淡色 */
+.markdown-content.markdown-content--reasoning [data-code-block] pre {
+  box-shadow: none !important;
+  border-radius: 6px !important;
+  font-size: var(--fs-sm) !important;
+}

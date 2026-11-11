@@ -1,0 +1,414 @@
+/* ============================================================
+   PrismClaw 主题 · 共享原语（base）
+   ------------------------------------------------------------
+   与主题无关、亮/暗两套共用的 token（字体、字号、玻璃公共原语）。
+   两套主题的差异化 token 与主题专属样式见：
+     - web/src/theme/dark.css  ([data-theme="dark"])
+     - web/src/theme/light.css ([data-theme="light"])
+   切换仍由 web/src/stores/ui.ts 设置 document 的 data-theme 属性驱动。
+   ============================================================ */
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Menlo', 'Consolas', 'Microsoft YaHei Mono', monospace;
+  /* ── 字号音阶（5 档，间距 1-2-3-4）──────────────────────
+     间距随层级递增，确保视觉阶梯清晰可辨：
+       xs  12px  +1   小标签 / 时间戳 / 徽章 / 内联元数据
+       sm  13px  +2   辅助说明 / 时间戳 / 侧栏列表 / 代码块
+       md  15px  +3   正文 / 按钮 / 输入框 / 面板主内容（body+ui 合并）
+       lg  18px  +4   卡片标题 / 区块标题 / Tab 切换
+       xl  22px       页面标题 / 弹窗标题 / 空 state Hero */
+  --fs-xs:  12px;
+  --fs-sm:  13px;
+  --fs-md:  15px;
+  --fs-lg:  18px;
+  --fs-xl:  22px;
+
+  /* ── 圆角：四档，控件不再各自发明 ────────────────────── */
+  --radius-control: 6px;   /* 按钮 / 输入框 / 标签 */
+  --radius-md: 8px;        /* 小卡 / 菜单行 / 缩略图 / 横幅 */
+  --radius-card: 12px;     /* 卡片 / 面板 / 对话框 */
+  --radius-pill: 999px;    /* 胶囊：只给 tag / 头像 / 圆形按钮 */
+
+  /* 材质只有两层：画布纯色 + 1px 线；浮层才允许玻璃与柔影。
+     输入框呼吸灯已恢复（breathe-blue-soft/focus 关键帧 + --c-glow-* 令牌，
+     见 index.css 与 light/dark 主题层）。 */
+}
+
+/* 主题切换全局过渡：所有 CSS 自定义属性 + 关键视觉属性平滑无闪烁过渡
+   用 transition-property 显式声明避免 transform/opacity 误触发动画；
+   时长 320ms + easeOutCubic */
+*,
+*::before,
+*::after {
+  transition-property:
+    background-color,
+    background,
+    color,
+    border-color,
+    box-shadow,
+    fill,
+    stroke,
+    --c-bg, --c-canvas, --c-surface, --c-surface-2, --c-surface-3, --c-exec-block, --c-exec-block-inset, --c-select-bg, --c-sidebar,
+    --c-border, --c-border-strong, --c-divider, --c-ring,
+    --c-text, --c-text-secondary, --c-text-tertiary,
+    --c-accent, --c-brand, --c-danger, --c-success, --c-warning,
+    --c-btn-primary-bg, --c-btn-primary-hover, --c-btn-primary-fg,
+    --overlay-bg, --overlay-border, --overlay-scrim,
+    --shadow-sm, --shadow-md, --shadow-lg;
+  transition-duration: 320ms;
+  transition-timing-function: cubic-bezier(.2, .8, .2, 1);
+}
+
+/* 减少动画用户偏好：关掉过渡 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   登录页（Liquid Glass Landing）—— 左右分栏
+   左：品牌 + 介绍 + 四领域卡；右：登录表单
+   所有颜色来自 theme token（light.css / dark.css），随主题平滑切换
+   ============================================================ */
+.login-bg {
+  min-height: 100vh;
+  display: flex;
+  background: var(--c-login-right);
+}
+
+/* ── 左面板（占 2/3） ── */
+.login-left {
+  flex: 2;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--c-login-left);
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 流体光球层：多个大模糊径向渐变，缓慢漂移，营造液态玻璃折射感 */
+.login-aurora {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.login-aurora .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: var(--c-login-orb-opacity, 0.4);
+  will-change: transform;
+}
+.orb-1 {
+  width: 520px; height: 520px;
+  top: 30%; left: 25%;
+  background: radial-gradient(circle, var(--c-login-orb-1) 0%, transparent 70%);
+}
+.orb-2 {
+  width: 460px; height: 460px;
+  top: 50%; right: 20%;
+  background: radial-gradient(circle, var(--c-login-orb-2) 0%, transparent 68%);
+}
+
+/* 内部显示区：自适应接近正方，避免被拉成宽条 */
+.login-left-inner {
+  width: 100%;
+  max-width: min(70vh, 100%);
+  position: relative;
+  z-index: 1;
+}
+
+/* 品牌行 */
+.brand-row {
+  display: flex; align-items: center; gap: 22px; margin-bottom: 20px;
+  position: relative; z-index: 1;
+}
+.brand-logo {
+  width: 104px; height: 104px; border-radius: 12px; object-fit: contain;
+  flex-shrink: 0; background: none; padding: 0;
+}
+.brand-text { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.brand-name { font-size: 30px; font-weight: 600; color: var(--c-accent); letter-spacing: -.5px; line-height: 1.1; }
+.brand-tagline { font-size: var(--fs-sm); font-weight: 400; color: var(--c-text-secondary); line-height: 1.35; }
+
+/* hero 文案 */
+.login-hero {
+  margin: 0 0 34px; font-size: var(--fs-sm); line-height: 1.8;
+  color: var(--c-text-secondary); max-width: 560px; position: relative; z-index: 1;
+}
+.login-hero b { color: var(--c-text); font-weight: 600; }
+
+/* 四领域卡 2×2 网格 */
+.domain-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;
+  position: relative; z-index: 1;
+}
+.domain-card {
+  border-radius: 11px; padding: 22px 24px 24px;
+  display: flex; flex-direction: column; gap: 12px;
+  transition: transform .3s ease, box-shadow .3s ease, background-color .3s ease, border-color .3s ease;
+  position: relative;
+  overflow: hidden;
+}
+.domain-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--c-login-card-highlight), transparent);
+  opacity: 0.3;
+}
+.domain-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--c-login-card-shadow-hover);
+}
+.domain-card .d-icon { width: 28px; height: 28px; flex-shrink: 0; }
+.domain-card h3 { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); letter-spacing: -.1px; line-height: 1.3; }
+.domain-card p { font-size: var(--fs-sm); line-height: 1.75; color: var(--c-text-secondary); }
+
+/* 领域卡图标统一为品牌色，去掉四色高饱和，降低模板感 */
+.domain-medical .d-icon,
+.domain-legal   .d-icon,
+.domain-office  .d-icon,
+.domain-base    .d-icon { color: var(--c-accent); }
+
+.login-domain-card {
+  background: var(--c-login-card-bg);
+  box-shadow: var(--c-login-card-shadow);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  backdrop-filter: var(--overlay-blur);
+}
+
+/* ── 右面板（占 1/3，内容居中） ── */
+.login-right {
+  flex: 1;
+  background: var(--c-login-right);
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 56px 60px; position: relative; overflow: hidden;
+}
+/* 右栏也注入柔光球：让登录表单玻璃能透出色彩，这是液态玻璃“通透”的关键 */
+.login-right::before,
+.login-right::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: var(--c-login-orb-opacity, 0.4);
+  pointer-events: none;
+  z-index: 0;
+}
+.login-right::before {
+  width: 460px; height: 460px;
+  top: 40%; left: 35%;
+  background: radial-gradient(circle, var(--c-login-orb-1) 0%, transparent 70%);
+}
+.login-right::after {
+  width: 400px; height: 400px;
+  top: 55%; right: 15%;
+  background: radial-gradient(circle, var(--c-login-orb-3) 0%, transparent 68%);
+}
+.login-toggle { position: absolute; top: 28px; right: 36px; z-index: 2; }
+.login-form-wrap { max-width: 380px; width: 100%; margin: 0 auto; position: relative; z-index: 1; }
+.login-form-wrap h2 { font-size: 28px; font-weight: 600; color: var(--c-text); letter-spacing: -.4px; margin-bottom: 10px; }
+.login-form-wrap > p { font-size: 14px; color: var(--c-text-tertiary); margin-bottom: 44px; }
+
+.login-form-card {
+  padding: 40px 0;
+}
+
+.login-fields { display: flex; flex-direction: column; gap: 18px; position: relative; z-index: 1; }
+.login-submit {
+  width: 100%; height: 52px; border-radius: var(--radius-control); border: none;
+  background: var(--c-btn-primary-bg);
+  color: var(--c-btn-primary-fg); font-size: var(--fs-md); font-weight: 500;
+  cursor: pointer; letter-spacing: 1px; transition: background .2s ease, box-shadow .2s ease, transform .2s ease; margin-top: 28px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--c-brand) 55%, transparent);
+  position: relative; z-index: 1;
+}
+.login-submit:hover:not(:disabled) {
+  background: var(--c-btn-primary-hover);
+  box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--c-brand) 60%, transparent);
+  transform: translateY(-1px);
+}
+.login-submit:disabled { opacity: .55; cursor: not-allowed; }
+
+/* 登录页底部文字链接：左「忘记密码」、右「新用户注册」，与登录按钮左右边界对齐 */
+.login-links {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; margin-top: 14px; position: relative; z-index: 1;
+}
+.login-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; padding: 0;
+  font-size: var(--fs-sm); color: var(--c-text-tertiary);
+  cursor: pointer; transition: color .2s ease;
+}
+.login-link:hover { color: var(--c-accent); }
+.login-switch { display: flex; justify-content: center; margin-top: 18px; position: relative; z-index: 1; }
+
+/* 邮箱验证码行：输入框占满剩余宽度，按钮固定高度与输入框一致 */
+.login-code-row { display: flex; gap: 10px; }
+.login-code-row .field-input { flex: 1; min-width: 0; }
+.login-code-btn {
+  height: 48px; padding: 0 14px; white-space: nowrap;
+  border-radius: var(--radius-control); border: 1px solid var(--c-border);
+  background: transparent; color: var(--c-text);
+  font-size: var(--fs-sm); cursor: pointer; transition: border-color .2s ease, color .2s ease;
+}
+.login-code-btn:hover:not(:disabled) { border-color: var(--c-accent); color: var(--c-accent); }
+.login-code-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+.login-alert {
+  margin-top: 16px; padding: 10px 12px; border-radius: var(--radius-md);
+  border: 1px solid transparent; font-size: var(--fs-md);
+  position: relative; z-index: 1;
+}
+.login-alert-error {
+  background: color-mix(in srgb, var(--c-error) 10%, transparent);
+  color: var(--c-error);
+  border-color: color-mix(in srgb, var(--c-error) 20%, transparent);
+}
+.login-alert-info {
+  background: color-mix(in srgb, var(--c-success) 10%, transparent);
+  color: var(--c-success);
+  border-color: color-mix(in srgb, var(--c-success) 20%, transparent);
+}
+.login-alert-warning {
+  background: color-mix(in srgb, var(--c-warning) 10%, transparent);
+  color: var(--c-warning);
+  border-color: color-mix(in srgb, var(--c-warning) 22%, transparent);
+}
+/* 表单内常驻提示：首个子元素不再需要与上方间距 */
+.login-alert.is-static { margin-top: 0; }
+
+/* 响应式：窄屏堆叠为上下 */
+@media (max-width: 860px) {
+  .login-bg { flex-direction: column; }
+  .login-left { padding: 48px 32px; }
+  .login-right { padding: 48px 32px; }
+  .domain-grid { max-width: 100%; }
+  .login-form-wrap { max-width: 100%; margin: 0 auto; }
+  .login-form-card { padding: 24px 0; }
+  .login-toggle { top: 16px; right: 16px; }
+  .login-aurora .orb { filter: blur(60px); opacity: calc(var(--c-login-orb-opacity, 0.55) * 0.7); }
+}
+
+/* ============================================================
+   代码块 · 导出样式
+   ============================================================ */
+.code-block-body pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 24px;
+  background: transparent !important;
+  margin: 0;
+  padding: 1rem 1.25rem !important;
+  border-radius: 0;
+  box-shadow: none;
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+}
+
+.code-block-body pre code {
+  display: block;
+  padding: 0 !important;
+  background: transparent !important;
+  color: inherit;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 24px;
+  white-space: pre;
+}
+
+/* Shiki 单例高亮输出样式由 index.css 的 .markdown-content .rich-shiki 规则统一管理 */
+
+/* ============================================================
+   聊天滚动控制 · 流式输出指示器动画
+   ============================================================ */
+
+/* 慢速脉冲（按钮容器） — 用 transform scale 实现，无需 rgba 变量 */
+@keyframes pulse-slow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.85;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 1.8s ease-in-out infinite;
+}
+
+/* 边缘旋转动画（按钮边框） */
+@keyframes spin-edge {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 轻微弹跳（箭头图标） */
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 1.2s ease-in-out infinite;
+}
+
+/* 边缘旋转环 — 与按钮边框融合的加载动画（利用按钮遮盖中心，自然形成环形） */
+.edge-spin-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 240deg,
+    var(--c-accent) 300deg,
+    var(--c-accent) 330deg,
+    transparent 360deg
+  );
+  animation: spin-edge 1.2s linear infinite;
+  z-index: 0;
+}
+
+
+/* ============================================================
+   @file-viewer 预览背景 · 按主题定死纯色
+   ------------------------------------------------------------
+   预览器用 Shadow DOM 隔离，宿主选择器进不去，但 CSS custom
+   properties 可穿透 Shadow 边界继承。所有渲染面（壳层、内容
+   区、docx 纸张外围、图片/OFD/RTF 面）统一优先读取
+   --file-viewer-render-surface-background，未定义时才回退各
+   renderer 内置的灰蓝色。在 .ofv-host（FilePreview 挂载容器）
+   上按宿主主题显式定义，即可全链路覆盖：
+     亮色 → 纯白 #ffffff；暗色 → 纯黑 #000000。
+   ============================================================ */
+.ofv-host {
+  --file-viewer-render-surface-background: #ffffff;
+}
+
+[data-theme="dark"] .ofv-host {
+  --file-viewer-render-surface-background: #000000;
+}

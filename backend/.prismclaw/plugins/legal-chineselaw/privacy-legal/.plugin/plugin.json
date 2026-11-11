@@ -1,0 +1,10 @@
+{
+  "name": "privacy-legal",
+  "version": "1.0.0",
+  "description": "对处理活动进行分类、生成 PIA、作为控制者或处理者审查 DPA、在法定时限内起草 DSAR 响应，并监控政策与实践的漂移。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "skills": "./skills"
+}

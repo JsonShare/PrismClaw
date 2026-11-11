@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+frontend/node_modules/
+frontend/.vite/
+frontend-app/node_modules/
+frontend-app/dist/
+backend/tests/
+backend/.prismclaw/
+deploy/
+docs/
+mcp_servers/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 真实配置含密钥，禁止进入构建上下文
+backend/configs/*.yaml
+!backend/configs/*.example.yaml
+deploy/configs/*.yaml
+!deploy/configs/*.example.yaml

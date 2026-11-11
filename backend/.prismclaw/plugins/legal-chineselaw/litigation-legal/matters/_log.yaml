@@ -1,0 +1,67 @@
+# This file is a Chinese translation of the original by Anthropic PBC.
+# Original: https://github.com/anthropics/legal-chineselaw
+# Licensed under Apache License 2.0
+
+# 案件组合账本 — litigation-legal
+#
+# 在 `matters:` 下每个事项一条记录。是 /portfolio-status 汇总的数据源。
+# 已结案事项保留在此文件中（可检索历史），但默认从活跃汇总中过滤。
+# 通过 /litigation-legal:matter-intake、/matter-update 和 /matter-close 编辑——
+# 直接编辑亦可，但请在该事项的 history.md 中记录变更。
+#
+# ──────────────────────────────────────────────────────────────────────────
+# Schema（数据结构）
+# ──────────────────────────────────────────────────────────────────────────
+# - id:                string — slug，稳定；与 matters/[slug]/ 文件夹匹配
+#   name:              string — 显示名称
+#   type:              contract | employment | ip | regulatory | investigation | product | other
+#   role:              plaintiff | defendant | claimant | respondent | investigated
+#   counterparty:      string
+#   jurisdiction:      string — 法院或监管机构
+#   status:            threatened | active | discovery | trial | appeal | closed
+#                      （结案类型通过 `outcome` 单独记录；
+#                       `/matter-close` 在和解结案时写入 `outcome: settled`）
+#   stage:             string — 自由格式子阶段（如 "pleadings"、"fact discovery"）
+#   source:            demand-letter | complaint-served | subpoena | regulator-inquiry | internal-report | pre-suit-threat
+#   outside_counsel:
+#     firm:            string | null
+#     lead:            string | null
+#     email:           string | null     # 新增 v2 — 供 /oc-status 邮件起草器使用
+#     engagement:      signed | pending | none
+#   conflicts:
+#     status:          cleared | pending | not-run | waived
+#     method:          corporate-legal | outside-counsel | system-check | informal | other
+#     cleared_by:      string | null
+#     cleared_date:    YYYY-MM-DD | null
+#     override:                                                          # 新增 v2.1
+#       by:              string | null        # 谁授权了绕过
+#       date:            YYYY-MM-DD | null
+#       rationale:       string | null        # 永久记录；不自动过期
+#   risk:              critical | high | medium | low   （依据 PRISMCLAW.md 风险矩阵）
+#   materiality:       reserved | disclosed | monitored | none
+#   exposure_range:    string — 如 "$2M–$5M" 或 "<$250K"
+#   internal_owners:
+#     business_lead:   string | null
+#     hr_partner:      string | null
+#     comms_contact:   string | null
+#   legal_hold:
+#     issued:          bool
+#     issued_date:     YYYY-MM-DD | null
+#     scope:           string | null
+#     custodians:      [string]            # 新增 v2
+#     last_refresh:    YYYY-MM-DD | null   # 新增 v2
+#     next_refresh:    YYYY-MM-DD | null   # 新增 v2
+#     released:        YYYY-MM-DD | null   # 新增 v2
+#   related_matters:   [string] | null     # 新增 v2 — 关联事项 slug 列表
+#   opened:            YYYY-MM-DD
+#   next_deadline:     YYYY-MM-DD | null
+#   last_updated:      YYYY-MM-DD
+#   path:              string — "matters/[slug]/"
+#
+# 已结案事项额外记录：
+#   closed:            YYYY-MM-DD
+#   outcome:           settled | dismissed | judgment-for-us | judgment-against-us | withdrawn | consolidated | other
+#   final_cost:        string | number
+# ──────────────────────────────────────────────────────────────────────────
+
+matters: []

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismClaw Toolkit Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.amber { background: #fbbf24; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Toolkit Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">&#128203; Copy</button>
+            <button onclick="downloadPNG(this)">&#128444; PNG</button>
+            <button onclick="downloadPDF(this)">&#128196; PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">&#8943;</button>
+        </div>
+      </div>
+      <p class="subtitle">Builtin Tool Layer + File Infrastructure Layer &mdash; Dual-layer data flow with optimistic concurrency control</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1100 880">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowEmerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ========== LAYER 1: Builtin Tool Layer ========== -->
+        <rect x="50" y="25" width="1000" height="400" rx="12" fill="#0f172a" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="72" y="47" fill="#34d399" font-size="11" font-weight="600">Builtin Tool Layer &mdash; builtin/</text>
+
+        <!-- Write-class tools row -->
+        <text x="85" y="75" fill="#fbbf24" font-size="9" font-weight="600">tool_class: write</text>
+
+        <!-- BashTool -->
+        <rect x="85" y="85" width="170" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="170" y="107" fill="white" font-size="11" font-weight="600" text-anchor="middle">BashTool</text>
+        <text x="170" y="123" fill="#94a3b8" font-size="8" text-anchor="middle">Persistent PTY session</text>
+        <text x="170" y="137" fill="#94a3b8" font-size="8" text-anchor="middle">blocking_budget: 15s</text>
+        <text x="170" y="153" fill="#34d399" font-size="7" text-anchor="middle">soft-timeout detach</text>
+
+        <!-- WriteTool -->
+        <rect x="280" y="85" width="170" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="365" y="107" fill="white" font-size="11" font-weight="600" text-anchor="middle">WriteTool</text>
+        <text x="365" y="123" fill="#94a3b8" font-size="8" text-anchor="middle">Binary ext block</text>
+        <text x="365" y="137" fill="#94a3b8" font-size="8" text-anchor="middle">review registry</text>
+        <text x="365" y="153" fill="#34d399" font-size="7" text-anchor="middle">read_epoch tracking</text>
+
+        <!-- EditTool -->
+        <rect x="475" y="85" width="170" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="560" y="107" fill="white" font-size="11" font-weight="600" text-anchor="middle">EditTool</text>
+        <text x="560" y="123" fill="#94a3b8" font-size="8" text-anchor="middle">old&rarr;new replace</text>
+        <text x="560" y="137" fill="#94a3b8" font-size="8" text-anchor="middle">read_epoch verify</text>
+        <text x="560" y="153" fill="#34d399" font-size="7" text-anchor="middle">Python syntax check</text>
+
+        <!-- CancelTaskTool -->
+        <rect x="670" y="85" width="170" height="80" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="755" y="107" fill="white" font-size="11" font-weight="600" text-anchor="middle">CancelTaskTool</text>
+        <text x="755" y="123" fill="#94a3b8" font-size="8" text-anchor="middle">skill_gated = True</text>
+        <text x="755" y="137" fill="#94a3b8" font-size="8" text-anchor="middle">ParallelTaskStore</text>
+        <text x="755" y="153" fill="#fbbf24" font-size="7" text-anchor="middle">cancel tasks</text>
+
+        <!-- Read-class tools row -->
+        <text x="85" y="195" fill="#22d3ee" font-size="9" font-weight="600">tool_class: read</text>
+
+        <!-- ReadTool -->
+        <rect x="280" y="205" width="170" height="65" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="365" y="227" fill="white" font-size="11" font-weight="600" text-anchor="middle">ReadTool</text>
+        <text x="365" y="243" fill="#94a3b8" font-size="8" text-anchor="middle">Page: 2000 lines</text>
+        <text x="365" y="257" fill="#22d3ee" font-size="7" text-anchor="middle">read_epoch SHA-256</text>
+
+        <!-- ListDirectoryTool -->
+        <rect x="475" y="205" width="170" height="65" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="560" y="227" fill="white" font-size="11" font-weight="600" text-anchor="middle">ListDirectoryTool</text>
+        <text x="560" y="243" fill="#94a3b8" font-size="8" text-anchor="middle">runtime.fs_list()</text>
+        <text x="560" y="257" fill="#22d3ee" font-size="7" text-anchor="middle">Directory listing</text>
+
+        <!-- AskUserQuestionTool -->
+        <rect x="670" y="205" width="170" height="65" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="755" y="227" fill="white" font-size="11" font-weight="600" text-anchor="middle">AskUserQuestion</text>
+        <text x="755" y="243" fill="#94a3b8" font-size="8" text-anchor="middle">1-4 questions</text>
+        <text x="755" y="257" fill="#22d3ee" font-size="7" text-anchor="middle">requires_interactive</text>
+
+        <!-- Read/Write data flow: read_epoch OCC -->
+        <rect x="85" y="290" width="755" height="55" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="462" y="312" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">read_epoch Optimistic Concurrency Control</text>
+        <text x="462" y="330" fill="#94a3b8" font-size="8" text-anchor="middle">Read &rarr; SHA-256 snapshot &rarr; Edit/Write verify &rarr; STALE reject | OK proceed &rarr; update epoch</text>
+
+        <!-- Arrows from write tools down to OCC -->
+        <line x1="170" y1="165" x2="170" y2="288" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="365" y1="165" x2="365" y2="288" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="560" y1="165" x2="560" y2="288" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3"/>
+        <!-- Arrows from read tools down to OCC -->
+        <line x1="170" y1="270" x2="170" y2="288" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3"/>
+        <line x1="365" y1="270" x2="365" y2="288" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3"/>
+
+        <!-- Helper utilities -->
+        <rect x="870" y="85" width="160" height="185" rx="6" fill="#0f172a" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="950" y="107" fill="#94a3b8" font-size="9" font-weight="600" text-anchor="middle">Helpers</text>
+        <text x="882" y="128" fill="#94a3b8" font-size="7">&#8226; _blocked_binary_extension()</text>
+        <text x="882" y="142" fill="#94a3b8" font-size="7">&#8226; _binary_write_guidance()</text>
+        <text x="882" y="156" fill="#94a3b8" font-size="7">&#8226; build_file_change()</text>
+        <text x="882" y="170" fill="#94a3b8" font-size="7">&#8226; _is_ask_user_question()</text>
+        <text x="882" y="184" fill="#94a3b8" font-size="7">&#8226; _clarify_timeout()</text>
+        <text x="882" y="198" fill="#94a3b8" font-size="7">&#8226; _build_budget_warning()</text>
+        <text x="882" y="212" fill="#94a3b8" font-size="7">&#8226; _extract_file_paths()</text>
+        <text x="882" y="226" fill="#94a3b8" font-size="7">&#8226; _entry_to_llm_dict()</text>
+        <text x="882" y="246" fill="#fbbf24" font-size="7">&#8226; BASH_DEFAULT_TIMEOUT=120s</text>
+        <text x="882" y="260" fill="#fbbf24" font-size="7">&#8226; READ_PAGE_LINES=2000</text>
+
+        <!-- ========== LAYER 2: File Infrastructure Layer ========== -->
+        <rect x="50" y="450" width="1000" height="280" rx="12" fill="#0f172a" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="72" y="472" fill="#22d3ee" font-size="11" font-weight="600">File Infrastructure Layer &mdash; file/</text>
+
+        <!-- FileObserver -->
+        <rect x="85" y="490" width="240" height="110" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="205" y="514" fill="white" font-size="11" font-weight="600" text-anchor="middle">FileObserver</text>
+        <text x="205" y="532" fill="#94a3b8" font-size="8" text-anchor="middle">FileVersion(read_epoch=SHA-256)</text>
+        <text x="205" y="548" fill="#94a3b8" font-size="8" text-anchor="middle">VersionCheck: OK / STALE / UNKNOWN</text>
+        <text x="205" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">sync_to_dict() / sync_from_dict()</text>
+        <text x="205" y="588" fill="#22d3ee" font-size="7" text-anchor="middle">SHA-256 content fingerprinting</text>
+
+        <!-- FileMutationQueue -->
+        <rect x="360" y="490" width="240" height="110" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="480" y="514" fill="white" font-size="11" font-weight="600" text-anchor="middle">file_mutation_queue (fn)</text>
+        <text x="480" y="532" fill="#94a3b8" font-size="8" text-anchor="middle">with_file_mutation_queue()</text>
+        <text x="480" y="548" fill="#94a3b8" font-size="8" text-anchor="middle">Per-file asyncio.Lock</text>
+        <text x="480" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">Concurrent write serialization</text>
+        <text x="480" y="588" fill="#22d3ee" font-size="7" text-anchor="middle">clear_mutation_queues() on session end</text>
+
+        <!-- GlobTool -->
+        <rect x="85" y="625" width="220" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="195" y="649" fill="white" font-size="11" font-weight="600" text-anchor="middle">GlobTool</text>
+        <text x="195" y="667" fill="#94a3b8" font-size="8" text-anchor="middle">runtime.fs_glob(pattern)</text>
+        <text x="195" y="683" fill="#94a3b8" font-size="8" text-anchor="middle">max_results=100 | workspace boundary</text>
+        <text x="195" y="697" fill="#22d3ee" font-size="7" text-anchor="middle">File pattern search</text>
+
+        <!-- GrepTool -->
+        <rect x="335" y="625" width="220" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="445" y="649" fill="white" font-size="11" font-weight="600" text-anchor="middle">GrepTool</text>
+        <text x="445" y="667" fill="#94a3b8" font-size="8" text-anchor="middle">runtime.fs_grep(pattern)</text>
+        <text x="445" y="683" fill="#94a3b8" font-size="8" text-anchor="middle">max_matches=250 | case opt</text>
+        <text x="445" y="697" fill="#22d3ee" font-size="7" text-anchor="middle">Content search</text>
+
+        <!-- OCR Cache -->
+        <rect x="580" y="625" width="220" height="80" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="690" y="649" fill="white" font-size="11" font-weight="600" text-anchor="middle">OCR Cache</text>
+        <text x="690" y="667" fill="#94a3b8" font-size="8" text-anchor="middle">stat fingerprint (mtime+size)</text>
+        <text x="690" y="683" fill="#94a3b8" font-size="8" text-anchor="middle">ocr_cache_path() / read/write</text>
+        <text x="690" y="697" fill="#22d3ee" font-size="7" text-anchor="middle">Auto-invalidate on change</text>
+
+        <!-- WorkspaceResolver -->
+        <rect x="635" y="490" width="200" height="110" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="735" y="514" fill="white" font-size="11" font-weight="600" text-anchor="middle">WorkspaceResolver</text>
+        <text x="735" y="532" fill="#94a3b8" font-size="8" text-anchor="middle">Path boundary enforcement</text>
+        <text x="735" y="548" fill="#94a3b8" font-size="8" text-anchor="middle">Sandbox policy integration</text>
+        <text x="735" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">Workspace root resolution</text>
+        <text x="735" y="588" fill="#22d3ee" font-size="7" text-anchor="middle">engine.security.sandbox</text>
+
+        <!-- Web Search Tools -->
+        <rect x="860" y="490" width="170" height="110" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="945" y="514" fill="white" font-size="11" font-weight="600" text-anchor="middle">Web Search Tools</text>
+        <text x="945" y="532" fill="#94a3b8" font-size="8" text-anchor="middle">web/ search providers</text>
+        <text x="945" y="548" fill="#94a3b8" font-size="8" text-anchor="middle">Search orchestrator</text>
+        <text x="945" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">External API integration</text>
+        <text x="945" y="588" fill="#22d3ee" font-size="7" text-anchor="middle">Not codebase semantic search</text>
+
+        <!-- ========== Inter-layer flow ========== -->
+        <line x1="462" y1="345" x2="462" y2="448" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="474" y="402" fill="#64748b" font-size="8">read/write deps</text>
+
+        <!-- FileObserver -> OCC feedback -->
+        <path d="M 205 490 L 205 380 L 85 380 L 85 312" fill="none" stroke="#22d3ee" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrowhead)"/>
+        <text x="110" y="370" fill="#22d3ee" font-size="7">VersionCheck</text>
+
+        <!-- ========== Data Flow Diagram ========== -->
+        <rect x="50" y="755" width="1000" height="105" rx="12" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
+        <text x="72" y="777" fill="#94a3b8" font-size="10" font-weight="600">Key Data Flows</text>
+
+        <!-- Read -> Edit flow -->
+        <rect x="85" y="790" width="90" height="30" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="130" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">ReadTool</text>
+        <line x1="175" y1="805" x2="205" y2="805" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <text x="190" y="800" fill="#94a3b8" font-size="6">SHA-256</text>
+        <rect x="208" y="790" width="90" height="30" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="253" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">EditTool</text>
+        <line x1="298" y1="805" x2="328" y2="805" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="331" y="790" width="100" height="30" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="381" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">FileObserver</text>
+        <line x1="431" y1="805" x2="461" y2="805" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="464" y="790" width="110" height="30" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="519" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">MutationQueue</text>
+
+        <!-- Bash flow -->
+        <rect x="610" y="790" width="90" height="30" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="655" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">BashTool</text>
+        <line x1="700" y1="805" x2="730" y2="805" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <text x="715" y="800" fill="#94a3b8" font-size="6">PTY</text>
+        <rect x="733" y="790" width="100" height="30" rx="4" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+        <text x="783" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">BashRuntime</text>
+        <line x1="833" y1="805" x2="863" y2="805" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <rect x="866" y="790" width="100" height="30" rx="4" fill="#0f172a" stroke="#64748b" stroke-width="1"/>
+        <text x="916" y="810" fill="white" font-size="8" font-weight="500" text-anchor="middle">Timeout/Fail</text>
+
+        <!-- Legend -->
+        <rect x="85" y="835" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="107" y="843" fill="#94a3b8" font-size="8">Write Tool</text>
+        <rect x="180" y="835" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="202" y="843" fill="#94a3b8" font-size="8">Read Tool / Infra</text>
+        <rect x="310" y="835" width="16" height="10" rx="2" fill="#0f172a" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="332" y="843" fill="#94a3b8" font-size="8">Concurrency Control</text>
+        <line x1="440" y1="840" x2="456" y2="840" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="462" y="843" fill="#94a3b8" font-size="8">Data Flow</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Write Tools (tool_class=write)</h3>
+        </div>
+        <ul>
+          <li>&#8226; BashTool: persistent PTY, 15s budget, soft/hard timeout</li>
+          <li>&#8226; WriteTool: binary block, review registry, epoch track</li>
+          <li>&#8226; EditTool: string replace, Python syntax check</li>
+          <li>&#8226; CancelTaskTool: skill-gated, ParallelTaskStore</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>Read Tools (tool_class=read)</h3>
+        </div>
+        <ul>
+          <li>&#8226; ReadTool: 2000-line pages, SHA-256 read_epoch</li>
+          <li>&#8226; ListDirectoryTool: runtime.fs_list()</li>
+          <li>&#8226; AskUserQuestion: interactive, 1-4 Qs</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>File Infrastructure</h3>
+        </div>
+        <ul>
+          <li>&#8226; FileObserver: SHA-256 version tracking + OCC</li>
+          <li>&#8226; FileMutationQueue: per-file asyncio.Lock</li>
+          <li>&#8226; GlobTool/GrepTool: pattern/content search</li>
+          <li>&#8226; OCR Cache: stat fingerprint, auto-invalidate</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      PrismClaw &bull; Toolkit Module &bull; backend/src/prismclaw/engine/toolkit/
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '\u2713 Copied!';
+      } catch (e) { btn.textContent = '\u2717 Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '\u23F3 ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = '10-toolkit.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '\u2713 Done!';
+      } catch (e) { btn.textContent = '\u2717 Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '\u23F3 ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('10-toolkit.pdf');
+        btn.textContent = '\u2713 Done!';
+      } catch (e) { btn.textContent = '\u2717 Failed'; }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

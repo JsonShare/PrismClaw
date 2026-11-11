@@ -1,0 +1,10 @@
+{
+  "name": "law-student",
+  "version": "1.0.0",
+  "description": "苏格拉底式提问训练、案例摘要、大纲构建、针对你所在司法管辖区的律师资格考试准备、IRAC 练习评分，以及学习计划制定——但从不替你写。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "skills": "./skills"
+}

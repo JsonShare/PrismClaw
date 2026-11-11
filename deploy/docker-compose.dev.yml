@@ -1,0 +1,65 @@
+# Local development infrastructure stack (PostgreSQL + Redis only).
+#
+# The PrismClaw app itself runs on the host (e.g. via IDE / uvicorn) for faster
+# iteration. This stack provides the VectorChord Suite Postgres (vchord_bm25 +
+# pg_tokenizer + vchord + pgvector) and Redis so the dev environment is
+# self-contained.
+#
+# Usage:
+#   docker compose -f deploy/docker-compose.dev.yml up -d
+#   docker compose -f deploy/docker-compose.dev.yml down          # stop
+#   docker compose -f deploy/docker-compose.dev.yml down -v       # stop + wipe data
+#
+# After startup, backend/configs/server.yaml should point at:
+#   storage.postgres_dsn = postgresql+asyncpg://postgres:postgres@localhost:5432/prismclaw
+#   redis.host           = localhost
+#   redis.password       = devredis
+
+name: prismclaw
+
+services:
+  postgres:
+    image: tensorchord/vchord-suite:pg17-latest
+    environment:
+      POSTGRES_DB: prismclaw
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "prismclaw"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=vchord
+      -c max_connections=100
+      -c log_min_duration_statement=200
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass devredis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "devredis", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

@@ -1,0 +1,11 @@
+{
+  "name": "corporate-legal",
+  "version": "1.0.0",
+  "description": "大规模运行并购尽调，带引用的表格审查，构建披露时间表和关闭检查清单，以内部格式起草董事会同意和会议纪要，并跨司法管辖区跟踪实体合规截止日期。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

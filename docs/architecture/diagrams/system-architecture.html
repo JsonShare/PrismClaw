@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismClaw System Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2gguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #a78bfa;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+
+    svg {
+      width: 100%;
+      min-width: 1100px;
+      display: block;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+
+    .card li {
+      margin-bottom: 0.375rem;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .toolbar-toggle {
+      background: transparent;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions {
+      display: none;
+      gap: 0.5rem;
+    }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover {
+      background: rgba(51, 65, 85, 0.8);
+      color: white;
+      border-color: #475569;
+    }
+
+    @media print {
+      body { background: #020617; padding: 1rem; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>PrismClaw Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">5-Layer Dependency Architecture · L0 Schema → L1 Engine → L2 Runtime → L3 Assembly → L4 App</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1320 1020">
+        <!-- Definitions -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ============================================================
+             DEPENDENCY ARROWS (drawn first, behind all component boxes)
+             ============================================================ -->
+
+        <!-- Left-side vertical dependency arrows: App → Wiring → Engine → Schema -->
+        <line x1="56" y1="100" x2="56" y2="220" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowhead-cyan)" stroke-dasharray="6,4"/>
+        <line x1="56" y1="248" x2="56" y2="370" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrowhead-amber)" stroke-dasharray="6,4"/>
+        <line x1="56" y1="398" x2="56" y2="530" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead-emerald)" stroke-dasharray="6,4"/>
+
+        <!-- Dependency labels -->
+        <text x="44" y="165" fill="#22d3ee" font-size="8" text-anchor="middle" transform="rotate(-90, 44, 165)">depends</text>
+        <text x="44" y="315" fill="#fbbf24" font-size="8" text-anchor="middle" transform="rotate(-90, 44, 315)">depends</text>
+        <text x="44" y="468" fill="#34d399" font-size="8" text-anchor="middle" transform="rotate(-90, 44, 468)">depends</text>
+
+        <!-- ============================================================
+             L4 APP LAYER (top)
+             ============================================================ -->
+
+        <!-- L4 Boundary -->
+        <rect x="80" y="20" width="760" height="110" rx="12" fill="rgba(8, 51, 68, 0.08)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="92" y="38" fill="#22d3ee" font-size="10" font-weight="600">L4 · App 通信层</text>
+
+        <!-- App: WebSocket -->
+        <rect x="100" y="50" width="130" height="56" rx="6" fill="#0f172a"/>
+        <rect x="100" y="50" width="130" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="165" y="74" fill="white" font-size="11" font-weight="600" text-anchor="middle">WebSocket</text>
+        <text x="165" y="90" fill="#94a3b8" font-size="8" text-anchor="middle">ws:// / wss://</text>
+
+        <!-- App: Auth/JWT -->
+        <rect x="246" y="50" width="130" height="56" rx="6" fill="#0f172a"/>
+        <rect x="246" y="50" width="130" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="311" y="74" fill="white" font-size="11" font-weight="600" text-anchor="middle">Auth / JWT</text>
+        <text x="311" y="90" fill="#94a3b8" font-size="8" text-anchor="middle">认证 &amp; 授权</text>
+
+        <!-- App: Gateway -->
+        <rect x="392" y="50" width="130" height="56" rx="6" fill="#0f172a"/>
+        <rect x="392" y="50" width="130" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="457" y="74" fill="white" font-size="11" font-weight="600" text-anchor="middle">Gateway</text>
+        <text x="457" y="90" fill="#94a3b8" font-size="8" text-anchor="middle">路由网关</text>
+
+        <!-- App: HTTP Routes -->
+        <rect x="538" y="50" width="130" height="56" rx="6" fill="#0f172a"/>
+        <rect x="538" y="50" width="130" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="603" y="74" fill="white" font-size="11" font-weight="600" text-anchor="middle">HTTP Routes</text>
+        <text x="603" y="90" fill="#94a3b8" font-size="8" text-anchor="middle">REST API</text>
+
+        <!-- App: ChatRunner -->
+        <rect x="684" y="50" width="130" height="56" rx="6" fill="#0f172a"/>
+        <rect x="684" y="50" width="130" height="56" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="749" y="74" fill="white" font-size="11" font-weight="600" text-anchor="middle">ChatRunner</text>
+        <text x="749" y="90" fill="#94a3b8" font-size="8" text-anchor="middle">async def _run_chat()</text>
+
+        <!-- ============================================================
+             L3 ASSEMBLY LAYER
+             ============================================================ -->
+
+        <!-- L3 Boundary -->
+        <rect x="80" y="138" width="760" height="30" rx="8" fill="rgba(251, 191, 36, 0.06)" stroke="#f59e0b" stroke-width="1" stroke-dasharray="6,3"/>
+        <text x="92" y="157" fill="#f59e0b" font-size="9" font-weight="600">L3 · Assembly 编配层 — DI bundles 组装 L1 modules</text>
+
+        <!-- ============================================================
+             L2 RUNTIME LAYER
+             ============================================================ -->
+
+        <!-- L2 Boundary -->
+        <rect x="80" y="178" width="760" height="110" rx="12" fill="rgba(120, 53, 15, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="92" y="196" fill="#fbbf24" font-size="10" font-weight="600">L2 · Runtime 运行时层</text>
+
+        <!-- Wiring: L1 Infrastructure Bundle -->
+        <rect x="100" y="178" width="168" height="56" rx="6" fill="#0f172a"/>
+        <rect x="100" y="178" width="168" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="184" y="202" fill="white" font-size="10" font-weight="600" text-anchor="middle">L1 Infrastructure</text>
+        <text x="184" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">基础设施 Bundle</text>
+
+        <!-- Wiring: L2 Runtime Bundle -->
+        <rect x="286" y="178" width="168" height="56" rx="6" fill="#0f172a"/>
+        <rect x="286" y="178" width="168" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="370" y="202" fill="white" font-size="10" font-weight="600" text-anchor="middle">L2 Runtime</text>
+        <text x="370" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">运行时 Bundle</text>
+
+        <!-- Wiring: L3 Lifecycle Bundle -->
+        <rect x="472" y="178" width="168" height="56" rx="6" fill="#0f172a"/>
+        <rect x="472" y="178" width="168" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="556" y="202" fill="white" font-size="10" font-weight="600" text-anchor="middle">L3 Lifecycle</text>
+        <text x="556" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">生命周期 Bundle</text>
+
+        <!-- Wiring: AgentRunnerDeps -->
+        <rect x="658" y="178" width="168" height="56" rx="6" fill="#0f172a"/>
+        <rect x="658" y="178" width="168" height="56" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="742" y="202" fill="white" font-size="10" font-weight="600" text-anchor="middle">AgentRunnerDeps</text>
+        <text x="742" y="216" fill="#94a3b8" font-size="8" text-anchor="middle">定义于L1(bootstrap.py) 组装于L2</text>
+
+        <!-- ============================================================
+             L1 ENGINE LAYER (15 modules, 4 rows)
+             ============================================================ -->
+
+        <!-- L1 Boundary -->
+        <rect x="80" y="278" width="760" height="310" rx="12" fill="rgba(6, 78, 59, 0.05)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="92" y="296" fill="#34d399" font-size="10" font-weight="600">L1 · Engine 引擎层</text>
+
+        <!-- Row 1 -->
+        <!-- 执行引擎 -->
+        <rect x="100" y="310" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="100" y="310" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="185" y="334" fill="white" font-size="11" font-weight="600" text-anchor="middle">执行引擎</text>
+        <text x="185" y="350" fill="#94a3b8" font-size="8" text-anchor="middle">Execution Engine</text>
+
+        <!-- 沙箱安全 -->
+        <rect x="286" y="310" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="286" y="310" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="371" y="334" fill="white" font-size="11" font-weight="600" text-anchor="middle">沙箱安全</text>
+        <text x="371" y="350" fill="#94a3b8" font-size="8" text-anchor="middle">Sandbox Security</text>
+
+        <!-- 技能系统 -->
+        <rect x="472" y="310" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="472" y="310" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="557" y="334" fill="white" font-size="11" font-weight="600" text-anchor="middle">技能系统</text>
+        <text x="557" y="350" fill="#94a3b8" font-size="8" text-anchor="middle">Skill System</text>
+
+        <!-- 插件系统 -->
+        <rect x="658" y="310" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="658" y="310" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="743" y="334" fill="white" font-size="11" font-weight="600" text-anchor="middle">插件系统</text>
+        <text x="743" y="350" fill="#94a3b8" font-size="8" text-anchor="middle">Plugin System</text>
+
+        <!-- Row 2 -->
+        <!-- 记忆系统 -->
+        <rect x="100" y="382" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="100" y="382" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="185" y="406" fill="white" font-size="11" font-weight="600" text-anchor="middle">记忆系统</text>
+        <text x="185" y="422" fill="#94a3b8" font-size="8" text-anchor="middle">Memory System</text>
+
+        <!-- Dreaming引擎 -->
+        <rect x="286" y="382" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="286" y="382" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="371" y="406" fill="white" font-size="11" font-weight="600" text-anchor="middle">Dreaming引擎</text>
+        <text x="371" y="422" fill="#94a3b8" font-size="8" text-anchor="middle">Dream Engine</text>
+
+        <!-- 上下文压缩 -->
+        <rect x="472" y="382" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="472" y="382" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="557" y="406" fill="white" font-size="11" font-weight="600" text-anchor="middle">上下文压缩</text>
+        <text x="557" y="422" fill="#94a3b8" font-size="8" text-anchor="middle">Context Compress</text>
+
+        <!-- MCP集成 -->
+        <rect x="658" y="382" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="658" y="382" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="743" y="406" fill="white" font-size="11" font-weight="600" text-anchor="middle">MCP集成</text>
+        <text x="743" y="422" fill="#94a3b8" font-size="8" text-anchor="middle">MCP Integration</text>
+
+        <!-- Row 3 -->
+        <!-- 子代理 -->
+        <rect x="100" y="454" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="100" y="454" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="185" y="478" fill="white" font-size="11" font-weight="600" text-anchor="middle">子代理</text>
+        <text x="185" y="494" fill="#94a3b8" font-size="8" text-anchor="middle">Sub-Agent</text>
+
+        <!-- 工具集 -->
+        <rect x="286" y="454" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="286" y="454" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="371" y="478" fill="white" font-size="11" font-weight="600" text-anchor="middle">工具集</text>
+        <text x="371" y="494" fill="#94a3b8" font-size="8" text-anchor="middle">Toolkit</text>
+
+        <!-- LLM服务 -->
+        <rect x="472" y="454" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="472" y="454" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="557" y="478" fill="white" font-size="11" font-weight="600" text-anchor="middle">LLM服务</text>
+        <text x="557" y="494" fill="#94a3b8" font-size="8" text-anchor="middle">LLM Service</text>
+
+        <!-- 审查系统 -->
+        <rect x="658" y="454" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="658" y="454" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="743" y="478" fill="white" font-size="11" font-weight="600" text-anchor="middle">审查系统</text>
+        <text x="743" y="494" fill="#94a3b8" font-size="8" text-anchor="middle">Review System</text>
+
+        <!-- Row 4 (3 modules, centered) -->
+        <!-- 运行时管理 -->
+        <rect x="146" y="526" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="146" y="526" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="231" y="550" fill="white" font-size="11" font-weight="600" text-anchor="middle">运行时管理</text>
+        <text x="231" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">Runtime Mgmt</text>
+
+        <!-- 调度器 -->
+        <rect x="332" y="526" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="332" y="526" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="417" y="550" fill="white" font-size="11" font-weight="600" text-anchor="middle">调度器</text>
+        <text x="417" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">Scheduler</text>
+
+        <!-- 策展器 -->
+        <rect x="518" y="526" width="170" height="56" rx="6" fill="#0f172a"/>
+        <rect x="518" y="526" width="170" height="56" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="603" y="550" fill="white" font-size="11" font-weight="600" text-anchor="middle">策展器</text>
+        <text x="603" y="566" fill="#94a3b8" font-size="8" text-anchor="middle">Curator</text>
+
+        <!-- ============================================================
+             L0 SCHEMA LAYER (bottom)
+             ============================================================ -->
+
+        <!-- L0 Boundary -->
+        <rect x="80" y="608" width="760" height="90" rx="12" fill="rgba(76, 29, 149, 0.05)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="92" y="626" fill="#a78bfa" font-size="10" font-weight="600">L0 · Schema 契约层 · 8 of 16 schema modules · zero dependencies</text>
+
+        <!-- Schema: agent -->
+        <rect x="95" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="95" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="136" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">agent</text>
+        <text x="136" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">代理</text>
+
+        <!-- Schema: llm -->
+        <rect x="187" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="187" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="228" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">llm</text>
+        <text x="228" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">大模型</text>
+
+        <!-- Schema: services -->
+        <rect x="279" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="279" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="320" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">services</text>
+        <text x="320" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">服务</text>
+
+        <!-- Schema: content -->
+        <rect x="371" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="371" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="412" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">content</text>
+        <text x="412" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">内容</text>
+
+        <!-- Schema: config -->
+        <rect x="463" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="463" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="504" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">config</text>
+        <text x="504" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">配置</text>
+
+        <!-- Schema: session -->
+        <rect x="555" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="555" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="596" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">session</text>
+        <text x="596" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">会话</text>
+
+        <!-- Schema: storage -->
+        <rect x="647" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="647" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="688" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">storage</text>
+        <text x="688" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">存储</text>
+
+        <!-- Schema: memory -->
+        <rect x="739" y="638" width="82" height="44" rx="6" fill="#0f172a"/>
+        <rect x="739" y="638" width="82" height="44" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="780" y="658" fill="white" font-size="10" font-weight="600" text-anchor="middle">memory</text>
+        <text x="780" y="672" fill="#94a3b8" font-size="7" text-anchor="middle">记忆</text>
+
+        <!-- ============================================================
+             PERSISTENCE LAYER (very bottom)
+             ============================================================ -->
+
+        <rect x="80" y="720" width="760" height="70" rx="12" fill="rgba(30, 41, 59, 0.3)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="92" y="738" fill="#94a3b8" font-size="10" font-weight="600">Persistence · PostgreSQL</text>
+
+        <!-- PG tables -->
+        <rect x="95" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="95" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="140" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">memory</text>
+
+        <rect x="193" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="193" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="238" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">session</text>
+
+        <rect x="291" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="291" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="336" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">trajectory</text>
+
+        <rect x="389" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="389" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="434" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">audit</text>
+
+        <rect x="487" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="487" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="532" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">dream</text>
+
+        <rect x="585" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="585" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="630" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">scheduler</text>
+
+        <rect x="683" y="748" width="90" height="32" rx="4" fill="#0f172a"/>
+        <rect x="683" y="748" width="90" height="32" rx="4" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="728" y="768" fill="#94a3b8" font-size="9" font-weight="500" text-anchor="middle">workspace</text>
+
+        <!-- Schema → PG arrows -->
+        <line x1="136" y1="682" x2="140" y2="746" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="596" y1="682" x2="238" y2="746" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+        <line x1="780" y1="682" x2="532" y2="746" stroke="#64748b" stroke-width="1" marker-end="url(#arrowhead)"/>
+
+        <!-- ============================================================
+             RIGHT PANEL: DATA FLOWS
+             ============================================================ -->
+
+        <!-- Panel background -->
+        <rect x="870" y="20" width="430" height="770" rx="12" fill="rgba(30, 41, 59, 0.3)" stroke="#334155" stroke-width="1"/>
+        <text x="1085" y="44" fill="white" font-size="11" font-weight="700" text-anchor="middle">Data Flows</text>
+
+        <!-- ---- Flow 1: 请求主路径 ---- -->
+        <text x="890" y="70" fill="#22d3ee" font-size="9" font-weight="600">❶ 请求主路径</text>
+
+        <!-- Flow nodes -->
+        <rect x="890" y="82" width="60" height="26" rx="4" fill="#0f172a"/>
+        <rect x="890" y="82" width="60" height="26" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="920" y="99" fill="white" font-size="8" font-weight="500" text-anchor="middle">WS</text>
+
+        <line x1="950" y1="95" x2="964" y2="95" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead-cyan)"/>
+
+        <rect x="968" y="82" width="76" height="26" rx="4" fill="#0f172a"/>
+        <rect x="968" y="82" width="76" height="26" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1006" y="99" fill="white" font-size="8" font-weight="500" text-anchor="middle">ChatRunner</text>
+
+        <line x1="1044" y1="95" x2="1058" y2="95" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead-cyan)"/>
+
+        <rect x="1062" y="82" width="62" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1062" y="82" width="62" height="26" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1093" y="99" fill="white" font-size="8" font-weight="500" text-anchor="middle">Runner</text>
+
+        <line x1="1124" y1="95" x2="1138" y2="95" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead-cyan)"/>
+
+        <rect x="1142" y="82" width="76" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1142" y="82" width="76" height="26" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1180" y="99" fill="white" font-size="8" font-weight="500" text-anchor="middle">PreRequest</text>
+
+        <!-- Second row of flow 1 -->
+        <rect x="890" y="120" width="78" height="26" rx="4" fill="#0f172a"/>
+        <rect x="890" y="120" width="78" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="929" y="137" fill="white" font-size="8" font-weight="500" text-anchor="middle">Agent Loop</text>
+
+        <line x1="968" y1="133" x2="982" y2="133" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead-emerald)"/>
+
+        <rect x="986" y="120" width="56" height="26" rx="4" fill="#0f172a"/>
+        <rect x="986" y="120" width="56" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="1014" y="137" fill="white" font-size="8" font-weight="500" text-anchor="middle">LLM</text>
+
+        <line x1="1042" y1="133" x2="1056" y2="133" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead-emerald)"/>
+
+        <rect x="1060" y="120" width="76" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1060" y="120" width="76" height="26" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="1098" y="137" fill="white" font-size="8" font-weight="500" text-anchor="middle">SafetyGate</text>
+
+        <line x1="1136" y1="133" x2="1150" y2="133" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead-emerald)"/>
+
+        <rect x="1154" y="120" width="66" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1154" y="120" width="66" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="1187" y="137" fill="white" font-size="8" font-weight="500" text-anchor="middle">Execute</text>
+
+        <!-- Third row of flow 1 -->
+        <rect x="890" y="158" width="62" height="26" rx="4" fill="#0f172a"/>
+        <rect x="890" y="158" width="62" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="921" y="175" fill="white" font-size="8" font-weight="500" text-anchor="middle">Arbiter</text>
+
+        <line x1="952" y1="171" x2="966" y2="171" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead-emerald)"/>
+
+        <rect x="970" y="158" width="70" height="26" rx="4" fill="#0f172a"/>
+        <rect x="970" y="158" width="70" height="26" rx="4" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="1005" y="175" fill="white" font-size="8" font-weight="500" text-anchor="middle">Response</text>
+
+        <!-- Connecting line from PreRequest down to Agent Loop -->
+        <path d="M 1180 108 L 1180 114 Q 1180 118 1176 118 L 974 118 Q 970 118 970 122 L 970 120" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="3,3"/>
+
+        <!-- Connecting line from Execute down to Arbiter -->
+        <path d="M 1187 146 L 1187 152 Q 1187 156 1183 156 L 974 156 Q 970 156 970 158" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="3,3"/>
+
+        <!-- ---- Flow 2: 安全决策链 ---- -->
+        <text x="890" y="210" fill="#fb7185" font-size="9" font-weight="600">❷ 安全决策链</text>
+
+        <rect x="890" y="222" width="68" height="26" rx="4" fill="#0f172a"/>
+        <rect x="890" y="222" width="68" height="26" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="924" y="239" fill="white" font-size="8" font-weight="500" text-anchor="middle">RuleGate</text>
+
+        <line x1="958" y1="235" x2="972" y2="235" stroke="#fb7185" stroke-width="1" marker-end="url(#arrowhead-rose)"/>
+
+        <rect x="976" y="222" width="76" height="26" rx="4" fill="#0f172a"/>
+        <rect x="976" y="222" width="76" height="26" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="1014" y="239" fill="white" font-size="8" font-weight="500" text-anchor="middle">RiskRouter</text>
+
+        <line x1="1052" y1="235" x2="1066" y2="235" stroke="#fb7185" stroke-width="1" marker-end="url(#arrowhead-rose)"/>
+
+        <rect x="1070" y="222" width="80" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1070" y="222" width="80" height="26" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="1110" y="239" fill="white" font-size="8" font-weight="500" text-anchor="middle">ConsentGate</text>
+
+        <line x1="1150" y1="235" x2="1164" y2="235" stroke="#fb7185" stroke-width="1" marker-end="url(#arrowhead-rose)"/>
+
+        <rect x="1168" y="222" width="60" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1168" y="222" width="60" height="26" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="1198" y="239" fill="white" font-size="8" font-weight="500" text-anchor="middle">Confirm</text>
+
+        <!-- Second row of flow 2 -->
+        <rect x="890" y="260" width="82" height="26" rx="4" fill="#0f172a"/>
+        <rect x="890" y="260" width="82" height="26" rx="4" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="931" y="277" fill="white" font-size="8" font-weight="500" text-anchor="middle">BwrapPolicy</text>
+
+        <!-- Connecting line from Confirm down to BwrapPolicy -->
+        <path d="M 1198 248 L 1198 254 Q 1198 258 1194 258 L 976 258 Q 972 258 972 262 L 972 260" fill="none" stroke="#475569" stroke-width="1" stroke-dasharray="3,3"/>
+
+        <!-- ---- Flow 3: 记忆写入路径 ---- -->
+        <text x="890" y="310" fill="#a78bfa" font-size="9" font-weight="600">❸ 记忆写入路径</text>
+
+        <rect x="890" y="322" width="60" height="26" rx="4" fill="#0f172a"/>
+        <rect x="890" y="322" width="60" height="26" rx="4" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="920" y="339" fill="white" font-size="8" font-weight="500" text-anchor="middle">L1-L4</text>
+
+        <line x1="950" y1="335" x2="964" y2="335" stroke="#a78bfa" stroke-width="1" marker-end="url(#arrowhead-violet)"/>
+
+        <rect x="968" y="322" width="90" height="26" rx="4" fill="#0f172a"/>
+        <rect x="968" y="322" width="90" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="1013" y="339" fill="white" font-size="8" font-weight="500" text-anchor="middle">Capture</text>
+
+        <line x1="1058" y1="335" x2="1072" y2="335" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead-emerald)"/>
+
+        <rect x="1076" y="322" width="74" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1076" y="322" width="74" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="1113" y="339" fill="white" font-size="8" font-weight="500" text-anchor="middle">Archive</text>
+
+        <line x1="1150" y1="335" x2="1164" y2="335" stroke="#34d399" stroke-width="1" marker-end="url(#arrowhead-emerald)"/>
+
+        <rect x="1168" y="322" width="72" height="26" rx="4" fill="#0f172a"/>
+        <rect x="1168" y="322" width="72" height="26" rx="4" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="1204" y="339" fill="white" font-size="8" font-weight="500" text-anchor="middle">Dreaming</text>
+
+        <!-- Gateway label for L1-L4 -->
+        <text x="920" y="358" fill="#94a3b8" font-size="7" text-anchor="middle">Gateway</text>
+
+        <!-- ============================================================
+             LEGEND (inside right panel, bottom)
+             ============================================================ -->
+
+        <line x1="890" y1="390" x2="1270" y2="390" stroke="#1e293b" stroke-width="1"/>
+        <text x="890" y="412" fill="white" font-size="10" font-weight="600">Legend</text>
+
+        <!-- Schema -->
+        <rect x="890" y="426" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="912" y="434" fill="#94a3b8" font-size="8">L0 Schema 契约层</text>
+
+        <!-- Engine -->
+        <rect x="890" y="444" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="912" y="452" fill="#94a3b8" font-size="8">L1 Engine 引擎层</text>
+
+        <!-- Wiring -->
+        <rect x="890" y="462" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="912" y="470" fill="#94a3b8" font-size="8">L2 Runtime 运行时层</text>
+
+        <!-- App -->
+        <rect x="890" y="480" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="912" y="488" fill="#94a3b8" font-size="8">L3 App 通信层</text>
+
+        <!-- Security -->
+        <rect x="890" y="498" width="16" height="10" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+        <text x="912" y="506" fill="#94a3b8" font-size="8">Security 安全</text>
+
+        <!-- Persistence -->
+        <rect x="890" y="516" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="912" y="524" fill="#94a3b8" font-size="8">Persistence 持久化</text>
+
+        <!-- Dependency arrow -->
+        <line x1="890" y1="540" x2="906" y2="540" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arrowhead)"/>
+        <text x="912" y="543" fill="#94a3b8" font-size="8">Dependency 依赖</text>
+
+        <!-- Data flow arrow -->
+        <line x1="890" y1="558" x2="906" y2="558" stroke="#22d3ee" stroke-width="1" marker-end="url(#arrowhead-cyan)"/>
+        <text x="912" y="561" fill="#94a3b8" font-size="8">Data Flow 数据流</text>
+
+        <!-- ---- Architecture Principles ---- -->
+        <line x1="890" y1="582" x2="1270" y2="582" stroke="#1e293b" stroke-width="1"/>
+        <text x="890" y="602" fill="white" font-size="10" font-weight="600">Architecture Principles</text>
+
+        <text x="890" y="622" fill="#a78bfa" font-size="8">▸ L0 Schema has zero external dependencies</text>
+        <text x="890" y="638" fill="#34d399" font-size="8">▸ L1 Engine depends only on L0 Schema types</text>
+        <text x="890" y="654" fill="#fbbf24" font-size="8">▸ L2 Runtime 运行时服务 + engine 门面; L3 Assembly 纯 DI 编配</text>
+        <text x="890" y="670" fill="#22d3ee" font-size="8">▸ L3 App provides communication layer only</text>
+        <text x="890" y="686" fill="#fb7185" font-size="8">▸ Security gates span L1–L3 (cross-cutting)</text>
+        <text x="890" y="702" fill="#94a3b8" font-size="8">▸ All persistence via PG, no direct file I/O</text>
+        <text x="890" y="718" fill="#94a3b8" font-size="8">▸ Memory flows: Capture → Archive → Dreaming</text>
+        <text x="890" y="734" fill="#94a3b8" font-size="8">▸ Strict layering: no upward dependencies</text>
+        <text x="890" y="750" fill="#94a3b8" font-size="8">▸ Plugin isolation via sandbox (bwrap)</text>
+        <text x="890" y="766" fill="#94a3b8" font-size="8">▸ Sub-agents inherit parent security context</text>
+
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>Schema · 契约层 (L0)</h3>
+        </div>
+        <ul>
+          <li>• 8 of 16 pure type modules: agent, llm, services, content, config, session, storage, memory</li>
+          <li>• Zero external dependencies — all other layers depend on L0</li>
+          <li>• Defines shared interfaces, DTOs, and domain contracts</li>
+          <li>• Any breaking change here propagates to all upper layers</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Engine · 引擎层 (L1)</h3>
+        </div>
+        <ul>
+          <li>• 15 functional modules organized in 4 rows</li>
+          <li>• Row 1: 执行引擎, 沙箱安全, 技能系统, 插件系统</li>
+          <li>• Row 2: 记忆系统, Dreaming引擎, 上下文压缩, MCP集成</li>
+          <li>• Row 3: 子代理, 工具集, LLM服务, 审查系统</li>
+          <li>• Row 4: 运行时管理, 调度器, 策展器</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>Runtime · 运行时层 (L2) &amp; Assembly · 编配层 (L3) &amp; App · 通信层 (L4)</h3>
+        </div>
+        <ul>
+          <li>• L2: 4 DI bundles — Infrastructure, Runtime, Lifecycle, AgentRunnerDeps</li>
+          <li>• L3: WebSocket, Auth/JWT, Gateway, HTTP Routes, ChatRunner</li>
+          <li>• L2 wires L1 modules; L3 exposes them to the outside world</li>
+          <li>• PG persistence: memory, session, trajectory, audit, dream, scheduler, workspace</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="footer">
+      PrismClaw · 4-Layer Architecture · L0 Schema → L1 Engine → L2 Runtime → L3 Assembly → L4 App · 2026
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'prismclaw-architecture.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('prismclaw-architecture.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

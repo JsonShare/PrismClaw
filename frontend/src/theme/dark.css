@@ -1,0 +1,195 @@
+/* ============================================================
+   PrismClaw 主题 · 暗色 —— 靛蓝 12 阶（同角色，换数值）
+   ------------------------------------------------------------
+   与亮色共用同一套角色编号，只换明度与彩度：
+     面 i1 #0D0F14 → i5 #283243；线 i6 #313E55 / i7 #3F5070 / i8 #4C6493；
+     动作 i9 #3167DC（白字 5.12）/ 按下 i10 #3D70DE；品牌 #1E57D9。
+   深色下克莱因蓝原值（#002FA7）对比不足 2:1，不可直接沿用——
+   这是数值问题，不是审美偏好。
+   ============================================================ */
+[data-theme="dark"] {
+  /* ── 面（靛蓝阶 1–5）──────────────────────────────── */
+  --c-bg: #161B22;                      /* 全局背景：黑灰，与左右侧栏同色（三合一） */
+  --c-surface: #0D1117;                 /* 中间栏：纯黑（实心，比全局黑灰更深一档） */
+  --c-surface-2: #1B1E24;
+  --c-surface-3: #22262D;
+  --c-exec-block: #212429;              /* 执行过程展开卡：中性浅灰（去蓝调，降视觉重心） */
+  --c-exec-block-inset: #2A2D33;        /* 展开卡内嵌子块（检索结果）：略深中性灰 */
+  --c-select-bg: #283243;
+  --c-sidebar: #161B22;                 /* 侧栏：与全局背景同色（左右+页面三合一） */
+  --c-canvas: #161B22;                  /* 主界面画布：与全局背景同色，中间栏纯黑浮其上 */
+
+  /* ── 线与环（靛蓝阶 6–8）──────────────────────────── */
+  --c-divider: #2A2E36;
+  --c-border: #333842;
+  --c-border-strong: #414751;
+  --c-ring: rgba(49, 103, 220, 0.38);
+
+  /* ── 字（中性阶 10–12）───────────────────────────── */
+  --c-text: #E9EDF4;
+  --c-text-primary: #E9EDF4;
+  --c-text-secondary: #ADB1B9;
+  --c-text-tertiary: #707B8F;
+
+  /* === 输入框呼吸灯光环（亮蓝 #4C9DFF，纯 rgba） === */
+  --c-glow-ring-idle:       rgba(0, 0, 0, 0);
+  --c-glow-ring-soft-base:  rgba(0, 0, 0, 0);
+  --c-glow-ring-soft-peak:  rgba(76, 157, 255, 0.30);
+  --c-glow-ring-focus-base: rgba(76, 157, 255, 0.38);
+  --c-glow-ring-focus-peak: rgba(76, 157, 255, 0.46);
+  --c-glow-ring-strong:     rgba(76, 157, 255, 0.68);
+  --c-glow-halo-near-idle:       rgba(76, 157, 255, 0.26);
+  --c-glow-halo-near-soft-peak:  rgba(76, 157, 255, 0.42);
+  --c-glow-halo-near-focus-base: rgba(76, 157, 255, 0.48);
+  --c-glow-halo-near-focus-peak: rgba(76, 157, 255, 0.54);
+  --c-glow-halo-far-idle:        rgba(76, 157, 255, 0.12);
+  --c-glow-halo-far-soft-peak:   rgba(76, 157, 255, 0.24);
+  --c-glow-halo-far-focus-base:  rgba(76, 157, 255, 0.28);
+  --c-glow-halo-far-focus-peak:  rgba(76, 157, 255, 0.34);
+  --c-glow-border-idle:     rgba(76, 157, 255, 0.18);
+  --c-glow-border-soft:     rgba(76, 157, 255, 0.32);
+  --c-glow-border-focus:    rgba(76, 157, 255, 0.44);
+  --c-glow-border-strong:   rgba(76, 157, 255, 0.64);
+  --c-shadow-float:         0 1px 3px rgba(1, 4, 9, 0.40);
+  --c-hair-line:            rgba(240, 246, 252, 0.10);
+  --c-hair-line-hover:      rgba(240, 246, 252, 0.16);
+
+  /* ── 动作与品牌 ──────────────────────────────────── */
+  --c-accent: #3167DC;
+  --c-brand: #1E57D9;
+  --c-btn-primary-bg: #3167DC;
+  --c-btn-primary-hover: #3D70DE;
+  --c-btn-primary-fg: #FFFFFF;
+
+  /* ── 语义 ────────────────────────────────────────── */
+  --c-success: #3FB950;
+  --c-warning: #D29922;
+  --c-danger: #D92426;
+  --c-error: #D92426;
+  --c-danger-soft: rgba(217, 36, 38, 0.14);
+  --c-success-soft: rgba(63, 185, 80, 0.12);
+  --c-accent-soft: rgba(49, 103, 220, 0.14);
+
+  /* ── 组件专属点缀（技能卡色相）────────────────────── */
+  --c-tag-pink-bg: rgba(217, 36, 38, 0.14);
+  --c-tag-pink-fg: #E5574F;
+  --c-icon-blue: #5B85E8;
+  --c-icon-blue-soft: rgba(91, 133, 232, 0.16);
+  --c-icon-soft-blue: #8FA9E8;
+
+  /* ── 阴影：只给浮层（画布内为零）──────────────────── */
+  --shadow-sm: 0 2px 6px -2px rgba(0, 0, 0, 0.50);
+  --shadow-md: 0 12px 28px -18px rgba(0, 0, 0, 0.60);
+  --shadow-lg: 0 14px 36px -14px rgba(0, 0, 0, 0.70);
+
+  /* ── 浮层玻璃（仅模态 / 下拉 / toast）─────────────── */
+  --overlay-bg: rgba(20, 23, 30, 0.86);
+  --overlay-border: rgba(233, 237, 244, 0.10);
+  --overlay-blur: blur(12px) saturate(120%);
+  --overlay-scrim: rgba(0, 0, 0, 0.62);
+
+  /* ── 登录页（品牌场，允许大色块与光晕）────────────── */
+  --c-login-left: linear-gradient(160deg, #14171E 0%, #0D0F14 55%, #080A0E 100%);
+  --c-login-right: #0D0F14;
+  --c-login-orb-opacity: 0.60;
+  --c-login-orb-1: rgba(30, 87, 217, 0.42);
+  --c-login-orb-2: rgba(61, 112, 222, 0.30);
+  --c-login-orb-3: rgba(90, 120, 200, 0.24);
+  --c-login-card-bg: rgba(233, 237, 244, 0.06);
+  --c-login-card-highlight: rgba(233, 237, 244, 0.16);
+  --c-login-card-shadow:
+    inset 0 1px 1px rgba(233, 237, 244, 0.12),
+    0 8px 20px -12px rgba(0, 0, 0, 0.55);
+  --c-login-card-shadow-hover:
+    inset 0 1px 1px rgba(233, 237, 244, 0.16),
+    0 12px 28px -14px rgba(0, 0, 0, 0.65);
+}
+
+/* ── 画布材质：纯色 + 1px 线，无模糊、无噪点、无柔影 ── */
+[data-theme="dark"] .app-sidebar {
+  background: var(--c-sidebar);
+}
+
+[data-theme="dark"] .app-panel {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+
+[data-theme="dark"] .app-card {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+}
+[data-theme="dark"] .app-card:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border-strong);
+}
+/* 容器型卡片（内部条目自带 hover 高亮）：卡片本身不做块级 hover，避免整卡色块 + 条目高亮双层叠加 */
+[data-theme="dark"] .app-card--passive:hover {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+}
+
+/* 主输入框：静态发丝边 + 聚焦外环。不呼吸。 */
+[data-theme="dark"] .input-surface {
+  background: var(--c-surface);
+  border-color: var(--c-border);
+}
+[data-theme="dark"] .input-surface:focus-within {
+  border-color: var(--c-glow-border-focus);
+  box-shadow:
+    0 0 0 1px var(--c-hair-line-hover),
+    0 0 0 0.6px var(--c-glow-ring-focus-base),
+    0 0 30px 1.5px var(--c-glow-halo-near-focus-base),
+    0 0 80px 5px var(--c-glow-halo-far-focus-base),
+    var(--c-shadow-float);
+}
+[data-theme="dark"] .input-surface.is-dragging {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 1px rgba(49, 103, 220, 0.34);
+  animation: none;
+}
+
+/* 浮层：唯一允许磨砂与柔影的层 */
+[data-theme="dark"] .overlay-panel {
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  -webkit-backdrop-filter: var(--overlay-blur);
+  backdrop-filter: var(--overlay-blur);
+  box-shadow: var(--shadow-lg);
+}
+
+/* 模态遮罩：暗色下需要更实的遮罩，40% 黑在近黑画布上等于没有 */
+[data-theme="dark"] .overlay-scrim {
+  background: var(--overlay-scrim);
+}
+
+/* 侧栏选中/悬停：底色分档，不做反色 */
+[data-theme="dark"] .sidebar-nav-row:hover {
+  background: var(--c-surface-3);
+}
+[data-theme="dark"] .sidebar-nav-row.is-active {
+  background: var(--c-select-bg);
+  color: var(--c-text);
+}
+
+/* 单色 UI 图标反白；彩色文件类型图标保持原色 */
+[data-theme="dark"] img.app-icon:not(.file-type-icon) {
+  filter: brightness(0) invert(1);
+}
+
+
+/* 全站底：纯色 */
+[data-theme="dark"] body {
+  background: var(--c-bg);
+  color: var(--c-text);
+}
+
+/* ============================================================
+   Highlight.js · 暗色
+   ============================================================ */
+[data-theme="dark"] .code-block-body .hljs {
+  background: transparent !important;
+}
+[data-theme="dark"] .code-block-body pre {
+  background: transparent !important;
+}

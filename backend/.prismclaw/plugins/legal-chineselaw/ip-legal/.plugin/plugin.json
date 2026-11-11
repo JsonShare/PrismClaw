@@ -1,0 +1,11 @@
+{
+  "name": "ip-legal",
+  "version": "1.0.0",
+  "description": "运行第一遍商标查询和自由实施分类，筛选发明披露以进行初始专利性评估，起草和分类停止侵权函和 DMCA 删除通知（发送和响应），检查开源合规，审查 IP 条款，并跟踪注册和续展截止日期。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

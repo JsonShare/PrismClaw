@@ -1,0 +1,176 @@
+# Agent 执行循环与上下文策略（唯一归属文件：agent）。
+# 归属顶层键：agent（含 agent.context / agent.compaction / agent.run_loop）
+#
+# 上下文预算的完整设计见 docs/context-layout-design.md；
+# 本文件的取值是“绝对模式”的当前生效值，比例模式尚待 schema 支持。
+#
+# 使用方式：复制为同目录下的 agent.yaml 后按需调整。
+#   cp backend/configs/agent.example.yaml backend/configs/agent.yaml
+
+agent:
+  # 0 表示不限制迭代次数（依赖 idle/run 超时兜底）
+  max_iterations: 0
+  # 工具数组变更策略：append_only 顺序稳定+只追加（保护好前缀缓存）；
+  # frozen 需预枚举全部能力；unbounded 放弃缓存红利。
+  tool_mutation_policy: "append_only"
+  # 单次会话成本上限（美元）；用于 budget_pricing 折算，0 表示不限制
+  max_budget_usd: 5.0
+
+  # 成本折算单价（每百万 token，美元）
+  budget_pricing:
+    input_per_mtok: 1.0
+    output_per_mtok: 3.0
+    cache_read_per_mtok: 0.1        # 命中前缀缓存的部分按此计价（约为输入的 1/10）
+    cache_write_per_mtok: 1.25      # 写缓存的部分溢价（Anthropic 口径）
+
+  context:
+    budget:
+      # 模型无 context_window 时的兜底窗口；正常路径以 models.yaml 的模型值为准
+      window_tokens: 131072
+      # 预算模式：absolute 走固定四键（回滚基石）；ratio 走 zones 比例求解（v4 §3.2）
+      mode: "absolute"   # absolute=固定四键（当前）；ratio=按模型窗口比例求解（zones 生效）
+      zones:
+        system:  { ratio: 0.12, floor: 2048, cap: 12288 }
+        dynamic: { ratio: 0.15, floor: 2048, cap: 16384 }
+        result:  { ratio: 0.15, floor: 2048, cap: 16384 }
+        tools:   { ratio: 0.18, floor: 1024, cap: 65536 }   # cap 为占位：实测 wire（wire_tokens_estimate）才是真上限
+        output:  { ratio: 0.20, max: 65536 }
+      # 冻结区（system 提示）预算；实测静态需求约 6.4k，留 25% 增长余量
+      system_zone_tokens: 8192
+      # 动态区（尾部 system-context）预算；与压缩/结果区共享时必须显式扣除
+      dynamic_zone_tokens: 12288
+      # 输出预留：Token 留给模型生成；必须 ≥ models.yaml 的 max_output_tokens，
+      # 否则请求会超窗。None 时回退到模型 max_output_tokens（schema 层处理）
+      output_reserve_tokens: 24576
+      # 历史预算下限（SDD W15）：剩余空间的 1/4，至少 4096
+      history_floor_min: 4096
+      history_floor_divisor: 4
+      # 子额度（sub-caps）：上下文分区细粒度预算
+      subcaps:
+        subagents: 1500
+        skills_ratio: 0.01
+        listing_desc_chars: 250
+        runtime_status: 500
+        l1_snapshot: 500
+        skill_attachment: 6000
+        doc_inline_min_chars: 2500
+        doc_inline_max_chars: 7500
+        max_constraints: 4
+        # ratio 模式附件 token 预算：min(ratio × input_budget, cap)
+        attachment_token_ratio: 0.25
+        attachment_token_cap: 24000
+        # 压缩后文件重注入：单文件 token 预算（全局 = 本值 × compaction.reinject_max_files）
+        reinject_file_tokens: 3200
+        # 技能 preload 注入上下文的 token 上限
+        skill_preload: 7500
+
+    compaction:
+      # 摘要使用的模型；null 表示沿用当前会话模型
+      model: null
+      timeout_seconds: 900.0
+      # 预测性压缩触发比例（占历史预算；75% 预警，90% 紧急阀，100% 硬上限）
+      predictive_threshold: 0.75
+      # 分块摘要的单块 token 预算
+      chunk_token_budget: 8000
+
+      history:
+        # 压缩后保留的最近原文 token 数（对齐 pi/claude-code 的 20k 基线）
+        keep_recent_tokens: 20000
+        # 摘要输出上限；越大越详细，但会挤占历史预算
+        summary_output_token_cap: 20000
+        # 压缩后的历史不带工具定义，避免模型误判“还能调工具”
+        preamble_no_tools: true
+        # 预测性压缩：提前 N 轮预判用量
+        predictive_horizon: 3
+        predictive_min_samples: 4
+        prompt:
+          enabled: true
+          template: null
+          # 摘要前先剥离模型的 analysis 段，减少噪声
+          strip_analysis_block: true
+
+      tool_results:
+        # 单条工具结果的字符硬上限（4k 会迫使模型反复重读，8k 是当前最优）
+        per_result_char_cap: 8000
+        # 单轮所有工具结果的合计上限
+        aggregate_char_budget: 30000
+        per_result_summary:
+          enabled: false
+          threshold_chars: 12000
+          target_chars: 2000
+          excluded_tools:
+            - "Bash"
+          excluded_material_types:
+            - "command_output"
+
+      safety:
+        # 连续压缩失败 N 次后停止尝试，避免死循环
+        max_consecutive_failures: 3
+        enable_autocompact_breaker: true
+        enable_soft_budget: true
+        # 软预算：达到窗口比例时告警/终止（0.9 / 0.95 为业界通用取值）
+        soft_budget:
+          warning_ratio: 0.9
+          terminate_ratio: 0.95
+        # 动态预算：按模型窗口实时调整各区域（关闭则使用上面的固定值）
+        enable_dynamic_budget: true
+
+      # PTL 截断重试后最小保留 token 数（128K 缩放）
+      ptl_min_keep_tokens: 6400
+      # 压缩后文件再注入的最大文件数
+      reinject_max_files: 5
+      # microcompact 触发模式：incremental 每轮滚动；batch 双触发批量（v4 §5.4）
+      microcompact_mode: "batch"
+      # microcompact 分工具保留窗口（tiered retention）
+      microcompact_keep_recent:
+        web_search: 1
+        web_fetch: 1
+        web_extract: 1
+        fetch_mcp_resource: 1
+        tool_search: 1
+        skill_search: 1
+        activate_skill: 1
+        bash: 3
+        bash_read: 3
+        python: 3
+        ls: 4
+        grep: 4
+        glob: 4
+        reduce_subagent_results: 3
+        read: 8
+        read_image: 6
+        read_office: 6
+
+  timeouts:
+    # 0 表示不限制单轮总时长
+    run_seconds: 0.0
+    # 无事件空闲超时：超过即判为卡死
+    idle_seconds: 360.0
+    # 单次工具调用超时
+    tool_seconds: 360.0
+
+  retry:
+    # 只输出 reasoning 时的重试次数（reasoning 不产生文本，需重试）
+    reasoning_only_limit: 2
+    # 空响应重试次数
+    empty_response_limit: 1
+
+  run_loop:
+    # 按工具名的单轮调用次数上限（防止搜索类工具无限循环）
+    tool_max_uses:
+      web-search-mcp__search: 6
+    # 视为“搜索意图”的工具；命中后启用搜索循环防护
+    search_intent_tools:
+      - "web-search-mcp__search"
+    # 搜索调用达到 N 次时提醒模型收敛
+    search_loop_warn_at: 5
+    # 搜索类输出占本轮上下文比例超过该值时冻结新搜索
+    search_freeze_output_share: 0.5
+    # 同一目标重复读取达到 N 次时告警
+    same_target_read_warn_at: 4
+    # 连续工具错误达到 N 次时判定“错误疲劳”，提前收口
+    error_fatigue_threshold: 3
+
+  control:
+    # 结构化输出校验失败时的最大修复次数
+    max_repairs: 1

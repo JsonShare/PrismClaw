@@ -1,0 +1,10 @@
+{
+  "name": "legal-clinic",
+  "version": "1.0.0",
+  "description": "设置诊所、让学生入职、运行结构化 intake、以防止失职的谨慎追踪截止日期，并在学期结束时交接案件——在 ABA 正式意见 512 内构建。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "skills": "./skills"
+}

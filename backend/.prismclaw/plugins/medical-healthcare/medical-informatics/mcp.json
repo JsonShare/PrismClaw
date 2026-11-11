@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "FHIR": {
+      "command": "node",
+      "args": [
+        "${PRISMCLAW_PLUGIN_ROOT}/../mcp_servers/fhir/src/index.mjs"
+      ],
+      "env": {
+        "FHIR_BASE_URL": "<在本地填入 EHR FHIR R4 基础 URL>",
+        "FHIR_CLIENT_ID": "<在本地填入 SMART 客户端 ID>"
+      },
+      "sandbox": {"enabled": false},
+      "title": "FHIR R4 MCP 服务器",
+      "description": "通过 SMART-on-FHIR 协议连接 Epic、Cerner、MEDITECH 等 EHR 系统，拉取患者临床数据和病历笔记。需要 Node.js >= 20。"
+    },
+    "CMS Coverage": {
+      "type": "http",
+      "url": "https://hcls.mcp.claude.com/cms_coverage/mcp",
+      "title": "CMS 医疗保险覆盖数据库",
+      "description": "查询 Medicare/Medicaid 国家覆盖决定（NCD）和本地覆盖决定（LCD）。注意：HTTP 类型 MCP 需等待 PrismClaw 运行时支持。"
+    },
+    "ICD10 Codes": {
+      "type": "http",
+      "url": "https://hcls.mcp.claude.com/icd10_codes/mcp",
+      "title": "ICD-10 编码查询",
+      "description": "查询 ICD-10-CM 和 ICD-10-PCS 编码集。注意：HTTP 类型 MCP 需等待 PrismClaw 运行时支持。"
+    },
+    "NPI Registry": {
+      "type": "http",
+      "url": "https://hcls.mcp.claude.com/npi_registry/mcp",
+      "title": "国家提供者标识符（NPI）注册中心",
+      "description": "查询美国国家提供者标识符注册中心。注意：HTTP 类型 MCP 需等待 PrismClaw 运行时支持。"
+    },
+    "Clinical Trials": {
+      "type": "http",
+      "url": "https://hcls.mcp.claude.com/clinical_trials/mcp",
+      "title": "临床试验查询",
+      "description": "查询 ClinicalTrials.gov 临床试验注册库。注意：HTTP 类型 MCP 需等待 PrismClaw 运行时支持。"
+    },
+    "PubMed": {
+      "type": "http",
+      "url": "https://pubmed.mcp.claude.com/mcp",
+      "title": "PubMed 生物医学文献",
+      "description": "搜索 PubMed 生物医学文献。注意：HTTP 类型 MCP 需等待 PrismClaw 运行时支持。"
+    }
+  },
+  "recommendedCategories": [
+    "fhir-integration",
+    "clinical-data-extraction",
+    "document-parse",
+    "fhir-development"
+  ],
+  "_notes": "FHIR 服务器为本地 Node.js 进程，需 Node.js >= 20。HTTP 类型 MCP（CMS Coverage、ICD10 Codes、NPI Registry、Clinical Trials、PubMed）需等待 PrismClaw 运行时 HTTP MCP 支持。"
+}

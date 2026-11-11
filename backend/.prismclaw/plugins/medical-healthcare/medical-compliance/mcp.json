@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "yuandian-medical": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "yuandian-medical-mcp-server"
+      ],
+      "env": {
+        "YUANDIAN_MEDICAL_API_KEY": "<请在本地填入自己的元典医疗 API Key>"
+      },
+      "title": "元典医疗合规 MCP",
+      "description": "提供医疗合规法规、隐私保护法规查询。"
+    }
+  },
+  "recommendedCategories": [
+    "hipaa-compliance",
+    "data-privacy",
+    "audit-trail",
+    "breach-response"
+  ],
+  "_notes": "医疗合规 MCP 用于查询相关法规和监管要求。"
+}

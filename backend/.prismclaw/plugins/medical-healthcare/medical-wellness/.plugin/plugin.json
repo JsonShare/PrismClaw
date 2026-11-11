@@ -1,0 +1,9 @@
+{
+  "name": "medical-wellness",
+  "version": "0.1.0",
+  "description": "大健康与慢病管理：健康数据报告分析（睡眠、营养、运动、减重、康复、心理、中医体质、家族史）、医学实体抽取与急救信息卡。面向亚健康人群与慢病随访场景，输出结构化健康分析报告；不替代执业医师诊断与处方。",
+  "author": {
+    "name": "PrismClaw Contributors"
+  },
+  "skills": "./skills"
+}

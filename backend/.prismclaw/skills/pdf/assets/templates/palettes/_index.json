@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "description": "PDF palette templates. Drop a new .json here to add a doc type.",
+  "builtin": [
+    "report",
+    "proposal",
+    "resume",
+    "portfolio",
+    "academic",
+    "general",
+    "minimal",
+    "stripe",
+    "diagonal",
+    "frame",
+    "editorial",
+    "magazine",
+    "darkroom",
+    "terminal",
+    "poster"
+  ]
+}

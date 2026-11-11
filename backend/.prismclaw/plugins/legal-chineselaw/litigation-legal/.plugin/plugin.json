@@ -1,0 +1,11 @@
+{
+  "name": "litigation-legal",
+  "version": "1.0.0",
+  "description": "管理诉讼投资组合——事项、截止日期、保全、要求、外部律师——并完成工作：权利要求图表（专利和民事）、时间线、质证准备、特权日志、简报起草。适应你的诉讼工作方式：内部、律所或个人。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

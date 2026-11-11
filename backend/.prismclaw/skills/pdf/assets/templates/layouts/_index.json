@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "description": "PDF page layout templates. Each layout is a directory with a preamble.typ file.",
+  "default": "default",
+  "layouts": {
+    "default": {
+      "name": "Default",
+      "description": "Standard A4 layout with accent header rule, page numbers, and clean heading hierarchy."
+    }
+  }
+}

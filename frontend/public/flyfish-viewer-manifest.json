@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "kind": "file-viewer-capability-assets",
+  "owners": [
+    {
+      "packageName": "@file-viewer/assets-drawing",
+      "packageVersion": "3.3.3"
+    }
+  ]
+}

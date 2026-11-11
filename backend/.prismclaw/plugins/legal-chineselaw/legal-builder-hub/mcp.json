@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "yuandian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "yuandian-mcp-server"
+      ],
+      "env": {
+        "YUANDIAN_API_KEY": "<请在本地填入自己的元典 API Key>"
+      },
+      "title": "元典 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何元典 API 凭据。使用前请在本地环境变量或私有配置中填入自己的元典开放平台凭据；不要把真实 API key、token 或 secret 提交到仓库。"
+    }
+  },
+  "recommendedCategories": [
+    "legal-skills-registry-cn",
+    "document-management",
+    "legal-research-cn"
+  ],
+  "_notes": "外部 MCP 已全部替换为元典（yuandian）。替代原版 Slack/Google Drive/Lawve AI。企业协作集成通过全局 Enterprise Collaboration MCP 接入（lark-im/lark-doc），无需在此配置。法律元力（yuanli.ailaw.cn）注册表通过 HTTP REST API 访问，无需 MCP——见 skills/skill-installer/references/yuanli-api.md（如有）和 yuanli-toolkits.yaml（离线目录）。"
+}

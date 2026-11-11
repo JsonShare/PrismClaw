@@ -1,0 +1,40 @@
+# legal-builder-hub 默认白名单（中国法发行版）
+# 由 /legal-builder-hub:cold-start-interview 生成——编辑此文件以修改信任来源。
+# 完整 schema 见 skill-installer/references/allowlist.md。
+#
+# 安全说明：此默认配置为限制性模式——未知来源将被拒绝。
+# 冷启动访谈提供为独立执业者切换至宽松模式的选项（适用于没有
+# IT 策划发布者列表的执业者）。如果你从未运行过设置就看到了此文件，
+# 安装程序将拒绝以下未明确列出的任何来源。这是有意为之：
+# 对于一个将第三方代码安装至特权法律工作区的工具而言，
+# 失败关闭是正确的默认行为。运行 /legal-builder-hub:cold-start-interview
+# 进行配置，或在理解权衡的前提下直接编辑此文件。
+
+mode: restrictive    # restrictive（限制性，失败关闭，默认）| permissive（宽松，标记并询问）
+
+registries:
+  - yuanli-cn                                      # 法律元力（https://yuanli.ailaw.cn）— 中国法主注册表
+  - https://github.com/legalopsconsulting/lpm-skills
+  - https://github.com/lawvable/awesome-legal-skills
+  - https://github.com/lawvable/agent-skills
+
+publishers:
+  - 华宇元典                                        # 法律元力官方发布者
+  - legalopsconsulting
+  - lawvable
+
+connectors: []
+  # 在限制性模式下，空值意味着声明任何 MCP 连接器的社区 skill 将被拒绝。
+  # 在此处添加已批准的 MCP 服务器 URL（如元典：npx yuandian-mcp-server），
+  # 或切换至宽松模式改为标记并询问。
+
+licenses:
+  # 社区 skill 可携带的 SPDX 许可证标识符。个人默认值。
+  # 由冷启动根据部署上下文设置（个人 / 律所内部 / 产品嵌入）。
+  # 详见 skill-installer/references/allowlist.md。
+  - MIT
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - ISC
+  - CC0-1.0

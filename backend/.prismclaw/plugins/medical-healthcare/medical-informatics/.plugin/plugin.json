@@ -1,0 +1,10 @@
+{
+  "name": "medical-informatics",
+  "version": "1.0.0",
+  "description": "医疗信息学插件：FHIR R4 电子病历集成、临床数据提取、文档解析与 FHIR 开发指南。支持 Epic/Cerner/MEDITECH 等主流 EHR 系统的 SMART-on-FHIR 对接。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "hooks": "./hooks/hooks.json",
+  "skills": "./skills"
+}

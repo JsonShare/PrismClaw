@@ -1,0 +1,23 @@
+# This file is a Chinese translation of the original by Anthropic PBC.
+# Original: https://github.com/anthropics/legal-chineselaw
+# Licensed under Apache License 2.0
+
+# 评论期追踪器
+# 由 reg-feed-watcher 在检测到 NPRM 时自动填充。
+# 通过 /regulatory-legal:comments 管理
+
+comments:
+  - id: CMT-001
+    regulation: "[NPRM 名称 + 联邦公报引用]"
+    regulator: "[机构名称]"
+    summary: "[一句话——此次规则制定的提议内容]"
+    link: "[联邦公报 URL]"
+    comment_deadline: "2026-05-15"
+    detected: "2026-03-20"
+    decision: "undecided"  # undecided（未决定）| filing（提交）| not-filing（不提交）| filed（已提交）| waived（放弃）
+    owner: "[来自 PRISMCLAW.md 的默认评论决策负责人]"
+    owner_slack: "[Slack 用户 ID 或 handle]"
+    notified: false
+    rationale: ""  # 做出决定时填写
+    filed_at: null  # 已提交时填写 ISO 日期时间
+    notes: ""

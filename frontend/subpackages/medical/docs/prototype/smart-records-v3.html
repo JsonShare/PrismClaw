@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-page-node-id="lclT9ysxfbYpH2TIBCu5ey">
+<head data-page-node-id="Amosdj0QX0qDm8J6yCElXH">
+<meta charset="UTF-8" data-page-node-id="ntRhGifHz5BMJejy2EYRHa">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="JRvp46PDoEW37mBZlhnywm">
+<title>智能病历 · 设计稿 v3</title>
+<style>
+/* ── 主题 token ── */
+:root {
+  --c-accent: #0969DA;
+  --c-accent-soft: rgba(9,105,218,0.08);
+  --c-accent-mid: rgba(9,105,218,0.15);
+  --c-surface: #FFFFFF;
+  --c-surface-2: #F6F8FA;
+  --c-surface-3: #EAEEF2;
+  --c-bg: #EBEEF2;
+  --c-text: #1F2328;
+  --c-text-2: #59636E;
+  --c-text-3: #818B98;
+  --c-border: rgba(31,35,40,0.08);
+  --c-border-s: rgba(31,35,40,0.15);
+  --c-success: #1A7F37; --c-success-s: rgba(26,127,55,0.10);
+  --c-warning: #9A6700; --c-warning-s: rgba(154,103,0,0.10);
+  --c-danger: #CF222E;  --c-danger-s: rgba(207,34,46,0.10);
+  --c-purple: #8250DF;  --c-purple-s: rgba(130,80,223,0.10);
+  --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 18px; --fs-xl: 22px;
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', system-ui, sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, monospace;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 3px rgba(31,35,40,0.05), 0 2px 8px rgba(31,35,40,0.03);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--c-bg); color: var(--c-text); height: 100vh; overflow: hidden; }
+
+/* ── 全局容器 ── */
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── 顶部面板（header + stats 一体白底） ── */
+.top-panel {
+  background: var(--c-surface);
+  border-bottom: 1px solid var(--c-border);
+  padding: 22px 24px 20px;
+}
+.page-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 18px;
+}
+.header-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--c-accent-soft);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c-accent); font-size: 16px; font-weight: 700;
+}
+.header-title {
+  font-size: 20px; font-weight: 700; color: var(--c-text);
+  letter-spacing: -0.3px;
+}
+.header-subtitle {
+  font-size: var(--fs-xs); color: var(--c-text-3); margin-top: 2px;
+}
+.header-upload-btn {
+  margin-left: auto;
+  height: 32px; padding: 0 16px; border-radius: 8px;
+  border: none; cursor: pointer;
+  background: var(--c-accent); color: #fff;
+  font-size: var(--fs-sm); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: opacity 0.15s;
+}
+.header-upload-btn:hover { opacity: 0.88; }
+.header-upload-btn svg { width: 14px; height: 14px; }
+
+/* ── 解析 loading 全屏态 ── */
+.parse-overlay {
+  position: fixed; inset: 0; z-index: 150;
+  background: rgba(31,35,40,0.45); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.parse-overlay.open { opacity: 1; pointer-events: auto; }
+.parse-card {
+  width: 440px; background: var(--c-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(31,35,40,0.18);
+  padding: 36px 40px 32px; text-align: center;
+  transform: translateY(12px); transition: transform 0.2s;
+}
+.parse-overlay.open .parse-card { transform: translateY(0); }
+.parse-ring { width: 88px; height: 88px; margin: 0 auto 20px; position: relative; }
+.parse-ring > svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.parse-ring-track { fill: none; stroke: var(--c-accent-soft); stroke-width: 8; }
+.parse-ring-arc {
+  fill: none; stroke: var(--c-accent); stroke-width: 8; stroke-linecap: round;
+  stroke-dasharray: 226; stroke-dashoffset: 170;
+  transform-origin: center;
+  animation: ring-spin 1.2s linear infinite;
+}
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+.parse-ring-check {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--c-text);
+}
+.parse-ring-check svg { width: 30px; height: 30px; }
+.parse-card.done .parse-ring-arc { animation: none; stroke-dashoffset: 0; }
+.parse-title { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.3px; }
+.parse-sub { font-size: var(--fs-sm); color: var(--c-text-2); margin-top: 8px; line-height: 1.6; }
+.parse-steps { display: flex; align-items: flex-start; margin-top: 26px; }
+.parse-step {
+  flex: 1; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+}
+.parse-step::before {
+  content: ''; position: absolute; top: 12px;
+  left: calc(-50% + 15px); width: calc(100% - 30px);
+  height: 1.5px; background: var(--c-border);
+}
+.parse-step:first-child::before { display: none; }
+.parse-step.done::before { background: rgba(9,105,218,0.35); }
+.parse-step-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  background: var(--c-surface); color: var(--c-text-3);
+  border: 1.5px solid var(--c-border-s);
+  position: relative; z-index: 1;
+}
+.parse-step.active .parse-step-dot {
+  background: var(--c-accent); border-color: var(--c-accent); color: #fff;
+  box-shadow: 0 0 0 4px var(--c-accent-soft);
+}
+.parse-step.done .parse-step-dot {
+  background: var(--c-accent-soft); border-color: rgba(9,105,218,0.35); color: var(--c-accent);
+}
+.parse-step-label { font-size: 11px; font-weight: 600; color: var(--c-text-3); }
+.parse-step.active .parse-step-label, .parse-step.done .parse-step-label { color: var(--c-text); }
+.parse-step-desc { font-size: 10px; color: var(--c-text-3); margin-top: -2px; }
+.parse-pills { display: flex; justify-content: center; gap: 8px; margin-top: 22px; }
+.parse-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 12px; border-radius: 14px;
+  font-size: 11px; font-weight: 600;
+}
+.parse-pill.done { background: var(--c-success-s); color: var(--c-success); }
+.parse-pill.doing { background: var(--c-success-s); color: var(--c-success); }
+.parse-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.parse-pill.doing .dot { animation: blink 1s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+/* ── 使用引导栏（说明 + 上传） ── */
+.guide-bar {
+  display: flex;
+  align-items: center;
+}
+.guide-steps {
+  flex: 1; display: flex;
+}
+.guide-step {
+  flex: 1; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.guide-step::before {
+  content: ''; position: absolute; top: 14px;
+  left: calc(-50% + 17px); width: calc(100% - 34px);
+  height: 1.5px; background: var(--c-border);
+}
+.guide-step:first-child::before { display: none; }
+.guide-step.done::before { background: rgba(9,105,218,0.35); }
+.guide-dot {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  background: var(--c-surface); color: var(--c-text-2);
+  border: 1.5px solid rgba(9,105,218,0.25);
+  position: relative; z-index: 1;
+}
+.guide-step.active .guide-dot {
+  background: var(--c-accent); border-color: var(--c-accent); color: #fff;
+  box-shadow: 0 0 0 4px var(--c-accent-soft);
+}
+.guide-step.done .guide-dot {
+  background: var(--c-accent-soft); border-color: rgba(9,105,218,0.35); color: var(--c-accent);
+}
+.guide-label { font-size: var(--fs-sm); font-weight: 600; color: var(--c-text); }
+.guide-desc { font-size: 11px; color: var(--c-text-3); margin-top: -3px; }
+.guide-upload { margin-left: 28px; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
+.upload-btn-solid {
+  height: 38px; padding: 0 20px; border-radius: 8px;
+  border: none; background: var(--c-accent);
+  color: #fff; font-size: var(--fs-md); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.upload-btn-solid:hover { opacity: 0.88; }
+.upload-btn-solid svg { width: 15px; height: 15px; }
+
+/* ── 三栏主体 ── */
+.main-cols {
+  flex: 1; display: grid; min-height: 0;
+  grid-template-columns: 300px 300px 1fr;
+}
+
+/* ── 一栏：患者列表 ── */
+.col-patients {
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  display: flex; flex-direction: column;
+}
+.col-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--c-border);
+}
+.search-box {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 12px;
+  border-radius: 8px;
+  background: var(--c-surface-2);
+}
+.search-box input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-size: var(--fs-sm); color: var(--c-text);
+}
+.search-box input::placeholder { color: var(--c-text-3); }
+.search-icon { color: var(--c-text-3); display: flex; align-items: center; }
+.search-icon svg { width: 14px; height: 14px; }
+
+.patient-list {
+  flex: 1; overflow-y: auto; padding: 4px 8px;
+}
+.patient-list::-webkit-scrollbar { width: 4px; }
+.patient-list::-webkit-scrollbar-thumb { background: var(--c-border-s); border-radius: 4px; }
+
+/* ── 患者卡片 ── */
+.patient-card {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius);
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: 2px; position: relative;
+  border: 1.5px solid transparent;
+}
+.patient-card:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+.patient-card.active {
+  background: var(--c-accent-soft);
+  border-color: rgba(9,105,218,0.18);
+}
+
+/* 头像 */
+.avatar {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-sm); font-weight: 700; color: var(--c-text-2);
+  background: var(--c-surface-2);
+}
+
+.patient-info { flex: 1; min-width: 0; }
+.patient-name-row { display: flex; align-items: center; gap: 6px; }
+.patient-name { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); }
+.patient-card.active .patient-name { color: var(--c-accent); }
+
+.risk-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 600;
+}
+.risk-pill.high { background: var(--c-danger-s); color: var(--c-danger); }
+.risk-pill.mid  { background: var(--c-warning-s); color: var(--c-warning); }
+.risk-pill.low  { background: var(--c-success-s); color: var(--c-success); }
+
+.patient-diagnosis {
+  font-size: var(--fs-sm); color: var(--c-text-2);
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.patient-meta {
+  font-size: var(--fs-xs); color: var(--c-text-3);
+  margin-top: 2px;
+}
+
+/* 分页 */
+.pager {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px; border-top: 1px solid var(--c-border);
+  font-size: var(--fs-xs); color: var(--c-text-2);
+}
+.pager-btn {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: var(--fs-xs); color: var(--c-text-2);
+  transition: all 0.15s;
+}
+.pager-btn:hover { background: var(--c-surface-2); border-color: var(--c-border-s); }
+.pager-btn.disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── 二栏：报告列表 ── */
+.col-reports {
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-border);
+  display: flex; flex-direction: column;
+}
+.report-header {
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
+/* 面包屑栏 */
+.breadcrumb-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+}
+.breadcrumb-name {
+  font-size: var(--fs-md); font-weight: 700; color: var(--c-text);
+}
+.report-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+
+/* ── 报告卡片 ── */
+.report-card {
+  display: block; padding: 10px 12px; border-radius: 8px;
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: 2px; position: relative;
+  border: 1.5px solid transparent;
+}
+.report-card:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-border);
+}
+.report-card.active {
+  background: var(--c-accent-soft);
+  border-color: rgba(9,105,218,0.18);
+}
+.report-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.report-type-tag {
+  padding: 2px 8px; border-radius: var(--radius-sm); flex-shrink: 0;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+  background: var(--c-surface-3); color: var(--c-text-2);
+}
+.report-name { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.report-card.active .report-name { color: var(--c-accent); }
+
+/* 第二行：日期 */
+.report-line2 {
+  margin-top: 3px; font-size: var(--fs-xs); color: var(--c-text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── 三栏：报告详情 ── */
+.col-detail {
+  background: var(--c-surface-2);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.detail-scroll {
+  flex: 1; overflow-y: auto; padding: 20px 28px;
+}
+.detail-scroll::-webkit-scrollbar { width: 5px; }
+.detail-scroll::-webkit-scrollbar-thumb { background: var(--c-border-s); border-radius: 4px; }
+
+.detail-inner { max-width: 1000px; margin: 0 auto; }
+
+/* 详情头 */
+.detail-header {
+  margin-bottom: 16px;
+}
+.detail-title-row { display: flex; align-items: center; gap: 8px; }
+.detail-title { font-size: var(--fs-xl); font-weight: 700; letter-spacing: -0.3px; }
+.detail-meta-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0;
+  margin-top: 4px; font-size: var(--fs-sm); color: var(--c-text-2);
+}
+.detail-meta-row .meta-value { font-weight: 400; }
+.meta-sep { color: var(--c-border-s); margin: 0 6px; user-select: none; }
+
+/* ── 区块 ── */
+.section {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-card);
+}
+.section-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.section-icon {
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+}
+.section-icon.green { background: var(--c-success-s); color: var(--c-success); }
+.section-icon.blue  { background: var(--c-accent-soft); color: var(--c-accent); }
+.section-icon.amber { background: var(--c-warning-s); color: var(--c-warning); }
+.section-title { font-size: var(--fs-md); font-weight: 600; }
+
+/* ── AI 建议行 ── */
+.ai-note {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-top: 12px; padding: 8px 12px; border-radius: var(--radius-sm);
+  background: var(--c-accent-soft);
+  border: 1px solid rgba(9,105,218,0.10);
+}
+.ai-note-label {
+  flex-shrink: 0; font-size: var(--fs-xs); font-weight: 600;
+  color: var(--c-accent);
+}
+.ai-note-text {
+  font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.6;
+}
+
+/* ── 摘要 KV ── */
+.kv-grid { display: grid; grid-template-columns: 72px 1fr; gap: 8px 12px; align-items: baseline; }
+.kv-key { font-size: var(--fs-sm); color: var(--c-text-3); font-weight: 500; text-align: right; line-height: 1.6; }
+.kv-val { font-size: var(--fs-md); color: var(--c-text); line-height: 1.6; }
+
+/* ── 编辑触发按钮 ── */
+.section-edit-trigger {
+  margin-left: auto;
+  height: 24px; padding: 0 10px; border-radius: var(--radius-sm);
+  border: none; background: var(--c-accent-soft);
+  display: inline-flex; align-items: center; gap: 4px;
+  cursor: pointer; color: var(--c-accent);
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.2px;
+  transition: all 0.15s;
+}
+.section-edit-trigger:hover { background: var(--c-accent-mid); }
+.section-edit-trigger svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* ── 编辑态 ── */
+.section.editing {
+  border-color: rgba(9,105,218,0.25);
+  box-shadow: 0 0 0 1px rgba(9,105,218,0.08), var(--shadow-card);
+}
+.section.editing .section-edit-trigger { display: none; }
+
+/* 编辑底部操作栏 */
+.section-edit-bar {
+  display: none; align-items: center; justify-content: flex-end; gap: 8px;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--c-border);
+}
+.section.editing .section-edit-bar { display: flex; }
+
+.edit-bar-hint {
+  margin-right: auto;
+  font-size: var(--fs-xs); color: var(--c-text-3);
+}
+.edit-bar-save {
+  height: 28px; padding: 0 14px; border-radius: var(--radius-sm);
+  border: none; background: var(--c-accent);
+  font-size: var(--fs-sm); font-weight: 600; color: #fff;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  transition: opacity 0.15s;
+}
+.edit-bar-save:hover { opacity: 0.88; }
+.edit-bar-cancel {
+  height: 28px; padding: 0 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border); background: var(--c-surface);
+  font-size: var(--fs-sm); font-weight: 500; color: var(--c-text-2);
+  cursor: pointer; display: inline-flex; align-items: center;
+  transition: all 0.15s;
+}
+.edit-bar-cancel:hover { background: var(--c-surface-2); }
+
+/* 可编辑字段态 */
+.section.editing .kv-val,
+.section.editing .ai-note-text,
+.section.editing .raw-doc-p,
+.section.editing .raw-doc-meta-item,
+.section.editing .raw-doc-sig {
+  outline: none; border-radius: 3px;
+  background: rgba(9,105,218,0.04);
+  box-shadow: inset 0 0 0 1px rgba(9,105,218,0.12);
+  padding: 1px 4px; margin: -1px -4px;
+  transition: box-shadow 0.15s;
+}
+.section.editing .kv-val:focus,
+.section.editing .ai-note-text:focus,
+.section.editing .raw-doc-p:focus,
+.section.editing .raw-doc-meta-item:focus,
+.section.editing .raw-doc-sig:focus {
+  box-shadow: inset 0 0 0 2px rgba(9,105,218,0.30);
+  background: rgba(9,105,218,0.06);
+}
+.save-toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 8px 20px; border-radius: 8px;
+  background: var(--c-success); color: #fff;
+  font-size: var(--fs-sm); font-weight: 500;
+  box-shadow: 0 4px 16px rgba(26,127,55,0.25);
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; z-index: 100;
+}
+.save-toast.show { opacity: 1; }
+
+/* ── 报告原文区 ── */
+.raw-body { padding-right: 4px; }
+.raw-doc {
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  font-size: var(--fs-sm); color: var(--c-text); line-height: 1.8;
+}
+.raw-doc-title {
+  text-align: center; font-size: var(--fs-lg); font-weight: 700;
+  letter-spacing: 2px; margin-bottom: 16px;
+  border-bottom: 1px solid var(--c-border-s); padding-bottom: 8px;
+}
+.raw-doc-meta {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  font-size: var(--fs-sm); color: var(--c-text-2);
+  margin-bottom: 16px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.raw-doc-meta-item { white-space: nowrap; }
+.raw-doc-h4 {
+  font-size: var(--fs-sm); font-weight: 700; color: var(--c-text);
+  margin-top: 16px; margin-bottom: 4px;
+}
+.raw-doc-p {
+  text-indent: 2em; margin-bottom: 4px;
+}
+.raw-doc-sig {
+  text-align: right; margin-top: 20px;
+  font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.8;
+}
+
+/* ── 源文件弹窗 ── */
+.source-modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(31,35,40,0.45); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.source-modal-overlay.open { opacity: 1; pointer-events: auto; }
+.source-modal {
+  width: 680px; max-width: 90vw; height: 80vh;
+  background: var(--c-surface); border-radius: var(--radius-lg);
+  box-shadow: 0 12px 40px rgba(31,35,40,0.18);
+  display: flex; flex-direction: column; overflow: hidden;
+  transform: translateY(12px); transition: transform 0.2s;
+}
+.source-modal-overlay.open .source-modal { transform: translateY(0); }
+.source-modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; border-bottom: 1px solid var(--c-border);
+}
+.source-modal-title { font-size: var(--fs-md); font-weight: 600; }
+.source-modal-close {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: none; background: var(--c-surface-2);
+  font-size: 16px; color: var(--c-text-2); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.source-modal-close:hover { background: var(--c-surface-3); color: var(--c-text); }
+.source-modal-body {
+  flex: 1; overflow-y: auto; padding: 20px;
+  background: var(--c-surface-2); display: flex; align-items: center; justify-content: center;
+}
+.source-modal-preview {
+  background: #fff; border-radius: var(--radius-sm);
+  box-shadow: 0 2px 8px rgba(31,35,40,0.08);
+  max-width: 100%; max-height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px; color: var(--c-text-3); font-size: var(--fs-sm);
+}
+.source-modal-preview .file-icon {
+  width: 48px; height: 48px; margin-bottom: 8px; color: var(--c-text-3); opacity: 0.35;
+}
+.source-modal-preview .file-name {
+  font-size: var(--fs-md); font-weight: 500; color: var(--c-text);
+  margin-top: 8px;
+}
+.source-modal-preview .file-meta {
+  font-size: var(--fs-xs); color: var(--c-text-3); margin-top: 4px;
+}
+.source-modal-foot {
+  padding: 10px 20px; border-top: 1px solid var(--c-border);
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+}
+.source-modal-foot .modal-btn {
+  height: 28px; padding: 0 12px; border-radius: var(--radius-sm);
+  font-size: var(--fs-sm); font-weight: 500; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: all 0.15s;
+}
+.modal-btn-secondary {
+  border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-text-2);
+}
+.modal-btn-secondary:hover { background: var(--c-surface-2); }
+.modal-btn-primary {
+  border: none; background: var(--c-accent); color: #fff;
+}
+.modal-btn-primary:hover { opacity: 0.88; }
+
+/* ── 空状态 ── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; color: var(--c-text-3);
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+.empty-title { font-size: var(--fs-md); font-weight: 500; margin-bottom: 4px; }
+.empty-hint { font-size: var(--fs-sm); }
+
+/* 患者卡片紧凑 meta */
+.patient-meta-compact {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--c-text-3); margin-left: 4px;
+}
+.patient-meta-compact .meta-count {
+  color: var(--c-accent); font-weight: 600; font-family: var(--font-mono);
+}
+.patient-card.active .patient-meta-compact .meta-count {
+  color: var(--c-accent);
+}
+
+/* 面包屑操作按钮 */
+.breadcrumb-actions {
+  margin-left: auto; display: flex; gap: 6px;
+}
+.action-btn {
+  height: 28px; padding: 0 10px; border-radius: var(--radius-sm);
+  border: none; cursor: pointer; font-size: var(--fs-xs); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: all 0.15s; letter-spacing: 0.2px;
+}
+.action-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+.action-btn-upload {
+  background: var(--c-accent-soft); color: var(--c-accent);
+}
+.action-btn-upload:hover { background: var(--c-accent-mid); }
+.action-btn-archive {
+  background: var(--c-surface-3); color: var(--c-text-2);
+}
+.action-btn-archive:hover { background: var(--c-border-s); }
+</style>
+</head>
+<body data-page-node-id="NlTftk7wrkq1F3zYlVdWwS">
+<div class="app" data-page-node-id="6IUkCamLcsPKafyAGn7y6Q">
+  <!-- ── 顶部面板 ── -->
+  <div class="top-panel">
+    <div class="page-header" data-page-node-id="HREqvOIo4awFelVcyX5qlA">
+      <div class="header-icon" data-page-node-id="86ZdRt4iblFbJfiLFjOIRw">病</div>
+      <div data-page-node-id="8XVjaKtVuk46cybQMh8u3t">
+        <div class="header-title" data-page-node-id="NfXiTP5wqxlwTlnfX6B6u4">智能病历</div>
+        <div class="header-subtitle" data-page-node-id="nPxwPoj5Ilw5VO8FoKSn6V">AI 驱动的临床病历管理</div>
+      </div>
+    </div>
+    <div class="guide-bar">
+      <div class="guide-steps">
+        <div class="guide-step active">
+          <div class="guide-dot">1</div>
+          <div class="guide-label">上传病历</div>
+          <div class="guide-desc">选择方便的方式</div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-dot">2</div>
+          <div class="guide-label">自动分类</div>
+          <div class="guide-desc">快速找到资料</div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-dot">3</div>
+          <div class="guide-label">病情总结</div>
+          <div class="guide-desc">一页了解重点</div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-dot">4</div>
+          <div class="guide-label">病历提问</div>
+          <div class="guide-desc">结合档案回答</div>
+        </div>
+      </div>
+      <button class="upload-btn-solid" onclick="startUploadFlow()">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3v10"/><path d="M3 8h10"/></svg>
+        上传病历
+      </button>
+    </div>
+  </div><!-- /top-panel -->
+
+  <!-- ── 三栏 ── -->
+  <div class="main-cols" data-page-node-id="rzHxrYe18GrgIZjBmruEVT">
+    <!-- 一栏：患者列表 -->
+    <div class="col-patients" data-page-node-id="0m9EwQaWHykZ6jSF69nsF7">
+      <div class="col-header" data-page-node-id="bUogtMXk6ADVneGmmXxpcj">
+        <div class="search-box" data-page-node-id="l79iItXPGmwUlkEAOGlGcH">
+          <span class="search-icon" data-page-node-id="a2yhsx3esDZFr3GAXsBEXU"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="5"/><path d="M10.5 10.5L14 14"/></svg></span>
+          <input placeholder="搜索患者姓名、诊断..." data-page-node-id="7Kr0NGB0SF653KwhRnOSIV" />
+        </div>
+      </div>
+      <div class="patient-list" data-page-node-id="CVAGL5OjlS8kgTUUrghlEs">
+<div class="patient-card active" data-page-node-id="5OQx6wqhbVWSBM353mpFTI">
+          <div class="avatar" data-page-node-id="3pEIh7DBZ0BCPmWKOCl0pH">张</div>
+          <div class="patient-info" data-page-node-id="CMv5gtCvLApxBNFA9TrPUP">
+            <div class="patient-name-row" data-page-node-id="cexZCX91GSGdnpeMCvHdib">
+              <span class="patient-name" data-page-node-id="DO8RzbVQ23c0TrqdihkE7G">张明远</span>
+              <span class="risk-pill high" data-page-node-id="NaeDukQLqYpu9W4k2qaNYC">高危</span>
+              <span class="patient-meta-compact"><span class="meta-count">5</span><span> 份报告</span></span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="diag-5OQx6wqhbVWSBM353mpFTI">非小细胞肺癌 IIIA 期</div>
+          </div>
+        </div>
+<div class="patient-card" data-page-node-id="TQCJz6tvGoL6f36h5XtdYz">
+          <div class="avatar" data-page-node-id="YBcCslXEhxC41H8KHHDtlL">李</div>
+          <div class="patient-info" data-page-node-id="BxErDHXx17zD9RqlpfJkvJ">
+            <div class="patient-name-row" data-page-node-id="6sbjnBSRuZo4owajUzqI6q">
+              <span class="patient-name" data-page-node-id="4ktNBCC8XWZowC2J2rPugx">李秀兰</span>
+              <span class="risk-pill mid" data-page-node-id="Zxs3EIjN6Ga9Mmpa1m3HQl">中危</span>
+              <span class="patient-meta-compact"><span class="meta-count">3</span><span> 份报告</span></span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="diag-TQCJz6tvGoL6f36h5XtdYz">胃腺癌 IIB 期</div>
+          </div>
+        </div>
+<div class="patient-card" data-page-node-id="gp9RTXAmaB6s2SuZfZ1jq5">
+          <div class="avatar" data-page-node-id="AQhwGC19HfoE0dgXnhtXzS">王</div>
+          <div class="patient-info" data-page-node-id="zorLURiOyZtI7ZQN7U5CWN">
+            <div class="patient-name-row" data-page-node-id="BHKyeIZCmEsce6zbgK5wHd">
+              <span class="patient-name" data-page-node-id="0LexlZLTG0qoxp76zicuoU">王建国</span>
+              <span class="risk-pill low" data-page-node-id="XnF62C3hTJU6IkeR5yydue">低危</span>
+              <span class="patient-meta-compact"><span class="meta-count">2</span><span> 份报告</span></span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="diag-gp9RTXAmaB6s2SuZfZ1jq5">结直肠癌 IIA 期</div>
+          </div>
+        </div>
+<div class="patient-card" data-page-node-id="Oufx3EuEB1N0mBZFe6Uy28">
+          <div class="avatar" data-page-node-id="WIRcOO7xnwgLk7u58XLJvq">赵</div>
+          <div class="patient-info" data-page-node-id="cIfaF0OEVJa3LJ3mX6HUAi">
+            <div class="patient-name-row" data-page-node-id="axA6rx6sz6VQ8z7zvO5Kz8">
+              <span class="patient-name" data-page-node-id="LSI5PMOUDQrsXJnAuAVqUw">赵雪梅</span>
+              <span class="risk-pill mid" data-page-node-id="lfsUy87kVYFzI6qhyKiPP2">中危</span>
+              <span class="patient-meta-compact"><span class="meta-count">4</span><span> 份报告</span></span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="diag-Oufx3EuEB1N0mBZFe6Uy28">乳腺癌 IIA 期</div>
+          </div>
+        </div>
+<div class="patient-card" data-page-node-id="hGEGHKNAlObXyzDUxPiBzY">
+          <div class="avatar" data-page-node-id="nqFSP2ZGwBPIGEti8d4fbi">陈</div>
+          <div class="patient-info" data-page-node-id="HE06pG7i2WhOgDSy2N8iGO">
+            <div class="patient-name-row" data-page-node-id="pE5CvlO5ICEgEGAd6htTtD">
+              <span class="patient-name" data-page-node-id="G5eXdD9ykyI4e2kYZcsoM4">陈伟华</span>
+              <span class="risk-pill low" data-page-node-id="SJLbDxZAgRmDPVjo3rpIah">低危</span>
+              <span class="patient-meta-compact"><span class="meta-count">1</span><span> 份报告</span></span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="diag-hGEGHKNAlObXyzDUxPiBzY">甲状腺乳头状癌 I 期</div>
+          </div>
+        </div>
+<div class="patient-card" data-page-node-id="3Of5upWeXUIGIVP7BeOE39">
+          <div class="avatar" data-page-node-id="GMnOSN9mgBCfFM5vWXmtt4">刘</div>
+          <div class="patient-info" data-page-node-id="3IAQ5X0HGtBvYMBu8VOjk8">
+            <div class="patient-name-row" data-page-node-id="K6kyVPdv6PC8GJZ0W2012A">
+              <span class="patient-name" data-page-node-id="xcAfr5SdbGxJ23RBtQwEH1">刘芳</span>
+              <span class="risk-pill high" data-page-node-id="bG28UGn3lpEI4HJhYVC1HI">高危</span>
+              <span class="patient-meta-compact"><span class="meta-count">2</span><span> 份报告</span></span>
+            </div>
+            <div class="patient-diagnosis" data-page-node-id="diag-3Of5upWeXUIGIVP7BeOE39">肝细胞癌 IIIB 期</div>
+          </div>
+        </div>
+      </div>
+      <div class="pager" data-page-node-id="8pTTFmFPz9r14yIuNqi4WT">
+        <button class="pager-btn disabled" data-page-node-id="oMhf4KukKLYRx0b93HiWUD">&#x2039;</button>
+        <span style="font-family:var(--font-mono)" data-page-node-id="9aTv07AxAcpy6r3yGA3jZU">1 / 13</span>
+        <button class="pager-btn" data-page-node-id="2lVHmBPAffLZhKCNKUnS0W">&#x203A;</button>
+      </div>
+    </div>
+
+    <!-- 二栏：报告列表 -->
+    <div class="col-reports" data-page-node-id="D4bGStq7KVgwTwAsl4fF8F">
+      <div class="report-header" data-page-node-id="0PcgkdLOEgwNwLmaZtBlm7">
+        <div class="breadcrumb-bar">
+          <div class="breadcrumb-info">
+            <span class="breadcrumb-name">张明远</span>
+          </div>
+          <div class="breadcrumb-actions">
+            <button class="action-btn action-btn-upload" onclick="startUploadFlow()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8"/><path d="M4 6l4-4 4 4"/><path d="M2 11v2a1 1 0 001 1h10a1 1 0 001-1v-2"/></svg>
+              上传
+            </button>
+            <button class="action-btn action-btn-archive" onclick="openSourceModal()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="11" rx="1.5"/><path d="M5 1v4"/><path d="M11 1v4"/><path d="M5 8h6"/><path d="M5 11h4"/></svg>
+              查看档案
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="report-list" data-page-node-id="OEdSDN8GRHX9gLlWcfWmu9">
+        <div class="report-card active" data-page-node-id="BddLFi5Be1xaasWwilKUnl">
+          <div class="report-line1">
+            <span class="report-type-tag">病理</span>
+            <span class="report-name">入院记录</span>
+          </div>
+          <div class="report-line2">2026-08-15 <span style="color:var(--c-border-s)">·</span> 协和医院</div>
+        </div>
+        <div class="report-card" data-page-node-id="At49EQPUr49Zuzv4wAae4k">
+          <div class="report-line1">
+            <span class="report-type-tag">影像</span>
+            <span class="report-name">胸部 CT 报告</span>
+          </div>
+          <div class="report-line2">2026-08-12 <span style="color:var(--c-border-s)">·</span> 协和医院</div>
+        </div>
+        <div class="report-card" data-page-node-id="Hy1FPPFpi5H8NlnwFJttYg">
+          <div class="report-line1">
+            <span class="report-type-tag">基因</span>
+            <span class="report-name">EGFR 基因检测</span>
+          </div>
+          <div class="report-line2">2026-08-10 <span style="color:var(--c-border-s)">·</span> 金域医学</div>
+        </div>
+        <div class="report-card" data-page-node-id="LeHHH7XRWpRQxAYYtYGWaa">
+          <div class="report-line1">
+            <span class="report-type-tag">检验</span>
+            <span class="report-name">血常规 + 肝肾功能</span>
+          </div>
+          <div class="report-line2">2026-08-08 <span style="color:var(--c-border-s)">·</span> 协和医院</div>
+        </div>
+        <div class="report-card" data-page-node-id="DK1usxJb8vtZ6jgvgxkCSN">
+          <div class="report-line1">
+            <span class="report-type-tag">治疗</span>
+            <span class="report-name">第一次化疗记录</span>
+          </div>
+          <div class="report-line2">2026-08-05 <span style="color:var(--c-border-s)">·</span> 协和医院</div>
+        </div>
+      </div>
+      <div class="pager" data-page-node-id="NXyq9YyNZKZqGL09qYiboD">
+        <button class="pager-btn disabled" data-page-node-id="GH7h7I2i2f0xLoTzB0ERaN">&#x2039;</button>
+        <span style="font-family:var(--font-mono)" data-page-node-id="aXEnCa6894dVkqTOVPHfK4">1 / 3</span>
+        <button class="pager-btn" data-page-node-id="PfA5dzv6BouP2fXXDVsF2a">&#x203A;</button>
+      </div>
+    </div>
+
+    <!-- 三栏：报告详情 -->
+    <div class="col-detail" data-page-node-id="s2Ktgg0PWqkEyIUKSvZHxG">
+      <div class="detail-scroll" data-page-node-id="StpzF9Pn6SG88gKMR6Xz7E">
+        <div class="detail-inner" data-page-node-id="xkEQn8ZdB5GFuqSuv67lVA">
+
+          <!-- 详情头 -->
+          <div class="detail-header">
+            <div class="detail-title-row">
+              <span class="detail-title">入院记录</span>
+            </div>
+            <div class="detail-meta-row">
+              <span class="meta-value">病理报告</span>
+              <span class="meta-sep">·</span>
+              <span class="meta-value">2026-08-15</span>
+              <span class="meta-sep">·</span>
+              <span class="meta-value">王主任</span>
+            </div>
+          </div>
+
+          <!-- AI 摘要 -->
+          <div class="section" id="section-summary">
+            <div class="section-head">
+              <div class="section-icon blue">AI</div>
+              <span class="section-title">AI 摘要</span>
+              <button class="section-edit-trigger" onclick="toggleEdit('section-summary')">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2.5l-.5-.5a1.4 1.4 0 00-2 0L4 9l-1 4 4-1 7-7a1.4 1.4 0 000-2z"/><path d="M10 5l2 2"/></svg>
+                修正
+              </button>
+            </div>
+            <div class="kv-grid">
+              <span class="kv-key">主诉</span>
+              <span class="kv-val">反复咳嗽 2 月余，加重伴痰中带血 1 周</span>
+              <span class="kv-key">现病史</span>
+              <span class="kv-val">患者 2 月前无明显诱因出现咳嗽，为阵发性干咳，未重视。1 周前咳嗽加重，痰中带血丝</span>
+              <span class="kv-key">诊断</span>
+              <span class="kv-val">右肺上叶非小细胞肺癌（腺癌）IIIA 期（cT3N1M0）</span>
+              <span class="kv-key">治疗计划</span>
+              <span class="kv-val">建议先行新辅助化疗 2 周期后评估手术可能性</span>
+            </div>
+            <div class="ai-note">
+              <span class="ai-note-label">AI 建议</span>
+              <span class="ai-note-text">建议按周期复查评估疗效。用药合理性存疑，请核实化疗方案。</span>
+            </div>
+            <div class="section-edit-bar">
+              <span class="edit-bar-hint">点击字段即可编辑</span>
+              <button class="edit-bar-cancel" onclick="cancelEdit('section-summary')">取消</button>
+              <button class="edit-bar-save" onclick="saveEdit('section-summary')">保存修改</button>
+            </div>
+          </div>
+
+          <!-- 报告原文 -->
+          <div class="section raw-section" id="section-raw">
+            <div class="section-head">
+              <div class="section-icon amber">原</div>
+              <span class="section-title">报告原文</span>
+              <button class="section-edit-trigger" onclick="toggleEdit('section-raw')">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 2.5l-.5-.5a1.4 1.4 0 00-2 0L4 9l-1 4 4-1 7-7a1.4 1.4 0 000-2z"/><path d="M10 5l2 2"/></svg>
+                修正
+              </button>
+            </div>
+            <div class="raw-body">
+              <div class="raw-doc">
+                <div class="raw-doc-title">入 院 记 录</div>
+                <div class="raw-doc-meta">
+                  <span class="raw-doc-meta-item">姓名：张明远</span>
+                  <span class="raw-doc-meta-item">性别：男</span>
+                  <span class="raw-doc-meta-item">年龄：58岁</span>
+                  <span class="raw-doc-meta-item">入院日期：2026-08-15</span>
+                  <span class="raw-doc-meta-item">科室：胸外科</span>
+                </div>
+                <div class="raw-doc-h4">主诉</div>
+                <div class="raw-doc-p">反复咳嗽2月余，加重伴痰中带血1周。</div>
+                <div class="raw-doc-h4">现病史</div>
+                <div class="raw-doc-p">患者2月前无明显诱因出现咳嗽，为阵发性干咳，以夜间为著，无发热、胸痛、咯血，未重视。1周前咳嗽加重，痰中带血丝，伴右侧胸痛，遂来我院就诊。自发病以来，食欲可，睡眠欠佳，大小便正常，体重减轻约3kg。</div>
+                <div class="raw-doc-h4">既往史</div>
+                <div class="raw-doc-p">既往体健，否认高血压、糖尿病、冠心病史。否认肝炎、结核等传染病史。否认手术史、输血史。否认药物及食物过敏史。预防接种史随当地。</div>
+                <div class="raw-doc-h4">个人史</div>
+                <div class="raw-doc-p">生于原籍，久居本地。吸烟史30年，约20支/日，未戒烟。否认饮酒史。</div>
+                <div class="raw-doc-h4">查体</div>
+                <div class="raw-doc-p">T 36.8°C，P 82次/分，R 20次/分，BP 128/76mmHg。神志清楚，精神可，全身浅表淋巴结未及肿大。右肺上叶呼吸音减低，左肺呼吸音清，未闻及干湿啰音。心率82次/分，律齐，各瓣膜听诊区未闻及病理性杂音。腹软，无压痛及反跳痛，肝脾肋下未触及。双下肢无水肿。</div>
+                <div class="raw-doc-h4">辅助检查</div>
+                <div class="raw-doc-p">胸部CT（2026-08-12）：右肺上叶占位性病变，大小约4.2×3.8cm，边界不规则，增强后不均匀强化；纵隔4R、7组淋巴结肿大，短径约1.2cm。纤维支气管镜活检病理（2026-08-14）：（右肺上叶）腺癌。EGFR基因检测（2026-08-10）：19外显子缺失突变。</div>
+                <div class="raw-doc-h4">初步诊断</div>
+                <div class="raw-doc-p">右肺上叶非小细胞肺癌（腺癌）IIIA期（cT3N1M0, EGFR 19del）</div>
+                <div class="raw-doc-h4">诊疗计划</div>
+                <div class="raw-doc-p">1. 完善术前检查：头颅MRI、骨扫描、肺功能、心电图</div>
+                <div class="raw-doc-p">2. 建议先行新辅助化疗2周期后评估手术可能性</div>
+                <div class="raw-doc-p">3. 必要时行多学科会诊（MDT）</div>
+                <div class="raw-doc-p">4. 对症支持治疗</div>
+                <div class="raw-doc-sig">
+                  主治医师：王主任<br/>
+                  记录日期：2026-08-15
+                </div>
+              </div>
+              <div class="section-edit-bar">
+                <span class="edit-bar-hint">点击字段即可编辑</span>
+                <button class="edit-bar-cancel" onclick="cancelEdit('section-raw')">取消</button>
+                <button class="edit-bar-save" onclick="saveEdit('section-raw')">保存修改</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="save-toast" id="saveToast">已保存</div>
+
+<!-- 源文件弹窗 -->
+<div class="source-modal-overlay" id="sourceModal" onclick="closeSourceModal(event)">
+  <div class="source-modal" onclick="event.stopPropagation()">
+    <div class="source-modal-head">
+      <span class="source-modal-title">源文件预览</span>
+      <button class="source-modal-close" onclick="closeSourceModal()">&#x2715;</button>
+    </div>
+    <div class="source-modal-body">
+      <div class="source-modal-preview">
+        <div style="text-align:center">
+          <div class="file-icon">
+            <svg width="48" height="48" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 1h5l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z"/><path d="M9 1v4h4"/><path d="M5 8h6"/><path d="M5 11h4"/></svg>
+          </div>
+          <div class="file-name">入院记录_2026-08-15.pdf</div>
+          <div class="file-meta">PDF 文件 · 2.3 MB · 2026-08-15 上传</div>
+          <div style="margin-top:16px; padding:40px 60px; border:1px dashed var(--c-border-s); border-radius:8px; color:var(--c-text-3); font-size:var(--fs-sm)">
+            原始报告文件预览区域<br/>
+            <span style="font-size:var(--fs-xs); opacity:0.6">支持 PDF / 图片格式</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="source-modal-foot">
+      <button class="modal-btn modal-btn-secondary" onclick="closeSourceModal()">关闭</button>
+      <button class="modal-btn modal-btn-primary">下载文件</button>
+    </div>
+  </div>
+</div>
+
+<!-- 解析 loading 弹层 -->
+<div class="parse-overlay" id="parseOverlay" onclick="closeParseOverlay(event)">
+  <div class="parse-card" id="parseCard" onclick="event.stopPropagation()">
+    <div class="parse-ring">
+      <svg viewBox="0 0 88 88">
+        <circle class="parse-ring-track" cx="44" cy="44" r="36"/>
+        <circle class="parse-ring-arc" cx="44" cy="44" r="36"/>
+      </svg>
+      <div class="parse-ring-check">
+        <svg width="30" height="30" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5L13 5"/></svg>
+      </div>
+    </div>
+    <div class="parse-title">病历已收到，正在安全整理</div>
+    <div class="parse-sub">可以离开页面，整理完成后再回来查看。</div>
+    <div class="parse-steps">
+      <div class="parse-step done" id="pstep-1">
+        <div class="parse-step-dot">&#10003;</div>
+        <div class="parse-step-label">上传病历</div>
+        <div class="parse-step-desc">选择方便的方式</div>
+      </div>
+      <div class="parse-step active" id="pstep-2">
+        <div class="parse-step-dot">2</div>
+        <div class="parse-step-label">自动分类</div>
+        <div class="parse-step-desc">快速找到资料</div>
+      </div>
+      <div class="parse-step" id="pstep-3">
+        <div class="parse-step-dot">3</div>
+        <div class="parse-step-label">病情总结</div>
+        <div class="parse-step-desc">一页了解重点</div>
+      </div>
+    </div>
+    <div class="parse-pills">
+      <span class="parse-pill done"><span class="dot"></span>隐私保护完成</span>
+      <span class="parse-pill doing" id="parsePillDoing"><span class="dot"></span>正在识别资料</span>
+    </div>
+  </div>
+</div>
+
+<script>
+function getEditableFields(sectionId) {
+  var section = document.getElementById(sectionId);
+  return section.querySelectorAll('.kv-val, .ai-note-text, .raw-doc-p, .raw-doc-meta-item, .raw-doc-sig');
+}
+
+var originalData = {};
+
+function toggleEdit(sectionId) {
+  var section = document.getElementById(sectionId);
+  var fields = getEditableFields(sectionId);
+  originalData[sectionId] = {};
+  fields.forEach(function(el, i) {
+    originalData[sectionId][i] = el.innerHTML;
+    el.contentEditable = 'true';
+  });
+  section.classList.add('editing');
+  fields[0] && fields[0].focus();
+}
+
+function saveEdit(sectionId) {
+  var section = document.getElementById(sectionId);
+  var fields = getEditableFields(sectionId);
+  fields.forEach(function(el) {
+    el.contentEditable = 'false';
+  });
+  section.classList.remove('editing');
+  delete originalData[sectionId];
+  showToast();
+}
+
+function cancelEdit(sectionId) {
+  var section = document.getElementById(sectionId);
+  var fields = getEditableFields(sectionId);
+  var saved = originalData[sectionId] || {};
+  fields.forEach(function(el, i) {
+    if (saved[i] !== undefined) el.innerHTML = saved[i];
+    el.contentEditable = 'false';
+  });
+  section.classList.remove('editing');
+  delete originalData[sectionId];
+}
+
+function showToast() {
+  var t = document.getElementById('saveToast');
+  t.classList.add('show');
+  setTimeout(function() { t.classList.remove('show'); }, 1600);
+}
+
+function openSourceModal() {
+  document.getElementById('sourceModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSourceModal(e) {
+  if (e && e.target !== e.currentTarget) return;
+  document.getElementById('sourceModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeSourceModal();
+});
+
+var parseTimers = [];
+function setParseStep(n, state) {
+  var el = document.getElementById('pstep-' + n);
+  el.classList.remove('done', 'active');
+  if (state) el.classList.add(state);
+  el.querySelector('.parse-step-dot').innerHTML =
+    state === 'done' ? '&#10003;' : String(n);
+}
+function setParsePill(text, doing) {
+  var pill = document.getElementById('parsePillDoing');
+  pill.className = doing ? 'parse-pill doing' : 'parse-pill done';
+  pill.innerHTML = '<span class="dot"></span>' + text;
+}
+function startUploadFlow() {
+  parseTimers.forEach(clearTimeout);
+  parseTimers = [];
+  var overlay = document.getElementById('parseOverlay');
+  var card = document.getElementById('parseCard');
+  card.classList.remove('done');
+  setParseStep(1, 'done');
+  setParseStep(2, 'active');
+  setParseStep(3, '');
+  setParsePill('正在识别资料', true);
+  overlay.classList.add('open');
+  parseTimers.push(setTimeout(function() {
+    setParseStep(2, 'done');
+    setParseStep(3, 'active');
+  }, 2600));
+  parseTimers.push(setTimeout(function() {
+    setParseStep(3, 'done');
+    setParsePill('识别完成', false);
+    card.classList.add('done');
+  }, 5200));
+  parseTimers.push(setTimeout(function() {
+    overlay.classList.remove('open');
+    showToast();
+  }, 7200));
+}
+function closeParseOverlay(e) {
+  if (e && e.target !== e.currentTarget) return;
+  parseTimers.forEach(clearTimeout);
+  parseTimers = [];
+  document.getElementById('parseOverlay').classList.remove('open');
+}
+</script>
+</body>
+</html>

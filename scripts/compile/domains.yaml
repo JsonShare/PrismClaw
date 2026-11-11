@@ -1,0 +1,112 @@
+# PrismClaw 业务域配置 — 唯一真实来源 (Single Source of Truth)
+#
+# 本文件是域元数据的唯一注册中心：
+#   - 编译时：domains-registry.mjs 读取此文件，生成前端/后端/部署产物
+#   - 运行时：后端 bundle.py 从生成的 manifest 加载，前端从后端 API 获取
+#
+# 私有化部署裁剪：
+#   1. 将不需要的域 enabled 改为 false
+#   2. 或 Docker 构建时：docker build --build-arg PRISMCLAW_DOMAINS=medical
+#
+# 新增域只需在此文件添加一个条目，然后在对应目录创建代码即可。
+
+domains:
+  medical:
+    enabled: false
+
+    # ── 基本描述 ──
+    label: 医疗工作台
+    # icon 使用 FontAwesome 图标名（后端 manifest 返回给前端，侧边栏渲染）
+    icon: stethoscope
+    # 降级图标：前端离线/后端不可达时使用的静态图片路径
+    fallback_icon: /domains/medical.png
+    # 工作台路由
+    path: /medical
+
+    # ── 侧边栏展示元数据（业务域自己的描述，核心只通用读取，不写死） ──
+    # 副标题：与 label 并列展示，说明该域的能力范畴
+    subtitle: AI 辅助诊断 · 报告解读
+    # 强调色：按域区分，明暗双值（浅色 accent / 深色 accent_dark）
+    accent: "#185FA5"
+    accent_dark: "#6FB0EE"
+
+    # ── 包发现 ──
+    # Python entry_point（pyproject.toml 中注册）
+    entry_point: subpackages.medical.integration.bundle:MedicalBundle
+    # 后端源码路径
+    backend_path: backend/src/subpackages/medical
+
+    # ── 前端分包 ──
+    # 前端分包路径（相对于 frontend/）
+    frontend_path: subpackages/medical
+    # React.lazy 动态导入路径（Vite alias @domains → frontend subpackages/）
+    lazy_import: "@domains/medical/MedicalWorkbenchPage"
+    lazy_export: MedicalWorkbenchPage
+
+    # ── 工作台菜单（menus >= 2 时左侧显示二级菜单） ──
+    # parent 分组与新版临床工作台侧栏对齐：
+    #   clinical  → 临床业务（records 智能病历 / patients 患者管理）
+    #   knowledge → 知识库（literature / guidelines / drugs）
+    # 新版 UI 渲染自有内部侧栏；此处仅为前端描述对齐实际导航。
+    menus:
+      - key: records
+        label: 智能病历
+        icon: file-medical
+        parent: clinical
+      - key: patients
+        label: 患者管理
+        icon: user-injured
+        parent: clinical
+      - key: literature
+        label: 文献知识库
+        icon: microscope
+        parent: knowledge
+      - key: guidelines
+        label: 指南知识库
+        icon: book-medical
+        parent: knowledge
+      - key: drugs
+        label: 药品知识库
+        icon: pills
+        parent: knowledge
+
+    # ── 前端页面路由 ──
+    # 患者详情为工作台内部状态（URL 同步 ?mw_patient=<id>），不再单独挂路由。
+    pages:
+      - key: workbench
+        path: /medical
+        js_asset: domains/medical
+
+  # ── 法律域 ──
+  legal:
+    enabled: false
+
+    label: 法律工作台
+    icon: gavel
+    fallback_icon: /domains/legal.png
+    path: /legal
+
+    # ── 侧边栏展示元数据（启用后由构建脚本生成前端映射） ──
+    subtitle: 合同审查 · 合规检查
+    accent: "#854F0B"
+    accent_dark: "#E0A33C"
+
+    entry_point: subpackages.legal.integration.bundle:LegalBundle
+    backend_path: backend/src/subpackages/legal
+
+    frontend_path: subpackages/legal
+    lazy_import: "@domains/legal/LegalWorkbenchPage"
+    lazy_export: LegalWorkbenchPage
+
+    menus:
+      - key: contract
+        label: 合同审查
+        icon: file-contract
+      - key: compliance
+        label: 合规检查
+        icon: shield-halved
+
+    pages:
+      - key: workbench
+        path: /legal
+        js_asset: domains/legal

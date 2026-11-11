@@ -1,0 +1,10 @@
+{
+  "name": "medical-contracts",
+  "version": "1.0.0",
+  "description": "医疗合同分析插件：对医疗合同、采购合同、服务协议等文档进行问答式分析，提供带溯源引用的合同解读。基于 Read/Grep/SearchCodebase 纯工具方案，无需外部服务。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "hooks": "./hooks/hooks.json",
+  "skills": "./skills"
+}

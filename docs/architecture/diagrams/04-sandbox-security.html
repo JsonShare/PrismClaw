@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismClaw Sandbox &amp; Security Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'JetBrains Mono', monospace; background: #020617; min-height: 100vh; padding: 2rem; color: white; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #fb7185; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container { background: rgba(15, 23, 42, 0.5); border-radius: 1rem; border: 1px solid #1e293b; padding: 1.5rem; overflow-x: auto; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 2rem; }
+    .card { background: rgba(15, 23, 42, 0.5); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.25rem; }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle { background: transparent; border: none; color: #475569; cursor: pointer; font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem; border-radius: 0.375rem; transition: color 0.2s, background 0.2s; }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button { background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print { body { background: #020617; padding: 1rem; } .toolbar { display: none !important; } }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Sandbox &amp; Security Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">&#128203; Copy</button>
+            <button onclick="downloadPNG(this)">&#128444; PNG</button>
+            <button onclick="downloadPDF(this)">&#128196; PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">&#8943;</button>
+        </div>
+      </div>
+      <p class="subtitle">SafetyGate decision pipeline &#8594; BwrapPolicy execution &mdash; fail-closed multi-layer defense</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1100 880">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowEmerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowRose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" />
+          </marker>
+          <marker id="arrowAmber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- SafetyGate main orchestrator -->
+        <rect x="350" y="15" width="400" height="50" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="2"/>
+        <text x="550" y="38" fill="white" font-size="13" font-weight="700" text-anchor="middle">SafetyGate</text>
+        <text x="550" y="55" fill="#94a3b8" font-size="9" text-anchor="middle">evaluate() &mdash; security pipeline orchestrator</text>
+
+        <!-- Decision pipeline vertical flow -->
+        <line x1="550" y1="65" x2="550" y2="90" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrowRose)"/>
+
+        <!-- Step 0: get_tool_safety_meta -->
+        <rect x="380" y="93" width="340" height="38" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="550" y="112" fill="white" font-size="9" font-weight="600" text-anchor="middle">Step 0: get_tool_safety_meta() &rarr; ToolSafetyMeta (fail-closed)</text>
+        <text x="550" y="126" fill="#94a3b8" font-size="8" text-anchor="middle">Step 0.5: TenantPolicyStore &rarr; tool_deny_list check</text>
+
+        <line x1="550" y1="131" x2="550" y2="148" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Step 1: RuleGate L0 -->
+        <rect x="380" y="151" width="340" height="38" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="550" y="168" fill="white" font-size="9" font-weight="600" text-anchor="middle">Step 1: RuleGate (L0) &mdash; 5 static rules</text>
+        <text x="550" y="182" fill="#94a3b8" font-size="8" text-anchor="middle">path escape | sensitive path | SSRF | workspace_tag | MCP unreg</text>
+
+        <line x1="550" y1="189" x2="550" y2="206" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Step 2: RiskRouter L1 -->
+        <rect x="380" y="209" width="340" height="38" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="550" y="226" fill="white" font-size="9" font-weight="600" text-anchor="middle">Step 2: RiskRouter (L1) &mdash; risk classification</text>
+        <text x="550" y="240" fill="#94a3b8" font-size="8" text-anchor="middle">side_effect_scope &#215; data_classification &#215; reversibility</text>
+
+        <line x1="550" y1="247" x2="550" y2="264" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Step 3: WorkspaceMode + ConsentGate -->
+        <rect x="380" y="267" width="340" height="38" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="550" y="284" fill="white" font-size="9" font-weight="600" text-anchor="middle">Step 3: WorkspaceMode (chat deny writes)</text>
+        <text x="550" y="298" fill="#94a3b8" font-size="8" text-anchor="middle">Step 3.5: ConsentGate (PHI/legal workspace consent)</text>
+
+        <line x1="550" y1="305" x2="550" y2="322" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Step 4: ConfirmGateway -->
+        <rect x="380" y="325" width="340" height="38" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="550" y="342" fill="white" font-size="9" font-weight="600" text-anchor="middle">Step 4: ConfirmGateway (L2) &mdash; UX confirmation</text>
+        <text x="550" y="356" fill="#94a3b8" font-size="8" text-anchor="middle">SOFT_BATCH(3) | HARD_MFA(FIDO2) | HARD_4EYES</text>
+
+        <line x1="550" y1="363" x2="550" y2="380" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- Step 4.5: TenantPolicyOverride -->
+        <rect x="380" y="383" width="340" height="32" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="550" y="403" fill="white" font-size="9" font-weight="600" text-anchor="middle">Step 4.5: TenantPolicyOverride (tier &#8593; confirm &#8593; only)</text>
+
+        <line x1="550" y1="415" x2="550" y2="440" stroke="#fb7185" stroke-width="2" marker-end="url(#arrowRose)"/>
+
+        <!-- GateDecision output -->
+        <rect x="420" y="443" width="260" height="35" rx="6" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="2"/>
+        <text x="550" y="465" fill="white" font-size="10" font-weight="700" text-anchor="middle">GateDecision</text>
+
+        <!-- Left side: Security components detail -->
+        <!-- RuleGate detail -->
+        <rect x="30" y="140" width="180" height="130" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="120" y="158" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">RuleGate (5 Rules)</text>
+        <text x="120" y="175" fill="#94a3b8" font-size="7" text-anchor="middle">1. Path escape (../, abs)</text>
+        <text x="120" y="188" fill="#94a3b8" font-size="7" text-anchor="middle">2. Sensitive paths</text>
+        <text x="120" y="201" fill="#94a3b8" font-size="7" text-anchor="middle">3. SSRF (169.254.x)</text>
+        <text x="120" y="214" fill="#94a3b8" font-size="7" text-anchor="middle">4. workspace_tag (PHI)</text>
+        <text x="120" y="227" fill="#94a3b8" font-size="7" text-anchor="middle">5. MCP unregistered</text>
+        <text x="120" y="248" fill="#fb7185" font-size="7" text-anchor="middle">Extensions: .dcm .pem .key</text>
+        <text x="120" y="261" fill="#fb7185" font-size="7" text-anchor="middle">Paths: ~/.ssh /etc/passwd /proc</text>
+
+        <!-- RiskRouter detail -->
+        <rect x="30" y="285" width="180" height="120" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="120" y="303" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">RiskRouter Dimensions</text>
+        <text x="120" y="320" fill="#94a3b8" font-size="7" text-anchor="middle">SideEffectScope (5 levels)</text>
+        <text x="120" y="333" fill="#94a3b8" font-size="7" text-anchor="middle">LOCAL_READ &#8594; EXTERNAL_IRREVERSIBLE</text>
+        <text x="120" y="346" fill="#94a3b8" font-size="7" text-anchor="middle">DataClassification (5 levels)</text>
+        <text x="120" y="359" fill="#94a3b8" font-size="7" text-anchor="middle">PUBLIC &#8594; PERSONAL_SENSITIVE</text>
+        <text x="120" y="372" fill="#94a3b8" font-size="7" text-anchor="middle">Reversibility (3 levels)</text>
+        <text x="120" y="385" fill="#94a3b8" font-size="7" text-anchor="middle">REVERSIBLE &#8594; IRREVERSIBLE</text>
+        <text x="120" y="398" fill="#fb7185" font-size="7" text-anchor="middle">fail-closed: EXT_IRR+PH+IRR+4eyes</text>
+
+        <!-- Right side: Enforcement components -->
+        <!-- BwrapPolicy -->
+        <rect x="820" y="140" width="250" height="130" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="945" y="158" fill="#34d399" font-size="10" font-weight="600" text-anchor="middle">BwrapPolicy</text>
+        <text x="945" y="175" fill="#94a3b8" font-size="7" text-anchor="middle">--ro-bind /usr /usr</text>
+        <text x="945" y="188" fill="#94a3b8" font-size="7" text-anchor="middle">--bind workspace /workspace</text>
+        <text x="945" y="201" fill="#94a3b8" font-size="7" text-anchor="middle">--tmpfs /tmp --unshare-pid</text>
+        <text x="945" y="214" fill="#94a3b8" font-size="7" text-anchor="middle">--die-with-parent</text>
+        <text x="945" y="227" fill="#94a3b8" font-size="7" text-anchor="middle">STRICT: --unshare-net</text>
+        <text x="945" y="240" fill="#94a3b8" font-size="7" text-anchor="middle">--clearenv + --setenv whitelist</text>
+        <text x="945" y="258" fill="#fb7185" font-size="7" text-anchor="middle">Hardcoded deny: /root /home /etc/ssh</text>
+        <text x="945" y="265" fill="#fb7185" font-size="7" text-anchor="middle">/etc/shadow /etc/ssl/private /var/lib/*</text>
+
+        <!-- DLP -->
+        <rect x="820" y="285" width="250" height="120" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="945" y="303" fill="#fbbf24" font-size="10" font-weight="600" text-anchor="middle">DlpScanner</text>
+        <text x="945" y="320" fill="#94a3b8" font-size="7" text-anchor="middle">1. Encoding preprocess (NFKC/B64/URL/QP)</text>
+        <text x="945" y="333" fill="#94a3b8" font-size="7" text-anchor="middle">2. Safe Harbor regex + line stats</text>
+        <text x="945" y="346" fill="#94a3b8" font-size="7" text-anchor="middle">3. k-anonymity (&#8805;30 lines &#8594; BLOCK)</text>
+        <text x="945" y="359" fill="#94a3b8" font-size="7" text-anchor="middle">4. PHI byte ratio (&#8805;30% &#8594; BLOCK)</text>
+        <text x="945" y="377" fill="#fbbf24" font-size="7" text-anchor="middle">Decision: ALLOW / MASK / BLOCK</text>
+        <text x="945" y="395" fill="#94a3b8" font-size="7" text-anchor="middle">PhiLlmScanner (GPU &#8805;14GB) + Fallback</text>
+
+        <!-- ConsentGate -->
+        <rect x="820" y="420" width="250" height="80" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="945" y="440" fill="white" font-size="10" font-weight="600" text-anchor="middle">ConsentGate</text>
+        <text x="945" y="457" fill="#94a3b8" font-size="7" text-anchor="middle">HIPAA 164.508 / GDPR Art.6</text>
+        <text x="945" y="470" fill="#94a3b8" font-size="7" text-anchor="middle">check() / grant() / revoke()</text>
+        <text x="945" y="483" fill="#94a3b8" font-size="7" text-anchor="middle">ConsentRecord + TTL + purpose consistency</text>
+        <text x="945" y="496" fill="#fb7185" font-size="7" text-anchor="middle">No declared purpose &#8594; deny</text>
+
+        <!-- Bottom row: Audit / BreakGlass / MCPGuard -->
+        <!-- AuditLogger + WORM -->
+        <rect x="30" y="500" width="320" height="110" rx="8" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="190" y="520" fill="white" font-size="11" font-weight="600" text-anchor="middle">AuditLogger + WORM Audit</text>
+        <text x="190" y="538" fill="#94a3b8" font-size="8" text-anchor="middle">SHA256 hash chain (tamper-proof)</text>
+        <text x="190" y="553" fill="#94a3b8" font-size="8" text-anchor="middle">async Queue (maxsize=1000) + file fallback</text>
+        <text x="190" y="568" fill="#94a3b8" font-size="8" text-anchor="middle">S3 Object Lock Compliance 7yr</text>
+        <text x="190" y="583" fill="#94a3b8" font-size="8" text-anchor="middle">Fanout: Local + S3 + SyslogNgTLS</text>
+        <text x="190" y="601" fill="#a78bfa" font-size="8" text-anchor="middle">&#8805;1 sink success &#8594; success</text>
+
+        <!-- BreakGlass -->
+        <rect x="380" y="500" width="320" height="110" rx="8" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="540" y="520" fill="white" font-size="11" font-weight="600" text-anchor="middle">BreakGlassManager</text>
+        <text x="540" y="538" fill="#94a3b8" font-size="8" text-anchor="middle">Emergency access: requester != approver</text>
+        <text x="540" y="553" fill="#94a3b8" font-size="8" text-anchor="middle">Token window: 30min default, 2h max</text>
+        <text x="540" y="568" fill="#94a3b8" font-size="8" text-anchor="middle">Scoping: workspace_ids + tool_pattern</text>
+        <text x="540" y="583" fill="#94a3b8" font-size="8" text-anchor="middle">+ sandbox_tier_cap</text>
+        <text x="540" y="601" fill="#fbbf24" font-size="8" text-anchor="middle">P4: BreakGlassRecorder + WORM audit</text>
+
+        <!-- MCPGuard -->
+        <rect x="730" y="500" width="320" height="110" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="890" y="520" fill="white" font-size="11" font-weight="600" text-anchor="middle">McpRegistryGuard</text>
+        <text x="890" y="538" fill="#94a3b8" font-size="8" text-anchor="middle">Registry: SSE/HTTP deny, unreg fail-closed</text>
+        <text x="890" y="553" fill="#94a3b8" font-size="8" text-anchor="middle">Ed25519 signature verification (P4-SEC-02)</text>
+        <text x="890" y="568" fill="#94a3b8" font-size="8" text-anchor="middle">Runtime: McpRuntimeNetworkObserver</text>
+        <text x="890" y="583" fill="#94a3b8" font-size="8" text-anchor="middle">3-strike auto-blacklist (24h)</text>
+        <text x="890" y="601" fill="#34d399" font-size="8" text-anchor="middle">Violations: UNDECLARED_DOMAIN/PORT/PROTOCOL</text>
+
+        <!-- ConfirmGateway detail -->
+        <rect x="30" y="430" width="180" height="60" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="120" y="448" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">ConfirmGateway</text>
+        <text x="120" y="463" fill="#94a3b8" font-size="7" text-anchor="middle">SOFT_BATCH: 3-in-1 confirm</text>
+        <text x="120" y="476" fill="#94a3b8" font-size="7" text-anchor="middle">HARD_MFA: FIDO2/WebAuthn</text>
+        <text x="120" y="489" fill="#94a3b8" font-size="7" text-anchor="middle">HARD_4EYES: 2nd person</text>
+
+        <!-- FourEyesRouter -->
+        <rect x="230" y="430" width="130" height="60" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="295" y="448" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">FourEyesRouter</text>
+        <text x="295" y="463" fill="#94a3b8" font-size="7" text-anchor="middle">force 4-eyes check</text>
+        <text x="295" y="476" fill="#94a3b8" font-size="7" text-anchor="middle">assign_approver()</text>
+        <text x="295" y="489" fill="#94a3b8" font-size="7" text-anchor="middle">req != assign</text>
+
+        <!-- TenantPolicy / AggregateGuard -->
+        <rect x="530" y="430" width="270" height="60" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="665" y="448" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">TenantPolicyOverride + SessionAggregateGuard</text>
+        <text x="665" y="463" fill="#94a3b8" font-size="7" text-anchor="middle">Tenant: deny_list / confirm &#8593; / tier &#8593;</text>
+        <text x="665" y="476" fill="#94a3b8" font-size="7" text-anchor="middle">Aggregate: phi_rows(25/50) emails(20/40)</text>
+        <text x="665" y="489" fill="#94a3b8" font-size="7" text-anchor="middle">prescriptions(15/30) net_bytes(50/100MB)</text>
+
+        <!-- EnvStrip / Crypto row -->
+        <rect x="30" y="640" width="240" height="70" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="150" y="660" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">env_strip module (build_clean_env)</text>
+        <text x="150" y="675" fill="#94a3b8" font-size="7" text-anchor="middle">Hardcoded deny floor (LD_PRELOAD etc)</text>
+        <text x="150" y="688" fill="#94a3b8" font-size="7" text-anchor="middle">DEFAULT_ALLOWLIST: PATH HOME LANG TERM</text>
+        <text x="150" y="701" fill="#94a3b8" font-size="7" text-anchor="middle">Operator can only narrow, never widen</text>
+
+        <rect x="300" y="640" width="240" height="70" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1"/>
+        <text x="420" y="660" fill="#a78bfa" font-size="9" font-weight="600" text-anchor="middle">HSM Signer / KeyRotation</text>
+        <text x="420" y="675" fill="#94a3b8" font-size="7" text-anchor="middle">LocalEd25519 (dev) 90d rotation</text>
+        <text x="420" y="688" fill="#94a3b8" font-size="7" text-anchor="middle">HsmPkcs11Signer (prod, PKCS#11)</text>
+        <text x="420" y="701" fill="#94a3b8" font-size="7" text-anchor="middle">7-day compatibility window</text>
+
+        <rect x="570" y="640" width="240" height="70" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+        <text x="690" y="660" fill="#fbbf24" font-size="9" font-weight="600" text-anchor="middle">Governance / SemanticFirewall</text>
+        <text x="690" y="675" fill="#94a3b8" font-size="7" text-anchor="middle">ContextValidatorChain</text>
+        <text x="690" y="688" fill="#94a3b8" font-size="7" text-anchor="middle">Budget &gt;1.5x &#8594; CircuitBreakerException</text>
+        <text x="690" y="701" fill="#94a3b8" font-size="7" text-anchor="middle">Prompt injection &#8594; [SECURITY ADVISORY]</text>
+
+        <rect x="840" y="640" width="220" height="70" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="950" y="660" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">SandboxState</text>
+        <text x="950" y="675" fill="#94a3b8" font-size="7" text-anchor="middle">enforce=False &#8594; PassthroughPolicy</text>
+        <text x="950" y="688" fill="#94a3b8" font-size="7" text-anchor="middle">enforce=True &#8594; BwrapPolicy</text>
+        <text x="950" y="701" fill="#94a3b8" font-size="7" text-anchor="middle">health_advisory() reporting</text>
+
+        <!-- Decision chain summary -->
+        <rect x="30" y="740" width="1040" height="50" rx="8" fill="rgba(136, 19, 55, 0.15)" stroke="#fb7185" stroke-width="1"/>
+        <text x="550" y="762" fill="#fb7185" font-size="10" font-weight="600" text-anchor="middle">Decision Chain: RuleGate(L0) &#8594; RiskRouter(L1) &#8594; WorkspaceMode &#8594; ConsentGate &#8594; ConfirmGateway(L2) &#8594; TenantOverride</text>
+        <text x="550" y="780" fill="#94a3b8" font-size="8" text-anchor="middle">Enforcement: BwrapPolicy / DlpScanner / Audit / BreakGlass / McpRegistryGuard / env_strip / HSM / SessionAggregateGuard</text>
+
+        <!-- Source tree -->
+        <rect x="30" y="810" width="1040" height="50" rx="8" fill="rgba(15, 23, 42, 0.3)" stroke="#1e293b" stroke-width="1"/>
+        <text x="50" y="830" fill="#94a3b8" font-size="9" font-weight="600">backend/src/prismclaw/engine/security/</text>
+        <text x="320" y="830" fill="#64748b" font-size="8">sandbox/ | gate/ | gate/routing/ | audit/ | dlp/ | consent/ | breakglass/ | mcp_guard/ | crypto/</text>
+
+        <!-- Fail-closed principle -->
+        <text x="50" y="850" fill="#fb7185" font-size="8" font-weight="600">FAIL-CLOSED: Unregistered &#8594; EXT_IRR+PH+IRR+4eyes | Unconfigured &#8594; deny | No bypass path exists</text>
+
+        <!-- Legend -->
+        <text x="840" y="850" fill="white" font-size="9" font-weight="600">Legend</text>
+        <rect x="890" y="843" width="10" height="7" rx="1" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="904" y="849" fill="#94a3b8" font-size="7">Security</text>
+        <rect x="950" y="843" width="10" height="7" rx="1" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="964" y="849" fill="#94a3b8" font-size="7">Sandbox</text>
+        <rect x="1010" y="843" width="10" height="7" rx="1" fill="#0f172a" stroke="#a78bfa" stroke-width="1"/>
+        <text x="1024" y="849" fill="#94a3b8" font-size="7">Audit</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>SafetyGate Pipeline</h3>
+        </div>
+        <ul>
+          <li>&#8226; 6-step evaluation: L0 static &#8594; L1 risk &#8594; mode &#8594; consent &#8594; L2 confirm &#8594; tenant</li>
+          <li>&#8226; RuleGate: 5 static rules (path/SSRF/tag/MCP)</li>
+          <li>&#8226; RiskRouter: 3D cross (scope &#215; classification &#215; reversibility)</li>
+          <li>&#8226; ConfirmGateway: SOFT_BATCH / HARD_MFA / HARD_4EYES</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>Sandbox Isolation</h3>
+        </div>
+        <ul>
+          <li>&#8226; BwrapPolicy: Linux bubblewrap process isolation</li>
+          <li>&#8226; Readonly /usr, bind workspace, tmpfs /tmp, PID isolation</li>
+          <li>&#8226; STRICT tier: --unshare-net + clearenv + setenv whitelist</li>
+          <li>&#8226; Hardcoded deny: /root, /home, /etc/ssh, /etc/ssl/private</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>DLP &amp; Compliance</h3>
+        </div>
+        <ul>
+          <li>&#8226; 4-step scan: preprocess &#8594; regex &#8594; k-anon &#8594; byte ratio</li>
+          <li>&#8226; k-anonymity: &#8805;30 PHI rows &#8594; BLOCK</li>
+          <li>&#8226; PHI byte ratio: &#8805;30% outbound &#8594; BLOCK</li>
+          <li>&#8226; WORM: SHA256 hash chain + S3 Object Lock 7yr + Fanout</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      PrismClaw &bull; Sandbox &amp; Security &bull; backend/src/prismclaw/engine/security/
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) { const orig = btn.textContent; try { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); const blob = await new Promise(r => canvas.toBlob(r, 'image/png')); await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); btn.textContent = '\u2713 Copied!'; } catch (e) { btn.textContent = '\u2717 Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPNG(btn) { const orig = btn.textContent; btn.textContent = '\u23F3 ...'; try { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); const link = document.createElement('a'); link.download = '04-sandbox-security.png'; link.href = canvas.toDataURL('image/png'); link.click(); btn.textContent = '\u2713 Done!'; } catch (e) { btn.textContent = '\u2717 Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+    async function downloadPDF(btn) { const orig = btn.textContent; btn.textContent = '\u23F3 ...'; try { const el = document.getElementById('report-container'); const r = el.getBoundingClientRect(); const pad = 32; const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 }); const imgData = canvas.toDataURL('image/png'); const { jsPDF } = window.jspdf; const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait'; const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] }); pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height); pdf.save('04-sandbox-security.pdf'); btn.textContent = '\u2713 Done!'; } catch (e) { btn.textContent = '\u2717 Failed'; } setTimeout(() => btn.textContent = orig, 2000); }
+  </script>
+</body>
+</html>

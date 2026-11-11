@@ -1,0 +1,181 @@
+# PrismClaw multi-worker production deployment.
+#
+# Architecture:
+#   Host nginx (TLS termination + frontend + reverse proxy)
+#     ├── /        → frontend/dist/ (SPA, served by nginx directly)
+#     ├── /api/ws  → worker1:8000 / worker2:8000 / worker3:8000 (WebSocket)
+#     ├── /api/v1/ → workers (OpenAI-compat SSE)
+#     └── /api/    → workers (REST API)
+#
+# Workers expose ports 8001/8002/8003 on the host for nginx to proxy to.
+# PostgreSQL (VectorChord Suite) and Redis run as sidecar containers.
+#
+# Usage:
+#   cp deploy/.env.example deploy/.env
+#   # edit deploy/.env — set all REQUIRED values
+#   docker compose -f deploy/docker-compose.multi.yml --env-file deploy/.env up -d
+#
+# Host nginx reference config: deploy/nginx.conf
+
+name: prismclaw
+
+# ── Network isolation ──────────────────────────────────────────────────
+# Internal network: workers + PG + Redis (no host exposure except worker ports)
+# External network: not used (nginx runs on host)
+networks:
+  backend:
+
+services:
+  # ── Application workers ──────────────────────────────────────────────
+  worker1: &worker
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: prismclaw:latest
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment: &worker-env
+      # ── PostgreSQL ───────────────────────────────────────────────────
+      PRISMCLAW_STORAGE_POSTGRES_DSN: postgresql+asyncpg://prismclaw:${POSTGRES_PASSWORD}@postgres:5432/prismclaw
+      # ── Redis (session / lock / affinity) ───────────────────────────
+      PRISMCLAW_STORAGE_SESSION_BACKEND: redis
+      PRISMCLAW_STORAGE_LOCK_BACKEND: redis
+      PRISMCLAW_REDIS_HOST: redis
+      PRISMCLAW_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      PRISMCLAW_AFFINITY_ENABLED: "true"
+      # ── Web channel auth ─────────────────────────────────────────────
+      PRISMCLAW_WEB_JWT_SECRET: ${PRISMCLAW_WEB_JWT_SECRET}
+      PRISMCLAW_WEB_ADMIN_TOKEN: ${PRISMCLAW_WEB_ADMIN_TOKEN}
+      # First-run admin bootstrap (after first seed, these are ignored)
+      PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID:-admin}
+      PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD}
+      # ── Production flags ─────────────────────────────────────────────
+      PRISMCLAW_LOG_LEVEL: ${PRISMCLAW_LOG_LEVEL:-INFO}
+      PRISMCLAW_WEB_WORKERS: ${PRISMCLAW_WEB_WORKERS:-4}
+    volumes:
+      - ../backend/configs:/app/backend/configs:ro
+      - prismclaw-workspaces:/app/workspaces
+    networks:
+      - backend
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2g
+        reservations:
+          cpus: "0.5"
+          memory: 512m
+    logging: &json-logging
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "prismclaw-{{.Name}}"
+    restart: unless-stopped
+
+  worker2:
+    <<: *worker
+    ports:
+      - "127.0.0.1:8002:8000"
+
+  worker3:
+    <<: *worker
+    ports:
+      - "127.0.0.1:8003:8000"
+
+  # ── PostgreSQL (VectorChord Suite) ───────────────────────────────────
+  postgres:
+    image: tensorchord/vchord-suite:pg17-latest
+    # NOTE: pin to an immutable digest in production, e.g.
+    #   tensorchord/vchord-suite@sha256:<digest>
+    environment:
+      POSTGRES_DB: prismclaw
+      POSTGRES_USER: prismclaw
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # Do NOT expose PG port to host in production.
+    # Access only from workers via the backend network.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./sql/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "prismclaw", "-d", "prismclaw"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4g
+        reservations:
+          cpus: "0.5"
+          memory: 1g
+    command: >
+      postgres
+      -c shared_preload_libraries=vchord
+      -c ssl=off
+      -c max_connections=200
+      -c work_mem=64MB
+      -c maintenance_work_mem=256MB
+      -c effective_cache_size=2GB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c log_min_duration_statement=500
+    logging:
+      <<: *json-logging
+    restart: unless-stopped
+
+  # ── Redis ────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --timeout 0
+      --tcp-keepalive 30
+      --requirepass ${REDIS_PASSWORD}
+      --rename-command FLUSHDB ""
+      --rename-command FLUSHALL ""
+    # Do NOT expose Redis port to host in production.
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768m
+        reservations:
+          cpus: "0.1"
+          memory: 256m
+    logging:
+      <<: *json-logging
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgres-data:
+  prismclaw-workspaces:

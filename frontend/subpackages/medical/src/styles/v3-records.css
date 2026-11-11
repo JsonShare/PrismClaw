@@ -1,0 +1,864 @@
+/* 智能病历 · 设计稿 v3 样式
+ *
+ * 原始来源是一份 v3 设计稿的 <style> 区块，当时作机械提取、未做改写。
+ * **注意**：那份设计稿（曾被记作 docs/prototype/smart-records-v3.html）在当前仓库里
+ * 已不存在，git 历史中也查无此文件 —— 因此本文件就是这部分样式的唯一权威来源，
+ * 不要再按「去设计稿对照」的方式维护它。
+ *
+ * 此后为接入项目主题体系所做的工程处理（原注释只列了前两项，实际已不止）：
+ *   1) 去掉 :root / * / body / .app 等全局规则（与项目主题体系冲突）
+ *   2) 顶部 .mw-v3 把设计稿变量名映射到项目主题令牌
+ *   3) 字号 / 圆角改走宿主档位令牌（--fs-* / --radius-*），不再写字面量
+ *   4) 文字弱色统一到 --c-text-secondary（原第三档在白底上仅 3.45:1，低于 AA）
+ *   5) 语义色不再当实心填充用：暗色下 --c-accent / --c-success 是为深底**提亮**过的，
+ *      叠白字实测 2.53:1；accent 实心改走宿主主按钮对 --c-btn-primary-bg/-fg
+ *   6) 内嵌面 / 悬停态退一档到 --c-surface-3（块面走 --c-surface-2）
+ *   7) 禁用态不透明度对齐代码库惯例 0.5
+ *   8) 表面改「三分法」：容器不铺底 / 最小可视单元 = --c-surface-2 / 单元内嵌 = --c-surface-3。
+ *      **分层由底色承担，但结构性分隔线必须保留** —— 曾一度把块描边与所有行/栏分隔线一并删掉
+ *      （「分层靠底色就够」），结果是数据表失去行线、三栏失去栏线、列表失去条目线，
+ *      扫描性全面下降。现口径：底色负责「面」，分隔线负责「界」，两者不是替代关系。
+ *      保留清单见 medical.css 的「花名册表格行线」段与本文件各处的 border-* 注释。
+ * 页面需在最外层挂 .mw-v3，变量才有值。
+ * 注意：域内四个知识库/患者页**不挂 .mw-v3**，它们的规则在 medical.css（裸 mw-* 类）。
+ */
+.mw-v3 {
+  /* 两档**同值** —— 见文件头第 4 条：原第三档在白底上仅 3.45:1（低于 AA），
+     已统一到 --c-text-secondary。保留两个名字是为了让「本域文字只有两档」这件事
+     在源码里可见、将来若要恢复第三档不必改 28 处消费点。
+     不要据此以为此处存在两档弱色。 */
+  --c-text-2: var(--c-text-secondary);
+  --c-text-3: var(--c-text-secondary);
+  --c-border-s: color-mix(in srgb, var(--c-text) 15%, transparent);
+  --c-accent-mid: color-mix(in srgb, var(--c-accent) 15%, transparent);
+  --c-success-s: var(--c-success-soft);
+  --c-warning-s: var(--c-warning-soft);
+  --c-danger-s: var(--c-danger-soft);
+  --c-purple-s: var(--c-tag-purple-bg);
+  --radius-sm: 0.375rem;
+  --font-mono: 'SF Mono', ui-monospace, monospace;
+
+  /* 这里原本还有 `--radius: var(--radius-lg, 8px)` 与 `--radius-lg: var(--radius-xl, 12px)`。
+     `--radius-lg` 与宿主同名（web/src/theme/*.css: --radius-lg: 8px），域内一覆盖，
+     .mw-v3 子树里所有读 --radius-lg 的宿主组件都会拿到 12px；而 `--radius` 转发
+     --radius-lg，于是它实际解析成 12px，而非注释所写的 8px —— 一个级联陷阱。
+     两者的域内定义已删，消费点直接引宿主令牌：
+       列表行 / 输入 = var(--radius-lg)     卡片 / 模态 = var(--radius-xl) */
+}
+
+/* ── 全局容器 ── */
+/* ── 顶部面板（header + 四步引导栏）──
+   容器角色：不铺底（露画布），下缘一条线把它与三栏主体分开。 */
+.mw-v3 .top-panel {
+  border-bottom: 1px solid var(--c-border);
+  padding: 22px 24px 20px;
+}
+.mw-v3 .page-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 18px;
+}
+/* 页头右侧操作组：HIS 状态 / 上传 / 待指派。
+   整体 margin-left:auto 靠右，三控件间距由 gap 统一；待指派不再是浮在页面上的固定按钮。 */
+.mw-v3 .header-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.mw-v3 .header-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--c-accent-soft);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c-accent); font-size: var(--fs-md); font-weight: 700;
+}
+.mw-v3 .header-title {
+  font-size: var(--fs-lg); font-weight: 700; color: var(--c-text);
+  letter-spacing: -0.3px;
+}
+.mw-v3 .header-subtitle {
+  font-size: var(--fs-xs); color: var(--c-text-3); margin-top: 2px;
+}
+/* ── 顶部操作（上传 / HIS 同步状态）──
+   原「四步使用引导栏」(guide-*) 已移除：静态常驻、占高、信息密度低，是页面最大噪音源。
+   上传按钮用 .upload-btn-solid，HIS 同步状态用 .his-sync-chip（见下方 HIS 段）。 */
+.mw-v3 .upload-btn-solid {
+  height: 38px; padding: 0 20px; border-radius: 8px;
+  border: none; background: var(--c-btn-primary-bg);
+  color: var(--c-btn-primary-fg); font-size: var(--fs-md); font-weight: 500;
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.mw-v3 .upload-btn-solid:hover { opacity: 0.88; }
+.mw-v3 .upload-btn-solid svg { width: 15px; height: 15px; }
+
+/* ── 两区主体：左=患者列表（导航），右=单页文档（报告目录 + 选中报告，融合）──
+   左栏固定 230–280px 只放患者；右栏 1fr 占满，页内纵向排布「页头 → 报告目录条 → 选中报告详情」。
+   目录条是页内导航、详情紧随其下，二者同属一页，不是左右分栏。
+   不设断点：可用宽度同时受「待指派」侧窗（360px）与域导航（192px）挤压。 */
+.mw-v3 .main-cols {
+  flex: 1; display: grid; min-height: 0;
+  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+}
+
+/* ── 一栏：患者列表 ── */
+.mw-v3 .col-browse {
+  border-right: 1px solid var(--c-border);
+  display: flex; flex-direction: column; min-height: 0;
+}
+/* 固定 84px 与右栏 .pt-hero 同高：两栏的分隔线才能落在同一水平线上。
+   高度写死而非由内容撑开，是因为「右栏身份带有几行内容」会随患者字段变化。 */
+.mw-v3 .browse-top {
+  border-bottom: 1px solid var(--c-border);
+  height: 84px; padding: 0 12px;
+  display: flex; flex-direction: column; justify-content: center; gap: 8px;
+}
+.mw-v3 .browse-head { display: flex; align-items: baseline; gap: 6px; }
+.mw-v3 .browse-title {
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: 1.2px;
+  color: var(--c-text-3);
+}
+.mw-v3 .browse-count { font-size: var(--fs-xs); color: var(--c-text-3); font-variant-numeric: tabular-nums; }
+/* .browse-toolbar 已移除：来源筛选/时间轴已上移至右侧单页页头（.doc-filters） */
+.mw-v3 .search-box {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 12px;
+  border-radius: 8px;
+  background: var(--c-surface-3);
+}
+.mw-v3 .search-box input {
+  flex: 1; min-width: 0; border: none; background: transparent; outline: none;
+  font-size: var(--fs-sm); color: var(--c-text);
+}
+.mw-v3 .search-box input::placeholder { color: var(--c-text-3); }
+.mw-v3 .search-icon { color: var(--c-text-3); display: flex; align-items: center; }
+.mw-v3 .search-icon svg { width: 14px; height: 14px; }
+
+.mw-v3 .browse-tree {
+  flex: 1; overflow-y: auto; padding: 4px 8px;
+}
+.mw-v3 .browse-tree::-webkit-scrollbar { width: 4px; }
+.mw-v3 .browse-tree::-webkit-scrollbar-thumb { background: var(--c-border-s); border-radius: 4px; }
+
+/* ── 患者卡片 ── */
+/* 患者卡片（左侧列表，纯列表、不展开报告） */
+.mw-v3 .patient-node {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-lg);
+  cursor: pointer; transition: background 0.15s; margin-bottom: 2px;
+  background: var(--c-surface-2);
+}
+.mw-v3 .patient-node:hover { background: var(--c-surface-3); }
+.mw-v3 .patient-node.active { background: color-mix(in srgb, var(--c-accent) 16%, var(--c-surface-3)); }
+
+.mw-v3 .patient-info { flex: 1; min-width: 0; }
+/* 姓名行必须能收缩且姓名不逐字换行：
+   缺 min-width:0 时 flex 会把姓名压到单字宽，三字姓名就竖排了。
+   允许换行：单栏实测 199px 时「姓名 + 风险徽标 + 份数」共约 157px，
+   而 patient-info 只有 117px —— 不换行则三者的收缩额度全从姓名扣，
+   三字姓名被压成「王…」（姓名是卡片的主标识，不能是第一个牺牲品）。
+   换行只在装不下时发生（flex-wrap 的换行判据是 flex-basis 之和），
+   宽栏下三者仍在同一行，故不需要断点/容器查询。 */
+.mw-v3 .patient-name-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  flex-wrap: wrap; row-gap: 2px;
+}
+.mw-v3 .patient-name {
+  font-size: var(--fs-md); font-weight: 600; color: var(--c-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+
+.mw-v3 .risk-pill {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 1px 8px; border-radius: var(--radius-sm);
+  font-size: var(--fs-xs); font-weight: 600;
+  flex: 0 0 auto; white-space: nowrap;
+}
+.mw-v3 .risk-pill.high { background: var(--c-danger-s); color: var(--c-danger); }
+.mw-v3 .risk-pill.mid { background: var(--c-warning-s); color: var(--c-warning); }
+.mw-v3 .risk-pill.low { background: var(--c-success-s); color: var(--c-success); }
+
+.mw-v3 .patient-diagnosis {
+  font-size: var(--fs-sm); color: var(--c-text-2);
+  margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 分页 */
+.mw-v3 .pager {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--c-border);
+  font-size: var(--fs-xs); color: var(--c-text-2);
+}
+.mw-v3 .pager-btn {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: var(--fs-xs); color: var(--c-text-2);
+  transition: all 0.15s;
+}
+.mw-v3 .pager-btn:hover { background: var(--c-surface-3); border-color: var(--c-border-s); }
+/* 禁用态不透明度对齐代码库惯例 0.5（.mw-btn:disabled / .sci-btn:disabled），
+   原 0.3 是本文件独有的离群值。 */
+.mw-v3 .pager-btn.disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── 二栏：报告列表（已并入左侧「患者→报告树」，不再独立成栏）── */
+
+/* 面包屑栏（breadcrumb-*）已随「二栏合树」移除：来源筛选/时间轴已上移 browse-toolbar，
+   患者名作为树节点呈现，不再单独成栏。 */
+/* ── Phase 1 报告检索栏 ── */
+/* 检索行允许换行：报告列实测 199px（待指派侧窗常驻时），
+   三个控件（输入框 + 类型 + 状态）在 175px 内装不下。
+   不换行的后果不是「变窄」而是**裁字** —— <select> 没有省略号，
+   标签被从中间切断成「全部类」「全部状」（原生控件按字符盒裁剪，无省略号）。
+   故：输入框给 120px 基准（可长可短），两个下拉 flex:0 0 auto 不再收缩，
+   装不下时下拉整体落到第二行。 */
+.mw-v3 .report-search {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 6px;
+  padding: 8px 12px 10px;
+}
+.mw-v3 .report-search-input {
+  flex: 1 1 120px; min-width: 0; height: 30px; padding: 0 10px; border-radius: var(--radius-sm);
+  background: var(--c-surface-3); color: var(--c-text);
+  font-size: var(--fs-sm); outline: none;
+}
+/* 焦点只加宿主环，**不再改底色**：原写法把底色切成 --c-surface，而暗色下
+   --c-surface(#161B22) 比 --c-surface-3(#1C2128) 更深 —— 聚焦时输入框反而变暗，
+   焦点方向反了。输入框本就有独立底色，环已足够指示焦点。 */
+.mw-v3 .report-search-input:focus { box-shadow: 0 0 0 2px var(--c-input-ring); }
+.mw-v3 .report-filter {
+  height: 30px; padding: 0 6px; min-width: 0; flex: 0 0 auto;
+  border-radius: var(--radius-sm); background: var(--c-surface-3);
+  color: var(--c-text-2); font-size: var(--fs-xs); outline: none; cursor: pointer;
+}
+.mw-v3 .report-filter:focus { box-shadow: 0 0 0 2px var(--c-input-ring); }
+.mw-v3 .report-search-clear {
+  height: 30px; padding: 0 10px; border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm); background: var(--c-surface-3);
+  color: var(--c-text-2); font-size: var(--fs-xs); cursor: pointer; white-space: nowrap;
+  flex: 0 0 auto;
+}
+.mw-v3 .report-search-clear:hover { color: var(--c-text); border-color: var(--c-text-3); }
+.mw-v3 .report-pt { color: var(--c-text-2); font-weight: 600; }
+/* .report-list 已移除：报告列表改为 browse-tree 内的 report-node（树子项 / 检索扁平列表） */
+
+/* ── 报告卡片 ── */
+.mw-v3 .report-card {
+  display: block; padding: 10px 12px; border-radius: var(--radius-lg);
+  cursor: pointer; transition: all 0.15s;
+  margin-bottom: 2px; position: relative;
+  background: var(--c-surface-2);
+}
+.mw-v3 .report-card:hover {
+  background: var(--c-surface-3);
+}
+.mw-v3 .report-card.active {
+  background: color-mix(in srgb, var(--c-accent) 16%, var(--c-surface-3));
+}
+/* 报告名必须独占一行 —— 它是卡片的标题（主标识）。
+   一行里塞 [类型标签][报告名][移动] 时，标签 flex-shrink:0、按钮 0 0 auto，
+   收缩额度只能从报告名扣：报告列 199px 时留给报告名仅 ~57px，
+   于是「胸部 CT 平扫 + 增强」被压成「胸…」——标题退化成 1 个字。
+   改用视觉顺序（order）而非改 DOM：标签 + 移动同行居右，报告名整行换行。
+   用 order 不动源码，键盘 Tab 顺序仍与阅读顺序一致（标签 → 报告名 → 移动）。
+   宽度充足时也是这个两行形态 —— 三种栏宽下形态一致，比「有时一行有时两行」可预期。 */
+.mw-v3 .report-line1 {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  flex-wrap: wrap; row-gap: 2px;
+}
+.mw-v3 .report-line1 .report-move-btn { order: 1; flex: 0 0 auto; }
+.mw-v3 .report-type-tag {
+  order: 0;
+  padding: 2px 8px; border-radius: var(--radius-sm); flex: 0 0 auto;
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.3px;
+  background: var(--c-surface-3); color: var(--c-text-2);
+}
+.mw-v3 .report-name {
+  order: 2; flex: 1 1 100%;
+  font-size: var(--fs-md); font-weight: 600; color: var(--c-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.mw-v3 .report-card.active .report-name { color: var(--c-accent); }
+
+/* 第二行：日期 */
+.mw-v3 .report-line2 {
+  margin-top: 3px; font-size: var(--fs-xs); color: var(--c-text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── 三栏：报告详情 ── */
+.mw-v3 .col-detail {
+  /* 三栏同为「容器」角色 → 都不铺底，分界交给栏间竖线。
+     原来只有详情栏铺 --c-surface-3，同级三栏两种待遇，凭空多出一大块灰。 */
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  /* 容器查询基准：详情栏宽度在「侧窗开/关」两态下相差 155px（293 ↔ 448），
+     用视口断点表达不了它。挂在这里而不是 .mw-v3 / .main-cols —— 见摘要 KV 段注释：
+     抽屉、模态、解析浮层都在本元素之外，包含块改写不触及任何 fixed 元素。 */
+  container-type: inline-size;
+}
+.mw-v3 .detail-scroll {
+  /* 上下内边距下沉到各带（页头 / 筛选 / 列表）——页头条才能与左栏搜索条同顶 */
+  flex: 1; overflow-y: auto; padding: 0 0 24px;
+}
+.mw-v3 .detail-scroll::-webkit-scrollbar { width: 5px; }
+.mw-v3 .detail-scroll::-webkit-scrollbar-thumb { background: var(--c-border-s); border-radius: 4px; }
+
+/* ── 患者档案页（右栏）──
+   四段纵向：身份带 / 工具条 / 按年时间轴 / 空态。
+   身份带与左栏 .browse-top 同高（84px）、同顶，两栏分隔线落在同一水平线上；
+   内容限宽 1080px 并**左对齐**（不是居中）—— 超宽屏下报告行不会被拉成 1600px 长条，
+   左缘仍与工具条、时间轴、以及左栏保持同一条竖线。 */
+.mw-v3 .pt-hero {
+  display: flex; align-items: center; gap: 16px;
+  height: 84px; padding: 0 28px;
+  border-bottom: 1px solid var(--c-border);
+  max-width: 1080px; margin-right: auto;
+}
+.mw-v3 .pt-hero-main {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.mw-v3 .pt-name-row {
+  display: flex; align-items: baseline; gap: 8px;
+  min-width: 0; flex-wrap: wrap; row-gap: 2px;
+}
+/* 姓名是这一页的主标识：独占权重，不与风险标 / 事实串争收缩额度 */
+.mw-v3 .pt-name {
+  margin: 0; font-size: var(--fs-xl); font-weight: 700;
+  letter-spacing: -0.3px; line-height: 1.25; color: var(--c-text);
+  white-space: nowrap;
+}
+.mw-v3 .pt-facts {
+  font-size: var(--fs-sm); color: var(--c-text-2);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mw-v3 .pt-sub {
+  display: flex; align-items: center; gap: 10px;
+  font-size: var(--fs-xs); color: var(--c-text-3);
+}
+.mw-v3 .pt-count { color: var(--c-text-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 事实串之间的分隔用竖线，不用「·」——「·」已在 pt-facts 内部承担分隔，两种混用会显得脏 */
+.mw-v3 .pt-sub-item { position: relative; padding-left: 11px; }
+.mw-v3 .pt-sub-item::before {
+  content: ''; position: absolute; left: 0; top: 50%;
+  width: 1px; height: 10px; transform: translateY(-50%);
+  background: var(--c-border);
+}
+
+/* 通用按钮（身份带动作 / 空态动作）：高度 32，与工具条控件同档 */
+.mw-v3 .pt-hero-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; }
+.mw-v3 .pt-btn {
+  height: 32px; padding: 0 12px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-sm); font-weight: 600; white-space: nowrap;
+  border: 1px solid transparent; background: transparent; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.mw-v3 .pt-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+.mw-v3 .pt-btn-ghost { border-color: var(--c-border); color: var(--c-text-2); }
+.mw-v3 .pt-btn-ghost:hover { background: var(--c-surface-3); color: var(--c-text); }
+.mw-v3 .pt-btn-primary { background: var(--c-btn-primary-bg); color: var(--c-btn-primary-fg); }
+.mw-v3 .pt-btn-primary:hover { opacity: 0.88; }
+
+/* 工具条：与身份带同宽同左缘 */
+.mw-v3 .pt-toolbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 6px;
+  padding: 9px 28px; border-bottom: 1px solid var(--c-border);
+  max-width: 1080px; margin-right: auto;
+}
+
+/* ── 时间轴：按年分段 ──
+   年份是一段的分界，不逐行重复。行内只留 06-18，日期扫描靠 tabular-nums 对齐。 */
+.mw-v3 .pt-timeline { padding: 0 28px 8px; max-width: 1080px; margin-right: auto; }
+.mw-v3 .pt-year { padding-top: 14px; }
+.mw-v3 .pt-year-head { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
+.mw-v3 .pt-year-label {
+  font-size: var(--fs-xs); font-weight: 700; letter-spacing: 1.2px;
+  color: var(--c-text-3); font-variant-numeric: tabular-nums;
+}
+.mw-v3 .pt-year-rule { flex: 1; height: 1px; background: var(--c-border); }
+
+/* 一行 = 日期列 + 轨道 + 卡片 + chevron。
+   轨道单独成一列（而不是绝对定位压在内边距上），行高怎么变都对齐。 */
+.mw-v3 .ptl-row { display: flex; align-items: stretch; }
+.mw-v3 .ptl-date {
+  flex: 0 0 46px; padding-top: 12px;
+  font-family: var(--font-mono); font-size: var(--fs-xs);
+  color: var(--c-text-3); font-variant-numeric: tabular-nums; letter-spacing: -0.2px;
+}
+.mw-v3 .ptl-rail { position: relative; flex: 0 0 18px; }
+.mw-v3 .ptl-rail::before {
+  content: ''; position: absolute; left: 4px; top: 0; bottom: 0;
+  width: 1px; background: var(--c-border);
+}
+/* 每组最后一行的线只画到圆点：否则组尾会吊着一截断线 */
+.mw-v3 .pt-year > .ptl-row:last-child .ptl-rail::before { bottom: auto; height: 17px; }
+.mw-v3 .ptl-dot {
+  position: absolute; left: 0; top: 13px;
+  width: 9px; height: 9px; border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--c-surface);
+}
+.mw-v3 .ptl-dot.src-his { background: var(--c-accent); }
+.mw-v3 .ptl-dot.src-up { background: var(--c-text-3); }
+
+.mw-v3 .ptl-card {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  padding: 9px 8px 10px 10px; margin-bottom: 2px;
+  text-align: left; border: none; border-radius: var(--radius-lg);
+  background: transparent; cursor: pointer; transition: background 0.15s;
+}
+.mw-v3 .ptl-card:hover { background: var(--c-surface-3); }
+.mw-v3 .ptl-l1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mw-v3 .ptl-type {
+  flex: 0 0 auto; padding: 1px 7px; border-radius: var(--radius-sm);
+  font-size: var(--fs-xs); font-weight: 600;
+  background: var(--c-surface-3); color: var(--c-text-2); white-space: nowrap;
+}
+/* 标题拿剩余宽度并省略：类型与状态标都不许压缩它（标题是这一行的主标识） */
+.mw-v3 .ptl-title {
+  flex: 1 1 auto; min-width: 0;
+  font-size: var(--fs-md); font-weight: 600; color: var(--c-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mw-v3 .ptl-pt { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--c-text-3); white-space: nowrap; }
+/* 行内标：语义色只给「要人注意」的状态，解析中退到中性灰 */
+.mw-v3 .ptl-flag {
+  flex: 0 0 auto; margin-left: auto; padding: 1px 7px; border-radius: var(--radius-sm);
+  font-size: var(--fs-xs); font-weight: 700; white-space: nowrap;
+}
+.mw-v3 .ptl-flag.warn { background: var(--c-warning-s); color: var(--c-warning); }
+.mw-v3 .ptl-flag.danger { background: var(--c-danger-s); color: var(--c-danger); }
+.mw-v3 .ptl-flag.info { background: var(--c-surface-3); color: var(--c-text-2); }
+.mw-v3 .ptl-l2 {
+  font-size: var(--fs-xs); color: var(--c-text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mw-v3 .ptl-l3 {
+  display: flex; align-items: baseline; gap: 6px; min-width: 0;
+  font-size: var(--fs-sm); color: var(--c-text-2);
+}
+.mw-v3 .ptl-l3-key { flex: 0 0 auto; font-size: var(--fs-xs); color: var(--c-text-3); }
+.mw-v3 .ptl-l3-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mw-v3 .ptl-chev {
+  flex: 0 0 auto; align-self: center; padding-left: 6px;
+  color: var(--c-text-3); font-size: 16px; transition: color 0.15s;
+}
+.mw-v3 .ptl-card:hover + .ptl-chev { color: var(--c-accent); }
+
+/* 空态 / 引导：左对齐、留白撑高度，不做居中大图标（居中空态在宽栏里像断网页面） */
+.mw-v3 .pt-hint { font-size: var(--fs-sm); color: var(--c-text-3); padding: 14px 2px; }
+.mw-v3 .pt-blank { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 44px 0 24px; max-width: 420px; }
+.mw-v3 .pt-blank-title { margin: 0; font-size: var(--fs-md); font-weight: 600; color: var(--c-text); }
+.mw-v3 .pt-blank-hint { margin: 0 0 8px; font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.7; }
+.mw-v3 .pt-intro { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 56px 28px 0; max-width: 470px; }
+.mw-v3 .pt-intro-mark {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--c-accent-soft); color: var(--c-accent);
+  font-size: var(--fs-lg); font-weight: 700;
+}
+.mw-v3 .pt-intro-title { margin: 4px 0 0; font-size: var(--fs-xl); font-weight: 700; letter-spacing: -0.3px; }
+.mw-v3 .pt-intro-text { margin: 0; font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.7; }
+.mw-v3 .pt-intro-note { margin: 2px 0 0; font-size: var(--fs-xs); color: var(--c-text-3); }
+
+/* 上传弹层：页内上传的「归档至 X」提示条 */
+.mw-v3 .upl-target {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px; padding: 7px 10px; border-radius: 8px;
+  background: var(--c-accent-soft);
+}
+.mw-v3 .upl-target-label { font-size: var(--fs-xs); color: var(--c-text-2); }
+.mw-v3 .upl-target-name { font-size: var(--fs-sm); font-weight: 700; color: var(--c-accent); }
+
+.mw-v3 .doc-dir-pager { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: var(--fs-xs); color: var(--c-text-2); }
+
+
+/* ── 区块 ── */
+/* 内容卡：与科研域 .sci-panel 同一配方（底色分层，不铺描边不投影）。
+   影已去掉 —— 三分法下层次由底色承担；且原先写死的亮色影在暗色下打在黑底上
+   几乎不可见，还会让两域卡片配方不一致。 */
+.mw-v3 .section {
+  background: var(--c-surface-2);
+  border-radius: var(--radius-xl, 12px);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.mw-v3 .section-head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.mw-v3 .section-icon {
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-xs); font-weight: 700;
+  /* 区块图标统一中性灰：彩色只留给真正需警示处(H/L 异常、高危)，
+     不再用三色图标争抢注意力 —— 「没有主次」的主要来源之一。 */
+  background: var(--c-surface-3); color: var(--c-text-2);
+}
+.mw-v3 .section-title { font-size: var(--fs-md); font-weight: 600; }
+
+/* ── AI 建议行 ── */
+.mw-v3 .ai-note {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-top: 12px; padding: 8px 12px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--c-accent) 8%, var(--c-surface-2));
+}
+.mw-v3 .ai-note-label {
+  flex-shrink: 0; font-size: var(--fs-xs); font-weight: 600;
+  color: var(--c-accent);
+}
+.mw-v3 .ai-note-text {
+  font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.6;
+}
+
+/* ── 摘要 KV ──
+   宽栏下键列固定 72px 很好：给「检查所见 / 对比既往 / 诊断意见」这类短标签
+   留出一条对齐轴，读数稳定。
+   但详情栏只有 293px 时（待指派侧窗常驻 = 占掉 360px，是常见态而非边缘态），
+   值列只剩 293 − 61(栏内边距) − 24(note 内边距) − 72(键列) − 12(列间距) ≈ 124px，
+   约 9 个汉字一行 —— 临床长文被压成一条竖带，断句全乱（实测截图确认）。
+   故窄栏下改「键上值下」堆叠：值列拿到整行 ~208px（≈16 字/行），键降级为小标题。
+   这就是窄容器里定义列表的常规形态。
+   容器挂 .col-detail：抽屉 / 模态 / 解析浮层都在它之外（浮层走 portal），
+   故 container-type 的包含块改写不会波及任何 position:fixed 元素。 */
+.mw-v3 .kv-grid { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px 12px; align-items: baseline; }
+.mw-v3 .kv-key { font-size: var(--fs-sm); color: var(--c-text-3); font-weight: 500; text-align: left; line-height: 1.6; }
+.mw-v3 .kv-val { font-size: var(--fs-md); color: var(--c-text); line-height: 1.6; }
+
+@container (max-width: 360px) {
+  .mw-v3 .kv-grid { grid-template-columns: minmax(0, 1fr); gap: 2px 0; }
+  .mw-v3 .kv-key { text-align: left; }
+  /* 键值之间贴紧(2px)、对与对之间拉开(10px)：
+     区分「一对之内」和「两对之间」，而不是均匀间距糊成一片。
+     注：不能用 .kv-key:not(:first-child) 做这件事 ——
+     每个键都被 <span style="display:contents"> 包着、都是各自父节点的首子元素，
+     该选择器恒不命中（会静默失效）。 */
+  .mw-v3 .kv-val { margin-bottom: 10px; }
+}
+
+/* ── 编辑触发按钮 ── */
+.mw-v3 .section-edit-trigger {
+  margin-left: auto;
+  height: 24px; padding: 0 10px; border-radius: var(--radius-sm);
+  border: none; background: var(--c-accent-soft);
+  display: inline-flex; align-items: center; gap: 4px;
+  cursor: pointer; color: var(--c-accent);
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.2px;
+  transition: all 0.15s;
+}
+.mw-v3 .section-edit-trigger:hover { background: var(--c-accent-mid); }
+.mw-v3 .section-edit-trigger svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+/* ── 编辑态 ── */
+.mw-v3 .section.editing {
+  /* 编辑态 = 一圈 accent 内描边 + 淡洗色底，不再叠卡片影（影已随三分法去掉） */
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-accent) 8%, transparent);
+  background: color-mix(in srgb, var(--c-accent) 7%, var(--c-surface-2));
+}
+.mw-v3 .section.editing .section-edit-trigger { display: none; }
+
+/* 编辑底部操作栏 */
+.mw-v3 .section-edit-bar {
+  display: none; align-items: center; justify-content: flex-end; gap: 8px;
+  margin-top: 12px; padding-top: 12px;
+  /* 分界用一条线，不用整条灰底 —— 灰底是我上一轮加的，卡片本身已是灰面，
+     再铺一层同级灰只会糊成一片，且原设计就是一条线。 */
+  border-top: 1px solid var(--c-border);
+}
+.mw-v3 .section.editing .section-edit-bar { display: flex; }
+
+.mw-v3 .edit-bar-hint {
+  margin-right: auto;
+  font-size: var(--fs-xs); color: var(--c-text-3);
+}
+.mw-v3 .edit-bar-save {
+  height: 28px; padding: 0 14px; border-radius: var(--radius-sm);
+  border: none; background: var(--c-btn-primary-bg);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--c-btn-primary-fg);
+  cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+  transition: opacity 0.15s;
+}
+.mw-v3 .edit-bar-save:hover { opacity: 0.88; }
+.mw-v3 .edit-bar-cancel {
+  height: 28px; padding: 0 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border); background: transparent;
+  font-size: var(--fs-sm); font-weight: 500; color: var(--c-text-2);
+  cursor: pointer; display: inline-flex; align-items: center;
+  transition: all 0.15s;
+}
+.mw-v3 .edit-bar-cancel:hover { background: var(--c-surface-3); }
+
+/* 可编辑字段态 */
+.mw-v3 .section.editing .kv-val, .mw-v3 .section.editing .ai-note-text, .mw-v3 .section.editing .raw-doc-p, .mw-v3 .section.editing .raw-doc-meta-item, .mw-v3 .section.editing .raw-doc-sig {
+  outline: none; border-radius: 3px;
+  background: color-mix(in srgb, var(--c-accent) 4%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-accent) 12%, transparent);
+  padding: 1px 4px; margin: -1px -4px;
+  transition: box-shadow 0.15s;
+}
+.mw-v3 .section.editing .kv-val:focus, .mw-v3 .section.editing .ai-note-text:focus, .mw-v3 .section.editing .raw-doc-p:focus, .mw-v3 .section.editing .raw-doc-meta-item:focus, .mw-v3 .section.editing .raw-doc-sig:focus {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--c-accent) 6%, transparent);
+}
+/* 此处原有 .save-toast（保存提示）与 .source-modal*（源文件弹窗）两组规则 ——
+   它们是 v3 原型 HTML 机械提取的产物，但对应功能从未在 React 侧实现：
+   全仓 TS/TSX 对这两个类名零引用（原型 HTML 自带一份，互不影响）。
+   死代码不修只删，故整块移除；日后若真要做，请重新提取并同步域令牌。
+   教训：给「零引用」的样式打补丁（例如调 hover 底色）等于是给死代码续命。 */
+
+/* ── 报告原文区 ── */
+.mw-v3 .raw-body { padding-right: 4px; }
+.mw-v3 .raw-doc {
+  background: var(--c-surface-2);
+  border-radius: var(--radius-sm);
+  padding: 20px;
+  font-size: var(--fs-sm); color: var(--c-text); line-height: 1.8;
+}
+.mw-v3 .raw-doc-title {
+  text-align: left; font-size: var(--fs-lg); font-weight: 700;
+  letter-spacing: 0.5px; margin-bottom: 16px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-border-s);
+}
+.mw-v3 .raw-doc-meta {
+  display: flex; flex-wrap: wrap; gap: 16px;
+  font-size: var(--fs-sm); color: var(--c-text-2);
+  margin-bottom: 16px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.mw-v3 .raw-doc-meta-item { white-space: nowrap; }
+.mw-v3 .raw-doc-h4 {
+  font-size: var(--fs-sm); font-weight: 700; color: var(--c-text);
+  margin-top: 16px; margin-bottom: 4px;
+}
+.mw-v3 .raw-doc-p {
+  text-indent: 2em; margin-bottom: 4px;
+}
+.mw-v3 .raw-doc-sig {
+  text-align: right; margin-top: 20px;
+  font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.8;
+}
+
+/* 此处原有 .source-modal*（源文件弹窗）与 .modal-btn-* 两组规则 ——
+   与上方 .save-toast 同源，都是 v3 原型 HTML 机械提取的遗留，React 侧零引用。
+   死代码不修只删：整块移除，别再加回来。 */
+
+
+/* 面包屑操作按钮 */
+.mw-v3 .action-btn {
+  height: 28px; padding: 0 10px; border-radius: var(--radius-sm);
+  border: none; cursor: pointer; font-size: var(--fs-xs); font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px;
+  transition: all 0.15s; letter-spacing: 0.2px;
+}
+.mw-v3 .action-btn svg { width: 12px; height: 12px; flex-shrink: 0; }
+.mw-v3 .action-btn-upload {
+  background: var(--c-accent-soft); color: var(--c-accent);
+}
+.mw-v3 .action-btn-upload:hover { background: var(--c-accent-mid); }
+.mw-v3 .action-btn-archive {
+  background: var(--c-surface-3); color: var(--c-text-2);
+}
+.mw-v3 .action-btn-archive:hover { background: var(--c-border-s); }
+
+/* ── 顶栏常驻「待指派 N」触发 ── */
+
+/* ── 待指派 · 右侧常驻侧窗（覆盖式，可折叠留边）──── */
+@keyframes inbox-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes inbox-slide-out {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+/* 侧窗常显时为内容预留右侧 360px，避免遮挡顶部「上传病历」按钮与三栏主体 */
+.mw-v3.app { transition: padding-right 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.mw-v3.inbox-shown { padding-right: 360px; }
+.mw-v3 .inbox-slideout {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  max-width: 86vw;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--c-surface);
+  border-left: 1px solid var(--c-border);
+  box-shadow: var(--mw-shadow-drawer);
+  animation: inbox-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.mw-v3 .inbox-slideout.closing {
+  animation: inbox-slide-out 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  pointer-events: none;
+}
+.mw-v3 .inbox-slideout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+.mw-v3 .inbox-slideout-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--c-text);
+}
+.mw-v3 .inbox-slideout-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+  background: var(--c-btn-primary-bg);
+  color: var(--c-btn-primary-fg);
+}
+.mw-v3 .inbox-slideout-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 细滚动条 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+.mw-v3 .inbox-slideout-body::-webkit-scrollbar { width: 4px; }
+.mw-v3 .inbox-slideout-body::-webkit-scrollbar-track { background: transparent; }
+.mw-v3 .inbox-slideout-body::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+  border-radius: 2px;
+}
+.mw-v3 .inbox-report-card {
+  text-align: left;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  background: var(--c-surface-2);
+}
+.mw-v3 .inbox-report-card:hover {
+  background: var(--c-surface-3);
+  box-shadow: var(--shadow-sm);
+}
+.mw-v3 .inbox-empty {
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: var(--fs-sm);
+  color: var(--c-text-3);
+  text-align: center;
+}
+
+/* ── 指派抽屉（AssignDrawer）视觉打磨 ── */
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.mw-v3 .mw-overlay [role="dialog"] {
+  animation: modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  border-radius: var(--radius-xl, 12px);
+  box-shadow: var(--glass-shadow);
+}
+/* 报告详情弹窗：底色退回页面级 --c-surface。
+   Panel 默认走 .mw-glass(--c-surface-2)，而内部 .section 也是 --c-surface-2，
+   同值会糊成一片、失去卡片层次；退一档底色让卡片重新浮起来。 */
+.mw-v3 .report-detail-dialog { background: var(--c-surface); }
+/* 详情弹窗内的状态提示条：把列表行上的「需核验 / 解析失败」展开成一句话，
+   否则那个标只提出问题、不给落点。 */
+.mw-v3 .rd-flag {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-bottom: 14px; padding: 9px 12px; border-radius: var(--radius-sm);
+}
+.mw-v3 .rd-flag.warn { background: var(--c-warning-s); }
+.mw-v3 .rd-flag.danger { background: var(--c-danger-s); }
+.mw-v3 .rd-flag-tag { flex: 0 0 auto; font-size: var(--fs-xs); font-weight: 700; }
+.mw-v3 .rd-flag.warn .rd-flag-tag { color: var(--c-warning); }
+.mw-v3 .rd-flag.danger .rd-flag-tag { color: var(--c-danger); }
+.mw-v3 .rd-flag-text { font-size: var(--fs-sm); color: var(--c-text-2); line-height: 1.6; }
+/* 抽屉内空态：图标+居中 */
+.mw-v3 .mw-overlay [role="dialog"] .assign-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+/* ── HIS 多来源：来源筛选 / 时间轴切换 / 来源标识 / HIS 同步状态 ──
+   复用宿主令牌，新增控件与既有 .source-tab 同族；分层靠底色，界靠分隔线。 */
+.mw-v3 .source-tab-group { display: flex; gap: 4px; }
+.mw-v3 .source-tab {
+  font-size: var(--fs-xs); padding: 4px 10px; border-radius: var(--radius-sm);
+  border: 1px solid transparent; background: var(--c-surface-3); color: var(--c-text-2);
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.mw-v3 .source-tab:hover { color: var(--c-text); }
+.mw-v3 .source-tab.on {
+  background: var(--c-accent-soft); color: var(--c-accent);
+  border-color: color-mix(in srgb, var(--c-accent) 25%, transparent);
+}
+
+
+/* HIS 同步状态（仅该患者下有 HIS 来源时出现） */
+.mw-v3 .his-sync-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--fs-xs); padding: 4px 10px; border-radius: 999px;
+  background: var(--c-accent-soft); color: var(--c-accent); white-space: nowrap;
+}
+.mw-v3 .his-sync-chip .pulse { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* 结构化数据区（检验表 / 用药列表） */
+/* 窄栏（待指派侧窗展开会再吃掉 360px）下，表格用 nowrap 防单元格被挤压换行碎裂，
+   外层 overflow-x:auto 兜底横向滚动 —— 宁可滚动也不让「项目/结果/参考/标志」错位。 */
+.mw-v3 .lab-table-wrap { overflow-x: auto; }
+.mw-v3 .lab-table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); white-space: nowrap; }
+.mw-v3 .lab-table th, .mw-v3 .lab-table td {
+  text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--c-border);
+}
+.mw-v3 .lab-table th { color: var(--c-text-3); font-weight: 500; }
+.mw-v3 .lab-table td { color: var(--c-text); }
+.mw-v3 .lab-ref { color: var(--c-text-3); }
+.mw-v3 .lab-flag-cell.flag-H { color: var(--c-danger); font-weight: 600; }
+.mw-v3 .lab-flag-cell.flag-L { color: var(--c-warning); font-weight: 600; }
+.mw-v3 .med-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
+.mw-v3 .med-list li {
+  font-size: var(--fs-sm); color: var(--c-text); padding: 6px 10px;
+  background: var(--c-surface-3); border-radius: var(--radius-sm);
+}
+
+/* ── 待指派触发：页头「上传病历」右侧（不再悬浮在患者页面右缘）──
+   侧窗常驻 360px 会把三栏挤瘪，故侧窗仍按需展开；触发按钮回到页头操作组。 */
+.mw-v3 .inbox-trigger {
+  height: 38px; padding: 0 16px; border-radius: 8px;
+  border: 1px solid var(--c-warning);
+  /* 橙色 = 待办/警示：与主色蓝的「上传病历」分工，待指派一眼可辨 */
+  background: var(--c-warning);
+  /* 橙底上的高对比文字：暗色主题取近黑、亮色主题取白（都是 --c-surface） */
+  color: var(--c-surface);
+  font-size: var(--fs-sm); font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.mw-v3 .inbox-trigger:hover {
+  background: color-mix(in srgb, var(--c-warning) 86%, var(--c-surface));
+  border-color: color-mix(in srgb, var(--c-warning) 86%, var(--c-surface));
+}
+.mw-v3 .inbox-close {
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  border: none; background: transparent; color: var(--c-text-2);
+  font-size: 16px; line-height: 1; cursor: pointer;
+}
+.mw-v3 .inbox-close:hover { background: var(--c-surface-3); color: var(--c-text); }

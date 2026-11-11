@@ -1,0 +1,11 @@
+{
+  "name": "regulatory-legal",
+  "version": "1.0.0",
+  "description": "监视监管源，对比新规则与你的政策库，跟踪意见截止日期和开放差距，并编写你团队周一早上阅读的摘要。",
+  "author": {
+    "name": "Anthropic"
+  },
+  "commands": "./commands",
+  "agents": "./agents",
+  "skills": "./skills"
+}

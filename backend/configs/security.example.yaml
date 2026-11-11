@@ -1,0 +1,32 @@
+# 安全策略：沙箱的文件系统/网络/环境变量白名单。
+# 归属顶层键：sandbox
+#
+# 注意：JWT 参数（channels.web.jwt_secret / jwt_expires）归属 server.yaml，
+# 不放在本文件——同一个顶层键（channels）只能有一个归属文件，
+# 否则 config_file_owner() 无法确定写回落点。
+#
+# 使用方式：复制为同目录下的 security.yaml。
+#   cp backend/configs/security.example.yaml backend/configs/security.yaml
+
+sandbox:
+  # 是否强制启用沙箱；关闭时仅记录不拦截（开发环境保持 false）
+  enforce: false
+
+  default_filesystem:
+    # 允许写入的路径（相对/绝对均可，~ 会被展开）
+    allow_write:
+      - "~/.prismclaw/workspaces"
+    # 禁止读取的路径（凭据目录，防止 prompt injection 读取密钥）
+    deny_read:
+      - "~/.ssh"
+      - "~/.aws"
+      - "~/.config"
+    deny_write: []
+
+  default_network:
+    # 云元数据地址默认封禁，防止 SSRF 拿到实例凭据
+    denied_domains:
+      - "169.254.169.254"
+
+  # 允许透传的环境变量名；空列表表示不额外放行
+  default_env_allowlist: []
