@@ -163,16 +163,16 @@ export function useSessionLoader(token: string | null, wsState: WSState, workspa
       workspaceId: wsId,
     })
 
-    const fetchPage = async (wsId: string, offset: number): Promise<{ items: Conversation[]; more: boolean }> => {
+    const fetchPage = async (wsId: string, offset: number): Promise<{ items: Conversation[]; more: boolean; ok: boolean }> => {
       const res = await fetch(
         apiUrl(`/api/sessions?workspace_id=${encodeURIComponent(wsId)}&limit=${pageSize}&offset=${offset}`),
         { headers: { Authorization: `Bearer ${token}` } },
       )
-      if (res.status === 401 || !res.ok) return { items: [], more: false }
+      if (res.status === 401 || !res.ok) return { items: [], more: false, ok: false }
       const data = await res.json()
-      if (!data || typeof data !== 'object') return { items: [], more: false }
+      if (!data || typeof data !== 'object') return { items: [], more: false, ok: false }
       const raw = Array.isArray(data.items) ? data.items : []
-      return { items: raw.map((s: SessionListResponse) => mapItem(s, wsId)), more: Boolean(data.has_more) }
+      return { items: raw.map((s: SessionListResponse) => mapItem(s, wsId)), more: Boolean(data.has_more), ok: true }
     }
 
     const run = async (attempt: number): Promise<void> => {
@@ -193,7 +193,14 @@ export function useSessionLoader(token: string | null, wsState: WSState, workspa
         offsetsRef.current = offsets
         hasMoreMapRef.current = moreMap
         setConversations(merged)
-        setHasMore(Object.values(moreMap).some(Boolean))
+        // 仅在所有工作区都成功返回后置位：任一工作区失败时列表对该工作区不完整，
+        // 不能据此判定某个会话不存在，否则会误清空该工作区下恢复的 activeConvId。
+        if (results.length > 0 && results.every((r) => r.ok)) {
+          useSessionStore.getState().markSessionsLoaded()
+        }
+        const anyMore = Object.values(moreMap).some(Boolean)
+        useSessionStore.getState().setSessionsHasMore(anyMore)
+        setHasMore(anyMore)
       } catch {
         if (stopped) return
         if (attempt >= 2) return
@@ -253,7 +260,9 @@ export function useSessionLoader(token: string | null, wsState: WSState, workspa
       const merged = [...existing, ...appended.filter((c) => !existingIds.has(c.id))]
       merged.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
       setConversations(merged)
-      setHasMore(Object.values(hasMoreMapRef.current).some(Boolean))
+      const anyMore = Object.values(hasMoreMapRef.current).some(Boolean)
+      useSessionStore.getState().setSessionsHasMore(anyMore)
+      setHasMore(anyMore)
     } finally {
       setLoadingMore(false)
     }

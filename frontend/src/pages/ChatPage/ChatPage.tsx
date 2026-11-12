@@ -145,6 +145,8 @@ export default function ChatPage() {
   const prependConversation = useSessionStore((s) => s.prependConversation)
   const activeConvId = useSessionStore((s) => s.activeConvId)
   const setActiveConvId = useSessionStore((s) => s.setActiveConvId)
+  const sessionsLoaded = useSessionStore((s) => s.sessionsLoaded)
+  const sessionsHasMore = useSessionStore((s) => s.sessionsHasMore)
 
   const convStates = useChatStore((s) => s.convStates)
   const unreadConvIds = useChatStore((s) => s.unreadConvIds)
@@ -519,6 +521,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (wsState !== 'ready') return
     if (!activeConvId) return
+    // 刷新后 activeConvId 先于会话列表恢复：列表未加载完成前不能判定「会话已不存在」，
+    // 否则会把正在进行的会话清空，用户随后的澄清会新建会话，一个问题被拆成两条历史。
+    if (!sessionsLoaded) return
+    // 列表仍是分页的一部分（还有更早的会话未拉取）：不在当前页 ≠ 不存在，
+    // 不能据此清空，否则较早的会话会被误杀。
+    if (sessionsHasMore) return
     if (conversations.some((c) => c.id === activeConvId)) return
     // Scheduler sessions may not be in the paginated conversation list
     if (schedulerTasks.some((t) => t.runs.some((r) => r.session_id === activeConvId))) return
@@ -528,7 +536,7 @@ export default function ChatPage() {
     // purgeConversation 同步清除，页面重载后为空，不会误豁免陈旧 id。
     if (useChatStore.getState().convStates[activeConvId]) return
     setActiveConvId(null)
-  }, [activeConvId, conversations, schedulerTasks, setActiveConvId, wsState])
+  }, [activeConvId, conversations, schedulerTasks, sessionsLoaded, sessionsHasMore, setActiveConvId, wsState])
 
   // activeConvId 变化（侧栏选择、scheduler 跳转、删除后回落等）→ 确保历史已加载。
   // ensureHistory 内部幂等（loaded/loading/有本地消息均不重取），无需 autoLoadedConvIdRef。

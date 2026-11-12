@@ -130,6 +130,8 @@ export function MedicalChatArea({ patient, initialSessionId }: MedicalChatAreaPr
     const text = input.trim()
     if (!text) return
     if (chat.isStreaming) return
+    // 澄清待答时必须走澄清面板（同轮续跑），不能把回答发成独立消息
+    if (chat.clarifyRequest) return
 
     setInput('')
 
@@ -157,6 +159,38 @@ export function MedicalChatArea({ patient, initialSessionId }: MedicalChatAreaPr
     // 3) 发消息（已有 sessionId，sendMessage 内部不会重复建会话）
     await chat.sendMessage(text, sessionId ?? undefined)
   }, [input, chat, patient.id, patient.name])
+
+  // ── 澄清选择态（同轮续跑，不入消息历史） ──
+
+  const [clarifyPicks, setClarifyPicks] = useState<Record<number, string[]>>({})
+
+  useEffect(() => {
+    setClarifyPicks({})
+  }, [chat.clarifyRequest])
+
+  const togglePick = useCallback((idx: number, label: string, multi: boolean) => {
+    setClarifyPicks((prev) => {
+      const cur = prev[idx] ?? []
+      if (multi) {
+        return {
+          ...prev,
+          [idx]: cur.includes(label) ? cur.filter((x) => x !== label) : [...cur, label],
+        }
+      }
+      return { ...prev, [idx]: [label] }
+    })
+  }, [])
+
+  const submitClarifyAnswers = useCallback(() => {
+    const req = chat.clarifyRequest
+    if (!req) return
+    const lines = req.questions.map((q, i) => {
+      const picks = clarifyPicks[i] ?? []
+      const prefix = q.header || `Q${i + 1}`
+      return `${prefix}：${picks.length > 0 ? picks.join('；') : '（跳过）'}`
+    })
+    chat.submitClarify(lines.join('\n'))
+  }, [chat, clarifyPicks])
 
   // ── 复制回调 ──
 
@@ -274,6 +308,48 @@ export function MedicalChatArea({ patient, initialSessionId }: MedicalChatAreaPr
             </div>
           )}
 
+          {chat.clarifyRequest ? (
+            <div className="rounded-2xl border border-[var(--c-border)] bg-[var(--c-surface)] p-4">
+              <p className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]">
+                需要确认以下信息才能继续
+              </p>
+              {chat.clarifyRequest.questions.map((q, idx) => (
+                <div key={`${q.header}-${idx}`} className="mt-3">
+                  <p className="text-[length:var(--fs-sm)] text-[var(--c-text)]">
+                    {q.header ? `${q.header} · ` : ''}
+                    {q.question}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {q.options.map((opt) => {
+                      const active = (clarifyPicks[idx] ?? []).includes(opt.label)
+                      return (
+                        <button
+                          key={opt.label}
+                          type="button"
+                          title={opt.description || undefined}
+                          onClick={() => togglePick(idx, opt.label, q.multiSelect)}
+                          className={`rounded-lg border px-3 py-1.5 text-[length:var(--fs-sm)] transition-colors ${
+                            active
+                              ? 'border-[var(--c-accent)] bg-[var(--c-accent-soft)] text-[var(--c-accent)]'
+                              : 'border-[var(--c-border)] text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-2)]'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={submitClarifyAnswers}
+                className="mt-4 rounded-lg bg-[var(--c-accent)] px-4 py-1.5 text-[length:var(--fs-sm)] font-medium text-white hover:opacity-90"
+              >
+                提交并继续
+              </button>
+            </div>
+          ) : (
           <ChatInputBox
             variant="normal"
             input={input}
@@ -306,6 +382,7 @@ export function MedicalChatArea({ patient, initialSessionId }: MedicalChatAreaPr
             token={null}
             abilitiesEnabled={false}
           />
+          )}
 
           {/* 免责声明 —— 对齐宿主样式 */}
           <div className="mt-1.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)] text-center opacity-60">

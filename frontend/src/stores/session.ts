@@ -29,10 +29,16 @@ function persistActiveConvId(id: string | null): void {
 interface SessionState {
   conversations: Conversation[]
   activeConvId: string | null
+  /** 会话列表是否已至少成功加载过一次（刷新后用于避免误清空恢复的 activeConvId） */
+  sessionsLoaded: boolean
+  /** 是否仍有未加载的会话分页；为 true 时列表不完整，不能据此判定会话不存在 */
+  sessionsHasMore: boolean
 }
 
 interface SessionActions {
   setConversations: (conversations: Conversation[]) => void
+  markSessionsLoaded: () => void
+  setSessionsHasMore: (hasMore: boolean) => void
   updateConversations: (updater: (prev: Conversation[]) => Conversation[]) => void
   prependConversation: (conv: Conversation) => void
   removeConversation: (id: string) => string | null
@@ -44,8 +50,14 @@ type SessionStore = SessionState & SessionActions
 export const useSessionStore = create<SessionStore>((set, get) => ({
   conversations: [],
   activeConvId: loadInitialActiveConvId(),
+  sessionsLoaded: false,
+  sessionsHasMore: true,
 
   setConversations: (conversations) => set({ conversations }),
+
+  markSessionsLoaded: () => set({ sessionsLoaded: true }),
+
+  setSessionsHasMore: (hasMore) => set({ sessionsHasMore: hasMore }),
 
   updateConversations: (updater) =>
     set((state) => ({ conversations: updater(state.conversations) })),
