@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /review-proposals
 
-逐步处理 monitor agent 的待定剧本更新提案，并将批准的变更应用到 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。
+逐步处理 monitor agent 的待定剧本更新提案，并将批准的变更应用到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。
 
 ## 说明
 
@@ -27,9 +27,9 @@ Licensed under Apache License 2.0
 
 3. **逐一展示提案。** 对每个提案，显示完整的提案块并提供四个选项：接受、拒绝、编辑、推迟。
 
-4. **对于接受或编辑：** 在写入之前显示对 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的精确差异。仅在律师明确确认后应用。
+4. **对于接受或编辑：** 在写入之前显示对 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的精确差异。仅在律师明确确认后应用。
 
-5. **对于拒绝或推迟：** 记录决定。不要修改 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。
+5. **对于拒绝或推迟：** 记录决定。不要修改 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。
 
 6. **所有提案解决后：** 显示变更摘要，然后归档提案文件。
 

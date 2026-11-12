@@ -20,7 +20,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？Run `/corporate-legal:matter-workspace switch <slug>` or say `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 是 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？Run `/corporate-legal:matter-workspace switch <slug>` or say `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 是 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -30,13 +30,13 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 交易团队简报（节奏、格式、业务方阅读什么）
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md` → 交易主管、时间线
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 交易团队简报（节奏、格式、业务方阅读什么）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md` → 交易主管、时间线
 - diligence-issue-extraction 输出中的当前发现
 
 ## 受众层级
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——业务方阅读什么 vs. 留档内容。默认层级：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——业务方阅读什么 vs. 留档内容。默认层级：
 
 | 受众 | 获得 | 不获得 |
 |---|---|---|
@@ -109,7 +109,7 @@ Licensed under Apache License 2.0
 
 ## 增量
 
-如果这是定期简报（根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 节奏），以变化为首：
+如果这是定期简报（根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 节奏），以变化为首：
 
 - 自上次简报以来的新发现
 - 严重性升级/降级的发现

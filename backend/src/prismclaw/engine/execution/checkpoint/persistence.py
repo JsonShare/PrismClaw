@@ -25,7 +25,7 @@ from prismclaw.engine.execution.checkpoint.models import (
     ToolEffectRecord,
 )
 
-CURRENT_RUN_SNAPSHOT_VERSION = 4
+CURRENT_RUN_SNAPSHOT_VERSION = 5
 
 
 class ActiveRunContextSnapshot(BaseModel):

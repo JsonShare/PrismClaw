@@ -236,7 +236,7 @@ Before completing Subskill 2:
 
 ---
 
-## Notes for Claude
+## Notes for the assistant
 
 ### Implementation Hints
 

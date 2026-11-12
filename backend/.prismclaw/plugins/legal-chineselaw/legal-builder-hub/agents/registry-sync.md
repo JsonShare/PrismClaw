@@ -24,7 +24,7 @@ Licensed under Apache License 2.0
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 被监控的注册表、已安装技能、更新偏好。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 被监控的注册表、已安装技能、更新偏好。
 2. 对每个注册表：读取注册表目录文件（如 YAML 目录索引）；GitHub 注册表直接用联网检索工具。与上次同步对比。
 3. 新技能：按执业档案匹配过滤，记录。
 4. 已更新技能：对照已安装列表检查，对比差异。

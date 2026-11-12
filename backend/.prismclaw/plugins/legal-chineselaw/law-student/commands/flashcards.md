@@ -16,11 +16,11 @@ Licensed under Apache License 2.0
 
 # /flashcards
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、弱学科、大纲位置。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、弱学科、大纲位置。
 2. 应用以下框架。
 3. 按标志路由：
    - `--generate`：按照卡片编写规则从来源（大纲路径、笔记、案例书）构建卡片。
-     写入 `.prismclaw/plugins/legal-chineselaw/law-student/flashcards/[subject]/cards.md`。
+     写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/flashcards/[subject]/cards.md`。
    - `--drill`（默认）：优先到期卡片 + 新卡片；显示 Q，等待答案，显示 A，
      接受自我评估，更新存储桶 + 下次审查。
    - `--review`：按存储桶浏览卡组。
@@ -63,8 +63,8 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、弱学科、现有大纲
-- `.prismclaw/plugins/legal-chineselaw/law-student/flashcards/[subject]/cards.md`（如果存在）（增量构建）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、弱学科、现有大纲
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/flashcards/[subject]/cards.md`（如果存在）（增量构建）
 - 用户提供的来源（大纲路径、笔记、案例书摘录）（如果给出）
 
 ## Modes
@@ -75,7 +75,7 @@ Licensed under Apache License 2.0
 
 当学生说"让我们做 5 张合同卡"或运行 `/law-student:session Contracts 5 --flashcards` 时。
 
-- 如果存在 `.prismclaw/plugins/legal-chineselaw/law-student/study-plan.yaml`，加载它并阅读此学科的 `session_history`。
+- 如果存在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/study-plan.yaml`，加载它并阅读此学科的 `session_history`。
 - 优先级：先前标记为错误的卡片 > 到期卡片 > 新卡片。
 - 按照 `--drill` 流程一次运行 N 张卡片。
 - 会话结束时，将结果附加到 `study-plan.yaml` → `session_history`：
@@ -92,13 +92,13 @@ session_history:
     stuck_topics: [parol-evidence-rule]
 ```
 
-- 如果没有 `study-plan.yaml`，改为写入 `.prismclaw/plugins/legal-chineselaw/law-student/session-history.yaml`。
+- 如果没有 `study-plan.yaml`，改为写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/session-history.yaml`。
 
 ### `--generate` — create cards
 
 **Inputs:**
 - Subject（课程名称或主题）
-- Source（大纲路径、笔记，或"use my existing outline from .prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md"）
+- Source（大纲路径、笔记，或"use my existing outline from ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md"）
 - Optional：card count target（默认每次会话 10-20）
 
 **Card structure:**

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 try:
     from typing import Self
 except ImportError:
@@ -12,33 +12,16 @@ from pydantic import BaseModel, Field, model_validator
 
 logger = logging.getLogger(__name__)
 
-# identifier-preservation block.  Mirrors the canonical text
-# in ``prismclaw.engine.compression.hardening``.  It is duplicated
-# here (rather than imported) because ``compaction.hardening`` is
-# loaded transitively by ``compaction.__init__`` → ``compaction.checkpoint``
-# → ``prismclaw.kernel``, which forms a cycle when this module
-# is being imported.  Keep both copies in sync.
-_IDENTIFIER_PRESERVATION_INSTRUCTIONS = (
-    "在摘要中逐字保留标识符：UUID、哈希、ID、主机名、IP 地址、端口、URL、"
-    "文件名、文件路径、模型名、会话 ID、提交 SHA、错误码。"
-    "不得重写、缩写或改写这些标记。"
-    "\n\n"
-    "用户陈述的事实必须在压缩后继续存在（SDD context-governance W8）："
-    "用户就其处境陈述的每项事实都是持久上下文——数字、日期、截止时间、"
-    "性能阈值（例如 P99 < 500ms）、团队规模、角色与风格偏好、"
-    "过往事件、业务规则以及技术专有名词。每项都要逐字带入摘要的第 10 节。"
-    "当输入中包含既有摘要时，其中已列出的每一项用户陈述事实都必须出现在新摘要中——"
-    "压缩链一旦首次丢弃某项事实，它就永久丢失。"
-    "\n\n"
-    "已取代的需求必须作为作废项保留，而不是消失（SDD context-governance W12）："
-    "当用户改变主意——更正取值、撤回承诺、取消需求、替换选择——"
-    "旧值不是当前上下文，但也不能删除。把它列在第 11 节，每条一行："
-    "作废事实 → 替代它的内容（若只是取消，则写“→ 无”）。这是一个禁止清单："
-    "其中的任何内容都绝不能再次作为当前事实出现。当输入中包含既有摘要时，"
-    "必须逐字继承每一条作废条目——丢失的作废条目会在后续生成中复活"
-    "（这正是本节要防止的失效）。某项事实可以出现在第 10 节或第 11 节，"
-    "但绝不能同时出现在两处；拿不准时，放在第 11 节并注明不确定性。"
-)
+# Single source of truth — imported from _preservation_rules.py.
+# The old dual-copy cycle is resolved by making _preservation_rules.py
+# a pure-constants module with no internal imports.
+try:
+    from prismclaw.engine.compression._preservation_rules import IDENTIFIER_PRESERVATION_INSTRUCTIONS
+except ImportError:
+    # Schema layer may load before engine layer in some test/CLI paths
+    IDENTIFIER_PRESERVATION_INSTRUCTIONS = (
+        "在摘要中逐字保留标识符，用户事实逐字带入第10节，作废需求列在第11节。"
+    )
 
 
 class WorkspaceConfig(BaseModel):
@@ -50,10 +33,6 @@ class WorkspaceConfig(BaseModel):
 
 
 class TimeoutConfig(BaseModel):
-    run_seconds: float = Field(
-        default=300.0,
-        description="Outermost timeout protecting a whole agent turn. 0 disables.",
-    )
     idle_seconds: float = Field(
         default=180.0,
         description="Max time with no LLM stream progress before aborting. 0 disables.",
@@ -81,7 +60,6 @@ class RetryConfig(BaseModel):
 # behavior change without code changes (and so the "flag off == old
 # behavior" verification criterion in the plan is enforceable).
 # Names mirror the Claude-side flags referenced in the plan.
-FLAG_DYNAMIC_BUDGET_DEFAULT = True
 FLAG_AUTOCOMPACT_BREAKER_DEFAULT = True
 FLAG_SOFT_BUDGET_DEFAULT = True
 
@@ -136,8 +114,7 @@ class SoftBudgetConfig(BaseModel):
 # draft <analysis>...</analysis> section from the LLM output.
 COMPACT_SUMMARY_DEFAULT_TEMPLATE = (
     "# 关键：禁止使用任何工具。只输出文本。\n\n"
-    "你的任务是详细总结此前的对话，重点关注用户的明确请求、所做的技术决策，"
-    "以及编写或修改过的代码。\n\n"
+    "你的任务是详细总结此前的对话，重点关注用户的明确请求、所做的关键决策和产出。\n\n"
     "回答必须分成两部分：先在 <analysis> 块中进行私下推理，"
     "然后在 <summary> 块中给出结构化摘要，供另一个 AI 继续执行任务。\n\n"
     "<analysis>\n"
@@ -148,7 +125,7 @@ COMPACT_SUMMARY_DEFAULT_TEMPLATE = (
     "<summary>\n"
     "1. 主要请求与意图\n"
     "2. 关键技术概念\n"
-    "3. 文件与代码片段\n"
+    "3. 关键文件与产出\n"
     "4. 错误与修复\n"
     "5. 问题解决过程\n"
     "6. 用户的所有消息\n"
@@ -159,7 +136,7 @@ COMPACT_SUMMARY_DEFAULT_TEMPLATE = (
     "11. 已失效/作废的需求（每条一行：作废事实 → 替代它的内容；必须从既有摘要中完整继承——"
     "一旦丢失作废条目，它会在后续工作中被误当作当前事实复活）\n"
     "</summary>\n\n"
-    f"{_IDENTIFIER_PRESERVATION_INSTRUCTIONS}\n"
+    f"{IDENTIFIER_PRESERVATION_INSTRUCTIONS}\n"
 )
 
 
@@ -249,9 +226,10 @@ class CompactPromptConfig(BaseModel):
     )
 
 
-# Note: this constant is defined AFTER the IDENTIFIER_PRESERVATION_INSTRUCTIONS
-# import above.  Pydantic reads default values from this constant
-# when constructing ``CompactPromptConfig`` instances.
+# IDENTIFIER_PRESERVATION_INSTRUCTIONS is imported from _preservation_rules.py above.
+# Pydantic reads default values from COMPACT_SUMMARY_DEFAULT_TEMPLATE
+# (which embeds IDENTIFIER_PRESERVATION_INSTRUCTIONS) when constructing
+# CompactPromptConfig instances.
 
 
 # ─────────────────────────── Compaction sub-blocks ───────────────────────────
@@ -380,10 +358,6 @@ class CompactionSafetyConfig(BaseModel):
         default=FLAG_SOFT_BUDGET_DEFAULT,
         description="Kill switch. Default on. When False, do not inject soft-budget warnings or escalate at the terminate ratio.",
     )
-    enable_dynamic_budget: bool = Field(
-        default=FLAG_DYNAMIC_BUDGET_DEFAULT,
-        description="Kill switch. Default on. When False, use legacy static window budget (context.budget.window_tokens * 0.8 chars) regardless of the active model.",
-    )
 
 
 class CompactionConfig(BaseModel):
@@ -470,8 +444,8 @@ class CompactionConfig(BaseModel):
 class CompletionControlConfig(BaseModel):
     """完成控制内核的修复额度。
 
-    轮次 / 墙钟 / 金额上限不在这里：它们仍归 ``max_iterations`` /
-    ``timeouts.run_seconds`` / ``max_budget_usd``，由 BudgetGuard 统一读取。
+    轮次 / 墙钟上限不在这里：它们由 ``effort`` 档位（RunRequest.effort）
+    解析，由 BudgetGuard 统一读取。
     修复额度属于「完成要求」，因此挂在契约上、由本配置给出上限。
     """
 
@@ -485,71 +459,31 @@ class CompletionControlConfig(BaseModel):
     )
 
 
-class RunLoopTuningConfig(BaseModel):
-    tool_max_uses: dict[str, int] = Field(
-        default_factory=lambda: {"web-search-mcp__search": 6},
+class StuckConfig(BaseModel):
+    """卡死检测配置（doom-loop 签名冻结）。"""
+
+    signature_warn: int = Field(
+        default=3,
         description=(
-            "Per-run max uses per tool name. Keys are LLM-facing names; MCP "
-            "tools use the '{server}__{tool}' rewrite (e.g. 'web-search-mcp__search')."
+            "同一工具调用签名（含结果指纹）连续重复达到此值时触发 soft warn；"
+            "超过此值注入结构化纠正；达到 2× 时冻结该签名（钳制在 12 条历史窗口内）。"
+            "0 禁用整条阶梯。"
         ),
     )
+
+
+class RunLoopTuningConfig(BaseModel):
     search_intent_tools: list[str] = Field(
         default_factory=lambda: ["web-search-mcp__search"],
-        description="Tool names treated as search/fetch intent for loop detection.",
+        description="Tool names treated as search/fetch intent for wrapping-phase freeze.",
     )
-    search_loop_warn_at: int = Field(
-        default=5,
-        ge=1,
-        description="Cumulative search-intent tool call count that triggers a Warn guidance injection. "
-                    "Works with search_freeze_output_share as a dual-condition Freeze gate.",
-    )
-    search_freeze_output_share: float = Field(
-        default=0.5,
-        ge=0.0,
-        le=1.0,
-        description="Tool-output-char share of history that, combined with search_loop_warn_at, "
-                    "triggers Freeze (removing search tools from the visible list). "
-                    "A share >= this value after a Warn indicates search is consuming the budget.",
-    )
-    same_target_read_warn_at: int = Field(
-        default=4,
-        ge=1,
-        description="Cumulative reads of one target (file/URL/query) with no write to it "
-                    "before Check 5 emits a same-target re-read advisory. Advisory-only: "
-                    "reads are essential to the task, so unlike search tools they are never frozen.",
-    )
-    error_fatigue_threshold: int = Field(
-        default=3,
-        description="Consecutive INTERNAL tool errors (parameter/usage bugs; external data-source "
-                    "failures are attributed separately and never counted here) that trigger a soft "
-                    "warn guidance (model may be fixating on a broken approach). It is diagnostic "
-                    "input, NOT a termination signal — run termination belongs solely to "
-                    "CompletionKernel (budget / completion contract / recovery fuse). 0 disables.",
-    )
-    repeated_tool_signature_threshold: int = Field(
-        default=3,
-        description="Repeated identical tool-call signature threshold that also triggers stall finalization when progress is low. 0 disables.",
-    )
-    doom_loop_threshold: int = Field(
-        default=3,
-        ge=1,
-        description="Hard cap on consecutive identical tool-call signatures (aligned with opencode's "
-                    "DOOM_LOOP_THRESHOLD=3). Escalation ladder in Check 2 of call_handling.py: at "
-                    "repeated_tool_signature_threshold the run gets a soft warn; ABOVE this cap it gets a "
-                    "structured corrective message injected into pending_messages (the loop still continues); "
-                    "at 2x this cap the run FREEZES that call signature — further identical calls are blocked "
-                    "before execution. Re-attempting a frozen call up to this cap sets the frozen_call_defied "
-                    "suspicion flag; the run-level terminate decision belongs solely to CompletionKernel. "
-                    "The 2x absolute max is clamped to the 12-entry recent_tool_signatures window, "
-                    "so values above 6 make the freeze stage unreachable and leave only the "
-                    "corrective-injection stage. The same ladder thresholds also govern the bounded-cycling "
-                    "detection (Check 2b): a full signature window confined to <=2 distinct call+result "
-                    "combinations warns at this threshold and raises the cycling suspicion flag at 2x "
-                    "(the loop is still never terminated locally).",
+    stuck: StuckConfig = Field(
+        default_factory=StuckConfig,
+        description="Doom-loop signature freeze thresholds.",
     )
 
     # run 级终态唯一由 CompletionKernel 裁决（预算 / 完成契约 / 恢复熔断）。
-    # 工具循环阶梯（doom-loop / 冻结 / 重读提醒）只产引导，不终止。
+    # 工具循环阶梯（doom-loop 签名冻结）只产引导，不终止。
     # arbiter_recovery_chain_limit 是 RecoveryPolicy 的恢复熔断上限。
     arbiter_recovery_chain_limit: int = Field(
         default=3,
@@ -575,129 +509,20 @@ class SubcapsSettings(BaseModel):
     doc_inline_min_chars: int = Field(2500, ge=1)
     doc_inline_max_chars: int = Field(7500, ge=1)
     max_constraints: int = Field(4, ge=0)
-    # ratio 模式附件 token 预算：min(ratio·input_budget, cap)；字符按 ×1.5 缩放
-    attachment_token_ratio: float = Field(0.25, ge=0.0, le=1.0)
-    attachment_token_cap: int = Field(24000, ge=0)
     # 压缩后文件重注入：单文件 token 预算（全局 = 本值 × compaction.reinject_max_files，不另设键）
     reinject_file_tokens: int = Field(3200, ge=0)
     # 技能 preload 注入 token 上限
     skill_preload: int = Field(7500, ge=0)
 
 
-class BudgetZoneSpec(BaseModel):
-    """比例模式（mode=ratio）下单个分区的配比规格。
-
-    ratio 为该分区占可用输入窗口 A_eff 的比例；floor 为分区预算下限
-    （token）；cap 为分区预算上限（token）。
-    """
-
-    model_config = {"populate_by_name": True}
-
-    ratio: float = Field(
-        default=0.12,
-        ge=0.0,
-        le=1.0,
-        description="该分区占可用输入窗口（A_eff）的比例。",
-    )
-    floor: int = Field(
-        default=2048,
-        ge=0,
-        description="该分区预算下限（token）。",
-    )
-    cap: int = Field(
-        default=12288,
-        ge=0,
-        description="该分区预算上限（token）。",
-    )
-
-    @model_validator(mode="after")
-    def _floor_le_cap(self) -> "BudgetZoneSpec":
-        # floor > cap 会让 clamp 上下限倒挂（floor 保障被静默破坏），
-        # 配置错误在加载期响亮拒绝。
-        if self.floor > self.cap:
-            raise ValueError(
-                f"zone floor ({self.floor}) must be <= cap ({self.cap})"
-            )
-        return self
-
-
-class OutputZoneSpec(BaseModel):
-    """比例模式下输出预留（output）的规格。
-
-    max 为 O 的硬上限（O ≤ min(round(0.3·W), max)，v4 §3.2）；ratio 字段
-    本批暂不参与 O 公式，保留给后续阶段使用。
-    """
-
-    model_config = {"populate_by_name": True}
-
-    ratio: float = Field(
-        default=0.20,
-        ge=0.0,
-        le=1.0,
-        description="输出预留占窗口的比例（本批暂不参与求解，保留供后续阶段）。",
-    )
-    max: int = Field(
-        default=65536,
-        ge=0,
-        description="输出预留硬上限（token）。O 无论如何不超过 min(round(0.3·W), max)。",
-    )
-
-
-class ContextZonesConfig(BaseModel):
-    """比例模式各分区（system/dynamic/result/tools）与输出预留的配比规格。
-
-    字段名固定为 zones.{system,dynamic,result,tools,output}，对应
-    agent.yaml 的 ``context.budget.zones.*``。tools.cap 为占位（真实上限
-    来自实测 wire，即 ``ToolsRegistry.wire_tokens_estimate()``）。
-    """
-
-    model_config = {"populate_by_name": True}
-
-    system: BudgetZoneSpec = Field(
-        default_factory=lambda: BudgetZoneSpec(ratio=0.12, floor=2048, cap=12288),
-        description="冻结区（system 前缀）配比。",
-    )
-    dynamic: BudgetZoneSpec = Field(
-        default_factory=lambda: BudgetZoneSpec(ratio=0.15, floor=2048, cap=16384),
-        description="动态区（dynamic 尾部 <system-context>）配比。",
-    )
-    result: BudgetZoneSpec = Field(
-        default_factory=lambda: BudgetZoneSpec(ratio=0.15, floor=2048, cap=16384),
-        description="结果区（result，工具结果消息）配比。",
-    )
-    tools: BudgetZoneSpec = Field(
-        default_factory=lambda: BudgetZoneSpec(ratio=0.18, floor=1024, cap=65536),
-        description=(
-            "工具 schema wire 预算配比。cap 用 65536 占位——T 由 clamp 实测 wire "
-            "到 floor 与 ratio·A_eff 之间，真实上限来自实测 wire。"
-        ),
-    )
-    output: OutputZoneSpec = Field(
-        default_factory=OutputZoneSpec,
-        description="输出预留（output）规格。",
-    )
-
-
 class ContextBudgetConfig(BaseModel):
-    """上下文窗口与分区预算。
+    """上下文窗口与分区预算（absolute 模式）。
 
     收敛了原先分散在 ``agent.max_context_tokens`` 与 ``agent.promptBudget``
     两处的配置。history 可用空间 = 窗口 - 冻结区 - 动态区 - 输出预留。
     """
 
     model_config = {"populate_by_name": True}
-
-    mode: Literal["absolute", "ratio"] = Field(
-        default="absolute",
-        description=(
-            "预算求解模式：absolute 走固定四键（window/system/dynamic/output_reserve，"
-            "回滚基石）；ratio 走 zones 比例求解（v4 §3.2）。"
-        ),
-    )
-    zones: ContextZonesConfig = Field(
-        default_factory=ContextZonesConfig,
-        description="比例模式（mode=ratio）下各分区与输出预留的配比规格。",
-    )
 
     window_tokens: int = Field(
         default=131_072,
@@ -723,13 +548,7 @@ class ContextBudgetConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_zones(self) -> "ContextBudgetConfig":
-        """固定分区之和不得超过窗口（分区溢出与显式预留溢出一并校验）。
-
-        仅对 absolute 模式生效；ratio 模式的分区由 resolve_context_zones
-        在运行时 clamp，不在此处做固定值校验。
-        """
-        if self.mode != "absolute":
-            return self
+        """固定分区之和不得超过窗口（分区溢出与显式预留溢出一并校验）。"""
         zones = self.system_zone_tokens + self.dynamic_zone_tokens
         if zones > self.window_tokens:
             raise ValueError(
@@ -755,34 +574,7 @@ class ContextBudgetConfig(BaseModel):
 
         预算 = 窗口 − 固定分区 − 工具 wire 成本 − 输出预留，且永不低于
         下限（剩余空间的 1/4，至少 4096）。
-
-        工具 wire 成本（SDD R-A2 / W13，A-0 实测 E14）：每个请求随
-        litellm ``tools`` 参数发送的工具 schema JSON 是真实的窗口占用，
-        此前完全未入账——budget_remaining 对运维是误导指标。值来自
-        ``ToolRegistry.wire_tokens_estimate()``（指纹缓存 + 序列化字节 ÷ 5
-        标定，31 工具 ≈6.4k tokens；旧 CJK 启发式给 11.8k，高估 1.8×），
-        全量注册表测量是 governance 过滤子集的保守上界。
-
-        下限防御（SDD W15）：旧实现在预留吃掉全部剩余空间时返回 0，
-        ``assess_history_compaction`` 的 ``history_budget > 0`` 守卫随即
-        **静默禁用压缩**（小窗口 + 大 max_output 的配置必踩——实测 32k
-        窗口 0 压缩、64k 真实 input 全程放行）。下限保证压缩始终可用，
-        只是更激进；命中下限说明配置失衡，每轮打 ERROR 暴露问题，
-        绝不静默。
         """
-        if self.mode == "ratio":
-            from prismclaw.engine.compression.context_zones import (
-                resolve_context_zones,
-            )
-
-            return resolve_context_zones(
-                window=self.window_tokens,
-                model_max_output=model_max_output,
-                budget=self,
-                tools_wire=tools_wire_tokens,
-                image_tokens=0,
-            ).history
-
         remaining = (
             self.window_tokens
             - self.system_zone_tokens
@@ -813,7 +605,7 @@ class ContextBudgetConfig(BaseModel):
 
     def _resolve_output_reserve(self, remaining: int, model_max_output: int | None) -> int:
         # 预留来源：显式配置 > 模型 max_output > 0（不预留，输出空间由
-        # 请求层的 max_tokens 钳制兜底）——旧的 ratio 兜底在此处已删除。
+        # 请求层的 max_tokens 钳制兜底）。
         reserve = self.output_reserve_tokens
         if reserve is None:
             reserve = model_max_output or 0
@@ -977,44 +769,33 @@ class ProviderModelSpecs(BaseModel):
     providers: dict[str, dict[str, ProviderModelSpecEntry]] = Field(default_factory=dict)
 
 
-class BudgetPricingConfig(BaseModel):
-    """成本天花板（loop 防护第 3 层）的 USD 折算费率。
+class EffortTierConfig(BaseModel):
+    """单个 effort 档位的预算配额。
 
-    单位：USD / million tokens。默认值按中档模型保守估计
-    （略高估 → 天花板偏早触发，安全方向）。当前单模型部署
-    （glm-53）用统一费率即可；多模型路由落地后再按模型细分。
+    steps / tool_calls 是硬上限；soft_s 只触发收尾信号，hard_s 才终止。
+    派生值（reserve_s / cap_s / converge_tools）不配置，由运行时按
+    hard_s 与 tool_calls 计算。
     """
 
-    input_per_mtok: float = Field(default=1.0, ge=0.0)
-    output_per_mtok: float = Field(default=3.0, ge=0.0)
-    cache_read_per_mtok: float = Field(default=0.1, ge=0.0)
-    cache_write_per_mtok: float = Field(default=1.25, ge=0.0)
+    steps: int = Field(..., ge=1, description="Max LLM steps (stream_llm calls) for this tier.")
+    tool_calls: int = Field(..., ge=1, description="Max tool-call attempts (parallel N counts as N; denied included).")
+    soft_s: float = Field(..., ge=0.0, description="Wall-clock soft deadline (wrap-up signal only).")
+    hard_s: float = Field(..., ge=0.0, description="Wall-clock hard deadline (termination).")
 
-    def cost_for_usage(self, usage: Any) -> float:
-        """LLMUsage → USD。字段缺失/None 按 0 计（getattr 容错）。
 
-        语义假设 input_tokens 不含 cache 部分（Anthropic 风格的
-        独立字段）；若适配层重复计入，成本被高估——对天花板是
-        安全方向。
-        """
-        if usage is None:
-            return 0.0
-        input_t = int(getattr(usage, "input_tokens", 0) or 0)
-        output_t = int(getattr(usage, "output_tokens", 0) or 0)
-        cache_read_t = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
-        cache_write_t = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
-        return (
-            input_t / 1e6 * self.input_per_mtok
-            + output_t / 1e6 * self.output_per_mtok
-            + cache_read_t / 1e6 * self.cache_read_per_mtok
-            + cache_write_t / 1e6 * self.cache_write_per_mtok
-        )
+class EffortConfig(BaseModel):
+    """三档 effort 预算。调用方通过 RunRequest.effort 选档；
+    RunRequest.long_running 对所选档位放大（steps×3 上限 30、hard_s×2 上限 1800）。"""
+
+    quick: EffortTierConfig = EffortTierConfig(steps=3, tool_calls=6, soft_s=45.0, hard_s=90.0)
+    standard: EffortTierConfig = EffortTierConfig(steps=6, tool_calls=12, soft_s=150.0, hard_s=300.0)
+    deep: EffortTierConfig = EffortTierConfig(steps=15, tool_calls=24, soft_s=420.0, hard_s=900.0)
 
 
 class AgentRunConfig(BaseModel):
-    max_iterations: int = Field(
-        default=70,
-        description="Hard iteration cap per run. 0 disables the cap; termination is then progress-driven (doom-loop guards, budget ceiling) only.",
+    effort: EffortConfig = Field(
+        default_factory=EffortConfig,
+        description="Effort tier budgets (quick/standard/deep). Selected per-run via RunRequest.effort.",
     )
     tool_mutation_policy: Literal["append_only", "frozen", "unbounded"] = Field(
         default="append_only",
@@ -1024,21 +805,6 @@ class AgentRunConfig(BaseModel):
         ),
     )
     context: ContextConfig = Field(default_factory=ContextConfig)
-
-    # 单任务成本上限（USD）——loop 防护第 3 层：唯一硬天花板。
-    # 每轮 LLM 用量按 budget_pricing 费率折算累计进
-    # tool_loop_state.total_usd_cost（随 checkpoint 持久化），
-    # should_continue 路径 B 消费：>90% 预警注入一次、超限终止。
-    # None（默认）= 不设上限；打磨型无限循环（任何进展定义下都在
-    # "前进"）只有这一层能兜住。
-    max_budget_usd: float | None = Field(
-        default=None,
-        description="Max USD cost allowed for a single task run (layer-3 hard ceiling). None disables.",
-    )
-    budget_pricing: BudgetPricingConfig = Field(
-        default_factory=BudgetPricingConfig,
-        description="USD/Mtok rates used to accrue tool_loop_state.total_usd_cost from LLM usage.",
-    )
 
     timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)

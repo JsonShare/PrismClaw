@@ -17,13 +17,13 @@ Licensed under Apache License 2.0
 
 # /legal-writing
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 班级、写作技能水平、过去反馈模式。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 班级、写作技能水平、过去反馈模式。
 2. 应用以下框架。
 3. 从头到尾阅读完整草稿。识别结构类型（memo / brief / paper / essay）。
 4. 给出结构化反馈：首先是结构，然后是分析深度、清晰度和风格、前 3 个修复。在我不确定的任何实质性规则调用上标记 `[VERIFY]`。
 5. 最多 1-2 个标记的示例措辞——说明结构动作，绝不是学生主题上的实质性内容。每个示例都标记"write yours — don't copy"。
 6. 如果被要求重写：优雅地拒绝。提供针对性的结构性反馈代替。
-7. 附加到 `.prismclaw/plugins/legal-chineselaw/law-student/writing-feedback/[student]/tracker.md` 以进行模式检测。
+7. 附加到 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/writing-feedback/[student]/tracker.md` 以进行模式检测。
 
 ---
 
@@ -47,7 +47,7 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → class, assignment type (if known), writing skill level, graded-essay feedback history
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → class, assignment type (if known), writing skill level, graded-essay feedback history
 - Student-provided draft
 - Optional: rubric or assignment prompt if the student shares one
 
@@ -142,7 +142,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 5：跟踪模式
 
-将会话摘要附加到 `.prismclaw/plugins/legal-chineselaw/law-student/writing-feedback/[student]/tracker.md`：
+将会话摘要附加到 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/writing-feedback/[student]/tracker.md`：
 
 ```markdown
 ## [date] — [assignment type / subject]

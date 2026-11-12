@@ -9,13 +9,6 @@ from prismclaw.schema.agent.session import AgentMessageDict, ProjectionInputMess
 
 
 def _render_reminder_body(reminder: SystemReminderProjection) -> str:
-    if reminder.kind == "budget_warning":
-        total_usd_cost = float(reminder.total_usd_cost or 0.0)
-        budget_usd = float(reminder.budget_usd or 0.0)
-        return (
-            f"警告：你已消耗 ${total_usd_cost:.2f}，超过任务总预算（${budget_usd:.2f}）的 90%。"
-            "请立即收尾当前任务并给出最终答复。"
-        )
     if reminder.kind == "history_compaction_summary":
         return (
             "[系统提示：以下是为节省上下文窗口而压缩的早期对话摘要。]\n"

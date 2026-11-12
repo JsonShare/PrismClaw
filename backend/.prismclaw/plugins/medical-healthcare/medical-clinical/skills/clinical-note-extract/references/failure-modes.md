@@ -22,5 +22,5 @@ Each worker rule in `rules.md` (and the orchestrator's completion report in SKIL
 ## What the skill does NOT solve
 
 - **Reasoning over the extracted values** (causality, temporality across notes, eligibility logic) — that is a downstream skill's job.
-- **OCR / scanned-document quality** — if the input is a low-quality scan, extraction quality is bounded by OCR quality. Flag illegible spans as `null_reason: "mentioned_unclear"`.
+- **OCR / scanned-document quality** — if the input is a low-quality scan, extraction quality is bounded by OCR quality. Flag illegible spans as `null_reason: "illegible"`.
 - **Cross-note reconciliation** — two notes that disagree about a value are reconciled by the caller, not this skill.

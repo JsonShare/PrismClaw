@@ -19,14 +19,7 @@
 
 > **初次使用？** 请先阅读 [QUICKSTART.md](QUICKSTART.md)——60 秒完成安装。本 README 为完整参考文档。
 
-本仓库的所有内容均支持**两种使用方式，共用同一套源码**：可作为 [PrismClaw Cowork](https://prismclaw.ai) 或 [PrismClaw](https://prismclaw.ai) plugin 安装，也可通过 [PrismClaw Managed Agents API](https://docs.prismclaw.ai) 部署在您自己的工作流引擎后端。相同的系统提示、相同的 skill——您选择运行位置。
-
-## 在 Cowork 中快速上手
-- [安装 PrismClaw Desktop](https://prismclaw.ai/download)
-- 获取 PrismClaw Cowork 访问权限
-- 按照下方视频中的说明操作：
-
-https://github.com/user-attachments/assets/51394f0a-5277-4fe2-b81c-5c5e9ac876b5
+本仓库是 PrismClaw 的专家插件集合：把仓库放进 PrismClaw 的插件目录、重启后即可使用，所有子插件共用同一套 skill 与系统提示。
 
 > [!IMPORTANT]
 > **这些 plugin 的所有输出均为供律师审阅的草稿——不构成法律意见、不构成法律结论、不替代律师服务。** 其内置的安全机制正是基于此：每处引用均标注来源、特权与主观法律判断采用保守默认值、管辖权假设明确呈现，任何文件在提交、发送或被依赖前均设有明确的确认关卡。律师负责审阅、核实，并对离开办公室的任何内容承担职业责任。这些 plugin 让审阅工作更快；它们不替代审阅本身。
@@ -167,7 +160,7 @@ managed-agent-cookbooks/  # PrismClaw Managed Agent cookbook——每个定时 a
   renewal-watcher/
 scripts/                  # deploy-managed-agent.sh · validate.py · orchestrate.py · lint-tool-scope.py · test-cookbooks.sh
 .plugin/
-  marketplace.json        # plugin 注册表
+  plugin.json             # 市场清单（声明 plugins 数组）
 ```
 
 每个 plugin 目录具有相同的结构：
@@ -185,29 +178,17 @@ scripts/                  # deploy-managed-agent.sh · validate.py · orchestrat
 
 ## 快速上手
 
-### PrismClaw Cowork
-
-在 Cowork 中：
-
-1. 打开 **Cowork** 标签页。
-2. 点击左侧边栏中的 **自定义**。
-3. 点击 **浏览 plugin** 并安装所需 plugin，**或者** 上传自定义 plugin 文件（将任意 plugin 目录压缩为 zip）。
-
-安装后，skill 会在相关时机自动触发，斜杠命令可通过 `/` 调用，定时 agent 按其前置内容中设置的节奏运行。
-
 ### PrismClaw
 
+把本仓库放到 PrismClaw 的插件目录即可，无需安装命令：
+
 ```bash
-# 添加市场（使用本仓库的绝对路径或 GitHub URL）
-/plugin marketplace add <path-to-this-repo>
+cp -R <path-to-this-repo> ~/.prismclaw/assets/plugins/legal-chineselaw
+```
 
-# 安装 plugin——选择与您执业领域匹配的
-/plugin install commercial-legal@legal-chineselaw
-/plugin install privacy-legal@legal-chineselaw
-/plugin install corporate-legal@legal-chineselaw
+重启 PrismClaw 后，各子插件会出现在技能面板的专家分组里。再为每个要用的子插件运行一次设置，执业档案会写入该子插件目录下的 `PRISMCLAW.md`：
 
-# 重启 PrismClaw，然后为每个已安装的 plugin 运行设置。
-# 这将把您的执业档案写入 ~/.prismclaw/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md
+```bash
 /commercial-legal:cold-start-interview
 /privacy-legal:cold-start-interview
 /corporate-legal:cold-start-interview
@@ -243,7 +224,7 @@ scripts/deploy-managed-agent.sh launch-radar
 | **Plugin** | 自包含的执业领域包——skill、agent、hook 和执业档案模板。按需安装。 | `<plugin>/` |
 | **Skill** | PrismClaw 在相关时机自动调用的领域专业知识、惯例和逐步方法——以及您明确触发的斜杠动作：`/commercial-legal:review`、`/privacy-legal:dsar-response`、`/litigation-legal:claim-chart`。 | `<plugin>/skills/<skill>/SKILL.md` |
 | **Agent** | 定时或事件驱动的工作流（续约监控、案件监控、监管变化监控）。在后台运行，发布至频道或写入文件。 | `<plugin>/agents/` |
-| **执业档案** | 描述您的 playbook、升级规则和内部风格的纯英文 `PRISMCLAW.md`。每个 skill 读取它。 | `~/.prismclaw/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md` |
+| **执业档案** | 描述您的 playbook、升级规则和内部风格的纯英文 `PRISMCLAW.md`。每个 skill 读取它。 | `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md` |
 | **连接器** | 将 PrismClaw 与您的数据连接的 [MCP 服务器](https://modelcontextprotocol.io/)——CLM、DMS、电子发现、研究平台、生产力工具。 | `.mcp.json`（每个 plugin） |
 | **Managed agent cookbook** | `agent.yaml` + 深度 1 子 agent + 无头部署的引导示例。 | `managed-agent-cookbooks/<slug>/` |
 
@@ -359,7 +340,7 @@ scripts/deploy-managed-agent.sh launch-radar
 这些是参考模板。当您根据团队的工作方式进行调整时，它们会变得更好——而自定义机制就是 plugin 本身，不是藏在仓库深处的配置文件。
 
 - **运行冷启动访谈。** 它**就是**自定义机制。它询问您的执业方式，读取您的种子文档，并写入您的执业档案。每个其他 skill 都从该档案读取。带上五份已签署的 MSA、您的 playbook 和升级矩阵运行 `/commercial-legal:cold-start-interview`，将使审阅 skill 明显更精准。
-- **编辑执业档案。** 您的档案位于 `~/.prismclaw/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md`。直接编辑以进行小修正——错误的升级阈值、新的集成、政策更新。plugin 更新后仍然保留。
+- **编辑执业档案。** 您的档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md`。直接编辑以进行小修正——错误的升级阈值、新的集成、政策更新。plugin 更新后仍然保留。
 - **重新运行设置。** 当您的执业方式发生重大变化时（新管辖区、新 CLM、新政策），再次运行 `/<plugin>:cold-start-interview` 进行完整重新访谈。
 - **更换连接器。** 将 `.mcp.json` 指向您的 CLM、DMS、电子发现平台、发布追踪器、HRIS。未配置连接器时 skill 会优雅降级——不会静默失败。
 - **引入您的 playbook 和模板。** 将您的术语、内部风格和品牌模板放入 plugin 的 `PRISMCLAW.md` 和 `references/`。skill 会读取它们。
@@ -571,7 +552,7 @@ scripts/deploy-managed-agent.sh launch-radar
 | `/law-student:study-plan` | study-plan | 构建或更新长期学习计划 |
 | `/law-student:session` | study-plan | 运行专注的 N 题学习会话；更新计划 |
 
-### cocounsel-legal（Thomson Reuters）
+### cocounsel-legal（Thomson Reuters，未随本包分发，需单独安装）
 
 | 命令 | Skill | 功能说明 |
 |---|---|---|

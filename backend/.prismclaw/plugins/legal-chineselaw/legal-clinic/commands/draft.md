@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /draft
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域模板、司法管辖区、当地规则、监督风格。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域模板、司法管辖区、当地规则、监督风格。
 2. 使用以下工作流。
 3. 将文档类型与模板匹配。从案件笔记中收集事实——标记缺失，永远不要猜测。
 4. 应用司法管辖区格式。使用内联的 `[FACT NEEDED]`、`[VERIFY]`、`[UNCERTAIN]` 标记起草。
@@ -43,13 +43,13 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、执业领域模板、司法管辖区（州 + 当地法院 + 已摄取的任何当地规则）、监督风格。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、执业领域模板、司法管辖区（州 + 当地法院 + 已摄取的任何当地规则）、监督风格。
 
 案件笔记或摄取摘要用于事实。
 
 ## 教育学检查
 
-阅读位于 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 的该执业领域主管指南。检查 `pedagogy_posture` 设置：
+阅读位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 的该执业领域主管指南。检查 `pedagogy_posture` 设置：
 
 - **`guide`（默认）：** 生成结构和清单。要求学生起草每个部分。对他们的草稿提供反馈（语域、阅读水平、所需元素、他们遗漏的内容）。只有当学生尝试过一次时才提议填写一个部分。
 - **`assist`:** 生成工作产品。标记需要学生审查的项目。学生通过审查进行编辑和学习。
@@ -65,7 +65,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 1：哪个文档？
 
-将请求与诊所的模板集匹配（来自 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`）。按执业领域的常见集：
+将请求与诊所的模板集匹配（来自 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`）。按执业领域的常见集：
 
 | 执业领域 | 文档 |
 |---|---|
@@ -89,7 +89,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 3：应用司法管辖区
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 司法管辖区：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 司法管辖区：
 
 - **标题格式：** 州和当地法院规则。如果在冷启动时摄取了当地规则，使用它们。如果没有，使用州默认值并标记：`[VERIFY CAPTION: 未加载当地规则——根据 [法院] 的当前规则确认格式]`
 - **服务要求：** 谁需要服务、如何服务、根据法院规则在何时之前服务
@@ -111,9 +111,9 @@ Licensed under Apache License 2.0
 
 ### 步骤 6：监督路由
 
-向法院或机构提交文件是一个有后果的行动。门槛是 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有诊所设置的第 0 部分角色检查加强。法院提交始终在提交前通过监督路由，无论监督风格选择如何。
+向法院或机构提交文件是一个有后果的行动。门槛是 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有诊所设置的第 0 部分角色检查加强。法院提交始终在提交前通过监督路由，无论监督风格选择如何。
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 监督风格：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 监督风格：
 - **正式队列：** 草稿进入队列，学生看到"queued for [教授]"
 - **可配置标记：** 如果此文档类型是标记触发器（法院提交通常是的），输出包括"CHECK WITH [教授] BEFORE FILING"
 - **更轻触：** 标准保障标签，无额外门槛——但根据诊所的现有监督结构，法院提交仍会在提交前给教授

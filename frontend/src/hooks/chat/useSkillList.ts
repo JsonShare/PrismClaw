@@ -13,7 +13,7 @@ export interface SkillPickerItem {
   invocationPolicy: string
   /** 插件（marketplace）名：插件来源技能才有，用于聚合与描述展示 */
   marketplaceName: string | null
-  /** 专家插件包级描述（marketplace.json description），所有子插件共享 */
+  /** 专家插件包级描述（市场级 plugin.json 的 description），所有子插件共享 */
   marketplaceDescription: string | null
   /** 子插件级描述（子插件自身 manifest description），每个子插件独立 */
   pluginDescription: string | null

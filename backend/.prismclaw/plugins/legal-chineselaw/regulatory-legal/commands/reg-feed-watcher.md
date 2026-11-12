@@ -22,7 +22,7 @@ Licensed under Apache License 2.0
 
 # /reg-feed-watcher
 
-1. 读 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 关注清单、重要性阈值、信息源配置。
+1. 读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 关注清单、重要性阈值、信息源配置。
 2. 使用以下工作流。
 3. 拉取每个信息源。按重要性过滤。
 4. 输出：新内容，按重要性档分类。
@@ -35,7 +35,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 关注清单、重要性阈值、信息源配置、摘要输出路径（如已设）。
+`~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 关注清单、重要性阈值、信息源配置、摘要输出路径（如已设）。
 
 `${PRISMCLAW_PLUGIN_ROOT}/references/reg-feed-watcher/source-catalog.md`（在此技能目录中）→ 各类信息源的整理目录（覆盖中央层级、地方层级、行业协会、二级来源等）。在配置新源或用户的关注清单存在覆盖缺口时使用（参见步骤 0）。
 
@@ -50,7 +50,7 @@ Licensed under Apache License 2.0
 
 如果存在明显缺口——例如，用户在关注清单监视"网信办"，但信息源配置里只有一个 `cac.gov.cn`，遗漏地方网信办、相关协会、最高院数据条线——在摘要顶部一次性提出：
 
-> **信息源覆盖缺口提醒：** 你的关注清单包含 [类别]，但仅配置了 [N] 个源。源目录在此类别中列出了 [X] 个选项（例如，[前 2-3 个名称]）。要我建议添加吗？运行 `/regulatory-legal:cold-start-interview --redo` 进行更新，或直接编辑 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`。
+> **信息源覆盖缺口提醒：** 你的关注清单包含 [类别]，但仅配置了 [N] 个源。源目录在此类别中列出了 [X] 个选项（例如，[前 2-3 个名称]）。要我建议添加吗？运行 `/regulatory-legal:cold-start-interview --redo` 进行更新，或直接编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`。
 
 不要反复唠叨相同的缺口——如果用户明确表示"暂时跳过地方监管"，请尊重。在 PRISMCLAW.md 中记录状态以便保持。
 
@@ -114,7 +114,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 2：分类
 
-每个项目根据 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 获得重要性档：
+每个项目根据 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 获得重要性档：
 
 | 项目类型 | 与阈值匹配 |
 |---|---|
@@ -133,7 +133,7 @@ Licensed under Apache License 2.0
 
 - **不要**将征求意见稿归类为"始终重要"——在规则发布之前合规影响为零。
 - **如果征求意见稿的任何问题领域触及关注清单的始终重要类别（例如，金融服务关注清单中关于开放银行的征求意见稿），则**归类为值得复核。
-- **将评议截止日期记录到** `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/comment-tracker.yaml`，并带有 `item_type: 征求意见稿`，以便下游台账可以将其与合规差异区分开来。
+- **将评议截止日期记录到** `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/comment-tracker.yaml`，并带有 `item_type: 征求意见稿`，以便下游台账可以将其与合规差异区分开来。
 - **在简报条目中包含一行**，明确指出："规则前。评议截止日期 [日期]。仅作为预定位分析路由到 `/regulatory-legal:policy-diff`（尚无合规差距）。"
 - **路由到评议台账，而不是内规差异台账。**
 
@@ -161,7 +161,7 @@ Licensed under Apache License 2.0
 
 **文件输出行为：**
 
-1. 在 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中查找 `摘要输出路径`。如果已设置，则写入此处。如果未设置的默认值：`~/regulatory-legal-digests/reg-digest-YYYY-MM-DD.md`。
+1. 在 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中查找 `摘要输出路径`。如果已设置，则写入此处。如果未设置的默认值：`~/regulatory-legal-digests/reg-digest-YYYY-MM-DD.md`。
 2. 如需要则创建父目录。
 3. 将完整摘要写入为 Markdown（与聊天输出内容相同，包括工作产品标题、源标签和核验引用页脚）。
 4. 如果该路径今天已存在文件，则附加带有时间戳子标题的新部分而不是覆盖——同一天可能会看到多次运行。
@@ -216,10 +216,10 @@ Licensed under Apache License 2.0
 
 ## 配置依赖的后备方案
 
-此技能从 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取关注清单、重要性阈值和信息源配置。当所需值仍然是 `[PLACEHOLDER]` 或为空时，在输出中具体说明：
+此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取关注清单、重要性阈值和信息源配置。当所需值仍然是 `[PLACEHOLDER]` 或为空时，在输出中具体说明：
 
-- **关注清单为空：** 停止并说"你配置中的关注清单为空。我不知道要监视哪些监管机构，无法拉取信息源。运行 `/regulatory-legal:cold-start-interview --redo` 或编辑 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 并添加至少一个监管机构。"
-- **重要性阈值为空：** 回退到默认档并附加："此输出使用了默认重要性档，因为你的配置没有设置自定义阈值。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 进行调整。"
+- **关注清单为空：** 停止并说"你配置中的关注清单为空。我不知道要监视哪些监管机构，无法拉取信息源。运行 `/regulatory-legal:cold-start-interview --redo` 或编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 并添加至少一个监管机构。"
+- **重要性阈值为空：** 回退到默认档并附加："此输出使用了默认重要性档，因为你的配置没有设置自定义阈值。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 进行调整。"
 - **信息源配置为空：** 仅运行公开网页源（元典 MCP 如可用，否则手工录入）并附加："此输出仅使用了公开网页源，因为你的配置没有列出任何经验证的栏目页 URL 或付费订阅源。使用 `/regulatory-legal:cold-start-interview --redo` 添加信息源。"
 
 当相关值已填充时，不说明配置。

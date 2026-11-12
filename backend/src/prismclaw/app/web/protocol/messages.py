@@ -27,6 +27,9 @@ class ChatSendMessage:
     confirmation_decision: Literal["approve", "deny"] | None = None
     attachments: list[Any] = field(default_factory=list)
     mode: WorkspaceMode | None = None
+    # 执行档位：quick/standard/deep，决定 steps / tool_calls / 墙钟预算。
+    # None → 后端默认 standard（见 RunRequest.effort）。
+    effort: Literal["quick", "standard", "deep"] | None = None
     trajectory: str | None = None  # "full", "dry", or None (use env default)
     designated_skills: list[str] = field(default_factory=list)  # 用户指定技能名（可多个）
     designated_plugins: list[str] = field(default_factory=list)  # 用户指定插件名（可多个）

@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /case-brief
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲/摘要偏好。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲/摘要偏好。
 2. 应用以下工作流。
 3. 以学生的格式摘录。如果是 drill-me 模式：要求学生先陈述裁决。
 
@@ -38,7 +38,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲/摘要偏好（格式、深度）、学习风格。
+`~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲/摘要偏好（格式、深度）、学习风格。
 
 ## "不要替我写"规则（硬规则）
 
@@ -72,7 +72,7 @@ Licensed under Apache License 2.0
 
 Skill 生成**带问题的模板**，不是填充好的摘要。学生填充每个部分；skill 审查、反驳、建议缺少什么。
 
-按照 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中学生的格式。如果未捕获，默认：
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中学生的格式。如果未捕获，默认：
 
 ```markdown
 ## [Case Name], [cite]
@@ -100,7 +100,7 @@ Skill 生成**带问题的模板**，不是填充好的摘要。学生填充每�
 
 ## 深度校准
 
-根据 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`——有些学生想要单行摘要（规则 + 引用），有些想要完整处理。匹配他们的格式。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`——有些学生想要单行摘要（规则 + 引用），有些想要完整处理。匹配他们的格式。
 
 如果他们是仍在学习阅读案例的 1L：更完整的摘要。如果他们是准备律师考试的 3L：仅规则。
 

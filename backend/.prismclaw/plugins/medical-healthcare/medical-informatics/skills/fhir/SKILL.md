@@ -18,7 +18,7 @@ The `fhir` MCP server ships with this plugin. If the fhir MCP's `status` is not 
 
 Call the fhir MCP's `status` first. If `configured.FHIR_BASE_URL` is set, call the fhir MCP's `connect` with **no arguments** — the server reads its env. If the user names a specific server, pass `{base_url, client_id}` explicitly instead.
 
-On a desktop, `connect` opens the browser and completes the SMART login automatically. In a headless or VM environment (Cowork, SSH, container), `connect` instead returns a sign-in URL: show it to the user, ask them to open it and sign in, then paste back the **full address-bar URL** they land on (it starts with `http://localhost:53682/callback?code=...` and the page itself may show a connection error — that's expected). Pass that URL to the fhir MCP's `connect_complete({callback_url})` to finish.
+On a desktop, `connect` opens the browser and completes the SMART login automatically. In a headless or VM environment (SSH, container), `connect` instead returns a sign-in URL: show it to the user, ask them to open it and sign in, then paste back the **full address-bar URL** they land on (it starts with `http://localhost:53682/callback?code=...` and the page itself may show a connection error — that's expected). Pass that URL to the fhir MCP's `connect_complete({callback_url})` to finish.
 
 Never connect implicitly on first use.
 

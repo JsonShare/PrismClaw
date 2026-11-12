@@ -18,13 +18,13 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的? Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的? Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
 ## 输出标题
 
-在前面加上 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 中的工作产品标题（根据用户角色而不同——见 `## Who's using this`）。此 skill 创建的每个文件、日志、备忘录和摘要都以该标题开头。
+在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 中的工作产品标题（根据用户角色而不同——见 `## Who's using this`）。此 skill 创建的每个文件、日志、备忘录和摘要都以该标题开头。
 
 > **分发纪律。** 此 skill 创建的每个文件——日志条目、备忘录草稿、受众摘要、文档注释——继承底层调查的特权性和保密性状态。在特权圈子之外分发（转发给调查团队外的非律师、未限定范围地抄送 HR、交给业务方）可能会放弃整个调查的特权。将这些文件存储在特权材料所在的地方，按照工作产品标题标记，并慎重做出每个分发决定。
 
@@ -48,7 +48,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 升级表、任何记录的调查协议。
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 升级表、任何记录的调查协议。
 
 ---
 
@@ -86,7 +86,7 @@ Licensed under Apache License 2.0
 
 创建以下文件：
 
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/investigation-[matter-slug]/log.yaml`：
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/investigation-[matter-slug]/log.yaml`：
 
 ```yaml
 # [WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this`]
@@ -111,11 +111,11 @@ entries: []
 evidentiary_gaps: []
 ```
 
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/investigation-[matter-slug]/sources-checklist.yaml`:
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/investigation-[matter-slug]/sources-checklist.yaml`:
 
 根据调查类型生成。见下方来源检查清单模板。
 
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/investigation-[matter-slug]/documents-reviewed.yaml`:
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/investigation-[matter-slug]/documents-reviewed.yaml`:
 
 ```yaml
 # [WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this`]
@@ -332,7 +332,7 @@ sources:
 ```
 
 展示检查清单后，将其写入
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/investigation-[slug]/sources-checklist.yaml`。
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/investigation-[slug]/sources-checklist.yaml`。
 
 ---
 
@@ -342,7 +342,7 @@ sources:
 
 ### 步骤 1 — 识别事项
 
-如果 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/` 中存在多个调查文件夹，询问这些数据属于哪个事项。如果只有一个，继续。
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/` 中存在多个调查文件夹，询问这些数据属于哪个事项。如果只有一个，继续。
 
 ### 步骤 2 — 识别数据类型
 
@@ -584,7 +584,7 @@ sources:
 [来自 documents-reviewed.yaml 的摘要表格]
 ```
 
-将草稿写入 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/investigation-[slug]/memo.md`。
+将草稿写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/investigation-[slug]/memo.md`。
 
 ### 如果备忘录已存在——更新
 
@@ -645,7 +645,7 @@ sources:
 
 ## 后果行动门槛（响应要求或投诉）
 
-**在生成摘要、备忘录或用于外部响应的内容之前（EEOC/DFEH/州机构指控响应、原告律师要求函响应、监管机构响应或任何正式投诉回复）：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
+**在生成摘要、备忘录或用于外部响应的内容之前（EEOC/DFEH/州机构指控响应、原告律师要求函响应、监管机构响应或任何正式投诉回复）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
 
 > 响应要求、指控或投诉具有法律后果——此处采取的立场是后续程序中的承认、抗辩放弃可能是无意的，基础调查的特权可能丧失。您是否与律师审查过此响应？如果是，继续。如果否，这是带给他们的简报：
 >

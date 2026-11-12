@@ -13,6 +13,12 @@ from prismclaw.schema.content.compaction import CompactResult
 
 logger = logging.getLogger(__name__)
 
+# ── 重叠审计 ──
+# 注入内容: <working_memory> XML block（Redis HGETALL 的工作记忆条目）
+# 注入时机: append 侧，仅 Redis 有值时触发
+# 与 L1 的重叠关系: 无。L1 没有 working_memory section。
+# 保留理由: 唯一承载 Redis 工作记忆的通道，不可替代。
+
 
 class WorkingMemoryHook:
     """Implements AgentHook Protocol.

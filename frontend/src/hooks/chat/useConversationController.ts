@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from 'react'
-import { useChatStore, usePermissionStore, useSessionStore } from '../../stores'
+import { useChatStore, useEffortStore, usePermissionStore, useSessionStore } from '../../stores'
 import type { OutboxItem } from '../../stores/chat'
 import { apiUrl } from '../../lib/system-adapter'
 import { splitAttachmentContent } from '../../lib/chat/attachments'
@@ -61,12 +61,14 @@ export function useConversationController({
   const wsSendChat = useCallback(
     (convId: string, text: string, attachments: AttachmentBlock[], extra: Record<string, unknown> = {}) => {
       const mode = usePermissionStore.getState().mode
+      const effort = useEffortStore.getState().effort
       send({
         type: 'chat.send',
         conversation_id: convId,
         workspace_id: backendWorkspaceId,
         content: text,
         mode,
+        effort,
         trajectory: 'full',
         ...(attachments.length > 0 ? { attachments } : {}),
         ...extra,

@@ -17,13 +17,13 @@ category: 商事合同
 
 # /review
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的剧本审查入站协议。从标题中识别协议结构，选择适当的 skill，并且——如果启用了 confirm_routing——在继续之前与用户确认。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的剧本审查入站协议。从标题中识别协议结构，选择适当的 skill，并且——如果启用了 confirm_routing——在继续之前与用户确认。
 
 ## 说明
 
-1. **加载 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。** 如果存在占位符，停止并提示："运行 `/commercial-legal:cold-start-interview` 先配置执业档案——我需要了解你的剧本才能根据它审查合同。"
+1. **加载 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。** 如果存在占位符，停止并提示："运行 `/commercial-legal:cold-start-interview` 先配置执业档案——我需要了解你的剧本才能根据它审查合同。"
 
-   同时读取 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## 审查偏好` → `confirm_routing`。如果字段缺失，将其视为 `true`。
+   同时读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## 审查偏好` → `confirm_routing`。如果字段缺失，将其视为 `true`。
 
 2. **获取协议：** 从文件路径、企业协作文档链接、[合同管理系统 ID] 或粘贴的文本。如果未提供，请询问。
 
@@ -75,7 +75,7 @@ category: 商事合同
 
 6. **运行 skill。** 完全遵循每个 skill 的工作流。如果适用多个 skills，按顺序运行它们并将输出集成到单个备忘录中——不要生成单独的备忘录。
 
-7. **检查升级：** 如果任何问题根据 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 矩阵超出审查者的权限，调用 **escalation-flagger** 路由并起草请求。
+7. **检查升级：** 如果任何问题根据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 矩阵超出审查者的权限，调用 **escalation-flagger** 路由并起草请求。
 
 8. **提供后续选项：**
    - 给业务负责人的利益相关者摘要
@@ -85,7 +85,7 @@ category: 商事合同
 
 ## 配置 confirm_routing
 
-添加到 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## 审查偏好`：
+添加到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## 审查偏好`：
 
 ```markdown
 ## 审查偏好
@@ -112,7 +112,7 @@ confirm_routing: true   # 设置为 false 以跳过路由确认并自动继续
 
 ## 输出
 
-根据 skill 格式的完整审查备忘录。路由决策记录在顶部。偏差逐偏差、具体红线语言、命名审批人。保存在 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → 内部风格说工作产品去的地方。
+根据 skill 格式的完整审查备忘录。路由决策记录在顶部。偏差逐偏差、具体红线语言、命名审批人。保存在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → 内部风格说工作产品去的地方。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

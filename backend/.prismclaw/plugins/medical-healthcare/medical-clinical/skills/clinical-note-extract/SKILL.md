@@ -43,6 +43,18 @@ priority: 9
 
 字段描述要写清**在哪找、怎么区分**，不要只写字段名。定义完先跟用户确认，再开始抽。
 
+字段还有两个可选键：`finding: true` 表示该字段要看断言语境（症状、诊断、暴露），抽取侧按下面的三轴标注；`check` 由校验脚本在抽取之后按 `kind` 分派——抽取侧看到 `check` 但不执行，只负责原样取值：
+
+| `check.kind` | 参数 | 校验脚本做什么 |
+|---|---|---|
+| `range` | `min` / `max` / `unit` | 数值越界记 FAIL；原文单位与 `unit` 不符记 `unit_suspect` |
+| `date` | — | 按原文精度解析（`2020` / `2020-06` / `2020-06-15`）；补全精度或非法日期记 FAIL |
+| `pattern` | `regex` | 不匹配记 FAIL |
+| `enum` | `values` | 不在枚举内记 FAIL；**不要把候选答案写进 `values`**，抽取方会看到 |
+| `terminology` | `via` | 没有对应编码连接器时不判定，挂 `code_status: unvalidated` 并在报告点名 |
+
+新增一种 kind = 在校验脚本加一个分支，抽取规则与 worker 契约都不变。
+
 ### 第 2 步：抽取
 
 对每份病历输出一条记录：
@@ -69,10 +81,12 @@ priority: 9
 
 字段规则：
 
-- `span` 必须是**原文的连续片段**，能直接检索到；跨句拼接的值要拆开或标 `span_ok: false`
-- `value` 为 null 时，`null_reason` 必填，取值：`not_mentioned`（原文没提）、`illegible`（字迹/扫描不清）、`redacted`（已脱敏遮盖）、`ambiguous`（原文表述矛盾无法判定）
+- `span` 必须是**原文的连续片段**，能直接检索到；跨句拼接、改写措辞的都不算 span，会被校验脚本判为「检索不到」
+- `value` 为 null 时，`null_reason` 必填，取值：`not_mentioned`（原文没提）、`illegible`（字迹/扫描不清）、`redacted`（已脱敏遮盖）、`ambiguous`（原文表述矛盾无法判定）、`out_of_scope`（字段不适用于本次就诊）
 - 数值带单位，单位与原文一致；原文单位异常（如 CRP 写成 mg/ml）保留原值并在 `notes` 里标 `unit_suspect`
 - 不确定是否属于该字段的，宁可不抽，把线索写进 `notes`
+- 一个字段只放一个值。要「所有用药」这类清单时，先用自由文本抽出清单，再按清单逐项建 schema 重抽一次，不要在单字段里塞数组
+- 同一字段出现多个冲突值时（如两次 FEV1），按 `desc` 的限定取（如「用药后」）；`desc` 没限定时取最近或最具体的一个，两个 span 都写进 `notes`
 
 **三条硬规则**（违反任何一条，结果不可用）：
 
@@ -80,22 +94,42 @@ priority: 9
 2. **绝不输出编码。** `value` 只放原文用词（「重度慢阻肺」），不要给 ICD/SNOMED/LOINC/RxNorm 编码。编码集有版本漂移，凭记忆给出的码往往已过期；需要编码时由下游单独做映射。
 3. **不补全部分值。** 原文写「2020 年 6 月」，就输出 `2020-06`，不要补成 `2020-06-01`；原文写「约 8%」，保留「约」，不要改成 8.0。
 
+**多份病历怎么办。** 硬规则「一次只抽一份」约束的是**每个抽取上下文只看一份**，不是拒绝批量输入。多份时按份隔离：每份病历单独交给 `note-extract-worker` 子代理（无工具、不共享上下文），一份一个 worker，彼此看不到对方的原文；每份再各自跑第 3 步校验。不要把多份病历拼进同一个抽取上下文——那正是召回率骤降且不报错的原因。
+
+数值的合理区间只用来**发现单位或转写错误**，不用来改值——超出下表时照原样输出，把疑点写进 `notes`：
+
+| 指标 | 单位 | 合理区间 |
+|---|---|---|
+| 心率 | bpm | 20–300 |
+| 收缩压 / 舒张压 | mmHg | 40–300 / 20–200 |
+| 体温 | °C / °F | 30–45 / 86–113 |
+| SpO2 | % | 40–100 |
+| HbA1c | % | 3–20 |
+| eGFR | mL/min/1.73m² | 1–200 |
+| 年龄 | 岁 | 0–130 |
+| 体重 / 身高 | kg / cm | 0.3–700 / 20–275 |
+
 ### 第 3 步：校验
 
-用脚本核对出处，不要只靠肉眼：
+用脚本核对，不要只靠肉眼。带 schema 跑才能校验 `check`：
 
 ```bash
-python scripts/validate_extraction.py --note note.txt --result result.json
+python scripts/validate_extraction.py --note note.txt --result result.json --schema schema.json
+python scripts/validate_extraction.py --note note.txt --result result.json --schema schema.json --json
 ```
 
-脚本检查四件事：
+脚本是确定性的，不做医学判断，检查五件事：
 
-1. 每个非空 `span` 能否在原文中检索到（忽略空白差异）
+1. 每个非空 `span` 能否在原文中检索到（忽略空白与全半角差异）
 2. 每个 null 是否带合法 `null_reason`
 3. 断言三轴取值是否合法
-4. 数值字段是否通过 `check`（范围/正则/枚举）
+4. 字段的 `type` 与 `check` 是否通过（`range` / `date` / `pattern` / `enum` / `terminology`）
+5. 原文单位与 schema 期望单位是否一致（不一致记 `unit_suspect`）
 
-输出逐字段 OK/FAIL 与汇总。有 FAIL 就回去改，不要带着错误出处交付。
+**可信判定：一个字段可信 = `span_verified` 为 true，且它的 `check` 没有 FAIL。两者缺一不可。**
+有 FAIL 就回去改，不要带着错误出处交付；`terminology` 缺连接器时挂 `unvalidated`，不算 FAIL，但必须在报告里点名，不能静默当成已验证。
+
+报告必须交代完整性：**请求 N 字段 · 有值 M · 空 K（按 `null_reason` 分项）**，再按 `check.kind` 给出通过/标记数。任何未通过的 check、未命中的 span，都不许静默混进结果。
 
 ## 断言三轴（中文适配）
 
@@ -128,13 +162,16 @@ python scripts/validate_extraction.py --note note.txt --result result.json
 
 ## 输出
 
-默认给三样东西：
+默认给四样东西：
 
 1. **结构化记录**：JSON（或用户指定的表格格式）
-2. **校验报告**：脚本输出，逐字段 OK/FAIL
-3. **待人工确认清单**：`ambiguous` 与 `unit_suspect` 的字段，说明为什么需要人工看
+2. **核对表**：`字段 | 值 | 断言 | 出处片段 | 状态`，一行一字段，按 schema 顺序
+3. **完整性汇总**：请求 N · 有值 M · 空 K（按 `null_reason` 分项），以及各 `check.kind` 的通过/标记数、`terminology` 未验证项
+4. **待人工确认清单**：`ambiguous`、`unit_suspect`、`unvalidated` 的字段，逐条说明为什么需要人工看
 
-字段多时用表格呈现：`字段 | 值 | 出处片段 | 断言 | 备注`。
+状态列取值：`有值` · `已核`（check 通过）· `越界` · `单位存疑` · `未验证`（术语连接器缺失）· `未提及` / `字迹不清` / `已脱敏`（对应 null_reason）。
+
+核对表的意义是让审核者不必重读病历就能逐行接受或驳回；reviewer 的接受/驳回结果就是这套抽取的黄金标注，能留下就留下。
 
 ## 与其它技能的关系
 

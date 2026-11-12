@@ -159,6 +159,13 @@ def sync_prismclaw_home(project_root: Path) -> Path:
             except Exception:
                 logger.exception("sync: 拷文件失败 %s → %s", src_entry, dst_entry)
 
+    for name in ("IDENTITY.md", "PREFERENCES.md"):
+        if not (target / name).is_file():
+            logger.warning(
+                "sync_prismclaw_home: 必需档案缺失 %s（身份/偏好将不会注入）",
+                target / name,
+            )
+
     logger.info(
         "sync_prismclaw_home: source=%s → target=%s, entries_synced=%d",
         source, target, synced,

@@ -94,7 +94,7 @@ plugin 是否包括正式审查工作流——学生 draft → 教授审查 → 
 2. **可配置标记，非正式审查**——某些触发条件将输出标记为"CHECK WITH PROFESSOR"，无队列机制
 3. **轻触**——所有内容上的标准保障标签，教授通过现有诊所结构监督（案件 rounds，一对一会面）
 
-稍后可通过编辑 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 更改。你的配置存储在该版本无关的路径中，并在 plugin 更新后保留。
+稍后可通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 更改。你的配置存储在该版本无关的路径中，并在 plugin 更新后保留。
 
 ## 学期轮换：`/ramp` 解决方案
 
@@ -143,11 +143,11 @@ plugin 是否包括正式审查工作流——学生 draft → 教授审查 → 
 
 Clio 被标记为可选的未来集成——120 多所法学院使用 Clio 进行案件管理。从文件上传开始；Clio 连接器将让 `/client-intake` 和 `/status` 直接提取案件数据。
 
-用于客户保密的帐户层级（Team 与 Enterprise）是每个诊所 IT 和伦理审查的开放问题。Cowork 的桌面架构在本地处理数据。
+用于客户保密的帐户层级（Team 与 Enterprise）是每个诊所 IT 和伦理审查的开放问题。PrismClaw 在本地处理数据。
 
 ## 它如何学习
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
 
 ## 文件结构
 
@@ -190,4 +190,4 @@ legal-clinic/
 
 ## 先决条件
 
-一些功能引用外部集成（文档管理、发布追踪器、电子发现、案件管理、监管提要）。这些不被捆绑——如果你在你的环境中为其中之一拥有 MCP 服务器，相关功能将使用它。没有它，plugin 回退到文件上传和手动工作流。运行 `/legal-clinic:integrations` 以查看你环境中有什么可用。
+一些功能引用外部集成（文档管理、发布追踪器、电子发现、案件管理、监管提要）。这些不被捆绑——如果你在你的环境中为其中之一拥有 MCP 服务器，相关功能将使用它。没有它，plugin 回退到文件上传和手动工作流。运行 `/legal-clinic:cold-start-interview --check-integrations` 可以只重新检查集成可用性，结果写入 `PRISMCLAW.md` 的「可用集成」一节。

@@ -206,7 +206,7 @@ category: AI治理
 
 **结束时说明可更改性：**
 
-> 完成了。你的执业档案位于 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`——直接可读可编辑的纯文本文件。随时运行 `--redo` 重新访谈或 `--check-integrations` 重检连接器。
+> 完成了。你的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`——直接可读可编辑的纯文本文件。随时运行 `--redo` 重新访谈或 `--check-integrations` 重检连接器。
 >
 > 最常需要更新的内容：备案状态（完成备案后更新）、新 AI 系统上线（更新 ai-systems.yaml）、法规更新（更新监管足迹）。
 

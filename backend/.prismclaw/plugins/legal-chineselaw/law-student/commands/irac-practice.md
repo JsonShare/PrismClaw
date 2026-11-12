@@ -17,12 +17,12 @@ Licensed under Apache License 2.0
 
 # /irac-practice
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 课程、考试格式、大纲位置、学习风格。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 课程、考试格式、大纲位置、学习风格。
 2. 应用以下框架。
 3. 确定模式：学生提供的假设 + 答案，或 skill 生成的假设配合学生的答案。
 4. 仔细阅读答案。对照预期的 IRAC 组件映射。
 5. 输出结构化反馈：发现/遗漏的问题、规则准确性、分析深度、组织、评分波段、前 3 个修复，最多 1-2 个标记的示例措辞（从不完整的 IRAC 模范）。
-6. 附加到 `.prismclaw/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md` 用于模式检测。3+ 次会话后显示模式。
+6. 附加到 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md` 用于模式检测。3+ 次会话后显示模式。
 
 ---
 
@@ -50,8 +50,8 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、考试格式、大纲位置、学习风格
-- `.prismclaw/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md`（如果存在）——跨会话模式跟踪
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、考试格式、大纲位置、学习风格
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md`（如果存在）——跨会话模式跟踪
 - 学生提供的假设（如果在特定提示上练习）和他们的书面答案
 
 ## 工作流
@@ -149,7 +149,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：跟踪模式
 
-附加到 `.prismclaw/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md`：
+附加到 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md`：
 
 ```markdown
 ## [日期] — [学科 / 假设主题]

@@ -9,7 +9,7 @@ Licensed under Apache License 2.0
 安装程序支持以下路径的白名单：
 
 ```
-~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml
+~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml
 ```
 
 此文件允许管理员限制安装程序可以获取的内容、它将信任哪些发布者，以及社区 skill 允许接入哪些 MCP 连接器。它是安装程序信任检查步骤的结构化对应物：信任检查是 AI 读取 skill 的过程，精心构造的提示注入可以操控该过程；而白名单是管理员控制的文件，PrismClaw 在任何分析运行之前就会读取它，其执行不依赖于 PrismClaw 对 skill 的正确分析。

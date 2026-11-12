@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /client-intake
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、接案模板、督导方式、标记触发器。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、接案模板、督导方式、标记触发器。
 2. 使用以下工作流。
 3. 路由到执业领域模板。始终监听跨领域问题。
 4. 冲突检查标记。分流分类。
@@ -40,11 +40,11 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、接案模板（如果有多个则按执业领域）、督导方式、司法管辖区、标记触发器。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、接案模板（如果有多个则按执业领域）、督导方式、司法管辖区、标记触发器。
 
 ## 读取督导指南
 
-检查 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 中是否有执业领域指南。如果存在，使用其接案问题、危险信号和适合标准代替以下通用默认值。如果不存在，使用通用接案并在接案摘要末尾注明："这是一次通用接案——您的督导可以通过 `/legal-clinic:build-guide` 为您的诊所类型定制问题。"
+检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 中是否有执业领域指南。如果存在，使用其接案问题、危险信号和适合标准代替以下通用默认值。如果不存在，使用通用接案并在接案摘要末尾注明："这是一次通用接案——您的督导可以通过 `/legal-clinic:build-guide` 为您的诊所类型定制问题。"
 
 当接案在执业领域路由之前开始（以下工作流的步骤 1）时，在路由后重新检查指南——指南路径取决于接案落入哪个执业领域。
 
@@ -60,7 +60,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 2：执业领域特定接案
 
-每个执业领域问不同的问题。使用 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中此领域的模板。如果没有提供，使用以下默认值：
+每个执业领域问不同的问题。使用 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中此领域的模板。如果没有提供，使用以下默认值：
 
 **移民：**
 - 当前身份和入境方式
@@ -107,7 +107,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：冲突检查标记
 
-按照 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 描述的任何冲突检查流程。至少：
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 描述的任何冲突检查流程。至少：
 
 - 对方当事人姓名——诊所是否代表或曾经代表他们？
 - 相关方——学生或诊所可能与之有冲突的其他人？
@@ -128,7 +128,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 6：督导标记检查
 
-按照 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 督导方式和标记触发器。如果启用了正式审查队列或可配置标记，且触发器存在（提到截止日期、DV 指标、移民身份争议等），记录标记。
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 督导方式和标记触发器。如果启用了正式审查队列或可配置标记，且触发器存在（提到截止日期、DV 指标、移民身份争议等），记录标记。
 
 ### 步骤 7：截止日期交接——必需交付物
 

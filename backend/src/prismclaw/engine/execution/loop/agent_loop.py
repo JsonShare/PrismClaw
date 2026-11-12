@@ -56,6 +56,9 @@ from prismclaw.engine.execution.control.kernel import (
     Decision,
     LoopEvent,
     TerminalReason,
+    evaluate_loop_control,
+    reasoning_effort_for,
+    resolve_effort_budget,
 )
 from prismclaw.engine.execution.projection.project import RunProjector
 from prismclaw.engine.execution.loop._loop_helpers import (
@@ -97,8 +100,7 @@ async def run_loop(
     while True:
         # ── 迭代开始计时 ──
         _iter_start = _time.monotonic()
-        state.perf.iterations += 1
-        state.timing.iteration = state.iteration
+        state.timing.iteration = state.perf.llm_calls + 1
         state.timing.pre_request_pipeline_ms = 0.0
         state.timing.llm_stream_ms = 0.0
         state.timing.tool_execution_ms = 0.0
@@ -120,7 +122,7 @@ async def run_loop(
                 logger.info(
                     "steering: injected %d user message(s) at iteration %d boundary",
                     len(_steering_texts),
-                    state.iteration,
+                    state.perf.llm_calls,
                 )
 
         # ── Step 2: prepare turn + stream LLM ──
@@ -155,7 +157,7 @@ async def run_loop(
                 continue  # 重新进入 Step 1 注入更新的消息
 
         # ── Iteration boundary: LLM start ──
-        yield IterationBoundary(iteration=state.iteration, kind="llm_start")
+        yield IterationBoundary(iteration=state.perf.llm_calls, kind="llm_start")
 
         # 2b. stream LLM
         if config.stream_llm is not None:
@@ -202,7 +204,7 @@ async def run_loop(
         # 路径 E（全拒判定）只在 all_blocked 阶段运行。
         if config.should_continue is not None:
             _decision = await config.should_continue(
-                state, response, event=LoopEvent(site="preflight", iteration=state.iteration),
+                state, response, event=LoopEvent(site="preflight", iteration=state.perf.llm_calls),
             )
             if not _decision.should_continue:
                 if state.terminal_error is not None:
@@ -225,10 +227,8 @@ async def run_loop(
             # 此处 continue 跳过底部 bookkeeping——prepare 每迭代从 tree
             # 重建，本回合落树的 assistant 消息自动进入下轮上下文
             # （HIGH-3 同族手工失效标志已删除，树是唯一真相源）。
-            # iteration 必须在此递增：底部 bookkeeping（L325）被 continue
-            # 跳过，若不补递增，纯文本循环（模型持续不调用工具）永远停在
-            # 同一 iteration，max_iterations 对其失去约束力（doom-loop 放行）。
-            state.iteration += 1
+            # steps 真值为 perf.llm_calls（在 stream_llm 调用前递增），
+            # 含重试/空响应路径，此处无需额外计数。
             continue
 
         # 3a. before_tool_call per call (immediate/prepared 分离)
@@ -282,7 +282,7 @@ async def run_loop(
                 _decision = await config.should_continue(
                     state,
                     response,
-                    event=LoopEvent(site="all_blocked", iteration=state.iteration),
+                    event=LoopEvent(site="all_blocked", iteration=state.perf.llm_calls),
                 )
                 if not _decision.should_continue:
                     if state.terminal_error is not None:
@@ -379,7 +379,7 @@ async def run_loop(
         # 覆盖：tool_loop 进度观察（record + evaluate）、budget、abort
         if config.should_continue is not None:
             _decision = await config.should_continue(
-                state, response, event=LoopEvent(site="post", iteration=state.iteration),
+                state, response, event=LoopEvent(site="post", iteration=state.perf.llm_calls),
             )
             if not _decision.should_continue:
                 if state.terminal_error is not None:
@@ -391,7 +391,7 @@ async def run_loop(
         # pending_messages 在循环顶部 Step 1 处理
 
         # ── bookkeeping ──
-        yield IterationBoundary(iteration=state.iteration, kind="llm_end")
+        yield IterationBoundary(iteration=state.perf.llm_calls, kind="llm_end")
         state.timing.total_iteration_ms = (_time.monotonic() - _iter_start) * 1000
         logger.debug(
             "loop_timing iter=%d pipeline=%.1fms llm=%.1fms tools=%.1fms total=%.1fms",
@@ -401,7 +401,6 @@ async def run_loop(
             state.timing.tool_execution_ms,
             state.timing.total_iteration_ms,
         )
-        state.iteration += 1
         state.llm_outcome = None
         state.llm_response = None
         # HIGH-3：prepare 端口每迭代从 tree 重建 source_messages，本回合
@@ -456,12 +455,21 @@ def create_loop_config(
     completion_config = deps.config.control
     # 完成契约在首个消费点惰性构建。
     _completion_state = CompletionState(contract=None, contract_resolved=False)
+    _budget_warned = False  # 预算临限提醒只注入一次
+    _effort_level = getattr(request, "effort", "standard") or "standard"
+    _effort_budget = resolve_effort_budget(
+        effort=_effort_level,
+        long_running=bool(getattr(request, "long_running", False)),
+        tiers=deps.config.effort,
+    )
+    # 写入 loop 预算的墙钟锚点（soft/hard deadline），供 evaluate_loop_control 消费。
+    run_state.loop_state.soft_at = float(run_started) + _effort_budget.soft_s
+    run_state.loop_state.hard_at = float(run_started) + _effort_budget.hard_s
     _budget_guard = BudgetGuard(
         Budget(
-            max_iterations=int(getattr(deps.config, "max_iterations", 0) or 0),
+            max_iterations=_effort_budget.steps,
             run_deadline_s=float(run_deadline_s or 0.0),
             run_started=float(run_started or 0.0),
-            max_usd=getattr(deps.config, "max_budget_usd", None),
         )
     )
     completion_kernel = CompletionKernel(
@@ -474,7 +482,6 @@ def create_loop_config(
     _terminal_messages = {
         "budget_iterations": "任务已用尽迭代预算（硬边界）。",
         "budget_seconds": "任务已超出运行时上限（硬边界）。",
-        "budget_usd": "任务已达到成本预算上限（硬边界）。",
         "blocked_no_progress": "完成要求未满足且修复额度已用尽，任务终止。",
         "blocked_tools_denied": "工具调用被策略整体拒绝且重规划机会已用尽，任务终止。",
         "error": "恢复链已耗尽，完成控制无法继续。",
@@ -501,16 +508,18 @@ def create_loop_config(
         from prismclaw.engine.execution.loop.arbiter import mark_task_blocked, persist_snapshot_fn
 
         if tool_loop_state is not None:
-            tool_loop_state.per_tool_call_counts.clear()
+            # run 终止时必须把所有 run 级状态清干净——下次 run 从 checkpoint
+            # 恢复时 tool_loop_state 可能残留（resume 场景），跨 run 污染不可接受。
+            tool_loop_state.compaction_failures = 0
             tool_loop_state.recent_tool_signatures.clear()
-            tool_loop_state.consecutive_errors = 0
             tool_loop_state.consecutive_external_errors = 0
             tool_loop_state.consecutive_external_same_signature = 0
+            tool_loop_state.last_external_signature = ""
             tool_loop_state.frozen_tools.clear()
             tool_loop_state.frozen_call_signatures.clear()
-            tool_loop_state.tool_output_chars_used = 0
-            tool_loop_state.target_read_counts.clear()
-            tool_loop_state.target_write_counts.clear()
+            tool_loop_state.tool_attempt_events.clear()
+            tool_loop_state.frozen_call_defied = False
+            tool_loop_state.convergence_advisory_sent = False
             state_machine.update_tool_loop_state(tool_loop_state)
         if state.ctx is not None:
             # 闭集收敛：terminated_by 显式给出时优先；否则 code 必须本身就是
@@ -546,7 +555,6 @@ def create_loop_config(
         动作。after_tool_call 已写入的终态优先级最高，任何阶段直接短路。
         """
         from prismclaw.engine.foundation.runtime_util import is_abort_set
-        from prismclaw.engine.toolkit.builtin.tool_helpers import _build_budget_warning_message
 
         if state.terminal_error is not None:
             return Decision("TERMINATE", state.ctx.terminated_by or TerminalReason.ERROR)
@@ -601,7 +609,6 @@ def create_loop_config(
                 total_cache_creation_tokens=state.ledger.total_cache_creation_tokens,
                 total_cache_read_tokens=state.ledger.total_cache_read_tokens,
                 run_state=run_state,
-                usd_cost=float(getattr(tool_loop_state, "total_usd_cost", 0.0)),
             )
             if gov.appended_messages_override:
                 state.pending_messages = list(gov.appended_messages_override)
@@ -625,16 +632,15 @@ def create_loop_config(
                 logger.info(
                     "should_continue_timing site=%s iteration=%d total=%.0fms gov=%.0fms kernel=-",
                     event.site,
-                    state.iteration,
+                    state.perf.llm_calls,
                     _sc_total_ms,
                     _gov_ms,
                 )
             return gov.decision
 
         # ── 预算 + 恢复（非完成事件；内核是唯一预算权威）──
-        _total_usd = float(getattr(tool_loop_state, "total_usd_cost", 0.0))
         _kernel_t0 = _time.monotonic()
-        decision = completion_kernel.decide(event, usd_cost=_total_usd)
+        decision = completion_kernel.decide(event)
         if decision.verdict == "TERMINATE":
             await _terminate(state, decision.code)
             return decision
@@ -651,18 +657,12 @@ def create_loop_config(
 
         # ── 预算临限提醒（不改变裁决，只提醒一次）──
         _budget_dim = _budget_guard.warn(
-            iteration=state.iteration, usd_cost=_total_usd,
+            iteration=state.perf.llm_calls,
         )
-        if _budget_dim is not None and not _completion_state.budget_warned:
-            _completion_state.budget_warned = True
-            if _budget_dim == "budget_usd":
-                state.pending_messages.append(
-                    _build_budget_warning_message(
-                        total_usd_cost=_total_usd,
-                        budget_usd=getattr(deps.config, "max_budget_usd", None),
-                    ),
-                )
-            else:
+        if _budget_dim is not None:
+            nonlocal _budget_warned
+            if not _budget_warned:
+                _budget_warned = True
                 state.pending_messages.append(
                     {
                         "role": "user",
@@ -679,7 +679,6 @@ def create_loop_config(
                 evaluate_tool_loop_policies,
                 record_tool_call_observation,
                 parse_tool_calls,
-                extract_call_target,
             )
 
             # 观察对象：本批次首个调用 + 其执行结果。
@@ -696,7 +695,6 @@ def create_loop_config(
                 _tool_args = _parsed[0].arguments or {}
                 _first_id = _parsed[0].call_id
             _tool_sig = compute_tool_signature(_tool_name or "", _tool_args)
-            _tool_target = extract_call_target(_tool_name, _tool_args)
 
             # 结果按 tool_call_id 严格配对（结果列表顺序不保证与调用一致）。
             # id 非空但匹配不到 → 本调用无结果（被拦截/异常），不是"取别的
@@ -716,13 +714,13 @@ def create_loop_config(
                 tool_signature=_tool_sig,
                 result_fingerprint=compute_result_fingerprint(_first_result),
                 # 无配对结果（execute_tools 异常/无结果）按失败计——正常执行
-                # 必有配对结果，error-fatigue 才不会漏计。
+                # 必有配对结果，doom-loop 签名窗口才不会漏计。
                 is_error=bool(
                     _first_result is None
                     or getattr(_first_result, "is_error", False)
                 ),
                 # 失败归因：external（MCP 传输/业务错误、sub-agent 整体失败）
-                # 不进签名窗口、不计连错，只累计 external 计数供判定函数区分
+                # 不进签名窗口，只累计 external 计数供判定函数区分
                 # "换源对抗"与"死磕同源"。
                 error_origin=(
                     getattr(_first_result, "error_origin", None)
@@ -733,19 +731,10 @@ def create_loop_config(
             loop_outcome = evaluate_tool_loop_policies(
                 state=tool_loop_state,
                 config=getattr(deps.config, "run_loop", None) if hasattr(deps, "config") else None,
-                tool_name=_tool_name,
-                tool_target=_tool_target,
             )
             state_machine.update_tool_loop_state(tool_loop_state)
 
             if loop_outcome.action == "warn" and loop_outcome.guidance is not None:
-                if loop_outcome.frozen_tools_to_freeze:
-                    # Check 4 search-loop freeze：冻结经 outcome 携带，
-                    # 此处是唯一写入点（evaluate 只读）
-                    tool_loop_state.frozen_tools.update(
-                        loop_outcome.frozen_tools_to_freeze,
-                    )
-                    state_machine.update_tool_loop_state(tool_loop_state)
                 state.pending_messages.append(
                     {"role": "user", "content": loop_outcome.guidance},
                 )
@@ -767,7 +756,7 @@ def create_loop_config(
             logger.info(
                 "should_continue_timing site=%s iteration=%d total=%.0fms gov=%.0fms kernel=%.0fms",
                 event.site,
-                state.iteration,
+                state.perf.llm_calls,
                 _sc_total_ms,
                 _gov_ms if _gov_ms >= 0 else -1.0,
                 (_time.monotonic() - _kernel_t0) * 1000,
@@ -811,6 +800,36 @@ def create_loop_config(
 
         # 三周期投影（Phase 1）：注入 Run 级记忆组合缓存（幂等 attach）。
         _run_projector.attach(getattr(deps, "context_assembler", None))
+
+        # ── loop 控制单一评估点（在 pipeline.run 之前）──
+        _ctrl = evaluate_loop_control(
+            run_state=run_state,
+            effort_budget=_effort_budget,
+            now=_time.monotonic(),
+        )
+        if _ctrl.should_stop:
+            state.ctx.terminated_by = TerminalReason.BUDGET_ITERATIONS
+            from prismclaw.engine.execution.loop.arbiter import mark_task_blocked
+            await mark_task_blocked(state.ctx, "loop_budget_exhausted")
+            return None
+
+        # ── 收尾冻结：wrapping 冻结搜索类，last_turn 冻结非写入类 ──
+        # frozen_tools 跨轮持续生效，仅在 _terminate 时清空；此处只增不删。
+        if _ctrl.freeze_tools and tool_loop_state is not None:
+            _run_loop_cfg = getattr(deps.config, "run_loop", None)
+            if _ctrl.is_last_turn:
+                # last_turn：冻结所有非写入类工具，保留 write 类让产物写完。
+                from prismclaw.engine.toolkit.registry.tool_classification import (
+                    resolve_tool_class,
+                )
+                for _tname in deps.tools.names():
+                    if resolve_tool_class(_tname, deps.tools) != "write":
+                        tool_loop_state.frozen_tools.add(_tname)
+            else:
+                # wrapping：冻结搜索意图工具，避免继续开探索分支。
+                _search_tools = set(getattr(_run_loop_cfg, "search_intent_tools", []) or [])
+                tool_loop_state.frozen_tools.update(_search_tools)
+            state_machine.update_tool_loop_state(tool_loop_state)
 
         result = await pipeline.run(
             request=request,
@@ -877,6 +896,8 @@ def create_loop_config(
         2. evaluate_safety_gate deny → BeforeToolCallResult(block=True)
         都不 deny → None (执行)
         """
+        # tool_calls_spent 按尝试计，含被拒；并行 N 个调用计 N（每调用进一次本回调）。
+        run_state.loop_state.tool_calls_spent += 1
         from prismclaw.engine.execution.dispatch.tools import evaluate_safety_gate
         from prismclaw.engine.execution.dispatch.call_handling import check_frozen_call
 
@@ -908,7 +929,7 @@ def create_loop_config(
             mode=_mode,
             workspace_tag=getattr(request, "workspace_tag", None),
             traj_turn_counter=_traj_scope.turn_counter if _traj_scope is not None else 0,
-            iteration=_bstate.iteration if _bstate is not None else 0,
+            iteration=_bstate.perf.llm_calls if _bstate is not None else 0,
         )
         all_denied = {**_gate_denied, **_pre_tool_denied}
         call_id = getattr(call, "call_id", None) or (
@@ -930,7 +951,6 @@ def create_loop_config(
 
         POST_TOOL hooks 已下沉到 execute_tool_calls 逐调用派发。此处保留：
 
-        * 同目标读/写计数（工具循环策略 Check 5 的数据源）；
         * 收敛软提示：完成契约机械核验无缺口时注入一次"请收尾"提示。
 
         完成审查只在模型试图停止时发生（no-tool 链 → CompletionKernel），
@@ -940,16 +960,6 @@ def create_loop_config(
         _ctx = _state.ctx if _state is not None else None
 
         if _state is not None and after_ctx.tool_calls:
-            from prismclaw.engine.execution.dispatch.call_handling import (
-                record_target_observations,
-            )
-
-            record_target_observations(
-                tool_loop_state,
-                after_ctx.tool_calls,
-                after_ctx.results or [],
-                tool_registry=deps.tools,
-            )
             # 完成契约无缺口 → 注入一次收尾提示。不终止：终止权只归内核。
             if _ctx is not None and _completion_state.contract is not None:
                 _review = CompletionReviewer(
@@ -961,7 +971,7 @@ def create_loop_config(
                     logger.info(
                         "convergence: deliverables complete at iter=%d "
                         "— injecting final-answer advisory",
-                        _state.iteration,
+                        _state.perf.llm_calls,
                     )
                     return AfterToolCallResult(
                         inject_messages=[{
@@ -984,6 +994,8 @@ def create_loop_config(
 
         保留已有模块 call_llm_stream_with_outcome()，不重写。
         """
+        # steps_spent 与 perf.llm_calls 同写入点（stream_llm 调用前）。
+        run_state.loop_state.steps_spent += 1
         from prismclaw.engine.execution.dispatch.pipeline import (
             PipelineParams,
             _OutcomeHolder,
@@ -1023,6 +1035,21 @@ def create_loop_config(
             )
             return
 
+        # ── 单请求墙钟硬上限 cap_s（effort 派生）──
+        # prepare_next_turn 之后到 stream_llm 之间有上下文构建耗时，
+        # 此处重新评估 is_last_turn 以保证 cap_s 准确。
+        _now = _time.monotonic()
+        _ctrl = evaluate_loop_control(
+            run_state=run_state,
+            effort_budget=_effort_budget,
+            now=_now,
+        )
+        _remaining_hard = run_state.loop_state.hard_at - _now
+        if _ctrl.is_last_turn:
+            _cap_s = min(_effort_budget.cap_s, max(0.0, _remaining_hard))
+        else:
+            _cap_s = min(_effort_budget.cap_s, max(0.0, _remaining_hard - _effort_budget.reserve_s))
+
         _pipeline_params = PipelineParams(
             prepared_turn=state.prepared_turn,
             effective_model=effective_model or "",
@@ -1030,9 +1057,12 @@ def create_loop_config(
             run_deadline_s=run_deadline_s,
             run_started=run_started,
             traj_turn_counter=_traj_scope.turn_counter if _traj_scope is not None else 0,
-            iteration_pre_advance=state.iteration,
+            iteration_pre_advance=state.perf.llm_calls,
             abort_event=abort_event,
             max_idle_retries=1,
+            cap_s=_cap_s,
+            is_last_turn=_ctrl.is_last_turn,
+            reasoning_effort=reasoning_effort_for(_effort_level),
         )
         holder = _OutcomeHolder()
         async for event in call_llm_stream_with_outcome(
@@ -1078,7 +1108,7 @@ def create_loop_config(
 
                     log_turn_token_usage(
                         logger_=logger,
-                        iteration=state.iteration,
+                        iteration=state.perf.llm_calls,
                         telemetry=_pt.preflight.compute_turn_telemetry(),
                         usage=_usage,
                         history_budget=_pt.history_budget,
@@ -1089,13 +1119,6 @@ def create_loop_config(
                         ),
                         tools_tokens=_pt.tools_wire_tokens,
                     )
-                # 成本天花板（第 3 层）：本轮用量按配置费率折算 USD，
-                # 累计进 tool_loop_state.total_usd_cost（随 checkpoint
-                # 持久化）。should_continue 路径 B 消费该值（>90% 预警
-                # 一次、超限终止）——没有这一步累计，预算检查恒为 0、
-                # 天花板是惰性的。
-                tool_loop_state.total_usd_cost += deps.config.budget_pricing.cost_for_usage(_usage)
-                state_machine.update_tool_loop_state(tool_loop_state)
 
     # ══════════════════════════════════════════════════════════
     # persist_denied_turn: 全拒回合的树持久化
@@ -1298,15 +1321,6 @@ def create_loop_config(
                 results=execution_artifacts.results,
             )
 
-            # ── 4. Accumulate tool output chars for search-loop detection ──
-            if tool_loop_state is not None:
-                for _r in execution_artifacts.results:
-                    _content = getattr(_r, "content", None) or []
-                    for _block in _content:
-                        _text = getattr(_block, "text", None)
-                        if _text:
-                            tool_loop_state.tool_output_chars_used += len(_text)
-
             # ── 5. Dynamic skill refresh ──
             # 用 heavyweight：它会额外做 skill 目录发现（新出现的
             # .work/skills 子树），是新目录唯一被发现的地方；
@@ -1423,10 +1437,10 @@ def create_loop_config(
             )
 
         except Exception as _exec_exc:
-            # On execution error: consecutive_errors 不在此处手写累加——
-            # error-fatigue 计数唯一写入点是 record_tool_call_observation，
-            # 无配对结果（本路径的常态，骨架已在 Step 3 前清空
-            # last_tool_results）会被它按失败计。
+            # On execution error: doom-loop 签名计数不在此处手写累加——
+            # 唯一写入点是 record_tool_call_observation，无配对结果
+            # （本路径的常态，骨架已在 Step 3 前清空 last_tool_results）
+            # 会被它按失败计。
             logger.warning(
                 "execute_tools error: %s", _exec_exc, exc_info=True,
             )

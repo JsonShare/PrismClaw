@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /outline-builder
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲偏好、现有大纲。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲偏好、现有大纲。
 2. 应用以下工作流。
 3. 以学生的格式构建。如果扩展现有大纲，完全匹配其结构。
 
@@ -75,14 +75,14 @@ Licensed under Apache License 2.0
 
 这不是为学生写——它是将学生指向他们已经拥有的两件东西并要求他们协调。将错误规则放入大纲并从中学习的 1L 是此 skill 存在以防止的失败模式。仅当以下情况时应用此规则：
 
-1. 学生实际上传或编写了 skill 可以引用的材料（`.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → Seed materials 中的种子材料，或正在扩展的大纲的早期部分），以及
+1. 学生实际上传或编写了 skill 可以引用的材料（`~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → Seed materials 中的种子材料，或正在扩展的大纲的早期部分），以及
 2. 陈述的规则与学生自己的材料在特定的实质点上不一致——不是措辞，不是细节水平。
 
 不要从你自己的知识自愿提供更正。不要引用案例书，除非学生上传了它。只将学生自己的材料引用给他们。目标是训练学生信任和验证他们自己的工作，而不是提供正确答案。
 
 ## Load context
 
-`.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲偏好（格式、深度、现有大纲位置）。
+`~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 大纲偏好（格式、深度、现有大纲位置）。
 
 如果现有大纲存在：阅读一个。完全匹配其结构。标题、深度、案例如何整合、是否有假设。
 

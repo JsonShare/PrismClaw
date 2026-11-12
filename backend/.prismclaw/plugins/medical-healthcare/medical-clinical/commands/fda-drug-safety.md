@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
+1. 读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
 2. 获取目标药品信息：药品名称（通用名或商品名）、NDC 编号（如有）。
 3. 调用 `fda_drug_safety` 工具（MCP）查询 FDA 数据库。
 4. 逐项提取以下安全信息：

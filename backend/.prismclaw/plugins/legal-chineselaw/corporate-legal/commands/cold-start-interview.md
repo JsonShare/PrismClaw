@@ -18,12 +18,11 @@ Licensed under Apache License 2.0
 
 # /corporate-cold-start-interview
 
-1. 检查 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`。如果是 `--new-deal`，跳到每个交易设置。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分的"连接了什么？"检查，并重写 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Available integrations` 表。探测时：只有在 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记为 ⚪，并附一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——这会误导用户以为某些东西已连接，而实际上并没有。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`。如果是 `--new-deal`，跳到每个交易设置。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分的"连接了什么？"检查，并重写 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Available integrations` 表。探测时：只有在 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记为 ⚪，并附一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——这会误导用户以为某些东西已连接，而实际上并没有。
 2. 运行以下访谈（先进行第 0 部分——角色 + 集成——然后是模块）。
 3. 种子文档：尽调请求清单 + 一份先前的问题备忘录。
 4. 提取：类别、阈值、备忘录格式、AI 工具配置。
-5. 迁移：如果在 `~/.prismclaw/plugins/cache/legal-chineselaw/corporate-legal/*/PRISMCLAW.md` 存在已填充的 PRISMCLAW.md（无 `[PLACEHOLDER]` 标记）但不在配置路径，将其复制到配置路径并告知用户迁移了什么。
-6. 写入 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（根据需要创建父目录）。对于 `--new-deal`，写入 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（根据需要创建父目录）。对于 `--new-deal`，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。
 
 ---
 
@@ -33,7 +32,7 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复的选项。
 - **包含 `[PLACEHOLDER]` 标记但无暂停注释** → 模板从未完成；提供重新开始或从占位符开始的地方恢复。
@@ -41,7 +40,6 @@ Licensed under Apache License 2.0
 
 模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其用作章节脚手架。将完成的执业档案写入配置路径，根据需要创建父目录。
 
-如果在旧缓存路径 `~/.prismclaw/plugins/cache/legal-chineselaw/corporate-legal/*/PRISMCLAW.md` 存在 PRISMCLAW.md 但不在配置路径，在继续之前将其复制到配置路径。
 
 - `--redo` — 完整重新访谈，覆盖所有章节
 - `--module [m&a | board | public | entities]` — 添加或刷新单个模块
@@ -51,7 +49,7 @@ Licensed under Apache License 2.0
 
 ## 检查共享公司档案
 
-查找 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 
 - **如果存在：** 读取它。显示一行确认："你是 [name]，[practice setting]，在 [company]，[industry]，在 [jurisdictions] 运营。对吗？（或说 'update' 来更改共享档案。）"如果确认，跳过公司问题——直接进入 plugin 特定问题。
 - **如果不存在：** 你将是该用户设置的第一个 plugin。定向和分叉后，询问公司问题并将其写入共享档案（根据 plugin 根目录中 `references/company-profile-template.md` 的模板），然后继续进行 plugin 特定问题。告诉用户："我已保存你的公司档案——其他法律 plugin 将读取它并跳过这些问题。"
@@ -106,7 +104,7 @@ Licensed under Apache License 2.0
 - **对于上传（问题备忘录、会议纪要、同意、组织结构图）：** "粘贴内容、共享文件路径，或说'暂时跳过'。如果你跳过，我会在你的执业档案中标记差距以便以后填写。"然后真的等待。这些种子文档驱动格式提取——静默跳过意味着每个未来的输出都将采用通用模板而不是内部格式。
 - **在写入执业档案之前：** 回顾访谈，列出所有被跳过或用占位符回答的问题——特别是每个活跃模块的种子文档。说："在我写入你的执业档案之前，还有以下内容未完成：[list]。要现在填写其中的任何内容，还是留作占位符？"然后等待答案。
 - **绝不**无声地写入有空白的执业档案。每个占位符都应该是用户有意选择跳过的，而不是从屏幕上滚过去的问题。
-- **暂停和恢复。** 预先告诉用户："如果需要停下来，说'暂停'（或'停止'，或'让我稍后回来'），我会保存你的进度。稍后再次运行 `/corporate-legal:cold-start-interview`，我会从你停下的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /corporate-legal:cold-start-interview to resume -->` 注释，未回答字段使用 `[PENDING]` 标记（区别于 `[PLACEHOLDER]`）。当设置重新运行并发现暂停的配置时，问候用户："欢迎回来。你在 [section] 暂停了。你之前的回答已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已经回答过的问题。
+- **暂停和恢复。** 预先告诉用户："如果需要停下来，说'暂停'（或'停止'，或'让我稍后回来'），我会保存你的进度。稍后再次运行 `/corporate-legal:cold-start-interview`，我会从你停下的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /corporate-legal:cold-start-interview to resume -->` 注释，未回答字段使用 `[PENDING]` 标记（区别于 `[PLACEHOLDER]`）。当设置重新运行并发现暂停的配置时，问候用户："欢迎回来。你在 [section] 暂停了。你之前的回答已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已经回答过的问题。
 
 ---
 
@@ -159,7 +157,7 @@ Licensed under Apache License 2.0
 - 如果你无法测试（无法从这里探测），报告 ⚪"已配置但未验证——打开你的 MCP 设置确认"，并附一行说明。
 - 永远不要仅基于配置报告 ✓。
 
-对于显示为未连接的连接器，告诉用户如何连接。示例措辞："Box 未连接。在 PrismClaw Cowork 中：设置 → 连接器 → 添加 → Box → 登录。在 PrismClaw 中：将 Box MCP 添加到你的配置或通过 `/mcp` 添加。这个 plugin 没有它也能工作——你将直接粘贴文档而不是拉取它们——但连接它会使文档拉取自动化。"
+对于显示为未连接的连接器，告诉用户如何连接。示例措辞："Box 未连接。在 PrismClaw 中：将 Box MCP 添加到你的配置或通过 `/mcp` 添加。这个 plugin 没有它也能工作——你将直接粘贴文档而不是拉取它们——但连接它会使文档拉取自动化。"
 
 然后以此形式报告发现：
 
@@ -432,7 +430,7 @@ Licensed under Apache License 2.0
 
 **研究连接器提示。** 在显示活跃模块之前，说：
 
-> "在你的第一次尽调提取或同意之前：连接一个研究工具。没有研究工具，我会将每个引用标记为未验证——有了研究工具，我会根据当前数据库验证它们。在 Cowork 中：设置 → 连接器。在 PrismClaw 中：当 skill 提示时授权。"
+> "在你的第一次尽调提取或同意之前：连接一个研究工具。没有研究工具，我会将每个引用标记为未验证——有了研究工具，我会根据当前数据库验证它们。在 PrismClaw 中：当 skill 提示时授权。"
 
 然后显示活跃模块和已填充的章节：
 
@@ -446,7 +444,7 @@ Licensed under Apache License 2.0
 
 以关于可更改性的备注结束：
 
-> "你的执业档案在 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——它是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
+> "你的执业档案在 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——它是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件以进行快速更改（新阈值、添加的司法管辖区、重命名的委员会）
 > - 运行 `/corporate-legal:cold-start-interview --redo` 进行完整重新访谈
@@ -483,7 +481,7 @@ Licensed under Apache License 2.0
 - 任何交易特定的阈值差异（$50M 的交易可能审查比 $1B 的交易更小的合同）
 - 此交易的外部律师事务所和主要联系人
 
-写入 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code-name]/deal-context.md`。Skills 读取 plugin 配置（内部）和 `deal-context.md`（此交易），在冲突时 deal-context.md 优先。
+写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code-name]/deal-context.md`。Skills 读取 plugin 配置（内部）和 `deal-context.md`（此交易），在冲突时 deal-context.md 优先。
 
 ---
 

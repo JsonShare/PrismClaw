@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /entity-compliance
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Entity Management`（实体表、司法管辖区、注册代理人）。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Entity Management`（实体表、司法管辖区、注册代理人）。
 2. 根据标志路由到以下正确模式：
    - 无标志或 `--init`：模式 1 ——从实体表初始化跟踪器
    - `--report`：模式 2 ——显示即将到期的截止期限和逾期项目
@@ -24,7 +24,7 @@ Licensed under Apache License 2.0
    - `--sweep`：模式 3c ——逐个浏览未知/逾期项目
    - `--audit`：模式 4 ——完整健康审计
    - `--export`：模式 5 ——生成 CSV 或表格导出
-3. 读/写 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`。
+3. 读/写 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`。
 4. 任何更新后：显示变更摘要和下一步行动。
 
 ---
@@ -72,7 +72,7 @@ Licensed under Apache License 2.0
 
 ## Tracker file
 
-位于 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`。结构：
+位于 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`。结构：
 
 ```yaml
 # 主体合规跟踪器 - 中国公司合规
@@ -135,7 +135,7 @@ entities:
 
 ### Step 1: Load entity table
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Entity Management` → 实体表。如果实体表已填充（从冷启动时的组织结构图上传），直接使用它。如果没有，要求用户运行冷启动模块或提供实体列表。
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Entity Management` → 实体表。如果实体表已填充（从冷启动时的组织结构图上传），直接使用它。如果没有，要求用户运行冷启动模块或提供实体列表。
 
 ### Step 2: For each entity × jurisdiction, confirm the filing requirements
 
@@ -190,7 +190,7 @@ custom_jurisdictions:
 
 ### Step 3: Write the tracker
 
-生成 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`，其中包含所有实体及其计算的申报要求。设置初始状态：
+生成 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`，其中包含所有实体及其计算的申报要求。设置初始状态：
 - 如果 last_filed 在当前申报期内，则为 `current`
 - 如果在 90 天内到期且当前期间无 last_filed，则为 `due_soon`
 - 如果到期日期已过且当前期间无 last_filed，则为 `overdue`
@@ -263,7 +263,7 @@ GOOD STANDING：
 
 ### Consequential-action gate (file SOI / annual report)
 
-**在指示或确认申报之前：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
+**在指示或确认申报之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
 
 > 与州务卿提交信息声明、年度报告或特许经营税申报表有法律后果——这是实体的正式陈述，它带有费用，错过或错误的申报可能导致失去良好信誉或特许经营税违约。您在申报前是否与律师（或合格的注册代理人）审查了此内容？如果是，继续记录申报。如果否，这是带给他们的简报：
 >
@@ -355,10 +355,10 @@ PrismClaw 更新：
 - `confirmed_good_standing` 超过 12 个月的实体——过时；值得刷新，特别是如果预期 M&A 或融资。
 
 **外国资格差距：**
-- 基于 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 实体表：公司的运营足迹（办公室、员工）所在的州是否有实体未外国合格？这需要律师确认运营存在——PrismClaw 可以标记问题但不能独立确定存在。
+- 基于 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 实体表：公司的运营足迹（办公室、员工）所在的州是否有实体未外国合格？这需要律师确认运营存在——PrismClaw 可以标记问题但不能独立确定存在。
 
 **公司间协议差距：**
-- 从 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`：如果公司间协议标记为部分或无，标记哪些实体关系可能需要协议（母子公司服务、IP 许可、贷款）。
+- 从 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`：如果公司间协议标记为部分或无，标记哪些实体关系可能需要协议（母子公司服务、IP 许可、贷款）。
 
 输出格式：
 
@@ -381,8 +381,8 @@ GOOD STANDING
 
 POTENTIAL GAPS
   Foreign qualification：[flag question ——确认运营存在于：]
-    [来自 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` footprint 未在跟踪器中标记为合格的州列表]
-  Intercompany agreements：[来自 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的状态]
+    [来自 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` footprint 未在跟踪器中标记为合格的州列表]
+  Intercompany agreements：[来自 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的状态]
 
 RECOMMENDED ACTIONS
   1. [最高优先级行动]

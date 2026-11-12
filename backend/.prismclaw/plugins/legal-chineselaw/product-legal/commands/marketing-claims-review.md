@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /marketing-claims-review
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 营销声明标准。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 营销声明标准。
 2. 运行以下声明分类和审查工作流。
 3. 提取每个声明。分类：吹嘘 / 事实 / 比较性 / 暗示 / 绝对。
 4. 对于每个非吹嘘声明：证实检查、建议修复。
@@ -31,7 +31,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -41,7 +41,7 @@ Licensed under Apache License 2.0
 
 ## 加载标准
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → `## Marketing claims`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → `## Marketing claims`：
 - 比较性声明政策（允许附带证实 / 不鼓励 / 从不）
 - 证实标准（声明发布前需要什么）
 - 常见被拒声明（从历史中学习）
@@ -98,7 +98,7 @@ Licensed under Apache License 2.0
 | "唯一能做到 X 的平台" | 如果其他人也做 X 就是假的——"第一个做到...的平台"（如果属实）或删除"唯一" |
 | "[竞争对手]做不到这个" | 展示你的功能。让观看者比较。 |
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`——如果比较性声明为"从不"，标记所有。如果"允许附带证实"，检查证实。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`——如果比较性声明为"从不"，标记所有。如果"允许附带证实"，检查证实。
 
 ### 暗示声明
 
@@ -148,7 +148,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：输出
 
-在前面加上 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题（因用户角色而异——见 `## Who's using this`）。
+在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题（因用户角色而异——见 `## Who's using this`）。
 
 ```markdown
 [WORK-PRODUCT HEADER — per plugin config ## Outputs]
@@ -166,7 +166,7 @@ Licensed under Apache License 2.0
 
 **可以发布：** [是 | 按以下更改 | 否——需要重写]
 
-> **在发出"可以发布：是"（即批准声明用于外部使用/发布）之前：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师：
+> **在发出"可以发布：是"（即批准声明用于外部使用/发布）之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师：
 >
 > > 批准营销声明用于发布是法律行为——一旦发布，证实差距和比较性声明暴露就成为执法或竞争对手挑战风险。你是否已与律师审查此内容？如果是，继续。如果否，这是带给他们的简报：
 > >

@@ -8,10 +8,7 @@ from typing import Any, Awaitable, Callable, Literal, TYPE_CHECKING
 from prismclaw.engine.compression.budget_orchestrator import (
     BudgetOrchestrator,
     HistoryCompactionAssessment,
-    degrade_context,
-    log_degradation_steps,
 )
-from prismclaw.engine.compression.context_zones import resolve_runtime_zones
 from prismclaw.engine.compression.history_compaction import (
     maybe_pretrim_history,
     predict_compaction_trigger,
@@ -19,7 +16,6 @@ from prismclaw.engine.compression.history_compaction import (
 from prismclaw.engine.compression.retention import SectionRetention
 from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
 from prismclaw.engine.foundation.metrics import emit
-from prismclaw.schema.shared.utils import count_image_parts, estimate_tokens
 
 if TYPE_CHECKING:
     # 类型注解所需的 execution 类型通过 TYPE_CHECKING 引入，
@@ -146,116 +142,11 @@ class CompressionOrchestrator:
                     )
             except Exception:
                 pass
-            _budget_cfg = deps.config.context.budget
-            _mode = getattr(_budget_cfg, "mode", "absolute")
-            _input_budget: int | None = None
-            if _mode == "ratio":
-                _image_tokens = 0
-                try:
-                    _tpr = int(
-                        getattr(getattr(deps.config, "vision", None), "tokens_per_image", 0)
-                        or 0
-                    )
-                    _cap = int(
-                        getattr(getattr(deps.config, "vision", None), "max_images_inline", 0)
-                        or 0
-                    )
-                    _img_n = count_image_parts(
-                        preflight.packed_request.messages if preflight.packed_request else []
-                    )
-                    _image_tokens = min(_img_n, _cap) * _tpr
-                except Exception:
-                    _image_tokens = 0
-                _tools_wire = 0
-                try:
-                    _tools_wire = int(deps.tools.wire_tokens_estimate()) if getattr(deps, "tools", None) else 0
-                except Exception:
-                    _tools_wire = 0
-                # ratio 为显式启用：窗口低于分区地板等配置错误在此响亮抛出
-                # （ValueError），不静默退化为「压缩永不触发」的 fail-open。
-                _zones = resolve_runtime_zones(
-                    budget=_budget_cfg,
-                    window=getattr(_budget_cfg, "window_tokens", None),
-                    model_max_output=model_max_output,
-                    tools_wire=_tools_wire,
-                    image_tokens=_image_tokens,
-                )
-                _input_budget = _zones.input_budget
-                # 降级阶梯（G2）：每轮计算一次降级决策并结构化记录。
-                # 如实说明：渲染层尚未供给块级 actuals，D1-D9 当前不产生
-                # 步骤（total_dropped 恒 0，下方 input_budget 收紧随之处眠）；
-                # 实际生效的是 D10（总压力 ≥0.9 记压缩触发）与 D11（仍超窗
-                # 时报 context_window_exceeded 或记 force_compaction）。
-                if _zones is not None:
-                    try:
-                        _system_actual = 0
-                        _dynamic_actual = 0
-                        _pkr = getattr(preflight, "packed_request", None)
-                        if _pkr is not None:
-                            _sys = getattr(_pkr, "system", None)
-                            if isinstance(_sys, str):
-                                _system_actual = int(estimate_tokens(_sys))
-                            elif isinstance(_sys, list):
-                                _parts: list[str] = []
-                                for _b in _sys:
-                                    _t = (
-                                        _b
-                                        if isinstance(_b, str)
-                                        else (
-                                            getattr(_b, "content", None)
-                                            or getattr(_b, "text", None)
-                                            or ""
-                                        )
-                                    )
-                                    if isinstance(_t, str):
-                                        _parts.append(_t)
-                                _system_actual = int(estimate_tokens("".join(_parts)))
-                            _dynamic_actual = int(
-                                getattr(_pkr, "context_payload_tokens", 0) or 0
-                            )
-                        _tp = getattr(preflight, "task_profile", None)
-                        _is_code = bool(
-                            _tp is not None
-                            and getattr(_tp, "has_material_type", None) is not None
-                            and _tp.has_material_type("code")
-                        )
-                        _compact_disabled = (
-                            getattr(compression_runtime, "consecutive_failures", 0)
-                            >= self._circuit_breaker_threshold
-                        )
-                        degradation = degrade_context(
-                            zones=_zones,
-                            mode="ratio",
-                            is_code_task=_is_code,
-                            system_actual=_system_actual,
-                            dynamic_actual=_dynamic_actual,
-                            compaction_disabled=_compact_disabled,
-                            consecutive_failures=int(
-                                getattr(compression_runtime, "consecutive_failures", 0)
-                            ),
-                        )
-                        log_degradation_steps(logger_=logger, plan=degradation)
-                        if degradation.total_dropped_tokens > 0:
-                            _input_budget = max(
-                                0,
-                                int(_input_budget or 0) - degradation.total_dropped_tokens,
-                            )
-                        if degradation.error_code:
-                            logger.warning(
-                                "context_window_exceeded mode=ratio error_code=%s "
-                                "dropped_tokens=%d",
-                                degradation.error_code,
-                                degradation.total_dropped_tokens,
-                            )
-                    except Exception as _deg_exc:
-                        logger.debug("degrade_context failed: %s", _deg_exc)
             history_assessment = BudgetOrchestrator().assess_history_compaction(
                 history_tokens=preflight.history_tokens,
                 history_budget=static_result.history_budget,
                 compaction_policy=compaction_policy,
                 last_prompt_tokens=getattr(compression_runtime, "last_prompt_tokens", None),
-                mode=_mode,
-                input_budget=_input_budget,
             )
             should_compact = history_assessment.should_compact
             logger.info(

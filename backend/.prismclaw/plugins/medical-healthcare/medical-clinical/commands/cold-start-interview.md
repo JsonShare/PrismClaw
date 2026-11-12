@@ -7,11 +7,11 @@ category: 临床诊疗
 
 # /clinical-cold-start-interview
 
-1. 检查 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`。
+1. 检查 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`。
 2. 运行以下访谈（先进行第 0 部分——角色 + 集成——然后是模块）。
 3. 种子文档：处方审查样例、生命体征记录格式。
 4. 提取：审查框架、集成状态、输出偏好。
-5. 写入 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`。
+5. 写入 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`。
 
 ---
 
@@ -21,14 +21,14 @@ category: 临床诊疗
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`：
 - **不存在** → 开始访谈。
 - **包含 `[PLACEHOLDER]` 标记** → 模板从未完成；提供重新开始。
 - **已填充（无占位符）** → 已配置；跳过，除非使用 `--redo` 或 `--module [name]`。
 
 ## 检查共享机构档案
 
-查找 `~/.prismclaw/plugins/medical-healthcare/company-profile.md`。
+查找 `~/.prismclaw/assets/plugins/medical-healthcare/company-profile.md`。
 
 - **如果存在：** 读取它。显示一行确认。
 - **如果不存在：** 定向和分叉后，询问机构问题并写入共享档案。

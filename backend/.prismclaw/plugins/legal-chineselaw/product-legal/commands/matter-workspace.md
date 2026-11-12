@@ -23,18 +23,18 @@ Licensed under Apache License 2.0
 - `/product-legal:matter-workspace new <slug>` — 创建新事项工作空间，运行简短接收，写入 `matter.md`
 - `/product-legal:matter-workspace list` — 列出事项及状态和活动标志
 - `/product-legal:matter-workspace switch <slug>` — 设置活动事项
-- `/product-legal:matter-workspace close <slug>` — 归档事项（移动到 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/_archived/`，永不删除）
+- `/product-legal:matter-workspace close <slug>` — 归档事项（移动到 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/_archived/`，永不删除）
 - `/product-legal:matter-workspace none` — 从任何活动事项分离，仅在执业级工作
 
 ## 说明
 
-1. 阅读 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` — 确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告诉用户："事项工作空间已关闭——你配置为单个客户的内部执业，因此插件自动从执业级上下文工作。如果你实际处理多个客户，重新运行 `/product-legal:cold-start-interview --redo` 并选择私人执业设置。否则，你根本不需要 `/product-matter-workspace`。"不要报错——禁用状态是内部用户的预期状态。
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` — 确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告诉用户："事项工作空间已关闭——你配置为单个客户的内部执业，因此插件自动从执业级上下文工作。如果你实际处理多个客户，重新运行 `/product-legal:cold-start-interview --redo` 并选择私人执业设置。否则，你根本不需要 `/product-matter-workspace`。"不要报错——禁用状态是内部用户的预期状态。
 2. 使用下面的存储布局和子命令逻辑。
 3. 根据 `$ARGUMENTS` 的第一个令牌分派：
-   - `new` → 运行接收访谈，写入 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/<slug>/matter.md`，种子 `history.md` 和 `notes.md`。
-   - `list` → 枚举 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/*/matter.md`，打印表格，标记活动事项。
+   - `new` → 运行接收访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/<slug>/matter.md`，种子 `history.md` 和 `notes.md`。
+   - `list` → 枚举 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/*/matter.md`，打印表格，标记活动事项。
    - `switch` → 更新执业级 PRISMCLAW.md 中的 `Active matter:` 行。
-   - `close` → 将 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/<slug>/` 移动到 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
+   - `close` → 将 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/<slug>/` 移动到 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
    - `none` → 设置 `Active matter:` 为 `none — practice-level context only`。
 4. 向用户显示更改内容并在写入前确认。
 
@@ -57,7 +57,7 @@ Licensed under Apache License 2.0
 所有事项数据位于：
 
 ```
-~/.prismclaw/plugins/legal-chineselaw/product-legal/
+~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/
 ├── PRISMCLAW.md                       # 执业级执业档案
 └── matters/
     ├── <slug>/

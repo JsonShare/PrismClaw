@@ -20,10 +20,10 @@ Licensed under Apache License 2.0
 
 # /regulatory-cold-start-interview
 
-1. 检查 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`。如果在旧缓存路径 `~/.prismclaw/plugins/cache/legal-chineselaw/regulatory-legal/*/PRISMCLAW.md` 存在填充的 PRISMCLAW.md（没有 `[PLACEHOLDER]` 标记）但在配置路径不存在，将其复制到配置路径并告诉用户迁移了什么。如果 `--check-integrations`，跳过访谈——仅重新运行第 0 部分"连接了什么"核查，并重写 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的 `## 可用集成` 表格。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`。如果 `--check-integrations`，跳过访谈——仅重新运行第 0 部分"连接了什么"核查，并重写 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的 `## 可用集成` 表格。
 2. 使用以下访谈工作流。访谈（第 0 部分优先——角色 + 集成——然后关注清单）：哪些监管机构、政策所在位置、什么重要。
 3. 连接政策库目录，索引政策。
-4. 写 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`（根据需要创建父目录），含关注清单 + 重要性阈值。
+4. 写 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`（根据需要创建父目录），含关注清单 + 重要性阈值。
 
 在探测集成时：仅当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪ 并附带单行如何确认。永远不要仅根据 `.mcp.json` 声明报告 ✓——这会误导用户认为某些东西已连接而实际没有。
 
@@ -35,7 +35,7 @@ Licensed under Apache License 2.0
 
 ## Cold-start 检查
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 欢迎用户并提供从该部分恢复。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供重新开始或从占位符开始的地方恢复。
@@ -43,11 +43,10 @@ Licensed under Apache License 2.0
 
 模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其用作部分支架。将完成的执业档案写入配置路径，根据需要创建父目录。
 
-如果在旧缓存路径 `~/.prismclaw/plugins/cache/legal-chineselaw/regulatory-legal/*/PRISMCLAW.md` 存在 PRISMCLAW.md 但在配置路径不存在，则向前复制。
 
 ## 检查共享公司档案
 
-查找 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 
 - **如果存在：** 读取它。显示单行确认："你是 [姓名]，[执业设置]，在 [公司]，[行业]，在 [司法管辖区]运营。对吗？（或说 'update' 以更改共享档案。）"如果确认，跳过公司问题——直接进入插件特定问题。
 - **如果不存在：** 你将是此用户设置的第一个插件。在定向和分支后，询问公司问题并将它们写入共享档案（根据插件根目录中 `references/company-profile-template.md` 的模板），然后继续插件特定问题。告诉用户："我已保存你的公司档案——其他法律插件将读取它并跳过这些问题。"
@@ -93,7 +92,7 @@ Licensed under Apache License 2.0
 - **对于上传或路径指针（政策库目录、现有关注清单、信息源 URL）：** "粘贴内容、共享文件路径，或说'暂时跳过'。如果你跳过，我将在你的配置中标记缺口，以便你稍后填充。"然后实际等待。
 - **在编写执业档案之前：** 审查访谈。列出跳过或用占位符回答的每个问题。说："在编写你的配置之前，这里仍然开放：[列表]。想现在填充其中任何一个，还是将它们留作占位符？"在编写之前等待答案。
 - **永远不要**用静默缺口编写执业档案。每个占位符都应该是用户故意跳过的选择，而不是滚动过去未回答的问题。
-- **暂停和恢复。** 提前告诉用户："如果你需要停止，说'pause'（或'stop'、或'让我稍后回到这个'），我将保存你的进度。稍后再次运行 `/regulatory-legal:cold-start-interview`，我将在你离开的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /regulatory-legal:cold-start-interview to resume -->` 注释，未回答字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，欢迎用户："欢迎回来。你在 [section] 暂停。你之前的答案已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已回答的问题。
+- **暂停和恢复。** 提前告诉用户："如果你需要停止，说'pause'（或'stop'、或'让我稍后回到这个'），我将保存你的进度。稍后再次运行 `/regulatory-legal:cold-start-interview`，我将在你离开的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /regulatory-legal:cold-start-interview to resume -->` 注释，未回答字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，欢迎用户："欢迎回来。你在 [section] 暂停。你之前的答案已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已回答的问题。
 
 **在设置中验证用户陈述的法律事实。** 当用户使用具体规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是你可以自查的内容——在将其写入配置之前进行检查。如果他们所说的与你的理解或他们粘贴的内容冲突，说出来："`[前提已标——需核验]`"。写入 PRISMCLAW.md 的错误事实会传播到每个未来输出；在这里捕获是产品中最具影响力的时刻之一。
 
@@ -352,7 +351,7 @@ Licensed under Apache License 2.0
 
 - 用可更改性注释关闭：
 
-  > "完成。你的配置位于 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` —— 你可以直接阅读和编辑的纯文本文件。你可以更改任何回答的内容：
+  > "完成。你的配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` —— 你可以直接阅读和编辑的纯文本文件。你可以更改任何回答的内容：
   >
   > - 直接编辑文件以快速更改
   > - 运行 `/regulatory-legal:cold-start-interview --redo` 进行完整重新访谈

@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /supervisor-review-queue
 
-1. 检查 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格。如果不是"正式审查队列"：说明诊所设置为 [flags/lighter-touch]，不存在正式队列，以及如何切换。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格。如果不是"正式审查队列"：说明诊所设置为 [flags/lighter-touch]，不存在正式队列，以及如何切换。
 2. 使用以下工作流。
 3. 默认：显示等待的内容，按紧急程度、按学生。
 4. 操作：批准 / 编辑后批准 / 带备注返回。全部记录。
@@ -41,13 +41,13 @@ Licensed under Apache License 2.0
 
 一些诊所想要一个正式门槛：学生起草，教授审查，输出发布。其他人认为这太死板——他们通过案件轮查和一对一来监督，而不是通过队列。
 
-**此 skill 仅在 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格为"正式审查队列"时才激活。**否则它休眠——冷启动访谈询问教授想要哪个模型，这是三个选项之一。
+**此 skill 仅在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格为"正式审查队列"时才激活。**否则它休眠——冷启动访谈询问教授想要哪个模型，这是三个选项之一。
 
 是否使用正式审查工作流确实是诊所采用的一个开放问题。这取决于学生经验水平、案件量以及教授已经如何运行监督。教授在设置时决定，可以稍后更改。
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格。如果不是"正式审查队列"：回复"诊所设置为 [flags/lighter-touch] 监督——没有正式队列。[教授] 通过 [诊所的现有结构] 审查。要切换到正式队列，编辑 PRISMCLAW.md → 监督风格。"
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格。如果不是"正式审查队列"：回复"诊所设置为 [flags/lighter-touch] 监督——没有正式队列。[教授] 通过 [诊所的现有结构] 审查。要切换到正式队列，编辑 PRISMCLAW.md → 监督风格。"
 
 如果启用了正式队列 → 读取标记触发器并继续。
 

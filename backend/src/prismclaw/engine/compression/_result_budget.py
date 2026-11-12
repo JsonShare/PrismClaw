@@ -4,7 +4,6 @@ from typing import Any
 
 from prismclaw.engine.compression.context_zones import (
     clamp_summary_cap,
-    resolve_runtime_zones,
 )
 
 
@@ -55,34 +54,11 @@ def _resolve_model_for_budget(deps: Any) -> str | None:
 def _resolve_aggregate_budget_chars(deps: Any, result_count: int) -> int:
     compaction_cfg = deps.config.context.compaction
 
-    # Kill switch: ``enable_dynamic_budget`` (default on).  When the
-    # operator sets it to False we use the legacy 80% static
-    # heuristic against ``context.budget.window_tokens`` and skip the
-    # ModelSpec lookup entirely.  The 4.0 chars-per-token constant
-    # matches the heuristic used by the rest of the codebase
-    # (``token_metrics.estimate_message_tokens``).
-    if not bool(compaction_cfg.safety.enable_dynamic_budget):
-        ctx_window = int(deps.config.context.budget.window_tokens)
-        legacy = int(ctx_window * 4.0 * 0.8)
-        return max(2000, legacy)
-
     explicit = _coerce_positive_int(compaction_cfg.tool_results.aggregate_char_budget)
     if explicit is not None:
         return explicit
 
     prompt_budget = deps.config.context.budget
-    # ratio 模式：结果区预算直接来自 resolve_runtime_zones 的 result 分区。
-    if getattr(prompt_budget, "mode", "absolute") == "ratio":
-        try:
-            zones = resolve_runtime_zones(
-                budget=prompt_budget,
-                window=int(prompt_budget.window_tokens),
-                model_max_output=None,
-                tools_wire=0,
-            )
-            return max(2000, int(zones.result) * 4)
-        except Exception:
-            pass  # fall through to the absolute/legacy derivation below
 
     # Prefer the budget-aware effective context window derived from
     # the active model + ``max_output_tokens_for_summary`` over the

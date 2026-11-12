@@ -125,6 +125,7 @@ export interface WSClientChatSend {
   confirmation_decision?: 'approve' | 'deny'
   attachments?: AttachmentBlock[]
   mode?: 'chat' | 'work'
+  effort?: 'quick' | 'standard' | 'deep'  // 执行档位（steps/tool_calls/墙钟预算）
   trajectory?: string  // 'full', 'dry', or undefined (use env default)
   designated_skills?: string[]  // 用户指定技能名（可多个）
   designated_plugins?: string[]  // 用户指定插件名（可多个）
@@ -280,6 +281,12 @@ export interface SubagentProgressItem {
   duration_so_far: number
   handoff_chain_id?: string | null
   from_subagent?: string | null
+}
+
+/** 右栏展示用：在进度项上补全 sub_agent 调用参数里的任务描述 / 模型覆盖。 */
+export interface SubagentPanelItem extends SubagentProgressItem {
+  task_hint: string | null
+  model_hint: string | null
 }
 
 export interface WSServerPing {

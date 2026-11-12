@@ -68,7 +68,7 @@ Licensed under Apache License 2.0
 
 ## How it learns
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。`reg-change-monitor` agent 监视监管源并针对你的政策库标记变更。你可以重新运行设置、直接编辑文件或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。`reg-change-monitor` agent 监视监管源并针对你的政策库标记变更。你可以重新运行设置、直接编辑文件或告诉 skill 记录新立场。
 
 ## Notes
 
@@ -78,4 +78,4 @@ Licensed under Apache License 2.0
 
 ## Configuration
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`，并在 plugin 更新后保留——你只需运行一次设置。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`，并在 plugin 更新后保留——你只需运行一次设置。

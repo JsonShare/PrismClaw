@@ -27,7 +27,7 @@ Licensed under Apache License 2.0
 
 仅通过此中心安装的社区 skills。识别规则：
 
-- skill 的名称必须出现在 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/install-log.yaml` 中，且最近的操作为 `install` 或 `enable`（不是 `uninstall`）。
+- skill 的名称必须出现在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/install-log.yaml` 中，且最近的操作为 `install` 或 `enable`（不是 `uninstall`）。
 - skill 的文件必须解析到 legal-chineselaw 附带的第一方插件目录之外的路径。
 
 如果任一检查失败，拒绝并告诉用户原因。永不删除或重命名第一方插件内的文件。
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 2：解析文件
 
-从日志中确定安装路径（安装时写入）。枚举每个文件和子目录。还要识别 skill 写入用户 `~/.prismclaw/plugins/...` 的任何配置——向用户展示但不默认删除（配置可能值得保留以便日后重新安装）。
+从日志中确定安装路径（安装时写入）。枚举每个文件和子目录。还要识别 skill 写入用户 `~/.prismclaw/assets/plugins/...` 的任何配置——向用户展示但不默认删除（配置可能值得保留以便日后重新安装）。
 
 ### 步骤 3：展示并确认
 
@@ -109,7 +109,7 @@ Licensed under Apache License 2.0
 ## 此 skill 不做什么
 
 - 卸载第一方插件 skills。使用 `/plugin` 进行插件管理。
-- 默认删除用户配置。`~/.prismclaw/plugins/legal-chineselaw/<plugin>/` 中的配置会被保留，除非用户明确要求。
+- 默认删除用户配置。`~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/` 中的配置会被保留，除非用户明确要求。
 - 每次调用操作多个 skill。一个名称，一个操作。
 
 

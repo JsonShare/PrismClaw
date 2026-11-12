@@ -45,7 +45,7 @@ plugin 对你进行访谈以了解：你是构建者、部署者，还是两者�
 
 | Skill | 目的 |
 |---|---|
-| **cold-start-interview** | 从访谈 + 种子文档编写 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` |
+| **cold-start-interview** | 从访谈 + 种子文档编写 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` |
 | **ai-inventory** | 欧盟 AI 法案的系统清单——每个系统的角色（供应商、部署者、进口商、分销商、授权代表、产品制造商）和风险等级 |
 | **use-case-triage** | 根据注册表对使用案例进行分类；标记缺失的评估 |
 | **aia-generation** | 内部格式的 AI 影响评估（AIA） |
@@ -65,7 +65,7 @@ plugin 对你进行访谈以了解：你是构建者、部署者，还是两者�
 
 准备好（如果存在）：你的 AI 或可接受使用政策、一份先前的影响评估、主要供应商 AI 协议、模型清单或已批准工具列表。
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 并在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 并在 plugin 更新后保留。
 
 ### 2. 分类新使用案例
 
@@ -120,7 +120,7 @@ ai-governance-legal/
 
 ## How it learns
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。`policy-monitor` agent 监视你的 AI 治理政策与你的实践之间的漂移，并提议更新。你可以重新运行设置、直接编辑文件，或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。`policy-monitor` agent 监视你的 AI 治理政策与你的实践之间的漂移，并提议更新。你可以重新运行设置、直接编辑文件，或告诉 skill 记录新立场。
 
 ## Notes
 
@@ -130,4 +130,4 @@ ai-governance-legal/
 - 影响评估格式来自你的种子评估。如果你在设置期间没有提供一个，它会使用基线结构——使用参考重新运行设置以改进它。
 - 构建者和部署者义务被分别对待。如果你两者都是，skill 会询问你为每个任务戴着哪顶帽子。
 - 差距分析是手动的（你将其指向法规或指南文档）。对于自动监视，如果已安装 plugin，可与 `regulatory-legal` plugin 配对。
-- 按照惯例，`## Company profile` 部分是 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 的第一个块。如果你运行其他 `-counsel` plugin，你可以跨复制它，而不是重新输入相同的上下文。
+- 按照惯例，`## Company profile` 部分是 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 的第一个块。如果你运行其他 `-counsel` plugin，你可以跨复制它，而不是重新输入相同的上下文。

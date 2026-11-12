@@ -18,7 +18,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -34,11 +34,11 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 司法管辖区足迹、升级表、任何现有的扩张笔记。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 司法管辖区足迹、升级表、任何现有的扩张笔记。
 
 ## 输出标题
 
-在前面加上 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 中的工作产品标题（根据用户角色而不同——见 `## Who's using this`）。
+在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 中的工作产品标题（根据用户角色而不同——见 `## Who's using this`）。
 
 ## 工作流
 
@@ -176,7 +176,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 5 — 创建扩张追踪器
 
-将新文件写入 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/expansion-[country-slug].yaml`，包含步骤 2-4 中识别的所有开放项。此文件跨会话持久。
+将新文件写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/expansion-[country-slug].yaml`，包含步骤 2-4 中识别的所有开放项。此文件跨会话持久。
 
 格式：
 
@@ -223,7 +223,7 @@ open_items:
 **首位员工目标：** [日期]
 **人数（12 个月）：** [N]
 **角色：** [列表]
-**追踪器：** ~/.prismclaw/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml
+**追踪器：** ~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml
 
 ---
 

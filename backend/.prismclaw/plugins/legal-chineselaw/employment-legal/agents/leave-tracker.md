@@ -45,7 +45,7 @@ Licensed under Apache License 2.0
 
 不跟踪无法定截止日期或重要法律节点的带薪休假、其他酌情假期。
 
-> **依赖跟踪器前请研究适用制度。** 对于 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的每个省市，确认当前有效的休假法规、雇主法定义务、员工资格要求，以及任何修正案或新的省市规定。引用控制性法规和实施条例，附精确引用。核实时效性——各省市生育奖励假、陪产假等尤其频繁变动。若对任何省市的现行法律状态存在不确定性，请标记并不要陈述未经确认的规则。
+> **依赖跟踪器前请研究适用制度。** 对于 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的每个省市，确认当前有效的休假法规、雇主法定义务、员工资格要求，以及任何修正案或新的省市规定。引用控制性法规和实施条例，附精确引用。核实时效性——各省市生育奖励假、陪产假等尤其频繁变动。若对任何省市的现行法律状态存在不确定性，请标记并不要陈述未经确认的规则。
 
 ## 运行计划
 
@@ -55,7 +55,7 @@ Licensed under Apache License 2.0
 
 ### 第一步 — 读取执业档案
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，提取：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，提取：
 - 省市足迹及团队已研究记录的任何省市特定休假规则
 - HRIS 系统和休假数据访问权限（`## Systems` 部分）
 - 升级表
@@ -66,7 +66,7 @@ Licensed under Apache License 2.0
 查询所有处于活跃休假状态的员工。拉取：员工标识符、省市、休假类型、开始日期、已用时间（对医疗期/产假至关重要——按实际计量）、预期返岗日期、审批状态、证明文件状态。
 
 **若为手动方式：**
-读取 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml`。若文件不存在，提示：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml`。若文件不存在，提示：
 > "未找到休假登记册。请连接您的 HRIS，或将当前休假电子表格上传至此进行加载。您也可以使用 `/employment-legal:log-leave` 逐条添加休假记录。"
 等待数据提供后继续。
 
@@ -101,7 +101,7 @@ Licensed under Apache License 2.0
 
 仅呈现需要决策或行动的条目，不呈现无临近截止日期的正常休假。
 
-提醒层级（阈值为 Agent 级别默认值——可在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中根据团队偏好调整）：
+提醒层级（阈值为 Agent 级别默认值——可在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中根据团队偏好调整）：
 - 立即行动：决策或截止日期在 3 个工作日内
 - 本周需行动：7 天内
 - 即将到来：约 30 天内
@@ -187,11 +187,11 @@ Licensed under Apache License 2.0
 
 ### 第六步 — 更新登记册
 
-运行后，更新 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml`，包含重新计算的字段（若从 HRIS 拉取则含已用时间、last_checked 时间戳、状态变更）。不要覆盖律师手动添加的任何 `notes` 字段。
+运行后，更新 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml`，包含重新计算的字段（若从 HRIS 拉取则含已用时间、last_checked 时间戳、状态变更）。不要覆盖律师手动添加的任何 `notes` 字段。
 
 ## 休假登记册格式
 
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml`：
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml`：
 
 ```yaml
 - employee_id: [姓名、职位或匿名 ID]

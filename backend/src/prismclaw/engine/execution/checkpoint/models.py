@@ -46,12 +46,11 @@ class RecoveryState(BaseModel):
     chain: list[str] = Field(default_factory=list)
 
 
-class BudgetState(BaseModel):
-    input_budget_tokens: int = 0
-    output_budget_tokens: int = 0
-    cost_budget_minor: int = 0
-    spent_input_tokens: int = 0
-    spent_output_tokens: int = 0
+class LoopState(BaseModel):
+    steps_spent: int = 0
+    tool_calls_spent: int = 0
+    soft_at: float = 0.0
+    hard_at: float = 0.0
 
 
 class CompressionState(BaseModel):
@@ -164,13 +163,12 @@ class RunState(BaseModel):
     session_id: str
     run_id: str | None = None
     workspace_id: str | None = None
-    iteration: int = 0
     retry_state: RetryState = Field(default_factory=RetryState)
     tool_loop_state: dict[str, object] = Field(default_factory=dict)
     recovery_state: RecoveryState = Field(default_factory=RecoveryState)
     current_phase: str | None = None
     last_model_response_meta: dict[str, object] = Field(default_factory=dict)
-    budget_state: BudgetState = Field(default_factory=BudgetState)
+    loop_state: LoopState = Field(default_factory=LoopState)
     compression_state: CompressionState = Field(default_factory=CompressionState)
     active_tool_call_id: str | None = None
     approval_pending: bool = False

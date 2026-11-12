@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
 
 ---
 
@@ -108,7 +108,7 @@ Licensed under Apache License 2.0
 
 ## 校准检查
 
-在最终确定之前，根据 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 风险校准进行检查：
+在最终确定之前，根据 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 风险校准进行检查：
 
 - 此风险评估是针对*此公司*校准的，还是通用的？
 - 在同意令下的公司的"高"风险可能在没有同意令的公司中是"中"
@@ -122,11 +122,11 @@ Licensed under Apache License 2.0
 
 ## 输出格式
 
-独立文档，2-4 页。在前面加上来自 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 的工作产品标题（因用户角色而异——请参阅"## 谁在使用"）。
+独立文档，2-4 页。在前面加上来自 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 的工作产品标题（因用户角色而异——请参阅"## 谁在使用"）。
 
 不是幻灯片，不是归档备忘录——决策文档，某人阅读然后做出决定。
 
-保存到 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 发布审查流程说的审查文档去的地方。如果文档将与特权圈子之外的任何人共享（例如，发布到广泛共享的工单），则仅删除该外部面向副本的工作产品标题，并在事项文件中保留特权原件。
+保存到 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 发布审查流程说的审查文档去的地方。如果文档将与特权圈子之外的任何人共享（例如，发布到广泛共享的工单），则仅删除该外部面向副本的工作产品标题，并在事项文件中保留特权原件。
 
 ## 引用检查
 

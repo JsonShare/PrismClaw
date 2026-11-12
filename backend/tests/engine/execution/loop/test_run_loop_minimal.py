@@ -168,7 +168,6 @@ async def test_turn_perf_counts_pure_text_turn() -> None:
         pass
 
     perf = state.perf
-    assert perf.iterations == 1
     assert perf.llm_calls == 1
     assert perf.tool_calls == 0
     assert perf.llm_ms >= 10.0, f"纯文本回合未计入 LLM 耗时: {perf.llm_ms}"
@@ -222,7 +221,6 @@ async def test_turn_perf_counts_tool_calls_across_iterations() -> None:
         pass
 
     perf = state.perf
-    assert perf.iterations == 2
     assert perf.llm_calls == 2
     assert perf.tool_calls == 2
     assert perf.tools_ms >= 0.0

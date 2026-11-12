@@ -10,18 +10,17 @@ Licensed under Apache License 2.0
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径 READ 配置。不是从此文件。
 2. 如果该文件不存在或仍包含 [PLACEHOLDER] 标记，在进行实质性工作前 STOP。说："此 plugin 需要先完成设置才能提供有效输出。请运行 /employment-legal:cold-start-interview——大约需要 10-15 分钟，此 plugin 中的每个命令都依赖于它。不设置的情况下，输出将是通用的，可能无法匹配你的实际劳动法律实践。" 不要继续使用占位符或默认配置。唯一无需设置即可运行的 skill 是 /employment-legal:cold-start-interview 本身和任何 --check-integrations 标志。
 3. 设置和冷启动访谈 WRITE 到该路径，根据需要创建父目录。
 4. 在 plugin 更新后的首次运行时，如果旧缓存路径
-   (~/.prismclaw/plugins/cache/legal-chineselaw/employment-legal/<version>/PRISMCLAW.md 适用于任何版本)
    存在已填充的 PRISMCLAW.md，但配置路径不存在，则在继续前将其复制到配置路径。
 5. 此文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示配置应具有的结构。每次 plugin 更新时它都会被替换。永远不要在此处写入用户数据。
 
-**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
+**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
 -->
 
 # 劳动法律顾问执业档案（中国劳动法）
@@ -53,7 +52,7 @@ Licensed under Apache License 2.0
 - ⚠️ 审查者备注：保留（这是审查者在依赖交付物之前找到所需内容的一个地方）
 - 来源归因标签：保留内联但合并（脚注或尾注对于干净的交付物是可以的）
 - Skill 适配叙述（"我正在使用 X skill，通常..."）：删除
-- Plugin 命令交接（"下一步运行 /plugin:other-command..."）：从交付物中删除；放在单独的审查者备注中
+- Plugin 命令交接（"下一步运行另一个插件的命令..."）：从交付物中删除；放在单独的审查者备注中
 - "我阅读了以下文件..."：删除
 
 交付物应该读起来像是合伙人/主任律师写的。元评论放在标题上方的审查者备注或单独的消息中，而不是文档中。
@@ -65,7 +64,7 @@ Licensed under Apache License 2.0
 | 元典法律研究（法条检索）| [✓ / ✗] | 引用标记 `[模型知识 — 需核验]`，优先核验地方性规定 |
 | 元典法律研究（案例检索）| [✓ / ✗] | 引用标记 `[模型知识 — 需核验]`，建议直接检索中国裁判文书网 |
 | 元典企业信息查询 | [✓ / ✗] | 手动查询国家企业信用信息公示系统 |
-| HR系统（钉钉/企业协作HR/用友/金蝶） | [✓ / ✗] | 请假数据在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml` 手动维护 |
+| HR系统（钉钉/企业协作HR/用友/金蝶） | [✓ / ✗] | 请假数据在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml` 手动维护 |
 | 文档存储（企业协作云文档/钉钉盘/企业微信文档） | [✓ / ✗] | 本地路径读取员工手册+种子文档 |
 | 企业协作/钉钉（即时通讯） | [✓ / ✗] | 审查结果仅作为文件输出 |
 
@@ -190,7 +189,7 @@ Licensed under Apache License 2.0
 
 **文件访问失败。** 当你无法读取用户指向的文件时，不要静默失败。说明发生了什么，并提供可能的解决方案。
 
-**验证日志。** 当你或用户验证标记的项目时——对照主要来源确认引用、对照当地规则检查截止日期——记录它，以便下一个人不会重新验证。将一行条目写入 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/verification-log.md`：
+**验证日志。** 当你或用户验证标记的项目时——对照主要来源确认引用、对照当地规则检查截止日期——记录它，以便下一个人不会重新验证。将一行条目写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/verification-log.md`：
 
 `[YYYY-MM-DD] [引用或事实] 由 [姓名] 对照 [来源] 核实 — [结论：已确认 / 更正为X / 无法核实]`
 
@@ -314,7 +313,7 @@ Plugin 的工作是让 PrismClaw 更擅长劳动法律工作，而不是将其�
 ## Systems
 
 **HRIS：** [系统名称 / 无]
-**休假数据访问：** [法务有读取权限 / 手动 — `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml`]
+**休假数据访问：** [法务有读取权限 / 手动 — `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml`]
 **员工手册位置：** [企业协作云文档 / 钉钉盘 / 本地路径]
 
 ---

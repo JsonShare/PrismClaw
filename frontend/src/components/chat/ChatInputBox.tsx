@@ -6,6 +6,7 @@ import type { PendingAttachment, PendingUpload } from '../../lib/chat/attachment
 import { imageBlockToDataUrl } from '../../lib/file/image'
 import FileIcon from '../file/FileIcon'
 import PlusMenu from './PlusMenu'
+import EffortToggle from './EffortToggle'
 import type { PlusMenuAction } from './PlusMenu'
 import SkillSelector from './SkillSelector'
 import PluginSelector from './PluginSelector'
@@ -382,7 +383,7 @@ export default function ChatInputBox({
       ) : (
         <>
           {pendingAttachments.length > 0 && (
-            <div className={`flex flex-wrap gap-2 ${attachmentPadding}`}>
+            <div className={`flex flex-wrap gap-2 shrink-0 ${attachmentPadding}`}>
               {pendingAttachments.map((att, i) => (
                 <AttachmentCard
                   key={att.id}
@@ -422,6 +423,7 @@ export default function ChatInputBox({
               data-state={anySubPanelOpen ? 'accent' : undefined}
               aria-label="添加" onMouseEnter={(e) => showTip(e, '添加', true)} onMouseLeave={hideTip}><Plus size={18} strokeWidth={2} /></button>
             <PlusMenu open={plusMenuOpen} onOpenChange={setPlusMenuOpen} onAction={handlePlusAction} />
+            <EffortToggle />
             <SkillSelector open={skillPanelOpen} onClose={() => setSkillPanelOpen(false)} selected={designation.skills} onChange={handleSkillPanelPick} skills={skills} loading={skillsLoading} />
             <PluginSelector open={pluginPanelOpen} onClose={() => setPluginPanelOpen(false)} selected={designation.plugins} onChange={handlePluginPanelPick} skills={skills} loading={skillsLoading} />
             <ContextPicker

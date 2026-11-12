@@ -20,7 +20,7 @@ Licensed under Apache License 2.0
 
 # /policy-redraft
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 政策库索引 + 执业档案。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 政策库索引 + 执业档案。
 2. 使用以下工作流。
 3. 收集输入：差异（来自 `/regulatory-legal:gaps` 输出或直接描述）、当前批准的政策文本、规则文本。
 4. 验证规则是当前的（根据 policy-diff 规则状态检查）。如果无法验证，发出 `⚠️ 规则状态未验证` 横幅。
@@ -34,7 +34,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 是 `✗`（内部法务用户默认），跳过此段的其余部分——技能使用执业级上下文，事项机制不可见。如果启用且没有活动事项，询问："这是哪个事项？运行 `/regulatory-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活动事项的 `matter.md` 以获取事项特定的上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/`。除非 `跨事项上下文` 是 `on`，否则绝不读取另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 是 `✗`（内部法务用户默认），跳过此段的其余部分——技能使用执业级上下文，事项机制不可见。如果启用且没有活动事项，询问："这是哪个事项？运行 `/regulatory-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活动事项的 `matter.md` 以获取事项特定的上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/`。除非 `跨事项上下文` 是 `on`，否则绝不读取另一个事项的文件。
 
 ---
 
@@ -60,7 +60,7 @@ Gap-surfacer 发现内规差异。Policy-diff 命名需要更改的内容。此�
 ### 1a. 差异
 
 以下之一：
-- 来自差异台账的 `GAP-ID`——从 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/gap-tracker.yaml`（或事项级等效项）加载条目。
+- 来自差异台账的 `GAP-ID`——从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/gap-tracker.yaml`（或事项级等效项）加载条目。
 - 在用户消息中描述的差异——捕获要求、法规和受影响的政策。
 - 从 `/regulatory-legal:policy-diff` 输出粘贴的比对摘要。
 
@@ -187,7 +187,7 @@ Gap-surfacer 发现内规差异。Policy-diff 命名需要更改的内容。此�
 
 ## 配置依赖的后备方案
 
-此技能从 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取政策库索引和所有者。当它需要的值为空或仍然是 `[PLACEHOLDER]` 时：
+此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取政策库索引和所有者。当它需要的值为空或仍然是 `[PLACEHOLDER]` 时：
 
 - **缺少政策所有者：** 仍然生成修订。在审查者笔记中注明："在 `## 政策库` 中没有为 [政策] 设置政策所有者。使用 `/regulatory-legal:cold-start-interview --redo` 分配一个，以便批准路径可路由。"
 - **政策库为空且差异未命名特定政策：** 停止并询问："我需要当前政策文本来修订。粘贴受影响政策的文本，或指向文件。"

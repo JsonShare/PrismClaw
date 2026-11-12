@@ -226,7 +226,7 @@ class LoadedPlugin:
     # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
     # 子插件通过 porting_context 传递 marketplace_name，非 marketplace 插件为 None。
     marketplace_name: str | None = None
-    # v5 渐进式披露：所属 marketplace 描述（来自 marketplace.json description）
+    # v5 渐进式披露：所属 marketplace 描述（来自市场级 plugin.json 的 description）
     # 比 manifest.description 更完整，系统提示词优先使用此字段。
     marketplace_description: str | None = None
     # 插件指令：PRISMCLAW.md 内容（子插件级 + marketplace 级继承）

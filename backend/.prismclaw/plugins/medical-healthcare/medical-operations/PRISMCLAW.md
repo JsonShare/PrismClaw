@@ -1,5 +1,5 @@
 <!--
-配置位置：~/.prismclaw/plugins/medical-healthcare/medical-operations/PRISMCLAW.md
+配置位置：~/.prismclaw/assets/plugins/medical-healthcare/medical-operations/PRISMCLAW.md
 -->
 
 > ⚠️ **此文件为冷启动模板，运行 `/operations-cold-start-interview` 填充实际内容。**

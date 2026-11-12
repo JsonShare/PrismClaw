@@ -15,7 +15,7 @@ Licensed under Apache License 2.0
 
 # /diligence-issue-extraction
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` + `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` + `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。
 2. 使用以下工作流。
 3. 检查 `ai-tool-handoff`——如果类别是批量且工具已配置，首先交接。
 4. 阅读文档，应用重要性过滤器，按类别提取。
@@ -25,19 +25,19 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
 
 ---
 
 ## 目的
 
-VDR 有 2,000 份文档。其中有 30 份对交易很重要。此技能根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的尽调类别和重要性阈值阅读文档，提取问题，并以内部备忘录格式编写。
+VDR 有 2,000 份文档。其中有 30 份对交易很重要。此技能根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的尽调类别和重要性阈值阅读文档，提取问题，并以内部备忘录格式编写。
 
 ## 加载背景
 
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 尽调结构（类别、重要性阈值）
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 问题备忘录格式（如何陈述发现）
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md` → 交易特定阈值、VDR 位置
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 尽调结构（类别、重要性阈值）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 问题备忘录格式（如何陈述发现）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md` → 交易特定阈值、VDR 位置
 
 如果 deal-context.md 不存在，询问这是哪个交易的。
 
@@ -99,7 +99,7 @@ VDR 有 2,000 份文档。其中有 30 份对交易很重要。此技能根据 `
 
 ### 步骤 2：应用重要性过滤器
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` / deal-context 阈值。如果阈值说合同 >¥X，则不要审查所有内容。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` / deal-context 阈值。如果阈值说合同 >¥X，则不要审查所有内容。
 
 具体对于合同：按合同金额（如果在文件名/元数据中）或对手方重要性排序。自上而下审查，直到达到阈值或类别耗尽。
 
@@ -168,7 +168,7 @@ VDR 有 2,000 份文档。其中有 30 份对交易很重要。此技能根据 `
 >
 > **没有静默补充。** 如果对配置的法律研究工具的研究查询对于发现所需的法律依据返回很少或没有结果（例如，控制权变更同意要求的规则、IP 转让原则、雇佣分类测试），报告发现的内容并停止。不要在未询问的情况下从网络搜索或模型知识填充差距。说："搜索从 [tool] 返回了 [N] 个结果。对于 [规则 / 原则]，覆盖范围似乎很薄。选项：(1) 扩大搜索查询，(2) 尝试不同的研究工具，(3) 搜索网络——结果将标记为 `[web search — verify]`，在依赖前应根据主要来源检查，或 (4) 标记为未验证并停止。你想要哪个？"律师决定是否接受较低可信度的来源。
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的发现模板。如果种子备忘录使用了这个：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的发现模板。如果种子备忘录使用了这个：
 
 ```
 Issue #N: [标题]

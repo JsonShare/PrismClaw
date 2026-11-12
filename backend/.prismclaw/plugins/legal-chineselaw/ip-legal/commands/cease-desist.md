@@ -24,7 +24,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. **阅读执业档案。** 加载 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]` 标记或不存在，停止并说："此 plugin 需要设置才能提供有用的输出。运行 `/ip-legal:cold-start-interview`——停止侵权函 skill 依赖于您的执法立场、审批矩阵和执业领域组合，这些都尚未配置。"
+1. **阅读执业档案。** 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]` 标记或不存在，停止并说："此 plugin 需要设置才能提供有用的输出。运行 `/ip-legal:cold-start-interview`——停止侵权函 skill 依赖于您的执法立场、审批矩阵和执业领域组合，这些都尚未配置。"
 
 2. **检查事项工作区。** 按照 `## 事项工作区`：如果 `已启用` 为 `✗`，跳过——skill 使用执业级上下文。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"
 
@@ -75,9 +75,9 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## 执法立场`（立场、停止侵权函触发条件、软性函件标准、审批矩阵、自动升级），`## IP 执业档案`（执业领域组合、已注册司法管辖区、外部律师名册），`## 输出`（工作产品标题、角色），`## 谁在使用这个`（角色——律师 vs. 非律师）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## 执法立场`（立场、停止侵权函触发条件、软性函件标准、审批矩阵、自动升级），`## IP 执业档案`（执业领域组合、已注册司法管辖区、外部律师名册），`## 输出`（工作产品标题、角色），`## 谁在使用这个`（角色——律师 vs. 非律师）
 - 执业档案种子文档中引用的任何停止侵权函模板或执法手册——阅读它，匹配结构
-- **事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过事项机制——skill 使用执业级上下文。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定覆盖（例如，立场覆盖、审批人覆盖）。将输出写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
+- **事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过事项机制——skill 使用执业级上下文。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定覆盖（例如，立场覆盖、审批人覆盖）。将输出写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
 
 ## 发送模式——起草停止侵权函
 

@@ -17,11 +17,11 @@ Licensed under Apache License 2.0
 
 # /log-leave
 
-向 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml` 添加新休假条目，包含开始跟踪期限所需的最少信息。当员工开始休假且你希望跟踪器从第一天起监控时钟时使用。
+向 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml` 添加新休假条目，包含开始跟踪期限所需的最少信息。当员工开始休假且你希望跟踪器从第一天起监控时钟时使用。
 
 ## 说明
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市表和系统部分。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市表和系统部分。
 
 2. 在单个提示中询问以下所有内容——不要逐个询问：
 
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
    > - 休假审批文件是否已归档？如果是，何时？
    > - 是否需要医疗证明？如果是，是否已提交？
 
-3. 使用 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的省市表，查找此休假类型在此省市的适用休假权益。对于医疗期，需要员工在本单位工龄（影响医疗期时长）：
+3. 使用 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的省市表，查找此休假类型在此省市的适用休假权益。对于医疗期，需要员工在本单位工龄（影响医疗期时长）：
    - 工龄不满10年：在本单位工作年限不满5年的，医疗期3个月；5年以上的，6个月
    - 工龄10年以上：在本单位工作年限不满5年，医疗期6个月；5-10年，9个月；10-15年，12个月；15-20年，18个月；20年以上，24个月
 
@@ -53,7 +53,7 @@ Licensed under Apache License 2.0
    - 医疗证明已请求但未收到 → 提示催要证明
    - 医疗期到期尚未确认返岗安排 → 提示需作出决策
 
-5. 使用休假跟踪器代理的休假登记册格式向 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml` 写入新条目。如果文件不存在，创建它。
+5. 使用休假跟踪器代理的休假登记册格式向 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml` 写入新条目。如果文件不存在，创建它。
 
 6. 用一行确认：
    > "已记录。[员工/角色] — [休假类型] — [省市] — [日期] 开始。第一个需关注事项：[是什么及何时]。休假跟踪器将自动提醒。"

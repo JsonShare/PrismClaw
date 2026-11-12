@@ -25,7 +25,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 阅读 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果它
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果它
    包含 `[PLACEHOLDER]`，停止并指向 `/ip-legal:cold-start-interview`。如果
    执业档案显示仅商标或版权（无专利执业），
    说明并路由用户到其他地方——这是错误的工具。
@@ -97,7 +97,7 @@ PRISMCLAW.md 中的 `## Matter workspaces`。
 运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 加载
 活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。
 将输出写入事项文件夹
-`~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。
+`~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。
 除非 `跨事项上下文` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 发明披露是 **净队** 或
@@ -109,7 +109,7 @@ PRISMCLAW.md 中的 `## Matter workspaces`。
 ## 首先加载执业档案
 
 **在阅读披露之前，阅读
-`~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果它
+`~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果它
 缺失或仍包含占位符，停止并运行 `/ip-legal:cold-start-interview`。执业
 档案告诉你：
 

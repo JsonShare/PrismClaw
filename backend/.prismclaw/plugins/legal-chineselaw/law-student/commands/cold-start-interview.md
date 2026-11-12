@@ -17,14 +17,14 @@ Licensed under Apache License 2.0
 
 # /student-cold-start-interview
 
-1. 检查 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`。如果已填充且没有 `--redo`，覆盖前先确认。如果已填充的 .prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md（无 `[PLACEHOLDER]` 标记）存在于 `~/.prismclaw/plugins/cache/legal-chineselaw/law-student/*/PRISMCLAW.md` 但不在配置路径，将其复制到配置路径并告知用户迁移了什么内容。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`。如果已填充且没有 `--redo`，覆盖前先确认。
 2. 应用下面的访谈工作流。
 3. 完成第 0 部分（谁在使用 / 连接了什么——学生 vs 应届毕业生 vs 其他；文档存储可用性）、第 1 部分（你在哪里）、第 2 部分（你如何学习——主动挑战 vs 先解释）、第 3 部分（强项/薄弱/回避）、第 4 部分（材料摄取——目标 10-20 项）。
 4. 重新阅读捕获的答案。发现矛盾、偏移的细节、值得现在说明的空缺。
-5. 写入 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`（根据需要创建父目录），包括 `## 谁在使用这个` 和 `## 可用集成`。如果分享的材料少于 10 项，添加 `LIMITED DATA` 标记。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`（根据需要创建父目录），包括 `## 谁在使用这个` 和 `## 可用集成`。如果分享的材料少于 10 项，添加 `LIMITED DATA` 标记。
 6. 与用户确认："这是我记录的内容——有什么不对吗？"
 
-**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查。在不触及角色或其他档案内容的情况下更新 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的 `## 可用集成`。在添加或删除 MCP 连接器后使用。
+**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查。在不触及角色或其他档案内容的情况下更新 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的 `## 可用集成`。在添加或删除 MCP 连接器后使用。
 
 探测时：只有当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪，附带一行确认说明。永远不要仅凭 `.mcp.json` 声明就报告 ✓——这会让用户误以为某个连接器已经连通，实际上并没有。
 
@@ -36,17 +36,17 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 向学生打招呼，提议从该部分继续。
 - **包含 `[PLACEHOLDER]` 标记但无暂停注释** → 模板从未完成；提议重新开始或从占位符开始处继续。
 - **已填充（无占位符，无暂停注释）** → 已配置；除非有 `--redo` 否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——用它作为部分脚手架。将完成的实践档案写入配置路径，根据需要创建父目录。如果 PRISMCLAW.md 存在于旧缓存路径 `~/.prismclaw/plugins/cache/legal-chineselaw/law-student/*/PRISMCLAW.md` 但不在此处，将其向前复制。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——用它作为部分脚手架。将完成的实践档案写入配置路径，根据需要创建父目录。
 
 ## 检查共享公司档案
 
-查找 `.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 
 - **如果存在：** 读取它。显示一行确认："You're [name], [practice setting], at [company], [industry], operating in [jurisdictions]. Right? (Or say 'update' to change the shared profile.)" 如果确认，跳过公司问题——直接进入 plugin 特定问题。
 - **如果不存在：** 这将是此用户设置的第一个 plugin。定向和分支之后，询问公司问题并写入共享档案（按 plugin 根目录中 `references/company-profile-template.md` 的模板），然后继续 plugin 特定问题。告诉用户："I've saved your company profile — the other legal plugins will read it and skip these questions."
@@ -99,7 +99,7 @@ Licensed under Apache License 2.0
 - **对于上传（教学大纲、大纲、评分论文、旧考试、MBE 题集）：** "粘贴内容、提供文件路径，或说'暂时跳过'。如果你跳过，我会在实践档案中标记差距，以便你之后填写。" 然后真正等待。不要静默地继续。
 - **在写入实践档案之前：** 回顾访谈。列出每个被跳过或用占位符回答的问题。说："Before I write your practice profile, here's what's still open: [list]. Want to fill any of these now, or leave them as placeholders?" 然后等待答案。
 - **永远不要**带着静默的空缺写入实践档案。每个占位符都应该是学生有意选择跳过的——而不是因为他们停下来思考时问题就滚过去了。
-- **暂停和继续。** 预先告知学生："如果你需要停止，说'暂停'（或'停止'，或'让我回来再看这个'），我会保存你的进度。稍后重新运行 `/law-student:cold-start-interview`，我会从你停下的地方继续。" 当学生暂停时，将部分配置写入 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`，在顶部添加 `<!-- SETUP PAUSED AT: [section name] — run /law-student:cold-start-interview to resume -->` 注释，并在未回答的字段上添加 `[PENDING]` 标记（与 `[PLACEHOLDER]` 区分）。当设置重新运行并发现暂停的配置时，问候学生："欢迎回来。你在 [部分] 暂停了。你之前的答案已保存。从上次继续，还是重新开始？" 不要重新询问已经回答的问题。
+- **暂停和继续。** 预先告知学生："如果你需要停止，说'暂停'（或'停止'，或'让我回来再看这个'），我会保存你的进度。稍后重新运行 `/law-student:cold-start-interview`，我会从你停下的地方继续。" 当学生暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`，在顶部添加 `<!-- SETUP PAUSED AT: [section name] — run /law-student:cold-start-interview to resume -->` 注释，并在未回答的字段上添加 `[PENDING]` 标记（与 `[PLACEHOLDER]` 区分）。当设置重新运行并发现暂停的配置时，问候学生："欢迎回来。你在 [部分] 暂停了。你之前的答案已保存。从上次继续，还是重新开始？" 不要重新询问已经回答的问题。
 - **批次大小——计算子部分。** "每轮不超过 2-3 个问题"意味着 2-3 个*可回答的提示*，包括子部分。一个有 5 个子部分的问题就是 5 个问题。测试：用户能不滚动就回答吗？如果问题不能放在一屏内，就太多了。尽可能使用结构化的点击式问题——它们不需要滚动或输入。
 
 **在设置中核实用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——如果你可以进行合理性检查——在将其写入配置之前进行检查。如果他们说的与你的理解或他们粘贴的内容冲突，指出来："You said the threshold is X; my understanding is Y — can you confirm which goes in the profile? `[premise flagged — verify]`" 写入 PRISMCLAW.md 的错误事实会传播到每个未来的输出；在这里捕捉它是产品中杠杆最高的时刻之一。
@@ -159,7 +159,7 @@ Licensed under Apache License 2.0
 - 如果你无法测试（无法从此处探测），报告 ⚪ "已配置但未验证——打开你的 MCP 设置确认"，附带一行说明。
 - 永远不要仅凭配置就报告 ✓。
 
-对于显示为未连接的连接器，告诉用户如何连接。示例措辞："Box 未连接。在 PrismClaw Cowork 中：设置 → 连接器 → 添加 → Box → 登录。在 PrismClaw 中：通过你的配置或 `/mcp` 添加 Box MCP。此 plugin 不需要它——你将直接粘贴文档而不是拉取它们——但连接它使文档拉取自动化。"
+对于显示为未连接的连接器，告诉用户如何连接。示例措辞："Box 未连接。在 PrismClaw 中：通过你的配置或 `/mcp` 添加 Box MCP。此 plugin 不需要它——你将直接粘贴文档而不是拉取它们——但连接它使文档拉取自动化。"
 
 然后以此形式报告结果：
 
@@ -286,14 +286,14 @@ Licensed under Apache License 2.0
 
 **无论哪种情况：**
 - 如果标记了 LIMITED DATA："实践档案很薄——在添加更多材料之前，下游 skill 将是通用的。最大的差距：[列表]。想标记要收集的首要内容吗？"
-- **在你第一次引用密集的会话之前，如果你有研究工具，请连接它。** 说："在你第一次依赖引用的 IRAC 练习或案例摘要之前：如果你有研究连接器（CourtListener），接好它。没有它，我会将每个引用标记为未验证——与你的案例书或律师资格备考服务交叉检查。在 Cowork 中：设置 → 连接器。"
+- **在你第一次引用密集的会话之前，如果你有研究工具，请连接它。** 说："在你第一次依赖引用的 IRAC 练习或案例摘要之前：如果你有研究连接器（CourtListener），接好它。没有它，我会将每个引用标记为未验证——与你的案例书或律师资格备考服务交叉检查。"
 
 <!-- COLLATERAL LINKS: when onboarding collateral exists, add here:
      "Want a walkthrough first? [Watch the 3-minute intro](URL) or [read the getting-started guide](URL)." -->
 
 然后以"你可以稍后更改任何内容"的说明结尾：
 
-> 完成。你的配置在 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`——一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
+> 完成。你的配置在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`——一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/law-student:cold-start-interview --redo` 进行完整重新访谈

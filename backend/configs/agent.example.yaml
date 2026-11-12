@@ -8,33 +8,32 @@
 #   cp backend/configs/agent.example.yaml backend/configs/agent.yaml
 
 agent:
-  # 0 表示不限制迭代次数（依赖 idle/run 超时兜底）
-  max_iterations: 0
+  # effort 档位预算（quick/standard/deep），由 RunRequest.effort 选档；
+  # RunRequest.long_running 放大所选档位（steps×3 上限 30、hard_s×2 上限 1800）。
+  effort:
+    quick:
+      steps: 3
+      tool_calls: 6
+      soft_s: 45.0
+      hard_s: 90.0
+    standard:
+      steps: 6
+      tool_calls: 12
+      soft_s: 150.0
+      hard_s: 300.0
+    deep:
+      steps: 15
+      tool_calls: 24
+      soft_s: 420.0
+      hard_s: 900.0
   # 工具数组变更策略：append_only 顺序稳定+只追加（保护好前缀缓存）；
   # frozen 需预枚举全部能力；unbounded 放弃缓存红利。
   tool_mutation_policy: "append_only"
-  # 单次会话成本上限（美元）；用于 budget_pricing 折算，0 表示不限制
-  max_budget_usd: 5.0
-
-  # 成本折算单价（每百万 token，美元）
-  budget_pricing:
-    input_per_mtok: 1.0
-    output_per_mtok: 3.0
-    cache_read_per_mtok: 0.1        # 命中前缀缓存的部分按此计价（约为输入的 1/10）
-    cache_write_per_mtok: 1.25      # 写缓存的部分溢价（Anthropic 口径）
 
   context:
     budget:
       # 模型无 context_window 时的兜底窗口；正常路径以 models.yaml 的模型值为准
       window_tokens: 131072
-      # 预算模式：absolute 走固定四键（回滚基石）；ratio 走 zones 比例求解（v4 §3.2）
-      mode: "absolute"   # absolute=固定四键（当前）；ratio=按模型窗口比例求解（zones 生效）
-      zones:
-        system:  { ratio: 0.12, floor: 2048, cap: 12288 }
-        dynamic: { ratio: 0.15, floor: 2048, cap: 16384 }
-        result:  { ratio: 0.15, floor: 2048, cap: 16384 }
-        tools:   { ratio: 0.18, floor: 1024, cap: 65536 }   # cap 为占位：实测 wire（wire_tokens_estimate）才是真上限
-        output:  { ratio: 0.20, max: 65536 }
       # 冻结区（system 提示）预算；实测静态需求约 6.4k，留 25% 增长余量
       system_zone_tokens: 8192
       # 动态区（尾部 system-context）预算；与压缩/结果区共享时必须显式扣除
@@ -56,9 +55,6 @@ agent:
         doc_inline_min_chars: 2500
         doc_inline_max_chars: 7500
         max_constraints: 4
-        # ratio 模式附件 token 预算：min(ratio × input_budget, cap)
-        attachment_token_ratio: 0.25
-        attachment_token_cap: 24000
         # 压缩后文件重注入：单文件 token 预算（全局 = 本值 × compaction.reinject_max_files）
         reinject_file_tokens: 3200
         # 技能 preload 注入上下文的 token 上限
@@ -112,8 +108,6 @@ agent:
         soft_budget:
           warning_ratio: 0.9
           terminate_ratio: 0.95
-        # 动态预算：按模型窗口实时调整各区域（关闭则使用上面的固定值）
-        enable_dynamic_budget: true
 
       # PTL 截断重试后最小保留 token 数（128K 缩放）
       ptl_min_keep_tokens: 6400
@@ -142,8 +136,6 @@ agent:
         read_office: 6
 
   timeouts:
-    # 0 表示不限制单轮总时长
-    run_seconds: 0.0
     # 无事件空闲超时：超过即判为卡死
     idle_seconds: 360.0
     # 单次工具调用超时
@@ -156,20 +148,12 @@ agent:
     empty_response_limit: 1
 
   run_loop:
-    # 按工具名的单轮调用次数上限（防止搜索类工具无限循环）
-    tool_max_uses:
-      web-search-mcp__search: 6
-    # 视为“搜索意图”的工具；命中后启用搜索循环防护
+    # 视为"搜索意图"的工具；wrapping 阶段冻结
     search_intent_tools:
       - "web-search-mcp__search"
-    # 搜索调用达到 N 次时提醒模型收敛
-    search_loop_warn_at: 5
-    # 搜索类输出占本轮上下文比例超过该值时冻结新搜索
-    search_freeze_output_share: 0.5
-    # 同一目标重复读取达到 N 次时告警
-    same_target_read_warn_at: 4
-    # 连续工具错误达到 N 次时判定“错误疲劳”，提前收口
-    error_fatigue_threshold: 3
+    # doom-loop 签名冻结阶梯：warn 阈值；冻结阈值派生为 2×（钳制在 12 条窗口）
+    stuck:
+      signature_warn: 3
 
   control:
     # 结构化输出校验失败时的最大修复次数

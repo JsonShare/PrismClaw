@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 阅读 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果它包含 `[PLACEHOLDER]`,停止并指向 `/ip-legal:cold-start-interview`。
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果它包含 `[PLACEHOLDER]`,停止并指向 `/ip-legal:cold-start-interview`。
 2. 遵循以下工作流。
 3. 运行 intake(商标、商品/服务、类别、司法管辖区、视觉/样式)。
 4. 针对内在障碍进行淘汰检查——通用、描述性、欺骗性、地理、姓氏、虚假连接、禁止事项、功能性。
@@ -58,20 +58,20 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`(内部用户的默认值),跳过本段的其余部分——skills 使用执业级上下文,事项机制不可见。如果已启用且没有活跃事项,询问:"这是哪个事项的? Run `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`,否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`(内部用户的默认值),跳过本段的其余部分——skills 使用执业级上下文,事项机制不可见。如果已启用且没有活跃事项,询问:"这是哪个事项的? Run `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`,否则永远不要阅读另一个事项的文件。
 
 ---
 
 ## 首先加载执业档案
 
-在运行清除之前,阅读 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。拉取:
+在运行清除之前,阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。拉取:
 
 - **角色** 来自 `## Who's using this`(律师 vs. 非律师改变工作产品标题和下面的非律师关卡)
 - **注册于** 和 **执行于** 来自 `## IP practice profile` 和 `## Enforcement posture`(如果用户未指定的默认司法管辖区)
 - **集成** 来自 `## Available integrations`(CourtListener / Solve Intelligence / Descrybe ——每个确定可运行哪些搜索、后备是什么以及输出中归因什么)
 - **决策姿态** 来自 `## Decision posture on subjective legal calls` ——此 skill 从不结论"没有混淆相似"
 
-如果 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 包含 `[PLACEHOLDER]` 或 `[Your Company Name]`,提出此反弹:
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 包含 `[PLACEHOLDER]` 或 `[Your Company Name]`,提出此反弹:
 
 > 我注意到你尚未配置执业档案——那是我如何为你的执业定制姿态、司法管辖区和批准链的方式。
 >
@@ -132,7 +132,7 @@ Licensed under Apache License 2.0
 
 ### 用户连接了什么
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的 `## Available integrations`:
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的 `## Available integrations`:
 
 - **如果商标搜索连接器可用**(Solve Intelligence、Descrybe ——或任何暴露 TM 注册搜索的 MCP):跨相关类别和司法管辖区运行初步搜索。将每个结果归因于其来源。注意搜索日期和范围(哪些注册处、哪些类别、精确匹配 vs. 模糊、设计搜索与否)。
 - **如果法律研究连接器可用**(针对诉讼的 CourtListener 获取案例法和 TTAB 决定):扫描涉及商标或近似变体的报告争议。相同归因规则。
@@ -221,7 +221,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 - **实际混淆。** 任何证据(错误查询、调查、评论、社交帖子)。
 - **扩张可能性**(桥接差距)。年长用户是否可能扩张到年轻用户的车道,反之亦然。
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的决策姿态:
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的决策姿态:
 
 - **永远不要结论"没有混淆相似"。**
 - 如果不确定,写:"发现相似商标——在采用前需要混淆评估。"或:"因素两面走;需要律师判断。"
@@ -243,7 +243,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 
 ## 输出格式
 
-在前面加上 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题。
+在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题。
 
 ```markdown
 [WORK-PRODUCT HEADER]
@@ -313,7 +313,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 - [具体下一步 1 — 例如,"在采用前跨 USPTO、州注册处、普通法来源、EUIPO 和 UK IPO 进行完整专业搜索"]
 - [具体下一步 2 — 例如,"如果意图继续,对第 25 类的 `APEXLEAF` 商标进行设计审查"]
 - [具体下一步 3 — 例如,"重构商标——当前形式是描述性的,需要次要含义"]
-- [根据 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 路由——执业档案中命名的商标 OC 或内部 IP 法律顾问]
+- [根据 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 路由——执业档案中命名的商标 OC 或内部 IP 法律顾问]
 
 ## 引用验证
 
@@ -341,7 +341,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 
 ## 输出位置
 
-如果事项工作区已启用且事项活跃,将输出写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/outputs/clearance-<mark-slug>-YYYY-MM-DD.md`。否则写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/outputs/clearance-<mark-slug>-YYYY-MM-DD.md` 并向用户展示路径。
+如果事项工作区已启用且事项活跃,将输出写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/outputs/clearance-<mark-slug>-YYYY-MM-DD.md`。否则写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/outputs/clearance-<mark-slug>-YYYY-MM-DD.md` 并向用户展示路径。
 
 如果事项活跃,向事项的 `history.md` 附加一行。
 

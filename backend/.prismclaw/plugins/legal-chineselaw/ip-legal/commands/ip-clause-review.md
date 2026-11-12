@@ -17,11 +17,11 @@ Licensed under Apache License 2.0
 
 # /ip-clause-review
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的执业档案审查协议中的 IP 条款。标记转让缺口、所有权模糊、许可范围问题和 IP 保证/赔偿问题。生成逐条款发现备忘录，按风险优先排序，并在适当时建议红线修改语言。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的执业档案审查协议中的 IP 条款。标记转让缺口、所有权模糊、许可范围问题和 IP 保证/赔偿问题。生成逐条款发现备忘录，按风险优先排序，并在适当时建议红线修改语言。
 
 ## 说明
 
-1. **加载 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果存在占位符，停止并提示："首先运行 `/ip-legal:cold-start-interview`——我需要先了解你的执业档案，才能据此审查 IP 条款。"
+1. **加载 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果存在占位符，停止并提示："首先运行 `/ip-legal:cold-start-interview`——我需要先了解你的执业档案，才能据此审查 IP 条款。"
 
 2. **获取协议：** 从文件路径、Drive 链接或粘贴文本。如果未提供，询问。
 
@@ -48,7 +48,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -60,7 +60,7 @@ Licensed under Apache License 2.0
 
 ## 前提条件：加载执业档案
 
-**在阅读协议之前，阅读 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果缺失或仍包含占位符，停止并运行 `/ip-legal:cold-start-interview`。执业档案告诉你：
+**在阅读协议之前，阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果缺失或仍包含占位符，停止并运行 `/ip-legal:cold-start-interview`。执业档案告诉你：
 
 - 司法管辖区范围——影响精神权利放弃是否可执行、工作成果是否适用、默示转让是否填补缺口、许可授予可以多广泛
 - 谁批准偏差以及什么严重级别
@@ -113,7 +113,7 @@ Licensed under Apache License 2.0
 **建议红线：**
 > "[具体替换语言]"
 
-**升级：** 按照 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，转让范围缺口升级给 [审批人]。
+**升级：** 按照 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，转让范围缺口升级给 [审批人]。
 ```
 
 > **转让能否传达 AI 生成内容？** *Thaler v. Perlmutter* 和版权局 2023 年 AI 注册指南表明，在没有任何人类作者身份的情况下 AI 生成的作品可能不受版权保护，尽管边界仍不明确且此领域在发展中。如果承包商使用 AI 完成可交付成果的相当部分，这些部分的版权状态不确定——转让条款只能传达存在的权利。
@@ -210,7 +210,7 @@ IP 规则因司法管辖区而异，影响结果。如果协议涉及以下任�
 
 ### 步骤 6：组装备忘录
 
-前置 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## Outputs` 的工作产品标题（因用户角色而异——参见 `## Who's using this`）。
+前置 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## Outputs` 的工作产品标题（因用户角色而异——参见 `## Who's using this`）。
 
 此备忘录和基础协议可能是特权的、机密的或两者兼有。输出从来源继承该状态。仅在特权圈内分发；在特权材料存放处标记和存储；在任何外部交付前删除工作产品标题。
 

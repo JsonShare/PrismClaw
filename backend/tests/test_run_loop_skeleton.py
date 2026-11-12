@@ -4,7 +4,7 @@
 
   - 无工具回合 → 路径 C 在 preflight 运行并正常 done（回归 A1）
   - 工具回合 → record+evaluate 只在 post 发生，每回合恰好一次
-  - execute_tools 异常 → 无配对结果按失败计（consecutive_errors 复活）
+  - execute_tools 异常 → 无配对结果按失败计（doom-loop 签名计数）
   - last_tool_results 每回合清空（无跨回合残留错配）
   - 全拒回合 → persist_denied_turn 落树后续跑（冻结 escalate 只置
     嫌疑标志，不产生终态）

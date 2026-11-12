@@ -15,10 +15,6 @@ class RunStateMachine:
     def retry_counts_view(self) -> dict[str, int]:
         return self.state.retry_state.model_dump(mode="python")
 
-    def advance_iteration(self) -> int:
-        self.state.iteration += 1
-        return self.state.iteration
-
     def record_retry(self, classification: str) -> dict[str, int]:
         if classification == "reasoning":
             self.state.retry_state.reasoning += 1

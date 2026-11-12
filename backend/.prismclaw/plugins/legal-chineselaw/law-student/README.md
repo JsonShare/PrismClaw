@@ -77,7 +77,7 @@ Licensed under Apache License 2.0
 
 ## 存储
 
-你的练习档案存储在 `~/.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`，在 plugin 更新后保留。其他所有内容都在你的工作目录中：
+你的练习档案存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`，在 plugin 更新后保留。其他所有内容都在你的工作目录中：
 
 ```
 law-student/
@@ -100,11 +100,11 @@ law-student/
 
 ## 它如何学习
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 的学习档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 的学习档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
 
 ## 注意事项
 
 - 训练我 vs 解释给我在冷启动时设置；可每会话切换。
 - 案例摘要和大纲使用 *你的* 格式。如果你有现有大纲，让冷启动指向它们。
-- 律师资格考试准备针对你在 `~/.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的薄弱科目。它会持续回到这些科目。
+- 律师资格考试准备针对你在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的薄弱科目。它会持续回到这些科目。
 - 每个生成内容的 skill 在不确定时标记。信任标记多于没有标记——没有标记的规则是我置信的内容；考试前仍要检查你的来源。

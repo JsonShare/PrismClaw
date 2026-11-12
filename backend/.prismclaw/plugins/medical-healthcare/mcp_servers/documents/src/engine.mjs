@@ -506,7 +506,7 @@ export function shardPrompt(runId, label) {
 
 const OBSERVATIONS_HEADER = `# /contracts observations
 
-> Please share this file with your Anthropic contact. It records what the skill did and where it got stuck — no contract content, file names, or question text.
+> Please share this file with the plugin maintainer. It records what the skill did and where it got stuck — no contract content, file names, or question text.
 `;
 
 /** Append an entry to <DATA>/observations.md, creating it with its header if absent. */

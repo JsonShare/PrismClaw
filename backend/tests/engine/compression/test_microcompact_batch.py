@@ -93,41 +93,17 @@ def test_batch_exceeding_budget_triggers_cleanup_and_resets_counter():
 
 
 def test_batch_threshold_sources():
-    from prismclaw.schema.config.config import CompactionConfig
-
-    # absolute：aggregate_char_budget
-    budget = SimpleNamespace(mode="absolute", dynamic_zone_tokens=12_288)
+    # aggregate_char_budget 优先
+    budget = SimpleNamespace(dynamic_zone_tokens=12_288)
     tool_results = SimpleNamespace(aggregate_char_budget=30_000)
     assert mc.batch_cleanup_threshold(budget=budget, tool_results=tool_results) == 30_000
 
-    # absolute：aggregate_char_budget 缺省 → 回退 dynamic_zone_tokens×4（字符口径）
+    # aggregate_char_budget 缺省 → 回退 dynamic_zone_tokens×4（字符口径）
     tool_results_none = SimpleNamespace(aggregate_char_budget=None)
     assert (
         mc.batch_cleanup_threshold(budget=budget, tool_results=tool_results_none)
         == 12_288 * 4
     )
-
-    # ratio：zones.result 由比例求解（不在此断言具体值，只验证走 result 分区）
-    ratio_budget = SimpleNamespace(
-        mode="ratio",
-        window_tokens=131_072,
-        zones=SimpleNamespace(
-            system=SimpleNamespace(ratio=0.12, floor=2048, cap=12288),
-            dynamic=SimpleNamespace(ratio=0.15, floor=2048, cap=16384),
-            result=SimpleNamespace(ratio=0.15, floor=2048, cap=16384),
-            tools=SimpleNamespace(ratio=0.18, floor=1024, cap=65536),
-            output=SimpleNamespace(ratio=0.20, max=65536),
-        ),
-    )
-    threshold = mc.batch_cleanup_threshold(
-        budget=ratio_budget,
-        tool_results=tool_results,
-        window=131_072,
-        model_max_output=32768,
-        tools_wire=6588,
-    )
-    assert isinstance(threshold, int)
-    assert threshold >= 2048
 
 
 # ── 4. 历史压缩边界复位计数器并快照探针 ─────────────────────────────────

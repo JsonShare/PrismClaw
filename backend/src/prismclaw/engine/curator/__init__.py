@@ -75,27 +75,9 @@ async def run_curator_cycle(
     return await cycle.execute()  # pyright: ignore[reportReturnType]
 
 
-REVIEW_PROMPT_TEMPLATE = """\
-你是一个 SOP 质量审查员。请审查以下自动生成的 SOP，对每条给出决策：
-
-可用决策：{actions}
-- keep：质量好，继续保留
-- promote：使用频率高且质量过关，建议升级为正式技能（忽略 use_count 阈值）
-- archive：质量差或内容有害，予以归档
-
-审查标准：
-1. 是否属于类级别（class-level）的通用流程，而非某个具体实例
-2. 步骤是否清晰、可执行
-3. 是否存在安全风险
-4. 内容是否过时或错误
-
-以下是待审查的 SOP：
-
-{entries}
-
-输出 JSON 数组：[{{"id": "...", "decision": "keep|promote|archive", "reason": "..."}}]
-仅输出 JSON，不要其他文字。
-"""
+# NOTE: REVIEW_PROMPT_TEMPLATE lives in persistence/curator/repository.py
+# (single source of truth — the repo's review_session() renders it for the LLM).
+# This module used to carry a second copy that drifted; removed 2026-11-12.
 
 
 async def create_curator_loop(

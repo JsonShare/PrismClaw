@@ -16,19 +16,19 @@ from prismclaw.engine.execution.request.system_prompt import (
     PromptInputs,
     build_frozen_prefix,
     build_identity_text,
+    build_preferences_text,
 )
 from prismclaw.engine.security.gate.governance import runtime_notes_for
 from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
 from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.skills import SkillInvocationState
+from prismclaw.engine.execution.query._turn_helpers import _require_capability_catalog
 
 # --- re-export from extracted sub-modules ---
 from prismclaw.engine.execution.query._catalog_builder import (  # noqa: F401
-    _discovery_runtime_notes,
     _session_follow_up_notes,
     _build_lightweight_repo_map,
     _tool_prompt_summaries,
-    _require_capability_catalog,
     _subagent_catalog_state,
     _compact_description,
     _rough_token_count,
@@ -103,9 +103,14 @@ class StaticContextBuilder:
         is_fast_path = False
         result = "built"
         try:
-            # fallback 与 TimeoutConfig.run_seconds 默认值一致（300s）；
-            # 此值仅参与 fast_path 判定（<30s），真实超时由 timeouts 配置执行
-            run_seconds = deps.config.timeouts.run_seconds if deps.config.timeouts else 300.0
+            # run_seconds 仅参与 fast_path 判定（<30s）；真实超时由 effort.hard_s 执行
+            from prismclaw.engine.execution.control.kernel import resolve_effort_budget
+            _effort_budget = resolve_effort_budget(
+                effort=getattr(request, "effort", "standard") or "standard",
+                long_running=bool(getattr(request, "long_running", False)),
+                tiers=deps.config.effort,
+            )
+            run_seconds = _effort_budget.hard_s
             channel = deps.channel if hasattr(deps, "channel") else "cli"
             request_mode = deps.task_request_policy.resolve_request_mode(
                 tree=tree,
@@ -154,7 +159,6 @@ class StaticContextBuilder:
                 else []
             )
             tool_summaries = list(shell_snapshot.tool_summaries)
-            strategy_notes.extend(_discovery_runtime_notes(tool_summaries))
             strategy_notes.extend(_session_follow_up_notes(tree, tool_summaries))
             # The full catalogs live in the frozen prefix (built once in
             # _build_shell_snapshot) and are surfaced every turn via the static
@@ -166,6 +170,7 @@ class StaticContextBuilder:
                 agent_id=request.agent_id,
                 model=shell_snapshot.model,
                 identity=build_identity_text(mode),
+                preferences=build_preferences_text(),
                 tools=tool_summaries,
                 available_skills=available_skills,
                 available_skills_note=shell_snapshot.available_skills_note,
@@ -286,6 +291,7 @@ class StaticContextBuilder:
             agent_id=request.agent_id,
             model=effective_model,
             identity=build_identity_text(mode),
+            preferences=build_preferences_text(),
             tools=tool_summaries,
             available_skills=available_skills,
             available_skills_note=available_skills_note,
@@ -325,9 +331,6 @@ class StaticContextBuilder:
         system_zone_budget = zone_of(
             deps.config.context.budget,
             "system",
-            window=deps.config.context.budget.window_tokens,
-            model_max_output=resolve_model_max_output(effective_model),
-            tools_wire=tools_wire_tokens,
         )
         # SDD R-A2: keep_recent imbalance must be visible, not silently
         # tolerated — a budget below keep_recent×1.5 means post-compaction

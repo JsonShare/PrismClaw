@@ -17,7 +17,7 @@
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径 READ 配置。不是从此文件。
@@ -25,7 +25,7 @@
 3. 设置和冷启动访谈 WRITE 到该路径，根据需要创建父目录。
 4. 此文件是模板，每次 plugin 更新时被替换。永远不要在此处写入用户数据。
 
-**共享公司档案。** 公司级事实位于 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+**共享公司档案。** 公司级事实位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 -->
 
 # AI 治理合规执业档案
@@ -124,7 +124,7 @@
 
 ## AI 系统清单
 
-**清单文件：** `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/ai-systems.yaml`
+**清单文件：** `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/ai-systems.yaml`
 
 **中国 AI 监管分类框架**（按系统逐一评估，非公司级整体标签）：
 

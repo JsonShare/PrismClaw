@@ -96,7 +96,7 @@ export PRISMCLAW_HEALTHCARE_DATA="${PRISMCLAW_HEALTHCARE_DATA:-$HOME/.prismclaw/
    ```
    → `$FRAUD_OUT_DIR/provider-packet-<npi>.html` ×N, `index.html`, `referrals.xlsx`.
 6. **Show the dashboard** so the user can validate it visually.
-   - **Claude Code Desktop with the preview tool available**: serve the run directory and open it
+   - **有内置预览面板时**：serve the run directory and open it
      in the side-pane preview — `npx serve "$FRAUD_OUT_DIR"` (the dashboard is `index.html`,
      so the root URL is the dashboard; packet links resolve as siblings).
    - **Otherwise** (terminal CLI, no preview tool): use the OS opener on
@@ -110,7 +110,7 @@ export PRISMCLAW_HEALTHCARE_DATA="${PRISMCLAW_HEALTHCARE_DATA:-$HOME/.prismclaw/
        || cmd.exe /c start "" "$f" 2>/dev/null \                   # Windows
        || echo "Could not auto-open; open manually: $f"
      ```
-   Skip this entirely in a headless/non-interactive run (eval, CI, Cowork) — just report the path.
+   Skip this entirely in a headless/non-interactive run (eval, CI, non-interactive execution) — just report the path.
    Don't fail the run if opening/serving fails.
 7. **Relay**: the ranked referrals (NPI, schemes, exposure $, confidence) and total exposure from
    the workflow result, verbatim where it cites numbers. Surface `meta.disclaimer` if it is set. Do
@@ -140,7 +140,7 @@ for **interactive adjudicate/synthesize exploration** only; the pipeline does no
 
 ## How it works (plugin layout)
 - **Entry skill** — this file; orchestrates the workflow, never does the math.
-- **Workflow** — `workflows/investigate.js` (Claude Code dynamic Workflow): Detect → Adjudicate → Synthesize.
+- **Workflow** — `workflows/investigate.js`（确定性 JS 流水线，非 Workflow 机制）：Detect → Adjudicate → Synthesize.
 - **Deterministic sweep** — `scripts/screen.js <corpus.duckdb> <quarter> <lob>` runs all detectors and
   writes `$FRAUD_OUT_DIR/referrals.json`. Zero model calls.
 - **Detectors** — `scripts/dNN-*.js` (one deterministic module each, sharing the Finding shape).

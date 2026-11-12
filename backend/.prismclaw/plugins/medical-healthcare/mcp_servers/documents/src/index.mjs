@@ -19,7 +19,7 @@ import { TOOLS } from "./schemas.mjs";
 //   node src/index.mjs                   MCP over stdio, for hosts that spawn
 //                                        servers themselves — the backup for
 //                                        surfaces where Bash is sandboxed away
-//                                        from the data dir (Cowork desktop) or
+//                                        from the data dir (desktop app) or
 //                                        absent entirely (chat).
 //
 // The MCP side is hand-rolled: the protocol we use is four methods of

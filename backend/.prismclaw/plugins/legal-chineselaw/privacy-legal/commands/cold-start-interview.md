@@ -22,7 +22,7 @@ category: 数据隐私
 3. 种子文档：个人信息处理规则（URL 或文件）、委托处理协议模板、一份参考PIPIA报告。阅读所有三份。
 4. 提取：规则承诺、协议立场（注意与声明的差异）、PIPIA结构。
 5. 迁移：如果旧缓存路径存在已填充的执业档案（无 `[PLACEHOLDER]` 标记）但在配置路径不存在，复制到配置路径并向用户展示迁移内容。
-6. 写入 `~/.prismclaw/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md`（根据需要创建父目录）。显示摘要。提议首个任务。
+6. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md`（根据需要创建父目录）。显示摘要。提议首个任务。
 
 ## `--check-integrations`
 
@@ -40,7 +40,7 @@ category: 数据隐私
 
 ## 检查共享公司档案
 
-查找 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。如果存在：读取并确认一行。如果不存在：先询问公司问题并写入共享档案。
+查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。如果存在：读取并确认一行。如果不存在：先询问公司问题并写入共享档案。
 
 ---
 
@@ -227,7 +227,7 @@ category: 数据隐私
 
 **结束时说明可更改性：**
 
-> "完成了。你的执业档案在 `~/.prismclaw/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md`——这是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
+> "完成了。你的执业档案在 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md`——这是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/privacy-legal:cold-start-interview --redo` 进行完整重新访谈

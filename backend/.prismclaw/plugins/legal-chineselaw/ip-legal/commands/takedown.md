@@ -25,7 +25,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. **阅读执业档案。** 加载 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]` 标记或不存在，停止并说："此 plugin 需要先设置才能提供有用的输出。运行 `/ip-legal:cold-start-interview`——takedown skill 依赖于你的审批矩阵和执业档案。"
+1. **阅读执业档案。** 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]` 标记或不存在，停止并说："此 plugin 需要先设置才能提供有用的输出。运行 `/ip-legal:cold-start-interview`——takedown skill 依赖于你的审批矩阵和执业档案。"
 
 2. **检查事项工作区。** 按照 `## Matter workspaces`：如果 `Enabled` 为 `✗`，跳过。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"
 
@@ -79,8 +79,8 @@ DMCA §512 是**美国联邦法律**。它适用于受美国管辖的服务提�
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## IP practice profile`（如有版权注册）、`## Enforcement posture` → `Approval matrix → DMCA takedown (ordinary)` 行、`## Outputs`（工作产品标题、角色）、`## Who's using this`（角色——律师 vs. 非律师）
-- **事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户默认），跳过事项机制。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 将输出写入活跃事项的文件夹 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/takedown/<slug>/`（或执业级的 `takedown/<slug>/`）。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+- `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## IP practice profile`（如有版权注册）、`## Enforcement posture` → `Approval matrix → DMCA takedown (ordinary)` 行、`## Outputs`（工作产品标题、角色）、`## Who's using this`（角色——律师 vs. 非律师）
+- **事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户默认），跳过事项机制。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 将输出写入活跃事项的文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/takedown/<slug>/`（或执业级的 `takedown/<slug>/`）。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ## 发送模式——起草 §512(c)(3) 撤除通知
 

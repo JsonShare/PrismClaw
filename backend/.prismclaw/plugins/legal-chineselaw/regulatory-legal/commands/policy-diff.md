@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 # /policy-diff
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 政策库索引。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 政策库索引。
 2. 使用以下工作流。
 3. 从法规中提取要求。匹配到索引的政策。
 4. 输出：每个要求的内规差异分析，哪些政策需要更新。
@@ -30,7 +30,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部法务用户默认），跳过本段的其余部分——技能使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/regulatory-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `跨事项上下文` 为 `on`。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部法务用户默认），跳过本段的其余部分——技能使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/regulatory-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `跨事项上下文` 为 `on`。
 
 ---
 
@@ -40,7 +40,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 政策库索引（政策、位置、所有者）。
+`~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 政策库索引（政策、位置、所有者）。
 
 ## 范围完整性
 
@@ -135,7 +135,7 @@ Licensed under Apache License 2.0
 
 - 命名一旦最终规则发布可能需要更改的政策（不是今天）。
 - 标志征求意见稿的任何问题区域是否以需要评议意见的方式与公司的实践相交。
-- 注意评议截止日期和来自 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 的团队的评议决策所有者。
+- 注意评议截止日期和来自 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 的团队的评议决策所有者。
 - 不要为征求意见稿生成每个要求的"无差异"行——没有要求可以进行比对。生成一段命名未来风险和它将触及的政策。
 
 ### 否定发现分支（最终规则/征求意见稿与不是正确目标的政策进行比对）
@@ -198,10 +198,10 @@ Licensed under Apache License 2.0
 
 ## 配置依赖的后备方案
 
-此技能从 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取政策库索引。当索引为空或仍为 `[PLACEHOLDER]` 时：
+此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取政策库索引。当索引为空或仍为 `[PLACEHOLDER]` 时：
 
-- **政策库为空：** 默认将每个要求标记为"无政策匹配"并附加到输出："你的配置中的政策库为空，因此每个要求都标记为新政策差异。如果你有解决这些要求的政策，使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 将它们添加到库，然后重新运行比对。"
-- **匹配政策缺少所有者：** 在摘要中保留 Owner 单元格为空并附加："未为 [list] 设置政策所有者。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的政策库分配它们，以便 gap-surfacer 可以路由。"
+- **政策库为空：** 默认将每个要求标记为"无政策匹配"并附加到输出："你的配置中的政策库为空，因此每个要求都标记为新政策差异。如果你有解决这些要求的政策，使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 将它们添加到库，然后重新运行比对。"
+- **匹配政策缺少所有者：** 在摘要中保留 Owner 单元格为空并附加："未为 [list] 设置政策所有者。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的政策库分配它们，以便 gap-surfacer 可以路由。"
 
 当库已填充且所有者已设置时，不要说任何关于配置的内容。
 

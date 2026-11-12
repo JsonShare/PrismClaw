@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /policy-starter
 
-1. 阅读 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`。如果执业档案未填充，停止并指导运行 `/ai-governance-legal:cold-start-interview`。
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`。如果执业档案未填充，停止并指导运行 `/ai-governance-legal:cold-start-interview`。
 2. 使用以下框架。
 3. 运行范围访谈——政策需要覆盖哪些章节，谁是受众，部署上下文是什么。不要跳到起草。
 4. 网络搜索与部署上下文相关的最新发布模型政策和指导（ABA、州律师协会、ILTA、CLOC、NIST、同行律所/同行公司政策、当前州 AI 法律、欧盟 AI 法案、适用部门监管机构）。
@@ -34,7 +34,7 @@ Licensed under Apache License 2.0
 
 ## Matter context
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/ai-governance-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 为 `on`。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/ai-governance-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 为 `on`。
 
 ---
 
@@ -51,7 +51,7 @@ Licensed under Apache License 2.0
 
 此 skill 不会最终确定、分发、发布或甚至对困难调用推荐特定立场。它产生草案并显示选择。
 
-## Read `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` first
+## Read `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` first
 
 在起草之前，始终阅读执业档案。驱动草案的章节：
 

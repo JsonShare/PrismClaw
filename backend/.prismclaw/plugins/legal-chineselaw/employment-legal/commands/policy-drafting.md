@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /policy-drafting
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、员工手册位置。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、员工手册位置。
 2. 使用以下工作流。
 3. 起草核心规章制度。检查足迹中每个省市是否需要变体。
 4. 输出：核心制度 + 省市补充。标记法律目前正在变化的领域。
@@ -26,7 +26,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -39,7 +39,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、员工手册位置和格式。
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、员工手册位置和格式。
 
 ## 工作流
 

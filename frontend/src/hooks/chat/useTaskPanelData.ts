@@ -3,7 +3,7 @@ import { useChatStore, useSessionStore } from '../../stores'
 import { usePhaseClock } from './usePhaseClock'
 import { normalizeWorkspacePath } from '../../lib/chat/paths'
 import { buildPhaseSubtitle, PHASE_OVERRIDE_PROTECTED_STATES } from '../../lib/chat/phase'
-import type { SubagentProgressItem, TimelineNode, ToolCallInfo } from '../../types'
+import type { SubagentPanelItem, SubagentProgressItem, TimelineNode, ToolCallInfo } from '../../types'
 
 /**
  * 咨询页右侧面板派生数据（单真相源：全部从 store 直订计算）。
@@ -68,7 +68,7 @@ export interface TaskPanelData {
   }>
   skillsForPanel: string[]
   toolNamesForPanel: string[]
-  runningSubagentsForPanel: SubagentProgressItem[]
+  subagentsForPanel: SubagentPanelItem[]
   runningToolCallsForPanel: ToolCallInfo[]
   formatToolProgressText: (tc: ToolCallInfo) => string
   taskRuntimeSummary: TaskRuntimeSummary
@@ -245,11 +245,46 @@ export function useTaskPanelData(): TaskPanelData {
     return out.reverse()
   }, [allToolCallsForPanel])
 
-  const runningSubagentsForPanel = useMemo(() => {
-    return liveSubagentTrace.filter(
-      (s) => s.partial_status === 'tool_running' || s.partial_status === 'tool_calling' || s.partial_status === 'thinking',
-    )
-  }, [liveSubagentTrace])
+  // sub_agent 的调用参数里含 agents[].task / agents[].model，但进度项只带
+  // sub_session_id，没有 call 关联。这里按 agent_name + 出现顺序做一次
+  // best-effort 对齐，纯展示用途，不参与运行态判断。
+  // 参数来源必须是**本轮** liveToolCalls：allToolCallsForPanel 混入了历史消息，
+  // 同名 agent 会优先命中上一轮的任务描述。
+  // 同时过滤 $synthetic 项（链路上限超限的合成失败态），它不是真实子代理。
+  const subagentsForPanel = useMemo<SubagentPanelItem[]>(() => {
+    const hints: Array<{ agentName: string; task: string | null; model: string | null }> = []
+    for (const tc of liveToolCalls) {
+      if (tc.name !== 'sub_agent') continue
+      const agents = (tc.arguments as Record<string, unknown> | undefined)?.agents
+      if (!Array.isArray(agents)) continue
+      for (const raw of agents) {
+        if (!raw || typeof raw !== 'object') continue
+        const entry = raw as Record<string, unknown>
+        const agentName = typeof entry.agent_name === 'string' ? entry.agent_name.trim() : ''
+        if (!agentName) continue
+        const task = typeof entry.task === 'string' && entry.task.trim() ? entry.task.trim() : null
+        const model = typeof entry.model === 'string' && entry.model.trim() ? entry.model.trim() : null
+        hints.push({ agentName, task, model })
+      }
+    }
+    const used = new Set<number>()
+    return liveSubagentTrace
+      .filter((item) => !item.sub_session_id.startsWith('$synthetic'))
+      .map((item) => {
+        let matched = -1
+        for (let i = 0; i < hints.length; i += 1) {
+          if (used.has(i) || hints[i].agentName !== item.subagent_name) continue
+          matched = i
+          break
+        }
+        if (matched >= 0) used.add(matched)
+        return {
+          ...item,
+          task_hint: matched >= 0 ? hints[matched].task : null,
+          model_hint: matched >= 0 ? hints[matched].model : null,
+        }
+      })
+  }, [liveToolCalls, liveSubagentTrace])
 
   const runningToolCallsForPanel = useMemo(() => {
     return liveToolCalls
@@ -395,7 +430,7 @@ export function useTaskPanelData(): TaskPanelData {
     allToolCallsForPanel,
     skillsForPanel,
     toolNamesForPanel,
-    runningSubagentsForPanel,
+    subagentsForPanel,
     runningToolCallsForPanel,
     formatToolProgressText,
     taskRuntimeSummary,

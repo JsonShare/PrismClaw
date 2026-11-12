@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
+1. 读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
 2. 获取以下信息：
    - **患者过敏史**：已知过敏原、严重程度、反应类型（皮疹/过敏性休克/血管神经性水肿等）
    - **目标药物**：需要检查的药品名称、剂量、给药途径

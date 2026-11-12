@@ -20,16 +20,16 @@ Licensed under Apache License 2.0
 # /aig-policy-monitor
 
 **扫描模式**（无参数或 `--sweep`）：
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` → 输出文件夹路径、AI 政策文档、上次扫描日期。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` → 输出文件夹路径、AI 政策文档、上次扫描日期。
 2. 使用以下框架。扫描输出文件夹中自上次扫描以来的文件。
 3. 对于每个输出：提取已批准的实践 → 与当前政策承诺和用例登记册进行比较。
 4. 分类差距：REQUIRED（政策歪曲当前实践）与 ADVISABLE（政策沉默）。
 5. 对于每个差距：引用当前政策、描述差距、起草建议语言。
-6. 标记输出中尚未添加到 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 登记册的任何用例。
-7. 向人工呈现结果。仅在确认后，更新 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 中的 `Last policy sweep` 和 `gaps_found`。
+6. 标记输出中尚未添加到 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 登记册的任何用例。
+7. 向人工呈现结果。仅在确认后，更新 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 中的 `Last policy sweep` 和 `gaps_found`。
 
 **直接查询模式**（带描述参数）：
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` → 当前政策承诺、用例登记册、实际政策文档。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` → 当前政策承诺、用例登记册、实际政策文档。
 2. 解析提议的实践。与政策进行比较：用例覆盖、自动化程度、受影响方、披露、供应商数据使用、监督。
 3. 输出：已覆盖/缺失/冲突 + 每个差距的建议语言 + 如需要的登记册条目 + 时间建议。
 
@@ -55,7 +55,7 @@ AI 政策的漂移速度比几乎任何其他政策文档都快——该领域�
 
 ## 加载当前状态
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`：
 - `## AI policy commitments` — 从已发布政策提取的承诺
 - `## Use case registry` — 已批准、有条件和从不的用例
 - `## Outputs` — 输出文件夹路径、AI 政策文档位置、上次扫描日期
@@ -63,7 +63,7 @@ AI 政策的漂移速度比几乎任何其他政策文档都快——该领域�
 如果 `## Outputs` 包含 `[PLACEHOLDER]`：
 > "输出还未配置。我仍然可以运行直接查询检查——描述你计划做什么，我会将其与你当前的 AI 政策进行比较。要启用爬取扫描，运行 `/ai-governance-legal:cold-start-interview` 并提供输出文件夹路径。"
 
-从 `## Outputs` → **AI 政策文档** 中的路径读取实际的 AI 或可接受使用政策文档。`~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 中的承诺是摘要；实际文档是建议编辑的权威来源。
+从 `## Outputs` → **AI 政策文档** 中的路径读取实际的 AI 或可接受使用政策文档。`~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 中的承诺是摘要；实际文档是建议编辑的权威来源。
 
 ---
 
@@ -86,7 +86,7 @@ AI 政策的漂移速度比几乎任何其他政策文档都快——该领域�
 如果输出文件夹为空或自上次扫描以来没有新文件：
 > "自 [上次扫描日期] 以来没有新输出。AI 政策与近期实践似乎保持同步。下次预定扫描：[date]。"
 
-**不要自动更新 `Last policy sweep` 或 `gaps_found`。** 在扫描结果呈现后，等待人工确认（"sweep acknowledged"、"results reviewed"或等效内容）。只有在那时更新 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`：
+**不要自动更新 `Last policy sweep` 或 `gaps_found`。** 在扫描结果呈现后，等待人工确认（"sweep acknowledged"、"results reviewed"或等效内容）。只有在那时更新 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`：
 
 - `Last policy sweep: [确认日期]`
 - `gaps_found: [N]`（该扫描中发现的 REQUIRED + ADVISABLE 差距数量）
@@ -104,7 +104,7 @@ AI 政策的漂移速度比几乎任何其他政策文档都快——该领域�
 - 标记：登记册中没有的新用例类别、暗示政策承诺的条件（例如，"必须向受影响方披露"——政策是否说你这样做？）、扩大政策范围的新批准实践
 
 **供应商 AI 审查（已签署/已批准）：**
-- 提取：已添加的供应商、同意的数据使用条款、接受的与 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 中标准立场不同的任何 AI 特定条款
+- 提取：已添加的供应商、同意的数据使用条款、接受的与 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 中标准立场不同的任何 AI 特定条款
 - 标记：政策应该引用其数据使用条款的已添加供应商（例如，"我们使用第三方 AI 服务并确保它们不在我们的数据上训练"）、对政策暗示你持有的标准立场的批准偏差
 
 **用例登记册更新：**
@@ -177,7 +177,7 @@ AI 政策的漂移速度比几乎任何其他政策文档都快——该领域�
 
 ## 用例登记册同步
 
-[自上次扫描以来批准但尚未在 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 登记册中的任何用例——建议添加的登记册条目]
+[自上次扫描以来批准但尚未在 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` 登记册中的任何用例——建议添加的登记册条目]
 
 ---
 
@@ -258,7 +258,7 @@ AI 政策的漂移速度比几乎任何其他政策文档都快——该领域�
 
 ## 用例登记册
 
-[如果此用例不在登记册中："添加到 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` → 用例登记册："]
+[如果此用例不在登记册中："添加到 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md` → 用例登记册："]
 ```
 | [用例] | [已批准/有条件] | [条件] | — |
 ```

@@ -27,11 +27,11 @@ Licensed under Apache License 2.0
 /employment-legal:cold-start-interview
 ```
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
 
 ## Prerequisites
 
-- **持久数据路径。** 休假登记、调查日志和扩展跟踪器写入 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/`，这是一个版本无关的路径，在 plugin 更新后保留。这些文件包含敏感的人员信息——确保该目录已备份并受到访问控制。
+- **持久数据路径。** 休假登记、调查日志和扩展跟踪器写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/`，这是一个版本无关的路径，在 plugin 更新后保留。这些文件包含敏感的人员信息——确保该目录已备份并受到访问控制。
 - **法律研究访问。** 此 plugin 中的 skill 有意不存储实体法律规则（最低工资标准、竞业限制补偿金比例、各地仲裁处理周期、省市高院指导意见等）。每个省市特定的规则在审查时进行研究和引用。确保会话可以访问你依赖的研究工具（元典 MCP、网页搜索、内部法律研究集成、团队参考材料）。
 - **外部法律顾问。** 在没有外部法律顾问参与任何紧急情况或新省市扩张的情况下，不会产生任何省市特定或司法管辖区特定的法律建议。
 
@@ -69,7 +69,7 @@ Licensed under Apache License 2.0
 
 ## How it learns
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
 
 ## Notes
 

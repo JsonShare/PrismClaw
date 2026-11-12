@@ -1,4 +1,8 @@
-"""SopCandidateTracker — collects per-turn metadata for self-evolution SOP extraction."""
+"""SopCandidateTracker — collects per-turn metadata for self-evolution SOP extraction.
+
+Hook 重叠审计: 本 hook 不注入任何 prompt（无 before_prompt_build 返回），
+只在 after_response / before_compaction 写 Redis。与 L1 section 无任何重叠关系。
+"""
 
 from __future__ import annotations
 

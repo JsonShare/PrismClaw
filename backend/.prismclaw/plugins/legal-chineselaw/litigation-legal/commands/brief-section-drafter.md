@@ -18,7 +18,7 @@ Licensed under Apache License 2.0
 
 # /brief-section-drafter
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 案件理论、内部风格。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 案件理论、内部风格。
 2. 遵循以下工作流和参考。
 3. 以内部格式/语气/引用风格起草。与理论一致。
 4. 输出：章节草稿。标记每个需要验证的事实或引用。
@@ -90,7 +90,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 案件理论、内部风格（引用格式、结构、语气、长度规范）。
+`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 案件理论、内部风格（引用格式、结构、语气、长度规范）。
 
 **冲突门槛——不可绕过。** 在起草之前，检查 `_log.yaml` 中此 skill 被调用的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
@@ -122,7 +122,7 @@ Licensed under Apache License 2.0
 
 **研究法院的庭审规程、书状格式要求、页数限制等；不要依赖偏好。**
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`：
 
 - **引用格式：** 中国裁判文书引用格式——法院名称、案号：`（YYYY）XX民终/初/申XXXX号`。法条引用：`《法规名称》第X条第X款`。精确匹配内部实践。
 - **结构：** 这家律所如何组织论证？先有主题句？论证性标题 vs. 描述性标题？
@@ -147,7 +147,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 5：输出
 
-**在提交文书之前（重大行为——此 skill 起草，但门槛在提交步骤运行）：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是非律师：
+**在提交文书之前（重大行为——此 skill 起草，但门槛在提交步骤运行）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是非律师：
 
 > 向法院提交文书有法律后果——它成为记录，在主张的论证和事实上约束当事人，律师的签名认证附加其上。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >

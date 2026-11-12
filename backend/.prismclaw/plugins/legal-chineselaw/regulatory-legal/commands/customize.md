@@ -24,7 +24,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`（以及上一层级的 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`（以及上一层级的 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -50,7 +50,7 @@ Licensed under Apache License 2.0
 - *收紧重要性阈值：* "`/reg-feed-watcher` 摘要将更短——低于新阈值的项目将从每周摘要中删除但保持可搜索。"
 - *向库添加新政策：* "`/policy-diff` 将在将新规则与库匹配时包括此政策。评议台账将标记影响此政策的评议。"
 
-对于共享档案更改（company name、industry、jurisdictions、practice setting、stage）：写入 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md` 并注意影响范围。修改后保存。
+对于共享档案更改（company name、industry、jurisdictions、practice setting、stage）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md` 并注意影响范围。修改后保存。
 
 ## 关闭
 

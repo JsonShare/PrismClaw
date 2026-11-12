@@ -22,13 +22,13 @@ Licensed under Apache License 2.0
 /legal-builder-hub:cold-start-interview
 ```
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`，在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`，在 plugin 更新后保留。
 
 ## 安全态势
 
 已安装的社区技能在运行时可以访问你的客户数据、事项文件和团队的操作手册。Hub 将每次安装和每次更新都视为信任决策。四层防御，任何一层都不足以单独防御：
 
-- **允许列表（管理员控制）：** `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml` 声明社区技能可以使用哪些注册中心、发布者和 MCP 连接器。`permissive` 模式（默认）对任何不在列表中的内容发出警告；`restrictive` 模式（推荐给律所/企业部署）拒绝它。在安装程序读取任何第三方内容之前检查允许列表。参见 `skills/skill-installer/references/allowlist.md` 了解架构。
+- **允许列表（管理员控制）：** `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml` 声明社区技能可以使用哪些注册中心、发布者和 MCP 连接器。`permissive` 模式（默认）对任何不在列表中的内容发出警告；`restrictive` 模式（推荐给律所/企业部署）拒绝它。在安装程序读取任何第三方内容之前检查允许列表。参见 `skills/skill-installer/references/allowlist.md` 了解架构。
 - **原始来源，而非摘要：** 在写入任何内容之前，安装程序向你显示完整的原始 `SKILL.md`——而非 AI 摘要。摘要是便利；做手脚的技能必须在原始显示会展示的文本中做。
 - **启发式扫描：** 安装程序和 `skills-qa` 都扫描技能以查找提示注入模式（覆盖/权限主张、超出范围的读写、外部 URL、隐藏 unicode、shell 执行、凭证请求）。这些是 AI 启发式扫描，明确标记为这样——干净的扫描不是安全审计，它是让你自己阅读文本的提示。
 - **每次都需要人工批准：** 没有新输入的 `yes` 就不会向磁盘写入任何内容。批准不会从先前消息推断。为了深度防御，安装程序建议在只读子代理中运行获取/分析，以便只有在批准后才能使用写入功能。
@@ -40,7 +40,7 @@ Licensed under Apache License 2.0
 ## 先决条件
 
 - registry-sync agent 的 Slack 通知需要在你的环境中配置 Slack MCP 服务器。没有它，agent 将其摘要写入文件。
-- `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 中的默认注册中心列表除了 `lpm-skills` 外都是空的。通过 `/legal-builder-hub:registry-browser` 或编辑 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 添加你信任的注册中心。
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 中的默认注册中心列表除了 `lpm-skills` 外都是空的。通过 `/legal-builder-hub:registry-browser` 或编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 添加你信任的注册中心。
 
 ## Commands
 
@@ -79,7 +79,7 @@ Licensed under Apache License 2.0
 
 ## 观察的注册中心（默认）
 
-默认允许列表随附我们预先配置审查的社区注册中心。编辑 repo 中的 `references/allowlist-default.yaml`，或你的每个安装的允许列表 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml`，以添加、删除或在限制和宽松模式之间切换。
+默认允许列表随附我们预先配置审查的社区注册中心。编辑 repo 中的 `references/allowlist-default.yaml`，或你的每个安装的允许列表 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml`，以添加、删除或在限制和宽松模式之间切换。
 
 - **lpm-skills** ——法律项目管理（Scott Margetts / LegalOps Consulting）—— `github.com/legalopsconsulting/lpm-skills`
 - **Lawvable / awesome-legal-skills** ——精选的法律工作 AI agent 技能列表—— `github.com/lawvable/awesome-legal-skills`
@@ -88,7 +88,7 @@ Licensed under Apache License 2.0
 
 ## 它如何学习
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Hub 在每次 `/legal-builder-hub:registry-browser` 和 `/legal-builder-hub:related-skills-surfacer` 时重新读取它，因此调整你的执业类型、行业或观察的注册中心会改进未来的推荐。当你的工作变动时，直接编辑文件或重新运行 `/legal-builder-hub:cold-start-interview --redo`。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Hub 在每次 `/legal-builder-hub:registry-browser` 和 `/legal-builder-hub:related-skills-surfacer` 时重新读取它，因此调整你的执业类型、行业或观察的注册中心会改进未来的推荐。当你的工作变动时，直接编辑文件或重新运行 `/legal-builder-hub:cold-start-interview --redo`。
 
 ## 注意事项
 

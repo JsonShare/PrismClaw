@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 安全规则：
 
-1. **仅卸载通过此中心安装的社区 skills。** 检查 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/install-log.yaml` 和 PRISMCLAW.md 已安装入门包表。如果 skill 未记录在那里，拒绝并告诉用户。
+1. **仅卸载通过此中心安装的社区 skills。** 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/install-log.yaml` 和 PRISMCLAW.md 已安装入门包表。如果 skill 未记录在那里，拒绝并告诉用户。
 2. **永不卸载第一方插件的 skill。** 随 legal-chineselaw 附带的 12 个核心插件不受此命令约束。如果命名的 skill 解析到这些插件之一的路径，拒绝。
 3. **删除文件前确认。** 向用户展示将被删除的每个路径。仅在明确 `yes` 后继续。
 4. **记录卸载。** 以 `action: uninstall` 和时间戳追加到 `install-log.yaml`，以便审计跟踪完整。

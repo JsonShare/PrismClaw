@@ -23,8 +23,8 @@ Licensed under Apache License 2.0
 
 ## 按展示界面渲染
 
-- **Cowork / PrismClaw Desktop:** HTML 工件。自包含、单个文件、内联 CSS。无外部依赖、无 CDN、无 npm。表格：带有 `data-sort` 属性和小型内联 JS 排序器的 HTML `<table>`。图表：条形图的内联 SVG 或 Unicode 块字符。保持 JS 最小——排序和过滤，没有其他。
-- **PrismClaw:** 将相同的 HTML 文件写入 plugin 的输出文件夹（`~/.prismclaw/plugins/legal-chineselaw/<plugin>/outputs/dashboard-<topic>-<date>.html`）并告诉用户打开它：macOS 上的 `open <path>`，或"在浏览器中打开。"还生成带有 Unicode 块图表的 markdown 版本用于摘要统计，以便用户在不离开终端的情况下看到形状。
+- **PrismClaw（应用内渲染）:** HTML 工件。自包含、单个文件、内联 CSS。无外部依赖、无 CDN、无 npm。表格：带有 `data-sort` 属性和小型内联 JS 排序器的 HTML `<table>`。图表：条形图的内联 SVG 或 Unicode 块字符。保持 JS 最小——排序和过滤，没有其他。
+- **PrismClaw:** 将相同的 HTML 文件写入 plugin 的输出文件夹（`~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/outputs/dashboard-<topic>-<date>.html`）并告诉用户打开它：macOS 上的 `open <path>`，或"在浏览器中打开。"还生成带有 Unicode 块图表的 markdown 版本用于摘要统计，以便用户在不离开终端的情况下看到形状。
 - **Excel (optional, where it fits):** 对于 `tabular-review`、`renewal-tracker`、`entity-compliance`，以及用户将带入会议或与非技术利益相关者共享的任何内容。使用现有的 Excel 输出规范。应用公式注入防护。
 - **Escape untrusted input (apply every dashboard, every time).** 来自此次会话外部的每个值——第三方清单中的 OSS 包/许可证字段、对方合同文本、尽职调查发现、供应商名称、事项描述、任何用户或 VDR 提供的字符串——在进入文档之前必须进行 HTML 转义。在写入表格单元格、摘要行、图表标签和工具提示文本时，将 `&`、`<`、`>`、`"`、`'` 转义为实体。在内联 JS 排序器/过滤器中，通过 `textContent` 设置单元格文本，永远不要通过 `innerHTML`。不要发出其内容插值不可信字符串的 `<script>` 块。在没有方案检查（仅 `http:` / `https:` / `mailto:`）的情况下，不要将不可信 URL 渲染到 `href` 或 `src` 中。这是 Excel 侧公式注入防护的 HTML 表面等效物——相同的威胁（攻击者控制的单元格内容），不同的执行表面（浏览器 JS 而非电子表格公式）。审阅者在浏览器中打开的仪表板是信任边界；像对待信任边界一样对待它。
 

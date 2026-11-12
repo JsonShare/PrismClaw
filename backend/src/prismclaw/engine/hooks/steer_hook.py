@@ -14,6 +14,12 @@ from prismclaw.schema.content.compaction import CompactResult
 
 logger = logging.getLogger(__name__)
 
+# ── 重叠审计 ──
+# 注入内容: <user_steer>（运行中调整指令）+ <user_sidebar>（附带问题）
+# 注入时机: append 侧，仅在 RunControl.pending_steers 非空时触发
+# 与 L1 的重叠关系: 无。L1 frozen/per-turn 没有 steer / sidebar section。
+# 保留理由: 唯一承载运行时用户指令覆盖的通道，不可替代。
+
 _SIDEBAR_INSTRUCTION = "（请先简要回答这些附带问题，然后回到主任务。）"
 
 _STEER_HEADER = (

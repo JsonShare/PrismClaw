@@ -28,14 +28,14 @@ Licensed under Apache License 2.0
    - `--report`：模式 3 — 生成状态报告
    - `--update`：模式 4 — 手动更新或解析上传的状态文件
    - `--export`：模式 5 — CSV 或表格导出
-5. 读/写 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/integration-tracker.yaml`。
+5. 读/写 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/integration-tracker.yaml`。
 6. 任何写入后：显示变更摘要并浮现任何新标志。
 
 ---
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -47,7 +47,7 @@ Licensed under Apache License 2.0
 
 ## 跟踪器文件
 
-位于 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/integration-tracker.yaml`。读取 `deal-context.md` 获取交易代码、目标名称、关闭日期和交易主管。如果 `closing-checklist.yaml` 存在，从中继承任何交易后项目。
+位于 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/integration-tracker.yaml`。读取 `deal-context.md` 获取交易代码、目标名称、关闭日期和交易主管。如果 `closing-checklist.yaml` 存在，从中继承任何交易后项目。
 
 ```yaml
 # integration-tracker.yaml
@@ -156,9 +156,9 @@ contracts:
 
 ### 步骤 1：加载交易上下文
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。如果未找到：询问交易代码名、目标公司、关闭日期、交易主管和外部律师。如果 deal-context.md 不存在则写入它。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。如果未找到：询问交易代码名、目标公司、关闭日期、交易主管和外部律师。如果 deal-context.md 不存在则写入它。
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/closing-checklist.yaml`（如果存在）。任何标记为交易后的项目都成为第 1 天或第 30 天的工作计划项目（从 closing-checklist 继承状态）。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/closing-checklist.yaml`（如果存在）。任何标记为交易后的项目都成为第 1 天或第 30 天的工作计划项目（从 closing-checklist 继承状态）。
 
 ### 步骤 2：读取交易输入
 
@@ -172,7 +172,7 @@ contracts:
 > - 交易摘要或条款清单（给我关键经济条款和时间表）
 > - 来自外部律师的整合待办事项或交易后检查清单
 > - 现有工作计划或整合跟踪器（我将导入并从中继续）
-> - 关闭检查清单——如果由 M&A 冷启动 skill 生成，我将从 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/closing-checklist.yaml` 自动继承它
+> - 关闭检查清单——如果由 M&A 冷启动 skill 生成，我将从 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/closing-checklist.yaml` 自动继承它
 > - 仅必要同意列表（如果购买协议由外部律师持有）
 >
 > **如果你没有任何书面内容：** 用简单语言告诉我交易——谁被收购、何时关闭、主要开放项目是什么——我将从标准的第 1/30/90/180 天工作计划构建一个入门跟踪器，供你编辑。

@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、升级表。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、升级表。
 2. 运行下面的完整工作流。
 3. 如果律师提前提供详情，提取可用的内容，仅询问差距。不要重新询问已提供的信息。
 
@@ -48,7 +48,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -108,11 +108,11 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、记录的任何分类历史或先前劳动争议和解、升级表以及团队记录的任何内部用工政策。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、记录的任何分类历史或先前劳动争议和解、升级表以及团队记录的任何内部用工政策。
 
 ## 输出标题
 
-在前面加上 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 中的工作底稿标题（根据用户角色而不同——见 `## Who's using this`）：
+在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 中的工作底稿标题（根据用户角色而不同——见 `## Who's using this`）：
 - 律师用：`保密 / 内部法律分析 — 仅供法务团队使用 — 不构成外发法律意见`
 - 非律师用：`研究笔记 / 内部记录 — 不构成法律意见 — 请律师复核后再依赖`
 
@@ -241,7 +241,7 @@ Licensed under Apache License 2.0
 
 **升级触发器**
 
-如果以下任何一项，或该配置中记录的任何团队特定触发器，按 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 升级：
+如果以下任何一项，或该配置中记录的任何团队特定触发器，按 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 升级：
 - 用工省市在劳动关系认定上有特别严格的司法口径且拟议工作是公司核心业务——不要在无律师审查的情况下继续。
 - 配置中注明了先前错误分类劳动争议或审计——适用加强审查。
 - 拟议人员将管理正式员工或有重大预算权限。
@@ -320,7 +320,7 @@ Licensed under Apache License 2.0
 
 ## 后果行动关卡（确定用工形式）
 
-**在产生"以[劳务/外包/派遣]继续"的最终建议之前：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
+**在产生"以[劳务/外包/派遣]继续"的最终建议之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
 
 > 确定用工形式有法律后果——错误分类使公司面临欠薪、社保补缴、工伤赔偿、劳动合同双倍工资风险。你是否已与律师审查此用工分类判断？如果是，继续。如果不是，这是带给他们的简报：
 >

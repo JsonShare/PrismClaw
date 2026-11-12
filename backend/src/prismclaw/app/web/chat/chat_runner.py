@@ -362,6 +362,7 @@ async def _run_chat(
         confirmation_decision=msg.confirmation_decision,
         attachments=msg.attachments,
         mode_override=mode,
+        effort=msg.effort or "standard",
         user_id=state.user_id,
         user_profile=user_profile,
         sandbox_policy=sandbox_policy,

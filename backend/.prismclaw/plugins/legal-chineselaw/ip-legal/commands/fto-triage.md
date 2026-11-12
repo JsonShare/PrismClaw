@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]`，停止并指向 `/ip-legal:cold-start-interview`。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]`，停止并指向 `/ip-legal:cold-start-interview`。
 2. 遵循以下工作流。
 3. 运行 intake（产品/工艺、技术细节、司法管辖区、已知专利、时间）。
 4. 如果连接器可用（Solve Intelligence 专利，或其他专利研究 MCP），运行初步专利搜索。否则在输出中说明，并继续使用用户提供的专利。
@@ -60,7 +60,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
 
 专利 FTO 事项特别常见的情况是在事项开启时采用**保密团队**或**加强**保密级别。遵守 `matter.md` 中的事项保密标记。
 
@@ -68,7 +68,7 @@ Licensed under Apache License 2.0
 
 ## 首先加载执业档案
 
-在运行分流之前，读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。提取：
+在运行分流之前，读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。提取：
 
 - **角色**，来自 `## 谁在使用这个`（律师 vs. 非律师改变工作产品标题和下面的非律师关卡）。
 - **已注册于**和**执法于**，来自 `## IP 执业档案`和`## 执法立场`（对防御性投资组合交叉检查和司法管辖区默认值有用）。
@@ -76,7 +76,7 @@ Licensed under Apache License 2.0
 - **集成**，来自 `## 可用集成` — 特别是 Solve Intelligence，或任何专利研究 MCP。决定有哪些搜索可用。
 - **决策立场**，来自 `## 主观法律裁决的决策立场` — 此 skill 永远不得出"不侵权"的结论。
 
-如果 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 包含 `[PLACEHOLDER]` 或 `[Your Company Name]`，呈现此反馈：
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 包含 `[PLACEHOLDER]` 或 `[Your Company Name]`，呈现此反馈：
 
 > 我注意到您尚未配置执业档案——那是我如何为您的执业定制立场、司法管辖区和审批链的方式。
 >
@@ -238,7 +238,7 @@ Licensed under Apache License 2.0
 
 ## 输出格式
 
-在前面附上 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## 输出` 中的工作产品标题。如果角色是律师，将文件标记为特权；如果不是律师，参阅下面的非律师关卡。
+在前面附上 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## 输出` 中的工作产品标题。如果角色是律师，将文件标记为特权；如果不是律师，参阅下面的非律师关卡。
 
 ```markdown
 [工作产品标题]
@@ -305,7 +305,7 @@ Licensed under Apache License 2.0
 - [由专利律师进行完整 FTO 研究——第一选择建议，除非搜索未发现任何内容且已运行全面搜索]
 - [如果发现字面解读，设计规避选项]
 - [律师指导的许可/IPR/PGR/承担风险分析]
-- [按 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 路由——执业档案中命名的专利外部律师]
+- [按 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 路由——执业档案中命名的专利外部律师]
 
 ## 故意侵权注释
 
@@ -336,7 +336,7 @@ Licensed under Apache License 2.0
 
 ## 输出位置
 
-如果事项工作区已启用且事项处于活跃状态，将输出写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/outputs/fto-triage-<subject-slug>-YYYY-MM-DD.md`。否则写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/outputs/fto-triage-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
+如果事项工作区已启用且事项处于活跃状态，将输出写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/outputs/fto-triage-<subject-slug>-YYYY-MM-DD.md`。否则写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/outputs/fto-triage-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
 
 如果事项处于活跃状态，向事项的 `history.md` 追加一行。
 

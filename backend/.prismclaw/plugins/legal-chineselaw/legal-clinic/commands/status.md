@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /status
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格、平实语言标准、司法管辖区。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格、平实语言标准、司法管辖区。
 2. 使用以下工作流。阅读案件笔记。
 3. 为指定受众生成：
    - `client` — 平实语言、发生了什么/下一步/您做什么/联系我们
@@ -46,14 +46,14 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格、平实语言标准（用于客户面向）、司法管辖区。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 监督风格、平实语言标准（用于客户面向）、司法管辖区。
 案件笔记用于事实。
 
 ## 受众模式
 
 ### 客户面向
 
-**读者：** 客户。可能压力大。可能不熟悉法律程序。阅读水平根据 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 平实语言标准（默认 6 年级）。
+**读者：** 客户。可能压力大。可能不熟悉法律程序。阅读水平根据 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 平实语言标准（默认 6 年级）。
 
 **包括：**
 - 自他们上次从诊所听说以来发生了什么
@@ -90,7 +90,7 @@ Licensed under Apache License 2.0
 [诊所名称]
 ```
 
-**发送前：** 发送客户状态更新是一个有后果的行动。门槛是 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有设置的第 0 部分角色检查加强。确认草稿已根据监督协议（队列 / 标记 / 更轻触）审查，并且所有内部审查标签（`[AI-ASSISTED DRAFT]`、`[VERIFY]` 等）已从客户面向副本中删除。
+**发送前：** 发送客户状态更新是一个有后果的行动。门槛是 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有设置的第 0 部分角色检查加强。确认草稿已根据监督协议（队列 / 标记 / 更轻触）审查，并且所有内部审查标签（`[AI-ASSISTED DRAFT]`、`[VERIFY]` 等）已从客户面向副本中删除。
 
 ### 内部（供教授）
 
@@ -173,7 +173,7 @@ Licensed under Apache License 2.0
 
 ## 监督路由
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`：
 - 客户面向 → 通常是标记触发器（客户通信）
 - 内部 → 无标记（反正要给教授）
 - 法院就绪 → 如果启用正式队列则始终标记（法院提交）

@@ -576,6 +576,7 @@ class LiteLLMStreamFn:
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMStreamChunk]:
         from litellm import acompletion
 
@@ -638,11 +639,12 @@ class LiteLLMStreamFn:
         if temperature is not None:
             extra["temperature"] = temperature
         extra.update(request_extensions)
-        if _should_disable_thinking(
+        _thinking_disabled = _should_disable_thinking(
             model=effective_model,
             llm_provider=llm_provider,
             api_base=api_base,
-        ):
+        )
+        if _thinking_disabled:
             # litellm 自动将非白名单参数透传至 extra_body，无需手动嵌套合并
             extra["chat_template_kwargs"] = {"enable_thinking": False}
             logger.info(
@@ -653,6 +655,10 @@ class LiteLLMStreamFn:
                 llm_provider or "",
                 api_base or "",
             )
+        # effort → 推理强度：litellm 统一参数 reasoning_effort（low/medium/high）。
+        # 与强制关思考互斥——关思考时下发会与 enable_thinking=False 冲突，故跳过。
+        if reasoning_effort and not _thinking_disabled:
+            extra["reasoning_effort"] = reasoning_effort
 
         # max_tokens 硬上限：按模型配置下发，并钳制到「窗口 − 估算输入 − 余量」。
         # 旧实现直接下发 max_output_tokens=131072（=整窗），prompt 50k + 131k > 窗口
@@ -1014,6 +1020,7 @@ class LiteLLMStreamFn:
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> LLMResponse:
         from prismclaw.schema.llm.tool_call_types import ToolCallBuffer
 
@@ -1031,6 +1038,7 @@ class LiteLLMStreamFn:
             idle_seconds=idle_seconds,
             abort_event=abort_event,
             temperature=temperature,
+            reasoning_effort=reasoning_effort,
         ):
             if chunk.reasoning_delta:
                 reasoning_parts.append(chunk.reasoning_delta)

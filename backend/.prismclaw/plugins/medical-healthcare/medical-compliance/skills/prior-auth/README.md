@@ -4,7 +4,7 @@ Automate payer review of prior authorization requests using AI-powered clinical 
 
 ## Overview
 
-This Claude Code skill helps automate the health insurance payer professional's prior authorization (PA) review process. It processes incoming PA requests from healthcare providers, validates medical necessity against coverage policies, and generates proposed authorization decisions with complete documentation for the professional's review and sign-off.
+This skill helps automate the health insurance payer professional's prior authorization (PA) review process. It processes incoming PA requests from healthcare providers, validates medical necessity against coverage policies, and generates proposed authorization decisions with complete documentation for the professional's review and sign-off.
 
 **Target Users:** Health insurance payer organizations (Medicare Advantage, Commercial, Medicaid MCOs)
 

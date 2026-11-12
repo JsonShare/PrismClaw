@@ -3,10 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.agent.session import SystemReminderProjection
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
     from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
 
 
@@ -51,13 +49,6 @@ def _extract_file_paths_from_tool_calls(tool_calls: list) -> list[str]:
         except Exception:
             continue
     return paths
-
-
-def _build_budget_warning_message(*, total_usd_cost: float, budget_usd: float) -> SystemReminderProjection:
-    return SystemReminderProjection.budget_warning(
-        total_usd_cost=total_usd_cost,
-        budget_usd=budget_usd,
-    )
 
 
 def _entry_to_llm_dict(entry: MessageEntry) -> dict[str, Any]:

@@ -41,6 +41,29 @@ from prismclaw.engine.plugins.trust import (
 
 logger = logging.getLogger(__name__)
 
+# 市场级与插件级清单同名，统一为 ``.plugin/plugin.json``；市场清单以声明
+# ``plugins`` 数组区分。
+MANIFEST_REL_PATH = Path(".plugin") / "plugin.json"
+
+
+def read_market_manifest(entry: Path) -> dict[str, Any] | None:
+    """读取市场级清单；不是市场目录时返回 None。
+
+    子插件目录同样有 ``.plugin/plugin.json``，但只有市场清单声明 ``plugins``
+    数组，据此区分，避免把市场根目录当成一个插件加载。
+    """
+    manifest = entry / MANIFEST_REL_PATH
+    if not manifest.is_file():
+        return None
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.debug("Failed to parse %s: %s", manifest, exc)
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("plugins"), list):
+        return None
+    return data
+
 
 @dataclass(slots=True)
 class PluginDiscoveryResult:
@@ -86,9 +109,9 @@ class PluginDiscoveryEngine:
         self._trusted_plugins = trusted_plugins or set()
         self._directory_sources = directory_sources or []
         self._strategies = strategies
-        # marketplace.json 声明的 marketplace 级 porting 上下文，按子插件名索引：
+        # 市场级 plugin.json 声明的 marketplace 级 porting 上下文，按子插件名索引：
         # {plugin_name: {"remap_rules": list[PathRemapRule], "marketplace_name": str}}。
-        # 由 _scan_directory 在解析 marketplace.json 时通用填充（不针对任何特定插件）。
+        # 由 _scan_directory 在解析市场级 plugin.json 时通用填充（不针对任何特定插件）。
         self._marketplace_meta: dict[str, dict[str, Any]] = {}
 
     def discover(self, *, workspace_trusted: bool = True) -> PluginDiscoveryResult:
@@ -182,67 +205,65 @@ class PluginDiscoveryEngine:
     def _scan_directory(self, dir_source: PluginDirectorySource) -> list[PluginID]:
         """扫描目录发现插件。
 
-        v4：兼容 marketplace.json 形式（对标参考实现 目录扫描）。
-        1. 递归扫描每个子目录中的 ``.plugin/marketplace.json``
+        1. 扫描每个子目录中的 `.plugin/plugin.json`，声明 ``plugins`` 数组的
+           视为市场清单，展开为其中的子插件
         2. 否则直接扫描子目录
         """
         if not dir_source.path.exists() or not dir_source.path.is_dir():
             return []
         discovered: list[PluginID] = []
         seen_names: set[str] = set()
-        # 1. 扫描每个子目录中的 marketplace.json
+        market_dirs: set[str] = set()
+        # 1. 扫描每个子目录中的市场清单
         try:
             for entry in sorted(dir_source.path.iterdir(), key=lambda p: p.name):
                 if not entry.is_dir() or entry.name.startswith("."):
                     continue
-                marketplace_json = entry / ".plugin" / "marketplace.json"
-                if marketplace_json.exists():
-                    try:
-                        data = json.loads(marketplace_json.read_text(encoding="utf-8"))
-                        if isinstance(data, dict):
-                            # marketplace 级 porting 上下文（通用）：remap 规则由
-                            # marketplace.json 的 porting.remap 声明，name 用作共享
-                            # 数据目录键。无任何插件特定逻辑。
-                            porting = data.get("porting")
-                            remap_cfg = (
-                                porting.get("remap") if isinstance(porting, dict) else None
+                data = read_market_manifest(entry)
+                if data is not None:
+                    market_dirs.add(entry.name)
+                    # marketplace 级 porting 上下文（通用）：remap 规则由
+                    # 市场清单的 porting.remap 声明，name 用作共享数据目录键。
+                    # 无任何插件特定逻辑。
+                    porting = data.get("porting")
+                    remap_cfg = (
+                        porting.get("remap") if isinstance(porting, dict) else None
+                    )
+                    remap_rules = parse_remap_rules(remap_cfg)
+                    mp_name = data.get("name")
+                    marketplace_name = (
+                        mp_name if isinstance(mp_name, str) and mp_name else entry.name
+                    )
+                    plugins = data.get("plugins") or []
+                    for sub in plugins:
+                        if not isinstance(sub, dict):
+                            continue
+                        name = sub.get("name")
+                        if not isinstance(name, str) or not name:
+                            continue
+                        self._marketplace_meta[name] = {
+                            "remap_rules": remap_rules,
+                            "marketplace_name": marketplace_name,
+                            "marketplace_description": data.get("description"),
+                        }
+                        if name in seen_names:
+                            continue
+                        seen_names.add(name)
+                        try:
+                            discovered.append(
+                                PluginID(name=name, source=dir_source.source)
                             )
-                            remap_rules = parse_remap_rules(remap_cfg)
-                            mp_name = data.get("name")
-                            marketplace_name = (
-                                mp_name if isinstance(mp_name, str) and mp_name else entry.name
-                            )
-                            plugins = data.get("plugins") or []
-                            if isinstance(plugins, list):
-                                for sub in plugins:
-                                    if not isinstance(sub, dict):
-                                        continue
-                                    name = sub.get("name")
-                                    if not isinstance(name, str) or not name:
-                                        continue
-                                    self._marketplace_meta[name] = {
-                                        "remap_rules": remap_rules,
-                                        "marketplace_name": marketplace_name,
-                                        "marketplace_description": data.get("description"),
-                                    }
-                                    if name in seen_names:
-                                        continue
-                                    seen_names.add(name)
-                                    try:
-                                        discovered.append(
-                                            PluginID(name=name, source=dir_source.source)
-                                        )
-                                    except ValueError:
-                                        pass
-                    except Exception as exc:
-                        logger.debug("Failed to parse marketplace.json %s: %s", marketplace_json, exc)
+                        except ValueError:
+                            pass
         except OSError as exc:
             logger.debug("Failed to scan %s: %s", dir_source.path, exc)
 
-        # 2. 直接扫描子目录（fallback）
+        # 2. 直接扫描子目录（fallback）；市场根目录不是插件，跳过
         try:
             for entry in sorted(dir_source.path.iterdir(), key=lambda p: p.name):
                 if not entry.is_dir() or entry.name.startswith("."):
+                    continue
+                if entry.name in market_dirs:
                     continue
                 for strategy in self._strategies:
                     if strategy.can_handle(entry):
@@ -265,7 +286,7 @@ class PluginDiscoveryEngine:
         """返回子插件继承的 marketplace 级 porting 上下文，独立插件返回 None。
 
         结构 ``{"remap_rules": list[PathRemapRule], "marketplace_name": str}``，
-        由 ``_scan_directory`` 解析 marketplace.json 的 ``porting.remap`` 与 ``name``
+        由 ``_scan_directory`` 解析市场级 plugin.json 的 ``porting.remap`` 与 ``name``
         通用填充。加载器据此应用插件声明的重映射规则、并派生共享数据目录。
         """
         return self._marketplace_meta.get(plugin_name)
@@ -274,7 +295,7 @@ class PluginDiscoveryEngine:
         """根据 ID 查找安装路径。
 
         1. 查 installed_plugins.json 的 install_path (对标参考实现 installEntry.installPath)
-        2. marketplace.json 声明的 source 相对路径
+        2. 市场级 plugin.json 声明的 source 相对路径
         3. Fallback 到目录扫描
         """
         record = self._install_store.get(plugin_id)
@@ -283,7 +304,7 @@ class PluginDiscoveryEngine:
             if path.exists():
                 return path
 
-        # 2. marketplace.json 中的 source 相对路径（递归扫描子目录）
+        # 2. 市场级 plugin.json 中的 source 相对路径（递归扫描子目录）
         for dir_source in self._directory_sources:
             if dir_source.source != plugin_id.source:
                 continue
@@ -293,32 +314,26 @@ class PluginDiscoveryEngine:
                 for entry in sorted(dir_source.path.iterdir(), key=lambda p: p.name):
                     if not entry.is_dir() or entry.name.startswith("."):
                         continue
-                    marketplace_json = entry / ".plugin" / "marketplace.json"
-                    if not marketplace_json.exists():
+                    data = read_market_manifest(entry)
+                    if data is None:
                         continue
-                    try:
-                        data = json.loads(marketplace_json.read_text(encoding="utf-8"))
-                        if not isinstance(data, dict):
+                    plugins = data.get("plugins") or []
+                    if not isinstance(plugins, list):
+                        continue
+                    for sub in plugins:
+                        if not isinstance(sub, dict):
                             continue
-                        plugins = data.get("plugins") or []
-                        if not isinstance(plugins, list):
-                            continue
-                        for sub in plugins:
-                            if not isinstance(sub, dict):
-                                continue
-                            if sub.get("name") == plugin_id.name:
-                                rel = sub.get("source")
-                                if isinstance(rel, str) and rel:
-                                    candidate = (entry / rel).resolve()
-                                    if candidate.exists():
-                                        return candidate
-                    except Exception as exc:
-                        logger.debug("Failed to parse marketplace.json %s: %s", marketplace_json, exc)
+                        if sub.get("name") == plugin_id.name:
+                            rel = sub.get("source")
+                            if isinstance(rel, str) and rel:
+                                candidate = (entry / rel).resolve()
+                                if candidate.exists():
+                                    return candidate
             except OSError as exc:
                 logger.debug("Failed to scan %s: %s", dir_source.path, exc)
 
         # 3. marketplace 级回退：利用 _marketplace_meta 中已解析的
-        # marketplace_name 推导子插件目录。当 marketplace.json 的 plugins
+        # marketplace_name 推导子插件目录。当市场级 plugin.json 的 plugins
         # 条目未显式声明 source 时（默认子目录名即插件名），此路径可正确定位。
         meta = self._marketplace_meta.get(plugin_id.name)
         if meta is not None:

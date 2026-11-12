@@ -20,7 +20,7 @@ Licensed under Apache License 2.0
 
 # /claim-chart
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 角色、工作产品标题、决策姿态、文档存储。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 角色、工作产品标题、决策姿态、文档存储。
 2. 如果事项工作区已启用，确认或选择活跃事项；加载 `matter.md`（立场、管辖法院、阶段、理论、诉状）。
 3. 遵循以下工作流和参考。
 4. 模式选择：
@@ -66,12 +66,12 @@ Licensed under Apache License 2.0
 
 ## 加载背景
 
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 角色、工作产品标题、决策姿态、文档存储、案件理论脚手架
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 角色、工作产品标题、决策姿态、文档存储、案件理论脚手架
 - 活跃事项的 `matter.md` — 索赔、抗辩、立场、管辖法院、阶段、理论
 - 民事模式：起诉状或反诉状（对于实际主张的诉因）、答辩（对于积极抗辩）、相关法条和司法解释，以及证据语料库——庭审笔录、声明书、已提交文件、鉴定意见。
 - 专利模式：专利证书、主张权利要求、说明书、申请历史档案、被指控产品材料或现有技术参考文件、任何无效宣告决定（国家知识产权局）或法院关于权利要求解释的判决。
 
-**冲突关卡——不可绕过。** 在构建要件分析表之前，检查 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
+**冲突关卡——不可绕过。** 在构建要件分析表之前，检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
 > "我在事项台账中看不到 [事项 slug]。先运行 `/litigation-legal:matter-intake`，以便冲突检查运行并设置事项工作区。我不会对未经 intake 的事项构建要件分析表——冲突检查是关卡。"
 
@@ -284,7 +284,7 @@ Licensed under Apache License 2.0
 
 ## 输出
 
-前置 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` `## 输出` 中的工作产品标题。
+前置 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` `## 输出` 中的工作产品标题。
 
 ### Markdown 表格（始终）
 

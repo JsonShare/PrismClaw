@@ -77,7 +77,7 @@ class PluginLoadStrategy(ABC):
         None 时取全局默认 ``~/.prismclaw/plugins-data``。
         ``porting_context`` 是 marketplace 级 porting 上下文（``{"remap_rules":
         list[PathRemapRule], "marketplace_name": str}``），由发现引擎从
-        marketplace.json 的 ``porting.remap`` 通用解析后传入；独立插件为 None。
+        市场级 plugin.json 的 ``porting.remap`` 通用解析后传入；独立插件为 None。
         """
 
 

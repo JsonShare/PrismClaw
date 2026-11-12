@@ -33,7 +33,6 @@ def _kernel(
     *,
     contract: CompletionContract | None,
     max_iterations: int = 0,
-    max_usd: float | None = None,
     limit: int = 3,
     chain: tuple[str, ...] = (),
 ) -> CompletionKernel:
@@ -44,7 +43,6 @@ def _kernel(
             max_iterations=max_iterations,
             run_deadline_s=0.0,
             run_started=0.0,
-            max_usd=max_usd,
         )),
         recovery=RecoveryPolicy(limit=limit, chain=chain),
     )
@@ -81,16 +79,10 @@ def test_budget_iterations_terminates_before_completion(tmp_path: Path) -> None:
 
 def test_budget_warning_threshold_not_terminating() -> None:
     guard = BudgetGuard(Budget(
-        max_iterations=5, run_deadline_s=0.0, run_started=0.0, max_usd=None,
+        max_iterations=5, run_deadline_s=0.0, run_started=0.0,
     ))
-    assert guard.warn(iteration=4, usd_cost=0.0) is None
-    assert guard.warn(iteration=5, usd_cost=0.0) == "budget_iterations"
-
-
-def test_budget_usd_terminates(tmp_path: Path) -> None:
-    kernel = _kernel(tmp_path, contract=None, max_usd=1.0)
-    decision = kernel.decide(LoopEvent(site="post", iteration=0), usd_cost=1.5)
-    assert (decision.verdict, decision.code) == ("TERMINATE", "budget_usd")
+    assert guard.warn(iteration=4) is None
+    assert guard.warn(iteration=5) == "budget_iterations"
 
 
 def test_budget_zero_iterations_never_fires(tmp_path: Path) -> None:

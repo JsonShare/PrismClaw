@@ -110,6 +110,9 @@ class PipelineParams:
     iteration_pre_advance: int  # _iter (pre-advance) for audit events
     abort_event: Any
     max_idle_retries: int = 1
+    cap_s: float = 0.0  # 单请求墙钟硬上限（effort 派生），0 表示不设
+    is_last_turn: bool = False  # cap_s 超时后非最后一轮重试一次，最后一轮交付部分内容
+    reasoning_effort: str | None = None  # effort 派生的推理强度（low/medium/high），None=模型默认
 
 
 # ---------------------------------------------------------------------------
@@ -196,12 +199,16 @@ async def call_llm_stream_with_outcome(
                 prompt_cache_runtime=snapshot.prompt_cache_runtime,
                 idle_seconds=deps.config.timeouts.idle_seconds,
                 abort_event=abort_event,
+                reasoning_effort=params.reasoning_effort,
+            )
+            # 单请求墙钟硬上限 cap_s（effort 派生）；cap_s 未设时回退到剩余 run 时间。
+            _request_deadline = (
+                params.cap_s if params.cap_s and params.cap_s > 0
+                else (params.remaining_run or 0.0)
             )
             guarded_iter = iterate_with_deadline(
                 stream_iter,
-                deadline_s=params.remaining_run
-                if params.remaining_run is not None and params.remaining_run > 0
-                else 0.0,
+                deadline_s=_request_deadline,
                 abort_event=abort_event,
                 kind="run",
             )
@@ -212,7 +219,7 @@ async def call_llm_stream_with_outcome(
                     _outcome.outcome = LLMStreamError(
                         error_event=ErrorEvent(
                             error_code="timeout",
-                            message=f"run exceeded {params.run_deadline_s}s run_seconds during stream",
+                            message=f"run exceeded {params.run_deadline_s}s hard deadline during stream",
                         ),
                     )
                     return
@@ -353,6 +360,15 @@ async def call_llm_stream_with_outcome(
             if (
                 te.kind == "idle"
                 and attempt < params.max_idle_retries
+                and not text_parts
+                and not tool_calls_buffer
+            ):
+                continue
+            # cap_s 超时：非最后一轮重试一次（给模型再一次机会），最后一轮交付已有内容。
+            if (
+                te.kind == "run"
+                and not params.is_last_turn
+                and attempt < 1
                 and not text_parts
                 and not tool_calls_buffer
             ):

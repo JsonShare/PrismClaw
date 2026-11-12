@@ -8,7 +8,7 @@ Licensed under Apache License 2.0
 
 团队没有自己框架时使用的默认框架。改编自内部产品法律执业。每个类别都有一个核心问题和一个自动跳过条件。
 
-各类别是稳定的框架概念。在某个类别*内*什么构成"需要改进"与"阻塞项"，取决于适用的司法管辖区、行业制度，以及公司自己在 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 中的校准。在得出特定事实模式是否构成问题之前，请研究适用于产品所在行业、受众和司法管辖区的监管制度。
+各类别是稳定的框架概念。在某个类别*内*什么构成"需要改进"与"阻塞项"，取决于适用的司法管辖区、行业制度，以及公司自己在 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 中的校准。在得出特定事实模式是否构成问题之前，请研究适用于产品所在行业、受众和司法管辖区的监管制度。
 
 ## 1. 合同承诺
 

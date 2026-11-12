@@ -24,18 +24,18 @@ Licensed under Apache License 2.0
 - `/ai-governance-legal:matter-workspace new <slug>` — 创建新事项工作区，运行简短的接案访谈，写入 `matter.md`
 - `/ai-governance-legal:matter-workspace list` — 列出所有事项及其状态和活跃标记
 - `/ai-governance-legal:matter-workspace switch <slug>` — 设置当前活跃事项
-- `/ai-governance-legal:matter-workspace close <slug>` — 归档事项（移至 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/matters/_archived/`，永不删除）
+- `/ai-governance-legal:matter-workspace close <slug>` — 归档事项（移至 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/_archived/`，永不删除）
 - `/ai-governance-legal:matter-workspace none` — 从任何活跃事项分离，仅在执业级别工作
 
 ## 说明
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`——确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告知用户："Matter workspaces are off — you're configured as an in-house practice with one client, so the plugin works from practice-level context automatically. If you actually work across multiple clients, re-run `/ai-governance-legal:cold-start-interview --redo` and select a private-practice setting. Otherwise, you don't need `/aig-matter-workspace` at all." 不要报错——禁用状态是内部用户的预期状态。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`——确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告知用户："Matter workspaces are off — you're configured as an in-house practice with one client, so the plugin works from practice-level context automatically. If you actually work across multiple clients, re-run `/ai-governance-legal:cold-start-interview --redo` and select a private-practice setting. Otherwise, you don't need `/aig-matter-workspace` at all." 不要报错——禁用状态是内部用户的预期状态。
 2. 使用以下工作流。
 3. 根据 `$ARGUMENTS` 的第一个 token 进行分发：
-   - `new` → 运行接案访谈，写入 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/matters/<slug>/matter.md`，初始化 `history.md` 和 `notes.md`。
-   - `list` → 枚举 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/matters/*/matter.md`，打印表格，标记活跃事项。
+   - `new` → 运行接案访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/<slug>/matter.md`，初始化 `history.md` 和 `notes.md`。
+   - `list` → 枚举 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/*/matter.md`，打印表格，标记活跃事项。
    - `switch` → 更新执业级 PRISMCLAW.md 中的 `Active matter:` 行。
-   - `close` → 将 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/matters/<slug>/` 移至 `~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
+   - `close` → 将 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/<slug>/` 移至 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
    - `none` → 将 `Active matter:` 设为 `none — practice-level context only`。
 4. 向用户展示变更内容并在写入前确认。
 
@@ -56,7 +56,7 @@ Licensed under Apache License 2.0
 所有事项数据位于：
 
 ```
-~/.prismclaw/plugins/legal-chineselaw/ai-governance-legal/
+~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/
 ├── PRISMCLAW.md                       # 执业级执业档案
 └── matters/
     ├── <slug>/

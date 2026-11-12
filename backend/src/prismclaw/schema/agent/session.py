@@ -52,10 +52,8 @@ class AgentMessageDict(TypedDict, total=False):
 
 @dataclass(frozen=True)
 class SystemReminderProjection:
-    kind: Literal["text", "budget_warning", "history_compaction_summary"] = "text"
+    kind: Literal["text", "history_compaction_summary"] = "text"
     text: str | None = None
-    total_usd_cost: float | None = None
-    budget_usd: float | None = None
     summary_text: str | None = None
     role: Literal["user"] = "user"
     entry_id: str | None = None
@@ -73,19 +71,6 @@ class SystemReminderProjection:
             text=text,
             role=role,
             entry_id=entry_id,
-        )
-
-    @classmethod
-    def budget_warning(
-        cls,
-        *,
-        total_usd_cost: float,
-        budget_usd: float,
-    ) -> "SystemReminderProjection":
-        return cls(
-            kind="budget_warning",
-            total_usd_cost=total_usd_cost,
-            budget_usd=budget_usd,
         )
 
     @classmethod

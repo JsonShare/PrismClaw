@@ -18,19 +18,18 @@ Licensed under Apache License 2.0
 
 # /clinic-cold-start-interview
 
-1. 检查 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`。如果已填充且没有 `--redo`，在覆盖前确认。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`。如果已填充且没有 `--redo`，在覆盖前确认。
 2. 运行以下教授访谈，从第 0 部分开始（督导律师角色检查 → 伦理前提条件 → 集成可用性）。如果用户不是督导律师，停止并重定向。
 3. 种子文档：诊所手册、提交指南、本地法院规则、接案表单、一份脱敏的示例文件。
 4. 关键决定：督导方式（正式审查队列 / 标记 / 更轻触）。
-5. 迁移：如果在 `~/.prismclaw/plugins/cache/legal-chineselaw/legal-clinic/*/PRISMCLAW.md` 存在已填充的 PRISMCLAW.md（无 `[PLACEHOLDER]` 标记）但不在配置路径，将其复制到配置路径并展示用户迁移了什么。
-6. 写入 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，包含 `## 谁在使用这个` 和 `## 可用集成`。展示督导选择和执业领域模板供确认。
-7. 提供 `/legal-clinic:ramp` 预览。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，包含 `## 谁在使用这个` 和 `## 可用集成`。展示督导选择和执业领域模板供确认。
+6. 提供 `/legal-clinic:ramp` 预览。
 
 ```
 /legal-clinic:cold-start-interview
 ```
 
-**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查（Clio、文档存储）。更新 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中的 `## 可用集成`，不触碰角色、伦理前提条件、督导方式或执业领域模板。在添加或移除 MCP 连接器后使用。
+**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查（Clio、文档存储）。更新 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中的 `## 可用集成`，不触碰角色、伦理前提条件、督导方式或执业领域模板。在添加或移除 MCP 连接器后使用。
 
 在探测时：仅在 MCP 工具调用实际成功时报告 ✓。已配置但未测试的连接器应标记为 ⚪，附一行确认方法。永不仅基于 `.mcp.json` 声明报告 ✓——那会误导用户认为某些东西已连接而实际上没有。
 
@@ -50,7 +49,7 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供从头开始或从占位符开始的地方恢复。
@@ -58,7 +57,7 @@ Licensed under Apache License 2.0
 
 ## 检查共享公司档案
 
-查找 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 
 - **如果存在：** 读取它。显示一行确认："您是 [姓名]，[执业设置]，在 [公司]，[行业]，在 [司法管辖区] 运营。对吗？（或者说 'update' 更改共享档案。）" 如果确认，跳过公司问题——直接进入插件特定的问题。
 - **如果不存在：** 您将是该用户设置的第一个插件。在导向和分叉后，询问公司问题并将其写入共享档案（按照插件根目录中 `references/company-profile-template.md` 的模板），然后继续插件特定的问题。告诉用户："我已保存您的公司档案——其他法律插件将读取它并跳过这些问题。"
@@ -113,7 +112,7 @@ Licensed under Apache License 2.0
 - **在写入执业档案之前：** 审查访谈。列出每个被跳过或用占位符回答的问题——仍然开放的伦理前提条件、没有模板的执业领域、未设置的督导标记触发器、承诺但未上传的手册。说："在我写入您的执业档案之前，以下是仍然开放的内容：[列表]。想要现在填充这些吗，还是保留为占位符？" 然后等待。
 - **永不**在有静默间隙的情况下写入执业档案。每个占位符都应该是督导律师刻意选择跳过的——不是滑过去的问题。
 - **批量大小——计算子部分。** "每轮不超过 2-3 个问题"意味着 2-3 个*可回答的提示*，计算子部分。一个有 5 个子部分的问题是 5 个问题。测试标准：用户可以在不滚动的情况下回答吗？如果不能，就太多了。尽可能优先使用结构化的点击选择问题——它们不需要滚动或输入。
-- **暂停和恢复。** 预先告诉督导律师："如果您需要停止，说 'pause'（或 'stop'，或 '让我稍后再来'），我会保存您的进度。稍后再次运行 `/legal-clinic:cold-start-interview`，我会从您停下的地方继续。" 当督导律师暂停时，将部分配置写入 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，顶部附有 `<!-- SETUP PAUSED AT: [section name] — run /legal-clinic:cold-start-interview to resume -->` 注释，未回答的字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，问候督导律师："欢迎回来。您在 [section] 暂停了。您之前的答案已保存。从我们停下的地方继续，还是重新开始？" 不要重新询问已回答的问题。
+- **暂停和恢复。** 预先告诉督导律师："如果您需要停止，说 'pause'（或 'stop'，或 '让我稍后再来'），我会保存您的进度。稍后再次运行 `/legal-clinic:cold-start-interview`，我会从您停下的地方继续。" 当督导律师暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，顶部附有 `<!-- SETUP PAUSED AT: [section name] — run /legal-clinic:cold-start-interview to resume -->` 注释，未回答的字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，问候督导律师："欢迎回来。您在 [section] 暂停了。您之前的答案已保存。从我们停下的地方继续，还是重新开始？" 不要重新询问已回答的问题。
 
 **在设置中验证用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是您可以合理性检查的内容——在写入配置之前进行验证。如果用户说的与您的理解或他们粘贴的内容冲突，提出来："您说阈值是 X；我的理解是 Y——您能确认哪个写入档案吗？`[premise flagged — verify]`" 写入 PRISMCLAW.md 的错误事实会传播到每个未来输出；在这里捕捉它是产品中最高杠杆的时刻之一。
 
@@ -158,7 +157,7 @@ Licensed under Apache License 2.0
 - 如果您无法测试（无法从这里探测），报告 ⚪ "已配置但未验证——打开您的 MCP 设置确认"，附一行操作方法。
 - 永仅基于配置报告 ✓。
 
-对于显示为未连接的连接器，告诉用户如何连接。示例措辞："Box 未连接。在 PrismClaw Cowork 中：Settings → Connectors → Add → Box → sign in。在 PrismClaw 中：将 Box MCP 添加到您的配置或通过 `/mcp`。此插件没有它也能工作——您需要粘贴文件而不是拉取——但连接它可以使文件拉取自动化。"
+对于显示为未连接的连接器，告诉用户如何连接。示例措辞："Box 未连接。在 PrismClaw 中：将 Box MCP 添加到您的配置或通过 `/mcp`。此插件没有它也能工作——您需要粘贴文件而不是拉取——但连接它可以使文件拉取自动化。"
 
 然后以此格式报告发现：
 
@@ -168,7 +167,7 @@ Licensed under Apache License 2.0
 
 您不需要所有这些。核心功能——接案、起草、客户信函、研究起点、截止日期、学期交接、督导审查——仅凭本地文件访问即可工作。
 
-将第 0 部分答案写入插件配置的 `## 谁在使用这个` 和 `## 可用集成`。如果在旧缓存路径 `~/.prismclaw/plugins/cache/legal-chineselaw/legal-clinic/*/PRISMCLAW.md` 存在已填充的 PRISMCLAW.md 但不在这里，先将其前向复制。
+将第 0 部分答案写入插件配置的 `## 谁在使用这个` 和 `## 可用集成`。
 
 ### 开场
 
@@ -335,14 +334,14 @@ Licensed under Apache License 2.0
 
 5. **如果标记了 LIMITED DATA：** "执业档案很薄——下游 skills 在更多材料添加之前会是通用的。最大差距：[具体的——例如，没有手册意味着 /ramp 仅覆盖命令]。最大的快速胜利：[具体的——例如，上传两三份您最近提交的动议，/draft 在您的格式惯例上会急剧更锐利]。"
 
-6. **在您的第一个案件审查之前，连接研究工具。** 说："在您的第一个案件审查或备忘录之前：连接研究工具。没有的话，我会将每个引用标记为未验证——有的话，我根据当前数据库验证它们。在 Cowork 中：Settings → Connectors。在 PrismClaw 中：在 skill 提示时授权。"
+6. **在您的第一个案件审查之前，连接研究工具。** 说："在您的第一个案件审查或备忘录之前：连接研究工具。没有的话，我会将每个引用标记为未验证——有的话，我根据当前数据库验证它们。在 PrismClaw 中：在 skill 提示时授权。"
 
    <!-- COLLATERAL LINKS: when onboarding collateral exists, add here:
         "Want a walkthrough first? [Watch the 3-minute intro](URL) or [read the getting-started guide](URL)." -->
 
 7. **用"您可以稍后更改任何内容"的注释关闭：**
 
-> 完成。您的诊所配置位于 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`——一个您可以直接读取和编辑的纯文本文件。您回答的任何内容都可以更改：
+> 完成。您的诊所配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`——一个您可以直接读取和编辑的纯文本文件。您回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/legal-clinic:cold-start-interview --redo` 进行完整重新访谈

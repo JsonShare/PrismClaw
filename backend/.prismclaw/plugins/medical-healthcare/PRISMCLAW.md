@@ -9,7 +9,7 @@
 ## 目录结构
 
 ```
-.plugin/marketplace.json            # 市场清单 — 每个插件一条记录
+.plugin/plugin.json                 # 市场清单 — 声明 plugins 数组（与子插件同名同路径）
 <plugin>/                           # 6 个第一方插件
   .plugin/plugin.json               # 插件清单（name、version、description、author）
   mcp.json                          # 插件连接的 MCP 服务器
@@ -66,25 +66,21 @@ references/                         # 共享模板（company-profile、dashboard
 
 ## 验证——提交 PR 前请先运行
 
-本仓库遵循与 `anthropics/claude-plugins-official` 在 CI 中相同的规范。请在本地运行等效检查：
+插件结构（市场级与子插件级的 `.plugin/plugin.json`）由 PrismClaw 在启动加载时校验，格式错误会出现在启动日志里。提交前请运行：
 
 ```bash
-# 1. 市场 + 各插件 schema 验证
-prismclaw plugin validate .plugin/marketplace.json
-for d in */; do [ -f "$d/.plugin/plugin.json" ] && prismclaw plugin validate "$d"; done
-
-# 2. Cookbook 工具作用域 lint
+# 1. Cookbook 工具作用域 lint
 python3 scripts/lint-tool-scope.py
 
-# 3. JSON/YAML 格式校验
+# 2. JSON/YAML 格式校验
 python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json', recursive=True)]"
 ```
 
 ## 约定
 
-### 保持 `marketplace.json` 与 `plugin.json` 同步
+### 保持市场清单与插件清单同步
 
-对于第一方插件，`marketplace.json` 中的 `name`、`description` 和 `author` 应与插件自身的 `.plugin/plugin.json` 对应字段保持一致。
+市场根目录与各子插件都使用 `.plugin/plugin.json`，靠是否声明 `plugins` 数组区分：声明了的是市场清单，否则是插件清单。对于第一方插件，市场清单中的 `name`、`description` 和 `author` 应与子插件自身 `.plugin/plugin.json` 的对应字段保持一致。
 
 ### 插件 PRISMCLAW.md 是模板，不是项目上下文
 

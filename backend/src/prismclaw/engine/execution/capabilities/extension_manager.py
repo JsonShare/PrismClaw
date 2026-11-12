@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.plugins.registry.descriptors import (
@@ -397,8 +398,61 @@ class ExtensionManager:
     def get_agent_descriptor(self, agent_name: str) -> AgentDescriptor | None:
         return self._descriptor_registry.agents.get(agent_name)
 
+    def _resolve_command_descriptor(self, command_name: str) -> CommandDescriptor | None:
+        """解析命令名，兼容 ``/plugin:command`` 命名空间写法。
+
+        插件文档普遍按 ``/<subplugin>:<command>`` 书写，而 commands/ 目录下的命令
+        以裸名注册（部分还带 ``<短名>-`` 前缀去重）。解析顺序：
+
+        1. 精确匹配注册名（原有行为）
+        2. ``plugin`` 前缀 + 同插件内的注册名
+        3. ``plugin`` 前缀 + 同插件 commands/*.md 的文件名（stem）
+        4. ``plugin`` 前缀 + 同插件内以 ``-<command>`` 结尾的去重名
+        """
+        if not command_name:
+            return None
+        descriptor = self._descriptor_registry.get_command(command_name)
+        if descriptor is not None or ":" not in command_name:
+            return descriptor
+
+        plugin, _, suffix = command_name.lower().partition(":")
+        if not plugin or not suffix:
+            return None
+
+        candidates = [
+            command
+            for command in self._descriptor_registry.commands.values()
+            if (command.plugin_name or "").lower() == plugin
+        ]
+        for command in candidates:
+            if (command.canonical_id or "").lower() == suffix:
+                return command
+        for command in candidates:
+            path = self._command_path(command)
+            if path and Path(path).stem.lower() == suffix:
+                return command
+        # 去重名（如 litigation-cn-evidence-review）：仅在候选唯一时采用，
+        # 否则宁可回退，避免把用户写错的命令静默解析到无关命令。
+        suffix_matches = [
+            command
+            for command in candidates
+            if (command.canonical_id or "").lower().endswith("-" + suffix)
+        ]
+        if len(suffix_matches) == 1:
+            return suffix_matches[0]
+        return None
+
+    @staticmethod
+    def _command_path(descriptor: CommandDescriptor) -> str | None:
+        capability = descriptor.capability
+        if isinstance(capability, dict):
+            path = capability.get("path")
+        else:
+            path = getattr(capability, "path", None)
+        return str(path) if path else None
+
     def get_plugin_command_descriptor(self, command_name: str) -> CommandDescriptor | None:
-        return self._descriptor_registry.get_command(command_name)
+        return self._resolve_command_descriptor(command_name)
 
     def iter_plugin_command_descriptors(self) -> list[CommandDescriptor]:
         return list(self._descriptor_registry.commands.values())
@@ -410,7 +464,7 @@ class ExtensionManager:
         return list(self._descriptor_registry.hooks.values())
 
     def get_plugin_command_runtime(self, command_name: str) -> Any | None:
-        descriptor = self._descriptor_registry.get_command(command_name)
+        descriptor = self._resolve_command_descriptor(command_name)
         if descriptor is not None and descriptor.capability is not None and descriptor.plugin_name:
             return build_plugin_command_runtime(descriptor.plugin_name, descriptor.capability)
         return None

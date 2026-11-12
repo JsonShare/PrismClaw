@@ -9,18 +9,17 @@ CONFIGURATION LOCATION
 
 此 plugin 的用户特定配置位于在 plugin 更新后仍然保留的版本无关路径：
 
-  ~/.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径读取配置。不要从此文件读取。
 2. 如果该文件不存在或仍包含 [PLACEHOLDER] 标记，在做实质性工作之前停止。说："此 plugin 在能给你有用的输出之前需要设置。运行 /law-student:cold-start-interview——需要大约 10-15 分钟，此 plugin 中的每条命令都依赖它。没有它，输出将是通用的，可能与你的实际执业不符。"不要继续使用占位符或默认配置。唯一在没有设置的情况下运行的 skill 是 /law-student:cold-start-interview 本身和任何 --check-integrations 标志。
 3. 设置和 cold-start-interview 写入该路径，必要时创建父目录。
 4. 在 plugin 更新后的首次运行中，如果在旧缓存路径
-   (~/.prismclaw/plugins/cache/legal-chineselaw/law-student/<version>/PRISMCLAW.md 任意版本)
    存在已填充的 PRISMCLAW.md 但配置路径没有，则在继续前将其复制到配置路径。
 5. 此文件（你正在读取的）是模板。它随 plugin 一起发布，显示配置应有的结构。每次 plugin 更新时都会被替换。不要在此处写入用户数据。
 
-**共享公司档案。** 公司级事实（你是谁、做什么、在哪里运营、风险立场、关键人员）保存在 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前读取它。如果它不存在，此 plugin 的设置会创建它。
+**共享公司档案。** 公司级事实（你是谁、做什么、在哪里运营、风险立场、关键人员）保存在 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前读取它。如果它不存在，此 plugin 的设置会创建它。
 -->
 
 # 法学院学生执业档案
@@ -96,7 +95,7 @@ CONFIGURATION LOCATION
 
 **数据密集型输出的仪表板提议。** 当输出数据密集——超过约 10 行表格数据，或任何包含严重性、状态或日期列的投资组合/登记册/跟踪器/清单/发现列表时，提供可视化仪表板。不要未经提示构建它（仪表板会增加用户可能不想要的权重），但要使提议具体并靠近决策树顶部：
 
-> 📊 **See this as a dashboard?** 我会构建一个交互式视图，包含：摘要统计（按严重性/状态计数）、彩色编码的可排序表格、显示数据形状的图表（风险分布、类别细分或适合的时间线），以及结转的审阅者注释。在 Cowork 中这会内联渲染。在 PrismClaw 中我会将 HTML 文件写入 [outputs 文件夹]，你可以在浏览器中打开它。如果你需要带入会议，我也可以生成 Excel。
+> 📊 **See this as a dashboard?** 我会构建一个交互式视图，包含：摘要统计（按严重性/状态计数）、彩色编码的可排序表格、显示数据形状的图表（风险分布、类别细分或适合的时间线），以及结转的审阅者注释。在 PrismClaw 中我会将 HTML 文件写入 [outputs 文件夹]，你可以在浏览器中打开它。如果你需要带入会议，我也可以生成 Excel。
 
 **仪表板格式是标准化的**——不要即兴创作。请参阅 plugin 根目录中的 `references/dashboard-template.md` 模板。保持简单：顶部的摘要统计、一个表格、最多一两个图表。一个构建需要 2 分钟、理解需要 30 秒的仪表板胜过一个构建需要 10 分钟、理解需要 2 分钟的仪表板。摘要统计行是最有价值的部分——律师应该在三秒钟内知道"40 个发现，3 个阻塞，6 个本周到期"。
 
@@ -150,7 +149,7 @@ CONFIGURATION LOCATION
 
 **文件访问失败。** 当你无法阅读用户指向你的文件时，不要静默失败。说明发生了什么："I can't read [path]. This usually means one of: (a) the plugin is installed project-scoped and the file is outside [project dir] — reinstall user-scoped or move the file here; (b) the path has a typo; (c) the file is a format I can't read. Can you paste the content directly, or try one of the fixes?" 静默的文件读取失败看起来像是 plugin 忽略了用户的材料。
 
-**验证日志。** 当你或用户验证标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规验证阈值——记录它，以便下一个人不会重新验证。向 `~/.prismclaw/plugins/legal-chineselaw/law-student/verification-log.md` 写一行：
+**验证日志。** 当你或用户验证标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规验证阈值——记录它，以便下一个人不会重新验证。向 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/verification-log.md` 写一行：
 
 `[YYYY-MM-DD] [cite or fact] verified by [name] against [source] — [verdict: confirmed / corrected to X / could not verify]`
 
@@ -253,7 +252,7 @@ Plugin 的工作是让 PrismClaw 更好地处理法律工作，而不是引导�
 
 ## 此领域的临时问题
 
-当用户在此 plugin 的执业领域提出问题时——不仅仅是当他们调用 skill 时——首先阅读 `~/.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`（和 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`）的执业档案，并应用它。如果它已填充，作为配置的助手回答：
+当用户在此 plugin 的执业领域提出问题时——不仅仅是当他们调用 skill 时——首先阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`（和 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`）的执业档案，并应用它。如果它已填充，作为配置的助手回答：
 
 - 使用他们的司法管辖区范围、风险偏好、剧本立场和升级链
 - 即使没有 skill 运行也应用护栏：来源归因、引用卫生、司法管辖区识别、决策立场、审阅者注释格式

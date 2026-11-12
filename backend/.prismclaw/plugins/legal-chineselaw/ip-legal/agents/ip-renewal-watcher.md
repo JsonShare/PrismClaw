@@ -3,7 +3,7 @@ name: ip-renewal-watcher
 description: >
   定时 Agent，读取知识产权投资组合登记册，计算到期事项，
   并发布按优先级排序的截止日期报告。默认每周运行。发布至
-  `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`
+  `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`
   → 续约提醒 中指定的频道。触发短语："what's renewing"、"IP deadlines"、
   "portfolio check"、"IP renewal report"，或按计划运行。
 ---
@@ -27,7 +27,7 @@ Licensed under Apache License 2.0
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，获取提醒目标（Slack 频道、邮件列表或内联）和工作成果标题规则。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，获取提醒目标（Slack 频道、邮件列表或内联）和工作成果标题规则。
 
 2. 加载 `ip-portfolio-workflow` 技能。为每项资产刷新计算截止日期——不仅信任存储日期——然后以 90 天窗口运行模式 2。
 

@@ -1,6 +1,6 @@
 ---
 name: escalation-flagger
-description: 根据 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`
+description: 根据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`
   中的升级矩阵，将合同问题路由给正确的审批人，并起草请求。当用户说"谁需要审批这个"、"升级这个"、"这需要总法律顾问签署吗"、"为此路由审批"时使用，或当另一个技能发现超出审阅者权限的问题时使用。
 argument_hint: '[描述问题，或参考审查备忘录]'
 category: 商事合同
@@ -15,11 +15,11 @@ Licensed under Apache License 2.0
 
 # /escalation-flagger
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 升级矩阵，为合同问题指定审批人并起草消息，这样您就不会在下午 5 点写"嘿有时间吗"。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 升级矩阵，为合同问题指定审批人并起草消息，这样您就不会在下午 5 点写"嘿有时间吗"。
 
 ## 指示
 
-1. **加载 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`** → 升级部分。如果缺失，说明——执业档案需要编辑。
+1. **加载 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`** → 升级部分。如果缺失，说明——执业档案需要编辑。
 
 2. **表征问题：** 美元阈值 / 条款偏离 / 自动触发器 / 业务决策。
 
@@ -49,19 +49,19 @@ Issue: §8.2 indemnity carveouts
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/commercial-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入到 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/matters/<matter-slug>/` 的事项文件夹。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/commercial-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/matters/<matter-slug>/` 的事项文件夹。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
 
 ---
 
 ## 目的
 
-每个合同团队都有升级矩阵，无论是否书面。此技能读取书面矩阵（在 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中），将合同问题与其匹配，指定审批人，并起草请求，以便律师不会在下午 5 点写"嘿有时间吗"消息。
+每个合同团队都有升级矩阵，无论是否书面。此技能读取书面矩阵（在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中），将合同问题与其匹配，指定审批人，并起草请求，以便律师不会在下午 5 点写"嘿有时间吗"消息。
 
 ## 加载矩阵
 
 **哪一方？** 在匹配到矩阵之前，确定公司在正在升级问题的合同中处于哪一方。通常很明显：如果对手方是提供货物或服务的供应商/供应商，您是采购方。如果对手方是购买您的产品/服务的客户，您是销售方。如果不明显，询问。阅读匹配的剧本部分（`### Sales-side playbook` 或 `### Purchasing-side playbook`）以评估条款是否在备用范围内或触发自动升级——在一方可行的条款在另一方可能是硬性拒绝。在起草的请求中注明哪一方，以便审批人知道应用了哪个剧本。
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## Escalation`。如果它缺失或模糊，说明——冷启动访谈应该已经捕获了这一点，如果没有，执业档案需要编辑。
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## Escalation`。如果它缺失或模糊，说明——冷启动访谈应该已经捕获了这一点，如果没有，执业档案需要编辑。
 
 预期结构：
 
@@ -84,7 +84,7 @@ Issue: §8.2 indemnity carveouts
 - **自动触发器：** 存在始终升级的项目之一
 - **业务决策：** 不是法律判断——需要业务所有者，而不是法律领导层
 
-不要升级实际上可以的事情。如果条款在 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的备用范围内，则不需要升级。
+不要升级实际上可以的事情。如果条款在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的备用范围内，则不需要升级。
 
 ### 步骤 2：匹配到矩阵
 
@@ -104,7 +104,7 @@ Issue: §8.2 indemnity carveouts
 
 ### 步骤 3：指定审批人
 
-要具体。不是"升级到法律领导层"——指定 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的人员或角色。如果矩阵没有为此情况指定任何人，说明："升级矩阵未涵盖 [情况]。建议询问 [合伙人/法务总监姓名] 谁负责处理这个。"
+要具体。不是"升级到法律领导层"——指定 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的人员或角色。如果矩阵没有为此情况指定任何人，说明："升级矩阵未涵盖 [情况]。建议询问 [合伙人/法务总监姓名] 谁负责处理这个。"
 
 ### 步骤 4：起草请求
 
@@ -126,7 +126,7 @@ Issue: §8.2 indemnity carveouts
 **合同说什么：**
 > "[exact quote]"（[确切引用]）
 
-**我们的剧本说什么：** [来自 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的引用]
+**我们的剧本说什么：** [来自 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的引用]
 
 **选项：**
 1. **接受**——[一行关于为什么这可能可以的说明]
@@ -148,7 +148,7 @@ Issue: §8.2 indemnity carveouts
 
 不必要升级的成本是审批人时间的 ~30 秒——他们阅读，说"可以，继续"，记录显示他们已看到。错过升级的成本是签署未经批准的条款，这是单向门。成本不对称。**有疑问时，升级。**
 
-升级的校准标准存在于 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中，而不是在此 skill 中。检查剧本的明确立场、其备用范围及其"无论美元价值如何都自动升级"列表：
+升级的校准标准存在于 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中，而不是在此 skill 中。检查剧本的明确立场、其备用范围及其"无论美元价值如何都自动升级"列表：
 
 - **明显在备用范围内：** 无需升级。
 - **明显超出范围，或在自动升级列表上：** 升级。
@@ -156,7 +156,7 @@ Issue: §8.2 indemnity carveouts
 
 不要因为过度升级可能会让审批人养成略读习惯而抑制升级。这是审批人体验问题，律师通过调整剧本中的阈值来解决，而不是 skill 通过对其不确定的条款做出自己的主观判断来解决的问题。
 
-如果出现剧本未解决的条款，不要猜测阈值——询问审阅律师此类问题是否应该升级，并提供将答案记录在 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中，以便未来审查一致。
+如果出现剧本未解决的条款，不要猜测阈值——询问审阅律师此类问题是否应该升级，并提供将答案记录在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中，以便未来审查一致。
 
 ## 此技能不做什么
 

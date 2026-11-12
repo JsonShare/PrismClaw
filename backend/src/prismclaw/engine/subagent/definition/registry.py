@@ -39,9 +39,9 @@ _MAX_FILES_PER_LAYER = 200
 class _LayerScanDiagnostics:
     """Detailed per-file scan result.
 
-    Produced by ``_scan_layer_detailed`` and consumed exclusively by the
-    ``/agents diagnose`` slash command. Normal SubAgentRegistry construction
-    discards this detail to avoid permanent memory overhead per manifest.
+    Produced by ``_scan_layer_detailed`` for diagnostics. Normal
+    SubAgentRegistry construction discards this detail to avoid permanent
+    memory overhead per manifest.
     """
 
     source: str
@@ -76,7 +76,7 @@ class SubAgentRegistry:
       (the rest of the layer continues to be scanned).
     - An entirely missing directory is silently skipped (zero log noise).
     - The registry is fully populated after ``__init__`` returns; there is no
-      lazy-load. Reload is a future concern (``/agents reload`` slash command).
+      lazy-load. Reloading requires rebuilding the registry.
     """
 
     def __init__(

@@ -23,7 +23,7 @@ Licensed under Apache License 2.0
 
 首次使用时，plugin 会对你进行访谈——十分钟，对话式——了解你的团队实际如何工作。它询问你的剧本立场、升级规则，以及当它出现在你办公桌上时让你叹息的事情。然后它要求 5-10 份最近签署的协议（越多越好，20 份能提供更清晰的模式），以便它能在实际中看到你的立场。
 
-它将所学内容写入 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`——一份关于你的团队的简单英文文档，每个其他 skill 在做任何事情之前都会阅读。你编辑文档，而非配置文件。
+它将所学内容写入 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`——一份关于你的团队的简单英文文档，每个其他 skill 在做任何事情之前都会阅读。你编辑文档，而非配置文件。
 
 ```
 /commercial-legal:cold-start-interview
@@ -47,7 +47,7 @@ Licensed under Apache License 2.0
 
 | Skill | 用途 |
 |---|---|
-| **cold-start-interview** | 首次运行访谈，写入 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` |
+| **cold-start-interview** | 首次运行访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` |
 | **vendor-agreement-review** | 完整的剧本与合同偏差分析，带红线 |
 | **nda-review** | 快速 GREEN/YELLOW/RED 分流，因此法务只需阅读需要的 NDA |
 | **saas-msa-review** | 订阅特定覆盖：自动续约、价格升级、数据退出、SLA |
@@ -93,7 +93,7 @@ Licensed under Apache License 2.0
 
 十分钟。准备好 5-10 份最近签署的协议以供分享（越多越好，20 份能提供更清晰的模式）。
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
 
 ### 2. 审查合同
 
@@ -113,7 +113,7 @@ Licensed under Apache License 2.0
 
 ## 它如何学习
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skills 会告诉你输出何时使用了你应该调整的默认值。当你的执业偏离你的剧本时，`playbook-monitor` agent 会提议更新。你可以重新运行设置、直接编辑文件，或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skills 会告诉你输出何时使用了你应该调整的默认值。当你的执业偏离你的剧本时，`playbook-monitor` agent 会提议更新。你可以重新运行设置、直接编辑文件，或告诉 skill 记录新立场。
 
 ## 文件结构
 

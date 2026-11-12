@@ -52,7 +52,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。**检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/commercial-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
+**事项上下文。**检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/commercial-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
 
 ---
 
@@ -118,7 +118,7 @@ Licensed under Apache License 2.0
 
 ## 特权继承
 
-此 skill 阅读基础协议和修正案——通常是特权或保密的，通常用于特权分析。输出继承来源的特权和保密状态。在每个输出前面添加 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题，仅在特权圈内分发，并将其存储在特权材料所在的位置。在任何外部交付之前删除标题。
+此 skill 阅读基础协议和修正案——通常是特权或保密的，通常用于特权分析。输出继承来源的特权和保密状态。在每个输出前面添加 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题，仅在特权圈内分发，并将其存储在特权材料所在的位置。在任何外部交付之前删除标题。
 
 ## 步骤 2：阅读和索引
 
@@ -248,7 +248,7 @@ Licensed under Apache License 2.0
 
 - 它不在基础协议和修正案之间发生冲突时确定哪个文档有效——那是法律解释问题。它标记冲突并路由给法律部门。
 - 它不起草新的修正案。
-- 它不与 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的剧本进行比较——那是 vendor-agreement-review skill 的工作。此 skill 纯粹是历史性的。
+- 它不与 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的剧本进行比较——那是 vendor-agreement-review skill 的工作。此 skill 纯粹是历史性的。
 - 如果语言模糊，它不推断修正案的含义——它准确引用并标记模糊性供法律部门处理。
 
 

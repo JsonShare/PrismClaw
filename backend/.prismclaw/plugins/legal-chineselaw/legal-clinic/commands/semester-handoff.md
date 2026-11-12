@@ -17,12 +17,12 @@ Licensed under Apache License 2.0
 
 # /semester-handoff
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、学期日期、监督风格。
-2. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` 和每个案件的 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、学期日期、监督风格。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` 和每个案件的 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。
 3. 使用以下工作流。
 4. 将活跃案件列表作为输入（如果诊所没有中央列表则询问）。映射离开 → 进入的所有者。
-5. 生成每个案件的交接备忘录 → `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/[case_id].md`。
-6. 生成队列摘要 → `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/_summary.md`。
+5. 生成每个案件的交接备忘录 → `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/[case_id].md`。
+6. 生成队列摘要 → `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/_summary.md`。
 7. 根据监督模型路由——正式队列 / 可配置标记 / 更轻触。
 
 ---
@@ -41,9 +41,9 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、学期、执业领域、监督风格
-- `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` → 所有活跃截止期限，按案件分组
-- `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`（每个案件）→ 沟通历史
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、学期、执业领域、监督风格
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` → 所有活跃截止期限，按案件分组
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`（每个案件）→ 沟通历史
 - 诊所维护的案件文件 / 摘要摘要
 - 学生名册——进入交接时谁拥有什么
 
@@ -51,7 +51,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 1：识别案件和所有者
 
-- 拉取所有活跃案件（来自摄取记录 + `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` case_ids + client-comms 文件夹）
+- 拉取所有活跃案件（来自摄取记录 + `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` case_ids + client-comms 文件夹）
 - 对于每个案件：谁是当前的学生所有者？他们留下还是离开？
 - 映射：离开所有者 → 进入所有者（如果已知；否则标记"TBD——教授分配"）
 
@@ -79,7 +79,7 @@ Licensed under Apache License 2.0
 
 ## 待处理的截止期限
 
-*从 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` 拉取。进入学生的第一个工作是确认这些是准确的并已拥有。*
+*从 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` 拉取。进入学生的第一个工作是确认这些是准确的并已拥有。*
 
 | 到期 | 类型 | 描述 | 备注 |
 |---|---|---|---|
@@ -110,7 +110,7 @@ Licensed under Apache License 2.0
 
 ## 沟通历史摘要
 
-*来自 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。这里是三行摘要；进入学生阅读完整日志。*
+*来自 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。这里是三行摘要；进入学生阅读完整日志。*
 
 [最近联系模式的简短摘要——例如，"自摄取以来 3 次电话，全部用西班牙语，客户更喜欢晚上。最后联系：2026-04-15，确认听证通知的地址。"]
 
@@ -135,7 +135,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 3：队列摘要
 
-在所有每个案件的备忘录之后，生成 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/_summary.md`：
+在所有每个案件的备忘录之后，生成 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/_summary.md`：
 
 ```markdown
 # 队列交接摘要——[学期结束]
@@ -170,9 +170,9 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：教授审查（如果监督模型要求）
 
-关闭案件或将其过渡给新学生是一个有后果的行动。门槛是 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有设置的第 0 部分角色检查加强。案件关闭备忘录始终获得教授签字，然后案件在交接文档中标记为关闭，无论监督风格选择如何。
+关闭案件或将其过渡给新学生是一个有后果的行动。门槛是 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有设置的第 0 部分角色检查加强。案件关闭备忘录始终获得教授签字，然后案件在交接文档中标记为关闭，无论监督风格选择如何。
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 监督风格：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 监督风格：
 
 - **正式审查队列：** 每个交接备忘录在发给进入学生之前进入审查队列。教授批准、编辑或返回。
 - **可配置标记：** 备忘录带有"CHECK WITH [教授] BEFORE RELYING"——教授非正式审查，学生负责检查。
@@ -180,11 +180,11 @@ Licensed under Apache License 2.0
 
 ### 步骤 5：交接
 
-审查后，交接备忘录位于 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/[case_id].md`。进入学生在下学期开始 `/ramp` 运行时阅读它们——`/ramp` 应该为新学生分配的案件显示备忘录。
+审查后，交接备忘录位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/handoffs/[semester]/[case_id].md`。进入学生在下学期开始 `/ramp` 运行时阅读它们——`/ramp` 应该为新学生分配的案件显示备忘录。
 
 ## 集成
 
-- **`/ramp`:** 在下学期开始时，读取 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/handoffs/[most-recent-semester]/` 并为每个新学生接手的案件显示每个案件的备忘录。
+- **`/ramp`:** 在下学期开始时，读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/handoffs/[most-recent-semester]/` 并为每个新学生接手的案件显示每个案件的备忘录。
 - **`/deadlines`:** 为每个备忘录的待处理截止期限部分提供内容。
 - **`/client-comms-log`:** 为沟通历史摘要提供内容。
 - **`/supervisor-review-queue`（如果启用正式审查）：** 交接备忘录路由到这里供教授批准。

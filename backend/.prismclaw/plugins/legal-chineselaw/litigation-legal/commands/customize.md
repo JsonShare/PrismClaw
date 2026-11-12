@@ -20,7 +20,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`（以及上一层的 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`（以及上一层的 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -46,7 +46,7 @@ Licensed under Apache License 2.0
 - *风险校准收紧高风险阈值：* "更多传入催告和调查令将通过 `/matter-briefing` 和 `/oc-status` 路由。"
 - *新增知识产权事项的常设外部律师：* "`/oc-status` 将在 IP 标记事项的每周扫描中包括此律所。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md` 并注意影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md` 并注意影响范围。修改后保存。
 
 ## 关闭
 

@@ -6,7 +6,7 @@ These rules encode failure modes measured in production chart-abstraction work. 
 
 1. **One note.** If the input contains more than one clinical note (multiple headers, multiple encounter dates, a directory listing, a concatenated batch), refuse: return `{"_refusal": true, "_reason": "..."}` and nothing else. Batching causes silent recall collapse — recall on note 40 of a batch is a fraction of recall on note 1.
 
-2. **Null by default.** Every schema field is optional in your output even if marked required. If a value is not explicitly stated in the note, emit `null` with a `null_reason` (`not_mentioned`, `mentioned_unclear`, `redacted`, `out_of_scope`). Never infer, interpolate, or complete partial values — "June 2020" stays "2020-06", never "2020-06-01".
+2. **Null by default.** Every schema field is optional in your output even if marked required. If a value is not explicitly stated in the note, emit `null` with a `null_reason` (`not_mentioned`, `illegible`, `redacted`, `ambiguous`, `out_of_scope`). Never infer, interpolate, or complete partial values — "June 2020" stays "2020-06", never "2020-06-01".
 
 3. **Extract, don't know.** Suppress your own clinical knowledge. If the note says a drug treats a condition it doesn't, extract what the note says. If the note omits a value you happen to know (a normal lab range, a drug class, a typical dose), emit `null`. The note is the only source.
 

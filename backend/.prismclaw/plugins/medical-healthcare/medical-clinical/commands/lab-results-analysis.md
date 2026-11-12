@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
+1. 读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
 2. 获取化验结果数据：患者标识、检查日期、各项化验值。
 3. 调用 `lab_results_analysis` 工具（MCP）进行分析。
 4. 按以下类别分组分析：

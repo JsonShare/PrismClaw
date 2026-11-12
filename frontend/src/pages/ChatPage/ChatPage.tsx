@@ -1171,7 +1171,7 @@ export default function ChatPage() {
               setRightCallsOpen={setRightCallsOpen}
               rightTrajectoryOpen={rightTrajectoryOpen}
               setRightTrajectoryOpen={setRightTrajectoryOpen}
-              runningSubagentsForPanel={panelData.runningSubagentsForPanel}
+              subagentsForPanel={panelData.subagentsForPanel}
               runningToolCallsForPanel={panelData.runningToolCallsForPanel}
               isStreaming={isStreaming}
               isQueued={isQueued}

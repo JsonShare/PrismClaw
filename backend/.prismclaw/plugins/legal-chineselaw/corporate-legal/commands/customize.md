@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（以及上一级的 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（以及上一级的 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -45,7 +45,7 @@ Licensed under Apache License 2.0
 - *打开上市公司模块：* "下次你在该领域运行任何内容时，我会提示你提供申报日历和披露控制信息。"
 - *AI 批量审查信任"逐行检查"改为"抽查 10%"：* "`/ai-tool-handoff` 将 QA 10% 样本，而非每次提取。"
 
-共享档案的修改（公司名称、行业、司法管辖区、执业环境、阶段）：写入 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md` 并说明影响范围。修改后保存。
+共享档案的修改（公司名称、行业、司法管辖区、执业环境、阶段）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md` 并说明影响范围。修改后保存。
 
 ## 关闭
 

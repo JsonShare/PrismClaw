@@ -5,7 +5,7 @@
 * 工具循环策略（同调用同结果、连续失败、冻结）仍归 ``call_handling``；
 * 压缩重启 / 工具全拒的降级仍归各自的既有模块，本内核只按
   ``RecoveryPolicy`` 的咨询结果下发 ``RESTART``；
-* 预算（轮次 / 墙钟 / 金额）是唯一先于完成判定的硬边界。
+* 预算（轮次 / 墙钟）是唯一先于完成判定的硬边界。
 
 因此 ``decide`` 是单一决策点，但只对「完成」负责——宣称它统一一切会把
 工具执行策略拖进完成内核。
@@ -17,7 +17,7 @@ import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from prismclaw.engine.execution.control.completion import (
     CompletionContract,
@@ -26,6 +26,10 @@ from prismclaw.engine.execution.control.completion import (
 )
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.agent.task_runtime import EvidenceRecord
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.checkpoint.models import RunState
+    from prismclaw.schema.config.config import EffortConfig
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +66,6 @@ class TerminalReason(str, Enum):
     NO_RESPONSE_EXHAUSTED = "no_response_exhausted"
     BUDGET_ITERATIONS = "budget_iterations"
     BUDGET_SECONDS = "budget_seconds"
-    BUDGET_USD = "budget_usd"
     BLOCKED_DECLARED = "blocked_declared"
     BLOCKED_NO_PROGRESS = "blocked_no_progress"
     BLOCKED_TOOLS_DENIED = "blocked_tools_denied"
@@ -110,33 +113,143 @@ class CompletionState:
     ledger: list[EvidenceRecord] = field(default_factory=list)
     repairs: int = 0
     advisory_nudged: bool = False
-    budget_warned: bool = False
 
 
 @dataclass(frozen=True)
 class Budget:
     """资源上限。修复额度不在这里——它属于完成契约。
 
-    单一轮次上限（``agent.max_iterations``）而非按模式分档：答案/分析类
-    的快速收敛由「无契约 ⇒ 首次停止即 COMPLETE」结构保证，不需要另一套
-    按模式计数的阈值；分档只会给合法多工具任务制造新的误杀面。
+    steps / hard_s 由 ``resolve_effort_budget`` 按 RunRequest.effort
+    派生，不在此配置。
     """
 
     max_iterations: int
     run_deadline_s: float
     run_started: float
-    max_usd: float | None
+
+
+@dataclass(frozen=True)
+class EffortBudget:
+    """effort 档位解析后的生效预算（含 long_running 修饰与派生值）。"""
+
+    steps: int
+    tool_calls: int
+    soft_s: float
+    hard_s: float
+    reserve_s: float
+    cap_s: float
+    converge_tools: int
+
+
+def resolve_effort_budget(
+    *,
+    effort: str,
+    long_running: bool,
+    tiers: "EffortConfig",
+) -> EffortBudget:
+    """按 RunRequest.effort / long_running 与配置档位解析生效预算。
+
+    long_running 修饰：steps ×3（上限 30）、hard_s ×2（上限 1800）。
+    派生值不配置：reserve_s = clamp(hard_s*0.25, 20, 120)，
+    cap_s = clamp(hard_s*0.6, 90, 240)，converge_tools = max(2, tool_calls//3)。
+    """
+    tier = getattr(tiers, effort, None) or tiers.standard
+    steps = int(tier.steps)
+    tool_calls = int(tier.tool_calls)
+    soft_s = float(tier.soft_s)
+    hard_s = float(tier.hard_s)
+    if long_running:
+        steps = min(steps * 3, 30)
+        hard_s = min(hard_s * 2.0, 1800.0)
+    reserve_s = min(max(hard_s * 0.25, 20.0), 120.0)
+    cap_s = min(max(hard_s * 0.6, 90.0), 240.0)
+    converge_tools = max(2, tool_calls // 3)
+    return EffortBudget(
+        steps=steps,
+        tool_calls=tool_calls,
+        soft_s=soft_s,
+        hard_s=hard_s,
+        reserve_s=reserve_s,
+        cap_s=cap_s,
+        converge_tools=converge_tools,
+    )
+
+
+# effort 档位 → 模型推理强度（litellm 统一 reasoning_effort 取值）。
+# 与 EffortBudget（执行复杂度）正交：一个控制"做多少步"，一个控制"想多深"。
+_REASONING_EFFORT_BY_TIER: dict[str, str] = {
+    "quick": "low",
+    "standard": "medium",
+    "deep": "high",
+}
+
+
+def reasoning_effort_for(effort: str) -> str:
+    """把 RunRequest.effort 映射为模型 reasoning_effort（quick→low / standard→medium / deep→high）。"""
+    return _REASONING_EFFORT_BY_TIER.get(effort, "medium")
+
+
+@dataclass(frozen=True)
+class ControlDecision:
+    """loop 控制单一评估点的输出。
+
+    should_stop：本轮直接终止（steps / tool_calls / hard_s 任一耗尽）。
+    freeze_tools：需要冻结部分工具（wrapping 冻结搜索类，last_turn 冻结非写入类）。
+    is_last_turn：本轮是最后一轮（剩余 hard_s <= reserve_s 或 turns_left <= 1）。
+
+    doom-loop 签名冻结不在此判定——由 call_handling.py Check 2 负责。
+    """
+
+    should_stop: bool
+    freeze_tools: bool
+    is_last_turn: bool
+    turns_left: int
+    tools_left: int
+
+
+def evaluate_loop_control(
+    *,
+    run_state: "RunState",
+    effort_budget: EffortBudget,
+    now: float,
+) -> ControlDecision:
+    """loop 控制的单一评估点。
+
+    收尾判定不落库、不做状态机：
+    wrapping  = turns_left <= 2 or remaining_soft <= 0 or tools_left <= converge_tools
+    last_turn = turns_left <= 1 or remaining_hard <= reserve_s
+    should_stop = turns_left <= 0 or remaining_hard <= 0 or tools_left <= 0
+    """
+    ls = run_state.loop_state
+    turns_left = effort_budget.steps - ls.steps_spent
+    tools_left = effort_budget.tool_calls - ls.tool_calls_spent
+    remaining_soft = ls.soft_at - now
+    remaining_hard = ls.hard_at - now
+    wrapping = (
+        turns_left <= 2
+        or remaining_soft <= 0
+        or tools_left <= effort_budget.converge_tools
+    )
+    last_turn = turns_left <= 1 or remaining_hard <= effort_budget.reserve_s
+    should_stop = turns_left <= 0 or remaining_hard <= 0 or tools_left <= 0
+    return ControlDecision(
+        should_stop=should_stop,
+        freeze_tools=wrapping or last_turn,
+        is_last_turn=last_turn,
+        turns_left=turns_left,
+        tools_left=tools_left,
+    )
 
 
 class BudgetGuard:
-    """轮次 / 墙钟 / 金额的唯一预算权威。0 或 None 表示未设上限。"""
+    """轮次 / 墙钟的唯一预算权威。0 表示未设上限。"""
 
     _WARN_FRACTION = 0.9
 
     def __init__(self, budget: Budget) -> None:
         self._budget = budget
 
-    def check(self, *, iteration: int, usd_cost: float) -> TerminalReason | None:
+    def check(self, *, iteration: int) -> TerminalReason | None:
         budget = self._budget
         if budget.max_iterations > 0 and iteration >= budget.max_iterations:
             return TerminalReason.BUDGET_ITERATIONS
@@ -144,17 +257,13 @@ class BudgetGuard:
             time.monotonic() - budget.run_started
         ) > budget.run_deadline_s:
             return TerminalReason.BUDGET_SECONDS
-        if budget.max_usd is not None and usd_cost > budget.max_usd:
-            return TerminalReason.BUDGET_USD
         return None
 
-    def warn(self, *, iteration: int, usd_cost: float) -> TerminalReason | None:
+    def warn(self, *, iteration: int) -> TerminalReason | None:
         """临限预警（不改变裁决）。返回触发预警的资源维度。"""
         budget = self._budget
         if budget.max_iterations > 0 and iteration >= self._WARN_FRACTION * budget.max_iterations:
             return TerminalReason.BUDGET_ITERATIONS
-        if budget.max_usd is not None and usd_cost >= self._WARN_FRACTION * budget.max_usd:
-            return TerminalReason.BUDGET_USD
         return None
 
 
@@ -248,14 +357,14 @@ class CompletionKernel:
     def state(self) -> CompletionState:
         return self._state
 
-    def decide(self, event: LoopEvent, *, usd_cost: float = 0.0) -> Decision:
+    def decide(self, event: LoopEvent) -> Decision:
         """裁决入口：委托 ``_decide`` 产出裁决，随后统一留痕（SDD §10）。
 
         每次裁决一条结构化日志 + ``completion.verdict_total`` 计数；
         REPAIR 额外记 ``completion.repair_total``（gap_codes 维度）。
         """
         started = time.monotonic()
-        decision = self._decide(event, usd_cost=usd_cost)
+        decision = self._decide(event)
         elapsed_ms = (time.monotonic() - started) * 1000.0
         contract = self._state.contract
         gap_codes = tuple(gap.code for gap in decision.gaps)
@@ -287,13 +396,13 @@ class CompletionKernel:
             )
         return decision
 
-    def _decide(self, event: LoopEvent, *, usd_cost: float = 0.0) -> Decision:
+    def _decide(self, event: LoopEvent) -> Decision:
         # 每次裁决只暴露本次的评估结果：早退分支（预算 / 非停止）不留下
         # 上一次的 last_review，否则治理层会为未评估的裁决写下陈旧留痕。
         self.last_review = None
 
         if (code := self._budget.check(
-            iteration=event.iteration, usd_cost=usd_cost,
+            iteration=event.iteration,
         )) is not None:
             return Decision("TERMINATE", code)
 

@@ -43,13 +43,13 @@ Plugin 在没有任何一个的情况下端到端运行；集成是附加的。
 /litigation-legal:cold-start-interview
 ```
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`，在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`，在 plugin 更新后保留。
 
 ## Commands
 
 | Command | 功能 |
 |---|---|
-| `/litigation-legal:cold-start-interview` | 冷启动→ 写入内部 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` |
+| `/litigation-legal:cold-start-interview` | 冷启动→ 写入内部 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` |
 | `/litigation-legal:matter-intake` | 统一输入→ 写入 `matters/[slug]/` + 追加到 `_log.yaml` |
 | `/litigation-legal:portfolio-status` | 组合汇总——风险分布、即将到来的截止日期、过时事项 |
 | `/litigation-legal:matter-briefing [slug]` | 一个事项的深度简报——在 GC 或外部律师电话前可读就绪 |
@@ -140,12 +140,12 @@ litigation-legal/
 
 ## 它如何学习
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
 
 ## 注意事项
 
-- 每个 skill 首先从 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 读取。如果你的风险偏好改变或你引入新的外部律师，更新它——不要在个别事项中掩盖它。
-- 按照惯例，`## Company profile` 是 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 的第一部分。如果你运行其他 `-legal` plugins，你可以跨复制它，而不是重新输入相同的上下文。
+- 每个 skill 首先从 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 读取。如果你的风险偏好改变或你引入新的外部律师，更新它——不要在个别事项中掩盖它。
+- 按照惯例，`## Company profile` 是 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 的第一部分。如果你运行其他 `-legal` plugins，你可以跨复制它，而不是重新输入相同的上下文。
 - `_log.yaml` 是组合状态的真实来源。保持它干净。
 - 事项历史是仅追加的。如果有问题，将更正作为新条目记录——不要编辑过去。
 - 已关闭的事项保留在 `_log.yaml`（可搜索的历史）中。默认情况下 `/portfolio-status` 从活跃汇总中过滤掉它们。

@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
+1. 读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
 2. 获取患者数据：从 EMR 集成或用户提供的文件/文本中读取。
 3. 提取以下关键信息：
    - **主诉和现病史**

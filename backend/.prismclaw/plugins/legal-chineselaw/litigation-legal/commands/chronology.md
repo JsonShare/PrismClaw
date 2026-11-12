@@ -17,14 +17,14 @@ Licensed under Apache License 2.0
 
 # /chronology
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` → 理论、枢纽事实、关键事实。
-2. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 文档存储来源、默认事项文件夹模式。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` → 理论、枢纽事实、关键事实。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 文档存储来源、默认事项文件夹模式。
 3. 遵循以下工作流和参考。
-4. 按顺序识别来源：本次会话中用户提供的路径、默认事项文件夹、从 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 声明的来源。
+4. 按顺序识别来源：本次会话中用户提供的路径、默认事项文件夹、从 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 声明的来源。
 5. 对于可读来源：提取日期事件。对于无法访问的来源：在差距中注明。
 6. 去重，根据事件与来源列表合并。
 7. 根据事项理论标记重要性 (🔴/🟡/⚪)。
-8. 编写 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/chronology.md`（或根据标记的格式变体）。
+8. 编写 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/chronology.md`（或根据标记的格式变体）。
 9. 如果存在先前版本：版本号递增，向用户展示差异摘要。
 10. 在完成之前确认："这是我构建的内容。扫描 🔴 条目——我误分类了什么吗？"
 
@@ -100,14 +100,14 @@ Licensed under Apache License 2.0
 - 用户上传的任何文件或会话中提供的路径。
 
 `--matter` 模式还读取：
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` → 案件理论、关键事实、转折事实（用于重要性标记）、关键日期。
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` → 案件理论、关键事实、转折事实（用于重要性标记）、关键日期。
 - PRISMCLAW.md 中的默认事项文件夹模式 → 此 slug 的文档存放位置。
 
 `--documents` 模式还读取：
 - 证据管理平台元数据（如果有可用的连接器）——按当事人 + 日期范围。
 - 证据编号清单或证据目录（如果用户指向一个）。
 
-**冲突门槛——不可绕过（`--matter` 模式）。** 在构建时间线之前，检查 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
+**冲突门槛——不可绕过（`--matter` 模式）。** 在构建时间线之前，检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
 > "我在事项日志中看不到 [matter slug]。首先运行 `/litigation-legal:matter-intake`，以便冲突检查运行并设置事项工作区。我不会对未接收的事项构建时间线——冲突检查是门槛。"
 
@@ -207,7 +207,7 @@ skill 在用户选择保密姿态之前不会提取：
 
 ### 工作时间线（默认）
 
-位置：`~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/chronology.md`。完整、标记、注释。律师工作的参考文档。
+位置：`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/chronology.md`。完整、标记、注释。律师工作的参考文档。
 
 ```markdown
 [WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this`]

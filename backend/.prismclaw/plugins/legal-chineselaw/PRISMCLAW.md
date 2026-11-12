@@ -11,7 +11,7 @@ Licensed under Apache License 2.0
 ## 目录结构
 
 ```
-.plugin/marketplace.json   # 市场清单 — 每个插件一条记录
+.plugin/plugin.json        # 市场清单 — 声明 plugins 数组（与子插件同名同路径）
 <plugin>/                         # 12 个第一方插件（commercial-legal、privacy-legal……）
   .plugin/plugin.json      # 插件清单（name、version、description、author）
   .mcp.json                       # 插件连接的 MCP 服务器
@@ -30,24 +30,19 @@ references/                       # 共享模板（company-profile、dashboard�
 
 ## 验证——提交 PR 前请先运行
 
-本仓库遵循与 `anthropics/claude-plugins-official` 在 CI 中相同的规范。请在本地运行等效检查：
+插件结构（市场级与子插件级的 `.plugin/plugin.json`）由 PrismClaw 在启动加载时校验，格式错误会出现在启动日志里。提交前请运行：
 
 ```bash
-# 1. 市场 + 各插件 schema 验证（以此为准）
-prismclaw plugin validate .plugin/marketplace.json
-for d in */; do [ -f "$d/.plugin/plugin.json" ] && prismclaw plugin validate "$d"; done
-prismclaw plugin validate external_plugins/cocounsel-legal  # ⚠️ external_plugins/ 目录尚未创建，此命令暂不可用
-
-# 2. Cookbook 工具作用域 lint（编排器不得过度授权工具）
+# 1. Cookbook 工具作用域 lint（编排器不得过度授权工具）
 python3 scripts/lint-tool-scope.py
 
-# 3. JSON/YAML 格式校验
+# 2. JSON/YAML 格式校验
 python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json', recursive=True)]"
 ```
 
 ### 市场不变量（I1–I11）
 
-`claude-plugins-official` 在 schema 检查之上叠加了以下规则，本仓库同样适用——最容易踩坑的几条：
+插件市场在 schema 检查之上叠加了以下规则，本仓库同样适用——最容易踩坑的几条：
 
 - **I1** — `plugins[]` 应按 name 字母排序（不区分大小写）。*目前存在一个已知警告：数组按策划的展示顺序排列。如需新增插件，请先询问再重新排序整个数组。*
 - **I2** — 插件名称不得重复。
@@ -59,13 +54,13 @@ python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json'
 
 ### Frontmatter 要求
 
-每个 `agents/*.md` 需要 `name` 和 `description`。每个 `skills/<name>/SKILL.md` 需要 `description`。每个 `commands/*.md` 需要 `description`。多行 description 使用 `>` 块标量完全没问题——`prismclaw plugin validate` 能正确解析。
+每个 `agents/*.md` 需要 `name` 和 `description`。每个 `skills/<name>/SKILL.md` 需要 `description`。每个 `commands/*.md` 需要 `description`。多行 description 使用 `>` 块标量完全没问题——加载器能正确解析。
 
 ## 约定
 
-### 保持 `marketplace.json` 与 `plugin.json` 同步
+### 保持市场清单与插件清单同步
 
-对于第一方插件，`marketplace.json` 中的 `name`、`description` 和 `author` 应与插件自身的 `.plugin/plugin.json` 对应字段保持一致。若在一处修改了插件 description，另一处也必须同步修改。
+市场根目录与各子插件都使用 `.plugin/plugin.json`，靠是否声明 `plugins` 数组区分：声明了的是市场清单，否则是插件清单。第一方插件在市场清单中的 `name`、`description` 和 `author` 应与子插件自身 `.plugin/plugin.json` 的对应字段保持一致；改一处必须同步另一处。
 
 ### 散文中的 skill 名称必须使用规范名称
 
@@ -77,7 +72,7 @@ python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json'
 
 ### 插件 PRISMCLAW.md 是模板，不是项目上下文
 
-每个 `<plugin>/PRISMCLAW.md` 是一个执业档案模板，由 `cold-start-interview` skill 复制到用户机器上的 `~/.prismclaw/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md`。安装插件时，它*不会*作为项目上下文加载——`prismclaw plugin validate` 会对此发出警告，这是预期行为。不要通过将内容移入 skill 来"修复"这个警告。
+每个 `<plugin>/PRISMCLAW.md` 是一个执业档案模板，由 `cold-start-interview` skill 复制到用户机器上的 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md`。安装插件时，它*不会*作为项目上下文加载——插件加载器会对此发出警告，这是预期行为。不要通过将内容移入 skill 来"修复"这个警告。
 
 ### `external_plugins/` 由供应商维护
 

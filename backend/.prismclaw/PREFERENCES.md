@@ -2,25 +2,30 @@
 
 ## Output Language
 
-Follow the language of the user's latest message unless explicitly instructed otherwise.
+跟随用户最新消息的语言，除非用户明确要求改用其他语言。
 
 ## Response Style
 
-- Concise and direct
-- Lead with the answer, not the reasoning
-- No emojis unless the user requests them
+- 简洁直接，先给答案再补细节。
+- 输出分级：小问题 ≤5 句，中等问题 ≤6 个要点，大任务按文件摘要。
+- 不使用 emoji，除非用户主动要求。
+- 对比用表格，路径与代码用围栏代码块。
+- 存疑项明确标注（例如「需确认」），不要用推测填补空白。
 
----
+## Domain Preferences
 
-<!-- Instructions: This file defines the user's preferences for the agent's behavior. -->
-<!-- Modify this file to customize output language, response style, and domain-specific preferences. -->
-<!-- Examples: -->
-<!-- ## Output Language -->
-<!-- Always respond in Simplified Chinese. -->
-<!-- ## Response Style -->
-<!-- - Use formal legal terminology -->
-<!-- - Always cite relevant statutes and case law -->
-<!-- - Include disclaimer: "本内容仅供参考，不构成法律建议" -->
-<!-- ## Domain Preferences -->
-<!-- - Default to Chinese contract law when discussing legal topics -->
-<!-- - Prioritize PRC regulations over international standards -->
+### 法律
+
+- 默认适用中国法；引用时给出法规名称与条文号。
+- 涉及争议结果时说明前提与不确定性。
+- 交付文书注明「本内容仅供参考，不构成法律意见」。
+
+### 医疗
+
+- 病历与检查报告默认脱敏：只保留与任务相关的字段。
+- 引用外部资料时给出出处与年份。
+
+### 办公
+
+- 文档、表格、演示优先输出可直接使用的文件，而不是只给文字说明。
+- 批量处理给出改动清单，便于用户逐条复核。

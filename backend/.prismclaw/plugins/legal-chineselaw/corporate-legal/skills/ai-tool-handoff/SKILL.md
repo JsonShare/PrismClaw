@@ -3,7 +3,7 @@ name: ai-tool-handoff
 name_zh: AI 工具交接
 description: >
   检测元典、北大法宝或类似批量合同审查工具何时在使用中，将大批量条款提取交接给它，
-  并根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的信任级别
+  并根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的信任级别
   对其输出进行 QA。当用户说"批量审查"、"AI 提取"、"合同批量分析"，
   或当 diligence-issue-extraction 遇到大批量类别时使用。
 category: 公司法务
@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？Run `/corporate-legal:matter-workspace switch <slug>` or say `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 是 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？Run `/corporate-legal:matter-workspace switch <slug>` or say `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 是 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -35,13 +35,13 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → AI 辅助审查：
+`~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → AI 辅助审查：
 - 使用中的工具（元典 / 其他国内AI合同审查工具 / 无）
 - 用于什么（哪些条款类型）
 - 信任级别（按原样使用 / 抽查 / 完整重新审查）
 - 交接流程（谁加载、谁 QA）
 
-如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 说没有 AI 工具 → 此 skill 为空操作。所有内容直接通过 diligence-issue-extraction。
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 说没有 AI 工具 → 此 skill 为空操作。所有内容直接通过 diligence-issue-extraction。
 
 ## 何时交接
 
@@ -60,12 +60,12 @@ Licensed under Apache License 2.0
 ### 步骤 1：准备批次
 
 - 识别批次文档（来自 VDR 清单）
-- 根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 指定提取目标（哪些条款类型）
+- 根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 指定提取目标（哪些条款类型）
 - 注明重要性阈值，以便可以过滤工具输出
 
 ### 步骤 2：加载（或指示加载者）
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——谁加载。如果是你，生成加载指令。如果是其他人，生成请求：
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——谁加载。如果是你，生成加载指令。如果是其他人，生成请求：
 
 ```markdown
 ## [工具] 加载请求 — [交易代码] — [类别]
@@ -75,7 +75,7 @@ Licensed under Apache License 2.0
 **提取目标：**
 - 控制权变更 / 转让
 - 排他性
-- [根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的其他项]
+- [根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的其他项]
 
 **过滤输出：** 仅标记提取目标存在的内容——不需要为每份文档输出"未找到 CoC 条款"。
 
@@ -86,7 +86,7 @@ Licensed under Apache License 2.0
 
 当工具返回结果时，应用信任级别：
 
-**"按原样使用"：** 直接摄入到尽调发现中。（仅在 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 明确说明时——这很少见。）
+**"按原样使用"：** 直接摄入到尽调发现中。（仅在 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 明确说明时——这很少见。）
 
 **"抽查 X%"：** 随机抽样 X% 的标记文档。对每份，阅读实际条款并与工具提取结果比较。如果错误率低，接受批次。如果发现错误，扩大样本。
 
@@ -116,7 +116,7 @@ Licensed under Apache License 2.0
 
 ### QA
 
-**信任级别：** [根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`]
+**信任级别：** [根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`]
 **样本量：** [N] 份文档已抽查
 **错误率：** [X]% — [已接受 / 已扩大样本 / 已触发完全重新审查]
 
@@ -138,8 +138,8 @@ Licensed under Apache License 2.0
 ## 此 skill 不做什么
 
 - 它不直接运行外部AI审查工具——它管理交接指令和 QA。人工（或工具自己的界面）运行提取。
-- 它不会完全用自身判断替代工具输出——如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 说抽查 10%，就检查 10%，不是 100%。
-- 它不决定信任级别——那在 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中，在冷启动时根据团队对工具的经验设置。
+- 它不会完全用自身判断替代工具输出——如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 说抽查 10%，就检查 10%，不是 100%。
+- 它不决定信任级别——那在 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中，在冷启动时根据团队对工具的经验设置。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

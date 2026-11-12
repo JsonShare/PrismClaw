@@ -51,11 +51,11 @@ category: 商事合同
 
 **哪一方？** 在应用剧本之前，确定公司在此保密协议中的哪一方。通常从上下文中明显：如果对手方是正在评估你产品的潜在客户或合作伙伴，你是披露方；如果你正在评估他们的，你是接收方。互惠保密协议仍然有一方——是谁发起的文件，评估在哪个方向运行。如果不明显，询问。阅读配置中的匹配剧本部分（`### 出售方剧本` 或 `### 采购方剧本`）。在输出中注意哪一方，以便审查者知道应用了哪个剧本。如果匹配的一方是 `[未配置]`，停止并告诉用户在分类继续之前运行 `/commercial-legal:cold-start-interview --side <side>`。
 
-**在分类任何内容之前，阅读 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## 剧本` → 匹配方 → `保密协议分类立场`。** 该部分是*此*团队在*此*方上使保密协议成为绿、黄或红的内容来源。此 skill 不带有保密协议条款的默认立场——法律、市场和每个团队的风险偏好变化太大，硬编码默认值不安全。
+**在分类任何内容之前，阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## 剧本` → 匹配方 → `保密协议分类立场`。** 该部分是*此*团队在*此*方上使保密协议成为绿、黄或红的内容来源。此 skill 不带有保密协议条款的默认立场——法律、市场和每个团队的风险偏好变化太大，硬编码默认值不安全。
 
 如果执业档案尚未拥有 `保密协议分类立场` 部分，或者它对你正在审查的保密协议中出现的条款保持沉默，询问用户：
 
-> 你的剧本不涵盖 [条款——例如，"剩余信息条款（Residuals）"、"保密期限"、"单方向保密协议中你是接收方的情形"]。你的默认立场是什么——什么时候应该是绿、黄、红？我会将其添加到 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，以便下次审查一致。
+> 你的剧本不涵盖 [条款——例如，"剩余信息条款（Residuals）"、"保密期限"、"单方向保密协议中你是接收方的情形"]。你的默认立场是什么——什么时候应该是绿、黄、红？我会将其添加到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，以便下次审查一致。
 
 然后在执业档案中记录答案，并使用新立场继续分类。
 
@@ -71,7 +71,7 @@ category: 商事合同
 
 ## 分类
 
-通过应用 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的立场，将保密协议分类为三个存储桶之一。下面的存储桶定义是稳定的；填充每个存储桶的*标准*来自剧本。
+通过应用 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` 中的立场，将保密协议分类为三个存储桶之一。下面的存储桶定义是稳定的；填充每个存储桶的*标准*来自剧本。
 
 ### 绿——路由到签名
 

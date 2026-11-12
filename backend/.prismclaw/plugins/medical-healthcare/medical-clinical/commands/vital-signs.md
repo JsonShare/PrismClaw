@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
+1. 读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md` 获取执业档案。
 2. 获取生命体征数据：
    - 心率（HR）
    - 血压（BP）- 收缩压/舒张压

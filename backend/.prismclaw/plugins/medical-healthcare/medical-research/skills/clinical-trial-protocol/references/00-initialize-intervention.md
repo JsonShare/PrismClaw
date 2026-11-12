@@ -191,7 +191,7 @@ If `waypoints/intervention_metadata.json` already exists:
 3. Handle accordingly
 
 
-## Notes for Claude
+## Notes for the assistant
 
 - Be friendly and conversational when collecting information
 - If user provides incomplete information, ask clarifying questions

@@ -26,7 +26,7 @@ Licensed under Apache License 2.0
 /corporate-legal:cold-start-interview
 ```
 
-引导你完成模块选择，然后针对每个活跃领域进行简短的针对性访谈。写入仅包含相关部分的模块化 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`。你的配置存储在该路径，并在 plugin 更新后保留。
+引导你完成模块选择，然后针对每个活跃领域进行简短的针对性访谈。写入仅包含相关部分的模块化 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`。你的配置存储在该路径，并在 plugin 更新后保留。
 
 每笔交易设置（仅并购模块）：
 
@@ -95,11 +95,11 @@ Licensed under Apache License 2.0
 
 ## 它如何学习
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的执业档案不是静态的——它随着你使用 plugin 而改进。Skills 告诉你输出何时使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的执业档案不是静态的——它随着你使用 plugin 而改进。Skills 告诉你输出何时使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
 
 ## 并购说明
 
 - 问题提取应用重要性阈值——如果阈值说按价值排名前 N，则不阅读每个文档。
 - 买方和卖方均受支持。执业档案捕获适用于此交易的哪一方；skills 相应调整姿态。
-- AI 工具交接（Luminance/Kira）是可选的。如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 说没有工具，则所有提取都通过直接 skill 运行。
+- AI 工具交接（Luminance/Kira）是可选的。如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 说没有工具，则所有提取都通过直接 skill 运行。
 - 关闭检查清单从购买协议初始化，然后随着尽调显示所需同意而自我更新。

@@ -18,7 +18,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -28,12 +28,12 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Board & Secretary` 部分：
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Board & Secretary` 部分：
   - 会议纪要格式（长篇叙述/行动纪要/混合）
   - 从种子文档提取的会议纪要模板（结构、决议语言、标题格式）
   - 董事会组成和委员会
   - 书面同意——用于什么以及任何限制
-- 如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 没有会议纪要格式：先运行冷启动。不要用通用格式继续。
+- 如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 没有会议纪要格式：先运行冷启动。不要用通用格式继续。
 
 ---
 
@@ -81,7 +81,7 @@ Licensed under Apache License 2.0
 要求出席者列表，或如果连接器已授权，提议从日历邀请中提取。
 
 **出席的董事：**
-- 从 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的董事会组成作为起点
+- 从 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的董事会组成作为起点
 - 询问实际出席了谁、谁缺席，以及缺席的董事是否有提前通知
 
 **出席的管理层：**
@@ -139,7 +139,7 @@ Licensed under Apache License 2.0
 
 ## 步骤 4：起草会议纪要
 
-使用来自 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的内部格式。不要默认为通用格式。种子会议纪要是模板——复制结构、标题、决议语言、讨论细节的程度。
+使用来自 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的内部格式。不要默认为通用格式。种子会议纪要是模板——复制结构、标题、决议语言、讨论细节的程度。
 
 ### 标准结构（适应内部格式）
 
@@ -165,7 +165,7 @@ Licensed under Apache License 2.0
 - 还出席：[管理层、外部律师、嘉宾——附角色]
 
 **上次会议纪要：**
-批准上次会议纪要的标准语言。如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 董事会日历中有上次会议日期，则从那里提取，否则保留为 [上次会议日期]。
+批准上次会议纪要的标准语言。如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 董事会日历中有上次会议日期，则从那里提取，否则保留为 [上次会议日期]。
 
 **议程项目——每个项目一个章节：**
 
@@ -179,7 +179,7 @@ Licensed under Apache License 2.0
 [如果随后有决议：]
 经适当动议和附议，以下决议以 [一致投票 / N 赞成、N 反对、N 弃权] 通过：
 
-RESOLVED, that [以来自 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的内部语言表达的决议文本]。
+RESOLVED, that [以来自 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 的内部语言表达的决议文本]。
 ```
 
 **散会：**
@@ -217,7 +217,7 @@ RESOLVED, that [以来自 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal
 
 ## 步骤 4.5：后果行动关卡（通过会议纪要）
 
-**在将会议纪要通过为最终版之前：** 读取 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是**非律师**：
+**在将会议纪要通过为最终版之前：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是**非律师**：
 
 > 通过会议纪要使其成为董事会决定的官方记录——它们是会议上采取的行动授权的主要证据。你是否已与律师审查过此内容？如果是，继续。如果不是，这是带给他们的简报：
 >
@@ -235,7 +235,7 @@ RESOLVED, that [以来自 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal
 
 ## 步骤 5：输出和审查提示
 
-产生完整草案。会议纪要本身是公司记录，不具有特权；不要将工作产品标题应用于传阅的会议纪要。以下的起草说明、占位符标志和审查检查清单是工作产品——根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` `## Outputs` 前置工作产品标题（根据用户角色而不同——见 `## Who's using this`）：
+产生完整草案。会议纪要本身是公司记录，不具有特权；不要将工作产品标题应用于传阅的会议纪要。以下的起草说明、占位符标志和审查检查清单是工作产品——根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` `## Outputs` 前置工作产品标题（根据用户角色而不同——见 `## Who's using this`）：
 
 ```
 [WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this`]

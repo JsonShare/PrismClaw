@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /socratic-drill
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 学习风格、课程、薄弱领域。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 学习风格、课程、薄弱领域。
 2. 应用以下工作流。
 3. 就该主题问一个问题。等待答案。
 4. 反驳。问后续问题。不要给答案。
@@ -41,13 +41,13 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 学习风格（drill-me vs explain-to-me——此 skill 设计为 drill-me，但语气调整）、薄弱领域、当前课程。
+`~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 学习风格（drill-me vs explain-to-me——此 skill 设计为 drill-me，但语气调整）、薄弱领域、当前课程。
 
 ## 抽认
 
 ### 步骤 1：选择主题
 
-用户命名它，或从 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的薄弱领域提取。如果他们一直避开某个主题，那就是要抽问的主题。
+用户命名它，或从 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的薄弱领域提取。如果他们一直避开某个主题，那就是要抽问的主题。
 
 ### 步骤 2：提问
 
@@ -75,7 +75,7 @@ Licensed under Apache License 2.0
 
 这不是给出答案。它是教学生信任和验证他们自己的材料——实际转移到考试的技能。一个头脑中有错误规则而磁盘上有正确笔记的 1L 应该被 handed 矛盾，而不是被告知重新阅读案例书。学生仍然必须决定哪个是正确的以及为什么；skill 只是拒绝让他们走过他们可以看到的矛盾。仅当以下情况时应用此规则：
 
-1. 学生实际上传了材料（笔记、大纲、案例摘要、抽认卡），在 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → Seed materials 中引用，以及
+1. 学生实际上传了材料（笔记、大纲、案例摘要、抽认卡），在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → Seed materials 中引用，以及
 2. 陈述的规则和上传的规则在特定点上不一致——不是措辞差异，不是细节水平差异，而是实质性矛盾。
 
 不要从你自己的知识自愿提供更正。不要引用案例书。只将学生自己的材料引用给他们。

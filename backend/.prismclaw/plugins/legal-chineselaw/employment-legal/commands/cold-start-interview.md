@@ -18,12 +18,11 @@ Licensed under Apache License 2.0
 
 # /employment-cold-start-interview
 
-1. 检查 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分`连接了什么？`检查并重写该配置路径下的 `## Available integrations` 表。探测时：只有当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪，附带一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——那会误导用户以为某些东西已连接而实际没有。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分`连接了什么？`检查并重写该配置路径下的 `## Available integrations` 表。探测时：只有当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪，附带一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——那会误导用户以为某些东西已连接而实际没有。
 2. 运行以下访谈（先是第 0 部分——角色 + 集成——然后是足迹）：省市/国家、招聘/解除审查触发器、经济补偿金做法。
 3. 种子文档：员工手册/规章制度 + 3 份解除备忘录。
 4. 构建省市特定的升级表。
-5. 如果在 `~/.prismclaw/plugins/cache/legal-chineselaw/employment-legal/*/PRISMCLAW.md` 存在已填充的 PRISMCLAW.md（无 `[PLACEHOLDER]` 标记）但在配置路径不存在，将其复制到配置路径并告诉用户迁移了什么。
-6. 写入 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，根据需要创建父目录。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，根据需要创建父目录。
 
 ---
 
@@ -35,7 +34,7 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复的选项。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供从头开始或从占位符开始处恢复的选项。
@@ -45,7 +44,7 @@ Licensed under Apache License 2.0
 
 ## 检查共享公司档案
 
-查找 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 
 - **如果存在：** 读取它。显示一行确认："你是 [名称]，[执业设置]，在 [公司]，[行业]，在 [省市/司法管辖区] 运营。对吗？（或说'更新'来更改共享档案。）" 如果确认，跳过公司问题——直接进入插件特定问题。
 - **如果不存在：** 你将是此用户设置的第一个插件。在引导和分支之后，询问公司问题并写入共享档案，然后继续插件特定问题。告诉用户："我已保存你的公司档案——其他法律插件将读取它并跳过这些问题。"
@@ -272,7 +271,7 @@ Licensed under Apache License 2.0
 
 写入配置后，说：
 
-> "完成。你的配置在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`——一个你可以直接阅读和编辑的纯文本文件。你回答的任何内容都可以更改：
+> "完成。你的配置在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`——一个你可以直接阅读和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/employment-legal:cold-start-interview --redo` 进行完整重新访谈

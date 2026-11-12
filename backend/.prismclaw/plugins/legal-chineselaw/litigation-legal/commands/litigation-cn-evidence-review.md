@@ -7,7 +7,7 @@ category: 争议诉讼
 
 # /cn-evidence-review
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 审查协议、证据清单格式。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 审查协议、证据清单格式。
 2. 遵循以下工作流程和参考规范。
 3. 对每份证据：明显充分/存疑需律师判断/明显不足。标注理由。
 4. 输出：待证事实清单 + 经审查的证据清单（含三性评估、证明力分级、缺口标注）+ 补充建议。律师审查所有标注后方可用于庭审。
@@ -27,7 +27,7 @@ category: 争议诉讼
 
 ## 案件背景
 
-检查实践层级 `PRISMCLAW.md` 中的 `## 案件工作区`。如已启用且无活跃案件，询问："这是哪个案件？运行 `litigation-matter-workspace switch <标识>` 或说 `实践层级`。" 加载活跃案件的 `matter.md`——尤其是案件理论、诉讼文书、管辖法院、案件阶段。将输出写入案件文件夹 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/<案件标识>/evidence-review/`。
+检查实践层级 `PRISMCLAW.md` 中的 `## 案件工作区`。如已启用且无活跃案件，询问："这是哪个案件？运行 `litigation-matter-workspace switch <标识>` 或说 `实践层级`。" 加载活跃案件的 `matter.md`——尤其是案件理论、诉讼文书、管辖法院、案件阶段。将输出写入案件文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/<案件标识>/evidence-review/`。
 
 ---
 
@@ -53,9 +53,9 @@ category: 争议诉讼
 
 ## 加载背景信息
 
-`~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 证据审查格式、审查协议。
+`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 证据审查格式、审查协议。
 
-**利益冲突审查门槛——不可绕过。** 审查证据前，检查 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中是否有该案件标识。如不在 `_log.yaml` 中，告知用户需要创建新的案件记录：
+**利益冲突审查门槛——不可绕过。** 审查证据前，检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中是否有该案件标识。如不在 `_log.yaml` 中，告知用户需要创建新的案件记录：
 
 > "我在案件记录中未找到 [案件标识]。请先运行 `litigation-matter-intake` 以建立案件工作区。我不会在未完成接案程序的案件上审查证据——证据审查报告需要归入案件文件。"
 
@@ -251,7 +251,7 @@ category: 争议诉讼
 
 ## 输出格式
 
-**在提交庭审或向对方出示前（实质行为——本工具初步审查，但门槛在庭审或质证环节触发，无论由谁操作）：** 读取 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如角色为非律师：
+**在提交庭审或向对方出示前（实质行为——本工具初步审查，但门槛在庭审或质证环节触发，无论由谁操作）：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如角色为非律师：
 
 > 在法庭上提交证据和进行质证具有法律后果——三性存疑的证据被排除可能导致相应待证事实无法完成证明，进而影响诉讼请求能否得到支持。您是否已与律师确认过本证据审查结论？若是，请继续；若否，以下是供您带给律师的摘要：
 >

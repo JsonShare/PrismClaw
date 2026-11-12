@@ -117,7 +117,6 @@ async def evaluate_no_tool_governance(
     total_cache_creation_tokens: int,
     total_cache_read_tokens: int,
     run_state: Any,
-    usd_cost: float = 0.0,
 ) -> NoToolGovernanceResult:
     """对无工具回合执行一次裁决。
 
@@ -195,7 +194,7 @@ async def evaluate_no_tool_governance(
     block_intent = getattr(tool_ctx, "goal_block_intent", None)
     if block_intent is not None:
         tool_ctx.goal_block_intent = None
-    decision = kernel.decide(event, usd_cost=usd_cost)
+    decision = kernel.decide(event)
     review = kernel.last_review
 
     # ── 4. 审查留痕（受理与不受理都写，保证自评/留痕同源） ──

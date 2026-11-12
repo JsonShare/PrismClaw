@@ -14,9 +14,9 @@ Licensed under Apache License 2.0
 
 # /portfolio-status
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（定义如何读取 `risk:` 字段）。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（定义如何读取 `risk:` 字段）。
 2. 遵循以下工作流和参考。
-3. 解析 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml`。默认过滤关闭的事项（使用 `--all` 包含）。
+3. 解析 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml`。默认过滤关闭的事项（使用 `--all` 包含）。
 4. 生成汇总：风险分布、14/30/60 天内的截止日期、超过 30 天无更新的事项、重大性汇总、阶段分布。
 5. 标记异常——所有标记为关键的、逾期的 next_deadline、没有分配外部律师但风险为中或高的事项。
 
@@ -30,8 +30,8 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 事实来源
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` — 风险校准（正确解读 risk/materiality 字段）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 事实来源
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` — 风险校准（正确解读 risk/materiality 字段）
 
 ## 标志和过滤器
 

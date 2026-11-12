@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 

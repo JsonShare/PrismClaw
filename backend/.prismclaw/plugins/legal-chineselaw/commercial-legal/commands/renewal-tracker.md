@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 ## Instructions
 
-1. **阅读 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/renewal-register.yaml`**（配置目录——在 plugin 更新后保留）。
+1. **阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/renewal-register.yaml`**（配置目录——在 plugin 更新后保留）。
 2. **默认模式：** 模式 2 ——接下来 90 天内将发生什么，使用半开区间按紧急程度分组，使每个截止期限恰好落入一个区间：🔴 0–13 天、🟠 14–44 天、🟡 45–89 天。第 14、45 和 90 天是边界——每个属于恰好一个区间，而不是两个。
 3. **`--days N`：** 更改窗口。
 4. **`--missed`：** 模式 4 ——已过且没有记录取消的取消截止期限。
@@ -50,7 +50,7 @@ Licensed under Apache License 2.0
 
 ## 登记册
 
-位于 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/renewal-register.yaml`（配置目录——在 plugin 更新后保留）。每个条目：
+位于 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/renewal-register.yaml`（配置目录——在 plugin 更新后保留）。每个条目：
 
 ```yaml
 - counterparty: "示例科技有限公司"
@@ -185,7 +185,7 @@ Licensed under Apache License 2.0
 
 ## 集成：renewal-watcher agent
 
-此 plugin 中的 renewal-watcher agent 按计划（默认每周）运行此 skill，并将"即将到来"报告发布到 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## House style` → `## House style` → 工产品去向的命名频道。模式 2 是代理的主要输出。
+此 plugin 中的 renewal-watcher agent 按计划（默认每周）运行此 skill，并将"即将到来"报告发布到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## House style` → `## House style` → 工产品去向的命名频道。模式 2 是代理的主要输出。
 
 ## 此 skill 不做的事
 

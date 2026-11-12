@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /is-this-a-problem
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 风险校准。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 风险校准。
 2. 运行以下分流工作流。
 3. 模式匹配。检查常见陷阱。
 4. 一分钟内回答：✅ 可以 / ⚠️ 需要看一下 / 🛑 暂停。一句话原因。
@@ -31,7 +31,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -47,7 +47,7 @@ Licensed under Apache License 2.0
 
 ## 加载校准
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → `## Risk calibration`。此 skill 的全部意义就是针对该表进行模式匹配。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → `## Risk calibration`。此 skill 的全部意义就是针对该表进行模式匹配。
 
 ## 分流
 
@@ -92,7 +92,7 @@ Licensed under Apache License 2.0
 
 **对于 Slack（常见情况）：**
 
-Slack 分流回复是内部法律建议。如果回复被粘贴到与非法律人员广泛共享的工单、文档或频道中，请在前面加上 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题（因用户角色而异——见 `## Who's using this`）：
+Slack 分流回复是内部法律建议。如果回复被粘贴到与非法律人员广泛共享的工单、文档或频道中，请在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题（因用户角色而异——见 `## Who's using this`）：
 
 ```
 [WORK-PRODUCT HEADER — per plugin config ## Outputs]

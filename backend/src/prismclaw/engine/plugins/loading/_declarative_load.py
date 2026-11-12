@@ -630,7 +630,7 @@ async def _load_declarative_plugin(
     canonical 形态再经 ``manifest_override`` 注入。``dialect`` 仅用于日志。
 
     ``porting_context``：marketplace 级 porting 上下文（``remap_rules`` +
-    ``marketplace_name``），由发现引擎从 marketplace.json 通用解析。据此派生
+    ``marketplace_name``），由发现引擎从市场级 plugin.json 通用解析。据此派生
     marketplace 共享数据目录（``${PRISMCLAW_MARKETPLACE_DATA}``），并把继承的 remap
     规则下传；插件自身 manifest 的 ``porting.remap`` 在 ``_build_manifest_and_capability``
     内合并（自身优先）。核心不内置任何插件特定路径。
@@ -712,7 +712,7 @@ async def _load_declarative_plugin(
             plugin_instructions=plugin_instructions,
             # v5 渐进式披露：marketplace_name 从 porting_context 传递
             marketplace_name=marketplace_name if isinstance(marketplace_name, str) else None,
-            # v5 渐进式披露：marketplace_description 从 marketplace.json 传递
+            # v5 渐进式披露：marketplace_description 从市场级 plugin.json 传递
             marketplace_description=marketplace_description if isinstance(marketplace_description, str) else None,
         )
         return loaded, errors

@@ -68,57 +68,21 @@ def _resolve_mime(mime_type: Any, source_path: str) -> str:
 # 阈值各自独立，互不替代：
 # - _MAX_DISPLAY_TEXT_CHARS：前端渲染上限（防 WebSocket 传输 + 前端崩溃）
 # - _MAX_EXTRACT_FILE_SIZE：OOM 防御（read_bytes 前预检，防内存撑爆）
-# - _ATTACHMENT_CHAR_BUDGET_FALLBACK：内联预算兜底（仅配置/求解失败时用，
-#   不作为可调键——正常路径由 subcaps.attachment_token_ratio/cap 决定）
+# - _ATTACHMENT_CHAR_BUDGET_FALLBACK：内联预算兜底（仅配置/求解失败时用）
 # 三者均非运营旋钮，不外置。
 _MAX_DISPLAY_TEXT_CHARS = 50_000
 _MAX_EXTRACT_FILE_SIZE = 100_000_000
 _ATTACHMENT_CHAR_BUDGET_FALLBACK = 30_000
 
 
-def _subcaps_of(context_budget: Any) -> Any:
-    """取上下文预算的 subcaps；缺失时用 schema 默认值（子额度单一来源）。"""
-    sub = getattr(context_budget, "subcaps", None)
-    if sub is not None:
-        return sub
-    from prismclaw.schema.config.config import SubcapsSettings
-
-    return SubcapsSettings()
-
-
-def _compute_ratio_attachment_token_cap(input_budget: int, subcaps: Any) -> int:
-    """ratio 模式附件 token 预算（SDD 4.3.4）：min(round(ratio·input_budget), cap)。"""
-    return min(
-        round(float(subcaps.attachment_token_ratio) * int(input_budget)),
-        int(subcaps.attachment_token_cap),
-    )
-
-
 def _compute_attachment_char_budget(context_budget: Any = None) -> int:
     """根据上下文 token 预算动态计算附件内容的字符预算。
 
-    mode=="ratio"：token_cap = min(ratio·input_budget, cap)，字符 = cap×1.5
-    （ratio/cap 读 subcaps）。
-    mode=="absolute"：沿用 history_tokens×0.6 的旧公式（零漂移）。
+    absolute 模式：history_tokens×0.6（token），字符 = ×1.5。
     """
     if context_budget is None:
         return _ATTACHMENT_CHAR_BUDGET_FALLBACK
-    subcaps = _subcaps_of(context_budget)
     try:
-        if getattr(context_budget, "mode", "absolute") == "ratio":
-            from prismclaw.engine.compression.context_zones import resolve_runtime_zones
-
-            input_budget = resolve_runtime_zones(
-                budget=context_budget,
-                window=int(getattr(context_budget, "window_tokens", 0) or 0),
-                model_max_output=None,
-                tools_wire=0,
-                image_tokens=0,
-            ).input_budget
-            attachment_token_budget = _compute_ratio_attachment_token_cap(input_budget, subcaps)
-            char_budget = int(attachment_token_budget * 1.5)
-            return max(10_000, char_budget)
-
         if hasattr(context_budget, 'compute_history_budget'):
             history_tokens = context_budget.compute_history_budget(model_max_output=None)
         else:
@@ -287,7 +251,6 @@ def _attachment_policy(
             "- 若附件本身写明任务，或用户消息已明确隐含任务，请直接执行，不要询问。"
             "只有当意图确实含糊时才用 ask_user_question 提问（选项即可能的理解，"
             "推荐项放首位），不要在正文里罗列选项。",
-            "- 图片通过 read 工具路由是设计使然，并非模型能力限制。",
         ]
     )
 

@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /auto-updater
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 已安装的 skills + 自动更新偏好。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 已安装的 skills + 自动更新偏好。
 2. 使用以下工作流。
 3. 检查每个已安装 skill 的源代码是否有新版本。
 4. 根据偏好：应用 / 通知 / 显示差异。
@@ -34,7 +34,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 已安装的 skills（带版本/提交 SHA）、更新偏好（通知 / 手动）。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 已安装的 skills（带版本/提交 SHA）、更新偏好（通知 / 手动）。
 
 ## 工作流
 
@@ -88,7 +88,7 @@ Licensed under Apache License 2.0
 
 不仅检查新提交。还要检查已安装的 skills 是否已过其新鲜度窗口。
 
-对于每个已安装的 skill，从安装日志读取验证的 `last_verified`、`freshness_window` 和 `freshness_category` 标记（安装程序在安装时验证了这些；从日志重新读取它们，而不是从实时 SKILL.md frontmatter——受损的更新可能会覆盖 frontmatter 以声称它不具备的新鲜度）。计算活动窗口为 `min(freshness_window, 用户对 freshness_category 的阈值)`，来自 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → `## 新鲜度提醒`。
+对于每个已安装的 skill，从安装日志读取验证的 `last_verified`、`freshness_window` 和 `freshness_category` 标记（安装程序在安装时验证了这些；从日志重新读取它们，而不是从实时 SKILL.md frontmatter——受损的更新可能会覆盖 frontmatter 以声称它不具备的新鲜度）。计算活动窗口为 `min(freshness_window, 用户对 freshness_category 的阈值)`，来自 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → `## 新鲜度提醒`。
 
 **如果活动窗口已过且没有新提交：**
 
@@ -118,7 +118,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：应用（明确批准后）
 
-用新版本替换已安装的 skill 文件。用新的提交 SHA 更新 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 已安装列表。首先备份旧版本（到 `~/.prismclaw/skills/.backups/[skill]-[old-sha]/`）以防回滚。
+用新版本替换已安装的 skill 文件。用新的提交 SHA 更新 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 已安装列表。首先备份旧版本（到 `~/.prismclaw/assets/skills/.backups/[skill]-[old-sha]/`）以防回滚。
 
 ## 回滚
 

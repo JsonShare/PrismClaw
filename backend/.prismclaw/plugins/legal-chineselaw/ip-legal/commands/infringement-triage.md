@@ -22,7 +22,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]`，停止并指向 `/ip-legal:cold-start-interview`。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]`，停止并指向 `/ip-legal:cold-start-interview`。
 2. 遵循以下工作流。
 3. 询问涉及哪项权利——商标/版权/专利/商业秘密/混合。如果混合，分别运行每项；不要合并。
 4. 运行通用 intake（当事方立场——先用权利方或被指控方、司法管辖区、时间、证据）。
@@ -69,7 +69,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
 
 侵权分流通常导致起草停止侵权函或路由版权通知。如果执业是私人执业且还没有活跃事项，开启一个——分流、停止侵权函和任何后续回应都应该在一个工作区中。
 
@@ -77,7 +77,7 @@ Licensed under Apache License 2.0
 
 ## 首先加载执业档案
 
-在运行分流之前，读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。提取：
+在运行分流之前，读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。提取：
 
 - **角色**，来自 `## 谁在使用这个`。
 - **执法立场**，来自 `## 执法立场` — 分流输出应以与声明立场（激进/稳健/保守）和相关函件类型的指定审批人一致的路由建议结束。
@@ -317,7 +317,7 @@ Licensed under Apache License 2.0
 
 ## 输出格式（所有模式）
 
-在前面附上 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## 输出` 中的工作产品标题。
+在前面附上 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## 输出` 中的工作产品标题。
 
 ```markdown
 [工作产品标题]
@@ -359,7 +359,7 @@ Licensed under Apache License 2.0
 - [来自律师的正式意见/按执业档案路由给 IP 外部律师]
 - [证据保全和保留——如果诉讼时效时钟在走]
 - [做出决定前需要发展的事实——例如，访问日志、申请历史、市场调查、调查证据]
-- [按照 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## 执法立场` 路由，如果立场是主张]
+- [按照 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` `## 执法立场` 路由，如果立场是主张]
 
 ## 引用验证
 
@@ -386,7 +386,7 @@ Licensed under Apache License 2.0
 
 ## 输出位置
 
-如果事项工作区已启用且事项处于活跃状态，写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/outputs/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md`。否则写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/outputs/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
+如果事项工作区已启用且事项处于活跃状态，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/outputs/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md`。否则写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/outputs/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
 
 如果事项处于活跃状态，向事项的 `history.md` 追加一行。
 

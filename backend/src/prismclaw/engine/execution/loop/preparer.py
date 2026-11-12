@@ -238,7 +238,13 @@ class RunPreparer:
         resolved_ws_path = self._tool_workspace_path
         abort_event = self._control.abort_event
 
-        run_deadline_s = deps.config.timeouts.run_seconds
+        from prismclaw.engine.execution.control.kernel import resolve_effort_budget
+        _effort_budget = resolve_effort_budget(
+            effort=getattr(request, "effort", "standard") or "standard",
+            long_running=bool(getattr(request, "long_running", False)),
+            tiers=deps.config.effort,
+        )
+        run_deadline_s = _effort_budget.hard_s
         run_started = time.monotonic()
         terminated_by = TerminalReason.DONE
 
@@ -1214,7 +1220,7 @@ class RunPreparer:
 
         # ── State machine ──
         state_machine = RunStateMachine(run_state)
-        iteration = run_state.iteration
+        iteration = run_state.loop_state.steps_spent
         total_output_tokens = snapshot.total_output_tokens if isinstance(snapshot.total_output_tokens, int) else 0
         total_cache_creation_tokens = snapshot.total_cache_creation_tokens if isinstance(snapshot.total_cache_creation_tokens, int) else 0
 

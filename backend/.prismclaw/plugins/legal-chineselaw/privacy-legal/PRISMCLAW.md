@@ -17,7 +17,7 @@
 配置文件位置
 
 此 plugin 的用户特定配置位于独立于版本的路径：
-  ~/.prismclaw/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md
 
 规则：
 1. 从该路径 READ 配置。不是从此文件。
@@ -25,7 +25,7 @@
 3. 设置和冷启动访谈 WRITE 到该路径，根据需要创建父目录。
 4. 此文件是模板，每次 plugin 更新时被替换。永远不要在此处写入用户数据。
 
-**共享公司档案。** 公司级事实位于 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`。
+**共享公司档案。** 公司级事实位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
 -->
 
 # 数据合规执业档案
@@ -312,7 +312,7 @@ PIPIA = 个人信息保护影响评估（《个人信息保护法》第五十五
 
 **文件访问失败。** 当你无法阅读用户指向你的文件时，不要静默失败。说明发生了什么，询问用户是否可以粘贴内容或尝试修复。
 
-**验证日志。** 当你或用户验证标记项时，向 `~/.prismclaw/plugins/legal-chineselaw/privacy-legal/verification-log.md` 写一行：
+**验证日志。** 当你或用户验证标记项时，向 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/verification-log.md` 写一行：
 
 `[YYYY-MM-DD] [引用或事实] 由 [姓名] 根据 [来源] 核验——[结论：已确认/已更正为X/无法核验]`
 

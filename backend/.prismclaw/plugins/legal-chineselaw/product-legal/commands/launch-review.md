@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /launch-review
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 框架 + 校准。如果是占位符则停止。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 框架 + 校准。如果是占位符则停止。
 2. 获取 PRD + 相关文档。如果连接了跟踪器,拉取工单和评论。
 3. 使用以下工作流遍历每个框架类别。
 4. 根据表格校准每个发现。新颖 = 明确标记。
@@ -32,7 +32,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`(内部用户的默认值),跳过本段的其余部分——skills 使用执业级上下文,事项机制不可见。如果已启用且没有活跃事项,询问:"这是哪个事项的? Run `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`,否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`(内部用户的默认值),跳过本段的其余部分——skills 使用执业级上下文,事项机制不可见。如果已启用且没有活跃事项,询问:"这是哪个事项的? Run `/product-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`,否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -44,11 +44,11 @@ Licensed under Apache License 2.0
 
 ## 目的
 
-阅读 PRD,检查此团队框架中的每个类别,根据实际情况校准(根据 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`),并以内部格式输出审查。目标: PM 阅读它并确切知道在发布前必须发生什么。
+阅读 PRD,检查此团队框架中的每个类别,根据实际情况校准(根据 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`),并以内部格式输出审查。目标: PM 阅读它并确切知道在发布前必须发生什么。
 
 ## 加载校准
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`:
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`:
 - `## Review framework` — 要检查的类别
 - `## Risk calibration` — 什么阻塞 vs. 什么仅供知晓 *在此公司*
 - `## Launch review process` — 输出格式
@@ -83,7 +83,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 3: 遍历框架
 
-对于 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 审查框架中的每个类别。如果团队没有,使用下面的 8 类默认值。类别是稳定的框架概念;在每个类别内,研究适用于产品部门、受众和司法管辖区的监管制度,然后再校准严重性。在一个司法管辖区或部门阻塞的内容在另一个中可能是常规的——`~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 捕获团队的校准。
+对于 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 审查框架中的每个类别。如果团队没有,使用下面的 8 类默认值。类别是稳定的框架概念;在每个类别内,研究适用于产品部门、受众和司法管辖区的监管制度,然后再校准严重性。在一个司法管辖区或部门阻塞的内容在另一个中可能是常规的——`~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 捕获团队的校准。
 
 | # | 类别 | 关键问题 | 如果则自动跳过 |
 |---|---|---|---|
@@ -139,7 +139,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4: 校准严重性
 
-对于每个发现,根据 ~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md 中的校准表检查:
+对于每个发现,根据 ~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md 中的校准表检查:
 
 - 如果它匹配"通常仅供知晓"模式 → 标记它,不阻塞
 - 如果它匹配"通常需要工作" → 指定工作,根据表估算时间表
@@ -148,7 +148,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 5: 组装审查
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 发布审查流程 → 输出格式。在前面加上 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题(根据用户角色而不同——见 `## Who's using this`)。如果未指定内部格式:
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 发布审查流程 → 输出格式。在前面加上 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` `## Outputs` 中的工作产品标题(根据用户角色而不同——见 `## Who's using this`)。如果未指定内部格式:
 
 ```markdown
 [WORK-PRODUCT HEADER — per plugin config ## Outputs]
@@ -166,7 +166,7 @@ Licensed under Apache License 2.0
 
 **判断:** [可以发布 | 有条件发布 | 等待 X 阻塞 | 需要升级]
 
-> **在发出"可以发布"或"有条件发布"判断之前:** 阅读 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师:
+> **在发出"可以发布"或"有条件发布"判断之前:** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师:
 >
 > > 批准发布是法律行为——一旦产品发布,公司就承诺于此处记录的法律立场。你是否已与律师审查此内容?如果是,继续。如果不是,这是带给他们的简报:
 > >
@@ -215,7 +215,7 @@ Licensed under Apache License 2.0
 
 **以下两个都是此 skill 的必需输出。** 都不是可选的。按以下顺序打印它们,它们之间有清晰的分隔符,以便用户不会错过编辑块。
 
-**输出 1 —— 特权发布审查备忘录。** 在步骤 5 中组装的完整分析:工作产品标题、结论、按类别的发现及风险理由、行动项、升级、下次注意事项、引用检查。这是内部法律工作产品。将其保留在你的事项文件(Drive、DMS 或 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 所说的审查文档存放位置)中。仅分发给特权圈内的人员。
+**输出 1 —— 特权发布审查备忘录。** 在步骤 5 中组装的完整分析:工作产品标题、结论、按类别的发现及风险理由、行动项、升级、下次注意事项、引用检查。这是内部法律工作产品。将其保留在你的事项文件(Drive、DMS 或 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 所说的审查文档存放位置)中。仅分发给特权圈内的人员。
 
 **输出 2 —— 编辑的工单评论块——可安全发布到跟踪器。** 在备忘录之后,用清晰的 `---` 分隔符和标题 `## 可安全发布到跟踪器(非特权)`,生成一个简短的评论块,仅包含:
 
@@ -258,7 +258,7 @@ Licensed under Apache License 2.0
 
 - 它不替代与 PM 的对话。通常 PRD 是错误的或过时的——审查提出问题,人类会问。
 - 它不批准发布。它为批准提供信息。
-- 它不追溯校准。如果此发布结果良好(或糟糕),并且应该更新校准表,人类更新 ~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md。
+- 它不追溯校准。如果此发布结果良好(或糟糕),并且应该更新校准表,人类更新 ~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

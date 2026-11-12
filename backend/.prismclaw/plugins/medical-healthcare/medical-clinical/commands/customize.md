@@ -10,7 +10,7 @@ customizes: medical-clinical
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`，获取当前自定义配置。
+读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`，获取当前自定义配置。
 
 ## 显示可自定义项
 

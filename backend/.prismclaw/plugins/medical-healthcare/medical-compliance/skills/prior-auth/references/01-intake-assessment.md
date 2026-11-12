@@ -553,7 +553,7 @@ Before completing Subskill 1:
 
 ---
 
-## Notes for Claude
+## Notes for the assistant
 
 ### Implementation Hints
 

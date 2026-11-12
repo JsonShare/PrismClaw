@@ -3,7 +3,7 @@
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径读取配置。不是从这个文件。

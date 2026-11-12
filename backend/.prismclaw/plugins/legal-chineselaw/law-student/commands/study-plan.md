@@ -18,8 +18,8 @@ Licensed under Apache License 2.0
 
 # /study-plan
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 律师考试司法管辖区、考试格式、考试日期、薄弱学科、目标学习小时/天、预备课程。
-2. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/study-plan.yaml`（如果存在）。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 律师考试司法管辖区、考试格式、考试日期、薄弱学科、目标学习小时/天、预备课程。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/study-plan.yaml`（如果存在）。
 3. 应用以下框架。
 4. 按标志路由：
    - `--build`（无计划存在时的默认值）：走一遍输入门控（考试、学科、小时/周、休息日、方法）。构建阶段结构 + 前两周的每日安排。写入 `study-plan.yaml`。
@@ -47,14 +47,14 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md`：
+`~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`：
 - 律师考试司法管辖区、考试格式、考试日期
 - 当前课程（用于非律师考试）
 - 薄弱学科（MBE、论文）
 - 预备课程
 - 目标学习小时/天
 
-`.prismclaw/plugins/legal-chineselaw/law-student/study-plan.yaml`（如果存在）——扩展，不要覆盖。
+`~/.prismclaw/assets/plugins/legal-chineselaw/law-student/study-plan.yaml`（如果存在）——扩展，不要覆盖。
 
 ## 工作流
 
@@ -95,7 +95,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 2.5：补充 vs. 替代（预备课程用户）
 
-如果 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → `Prep course` 是 **Barbri**、**Themis**、**Kaplan** 或任何其他结构化预备课程（即不是 `self` 或 `N/A`），学生已经有预备课程日历。此 skill 的计划必须选择两个角色之一——它不能在预备课程旁边运行完整的平行课程而不让学生筋疲力尽。
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → `Prep course` 是 **Barbri**、**Themis**、**Kaplan** 或任何其他结构化预备课程（即不是 `self` 或 `N/A`），学生已经有预备课程日历。此 skill 的计划必须选择两个角色之一——它不能在预备课程旁边运行完整的平行课程而不让学生筋疲力尽。
 
 询问，一个问题，等待：
 
@@ -134,7 +134,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：写入
 
-写入 `.prismclaw/plugins/legal-chineselaw/law-student/study-plan.yaml`：
+写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/study-plan.yaml`：
 
 ```yaml
 plan_type: bar  # or law-school-exam or semester

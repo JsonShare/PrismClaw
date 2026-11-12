@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。
 2. 加载 `internal-investigation` 参考 skill 并运行模式 2（添加数据）。
 3. 处理后，显示提取比率和提取项目列表。
 4. 如果数据覆盖检查清单项目，提示更新来源检查清单。

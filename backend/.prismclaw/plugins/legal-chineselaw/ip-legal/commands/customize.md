@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`（以及上一层的 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`（以及上一层的 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -46,7 +46,7 @@ Licensed under Apache License 2.0
 - *执法姿态激进 → 中等：* "`/cease-desist` 将为模糊情况提供治愈信草稿作为第一选项，而不是直接发送 C&D。"
 - *新的阻止许可 OSS 许可证：* "`/oss-review` 将使包含此许可证的审查失败，而不是警告。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md` 并说明影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md` 并说明影响范围。修改后保存。
 
 ## 关闭
 

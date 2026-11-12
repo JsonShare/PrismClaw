@@ -23,7 +23,6 @@ from prismclaw.engine.context.microcompact import (
     resolve_microcompact_mode,
 )
 from prismclaw.engine.compression.compaction import estimate_tokens
-from prismclaw.engine.compression.context_zones import resolve_runtime_zones
 from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
 from prismclaw.schema.shared.utils import count_image_parts
 from prismclaw.engine.compression.file_reinjection import (
@@ -382,8 +381,8 @@ class PreRequestPipeline:
                 audit_trail.append({"action": "pruned_replacement_state", "tool_call_id": removed_id})
 
         packed_request = preflight.packed_request if preflight is not None else None
-        # 批 4b-2：为 stream_fn 填充 input_budget（ratio=A_eff 已扣图片；
-        # absolute=window−image_tokens，仅影响钳制与日志，不改 history 预算计算）。
+        # 批 4b-2：为 stream_fn 填充 input_budget
+        # （absolute=window−image_tokens，仅影响钳制与日志，不改 history 预算计算）。
         if packed_request is not None:
             _budget_cfg = deps.config.context.budget
             _image_tokens = 0
@@ -400,29 +399,9 @@ class PreRequestPipeline:
                 _image_tokens = min(_img_n, _cap) * _tpr
             except Exception:
                 _image_tokens = 0
-            if getattr(_budget_cfg, "mode", "absolute") == "ratio":
-                _tools_wire = 0
-                try:
-                    _tools_wire = (
-                        int(deps.tools.wire_tokens_estimate())
-                        if getattr(deps, "tools", None)
-                        else 0
-                    )
-                except Exception:
-                    _tools_wire = 0
-                # 配置错误（窗口低于分区地板）响亮抛出，不做静默回退——
-                # 静默回退会把 input_budget 填成≈整窗，ratio 预算名存实亡。
-                _input_budget = resolve_runtime_zones(
-                    budget=_budget_cfg,
-                    window=getattr(_budget_cfg, "window_tokens", None),
-                    model_max_output=resolve_model_max_output(effective_model),
-                    tools_wire=_tools_wire,
-                    image_tokens=_image_tokens,
-                ).input_budget
-            else:
-                _input_budget = max(
-                    0, int(getattr(_budget_cfg, "window_tokens", 0) or 0) - _image_tokens
-                )
+            _input_budget = max(
+                0, int(getattr(_budget_cfg, "window_tokens", 0) or 0) - _image_tokens
+            )
             packed_request.input_budget = _input_budget
         digest = build_prepared_turn_digest(
             messages_for_llm=packed_request.messages if packed_request is not None else [],

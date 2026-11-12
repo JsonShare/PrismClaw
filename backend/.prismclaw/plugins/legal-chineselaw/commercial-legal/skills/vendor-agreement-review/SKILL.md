@@ -2,7 +2,7 @@
 name: vendor-agreement-review
 name_zh: 供应商协议审查
 description: >
-  参考：依据 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`
+  参考：依据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`
   中的团队剧本，运用三观四步法审查供应商协议。先做宏观（交易结构：合同类型/主体/标的/程序）
   和中观（合同形式），再做微观（三点一线：首部→交易条款→配套条款）逐条审查，
   生成具体红线语言并路由审批人。当 /commercial-legal:review 检测到供应商主服务协议、

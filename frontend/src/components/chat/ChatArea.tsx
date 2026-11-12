@@ -110,6 +110,7 @@ export default function ChatArea({
   const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([])
   const [uploadQueueOpen, setUploadQueueOpen] = useState(false)
   const uploadQueueClearTimerRef = useRef<number | null>(null)
+  const uploadSessionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -309,7 +310,8 @@ export default function ChatArea({
       params.set('workspace_id', workspaceId || 'default')
       const dir = workspaceUploadDir ?? ''
       if (dir) params.set('dir', dir)
-      if (activeConvId) params.set('session_id', activeConvId)
+      const uploadSessionId = activeConvId || uploadSessionIdRef.current
+      if (uploadSessionId) params.set('session_id', uploadSessionId)
       const res = await fetch(
         apiUrl(`/api/files/upload?${params.toString()}`),
         {
@@ -328,9 +330,10 @@ export default function ChatArea({
         skipped: SkippedFile[]
         session_id?: string
       }
-      // 后端自动创建 session_id 时（无 activeConvId 的新对话场景），同步到 store
-      if (!activeConvId && data.session_id) {
-        useSessionStore.getState().setActiveConvId(data.session_id)
+      // 后端自动创建 session_id 时（无 activeConvId 的新对话场景）：仅记住它，
+      // 让本轮后续附件复用同一上传目录；不触碰 activeConvId。
+      if (!activeConvId && !uploadSessionIdRef.current && data.session_id) {
+        uploadSessionIdRef.current = data.session_id
       }
       return { uploaded: data.files ?? [], skipped: data.skipped ?? [] }
     },
@@ -802,6 +805,8 @@ export default function ChatArea({
       void controller.sendMessage(finalText, outgoingAttachments)
       setInput('')
       setPendingAttachments([])
+      // 附件已随本轮发送（或已清空）：上传侧临时 session 不再复用
+      uploadSessionIdRef.current = null
       prefetchAbortRef.current.clear()
       prefetchPromiseRef.current.clear()
       // 滚动权归滚动状态机：发问置顶由 store 里的 pinRequest 指令触发

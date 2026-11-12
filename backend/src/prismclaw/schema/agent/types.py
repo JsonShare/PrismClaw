@@ -52,6 +52,8 @@ class RunRequest:
     user_profile: Any = None
     request_id: str | None = None
     task_id: str | None = None
+    effort: Literal["quick", "standard", "deep"] = "standard"
+    long_running: bool = False
     task_spec: TaskSpec | None = None
     turn_semantics: TurnSemantics | None = None
     task_context_contract: TaskContextContract | None = None

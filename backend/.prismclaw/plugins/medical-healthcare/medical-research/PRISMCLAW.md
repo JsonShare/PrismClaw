@@ -1,5 +1,5 @@
 <!--
-配置位置：~/.prismclaw/plugins/medical-healthcare/medical-research/PRISMCLAW.md
+配置位置：~/.prismclaw/assets/plugins/medical-healthcare/medical-research/PRISMCLAW.md
 -->
 
 # 医学研究执业档案

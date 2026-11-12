@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。
 2. 加载 `internal-investigation` 参考 skill 并运行模式 1（打开）。
 3. 如果具有相同 slug 的事项已存在，在覆盖前发出警告。
 

@@ -12,6 +12,29 @@ from prismclaw.schema.config.config import COMPACT_SUMMARY_DEFAULT_TEMPLATE
 logger = logging.getLogger(__name__)
 
 
+def _strip_md_frontmatter(text: str) -> str:
+    """Strip HTML comment blocks (<!-- ... -->) and YAML frontmatter (--- ... ---)
+    from the head of an md prompt file.  Only strips a single leading block;
+    does not touch inline comments.  Returns the remainder verbatim.
+
+    compact_summary.md uses an HTML comment header for human-readable docs;
+    we don't want that fed to the LLM as part of the prompt.
+    """
+    stripped = text.lstrip()
+    if stripped.startswith("<!--"):
+        end = stripped.find("-->")
+        if end != -1:
+            stripped = stripped[end + 3:].lstrip()
+    elif stripped.startswith("---"):
+        # YAML frontmatter
+        end = stripped.find("\n---", 3)
+        if end == -1:
+            end = stripped.find("---\n", 3)
+        if end != -1:
+            stripped = stripped[end + 4:].lstrip()
+    return stripped
+
+
 # ──────────────────────────── No-Tools Preamble ────────────────────────────
 
 
@@ -171,7 +194,8 @@ def _resolve_prompt_template(
     either inline a string, point to a file, or use the upstream
     default):
 
-    1. ``None`` / empty → ``default`` (in-code constant).
+    1. ``None`` / empty → try ``default_path`` first (single source of
+       truth), fall back to ``default`` if the file is missing.
     2. A multi-line literal (contains a newline) → return as-is.
     3. A single-line token → treat as a path.  Relative paths are
        resolved against ``default_path``'s parent for convenience.
@@ -181,6 +205,13 @@ def _resolve_prompt_template(
     ``config_label`` is used only for diagnostic messages.
     """
     if not template or not isinstance(template, str):
+        # default_path 是单一真相源（R4: compact_summary 模板单份化）
+        try:
+            if default_path.is_file():
+                text = default_path.read_text(encoding="utf-8")
+                return _strip_md_frontmatter(text)
+        except OSError as exc:
+            logger.debug("prompt_template.default_path_failed label=%s err=%s", config_label, exc)
         return default
     # Heuristic: multi-line inputs are always inline.  Single-line
     # inputs: try to read as a filesystem path; on failure, treat
@@ -193,7 +224,7 @@ def _resolve_prompt_template(
     if not candidate.is_absolute():
         candidate = default_path.parent / template
     try:
-        return candidate.read_text(encoding="utf-8")
+        return _strip_md_frontmatter(candidate.read_text(encoding="utf-8"))
     except OSError as exc:
         logger.debug(
             "prompt_template.inline_used label=%s value=%s err=%s",

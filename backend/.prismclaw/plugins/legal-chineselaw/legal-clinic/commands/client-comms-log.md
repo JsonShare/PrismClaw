@@ -20,7 +20,7 @@ Licensed under Apache License 2.0
 1. 使用以下工作流。
 2. 需要 case-id（如果未提供则提示）。
 3. 按标记路由：
-   - `--add`（默认）：捕获方向、媒介、学生、摘要、行动项目、后续到期。与用户确认。追加（最近优先）到 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。
+   - `--add`（默认）：捕获方向、媒介、学生、摘要、行动项目、后续到期。与用户确认。追加（最近优先）到 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。
    - `--read`：显示最近的 N 个条目。
    - `--summary`：一段式压缩阅读。
    - `--patterns`：扫描未回复的沟通、错过的后续、语言差距、语气转变、联系空白。监督导向。
@@ -43,8 +43,8 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`（如果存在）— 追加目标
-- `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 不大量阅读；此 skill 是案件范围的
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`（如果存在）— 追加目标
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 不大量阅读；此 skill 是案件范围的
 
 ## 模式
 
@@ -69,7 +69,7 @@ Licensed under Apache License 2.0
 
 **写入之前：** 向用户显示格式化的条目并请求确认。诊所记录应该在写入之前审查，而不是之后。
 
-**追加**到 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。如果日志不存在，创建它并带有标题：
+**追加**到 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`。如果日志不存在，创建它并带有标题：
 
 ```markdown
 # 沟通日志——[案件名称]

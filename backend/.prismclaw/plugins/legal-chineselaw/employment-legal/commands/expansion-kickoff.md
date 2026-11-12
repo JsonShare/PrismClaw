@@ -21,12 +21,12 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、升级表。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、升级表。
 2. 加载 `international-expansion` 参考 skill 并运行完整工作流。
-3. 如果此省市/国家的追踪器文件已存在（`~/.prismclaw/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml`），
+3. 如果此省市/国家的追踪器文件已存在（`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml`），
    标记它："[省市/国家] 的扩张追踪器已存在。使用
    `/employment-legal:expansion-update [省市/国家]` 来更新它，或确认你想重新开始。"
-4. 完成后创建 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml`。
+4. 完成后创建 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml`。
 
 ## 中国境内省市扩张关注点
 

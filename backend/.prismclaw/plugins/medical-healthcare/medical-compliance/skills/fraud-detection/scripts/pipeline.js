@@ -5,7 +5,7 @@ import { gateFindings } from "./gate.js";
 // then exposure. Output is the canonical referrals.json contract — renderers (dashboard / packet /
 // xlsx) and the narrative agent consume this, never the raw detectors.
 //
-// NOTE: this is a plain deterministic JS module, NOT a Claude Code dynamic Workflow — it makes zero
+// NOTE: this is a plain deterministic JS module, NOT a dynamic Workflow — it makes zero
 // model calls (invariant: math in code, never the model). The only LLM step is the referral
 // narrative in the skill, which runs AFTER this on the returned JSON.
 import { enrollmentAt } from "./reference-data.js";

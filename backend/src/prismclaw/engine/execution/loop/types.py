@@ -100,9 +100,7 @@ class TurnPerf:
 
     # 单调时钟起点（run_loop 首次进入时打点）
     started_at: float = 0.0
-    # 本回合经过的迭代数（while 顶部计数，含被 continue 跳过的纯文本回合）
-    iterations: int = 0
-    # 实际发生的 LLM 调用数（含重试/失败重发）
+    # 实际发生的 LLM 调用数（含重试/失败重发），同时作为步数真值
     llm_calls: int = 0
     # 实际执行的工具调用数（不含被 before_tool_call 拦截的）
     tool_calls: int = 0

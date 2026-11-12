@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /cold-call-prep
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 课程列表、教授、学习风格。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 课程列表、教授、学习风格。
 2. 应用以下工作流。
 3. 识别阅读材料（案例名称 + 引用、教授、课程、教学大纲上下文）。
 4. 跨类别预测 6-10 个可能的问题（事实/裁决/推理/应用/政策），加权到教授的已知倾向。
@@ -48,7 +48,7 @@ Cold-calling 成败取决于准备。教授已经阅读案例数十次并且知�
 
 ## 加载上下文
 
-- `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、教授、学习风格
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、教授、学习风格
 - 用户提供的：案例名称 / 案例文本 / 案例书页面 / 阅读清单
 
 ## 工作流
@@ -56,7 +56,7 @@ Cold-calling 成败取决于准备。教授已经阅读案例数十次并且知�
 ### 步骤 1：识别阅读材料 + 教授
 
 - 案例名称和引用
-- 教授（来自 .prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md 课程列表——语气和重点因教授而异）
+- 教授（来自 ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md 课程列表——语气和重点因教授而异）
 - 课程 / 学科领域
 - 此案例在教学大纲中的位置（用于上下文——这是主题上的第一个案例，缩小案例，还是反例？）
 
@@ -88,7 +88,7 @@ Cold-calling 成败取决于准备。教授已经阅读案例数十次并且知�
 - 法院保护的政策是什么？
 - 这个规则有意义吗？替代方法？
 
-**教授特定风格（来自 .prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md 笔记）：**
+**教授特定风格（来自 ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md 笔记）：**
 - 如果教授以假设繁重的 calls 闻名，加权应用/假设问题
 - 如果政策繁重，加权政策/理论
 - 如果事实繁重的苏格拉底式（Paper Chase 风格），加权事实 + 裁决
@@ -137,7 +137,7 @@ Cold-calling 成败取决于准备。教授已经阅读案例数十次并且知�
 - **成为教授。** 实际的 cold-call 可以去任何地方。此 skill 预测模式；教授会有惊喜。
 - **替代阅读案例。** 如果你还没读它，skill 无法帮助你——问题需要你已吸收的文本。
 - **不先问你案例的裁决就给你。** Drill-me 模式：我问，你回答。
-- **预测司法管辖区特定的细分问题。** 如果教授有已知的爱好，在 .prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md 课程笔记中捕获它们，skill 可以相应加权；否则，它从一般模式工作。
+- **预测司法管辖区特定的细分问题。** 如果教授有已知的爱好，在 ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md 课程笔记中捕获它们，skill 可以相应加权；否则，它从一般模式工作。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

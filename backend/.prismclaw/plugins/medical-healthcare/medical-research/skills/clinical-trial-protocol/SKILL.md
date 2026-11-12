@@ -90,8 +90,8 @@ scripts/
 ### 1. clinical trials MCP Server (Required)
 
 **Installation:**
-- Install via drag-and-drop `.mcpb` file into Claude Desktop
-- Or configure manually in Claude Desktop settings
+- The server is declared in the plugin's MCP config; PrismClaw prompts for authorization on first use
+- Or add the same server entry manually to your MCP settings
 
 **Available Tools:**
 `search_clinical_trials` - Search by:

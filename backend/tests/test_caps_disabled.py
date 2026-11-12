@@ -24,22 +24,21 @@ def _guard(max_iterations: int) -> BudgetGuard:
         max_iterations=max_iterations,
         run_deadline_s=0.0,
         run_started=0.0,
-        max_usd=None,
     ))
 
 
 def test_budget_zero_max_iterations_never_fires():
     guard = _guard(0)
     for it in (0, 1, 150, 9999):
-        assert guard.check(iteration=it, usd_cost=0.0) is None, (
+        assert guard.check(iteration=it) is None, (
             f"max_iterations=0 wrongly fired at iteration {it}"
         )
 
 
 def test_budget_positive_max_iterations_still_fires():
     guard = _guard(5)
-    assert guard.check(iteration=4, usd_cost=0.0) is None
-    assert guard.check(iteration=5, usd_cost=0.0) == "budget_iterations"
+    assert guard.check(iteration=4) is None
+    assert guard.check(iteration=5) == "budget_iterations"
 
 
 def test_remaining_run_seconds_zero_disables():
@@ -49,19 +48,17 @@ def test_remaining_run_seconds_zero_disables():
     assert remaining_run_seconds(3600.0, started) > 3500
 
 
-def test_agent_config_caps_disabled():
+def test_agent_config_effort_tiers_present():
+    """预算上限已由 effort 档位取代 max_iterations/run_seconds。"""
     cfg = load_document(_AGENT_CONFIG)
     agent = cfg["agent"]
-    assert agent["max_iterations"] == 0, "max_iterations 应为 0（禁用）"
-    assert agent["timeouts"]["run_seconds"] == 0.0, "run_seconds 应为 0.0（禁用）"
-
-
-def test_agent_config_layer3_ceiling_configured():
-    """第 3 层天花板在配置中就位：max_budget_usd + 费率。"""
-    cfg = load_document(_AGENT_CONFIG)
-    agent = cfg["agent"]
-    assert agent["max_budget_usd"] is not None and agent["max_budget_usd"] > 0
-    pricing = agent["budget_pricing"]
-    assert pricing["input_per_mtok"] > 0 and pricing["output_per_mtok"] > 0
+    assert "max_iterations" not in agent, "max_iterations 已由 effort 档位取代"
+    assert "run_seconds" not in agent["timeouts"], "run_seconds 已由 effort.hard_s 取代"
+    effort = agent["effort"]
+    for tier in ("quick", "standard", "deep"):
+        assert effort[tier]["steps"] > 0
+        assert effort[tier]["tool_calls"] > 0
+        assert effort[tier]["hard_s"] > 0
+        assert effort[tier]["soft_s"] <= effort[tier]["hard_s"]
 
 

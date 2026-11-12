@@ -18,7 +18,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 ✗（内部用户的默认设置），跳过此段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："Which matter is this for? Run `/commercial-legal:matter-workspace switch <slug>` or say `practice-level`." 加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 是 on，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 是 ✗（内部用户的默认设置），跳过此段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："Which matter is this for? Run `/commercial-legal:matter-workspace switch <slug>` or say `practice-level`." 加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 是 on，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -36,7 +36,7 @@ Licensed under Apache License 2.0
 
 ## 受众校准
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## House style` → 谁阅读利益相关者摘要，它们应该有多长。如果未指定，默认：采购或部门负责人，最多两段，无法律术语。
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## House style` → 谁阅读利益相关者摘要，它们应该有多长。如果未指定，默认：采购或部门负责人，最多两段，无法律术语。
 
 不同的受众需要不同的摘要：
 
@@ -72,7 +72,7 @@ Licensed under Apache License 2.0
 
 ### 格式
 
-前置来自 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` `## Outputs` 的工作产品标题（它因用户角色而异——请参阅 `## Who's using this`）。
+前置来自 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` `## Outputs` 的工作产品标题（它因用户角色而异——请参阅 `## Who's using this`）。
 
 ```markdown
 [WORK-PRODUCT HEADER — per plugin config ## Outputs]

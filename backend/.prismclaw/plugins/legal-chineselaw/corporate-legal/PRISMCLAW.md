@@ -9,19 +9,18 @@ Licensed under Apache License 2.0
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径读取配置。不是从这个文件。
 2. 如果该文件不存在或仍包含 [PLACEHOLDER] 标记，在进行实质性工作之前停止。说："这个 plugin 需要先设置才能给你有用的输出。运行 /corporate-legal:cold-start-interview——大约需要 10-15 分钟，这个 plugin 中的每个命令都依赖它。没有它，输出将是通用的，可能与你的执业实际工作方式不匹配。"不要使用占位符或默认配置继续。无需设置即可运行的唯一 skills 是 /corporate-legal:cold-start-interview 本身以及任何 --check-integrations 标志。
 3. 设置和 cold-start-interview 写入该路径，根据需要创建父目录。
 4. 在 plugin 更新后的首次运行时，如果在旧缓存路径中存在已填充的 PRISMCLAW.md
-   (~/.prismclaw/plugins/cache/legal-chineselaw/corporate-legal/<version>/PRISMCLAW.md 对于任何版本)
    但在配置路径中不存在，则先将其复制到配置路径，然后再继续。
 5. 这个文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示
    配置应具有的结构。每次 plugin 更新时都会替换它。永远不要在这里写入用户数据。
 
-**共享公司档案。** 公司级事实（你是谁、你做什么、你在哪里运营、你的风险姿态、关键人物）位于 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`——在此文件上方一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前先阅读它。如果它不存在，此 plugin 的设置将创建它。
+**共享公司档案。** 公司级事实（你是谁、你做什么、你在哪里运营、你的风险姿态、关键人物）位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`——在此文件上方一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前先阅读它。如果它不存在，此 plugin 的设置将创建它。
 -->
 
 # 公司执业档案
@@ -57,7 +56,7 @@ Licensed under Apache License 2.0
 - ⚠️ 审阅者备注：保留（它是审阅者在依赖可交付成果之前找到所需内容的一个位置）
 - 来源归因标记：保留内联但合并（脚注或尾注对于干净的可交付成果是可以的）
 - Skill 适合叙述（"我正在使用 X skill，它通常……"）：删除
-- Plugin 命令交接（"接下来运行 /plugin:other-command……"）：从可交付成果中删除；放在单独的审阅者备注中
+- Plugin 命令交接（"接下来运行另一个插件的命令……"）：从可交付成果中删除；放在单独的审阅者备注中
 - "我阅读了以下文件……"：删除
 
 可交付成果应该读起来像是合伙人写的。元评论放在标题上方的审阅者备注中或单独的消息中，而不是文档中。
@@ -66,7 +65,7 @@ Licensed under Apache License 2.0
 
 | 集成 | 状态 | 不可用时的备用方案 |
 |---|---|---|
-| 数据室（企业协作/坚果云/Box私有化/国内VDR） | [✓ / ✗] | 尽调从本地文件夹拉取；用户将文档放入 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/deals/[code]/vdr-mirror/` |
+| 数据室（企业协作/坚果云/Box私有化/国内VDR） | [✓ / ✗] | 尽调从本地文件夹拉取；用户将文档放入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/vdr-mirror/` |
 | 董事会门户（企业协作云文档/钉钉智能文档/企业微信） | [✓ / ✗] | 会议纪要/决议从本地模板工作；无门户发布 |
 | 文档存储（企业协作云文档/钉钉文档/企业微信） | [✓ / ✗] | 阅读本地路径；无跨系统搜索 |
 | 即时通讯（企业协作/钉钉/企业微信） | [✓ / ✗] | 简报仅作为文件发出；无频道内摘要 |
@@ -125,7 +124,7 @@ Licensed under Apache License 2.0
 
 **数据密集型输出的仪表板提议。** 当输出是数据密集的——超过约 10 行表格数据，或任何带有严重性、状态或日期列的投资组合 / 登记册 / 跟踪器 / 清单 / 发现列表——提供可视化仪表板。不要未经提示构建它（仪表板会增加用户可能不想要的权重），但要使提议具体并靠近决策树顶部：
 
-> 📊 **将其视为仪表板？** 我将构建一个交互式视图，包含：摘要统计（按严重性/状态计数）、彩色编码的可排序表格、显示数据形状的图表（风险分布、类别细分或合适的时间线），以及结转的审阅者备注。在 Cowork 中，这会内联渲染。在 PrismClaw 中，我将写入 HTML 文件到 [outputs folder]，你可以在浏览器中打开它。如果你需要将其带入会议，我也可以生成 Excel。
+> 📊 **将其视为仪表板？** 我将构建一个交互式视图，包含：摘要统计（按严重性/状态计数）、彩色编码的可排序表格、显示数据形状的图表（风险分布、类别细分或合适的时间线），以及结转的审阅者备注。在 PrismClaw 中，我将 HTML 文件写入 [outputs 文件夹]，你可以在浏览器中打开它。如果你需要将其带入会议，我也可以生成 Excel。
 
 **仪表板格式是标准化的**——不要即兴创作。请参阅 plugin 根目录中的 `references/dashboard-template.md` 模板。保持简单：顶部的摘要统计、一个表格、最多一两个图表。构建需要 2 分钟、理解需要 30 秒的仪表板胜过构建需要 10 分钟、理解需要 2 分钟的仪表板。摘要统计行是最有价值的部分——律师应该在 3 秒内知道"40 个发现，3 个阻塞，6 个本周到期"。
 
@@ -277,7 +276,7 @@ Licensed under Apache License 2.0
 
 **文件访问失败。** 当你无法阅读用户指向你的文件时，不要静默失败。说明发生了什么："我无法阅读 [path]。这通常意味着：(a) plugin 是按项目范围安装的，并且文件在 [project dir] 之外——按用户范围重新安装或将文件移动到这里；(b) 路径有错别字；(c) 文件是我无法阅读的格式。你能直接粘贴内容吗，或者尝试其中一个修复方法？"静默的文件读取失败看起来像是 plugin 忽略了用户的材料。
 
-**验证日志。** 当你或用户验证标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规验证阈值——记录它，以便下一个人不会重新验证。向 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/verification-log.md` 写一行：
+**验证日志。** 当你或用户验证标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规验证阈值——记录它，以便下一个人不会重新验证。向 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/verification-log.md` 写一行：
 
 `[YYYY-MM-DD] [cite or fact] verified by [name] against [source] — [verdict: confirmed / corrected to X / could not verify]`
 
@@ -300,7 +299,7 @@ Plugin 的工作是让 PrismClaw 在法律工作上做得更好，而不是将�
 
 ## 此领域的临时问题
 
-当用户在此 plugin 的执业领域问问题时——不仅仅是当他们调用 skill 时——首先阅读 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（和 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`）中的执业档案，并应用它。如果它已填充，作为配置的助手回答：
+当用户在此 plugin 的执业领域问问题时——不仅仅是当他们调用 skill 时——首先阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（和 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`）中的执业档案，并应用它。如果它已填充，作为配置的助手回答：
 
 - 使用他们的司法管辖区范围、风险姿态、剧本立场和升级链
 - 即使没有 skill 在运行，应用护栏：来源归因、引用卫生、司法管辖区识别、决策姿态、审阅者备注格式
@@ -375,7 +374,7 @@ Plugin 的工作是让 PrismClaw 在法律工作上做得更好，而不是将�
 
 对于私人执业中的 corporate-legal，"事项"通常是交易（M&A 交易、融资轮、董事会事项）或离散工作流（实体重组、集成项目）。
 
-当事项工作区已启用时，skills 在活跃事项的上下文中工作。Skills 阅读此执业级 PRISMCLAW.md 以获取执业档案级规则（内部风格、重要性阈值、模块选择），并阅读事项的 `matter.md` 以获取事项特定事实和覆盖。输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。
+当事项工作区已启用时，skills 在活跃事项的上下文中工作。Skills 阅读此执业级 PRISMCLAW.md 以获取执业档案级规则（内部风格、重要性阈值、模块选择），并阅读事项的 `matter.md` 以获取事项特定事实和覆盖。输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。
 
 当跨事项上下文关闭（默认）时，在事项 A 中工作的 skill 永远不会阅读事项 B 的文件。应该跨事项携带的知识写入此执业级 PRISMCLAW.md，而不是事项文件夹。
 
@@ -536,7 +535,7 @@ Plugin 的工作是让 PrismClaw 在法律工作上做得更好，而不是将�
 **内部公司协议已到位：** [PLACEHOLDER — 是 / 否 / 部分]
 **子公司治理节奏：** [PLACEHOLDER — 子公司董事会多久召开一次（如果有）]
 
-**合规跟踪器：** `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`
+**合规跟踪器：** `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/entities/compliance-tracker.yaml`
 **上次合规报告：** [PLACEHOLDER — 日期或无]
 **上次健康审计：** [PLACEHOLDER — 日期或无]
 

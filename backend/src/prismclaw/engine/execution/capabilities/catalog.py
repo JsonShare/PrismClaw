@@ -27,7 +27,7 @@ class SkillCatalogEntry:
     origin: str | None = None
     # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
     marketplace_name: str | None = None
-    # v5 渐进式披露：marketplace / 插件级描述（来自 marketplace.json description）
+    # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
     marketplace_description: str | None = None
     # 子插件级描述（来自子插件自身 manifest description）
     plugin_description: str | None = None

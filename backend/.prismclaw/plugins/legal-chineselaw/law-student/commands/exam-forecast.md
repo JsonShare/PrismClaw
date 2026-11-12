@@ -17,13 +17,13 @@ Licensed under Apache License 2.0
 
 # /exam-forecast
 
-1. 加载 `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → class、professor、exam format、syllabus。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → class、professor、exam format、syllabus。
 2. 应用以下工作流。
 3. 接收过去考试（PDF、粘贴或路径）。确认样本量。
 4. 分析每次过去考试：格式、学科覆盖、问题风格、事实模式密度、反复出现的陷阱。
 5. 跨考试模式分析——什么是稳定的，什么是变化的。
 6. 结合当前教学大纲生成预测：学科权重、格式、爱好、学习重点。
-7. 编写 `.prismclaw/plugins/legal-chineselaw/law-student/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。构建为加权启发式，而不是预测。
+7. 编写 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。构建为加权启发式，而不是预测。
 
 ---
 
@@ -42,7 +42,7 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `.prismclaw/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、考试格式、教学大纲（如果捕获）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、考试格式、教学大纲（如果捕获）
 - 用户提供的过去考试（PDF、粘贴文本、路径）
 - Optional：当前课程的教学大纲（用于"迄今为止涵盖的内容"）
 
@@ -149,7 +149,7 @@ STUDY NOTES — NOT LEGAL ADVICE
 
 ### Step 5: Output location
 
-写入 `.prismclaw/plugins/legal-chineselaw/law-student/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。版本控制——如果学生在学期中获得另一次过去考试，重新运行并附加。
+写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。版本控制——如果学生在学期中获得另一次过去考试，重新运行并附加。
 
 ## Integration
 

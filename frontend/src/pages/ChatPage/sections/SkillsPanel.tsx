@@ -237,7 +237,7 @@ const GENERIC_PLUGIN_ROOTS = new Set(['plugins', 'skills', '.prismclaw', '.claud
  * 从技能的 location（绝对路径，形如 .../{marketplace}/{plugin}/skills/{skill}/SKILL.md）
  * 推导其所属的插件市场目录（外层分组，如 "legal-chineselaw"）。
  *
- * marketplace.json 形式的插件目录结构为 `.prismclaw/plugins/{marketplace}/{plugin}/skills/...`，
+ * 市场清单形式的插件目录结构为 `.prismclaw/assets/plugins/{marketplace}/{plugin}/skills/...`，
  * 故取「插件同名目录」上一级作为市场目录；若上一级是通用根目录（直接扫描安装的非市场插件），
  * 则返回 null（视为无外层分组）。
  */

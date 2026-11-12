@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /research-start
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 司法管辖区、执业领域。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 司法管辖区、执业领域。
 2. 使用以下工作流。
 3. 具体构建问题。构建路线图：法规起点（未验证）、案例法领域（不是案例）、次要来源、搜索词。
 4. 如果学生上传了已有研究：综合并识别差距。
@@ -41,7 +41,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 司法管辖区（州）、执业领域。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 司法管辖区（州）、执业领域。
 
 ## 工作流
 
@@ -49,7 +49,7 @@ Licensed under Apache License 2.0
 
 **在构建路线图之前，阅读诊所自己的种子文档。** 督导律师在冷启动时上传了它们（手册、提交指南、本地法院规则、接案表单、示例案件文件）——它们是预先审查的、特定于司法管辖区的，将击败学生研究前 20 分钟的任何 Westlaw 查询。
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → `## 种子文档`。识别任何目的或文件名与研究领域匹配的项目（例如，针对 UD 可居住性问题的"Alameda UD 提交指南"；同一执业领域的脱敏示例案件文件；同一问题的先前备忘录）。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → `## 种子文档`。识别任何目的或文件名与研究领域匹配的项目（例如，针对 UD 可居住性问题的"Alameda UD 提交指南"；同一执业领域的脱敏示例案件文件；同一问题的先前备忘录）。
 2. 对于每个匹配，在路线图输出顶部将其展示为**先阅读的种子文档**块。命名文件，说明为什么对此具体问题重要，以及它可能覆盖什么 vs. 仍然需要外部研究的地方。
 3. 如果没有种子文档匹配问题，明确说明（"没有诊所种子文档匹配此问题——直接进入主要来源"）。不要捏造匹配。
 4. 如果诊所在 `## 种子文档` 中设置了 `LIMITED DATA` 标记，添加一行注释："诊所种子文档少于 10 份；您教授的先例库很薄——更依赖主要来源并向您的督导标记缺失内容。"

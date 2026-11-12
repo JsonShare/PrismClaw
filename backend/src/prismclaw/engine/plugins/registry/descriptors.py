@@ -59,7 +59,7 @@ class PluginDescriptor(BaseDescriptor):
     explicitly_configured: bool = False
     # v5 渐进式披露：所属 marketplace 名称
     marketplace_name: str | None = None
-    # v5 渐进式披露：marketplace / 插件级描述（来自 marketplace.json description）
+    # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
     marketplace_description: str | None = None
     # 子插件级描述（来自子插件自身 manifest description），与包级描述分层
     plugin_description: str | None = None
@@ -82,7 +82,7 @@ class SkillDescriptor(BaseDescriptor):
     # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
     # 用于系统提示词按包名聚合展示插件技能。
     marketplace_name: str | None = None
-    # v5 渐进式披露：marketplace / 插件级描述（来自 marketplace.json description）
+    # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
     marketplace_description: str | None = None
     # 子插件级描述（来自子插件自身 manifest description），与包级描述分层
     plugin_description: str | None = None

@@ -5,13 +5,13 @@ import {
   Clock3,
   Clock,
   Wrench,
-  Bot,
   Download,
   X,
 } from 'lucide-react'
 import { FilePreviewWithReview } from '../../components/file/FilePreviewWithReview'
 import FileIcon from '../../components/file/FileIcon'
-import type { FileChange, ToolCallInfo } from '../../types'
+import { SubagentTree } from '../../components/chat/SubagentTree'
+import type { FileChange, SubagentPanelItem, ToolCallInfo } from '../../types'
 import type { JSONContent } from '@tiptap/core'
 import iconOpen from '../../images/other_icon/open.png'
 
@@ -19,13 +19,6 @@ interface TaskRuntimeSummary {
   title: string
   subtitle: string
   icon: 'streaming' | 'finalizing'
-}
-
-interface RunningSubagent {
-  sub_session_id: string
-  subagent_name: string
-  current_tool: string | null
-  partial_status?: string
 }
 
 interface ReviewHandlers {
@@ -59,7 +52,7 @@ interface ChatRightPanelProps {
   setRightCallsOpen: (v: boolean | ((prev: boolean) => boolean)) => void
   rightTrajectoryOpen: boolean
   setRightTrajectoryOpen: (v: boolean | ((prev: boolean) => boolean)) => void
-  runningSubagentsForPanel: RunningSubagent[]
+  subagentsForPanel: SubagentPanelItem[]
   runningToolCallsForPanel: ToolCallInfo[]
   isStreaming: boolean
   isQueued: boolean
@@ -162,7 +155,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
               </button>
               {props.rightProcessOpen && (
                 <div className={rightRailBodyClass}>
-                  {props.runningSubagentsForPanel.length === 0 && props.runningToolCallsForPanel.length === 0 && !props.isStreaming && !props.isQueued && !props.liveTaskRuntime ? (
+                  {props.subagentsForPanel.length === 0 && props.runningToolCallsForPanel.length === 0 && !props.isStreaming && !props.isQueued && !props.liveTaskRuntime ? (
                     <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed opacity-60">
                       查看任务的运行状态
                     </div>
@@ -201,40 +194,32 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
                           </div>
                         </div>
                       )}
-                      {props.runningToolCallsForPanel.slice(0, 4).map((tc) => (
-                        <div key={tc.id} className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-                            {tc.progressPhase === 'waiting_approval' ? (
-                              <Clock size={13} className="text-[var(--c-icon-soft-blue)]" />
-                            ) : (
-                              <Wrench size={13} className="text-[var(--c-accent)]" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)] truncate">
-                              {tc.name}
+                      {/* sub_agent 这一行由下方 SubagentTree 承载，避免同一批执行出现两次 */}
+                      {props.runningToolCallsForPanel
+                        .filter((tc) => !(props.subagentsForPanel.length > 0 && tc.name === 'sub_agent'))
+                        .slice(0, 4)
+                        .map((tc) => (
+                          <div key={tc.id} className="flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
+                              {tc.progressPhase === 'waiting_approval' ? (
+                                <Clock size={13} className="text-[var(--c-icon-soft-blue)]" />
+                              ) : (
+                                <Wrench size={13} className="text-[var(--c-accent)]" />
+                              )}
                             </div>
-                            <div className="mt-0.5 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]/66 truncate">
-                              {props.formatToolProgressText(tc)}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {props.runningSubagentsForPanel.slice(0, 6).map((s) => (
-                        <div key={s.sub_session_id} className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full">
-                            <Bot size={13} className="text-[var(--c-text-secondary)]" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)] truncate">
-                              {s.subagent_name}
-                            </div>
-                            <div className="mt-0.5 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]/66 truncate">
-                              {s.current_tool ? s.current_tool : '运行中'}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)] truncate">
+                                {tc.name}
+                              </div>
+                              <div className="mt-0.5 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]/66 truncate">
+                                {props.formatToolProgressText(tc)}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      {props.subagentsForPanel.length > 0 && (
+                        <SubagentTree items={props.subagentsForPanel} />
+                      )}
                     </div>
                   )}
                 </div>

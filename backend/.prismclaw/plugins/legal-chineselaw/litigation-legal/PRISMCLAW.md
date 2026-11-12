@@ -10,18 +10,17 @@ Licensed under Apache License 2.0
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径 READ 配置。不是从此文件。
 2. 如果该文件不存在或仍包含 [PLACEHOLDER] 标记，在进行实质性工作前 STOP。说："This plugin needs setup before it can give you useful output. Run /litigation-legal:cold-start-interview — it takes about 10-15 minutes and every command in this plugin depends on it. Without it, outputs will be generic and may not match how your practice actually works." 不要继续使用占位符或默认配置。唯一无需设置即可运行的 skill 是 /litigation-legal:cold-start-interview 本身和任何 --check-integrations 标志。
 3. 设置和冷启动访谈 WRITE 到该路径，根据需要创建父目录。
 4. 在 plugin 更新后的首次运行时，如果旧缓存路径
-   (~/.prismclaw/plugins/cache/legal-chineselaw/litigation-legal/<version>/PRISMCLAW.md 适用于任何版本)
    存在已填充的 PRISMCLAW.md，但配置路径不存在，则在继续前将其复制到配置路径。
 5. 此文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示配置应具有的结构。每次 plugin 更新时它都会被替换。永远不要在此处写入用户数据。
 
-**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
+**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
 -->
 
 # 诉讼执业档案
@@ -211,7 +210,7 @@ Licensed under Apache License 2.0
 
 **文件访问失败。** 当你无法阅读用户指向你的文件时，不要静默失败。
 
-**验证日志。** 当你或用户验证标记项时，记录它，以便下一个人不会重新验证。向 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/verification-log.md` 写一行：
+**验证日志。** 当你或用户验证标记项时，记录它，以便下一个人不会重新验证。向 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/verification-log.md` 写一行：
 
 `[YYYY-MM-DD] [cite or fact] verified by [name] against [source] — [verdict: confirmed / corrected to X / could not verify]`
 

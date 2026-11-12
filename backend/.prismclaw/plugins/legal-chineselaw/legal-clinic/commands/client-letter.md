@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /client-letter
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 平实语言标准、督导方式、诊所联系信息。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 平实语言标准、督导方式、诊所联系信息。
 2. 使用以下模板和工作流。
 3. 将类型匹配到模板。平实语言检查。
 4. 输出带有 AI 辅助标签、督导路由。
@@ -44,11 +44,11 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 平实语言标准、督导方式、诊所联系信息。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 平实语言标准、督导方式、诊所联系信息。
 
 ## 教育学检查
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 中此执业领域的督导指南。检查 `pedagogy_posture` 设置：
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 中此执业领域的督导指南。检查 `pedagogy_posture` 设置：
 
 - **`guide`（默认）：** 产生结构和检查清单（必要元素、平实语言目标、按学生实践规则的签字）。要求学生起草每个部分。对他们的草稿给出反馈（语域、阅读水平、必要元素、他们遗漏的内容）。只有当学生尝试过一次时才提议填写一个部分。
 - **`assist`：** 产生信函。标记需要学生审查的项目。学生通过审查进行编辑和学习。
@@ -141,11 +141,11 @@ Licensed under Apache License 2.0
 
 ## 发送前
 
-向客户发送信函是一个有后果的行动。此插件的门槛是 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## 督导方式` 描述的督导工作流，由确认许可的督导律师拥有诊所设置的第 0 部分角色检查加强。该门槛仍然有效：每封信在离开诊所之前都需要通过审查。
+向客户发送信函是一个有后果的行动。此插件的门槛是 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中 `## 督导方式` 描述的督导工作流，由确认许可的督导律师拥有诊所设置的第 0 部分角色检查加强。该门槛仍然有效：每封信在离开诊所之前都需要通过审查。
 
 在发送上述任何信件之前，确认：
 
-1. 草稿已按照 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中的督导协议审查（队列 / 标记 / 更轻触）。
+1. 草稿已按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中的督导协议审查（队列 / 标记 / 更轻触）。
 2. 所有内部审查标签（`[AI-ASSISTED DRAFT]`、任何 `[VERIFY]` 或 `[FACT NEEDED]` 标签）已从面向客户的副本中删除。
 3. 签字符合您所在司法管辖区法律学生签署信函的学生实践规则。
 
@@ -153,11 +153,11 @@ Licensed under Apache License 2.0
 
 ## 平实语言检查
 
-按照 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 标准。短句。无行话。强制阅读水平目标。如果上面模板中包含客户可能不理解的法律术语，第一次使用时解释："我们提交了您的'答复'——那是告诉法院您一方的文件。"
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 标准。短句。无行话。强制阅读水平目标。如果上面模板中包含客户可能不理解的法律术语，第一次使用时解释："我们提交了您的'答复'——那是告诉法院您一方的文件。"
 
 ## 督导路由
 
-按照 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`。常规信函是否是标记触发器取决于教授选择的督导方式。如果是更轻触：这些在学生审查后发出，没有队列步骤。如果是正式审查队列：甚至常规信函也要排队。
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`。常规信函是否是标记触发器取决于教授选择的督导方式。如果是更轻触：这些在学生审查后发出，没有队列步骤。如果是正式审查队列：甚至常规信函也要排队。
 
 ## 此 skill 不做什么
 

@@ -28,9 +28,10 @@ This is **single-user, local-only**:
 Contract text is untrusted input. The design keeps the blast radius structural, not behavioral:
 
 - **The skill only uses Read, Grep, and SearchCodebase** — read-only tools that cannot modify files or make network requests.
-- **Citations are verified against the source** — every claim references a specific file and section, and the user can verify by reading the same file.
+- **Citations are checked deterministically** — before the answer is written, `scripts/verify_citations.py` requires every quote to be a verbatim substring of the source file (normalizing only whitespace, quotes, and dashes). Quotes that fail are blocked from the answer rather than softened into paraphrase.
 - **Don't run this on a corpus you don't trust.**
 
 ## How it's built
 
 - `SKILL.md` — the whole flow in one file: bootstrap, plan (with the one confirmation pause), scope, read, and the chat answer. **This is the file to read or edit to understand or change run behavior.**
+- `scripts/verify_citations.py` — stdlib-only citation checker: `python scripts/verify_citations.py --quotes quotes.json --docs-dir <contracts folder>`. Statuses are `exact` / `missing` / `unverifiable`; exit code 1 when any quote is missing. PDF/Word corpora: extract text first and point `--docs-dir` at the extracted folder (matching falls back to the filename stem).

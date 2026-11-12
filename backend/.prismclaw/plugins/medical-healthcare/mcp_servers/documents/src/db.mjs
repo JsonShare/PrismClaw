@@ -9,7 +9,7 @@ const schemaSql = readFileSync(new URL("../schema.sql", import.meta.url), "utf8"
 // ---------------------------------------------------------------------------
 
 // Plugin-wide convention: $PRISMCLAW_HEALTHCARE_DATA overrides the parent dir;
-// each component appends its own name (see plugins/healthcare/CLAUDE.md).
+// each component appends its own name.
 const DATA_ROOT =
   process.env.PRISMCLAW_HEALTHCARE_DATA ??
   join(process.env.HOME ?? ".", ".prismclaw", "data", "healthcare");
@@ -76,7 +76,7 @@ const ADDITIVE_COLUMNS = [
 // has to delete the file.
 //
 // Probe and apply run as ONE immediate transaction: every client (each
-// Desktop window, the Cowork device bridge, every CLI session) spawns its own
+// Desktop window, the desktop device bridge, every CLI session) spawns its own
 // server process against this shared file, often within the same millisecond;
 // unserialized, the DROP/CREATE pairs race ("view already exists") and the
 // version probe can read another process's half-applied state and misdiagnose

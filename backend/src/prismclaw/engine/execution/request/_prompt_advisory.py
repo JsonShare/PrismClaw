@@ -8,6 +8,18 @@ from prismclaw.engine.execution.handoff.contract import (
 from prismclaw.engine.execution.request._disclaimer_registry import get_advisory_rules
 from prismclaw.engine.execution.request._prompt_types import PromptInputs, _wrap_xml
 
+# ── 边界声明 ──────────────────────────────────────────────────────────
+#
+# 本模块的 advisory 文本是给 **主 agent** 看的——指导主 agent 如何
+# 编排/派发 subagent，不是 subagent 自己的 system prompt。
+#
+# subagent 的身份/角色/能力描述由 .prismclaw/agents/*.md manifest
+# 定义（L4 层），运行时由 compose_subagent_system_prompt 拼装。
+# 本模块不参与 subagent prompt 的组装。
+#
+# handoff contract（handoff_request_marker_contract_summary）是协议层
+# 的序列化格式说明，不是 prompt 文本，单独归类。
+
 
 def _looks_like_chinese(text: str | None) -> bool:
     if not text:
@@ -39,39 +51,32 @@ def _looks_like_english(text: str | None) -> bool:
     return letters >= 6 or (letters / non_space) >= 0.3
 
 
-_SUBAGENT_CORE_TEXT = """\
-## 子代理并行分发
+_SUBAGENT_ORCHESTRATION_ADVISORY = """\
+## 子代理编排
 
-仅在需要并行调研、独立审查，或工作量超出当前上下文时使用子代理。
-不要为简单修改或直接命令而创建子代理。
-子代理彼此隔离：必须显式传入全部必要上下文，再把多个结果压缩成单条消息。
+子代理仅用于并行调研、独立审查或大上下文任务；不要为简单修改创建。
+子代理彼此隔离，结果用 `reduce_subagent_results` 合并。
 
-## 编排模式
+### 编排模式
 
-1. **并行检索**：派发 2–4 个 `researcher`，各自负责互不重叠的范围（不同文件路径、关键词或领域）。每个子代理在独立模型实例上运行。
-2. **迭代细化**：researcher 结果返回后，检查其输出中的 `open_questions`。若非空，再派发 `researcher` 针对这些缺口补充调研。此前发现会通过 `context_snapshot.key_findings` 自动传递——不要在任务描述中重复。
-3. **规划-执行-验证**：调研充分后，先派发 `architect` 做规划，再由 `builder` 执行，最后由 `auditor` 验证。每一步都接收前一步的输出。
-4. **合并并行结果**：使用 `reduce_subagent_results` 并指定策略 `merge_envelopes`，合并多个 researcher 的输出（会去重 findings 与 open_questions）。
-5. **你是编排者**：当子代理返回 [HANDOFF_REQUEST] 时，评估应当派发建议的代理还是自行处理。不要机械转发——要结合当前任务上下文理解并决策。
+1. **并行检索**：派发 2–4 个 `researcher`，各负责互不重叠的范围；必要时检查 `open_questions` 再派发补充。
+2. **规划-执行-验证**：调研充分后，`architect`（规划）→ `builder`（执行）→ `auditor`（验证），每步接收前一步输出。
+3. **你是编排者**：收到 [HANDOFF_REQUEST] 时，评估是否派发建议代理或自行处理——不要机械转发。
 
-## 证据与准确性规则
+### 证据规则
 
-每个子代理结果都包含 `evidence` 列表（由工具调用自动收集）和 `confidence_assessment`。将子代理结果综合成最终答案时：
-
-1. **按证据置信度分级表述**。仅由 [LOW] 或 [UNVERIFIED] 证据支撑的陈述，必须明确限定（例如“据未经核实的来源……”）。不要把它们当作既定事实。
-2. **不得提升置信度**。若子代理报告 `confidence_assessment: low`，则无论其结论看起来多合理，都按低置信度处理。
-3. **标出证据缺口**。当用户询问的某项主张没有得到任何子代理的证据支持时，明确说明该信息未经独立核实。
-4. **证据去重**。多个子代理引用同一来源时，只引用一次，并采用其中最高的置信度等级。
-5. **证据冲突时保持谨慎**。若子代理意见不一致且证据冲突，应同时呈现双方及其置信度，而不是选择其一。
-6. **高风险主张必须有 [HIGH] 证据**。安全关键或后果重大的陈述，必须至少有一条 [HIGH] 置信度证据支撑；若没有，须明确提醒用户该主张缺乏验证。
-7. **聚合时传递置信度**。合并子代理结果时，合并后的 `confidence_assessment` 必须反映所有来源中的最低置信度。
-8. **受监管领域的数值精度**。呈现剂量、条款编号、日期等精确值时，须逐字引用原始来源中的准确值。不要四舍五入、近似或改写数值。
+子代理结果含 `evidence` 列表和 `confidence_assessment`，综合时：
+1. **置信度不得提升**：`low` 就是 low，不因结论合理就升级；合并后取最低置信度。
+2. **[LOW]/[UNVERIFIED] 支撑的陈述必须限定**（如"据未经核实的来源……"）。
+3. **证据缺口明确标出**；证据冲突时双方并列呈现，不选边。
+4. **高风险主张必须有 [HIGH] 证据**，否则提醒用户缺乏验证。
+5. **引用去重**：多子代理同源只引一次，取最高置信度。
 """
 
 
 def _build_advisory_text() -> str:
     """Build the full sub-agent advisory text: core rules + domain-specific rules from registry."""
-    text = _SUBAGENT_CORE_TEXT
+    text = _SUBAGENT_ORCHESTRATION_ADVISORY
     domain_rules = get_advisory_rules()
     if domain_rules:
         lines = []

@@ -2,7 +2,7 @@
 name: renewal-watcher
 description: >
   定时 Agent，检查续约登记册并发布即将到期的内容。
-  默认每周运行。发布至 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` →
+  默认每周运行。发布至 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` →
   内部风格 → 续约提醒 中指定的频道。
   触发短语："what's renewing"、"check renewals"、"renewal report"，或按计划运行。
 ---
@@ -26,7 +26,7 @@ Licensed under Apache License 2.0
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，获取提醒目标（企业协作群/钉钉群或邮件列表）。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，获取提醒目标（企业协作群/钉钉群或邮件列表）。
 2. 加载 renewal-tracker 命令，运行模式 2（未来 90 天）。
 3. 若存在 🔴 项目（取消截止日期在 0-13 天内），无论计划如何立即发布。
 4. 若已连接[合同管理系统]且登记册超过 30 天未同步，运行模式 3 刷新。

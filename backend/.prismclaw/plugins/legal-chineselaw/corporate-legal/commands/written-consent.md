@@ -17,11 +17,11 @@ Licensed under Apache License 2.0
 
 # /written-consent
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 董事会与秘书（同意存储库、决议语言、注册州、董事会组成）。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 董事会与秘书（同意存储库、决议语言、注册州、董事会组成）。
 2. 使用以下工作流。
 3. 识别行动并分类（例行 / 审查标记）。
 4. 如果是审查标记：显示外部律师警告并在继续之前确认。
-5. 从同意存储库中搜索最接近的先例。如果没有存储库：使用 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的种子同意。
+5. 从同意存储库中搜索最接近的先例。如果没有存储库：使用 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的种子同意。
 6. 使用先例作为基础以内部格式起草同意。
 7. 输出：同意草案 + 签署人检查清单 + 审查提示。
 
@@ -29,7 +29,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -81,7 +81,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Board & Secretary`：
+- `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → `## Board & Secretary`：
   - 同意存储库位置
   - 内部决议语言
   - 注册州（用于通知要求）
@@ -116,7 +116,7 @@ Licensed under Apache License 2.0
 - **正在批准什么？**（一句话。）
 - **任何支持细节？** 例如：被任命官员的姓名、股权授予的授予金额和价格、合同批准的对手方和合同价值。
 - **生效日期：** 今天，还是特定日期？
-- **签署人：** 全体董事会，还是特定委员会？如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 书面同意范围说某些行动需要会议而不是同意，现在标记它。
+- **签署人：** 全体董事会，还是特定委员会？如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 书面同意范围说某些行动需要会议而不是同意，现在标记它。
 - **任何董事冲突？** 任何董事对正在批准的行动有实质性利益吗？如果是：标记它。冲突董事根据州法律和冲突性质可能仍能签署，但同意应披露它，用户应确认。
 
 ### 行为分类
@@ -169,7 +169,7 @@ Licensed under Apache License 2.0
 
 ### 如果没有存储库（仅种子文档）
 
-从 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的种子同意中提取格式。注意无法进行先例搜索——草案将遵循内部格式但没有实质性先例匹配。向用户标记此内容：
+从 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的种子同意中提取格式。注意无法进行先例搜索——草案将遵循内部格式但没有实质性先例匹配。向用户标记此内容：
 
 > 未连接同意存储库，所以我从你的种子文档中处理格式。对于此特定行动类型，你可能想检查是否有先例同意作为实质性起点。
 
@@ -244,7 +244,7 @@ Date: _______________
 
 ## 步骤 4：确认注册州的同意规则
 
-检查 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的注册州。在起草之前研究该州的书面同意要求：
+检查 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的注册州。在起草之前研究该州的书面同意要求：
 
 - 董事会书面同意是否需要一致，还是允许较低门槛？
 - 是否需要向非签署董事发出通知？在什么时间？
@@ -254,13 +254,13 @@ Date: _______________
 
 引用控制的法规章节以及依赖的任何章程/细则条款。验证时效性——州公司法定期修订。标记不确定性以供律师验证，而不是陈述你未确认的规则。
 
-如果 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 在这些问题上记录了内部立场，应用它并记录依赖的法律支持。向输出添加简短的"州法律通知"块，总结你确认（或标记）的内容，以便用户不留下疑问。
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 在这些问题上记录了内部立场，应用它并记录依赖的法律支持。向输出添加简短的"州法律通知"块，总结你确认（或标记）的内容，以便用户不留下疑问。
 
 ---
 
 ## 步骤 4.5：后果行动关卡（执行同意）
 
-**在继续输出之前：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是**非律师**：
+**在继续输出之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是**非律师**：
 
 > 执行书面同意有法律后果——它约束实体并成为公司记录。你是否已与律师审查此内容？如果是，继续。如果不是，这是带给他们的简报：
 >
@@ -280,7 +280,7 @@ Date: _______________
 
 生成：
 
-1. **同意草案**——完整、准备审查和分发。执行的书面同意本身是公司记录，不是特权；不要将工作产品标题应用于分发的同意。下面的起草注释、签署人跟踪器和分析是工作产品——根据 `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` `## Outputs` 在其前面添加工作产品标题（根据用户角色而不同——见 `## Who's using this`）：
+1. **同意草案**——完整、准备审查和分发。执行的书面同意本身是公司记录，不是特权；不要将工作产品标题应用于分发的同意。下面的起草注释、签署人跟踪器和分析是工作产品——根据 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` `## Outputs` 在其前面添加工作产品标题（根据用户角色而不同——见 `## Who's using this`）：
 
    ```
    [WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this`]
@@ -296,7 +296,7 @@ Required signatories (unanimous consent required):
 □ [Director Name 1]
 □ [Director Name 2]
 □ [Director Name 3]
-[etc. — pulled from board composition in `~/.prismclaw/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`]
+[etc. — pulled from board composition in `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`]
 
 Conflict disclosures:
 [None / [Director Name] has a disclosed interest — confirm whether recusal or disclosure is appropriate]

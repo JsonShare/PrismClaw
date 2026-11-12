@@ -1,159 +1,27 @@
-"""批 7 收尾闭环测试：G1 附件预算 / G2 降级阶梯 / G3 l1 截断 / G4 埋点 / G5 T5 不落库。"""
+"""批 7 收尾闭环测试：G1 附件预算 / G3 l1 截断 / G4 埋点 / G5 T5 不落库。"""
 from __future__ import annotations
 
 import json
-import logging
 
-from prismclaw.engine.compression.budget_orchestrator import (
-    DegradationPlan,
-    DegradationStep,
-    degrade_context,
-    log_degradation_steps,
-)
-from prismclaw.engine.compression.context_zones import resolve_runtime_zones
-from prismclaw.engine.execution.request import attachments as attachments_mod
+
 from prismclaw.engine.execution.request.attachments import (
     _compute_attachment_char_budget,
-    _compute_ratio_attachment_token_cap,
 )
 from prismclaw.engine.execution.request.system_prompt import (
     _l1_rough_token_count,
     _truncate_l1_snapshot,
 )
-from prismclaw.schema.config.config import ContextBudgetConfig, SubcapsSettings
+from prismclaw.schema.config.config import ContextBudgetConfig
 
 
 # ---------------------------------------------------------------------------
-# G1：附件预算 mode 感知
+# G1：附件预算（absolute）
 # ---------------------------------------------------------------------------
-
-def test_g1_ratio_attachment_cap_200k():
-    cap = _compute_ratio_attachment_token_cap(170_000, SubcapsSettings())
-    assert cap == 24_000
-    budget = ContextBudgetConfig(mode="ratio", window_tokens=200_000)
-    assert _compute_attachment_char_budget(budget) == 24_000 * 1.5  # 36000
-
-
-def test_g1_ratio_attachment_cap_32k():
-    budget = ContextBudgetConfig(mode="ratio", window_tokens=32_768)
-    # 0.25 × input_budget(=27853) = 6963 < 24000 生效，字符 = 6963 × 1.5
-    char_budget = _compute_attachment_char_budget(budget)
-    assert char_budget == int(round(0.25 * 27_853) * 1.5)
-    assert char_budget < 36_000
-
 
 def test_g1_absolute_zero_drift():
-    budget = ContextBudgetConfig()  # absolute 默认，零漂移走老公式
-    assert budget.mode == "absolute"
+    budget = ContextBudgetConfig()
     # 老公式：history=106496 → 106496*0.6=63897 → *1.5=95845
     assert _compute_attachment_char_budget(budget) == 95_845
-
-
-# ---------------------------------------------------------------------------
-# G2：降级阶梯
-# ---------------------------------------------------------------------------
-
-def _ratio_zones() -> "object":
-    return resolve_runtime_zones(
-        budget=ContextBudgetConfig(mode="ratio"),
-        window=200_000,
-        model_max_output=30_000,
-        tools_wire=6588,
-        image_tokens=0,
-    )
-
-
-def test_g2_d2_before_d4():
-    zones = _ratio_zones()
-    plan = degrade_context(
-        zones=zones,
-        mode="ratio",
-        is_code_task=False,
-        system_actual=25_000,
-        dynamic_actual=0,
-        actuals={"subagents": 9_000, "repository_map": 6_000},
-    )
-    names = [s.step for s in plan.steps]
-    assert names[0] == "D2"
-    assert "D4" in names
-    assert names.index("D2") < names.index("D4")
-    d2 = next(s for s in plan.steps if s.step == "D2")
-    assert d2.zone == "system"
-    assert d2.dropped_tokens == 9_000
-    assert d2.cache_invalidated is True
-    assert d2.pressure_before > d2.pressure_after
-    assert plan.total_dropped_tokens == 15_000
-    assert plan.error_code is None
-
-
-def test_g2_d11_error_when_compaction_disabled():
-    zones = _ratio_zones()
-    plan = degrade_context(
-        zones=zones,
-        mode="ratio",
-        system_actual=30_000,
-        dynamic_actual=0,
-        actuals={},
-        compaction_disabled=True,
-    )
-    assert plan.exceeded is True
-    assert plan.error_code == "context_window_exceeded"
-    assert plan.steps[-1].step == "D11"
-
-
-def test_g2_d11_force_compaction_without_error():
-    zones = _ratio_zones()
-    plan = degrade_context(
-        zones=zones,
-        mode="ratio",
-        system_actual=30_000,
-        dynamic_actual=0,
-        actuals={},
-        compaction_disabled=False,
-        consecutive_failures=0,
-    )
-    assert plan.exceeded is False
-    assert plan.error_code is None
-    assert any(s.step == "D11" and s.note == "force_compaction" for s in plan.steps)
-
-
-def test_g2_absolute_noop():
-    zones = _ratio_zones()
-    plan = degrade_context(
-        zones=zones,
-        mode="absolute",
-        system_actual=99_999,
-        dynamic_actual=99_999,
-    )
-    assert plan.steps == ()
-    assert plan.total_dropped_tokens == 0
-    assert plan.error_code is None
-
-
-def test_g2_log_fields(caplog):
-    caplog.set_level(logging.INFO)
-    plan = DegradationPlan(
-        steps=(
-            DegradationStep(
-                step="D2",
-                zone="system",
-                dropped_tokens=9000,
-                pressure_before=2.0,
-                pressure_after=1.3,
-                cache_invalidated=True,
-            ),
-        ),
-        total_dropped_tokens=9000,
-    )
-    log_degradation_steps(logger_=logging.getLogger("test_g2"), plan=plan, iteration=3)
-    text = caplog.text
-    assert "degradation_summary" in text
-    assert "degradation_step" in text
-    assert "step=D2" in text and "zone=system" in text
-    assert "dropped_tokens=9000" in text
-    assert "pressure_before=2.000" in text
-    assert "pressure_after=1.300" in text
-    assert "cache_invalidated=True" in text
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +49,8 @@ def test_g3_l1_snapshot_short_untouched():
 # ---------------------------------------------------------------------------
 
 def test_g4_context_window_pressure_warning(caplog):
+    import logging
+
     from prismclaw.engine.services.llm.stream_fn import _report_context_window_pressure
 
     caplog.set_level(logging.WARNING)

@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`（以及上一级的 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`（以及上一级的 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -43,7 +43,7 @@ Licensed under Apache License 2.0
 - *质检严格度从严格 → 中等：* "`/skills-qa` 将报告相同的发现，但不会在中等层级阻止安装，除非您确认。"
 - *自动更新从开 → 关：* "中心将在应用更新之前提示您，而不是自动应用。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md` 并注明影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md` 并注明影响范围。修改后保存。
 
 ## 关闭
 

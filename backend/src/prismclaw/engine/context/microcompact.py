@@ -463,29 +463,13 @@ def batch_cleanup_threshold(
     model_max_output: int | None = None,
     tools_wire: int = 0,
 ) -> int:
-    """batch 触发阈值：ratio 取 zones.result 预算；absolute 取 aggregate_char_budget。
+    """batch 触发阈值：absolute 取 aggregate_char_budget，回退 dynamic_zone_tokens×4。
 
-    计数器按「字符」累计（tool_result_chars 用 len 计），故两个分支都
-    必须返回字符口径：ratio 的 zones.result 是 token，按 4 字符/token
-    换算（与 absolute 回退 dynamic_zone_tokens×4 同一估算口径）。
+    计数器按「字符」累计（tool_result_chars 用 len 计），故返回字符口径：
+    dynamic_zone_tokens 是 token 值，按 4 字符/token 换算。
     """
-    mode = getattr(budget, "mode", "absolute")
-    if mode == "ratio":
-        from prismclaw.engine.compression.context_zones import zone_of
-
-        return int(
-            zone_of(
-                budget,
-                "result",
-                window=window,
-                model_max_output=model_max_output,
-                tools_wire=tools_wire,
-            )
-        ) * 4
     agg = getattr(tool_results, "aggregate_char_budget", None)
     if agg is None:
-        # dynamic_zone_tokens 是 token 值，按 4 字符/token 换算成字符阈值，
-        # 与 _result_budget 的派生口径一致。
         agg = max(0, int(getattr(budget, "dynamic_zone_tokens", 0) or 0)) * 4
     return int(agg)
 

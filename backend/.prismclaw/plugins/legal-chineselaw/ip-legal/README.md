@@ -27,7 +27,7 @@ Licensed under Apache License 2.0
 
 首次使用时，plugin 对你进行访谈——十到十五分钟，对话式——以了解你的执业实际如何工作。它询问你的执业领域组合、你的司法管辖区足迹、你的执法姿态、你的审批矩阵和你的升级触发器。然后它询问你的投资组合列表、品牌指南、C&D 模板、执法剧本和 OSS 政策——无论你有什么——因此它可以提取而不是让你重新输入。
 
-它将学到的内容写入 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`——一份关于你执业的简单英文文档，每个其他 skill 在做任何事情之前都会阅读它。你编辑文档，而不是配置文件。
+它将学到的内容写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`——一份关于你执业的简单英文文档，每个其他 skill 在做任何事情之前都会阅读它。你编辑文档，而不是配置文件。
 
 ```
 /ip-legal:cold-start-interview
@@ -57,7 +57,7 @@ Licensed under Apache License 2.0
 
 | Skill | 目的 |
 |---|---|
-| **cold-start-interview** | 第一次运行的访谈，编写 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` |
+| **cold-start-interview** | 第一次运行的访谈，编写 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` |
 | **cease-desist** | 起草或分类 C&D；在发送前通过审批矩阵路由 |
 | **takedown** | DMCA 通知、收到的删除通知的响应或反通知 |
 | **clearance** | 拟议商标的剔除搜索 + 混淆可能性第一遍 |
@@ -109,7 +109,7 @@ Licensed under Apache License 2.0
 
 十到十五分钟。准备好分享你的投资组合列表、品牌指南（如果有）、C&D 模板（如果有）和你的 OSS 政策（如果有）。
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
 
 ### 2. 查询商标
 
@@ -157,14 +157,14 @@ ip-legal/
 plugin 从以下位置读取用户特定配置：
 
 ```
-~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md
+~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md
 ```
 
 此路径在 plugin 更新后保留。随 plugin 提供的 `PRISMCLAW.md` 是模板——每次升级都会替换它。冷启动访谈将你填充的版本写入上面的配置路径；从那时起，当某些内容发生变化时，直接编辑该文件。
 
 ## How it learns
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。`ip-renewal-watcher` agent 跟踪投资组合登记册并按你的节奏显示即将到来的续展截止日期。你可以重新运行设置、直接编辑文件或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。`ip-renewal-watcher` agent 跟踪投资组合登记册并按你的节奏显示即将到来的续展截止日期。你可以重新运行设置、直接编辑文件或告诉 skill 记录新立场。
 
 ## Notes
 

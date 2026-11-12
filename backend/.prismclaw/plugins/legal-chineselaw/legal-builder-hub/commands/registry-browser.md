@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /registry-browser
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 监控的注册表。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 监控的注册表。
 2. 使用以下工作流。
 3. 搜索每个注册表。显示匹配结果及其描述。
 4. 提供查看任何匹配结果的完整 SKILL.md 的选项。
@@ -30,7 +30,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 监控的注册表列表。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 监控的注册表列表。
 
 ## 工作流
 
@@ -75,7 +75,7 @@ Licensed under Apache License 2.0
 
 1. 获取它，验证它是一个 skills 仓库（有 `skills/` 或 `.plugin/`）
 2. 显示其中有什么
-3. 确认后添加到 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 监控的注册表
+3. 确认后添加到 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 监控的注册表
 
 ## 默认注册表
 

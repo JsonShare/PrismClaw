@@ -105,7 +105,13 @@ async def run_agent_stream(
     resolved_ws_path = Path(tool_workspace_path).resolve()
 
     abort_event = control.abort_event
-    run_deadline_s = deps.config.timeouts.run_seconds
+    from prismclaw.engine.execution.control.kernel import resolve_effort_budget
+    _effort_budget = resolve_effort_budget(
+        effort=getattr(request, "effort", "standard") or "standard",
+        long_running=bool(getattr(request, "long_running", False)),
+        tiers=deps.config.effort,
+    )
+    run_deadline_s = _effort_budget.hard_s
     run_started = ctx.run_started if ctx is not None else time.monotonic()
 
     try:
@@ -169,9 +175,9 @@ async def run_agent_stream(
                 # 轨迹追踪
                 if isinstance(event, IterationBoundary):
                     if event.kind == "llm_end":
-                        _traj_scope.publish_iteration_end(request.session_id, _loop_state.iteration)
+                        _traj_scope.publish_iteration_end(request.session_id, _loop_state.perf.llm_calls)
                     elif event.kind == "llm_start":
-                        _traj_scope.publish_iteration_start(request.session_id, _loop_state.iteration)
+                        _traj_scope.publish_iteration_start(request.session_id, _loop_state.perf.llm_calls)
 
             # ── Post-loop: abort 场景合成未启动工具的 ToolCallEnd ──
             _term_reason = _loop_state.ctx.terminated_by if _loop_state.ctx is not None else None
@@ -191,7 +197,7 @@ async def run_agent_stream(
             )
 
             # Sync state back from RunLoopState for the finally block
-            prepared.iteration = _loop_state.iteration
+            prepared.iteration = _loop_state.perf.llm_calls
             if _loop_state.ctx is not None:
                 prepared.terminated_by = _loop_state.ctx.terminated_by
             prepared.active_skill_invocation = _loop_state.active_skill_invocation

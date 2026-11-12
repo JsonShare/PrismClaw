@@ -171,6 +171,22 @@ Every fact you state must be traceable to text you read in this session. Quotes 
 - **Self-locating.** Include enough surrounding words that the quote is unambiguous in the document (a bare "5.5%" appears in fifty places).
 - **Attributed.** Every quote names the document it came from — filename, and section/clause number when available.
 
+**Verify — don't self-certify.** Collect the quotes you intend to use into `quotes.json` and run the deterministic check before writing the answer:
+
+```bash
+python scripts/verify_citations.py --quotes quotes.json --docs-dir <contracts folder>
+```
+
+```json
+[{"label": "§4.2 payment term", "doc": "vendor-a.txt", "quote": "…"}]
+```
+
+- `exact` — may go in the answer's quote column.
+- `missing` — re-read the document and extract verbatim, or label it "reconstructed". Never let it pass silently.
+- `unverifiable` — the document is a binary (PDF/Word) that wasn't in the text set. Extract it first (doc-extract outputs `<name>.txt`), point `--docs-dir` at that text folder — matching falls back to the filename stem, so `doc` can keep the original name — and re-run. If extraction isn't possible, that quote may only appear labeled "not citation-verified". **A run where every quote is `unverifiable` is not a pass** — it means nothing was verified.
+
+The script only normalizes whitespace/quotes/dashes and checks for a substring. It changes nothing in the source; it exists to catch quotes written from memory rather than read.
+
 ## Triage
 
 While reading, you'll encounter ambiguities you couldn't resolve on first read. Resolve them yourself, visibly, and carry the honest residue into the report. **The run never stops to ask about substance** — the one question a human answers is the plan go-ahead, and that already happened.
@@ -190,6 +206,8 @@ In the answer these facts go under their own heading — "Read visually (extract
 **Gather.** Review all the text you've read. Organize findings by document, then by the rubric's categories. Count findings per kind — the counts decide how you present:
 
 **A few hundred findings at most** can be composed directly into the answer. **Past that**, summarize per-contract verdicts first, then provide the detail tables — the composed answer needs one row per contract, not every clause that produced it.
+
+**Verify the quotes before composing.** Write the quotes you plan to put in the tables to `quotes.json` and run `scripts/verify_citations.py`. Only `exact` quotes reach the tables. This step produces no content — it only vetoes unqualified quotes.
 
 **Compose the answer — in chat, once.** Your chat message IS the answer, and it streams to the user as you write it. Write it for reading, not for filing, in this order:
 

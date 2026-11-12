@@ -4,30 +4,12 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-IDENTIFIER_PRESERVATION_INSTRUCTIONS = (
-    "在摘要中逐字保留标识符：UUID、哈希、ID、主机名、"
-    "IP 地址、端口、URL、文件名、文件路径、模型名、会话 ID、"
-    "提交 SHA、错误码。不得重写、缩写或改写这些标记。"
-    "\n\n"
-    "用户陈述的事实必须在压缩后继续存在（SDD context-governance W8）："
-    "用户就其处境陈述的每项事实都是持久上下文——数字、"
-    "日期、截止时间、性能阈值（例如 P99 < 500ms）、团队规模、"
-    "角色与风格偏好、过往事件、业务规则以及技术专有名词。"
-    "每项都要逐字带入摘要。当输入中包含既有摘要时，"
-    "其中已列出的每一项用户陈述事实都必须出现在新摘要中——"
-    "压缩链一旦首次丢弃某项事实，它就永久丢失。"
-    "\n\n"
-    "已取代的需求必须作为作废项保留，而不是消失（SDD "
-    "context-governance W12）：当用户改变主意——更正取值、撤回承诺、"
-    "取消需求、替换选择——旧值不是当前上下文，但也不能删除。"
-    "把它记为作废条目：“作废事实 → 替代它的内容”"
-    "（若只是取消，则写“→ 无”）。这是一个禁止清单："
-    "其中的任何内容都绝不能再次作为当前事实出现。当输入中包含既有摘要时，"
-    "必须逐字继承每一条作废条目——丢失的作废条目会在后续生成中复活。"
-)
+# Single source of truth — imported from _preservation_rules.py.
+# Do NOT redefine here.
+from prismclaw.engine.compression._preservation_rules import IDENTIFIER_PRESERVATION_INSTRUCTIONS
 
 HARDENED_SUMMARIZER_SYSTEM_PROMPT = (
-    "你正在为接班的 AI 程序员做笔记。请简洁地总结排障进展。"
+    "请为接班的 AI 简洁地总结此前的工作进展。"
     "1. 目标是什么？ 2. 已完成或发现了什么？ 3. 下一个立即执行的步骤是什么？\n\n"
     f"{IDENTIFIER_PRESERVATION_INSTRUCTIONS}\n\n"
     "不要写客套话。返回纯文本；除非能提升清晰度，否则不要使用标题或项目符号。"

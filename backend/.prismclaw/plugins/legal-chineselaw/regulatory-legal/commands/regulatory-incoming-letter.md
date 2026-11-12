@@ -18,7 +18,7 @@ category: 监管合规
 
 # /regulatory-incoming-letter
 
-1. 读 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 公司画像、escalation_path、归口部门联系人
+1. 读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 公司画像、escalation_path、归口部门联系人
 2. 用下面的 7 阶段工作流
 3. 录入（OCR + 字段抽取）→ 自动归类（6 分法）→ 按类处置 → 任务派发 → 进度跟踪 → 上报材料汇总 → 闭环
 4. 关键截止日自动锁到监管要求回复期前的内部缓冲日期（默认 5 个工作日）
@@ -91,7 +91,7 @@ reg-feed-watcher 可能会捕获到"金管总局自查工作函"等普遍性通�
 
 ### 1.3 抽取结果保存
 
-抽取后落地为结构化 YAML 文件到 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/incoming-letters/<letter-id>/letter.yaml`，附原始扫描件 / 文本副本到同目录。
+抽取后落地为结构化 YAML 文件到 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/incoming-letters/<letter-id>/letter.yaml`，附原始扫描件 / 文本副本到同目录。
 
 `letter-id` 命名建议：`YYYY-MM-DD-<监管缩写>-<文号尾号>`，例如 `2026-05-25-金管沪-XX`。
 
@@ -206,7 +206,7 @@ reg-feed-watcher 可能会捕获到"金管总局自查工作函"等普遍性通�
 
 ## 第 4 步：任务派发（拆解为 inspection-task）
 
-将函件要求事项拆解为 N 条 `inspection-task` 类型的整改事项，写入 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/gap-tracker.yaml`：
+将函件要求事项拆解为 N 条 `inspection-task` 类型的整改事项，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/gap-tracker.yaml`：
 
 ```yaml
 gaps:

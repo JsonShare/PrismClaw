@@ -17,11 +17,11 @@ Licensed under Apache License 2.0
 
 # /build-guide
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 角色（必须是督导律师）、执业领域、司法管辖区。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 角色（必须是督导律师）、执业领域、司法管辖区。
 2. 使用以下工作流。
 3. 如果用户不是督导律师，停止并重定向（学生运行 `/legal-clinic:ramp`）。
 4. 逐步进行：执业领域 → 接案问题 → 教育学姿态 → 审查门控 → 跨插件检查 → 本地规则。
-5. 写入 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md`。按需创建 `guides/` 目录。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md`。按需创建 `guides/` 目录。
 6. 提供试运行——在配置的姿态下运行 `/legal-clinic:draft`，让督导看到学生看到的内容。
 
 ```
@@ -63,7 +63,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 1：检查角色
 
-这是一个督导 skill。读取 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → `## 谁在使用这个` → 角色。如果角色不是"督导律师"，说：
+这是一个督导 skill。读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → `## 谁在使用这个` → 角色。如果角色不是"督导律师"，说：
 
 > 此 skill 面向督导——它配置面向学生 skills 的行为方式。如果您是督导，请确保您的执业档案角色在 `/legal-clinic:cold-start-interview` 中设置为"督导律师"。如果您是学生，这不是适合您的 skill——运行 `/legal-clinic:ramp` 进行入职，或请您的督导为诊所撰写指南。
 
@@ -77,7 +77,7 @@ Licensed under Apache License 2.0
 
 检查 `PRISMCLAW.md` → `## 诊所档案` → 执业领域中列出的执业领域。如果选择的执业领域未列在那里，注明："我会写这个指南，但您的执业档案没有将 [area] 列为诊所的执业领域之一。这没问题——您可以稍后用 `/legal-clinic:cold-start-interview --redo` 添加——但面向学生的 skills 在档案列出之前不会将接案路由到此领域。"
 
-如果 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 已有指南存在，提供："[area] 的指南已存在于 [path]。您想要 (a) 逐节修订，(b) 从头开始覆盖，还是 (c) 先看看里面有什么？"
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 已有指南存在，提供："[area] 的指南已存在于 [path]。您想要 (a) 逐节修订，(b) 从头开始覆盖，还是 (c) 先看看里面有什么？"
 
 ### 步骤 3：接案问题
 
@@ -145,7 +145,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 8：写入指南
 
-写入 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md`。如果 `guides/` 目录不存在则创建。使用此结构：
+写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md`。如果 `guides/` 目录不存在则创建。使用此结构：
 
 ```markdown
 # 执业领域指南：[执业领域]
@@ -225,7 +225,7 @@ Licensed under Apache License 2.0
 
 然后告诉督导：
 
-> 您的指南位于 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md`。每个使用此诊所插件 [执业领域] 的学生将有遵循它的 skills。随时直接编辑文件更改任何内容，或重新运行 `/legal-clinic:build-guide` 修订某个部分。您可以有多个指南——每个执业领域一个。
+> 您的指南位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md`。每个使用此诊所插件 [执业领域] 的学生将有遵循它的 skills。随时直接编辑文件更改任何内容，或重新运行 `/legal-clinic:build-guide` 修订某个部分。您可以有多个指南——每个执业领域一个。
 
 ### 步骤 9：提供试运行
 
@@ -235,7 +235,7 @@ Licensed under Apache License 2.0
 
 ## 输出
 
-skill 的"输出"是写入 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 的文件。与督导的对话是访谈；书面指南是产物。
+skill 的"输出"是写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 的文件。与督导的对话是访谈；书面指南是产物。
 
 写入后，显示简短确认：
 

@@ -27,7 +27,6 @@ from prismclaw.engine.execution.request.packing import RequestPackager
 from prismclaw.engine.security.gate.governance import runtime_notes_for
 from prismclaw.engine.execution.request._prompt_types import build_system_prompt_section_state
 from prismclaw.engine.compression.context_zones import resolve_runtime_zones
-from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
 from prismclaw.engine.execution.request.system_prompt import (
     PromptInputs,
     SystemPromptResult,
@@ -349,8 +348,6 @@ class QueryTurnPreparator:
                 _tools_wire = 0
         _zones = resolve_runtime_zones(
             budget=deps.config.context.budget,
-            window=deps.config.context.budget.window_tokens,
-            model_max_output=resolve_model_max_output(prompt_inputs.model),
             tools_wire=_tools_wire,
         )
         budgeted = orchestrate_context_layout_budgets(

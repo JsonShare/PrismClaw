@@ -14,7 +14,7 @@ category: 监管合规
 
 # /regulatory-gaps
 
-1. 读内规差异台账 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/gap-tracker.yaml`
+1. 读内规差异台账 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/gap-tracker.yaml`
 2. 如果 `--close`：标记内规差异为关闭，附解决方案说明
 3. 如果 `--accept`：记录风险接受理由和接受人，状态 → risk-accepted
 4. 否则：按年龄和重要性报告开放的内规差异

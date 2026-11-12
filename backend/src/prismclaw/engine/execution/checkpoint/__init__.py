@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from prismclaw.engine.execution.checkpoint.models import (
     BatchRuntimeRecord,
-    BudgetState,
     CommitState,
     CompressionRuntimeState,
     CompressionState,
     EffectClass,
     InvokedSkillRecord,
     InvokedSkillState,
+    LoopState,
     PromptCacheRuntimeState,
     RecoveryState,
     RequestAssemblySnapshot,
@@ -51,9 +51,9 @@ from prismclaw.schema.persistence.persistence import RunSnapshotStore
 
 __all__ = [
     # models
-    "BatchRuntimeRecord", "BudgetState", "CommitState", "CompressionRuntimeState",
+    "BatchRuntimeRecord", "CommitState", "CompressionRuntimeState",
     "CompressionState", "EffectClass", "InvokedSkillRecord", "InvokedSkillState",
-    "PromptCacheRuntimeState",
+    "LoopState", "PromptCacheRuntimeState",
     "RecoveryState", "RequestAssemblySnapshot", "ResumeBoundary", "ResumeDisposition",
     "RetryState", "RunState", "SystemPromptSectionRecord",
     "SystemPromptSectionState", "ToolEffectRecord",

@@ -23,7 +23,7 @@ Licensed under Apache License 2.0
 
 1. 加载 `leave-tracker` 代理并运行完整工作流。
 
-2. 如果未连接 HRIS 且不存在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/leave-register.yaml`，提示律师上传休假电子表格或使用 `/employment-legal:log-leave` 添加条目。
+2. 如果未连接 HRIS 且不存在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/leave-register.yaml`，提示律师上传休假电子表格或使用 `/employment-legal:log-leave` 添加条目。
 
 3. 仅对需要行动的休假发出警报。无需处理的休假每行汇总一条。
 

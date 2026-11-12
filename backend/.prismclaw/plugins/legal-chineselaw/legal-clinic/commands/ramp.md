@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /ramp
 
-1. 检查 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 是否已设置。如果是占位符："请 [教授] 先运行 `/legal-clinic:cold-start-interview`。"
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 是否已设置。如果是占位符："请 [教授] 先运行 `/legal-clinic:cold-start-interview`。"
 2. 使用以下介绍工作流。
 3. 逐步进行：诊所上下文（来自手册）→ 命令 → 实践练习（模拟接案、练习起草、研究路线图）→ 验证习惯。
 4. `--card`：生成一页参考卡。
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、执业领域、司法管辖区、手册路径、督导方式、执业领域模板。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、执业领域、司法管辖区、手册路径、督导方式、执业领域模板。
 
 如果该文件缺失或仍有占位符："诊所尚未设置。请 [督导教授] 先运行 `/clinic-cold-start-interview`。"
 
@@ -58,7 +58,7 @@ Licensed under Apache License 2.0
 
 ### 第 1 部分：此诊所（5 分钟）
 
-从 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 和已摄取的手册中读取。交互式覆盖：
+从 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 和已摄取的手册中读取。交互式覆盖：
 
 - **执业领域** — 诊所处理什么，不处理什么（以及如果有人带着范围外的问题走进来时转介到哪里）
 - **客户** — 他们是谁，面临什么，语言

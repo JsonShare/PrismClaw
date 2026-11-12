@@ -42,7 +42,7 @@ demand-letters/
 
 ## 与事项的关系
 
-起草催款函后，`demand-draft` 根据内部 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的重大性启发式评估重大性，并提议创建事项。如果是，一个事项行进入 `matters/_log.yaml`，其中 `source: demand-letter`，`matters/[matter-slug]/matter.md` 反向链接到此催款函文件夹。
+起草催款函后，`demand-draft` 根据内部 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的重大性启发式评估重大性，并提议创建事项。如果是，一个事项行进入 `matters/_log.yaml`，其中 `source: demand-letter`，`matters/[matter-slug]/matter.md` 反向链接到此催款函文件夹。
 
 非重大催款函仅保留在此处。它们仍然是工作产品记录——只是不在组合中追踪。
 

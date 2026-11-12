@@ -23,7 +23,7 @@ Licensed under Apache License 2.0
 
 - 将 skill 的 `SKILL.md` 重命名为 `SKILL.md.disabled`，以便 PrismClaw 不再将其发现为活跃 skill。文件、引用、模板和配置保持不变。
 - 如果 skill 在 `hooks/hooks.json` 中提供 hooks，也将该文件重命名为 `hooks/hooks.json.disabled`，以便在 skill 禁用时不会触发自动触发器。
-- 将操作记录到 `~/.prismclaw/plugins/legal-chineselaw/legal-builder-hub/install-log.yaml`。
+- 将操作记录到 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/install-log.yaml`。
 
 安全规则：
 

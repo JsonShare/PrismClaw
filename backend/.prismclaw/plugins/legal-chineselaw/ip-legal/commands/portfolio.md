@@ -20,7 +20,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. **遵循下面的工作流程**，并读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。
+1. **遵循下面的工作流程**，并读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。
 
 2. **默认（无参数）：** 等同于 `--report`——显示接下来 90 天内按紧急程度分组的截止日期（🔴 已失效/宽限期内、⏰ 窗口内到期、🟡 即将到期、🌐 代理管理、❓ 未知）。
 
@@ -100,7 +100,7 @@ Licensed under Apache License 2.0
 
 ## 登记册
 
-位于 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。结构：
+位于 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。结构：
 
 ```yaml
 # IP 投资组合登记册
@@ -191,7 +191,7 @@ assets:
 
 ### 第 1 步：确定来源
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`：
 - **IP 管理系统已连接**（Anaqua、CPA Global 等）：通过其集成拉取投资组合。IP 系统是权威来源；此登记册镜像它，不添加系统没有的截止日期。
 - **无 IP 管理系统，但有电子表格/导出文件：** 请用户分享导出文件。导入现有内容；将缺少注册或授权日期的任何资产标记为 `unknown`，用于截止日期计算。
 - **没有任何内容：** 交互式逐步处理资产——类型、司法管辖区、编号、关键日期、所有者。
@@ -235,7 +235,7 @@ assets:
 
 默认窗口：90 天。在生成报告之前刷新每个资产的计算截止日期——不要仅依赖存储的日期。
 
-输出（按 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → 输出 在前面添加工作产品标题）：
+输出（按 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → 输出 在前面添加工作产品标题）：
 
 ```
 IP 投资组合截止日期报告 — [date]
@@ -321,7 +321,7 @@ IP 投资组合截止日期报告 — [date]
 
 ### 重要行动门控
 
-**在记录维护申请或费用支付已完成之前：** 读取 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是**非律师**：
+**在记录维护申请或费用支付已完成之前：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是**非律师**：
 
 > 将 §8 声明、§9 续期、专利维护费支付或国际年金记录为"已申请"会产生后果。如果记录错误——错过了到期日、实体规模错误、使用样本错误——截止日期不会移动，资产仍然可能失效。你是否已与实际完成申请的律师或外国代理人（或 USPTO TSDR / WIPO Madrid Monitor / 相关登记处）确认了这一点？如果是，继续。如果否：
 >

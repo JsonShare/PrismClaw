@@ -14,11 +14,11 @@ Licensed under Apache License 2.0
 
 # /oss-review
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的执业档案运行开源许可证合规检查。按许可证系列分类依赖，根据部署模式映射义务，标记许可证未知和非 OSI 假冒 OSS 的包，并推荐行动——遵守、替换、移除、寻求法律审查、寻求商业许可证。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的执业档案运行开源许可证合规检查。按许可证系列分类依赖，根据部署模式映射义务，标记许可证未知和非 OSI 假冒 OSS 的包，并推荐行动——遵守、替换、移除、寻求法律审查、寻求商业许可证。
 
 ## 说明
 
-1. **加载 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果存在占位符，停止并提示："首先运行 `/ip-legal:cold-start-interview`——在审查之前，我需要了解你的执业档案（以及 OSS 政策，如果有）。" 如果执业档案指向上传的 OSS 政策，也要阅读该政策——它是团队接受的/审查的/禁止的许可证的真实来源。
+1. **加载 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果存在占位符，停止并提示："首先运行 `/ip-legal:cold-start-interview`——在审查之前，我需要了解你的执业档案（以及 OSS 政策，如果有）。" 如果执业档案指向上传的 OSS 政策，也要阅读该政策——它是团队接受的/审查的/禁止的许可证的真实来源。
 
 2. **确定范围：**依赖列表（package.json、requirements.txt、go.mod、Gemfile、Cargo.toml、pom.xml、SBOM）、单个库，或团队准备开源的出站代码。如果用户传递了路径，从文件推断；否则询问。
 
@@ -54,7 +54,7 @@ OSS 清除请求通常通过票务系统进入。连接到 Jira、Linear 或 Asa
 
 ## Matter context
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的"## Matter workspaces"。如果 `Enabled` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `/ip-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 为事项特定上下文和覆盖加载活跃事项的 `matter.md`。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 是 `on`。
 
 ---
 
@@ -66,7 +66,7 @@ OSS 清除请求通常通过票务系统进入。连接到 Jira、Linear 或 Asa
 
 ## 先决条件：加载执业档案
 
-**在扫描依赖之前，阅读 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果它丢失或仍然包含占位符，停止并运行 `/ip-legal:cold-start-interview`。执业档案告诉你：
+**在扫描依赖之前，阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果它丢失或仍然包含占位符，停止并运行 `/ip-legal:cold-start-interview`。执业档案告诉你：
 
 - 团队中谁拥有 OSS 审查（通常是工程与法律签署）
 - Copyleft 义务的升级路由
@@ -196,7 +196,7 @@ OSS 清除请求通常通过票务系统进入。连接到 Jira、Linear 或 Asa
 
 ### 步骤 7：组装备忘录
 
-根据 `~/.prismclaw/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## 输出` 附加工作产品标题（因用户角色而异——参见"## 谁在使用此"）。
+根据 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` → `## 输出` 附加工作产品标题（因用户角色而异——参见"## 谁在使用此"）。
 
 此备忘录和任何审查的依赖列表可能是特权的、机密的或两者兼有。输出从来源继承该状态。仅在特权圈内分发；在任何外部交付之前删除工作产品标题（包括在特权圈之外的工程工单上附加备忘录）。
 

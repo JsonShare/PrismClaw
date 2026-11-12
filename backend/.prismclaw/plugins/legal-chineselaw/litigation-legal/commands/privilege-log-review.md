@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 # /privilege-log-review
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 审查协议、证据清单格式。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 审查协议、证据清单格式。
 2. 遵循以下工作流和参考。
 3. 对于每个条目：明显受保密保护 / 明显不受保密保护 / 需要律师审查。标记原因。
 4. 输出：带标记的审查日志。律师在提交前审查所有标记。
@@ -88,9 +88,9 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 证据审查格式、审查协议。
+`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 证据审查格式、审查协议。
 
-**冲突门槛——不可绕过。** 在审查之前，检查 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
+**冲突门槛——不可绕过。** 在审查之前，检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
 > "我在事项日志中看不到 [matter slug]。首先运行 `/litigation-legal:matter-intake`，以便冲突检查运行并设置事项工作区。我不会对未接收的事项进行保密审查——冲突检查是门槛，审查报告需要归入事项文件。"
 
@@ -179,7 +179,7 @@ Licensed under Apache License 2.0
 
 ## 输出
 
-**在证据目录提交对方或法院之前（重大行为）：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是非律师：
+**在证据目录提交对方或法院之前（重大行为）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是非律师：
 
 > 提交证据目录和在诉讼中指定文件都有法律后果——提交受职业保密保护的文件可能放弃保密性；未提交应提交的文件可能被视为妨碍诉讼。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >

@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 ## 读取当前配置
 
-读取 `~/.prismclaw/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`（以及上一级的 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`（以及上一级的 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
 - *新增升级审批人：* "任何超出你自己权限的红线现在会路由到该审批人——`/escalation-flagger` 会默认将他们纳入匹配风险等级的收件人。"
 - *风险偏好从中性改为激进：* "我会接受更多对供应商有利的立场而不标记，并将 `[review]` 的触发门槛提高。"
 
-共享档案的修改（公司名称、行业、司法管辖区、执业环境、阶段）：写入 `~/.prismclaw/plugins/legal-chineselaw/company-profile.md` 并说明影响范围。修改后保存。
+共享档案的修改（公司名称、行业、司法管辖区、执业环境、阶段）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md` 并说明影响范围。修改后保存。
 
 ## 关闭
 

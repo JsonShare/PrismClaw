@@ -19,8 +19,8 @@ Licensed under Apache License 2.0
 # /legal-hold
 
 1. 如果 `--status`（无 slug）：阅读 `_log.yaml`，生成组合范围保全报告。
-2. 否则：加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` + 日志行。
-3. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 特权标记、保全模板指针、升级规范。
+2. 否则：加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` + 日志行。
+3. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 特权标记、保全模板指针、升级规范。
 4. 遵循以下工作流和参考。
 5. 按标志路由：
    - `--issue`：捕获范围、保管人、日期范围、系统。起草 `legal-hold-v1.docx`。更新 `legal_hold` 字段。附加历史条目。设置 `next_refresh`（默认 +6 个月）。
@@ -55,9 +55,9 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` ——日志行（legal_hold 字段 + 状态）
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` ——事项上下文（对手方、事实、来自 internal_owners 的关键保管人）
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` ——内部保全模板指针的内部风格、特权标记、升级规范
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` ——日志行（legal_hold 字段 + 状态）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` ——事项上下文（对手方、事实、来自 internal_owners 的关键保管人）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` ——内部保全模板指针的内部风格、特权标记、升级规范
 
 **冲突门槛——不可绕过。** 在发布、刷新或释放保全通知之前，检查事项 slug 的 `_log.yaml`。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
@@ -73,7 +73,7 @@ Licensed under Apache License 2.0
 
 当 `legal_hold.issued == false` 且事项活跃或合理预期时需要。
 
-**在向保管人发布保全通知之前（重大行为）：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师：
+**在向保管人发布保全通知之前（重大行为）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师：
 
 > 发布证据保全通知有内部法律合规含义——范围、保管人列表和时间创建企业将在以后争论证据灭失时被评判的内部记录。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >
@@ -95,7 +95,7 @@ Licensed under Apache License 2.0
 5. **紧急性**——如果已送达诉讼或收到带有诉讼威胁的要求，这今天就要发出。
 6. **生效日期**——保全的日期。
 
-**使用以下模板起草每个保管人的通知**，如果 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中配置了内部模板；否则使用以下默认模板。
+**使用以下模板起草每个保管人的通知**，如果 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中配置了内部模板；否则使用以下默认模板。
 
 **默认证据保全通知模板：**
 
@@ -104,7 +104,7 @@ Licensed under Apache License 2.0
 
 日期：[生效日期]
 收件人：[保管人姓名]
-发件人：[签署人——根据 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 默认]
+发件人：[签署人——根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 默认]
 主题：证据保全通知——[事项简称]
 
 您收到此通知是因为 [公司] 已确定 [争议/调查的一句话描述，避免不利细节]。为防止相关材料灭失，请按本通知要求妥善保管相关文件。
@@ -146,8 +146,8 @@ Licensed under Apache License 2.0
 > 这是供律师审查的草稿证据保全通知，不是准备发布的通知。发布保全通知触发公司将在以后任何证据灭失论点中被评判的保全义务记录，通知本身可能是可提交的内部文件。执业律师审查、批准和发布。不要未经审查分发此草稿。
 
 **写入：**
-- 通过 `docx` skill 写入 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/legal-hold-v1.docx`
-- 附加到 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/history.md`：
+- 通过 `docx` skill 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/legal-hold-v1.docx`
+- 附加到 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/history.md`：
   ```
   ## [YYYY-MM-DD] — 证据保全通知已发布
 
@@ -181,7 +181,7 @@ Licensed under Apache License 2.0
 **已离职保管人：** 如果保管人自上次刷新以来已离开公司，skill 将此标记为保全行动项目——离职员工的文件和电子邮件档案需要在 IT 级别保全，而不仅仅是通过通知个人。在 history.md 中记录为需要行动的单独条目。
 
 **写入：**
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/legal-hold-v[N].docx`（下一版本号）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/legal-hold-v[N].docx`（下一版本号）
 - `history.md` 条目
 - `_log.yaml`：更新 `last_refresh` 和 `next_refresh` 字段；如变更则修改 `custodians` 列表
 
@@ -189,7 +189,7 @@ Licensed under Apache License 2.0
 
 通常在事项关闭时。确认事项真正结束（未上诉、不太可能重新开放、相关主张的诉讼时效已过）。
 
-**在释放保全通知之前（重大行为——保全义务恢复正常状态）：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师：
+**在释放保全通知之前（重大行为——保全义务恢复正常状态）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是非律师：
 
 > 释放证据保全通知有内部法律含义——一旦释放，保管人可能恢复正常文件处置。在错误时间释放会造成证据灭失风险。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >
@@ -205,7 +205,7 @@ Licensed under Apache License 2.0
 **释放通知模板：** 一段，正式。"关于 [事项] 于 [日期] 发布的证据保全通知于 [日期] 生效解除。正常文件管理政策恢复适用。"
 
 **写入：**
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/[slug]/legal-hold-release.docx`
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/legal-hold-release.docx`
 - `history.md` 条目
 - `_log.yaml`：设置 `released: [YYYY-MM-DD]`
 

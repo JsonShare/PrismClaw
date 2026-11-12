@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /hiring-review
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、招聘审查触发器、竞业限制政策。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、招聘审查触发器、竞业限制政策。
 2. 使用以下工作流。
 3. 检查：省市合规、劳动合同必要条款、竞业限制协议有效性、背景调查合规性、录用条件告知。
 4. 标记任何触及省市特定升级表的项目。
@@ -26,7 +26,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `/employment-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -36,11 +36,11 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、招聘审查触发器、竞业限制政策、录用函模板位置。
+`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市足迹、招聘审查触发器、竞业限制政策、录用函模板位置。
 
 ## 输出标题
 
-在前面加上来自 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 的工作底稿标题（根据用户角色而异——见 `## Who's using this`）：
+在前面加上来自 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → `## Outputs` 的工作底稿标题（根据用户角色而异——见 `## Who's using this`）：
 - 律师用：`保密 / 内部法律分析 — 仅供法务团队使用 — 不构成外发法律意见`
 - 非律师用：`研究笔记 / 内部记录 — 不构成法律意见 — 请律师复核后再依赖`
 
@@ -57,7 +57,7 @@ Licensed under Apache License 2.0
 
 如果是远程：他们的实际工作地点省市管辖（劳动合同履行地）。如果是混合：通常是他们的主要工作地点，但注意劳动合同中工作地点条款（影响仲裁管辖）。
 
-检查 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中此省市的省市表。如果不在表中——新省市——标记："[省市] 的首次招聘。省市表不涵盖此。录用函发出前需要研究当地规则。"
+检查 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中此省市的省市表。如果不在表中——新省市——标记："[省市] 的首次招聘。省市表不涵盖此。录用函发出前需要研究当地规则。"
 
 **注意中国劳动法在省市层面的差异重点：**
 - 最低工资标准（各省市不同，通常每年更新）
@@ -118,7 +118,7 @@ Licensed under Apache License 2.0
 > - **违约金** — 可约定，但须合理；不得仅要求劳动者承担违约金而不支付补偿金。
 > 引用主要来源。验证时效性。
 
-按照 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 竞业限制政策：此招聘是否甚至应获得一个？有些公司选择性使用它们。首先应用内部政策，然后研究省市的覆盖。
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 竞业限制政策：此招聘是否甚至应获得一个？有些公司选择性使用它们。首先应用内部政策，然后研究省市的覆盖。
 
 > **没有静默补充。** 如果对配置的法律研究工具的研究查询对于省市的试用期上限、竞业限制规则、劳动合同必要条款或你正在研究的任何其他项目返回很少或没有结果，报告发现的内容并停止。
 >
@@ -126,7 +126,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 5：省市特定招聘合规要求
 
-检查此省市在 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的表。每次招聘要研究的常见类别：
+检查此省市在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的表。每次招聘要研究的常见类别：
 
 - **录用条件告知** — 是否在签订劳动合同或入职前明确告知录用条件？这是试用期以"不符合录用条件"解除劳动合同的前提（须举证已告知且未满足）。
 - **背景调查合规** — 是否获得员工书面授权？（《个人信息保护法》要求对个人信息处理取得同意）。是否涉及查询刑事犯罪记录等敏感信息的合规？
@@ -192,7 +192,7 @@ Licensed under Apache License 2.0
 
 ## 后果行动关卡（发出录用/签订劳动合同）
 
-**在生成"可发送"建议或签署的最终录用函之前：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
+**在生成"可发送"建议或签署的最终录用函之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的 `## Who's using this`。如果角色是 **非律师**：
 
 > 发出录用/签订劳动合同有法律后果——劳动合同是合同，竞业限制协议、试用期约定和省市特定条款一旦签署就难以重置。你是否已与律师审查此录用合规文件？如果是，继续。如果不是，这是带给他们的简报：
 >

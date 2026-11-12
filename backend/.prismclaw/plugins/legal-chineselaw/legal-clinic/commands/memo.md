@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /memo
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、司法管辖区。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、司法管辖区。
 2. 使用以下工作流。阅读接案摘要/案件笔记。
 3. 将问题构建为问题。为每个问题搭建 IRAC 脚手架——规则块是 RESEARCH NEEDED，应用是 STUDENT ANALYSIS 提示，结论留空。
 4. 优势/弱点/开放问题。研究差距摘要。
@@ -39,12 +39,12 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、司法管辖区、督导方式。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、司法管辖区、督导方式。
 接案摘要和案件笔记用于事实。
 
 ## 教育学检查
 
-阅读 `~/.prismclaw/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 中此执业领域的督导指南。检查 `pedagogy_posture` 设置：
+阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 中此执业领域的督导指南。检查 `pedagogy_posture` 设置：
 
 - **`guide`（默认）：** 产生 IRAC 结构和研究差距列表。要求学生从研究中自己起草每个规则陈述，而不是给他们框架。对他们写的内容给出反馈。只有当学生尝试过一次时才提供填充框架规则的选项。
 - **`assist`：** 产生备忘录脚手架并填充可以填充的内容。标记需要学生审查的项目。学生通过审查进行编辑和学习。（注意：此备忘录 skill 始终按设计将 `[STUDENT ANALYSIS]` 和 `[STUDENT CONCLUSION]` 块留空——`assist` 意味着 skill 产生 IRAC 脚手架和框架规则陈述；它不产生应用或结论。）

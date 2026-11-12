@@ -23,7 +23,7 @@
 
 连接到你的发布跟踪器（企业协作项目/Jira/Linear/禅道），阅读你过去的十个发布审查，了解你实际阻断什么与你放行什么。构建每个其他 skill 都读取的风险校准表。
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
 
 ```
 /product-legal:cold-start-interview
@@ -43,7 +43,7 @@
 
 | Skill | 目的 |
 |---|---|
-| **cold-start-interview** | 从访谈 + 过去发布审查编写 ~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md |
+| **cold-start-interview** | 从访谈 + 过去发布审查编写 ~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md |
 | **launch-review** | 按类别审查，针对你的公司校准；含中国特有场景检查清单 |
 | **marketing-claims-review** | 声明分类：夸张/事实/比较/暗示/绝对；覆盖广告法、消费者权益保护法执法口径 |
 | **feature-risk-assessment** | 当发布审查不够时，对一个问题进行深入探讨 |
@@ -138,7 +138,7 @@
 
 ## How it learns
 
-你在 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
 
 ## Notes
 
@@ -153,4 +153,4 @@
 
 ## Configuration
 
-你的配置存储在 `~/.prismclaw/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`，并在 plugin 更新后保留——你只需运行一次设置。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md`，并在 plugin 更新后保留——你只需运行一次设置。

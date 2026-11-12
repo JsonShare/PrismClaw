@@ -20,11 +20,11 @@ Licensed under Apache License 2.0
 
 # /demand-intake
 
-1. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 律师函实践、格局、风险校准。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 律师函实践、格局、风险校准。
 2. 遵循以下工作流和参考。
 3. 运行自适应收集（核心 8 题始终询问；如属于重大事项或使用 `--full` 则询问战略块）。
 4. 从标题 + 对方 + 年份-月份生成 slug。
-5. 写入 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/intake.md`。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/intake.md`。
 6. 向用户确认："Intake saved. Run `/litigation-legal:demand-draft [slug]` when ready."（收集已保存。准备好时运行 `/litigation-legal:demand-draft [slug]`）
 
 ---
@@ -37,7 +37,7 @@ Licensed under Apache License 2.0
 
 ## 加载背景
 
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 律师函实践（保险提交时机、事项创建的重大性阈值、任何种子文档模板）、格局（对手类型、重复对手模式）、风险校准（预先估计重大性）、内部风格。**语气、合规期限、签署人不是实践级默认值——它们在下面的"本案事项姿态"步骤中针对每个事项设置。**
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 律师函实践（保险提交时机、事项创建的重大性阈值、任何种子文档模板）、格局（对手类型、重复对手模式）、风险校准（预先估计重大性）、内部风格。**语气、合规期限、签署人不是实践级默认值——它们在下面的"本案事项姿态"步骤中针对每个事项设置。**
 
 ## 标志
 
@@ -102,8 +102,8 @@ Licensed under Apache License 2.0
 重大性启发式：如果以下任何一项为真，则询问战略块。
 
 - 要求类型为停止侵权、违约补救、雇佣离职或保全
-- 期望结果的货币价值 ≥ `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 风险校准中的中等严重性区间
-- 对方是客户、竞争对手或频繁对手（根据 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 格局）
+- 期望结果的货币价值 ≥ `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 风险校准中的中等严重性区间
+- 对方是客户、竞争对手或频繁对手（根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 格局）
 - 用户使用 `--full` 运行
 
 **明确跳过选项。** 当触发战略块时，用户可以拒绝回答。直接询问：
@@ -145,9 +145,9 @@ Licensed under Apache License 2.0
 
 ### Slug
 
-`[type]-[counterparty-short]-[yyyy-mm]`。在 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/demand-letters/` 中确认唯一性。
+`[type]-[counterparty-short]-[yyyy-mm]`。在 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/` 中确认唯一性。
 
-### `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/intake.md`
+### `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/intake.md`
 
 ```markdown
 [工作产品标记——根据插件配置 ## Outputs ——因角色而异；参见"## 谁在使用"]
@@ -276,7 +276,7 @@ Licensed under Apache License 2.0
 
 - 起草信函。那是 `demand-draft` 的工作——这两个步骤故意分开，以便法律顾问可以在起草前暂停以获取业务意见、外部顾问咨询或保险提交。
 - 决定是否发送信函。一些收集会话以"实际上，不要发送——让我们直接谈判"结束。这是有效结果；收集体记录仍然有价值。
-- 运行利益冲突检查。如果对方是客户或已知实体，标记这应在发送前清除利益冲突（根据 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`）——但检查本身存在于事项收集工作流中或此技能之外。
+- 运行利益冲突检查。如果对方是客户或已知实体，标记这应在发送前清除利益冲突（根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`）——但检查本身存在于事项收集工作流中或此技能之外。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

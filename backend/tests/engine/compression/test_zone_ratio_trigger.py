@@ -1,4 +1,4 @@
-"""批 4b-2：ratio 触发收口 + 工具数组 append_only + 图像 token 估计测试。"""
+"""批 4b-2：历史压缩触发 + 工具数组 append_only + 图像 token 估计测试。"""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -7,52 +7,18 @@ from prismclaw.engine.compression.budget_orchestrator import BudgetOrchestrator
 from prismclaw.schema.config.config import AgentRunConfig, ContextBudgetConfig, VisionConfig
 
 
-def test_ratio_trigger():
-    orch = BudgetOrchestrator()
-    input_budget = 80000
-    threshold = input_budget - 2048
-    # 超过阈值（total_input 取 history 估算与 last_prompt 的较大者）→ compact
-    res = orch.assess_history_compaction(
-        history_tokens=1000,
-        history_budget=0,
-        last_prompt_tokens=threshold + 1,
-        mode="ratio",
-        input_budget=input_budget,
-    )
-    assert res.should_compact is True
-    # 低于阈值 → 不 compact
-    res2 = orch.assess_history_compaction(
-        history_tokens=1000,
-        history_budget=0,
-        last_prompt_tokens=threshold - 1,
-        mode="ratio",
-        input_budget=input_budget,
-    )
-    assert res2.should_compact is False
-    # total_input = max(估算, last_prompt)：history 估算超阈值即触发，即使 last_prompt 为 0
-    res3 = orch.assess_history_compaction(
-        history_tokens=threshold + 1,
-        history_budget=0,
-        last_prompt_tokens=0,
-        mode="ratio",
-        input_budget=input_budget,
-    )
-    assert res3.should_compact is True
-
-
 def test_absolute_zero_drift():
     orch = BudgetOrchestrator()
-    # absolute 模式判定与改造前完全一致：仍以 history_tokens>history_budget 为准，
-    # last_prompt_tokens 再大也不参与判定。
+    # 判定以 history_tokens>history_budget 为准，last_prompt_tokens 不参与判定。
     a = orch.assess_history_compaction(
-        history_tokens=12000, history_budget=10000, last_prompt_tokens=999999, mode="absolute"
+        history_tokens=12000, history_budget=10000, last_prompt_tokens=999999,
     )
     assert a.should_compact is True
     b = orch.assess_history_compaction(
-        history_tokens=5000, history_budget=10000, last_prompt_tokens=999999, mode="absolute"
+        history_tokens=5000, history_budget=10000, last_prompt_tokens=999999,
     )
     assert b.should_compact is False
-    c = orch.assess_history_compaction(history_tokens=5000, history_budget=0, mode="absolute")
+    c = orch.assess_history_compaction(history_tokens=5000, history_budget=0)
     assert c.should_compact is False
 
 
@@ -120,8 +86,8 @@ def test_estimate_tokens_images():
 
 
 def test_config_defaults():
-    cfg = ContextBudgetConfig(mode="ratio")
-    assert cfg.mode == "ratio"
+    cfg = ContextBudgetConfig()
+    assert cfg.window_tokens == 131_072
     run = AgentRunConfig()
     assert run.tool_mutation_policy == "append_only"
     assert VisionConfig().tokens_per_image == 1024

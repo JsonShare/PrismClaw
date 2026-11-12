@@ -26,8 +26,8 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/comment-tracker.yaml` → 所有跟踪的征求意见稿及其状态。
-`~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 默认评议决策所有者。
+`~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/comment-tracker.yaml` → 所有跟踪的征求意见稿及其状态。
+`~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 默认评议决策所有者。
 
 ## 默认视图——开放评议期
 
@@ -74,7 +74,7 @@ Licensed under Apache License 2.0
 
 ## 后果行动关卡（向监管机构提交评议意见）
 
-**在将决定记录为"filing"之前——并且始终在生成提交就绪的意见函或监管机构回应草案之前：** 阅读 `~/.prismclaw/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是 **非律师**：
+**在将决定记录为"filing"之前——并且始终在生成提交就绪的意见函或监管机构回应草案之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是 **非律师**：
 
 > 向监管机构提交评议意见有法律后果。这是公司立场的公开声明，它在规则制定或执法事项中记录在案，此处采取的立场约束公司，并可在后续程序中对其使用。你是否已与律师审查此内容？如果是，继续。如果否，这是带给他们的简报：
 >

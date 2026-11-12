@@ -33,7 +33,7 @@ class AvailableSkillEntry:
     is_active: bool = False
     # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
     marketplace_name: str | None = None
-    # v5 渐进式披露：marketplace / 插件级描述（来自 marketplace.json description）
+    # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
     marketplace_description: str | None = None
     # 技能准入策略：auto(双通道)/user_only(仅用户指定)/model_only(仅模型)/disabled(禁用)
     invocation_policy: str = "auto"
@@ -89,9 +89,8 @@ class PromptInputs:
     workspace_path: str | None = None
     repo_map: str | None = None
     now_iso: str | None = None
-    identity: str = (
-        "你是 PrismClaw，一个全领域智能助手。"
-    )
+    identity: str | None = None  # 由 build_identity_text(mode) 从 IDENTITY.md 读取；缺失时为空
+    preferences: str | None = None  # 由 build_preferences_text() 显式传入；文件缺失时为空
     subagent_registry_size: int = 0
     handoff_enabled: bool = False
     any_manifest_has_can_handoff_to: bool = False

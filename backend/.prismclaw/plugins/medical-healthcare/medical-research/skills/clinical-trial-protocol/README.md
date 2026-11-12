@@ -4,7 +4,7 @@ Generate clinical trial protocols for medical devices or drugs (phase 2 or 3). M
 
 ## Overview
 
-This Claude Code skill generates comprehensive clinical trial protocols based on NIH/FDA guidelines and similar trials research. It supports both medical devices (IDE pathway) and drugs (IND pathway) with appropriate regulatory terminology.
+This skill generates comprehensive clinical trial protocols based on NIH/FDA guidelines and similar trials research. It supports both medical devices (IDE pathway) and drugs (IND pathway) with appropriate regulatory terminology.
 
 **Target Users:** Clinical researchers, regulatory affairs professionals, protocol writers
 

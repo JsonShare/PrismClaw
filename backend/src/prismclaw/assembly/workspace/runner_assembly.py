@@ -181,15 +181,13 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
 
     config = AgentRunConfig.model_validate(
         {
-            "max_iterations": settings.agent.max_iterations,
-            "max_budget_usd": settings.agent.max_budget_usd,
-            "budget_pricing": settings.agent.budget_pricing.model_dump(),
             "tool_mutation_policy": settings.agent.tool_mutation_policy,
             "context": settings.agent.context.model_dump(by_alias=True),
             "control": settings.agent.control.model_dump(),
             "timeouts": settings.agent.timeouts.model_dump(),
             "retry": settings.agent.retry.model_dump(),
             "run_loop": settings.agent.run_loop.model_dump(),
+            "effort": settings.agent.effort.model_dump(),
             "vision": {
                 "model": settings.vision.model,
                 "api_key": settings.vision.api_key,

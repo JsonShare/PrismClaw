@@ -329,7 +329,7 @@ def _assemble_catalog_snapshot(
                         "manifest": _dump_manifest_payload(manifest),
                         # v5 渐进式披露：marketplace_name 用于系统提示词按包名聚合
                         "marketplace_name": getattr(descriptor, "marketplace_name", None),
-                        # v5 渐进式披露：marketplace / 插件级描述（来自 marketplace.json description）
+                        # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
                         "marketplace_description": getattr(descriptor, "marketplace_description", None),
                         "plugin_description": getattr(descriptor, "plugin_description", None),
                     },

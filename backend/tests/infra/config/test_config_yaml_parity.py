@@ -58,8 +58,6 @@ def test_merged_config_validates_without_dropped_keys():
     unknown_top = set(merged) - set(Settings.model_fields)
     assert not unknown_top, f"yaml 顶层键无 schema 承载（会被静默丢弃）: {unknown_top}"
     # 批 0 修复的静默丢弃键——必须真实生效
-    assert settings.agent.max_budget_usd == 5.0
-    assert settings.agent.budget_pricing.input_per_mtok > 0
     assert settings.agent.control.max_repairs >= 0
     # 批 1 收敛后的唯一结果裁剪来源
     cap = settings.agent.context.compaction.tool_results.per_result_char_cap

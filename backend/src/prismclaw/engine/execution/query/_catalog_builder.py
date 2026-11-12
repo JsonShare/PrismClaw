@@ -4,10 +4,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 from prismclaw.engine.execution.capabilities.catalog import (
     CapabilityCatalogService,
@@ -54,15 +51,6 @@ _REPO_MAP_IGNORE_DIRS = {
     "skills",
     "sandbox",
 }
-
-
-def _discovery_runtime_notes(tool_summaries: list[tuple[str, str]]) -> list[str]:
-    tool_names = {name for name, _desc in tool_summaries}
-    if "tool_search" in tool_names and "skill_search" in tool_names:
-        return [
-            "已启用发现分流：使用 `skill_search` 检索技能，使用 `tool_search` 检索工具。"
-        ]
-    return []
 
 
 def _session_follow_up_notes(tree: Any, tool_summaries: list[tuple[str, str]]) -> list[str]:
@@ -155,13 +143,6 @@ def _tool_prompt_summaries(
             headless=headless,
         )
     ]
-
-
-def _require_capability_catalog(deps: Any) -> CapabilityCatalogService:
-    catalog = getattr(deps, "capability_catalog", None)
-    if isinstance(catalog, CapabilityCatalogService):
-        return catalog
-    raise RuntimeError("AgentRunnerDeps.capability_catalog is required for prompt planning")
 
 
 def _subagent_catalog_state(catalog: CapabilityCatalogService | None) -> tuple[int, bool]:

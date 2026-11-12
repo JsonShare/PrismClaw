@@ -404,7 +404,7 @@ Display concise summary to user:
 
 ---
 
-## Notes for Claude
+## Notes for the assistant
 
 - **Be thorough** — protocol quality depends on good research
 - **Always report status** — user should see database queries and document reviews in real-time

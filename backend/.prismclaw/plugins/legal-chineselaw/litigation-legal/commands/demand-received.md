@@ -21,11 +21,11 @@ Licensed under Apache License 2.0
 # /demand-received
 
 1. 从提供的路径阅读入站文档。
-2. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 进行组合交叉检查。
-3. 加载 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准、业务格局、催告函实践。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 进行组合交叉检查。
+3. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准、业务格局、催告函实践。
 4. 遵循以下工作流和参考。
 5. 提取字段；交叉检查组合；评估实体价值；提出附带建议的选项。
-6. 写入 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/triage.md`。复制或链接入站文档到 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/incoming.[ext]`。
+6. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/triage.md`。复制或链接入站文档到 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/incoming.[ext]`。
 7. 按用户选择交接：
    - 创建事项 → 预填充的 `matter-intake`
    - 用反催告回应 → 预填充的 `demand-intake`
@@ -63,8 +63,8 @@ Licensed under Apache License 2.0
 ## 加载上下文
 
 - 入站文档（用户提供路径或放入会话中）
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 扫描相关事项（同一对方、通过实体关系重叠的对方、或事项类型 + 近期日期）
-- `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（用于实体价值评估）、业务格局（发送者是否为常见对手方？）、催告函实践（内部语气和回应默认值）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 扫描相关事项（同一对方、通过实体关系重叠的对方、或事项类型 + 近期日期）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（用于实体价值评估）、业务格局（发送者是否为常见对手方？）、催告函实践（内部语气和回应默认值）
 
 ## 工作流
 
@@ -107,7 +107,7 @@ Licensed under Apache License 2.0
 - **对方实力** — 如果他们明天上法院/申请仲裁，他们的故事是什么？
 - **我方实力** — 我们可能的抗辩是什么？
 - **要求的损害赔偿 vs. 可能的** — 要求是否与他们赢得时法院/仲裁庭会判决的金额相称？
-- **杠杆和压力** — 他们可信地准备好起诉/申请仲裁了吗？他们有能力吗？根据 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 他们是否为重复诉讼对手方？
+- **杠杆和压力** — 他们可信地准备好起诉/申请仲裁了吗？他们有能力吗？根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 他们是否为重复诉讼对手方？
 
 输出分流评级：**具有实体价值 / 有争议 / 薄弱 / 无意义**。直说。用户在做分流，不是在写简报。
 
@@ -151,7 +151,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 6：写入分流
 
-输出：`~/.prismclaw/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/triage.md`。
+输出：`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/triage.md`。
 
 ```markdown
 [工作产品标题——根据插件配置 ## Outputs——因角色而异；见 `## 谁在使用这个`]
@@ -262,7 +262,7 @@ Licensed under Apache License 2.0
 - 创建事项 → 交接给 `/matter-intake` 附：对方、类型、`source: demand-letter`（入站）、以防御性框架的初始理论，预填充。
 - 以反催告回应 → 交接给 `/demand-intake` 附：对方、分流中的上下文、期望结果作为回应。
 - 链接到现有事项 → 更新该事项在 `_log.yaml` 中的 `related_matters`；向其 `history.md` 附加事件。
-- 独立 → 保留在 `~/.prismclaw/plugins/legal-chineselaw/litigation-legal/inbound/`；组合无变更。
+- 独立 → 保留在 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/inbound/`；组合无变更。
 
 ## 以下一步决策树结束
 
