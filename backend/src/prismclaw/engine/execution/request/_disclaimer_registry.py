@@ -26,8 +26,8 @@ from dataclasses import dataclass
 class DomainAdvisoryRule:
     """Domain-specific advisory rule registered by domain bundles.
 
-    Rendered as numbered items in the sub-agent advisory section,
-    appended after the core evidence & accuracy rules.
+    Rendered as numbered items in the dynamic ``<domain_advisory>`` section
+    by ``_prompt_advisory.domain_advisory_section()``.
     """
     domain: str
     title: str   # e.g., "Medical disclaimer (MANDATORY)"

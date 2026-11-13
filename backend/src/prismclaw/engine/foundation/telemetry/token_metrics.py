@@ -7,7 +7,6 @@ per-turn attribution, and cumulative session metrics.
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -102,7 +101,7 @@ def extract_token_snapshot(usage: Any) -> TokenSnapshot:
     - Standard usage dict with input_tokens/output_tokens
     - Cache fields: cache_creation_input_tokens, cache_read_input_tokens
     - Iterations field (server-side tool loops)
-    - LLMUsage dataclass from prismclaw.engine.agent.llm
+    - LLMUsage dataclass from prismclaw.schema.llm.types
 
     Args:
         usage: Usage object (dict, dataclass, or any object with the right attributes).
@@ -157,31 +156,13 @@ def _extract_from_object(usage: Any) -> TokenSnapshot:
 def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
     """Estimate token count for a message list.
 
-    This is a fallback for when API usage data is not available. Text
-    estimation delegates to the calibrated CJK-aware estimator
-    (models.utils.estimate_tokens, R²=0.9978 vs the production
-    tokenizer) so Chinese-heavy content is not under-counted.
+    Fallback for when API usage data is not available. Delegates to the
+    token-counting plugin so telemetry shares the single accounting
+    authority with compaction.
     """
-    from prismclaw.schema.shared import estimate_tokens
+    from prismclaw.token_counting import count_messages
 
-    total = 0
-    for msg in messages:
-        if not isinstance(msg, dict):
-            continue
-        content = msg.get("content")
-        if isinstance(content, str):
-            total += estimate_tokens(content)
-        elif isinstance(content, list):
-            for block in content:
-                if isinstance(block, dict):
-                    text = block.get("text", "")
-                    if isinstance(text, str):
-                        total += estimate_tokens(text)
-                    # Tool use input JSON
-                    inp = block.get("input")
-                    if isinstance(inp, dict):
-                        total += estimate_tokens(json.dumps(inp, ensure_ascii=False))
-    return max(1, total)
+    return max(1, count_messages(messages))
 
 
 def _coerce_int(value: Any) -> int:

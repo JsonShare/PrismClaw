@@ -59,19 +59,17 @@ class RetryConfig(BaseModel):
 # Each WP has a default-on kill switch so operators can disable a
 # behavior change without code changes (and so the "flag off == old
 # behavior" verification criterion in the plan is enforceable).
-# Names mirror the Claude-side flags referenced in the plan.
+# Flag 命名约定：与上游设计保持可追溯对应关系。
 FLAG_AUTOCOMPACT_BREAKER_DEFAULT = True
 FLAG_SOFT_BUDGET_DEFAULT = True
 
 
 class SoftBudgetConfig(BaseModel):
-    """Two-tier soft-degrade thresholds for the context window.
+    """两层软降级阈值。
 
-    Mirrors the active soft-degrade pattern (90% warn / 95% terminate)
-    from Claude's ``compactConversation`` and ``microCompact``: when
-    ``token_usage / effective_window`` crosses ``warning_ratio`` the
-    coordinator injects a system warning; when it crosses
-    ``terminate_ratio`` the current turn is forced to wrap up.
+    token_usage / effective_window 越过 warning_ratio 时注入系统警告；
+    越过 terminate_ratio 时强制当前回合收尾，不再开新探索。
+    默认 90% / 95% 两档。
     """
 
     warning_ratio: float = Field(
@@ -107,11 +105,10 @@ class SoftBudgetConfig(BaseModel):
         return self
 
 
-# 9-section summarization prompt (mirrors Claude's
-# ``compactConversation`` template).  Defaults to the upstream
-# 9-section template; operators may override ``template`` with a
-# domain-specific prompt.  ``strip_analysis_block`` removes the
-# draft <analysis>...</analysis> section from the LLM output.
+# 9 章节压缩摘要模板。默认使用内置 9 章节模板（主请求 / 关键技术概念 /
+# 关键文件与产出 / 错误与修复 / 问题解决过程 / 用户消息 / 待办 /
+# 当前工作 / 可选下一步）；运营可通过 template 字段覆写为领域专用模板。
+# strip_analysis_block 控制是否移除 LLM 输出中的 <analysis> 草稿块。
 COMPACT_SUMMARY_DEFAULT_TEMPLATE = (
     "# 关键：禁止使用任何工具。只输出文本。\n\n"
     "你的任务是详细总结此前的对话，重点关注用户的明确请求、所做的关键决策和产出。\n\n"
@@ -196,14 +193,12 @@ class PerResultSummaryConfig(BaseModel):
 
 
 class CompactPromptConfig(BaseModel):
-    """9-section summarization prompt configuration.
+    """压缩摘要模板配置。
 
-    Mirrors Claude's ``compactConversation`` 9-section template
-    (Primary Request, Key Technical Concepts, Files, Errors, Problem
-    Solving, User Messages, Pending Tasks, Current Work, Optional
-    Next Step).  Operators can replace ``template`` with a
-    domain-specific prompt; ``strip_analysis_block`` controls whether
-    the draft <analysis> section is removed from the LLM output.
+    内置 9 章节默认模板（主请求 / 关键技术概念 / 关键文件与产出 /
+    错误与修复 / 问题解决过程 / 用户消息 / 待办 / 当前工作 / 可选下一步）；
+    运营可通过 template 字段覆写为领域专用模板。
+    strip_analysis_block 控制是否移除 LLM 输出中的 <analysis> 草稿块。
     """
 
     template: str | None = Field(
@@ -276,11 +271,11 @@ class HistoryCompactionConfig(BaseModel):
     )
     prompt: "CompactPromptConfig" = Field(
         default_factory=lambda: CompactPromptConfig(),
-        description="9-section summarization prompt configuration. Mirrors Claude's compactConversation template.",
+        description="9 章节压缩摘要模板配置。覆写可使用领域专用模板；None 时使用内置默认模板。",
     )
     preamble_no_tools: bool = Field(
         default=True,
-        description="Prepend the no-tools preamble to summarizer user messages. Mirrors Claude's FLAG_NO_TOOLS_PREAMBLE.",
+        description="压缩摘要前置的禁止工具调用提示。关闭时摘要器可调用工具。",
     )
     predictive_horizon: int = Field(
         default=3,
@@ -344,7 +339,7 @@ class CompactionSafetyConfig(BaseModel):
     max_consecutive_failures: int = Field(
         default=3,
         ge=1,
-        description="Consecutive autocompact failures before the breaker opens. Mirrors Claude's MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES.",
+        description="自动压缩连续失败多少次后熔断，熔断后不再自动压缩。",
     )
     enable_autocompact_breaker: bool = Field(
         default=FLAG_AUTOCOMPACT_BREAKER_DEFAULT,
@@ -352,7 +347,7 @@ class CompactionSafetyConfig(BaseModel):
     )
     soft_budget: "SoftBudgetConfig" = Field(
         default_factory=lambda: SoftBudgetConfig(),
-        description="Soft budget thresholds. Mirrors Claude's 90%/95% active soft-degrade pattern.",
+        description="软降级阈值配置。默认 90% 警告 / 95% 强制收尾。",
     )
     enable_soft_budget: bool = Field(
         default=FLAG_SOFT_BUDGET_DEFAULT,
@@ -494,15 +489,14 @@ class RunLoopTuningConfig(BaseModel):
 class SubcapsSettings(BaseModel):
     """子额度（sub-caps）：上下文分区的细粒度预算（批 3 外置）。
 
-    原为分散在各引擎模块级的魔法常量，现统一收敛到此。``subagents``
-    由 3000 → 1500 属计划内变更（SDD D11 渐进披露），其余字段为等价迁移。
+    原为分散在各引擎模块级的魔法常量，现统一收敛到此。技能/子代理目录
+    已改为渐进式披露（固定 prompt 只保留项目技能名、包索引与核心子代理），
+    目录预算相关的 ``subagents`` / ``skills_ratio`` / ``listing_desc_chars``
+    已随死代码一并移除。
     """
 
     model_config = {"populate_by_name": True, "extra": "forbid"}
 
-    subagents: int = Field(1500, ge=0)
-    skills_ratio: float = Field(0.01, ge=0.0, le=1.0)
-    listing_desc_chars: int = Field(250, ge=1)
     runtime_status: int = Field(500, ge=1)
     l1_snapshot: int = Field(500, ge=1)
     skill_attachment: int = Field(6000, ge=1)

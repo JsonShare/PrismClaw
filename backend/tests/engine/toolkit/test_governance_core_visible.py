@@ -108,6 +108,6 @@ def test_core_set_matches_expected_baseline():
     assert _CORE_VISIBLE_TOOLS == frozenset({
         "read", "write", "edit", "bash", "ls", "grep", "glob",
         "todo_write", "ask_user_question",
-        "tool_search", "skill_search", "activate_skill",
+        "tool_search", "skill_search", "subagent_search", "activate_skill",
         "present_files",
     })

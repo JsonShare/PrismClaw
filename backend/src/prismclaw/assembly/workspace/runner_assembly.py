@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.execution.skills.runtime import SkillRuntime
-from prismclaw.engine.services.llm.stream_fn import LiteLLMStreamFn
+from prismclaw.engine.services.llm.client import LiteLLMClient
 from prismclaw.schema.llm.errors import LLMError
 from prismclaw.engine.services.llm.provider_resolver import resolve_provider_for_model
-from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps, DreamBundle, PersistenceBundle, PluginBundle
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps, DreamBundle, PersistenceBundle, PluginBundle
 from prismclaw.engine.runtime.client import WorkspaceRuntimeClient
 from prismclaw.schema.services.env_types import ExecutionEnv
 from prismclaw.engine.task_profile.service import TaskProfileService
@@ -38,7 +38,6 @@ from prismclaw.runtime.capability_refresh import (
     schedule_mcp_capability_refresh,
 )
 from prismclaw.runtime.skills.mcp_skills import mcp_prompt_resolver, mcp_skill_manifests_builder
-from prismclaw.runtime.skills.management import DefaultSkillManagement
 from prismclaw.infra.settings import Settings
 from prismclaw.infra.task_manager import TaskManager
 from prismclaw.schema.config.config import AgentRunConfig, WorkspaceConfig
@@ -100,7 +99,7 @@ logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass(slots=True)
 class KernelRuntimeBundle:
-    llm: LiteLLMStreamFn
+    llm: LiteLLMClient
     resolver: WorkspaceResolver
     tools: ToolRegistry
     hooks: HookRegistry
@@ -150,8 +149,29 @@ def _build_provider_specs(providers: dict[str, Any]) -> dict[str, dict[str, dict
     return result
 
 
+def _configure_token_counting(settings: Settings) -> None:
+    """按 ``token_counting`` 配置安装全局计数插件（默认 heuristic）。
+
+    计数插件必须在任何预算/压缩/埋点调用之前安装；配置错误时 fail-fast，
+    避免静默退回默认系数导致预算口径与配置不一致。
+    """
+    from prismclaw.token_counting import build_token_counter, set_token_counter
+
+    cfg = settings.token_counting
+    options = cfg.heuristic.model_dump() if cfg.provider == "heuristic" else {}
+    try:
+        counter = build_token_counter(cfg.provider, **options)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"token_counting.provider='{cfg.provider}' is not registered. "
+            f"Fix backend/configs/models.yaml before starting. {exc}"
+        ) from exc
+    set_token_counter(counter)
+
+
 def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
-    llm = LiteLLMStreamFn(
+    _configure_token_counting(settings)
+    llm = LiteLLMClient(
         default_model=settings.models.default_model,
         providers=settings.models.providers,
         default_provider=settings.models.default_provider,
@@ -332,7 +352,7 @@ def build_dream_runtime(
     session_factory: Any,
     memory_store: MemoryStore | None,
     session_store: SessionStore,
-    llm: LiteLLMStreamFn,
+    llm: LiteLLMClient,
     task_manager: TaskManager | None,
     lock_manager: Any,
     worker_registry: Any,
@@ -472,7 +492,7 @@ def build_memory_runtime(
     task_manager: TaskManager | None,
     memory_store: MemoryStore | None,
     redis_client: Any,
-    llm: LiteLLMStreamFn,
+    llm: LiteLLMClient,
     dream_runtime: DreamRuntimeBundle,
     memory_gateway: Any = None,
 ) -> MemoryRuntimeBundle:
@@ -545,7 +565,7 @@ def build_memory_runtime(
     return MemoryRuntimeBundle(context_engine=context_engine, nudge_hook=nudge_hook)
 
 
-def _build_llm_summarizer(llm: LiteLLMStreamFn) -> Any:
+def _build_llm_summarizer(llm: LiteLLMClient) -> Any:
     """LLM-backed summarizer callable for the compaction SummaryEngine.
 
     SDD context-governance W11 (2026-08-21, root cause of "compaction
@@ -598,7 +618,7 @@ def _validate_memory_runtime_prerequisites(
         raise ValueError("memory runtime requires task_manager and lock_manager")
 
 
-def _build_summarize_fn(llm: LiteLLMStreamFn) -> Any:
+def _build_summarize_fn(llm: LiteLLMClient) -> Any:
     """Build a per-result LLM summarization callback from the LLM stream function.
 
     The returned callable matches ``async def summarize_fn(prompt: str) -> str``.
@@ -765,7 +785,14 @@ def assemble_runner_deps(
                 max_handoff_chain_length=settings.subagent.max_handoff_chain_length,
             )
 
+    from prismclaw.engine.execution.loop.tree_writer import publish_compaction_node
+    from prismclaw.schema.agent.callbacks import AgentCallbacks
+
     deps = AgentRunnerDeps(
+        callbacks=AgentCallbacks(
+            on_compaction_node=publish_compaction_node,
+            on_mcp_death=mcp_death_handler,
+        ),
         llm=kernel_runtime.llm,
         tools=tools,
         context_engine=memory_runtime.context_engine,
@@ -778,7 +805,6 @@ def assemble_runner_deps(
         capability_catalog=capability_catalog,
         task_manager=task_manager,
         lock_manager=lock_manager,
-        mcp_death_handler=mcp_death_handler,
         handoff_supervisor=handoff_supervisor,
         task_profile_service=kernel_runtime.task_profile_service,
         dream=DreamBundle(
@@ -797,25 +823,6 @@ def assemble_runner_deps(
             trajectory_persistence=trajectory_persistence,
         ),
         runtime_client=_build_runtime_client(),
-        skill_management=DefaultSkillManagement(),
-    )
-    from prismclaw.runtime.skills.installer import _extract_zip, _verify_integrity
-    deps.zip_extract_fn = _extract_zip
-    deps.zip_verify_fn = _verify_integrity
-    from prismclaw.engine.execution.loop.bootstrap import publish_compaction_node
-    _cb_on_compaction_node = publish_compaction_node
-    _cb_on_mcp_death = mcp_death_handler
-    # Build a lightweight LoopCallbacks adapter so resolved_* properties work
-    class _CallbacksAdapter:
-        __slots__ = ("on_compaction_node", "on_mcp_death", "on_subagent_progress", "on_stream_event")
-        def __init__(self, **kw: Any) -> None:
-            for k, v in kw.items():
-                setattr(self, k, v)
-    deps.callbacks = _CallbacksAdapter(
-        on_compaction_node=_cb_on_compaction_node,
-        on_mcp_death=_cb_on_mcp_death,
-        on_subagent_progress=None,
-        on_stream_event=None,
     )
     prs = kernel_runtime.config.context.compaction.tool_results.per_result_summary
     if prs.enabled and kernel_runtime.llm is not None:

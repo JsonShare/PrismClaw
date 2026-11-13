@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from prismclaw.engine.services.llm.provider_resolver import (
     _connection_error_types,
+    _should_retry_transient_provider_error,
     classify_error,
 )
 from prismclaw.schema.llm.errors import LLMError, LLMErrorCode
@@ -58,6 +59,18 @@ def test_classify_llmerror_wrap_once():
     # Wrap-once：LLMError 自带 code，绝不按消息子串重分类。
     exc = LLMError(LLMErrorCode.UNKNOWN, "APIConnectionError happened")
     assert classify_error(exc) == LLMErrorCode.UNKNOWN
+
+
+def test_retry_builtin_connection_refused():
+    # 原字符串分支覆盖 connectionrefusederror；类型化后必须仍然可重试。
+    assert _should_retry_transient_provider_error(ConnectionRefusedError("refused")) is True
+
+
+def test_retry_httpx_timeout_is_false():
+    # httpx.TransportError 覆盖 TimeoutException，但超时不应重试。
+    import httpx
+
+    assert _should_retry_transient_provider_error(httpx.ReadTimeout("timed out")) is False
 
 
 def test_classify_camelcase_api_connection_error_message_misses_substring():

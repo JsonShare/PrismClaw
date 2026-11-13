@@ -100,8 +100,8 @@ class _CompactionDeps(Protocol):
     # coordinator creates a fresh in-memory breaker that lives for
     # the duration of the run.
     autocompact_breaker: "AutocompactBreaker | None"
-    # Callback to publish a compaction trajectory node (replaces
-    # lazy import of engine.agent.run.bootstrap.publish_compaction_node).
+    # Callback to publish a compaction trajectory node (avoids a runtime
+    # import of the loop layer from compression).
     on_compaction_node: Callable[..., None] | None
     # 依赖反转 ports——compression 通过此协议访问
     # execution/hooks/security 能力，避免反向 import。
@@ -307,10 +307,11 @@ async def try_compaction(
             ),
         )
         await _commit_tree_entry(deps=deps, tree=tree, entry=comp_entry)
-        # DSH parity: CompactionEntry bypasses bootstrap._append — publish
+        # CompactionEntry bypasses tree_writer._append — publish
         # the compacted trajectory cell here (best-effort, never raises).
         try:
-            on_compaction_node = getattr(deps, "resolved_on_compaction_node", None) or getattr(deps, "on_compaction_node", None)
+            _callbacks = getattr(deps, "callbacks", None)
+            on_compaction_node = _callbacks.on_compaction_node if _callbacks is not None else None
             if callable(on_compaction_node):
                 on_compaction_node(
                     tree, entry_id=comp_entry_id, summary=compact_result.summary,

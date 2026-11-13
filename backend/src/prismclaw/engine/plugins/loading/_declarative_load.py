@@ -27,6 +27,7 @@ from prismclaw.engine.plugins.loading._manifest_parse import (
     _merge_hook_config,
 )
 from prismclaw.engine.plugins.manifest import PluginManifest
+from prismclaw.schema.shared.utils import estimate_tokens, truncate_by_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +287,127 @@ def _substitute_mcp_server_configs(
     return substituted
 
 
+# 单次技能激活注入 PRISMCLAW.md 的 token 上限。域包（法律/医疗等）的
+# PRISMCLAW.md 动辄上万 token，全量注入会挤占上下文并淹没当前任务。
+_PLUGIN_INSTRUCTIONS_TOKEN_BUDGET = 2000
+
+# 超限时优先保留的章节：安全红线、输出规范与护栏类的行为约束。
+_PRIORITY_SECTION_KEYWORDS = (
+    "安全",
+    "红线",
+    "禁止",
+    "护栏",
+    "约束",
+    "输出",
+    "格式",
+    "规范",
+    "safety",
+    "guardrail",
+    "red line",
+    "output",
+    "format",
+)
+
+_HEADING_RE = re.compile(r"^#{1,6}\s+\S", re.MULTILINE)
+
+# 省略提示预留的 token、值得截断保留（而非整段丢弃）的最小章节体量，
+# 以及超预算时优先整段保留的小章节上限。
+_OMISSION_NOTE_RESERVE = 80
+_MIN_SECTION_TOKENS = 200
+_SMALL_SECTION_TOKENS = 300
+
+
+def _split_sections(text: str) -> list[tuple[str, str]]:
+    """按 markdown 标题切分为 ``(标题, 整段原文)``；首个标题前的内容标题为空。"""
+    matches = list(_HEADING_RE.finditer(text))
+    if not matches:
+        return [("", text.strip())]
+    sections: list[tuple[str, str]] = []
+    preamble = text[: matches[0].start()].strip()
+    if preamble:
+        sections.append(("", preamble))
+    for idx, match in enumerate(matches):
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        block = text[match.start() : end].rstrip()
+        sections.append((block.split("\n", 1)[0].lstrip("# ").strip(), block))
+    return sections
+
+
+def _is_priority_section(heading: str) -> bool:
+    lowered = heading.lower()
+    return any(keyword in lowered for keyword in _PRIORITY_SECTION_KEYWORDS)
+
+
+def _cap_plugin_instructions(
+    text: str, token_budget: int = _PLUGIN_INSTRUCTIONS_TOKEN_BUDGET
+) -> str:
+    """章节感知的注入限额：优先保留安全/输出规范类章节，其余按原顺序填充。
+
+    安全/输出类章节整体超预算时，小章节整段保留、大章节按体量比例分剩余
+    额度，避免先到先得导致后面的护栏章节被整段挤掉。被舍弃的章节以一行
+    说明替代，让模型知道完整规范在插件目录的 PRISMCLAW.md 里，而不是
+    无声丢失。未超限时原样返回。
+    """
+    if estimate_tokens(text) <= token_budget:
+        return text
+
+    sections = _split_sections(text)
+    costs = [estimate_tokens(block) for _, block in sections]
+    priority = [i for i, (heading, _) in enumerate(sections) if _is_priority_section(heading)]
+    priority_set = set(priority)
+    others = [i for i in range(len(sections)) if i not in priority_set]
+
+    remaining = token_budget - _OMISSION_NOTE_RESERVE
+    kept: dict[int, str] = {}
+
+    priority_total = sum(costs[i] for i in priority)
+    if priority_total > remaining:
+        # 小章节优先整段保留（截成几十 token 的碎片没有意义），
+        # 剩余额度再按体量比例分给大章节。
+        small = [i for i in priority if costs[i] <= _SMALL_SECTION_TOKENS]
+        big = [i for i in priority if costs[i] > _SMALL_SECTION_TOKENS]
+        small_total = sum(costs[i] for i in small)
+        if big and small_total <= remaining // 2:
+            for idx in small:
+                kept[idx] = sections[idx][1]
+            big_total = sum(costs[i] for i in big)
+            for idx in big:
+                quota = max(int((remaining - small_total) * costs[idx] / big_total), 1)
+                kept[idx] = truncate_by_tokens(sections[idx][1], quota)
+        else:
+            for idx in priority:
+                quota = max(int(remaining * costs[idx] / priority_total), 1)
+                kept[idx] = truncate_by_tokens(sections[idx][1], quota)
+        remaining = 0
+    else:
+        for idx in priority:
+            kept[idx] = sections[idx][1]
+        remaining -= priority_total
+
+    omitted = 0
+    for idx in others:
+        block = sections[idx][1]
+        if costs[idx] <= remaining:
+            kept[idx] = block
+            remaining -= costs[idx]
+        elif remaining > _MIN_SECTION_TOKENS:
+            kept[idx] = truncate_by_tokens(block, remaining)
+            remaining = 0
+        else:
+            omitted += 1
+
+    if not kept:
+        return truncate_by_tokens(text, token_budget)
+
+    parts = [kept[idx] for idx in sorted(kept)]
+    if omitted:
+        parts.append(
+            f"> 受注入长度限制，已省略 {omitted} 个章节。"
+            "需要完整规范时请读取插件目录下的 PRISMCLAW.md。"
+        )
+    return "\n\n".join(parts)
+
+
 def _load_plugin_instructions(install_path: Path) -> str | None:
     """加载 PRISMCLAW.md 作为插件指令。
 
@@ -295,6 +417,7 @@ def _load_plugin_instructions(install_path: Path) -> str | None:
     2. 向上查找 marketplace 级 PRISMCLAW.md 作为继承指令（低优先级）
     3. 合并两级指令，明确标注层级关系
     4. 对内容调用 substitute_variables 解析 ${PRISMCLAW_PLUGIN_ROOT} 等变量
+    5. 按章节做 token 限额（见 ``_cap_plugin_instructions``）
 
     HTML comment 剥离（2026-10-29 修复）：
     插件模板里用 ``<!-- ... -->`` comment 块写了"停止检查"等 prose 指令——这些
@@ -310,7 +433,7 @@ def _load_plugin_instructions(install_path: Path) -> str | None:
     plugin_name = install_path.name
     variables = build_plugin_variables(plugin_root=install_path)
     parts: list[str] = []
-    sub_plugin_readme = install_path / "PRISMCLAW.md"
+    sub_plugin_readme = install_path / "PLUGIN.md"
     if sub_plugin_readme.is_file():
         try:
             content = sub_plugin_readme.read_text(encoding="utf-8")
@@ -323,10 +446,10 @@ def _load_plugin_instructions(install_path: Path) -> str | None:
                     f"{substituted.strip()}"
                 )
         except OSError as exc:
-            logger.debug("Failed to read PRISMCLAW.md at %s: %s", sub_plugin_readme, exc)
+            logger.debug("Failed to read PLUGIN.md at %s: %s", sub_plugin_readme, exc)
 
     parent = install_path.parent
-    marketplace_readme = parent / "PRISMCLAW.md"
+    marketplace_readme = parent / "PLUGIN.md"
     if marketplace_readme.is_file():
         try:
             content = marketplace_readme.read_text(encoding="utf-8")
@@ -343,7 +466,7 @@ def _load_plugin_instructions(install_path: Path) -> str | None:
             logger.debug("Failed to read marketplace PRISMCLAW.md at %s: %s", marketplace_readme, exc)
 
     if parts:
-        return "\n\n---\n\n".join(parts)
+        return _cap_plugin_instructions("\n\n---\n\n".join(parts))
     return None
 
 

@@ -15,7 +15,7 @@ from prismclaw.engine.subagent.prompting import (
     resolve_preloaded_skill_context,
 )
 from prismclaw.engine.subagent.shared_types import PreloadedSkillContext
-from prismclaw.engine.execution.request.packing import inject_cache_control_breakpoints
+from prismclaw.schema.llm.request_format import inject_cache_control_breakpoints
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.subagent import SubagentContextSnapshot
 

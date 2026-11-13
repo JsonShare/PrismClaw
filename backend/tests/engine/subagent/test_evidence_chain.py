@@ -15,7 +15,7 @@
  12. render_task_envelope: confidence_assessment 字段引导
  13. normalize_state_payload: evidence 透传
  14. merge_state_payloads: evidence 去重合并
- 15. _prompt_advisory: 证据与准确性规则包含在 advisory 中
+ 15. <subagents>: 证据与准确性规则（固定段唯一 owner）
 
 每轮模拟一种场景, 共 20 轮:
   R01: 单 researcher 成功返回, evidence 包含 read/grep/web_fetch
@@ -519,22 +519,31 @@ def test_r18_render_envelope_handover_confidence():
 
 
 # ═══════════════════════════════════════════════════════════════
-# R19: prompt advisory 包含 Evidence & Accuracy Rules
+# R19: 子代理规则归属固定段 <subagents>
 # ═══════════════════════════════════════════════════════════════
 
-def test_r19_advisory_contains_evidence_rules():
-    from prismclaw.engine.execution.request._prompt_advisory import (
-        _build_advisory_text,
-        subagent_advisory_section,
-    )
+def test_r19_subagents_section_contains_evidence_rules():
+    from prismclaw.engine.execution.request._prompt_types import PromptInputs
+    from prismclaw.engine.execution.request.system_prompt import subagents_section
 
-    # 检查核心文本（core + registry 动态规则）
-    advisory = _build_advisory_text()
-    assert "证据与准确性规则" in advisory
-    assert "不得提升置信度" in advisory
-    assert "高风险主张必须有 [HIGH] 证据" in advisory
+    result = subagents_section(PromptInputs(
+        session_id="test-session",
+        workspace_id="test-ws",
+        agent_id="test-agent",
+        model="test-model",
+        tools=[("sub_agent", "delegate")],
+        subagent_registry_size=2,
+    ))
+    assert result is not None
+    assert "证据" in result
+    assert "置信度不得提升" in result
+    assert "高风险主张需 [HIGH]" in result
+    assert "[HANDOFF_REQUEST]" in result
 
-    # 检查通过 subagent_advisory_section 生成的完整输出
+
+def test_r19_handoff_advisory_is_protocol_only():
+    """动态 handoff_advisory 只保留协议变体，不重复编排/证据规则。"""
+    from prismclaw.engine.execution.request._prompt_advisory import handoff_advisory_section
     from prismclaw.engine.execution.request._prompt_types import PromptInputs
 
     inputs = PromptInputs(
@@ -543,10 +552,36 @@ def test_r19_advisory_contains_evidence_rules():
         agent_id="test-agent",
         model="test-model",
         subagent_registry_size=2,
+        handoff_enabled=True,
+        max_handoff_chain_length=5,
     )
-    result = subagent_advisory_section(inputs)
+    result = handoff_advisory_section(inputs)
     assert result is not None
-    assert "证据与准确性规则" in result
+    assert "[HANDOFF_REQUEST]" in result
+    assert "置信度不得提升" not in result
+
+
+def test_r19_domain_advisory_renders_registered_rules():
+    """领域规则（如医疗免责声明）由 domain_advisory 独立承载。"""
+    from prismclaw.engine.execution.request._disclaimer_registry import (
+        DomainAdvisoryRule,
+        register_advisory_rule,
+        unregister_advisory_rules,
+    )
+    from prismclaw.engine.execution.request._prompt_advisory import domain_advisory_section
+
+    register_advisory_rule(DomainAdvisoryRule(
+        domain="test-domain",
+        title="免责声明（强制）",
+        body="必须附加免责声明。",
+    ))
+    try:
+        result = domain_advisory_section()
+    finally:
+        unregister_advisory_rules("test-domain")
+    assert result is not None
+    assert "免责声明（强制）" in result
+    assert "必须附加免责声明" in result
 
 
 # ═══════════════════════════════════════════════════════════════

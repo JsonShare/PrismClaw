@@ -20,7 +20,7 @@ from prismclaw.schema.agent.session import AgentMessageDict, ProjectionInputMess
 from prismclaw.schema.services.skills import SkillInvocationState
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.engine.execution.loop.runner import RunRequest
 
 logger = logging.getLogger(__name__)

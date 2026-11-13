@@ -46,45 +46,23 @@ async def compact_with_safety_timeout(
 
 
 def estimate_tokens(text: str) -> int:
-    """Delegate to the calibrated estimator (SDD context-governance W1).
+    """Delegate to the token-counting plugin (historical import surface)."""
+    from prismclaw.token_counting import count_text
 
-    The implementation lives in prismclaw.kernel.utils (core may import
-    models; the reverse is forbidden). This wrapper keeps the historical
-    import surface — prismclaw.engine.compression and
-    pre_request_pipeline import estimate_tokens from this module.
-    """
-    from prismclaw.schema.shared import estimate_tokens as _impl
-
-    return _impl(text)
+    return count_text(text)
 
 
 def estimate_message_tokens(msg: dict[str, Any]) -> int:
-    total = 8
-    content = msg.get("content")
-    if isinstance(content, str):
-        total += estimate_tokens(content)
-    elif isinstance(content, list):
-        for block in content:
-            if isinstance(block, dict):
-                btype = block.get("type")
-                if btype in ("image_url", "image"):
-                    total += _image_token_estimate()
-                else:
-                    text = block.get("text") or ""
-                    total += estimate_tokens(text) if isinstance(text, str) else 0
-    for call in msg.get("tool_calls") or []:
-        fn = (call or {}).get("function") or {}
-        name = fn.get("name") or ""
-        args = fn.get("arguments")
-        if isinstance(args, str):
-            total += estimate_tokens(name) + estimate_tokens(args)
-        elif isinstance(args, dict):
-            total += estimate_tokens(name) + estimate_tokens(str(args))
-    return total
+    """Delegate message accounting to the token-counting plugin."""
+    from prismclaw.token_counting import count_message
+
+    return count_message(msg, image_tokens_each=_image_token_estimate())
 
 
 def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
-    return sum(estimate_message_tokens(m) for m in messages)
+    from prismclaw.token_counting import count_messages
+
+    return count_messages(messages, image_tokens_each=_image_token_estimate())
 
 
 @dataclass

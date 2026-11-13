@@ -8,11 +8,18 @@ memory_archive.py.
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
+
+from prismclaw import token_counting as _token_counting
+from prismclaw.token_counting import count_text as _count_text
+
+# 历史常量名保留为可导入的再导出（测试与外部调用方依赖）。
+_CJK_TOKENS_PER_CHAR = _token_counting.CJK_TOKENS_PER_CHAR
+_OTHER_CHARS_PER_TOKEN = _token_counting.OTHER_CHARS_PER_TOKEN
+_estimator_v2_enabled = _token_counting._estimator_v2_enabled
 
 IMAGE_PLACEHOLDER = "[图片]"
 FILE_PLACEHOLDER = "[附件]"
@@ -45,67 +52,23 @@ def decode_inline_markers(text: str) -> str:
 # ══════════════════════════════════════════════════════════════════
 # Token estimation (SDD docs/context-governance-sdd.md W1 / S0-S1)
 # ══════════════════════════════════════════════════════════════════
-# Coefficients calibrated 2026-08-21 against the real Qwen3.5-27B
-# tokenizer over 101 production chat messages (scripts/calibration_
-# report.json): R²=0.9978. The legacy ``len(text) // 4`` heuristic
-# underestimated Chinese-heavy content by 2.28x (independently confirmed
-# by the 50-round web test: real input climbed to 136,792 tokens on a
-# 131,072-token window while the estimator reported ~60k), so history
-# compaction never triggered.
-#
-# Rollback switch: PRISMCLAW_COMPACTION_ESTIMATOR_V2=false restores the
-# legacy len//4 behavior (read once at import; restart to apply).
-
-_CJK_TOKENS_PER_CHAR = 0.75      # fit: 0.7499 tokens per CJK character
-# 注意：2.72 是 2026-08-21 校准 101 条 chat messages 的 R²=0.9978 拟合值，
-# 但那批数据是生产对话（中文为主），英文 JSON/system-prompt/tool-schema 占比低。
-# 漂移 sentinel 在含大量英文 JSON 的场景下暴露了问题：2.72 chars/token ≈ 2.72 B/token
-# 远低于实际 provider tokenizer（对英文/JSON 通常 4-5 B/token），导致 estimator 对英文
-# 内容**系统性高估 60-85%**——history_tokens/accounted 持续比 real 大 6-7K tokens。
-# 调至 4.0 chars/token ≈ 4 B/token 英文（gpt-4o/qwen 等真实 tokenizer 英文基准），
-# 同时 CJK 0.75 ≈ 4 B/token 保持不变（两者在 UTF-8 字节维度上对齐到 ~4 B/token，
-# 是大多数 tokenizer 的实际字节效率）。值 4.0 是两者（CJK 和 ASCII）在字节空间的自然交汇点。
-_OTHER_CHARS_PER_TOKEN = 4.0
-
-_CJK_RE = re.compile(
-    "[\u3400-\u4dbf\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]"
-)
-
-
-def _estimator_v2_enabled() -> bool:
-    raw = os.environ.get("PRISMCLAW_COMPACTION_ESTIMATOR_V2", "true")
-    return str(raw).strip().lower() not in ("false", "0", "no")
-
-
-def _estimate_text_tokens(text: str) -> int:
-    if not text:
-        return 0
-    if not _estimator_v2_enabled():
-        return max(1, len(text) // 4)
-    # sub() runs in C: cjk = len − len(after removing CJK chars)
-    cjk = len(text) - len(_CJK_RE.sub("", text))
-    other = len(text) - cjk
-    return max(1, int(cjk * _CJK_TOKENS_PER_CHAR + other / _OTHER_CHARS_PER_TOKEN))
+# 权威实现已抽离到独立插件包 ``prismclaw.token_counting``（可替换 provider、
+# 系数集中配置）。本模块保留历史 import 面，仅做委托。
 
 
 def estimate_tokens(text: str, *, image_tokens_each: int = 0) -> int:
-    """Estimate LLM tokens for a text (CJK-weighted, calibrated).
-
-    CJK characters count ~0.75 tokens each; everything else ~1 token per
-    2.72 characters (markdown/punctuation-heavy chat content tokenizes
-    denser than natural English prose). Empty text returns 0.
+    """Estimate LLM tokens for a text (delegates to the token-counting plugin).
 
     ``image_tokens_each``（默认 0）使图片占位符（``IMAGE_PLACEHOLDER``）
     按每张图固定 token 计而不做占位符文本零化；0 保持旧行为。
     """
     if not text:
         return 0
-    if image_tokens_each > 0:
-        image_count = text.count(IMAGE_PLACEHOLDER)
-        if image_count:
-            remainder = text.replace(IMAGE_PLACEHOLDER, "")
-            return _estimate_text_tokens(remainder) + image_count * int(image_tokens_each)
-    return _estimate_text_tokens(text)
+    return _count_text(
+        text,
+        image_tokens_each=image_tokens_each,
+        image_placeholder=IMAGE_PLACEHOLDER if image_tokens_each > 0 else "",
+    )
 
 
 def count_image_parts(messages: Any) -> int:

@@ -29,7 +29,7 @@ from prismclaw.engine.execution.state.task_persistence import (
     _evaluate_and_apply_task_mutation,
     _set_resume_boundary,
 )
-from prismclaw.engine.execution.loop.bootstrap import (
+from prismclaw.engine.execution.loop.tree_writer import (
     _persist_session_memory_snapshot,
 )
 from prismclaw.engine.execution.skills.skill_dispatch import _append_control_message_override
@@ -132,7 +132,7 @@ async def evaluate_no_tool_governance(
         append_assistant_response,
     )
     from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
-    from prismclaw.engine.execution.loop.bootstrap import _append
+    from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.engine.execution.checkpoint import ResumeBoundary
     from prismclaw.engine.execution.loop.arbiter import persist_snapshot_fn
 

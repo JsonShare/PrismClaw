@@ -9,17 +9,18 @@ Design rules (enforced by the code, not by convention):
   ``dict[int, dict]`` shape that was used previously is **gone** — if
   you see it anywhere it is a bug, not a compatibility layer.
 * There is exactly ONE place where raw argument bytes are appended to
-  an accumulating string: :meth:`ToolCallSlot.accumulate_arguments`.
+  an accumulating string: :meth:`ToolCallSlot.absorb_argument_bytes`.
   If you find another ``arguments += …`` anywhere, it is a bug.
 * There is exactly ONE place where the accumulated argument string is
-  parsed into a dict and optionally recovered:
-  :meth:`ToolCallSlot.finalize_arguments`.  Downstream code (tool
-  implementations, the streaming executor, skill invokers) MUST NOT
-  contain any ``_raw`` unwrapping, JSON-recovery, brace-balancing, or
-  other "defensive" argument parsing.  If the arguments were
-  unrecoverable, finalize_arguments encodes that fact in a way the
-  execution layer can detect, and *only* the execution layer is
-  allowed to report it.
+  parsed: :meth:`ToolCallSlot.parse_arguments` (``json.loads`` →
+  salvage → ``None``).  The execution layer's
+  :func:`prismclaw.engine.execution.dispatch.execution_entry.repair_json_args`
+  reuses the same salvage implementation for the strings that reach it
+  out of band; it is not a second parser.
+* :meth:`ToolCallSlot.to_openai_dict` always emits **valid JSON** for
+  ``function.arguments`` (``{}`` when unrecoverable).  An invalid string
+  here would be persisted into the assistant message and rejected by the
+  provider on replay.
 * There is exactly ONE JSON-salvage implementation in this repo:
   :func:`_salvage_json_object`.  The previous ``_try_recover_json`` in
   ``execution_entry.py`` was 95 % a duplicate; it has been deleted.
@@ -35,6 +36,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -54,7 +56,7 @@ class ToolCallSlot:
     function-calling wire format, because LiteLLM normalises every
     provider into this shape before we see a chunk.  Adding or
     renaming a field here means you also need to audit
-    :func:`_normalize_tool_call_delta` in ``llm.py``.
+    :func:`_normalize_tool_call` in ``client.py``.
     """
 
     index: int
@@ -97,64 +99,33 @@ class ToolCallSlot:
     # Parsing + recovery — one pipeline, three tiers
     # ------------------------------------------------------------------
 
-    def parse_arguments(self) -> dict[str, Any]:
-        """Return the parsed argument dict.
+    def parse_arguments(self) -> dict[str, Any] | None:
+        """Return the parsed argument dict, or ``None`` if unrecoverable.
 
         Pipeline (in order of attempt):
 
         1. ``json.loads`` on the accumulated string.
-        2. :func:`_salvage_json_object` to recover a valid dict from a
-           malformed payload (duplicated JSON, dropped closing brace).
-        3. ``{"_raw": original_string}`` when nothing else works.
+        2. :func:`_salvage_json_object` for truncated / concatenated
+           payloads.
+        3. ``None`` — not a valid dict.
 
-        There is deliberately no step 4, and no "try even harder"
-        branch.  Every additional salvage heuristic we add has a
-        non-zero chance of silently corrupting a valid-but-unusual
-        payload; logging the failure and letting the operator see it
-        is always better than guessing.
+        Salvage lives here *and* is reused by the execution layer's
+        :func:`repair_json_args` (same implementation, same result).  The
+        repaired dict must be what both history and execution see,
+        otherwise the assistant message replayed to the provider would
+        disagree with the args the tool actually ran with.
         """
         raw = self.arguments_str or "{}"
 
-        # Tier 1 — clean parse.  99.9 % of calls.
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
             parsed = None
-
         if isinstance(parsed, dict):
             return parsed
-        if parsed is not None:
-            # json.loads succeeded but produced a list / string / null.
-            # Never silently coerce; go straight to salvage because the
-            # preceding bytes might be garbage followed by a valid dict.
-            logger.warning(
-                "tool_call_args_non_dict idx=%d bytes=%d type=%s name=%s",
-                self.index,
-                len(raw),
-                type(parsed).__name__,
-                self.name or "<unknown>",
-            )
 
-        # Tier 2 — salvage.
-        recovered = _salvage_json_object(raw)
-        if recovered is not None:
-            logger.warning(
-                "tool_call_args_recovered idx=%d bytes=%d name=%s",
-                self.index,
-                len(raw),
-                self.name or "<unknown>",
-            )
-            return recovered
-
-        # Tier 3 — unrecoverable.  Preserve the original bytes for
-        # error reporting and wrap them exactly once.
-        logger.warning(
-            "tool_call_args_unrecoverable idx=%d bytes=%d name=%s",
-            self.index,
-            len(raw),
-            self.name or "<unknown>",
-        )
-        return {"_raw": raw}
+        # json.loads failed, or produced a non-dict (list / string / null).
+        return _salvage_json_object(raw)
 
     # ------------------------------------------------------------------
     # Serialisation
@@ -163,17 +134,20 @@ class ToolCallSlot:
     def to_openai_dict(self) -> dict[str, Any]:
         """Return a dict in the OpenAI tool call wire format.
 
-        The ``arguments`` field is always a JSON-encoded string,
-        matching the transport format and the shape expected by
-        ``_function_args`` in the execution layer.
+        ``arguments`` is **always** valid JSON: the parsed/salvaged dict
+        when available, otherwise ``{}``.  Emitting the raw malformed
+        string here would persist an invalid ``tool_calls[].function.
+        arguments`` into the assistant message, which the provider rejects
+        with a 400 on the next replay.
         """
         args_parsed = self.parse_arguments()
+        arguments = json.dumps(args_parsed, ensure_ascii=False) if args_parsed else "{}"
         return {
             "id": self.id or f"call_{self.index}",
             "type": "function",
             "function": {
                 "name": self.name,
-                "arguments": json.dumps(args_parsed, ensure_ascii=False),
+                "arguments": arguments,
             },
         }
 
@@ -236,6 +210,20 @@ class ToolCallBuffer:
 # Salvage helper — the one and only
 # ---------------------------------------------------------------------------
 
+_FENCE_RE = re.compile(r"```(?:json)?\s*\n?(.*?)```", re.DOTALL | re.IGNORECASE)
+_TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
+
+
+def _strip_md_fence(raw: str) -> str:
+    """Return the inner JSON when *raw* is wrapped in a markdown fence."""
+    match = _FENCE_RE.search(raw)
+    return match.group(1).strip() if match else raw
+
+
+def _strip_trailing_commas(raw: str) -> str:
+    """Remove ``,}`` / ``,]`` before a closing delimiter (invalid JSON)."""
+    return _TRAILING_COMMA_RE.sub(r"\1", raw)
+
 
 def _salvage_json_object(raw: str) -> dict[str, Any] | None:
     """Extract the most complete valid JSON dict from a malformed string.
@@ -260,7 +248,24 @@ def _salvage_json_object(raw: str) -> dict[str, Any] | None:
       arguments are always objects.
     * More than 2 appended closing braces — anything beyond that is
       almost certainly a real problem, not a dropped pair.
+
+    Two cheap normalisations run before the strategies below: markdown
+    code-fence unwrapping (```json … ```) and trailing-comma removal.
+    Both are applied only to a full-string parse attempt, so a stray
+    ``",}"`` inside a string value can never be mangled in the
+    fallback strategies.
     """
+    _fence = _strip_md_fence(raw)
+    if _fence != raw:
+        raw = _fence
+    try:
+        _fast = json.loads(_strip_trailing_commas(raw))
+    except (ValueError, TypeError):
+        pass
+    else:
+        if isinstance(_fast, dict):
+            return _fast
+
     candidates: list[tuple[int, str]] = []  # (start_pos, substring)
 
     # Strategy A — every balanced {…} span via bracket matching.

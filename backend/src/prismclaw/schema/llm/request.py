@@ -29,7 +29,7 @@ class PackedLLMRequest:
     # 辅助请求保持 None——不携带路由键即不与主缓存前缀粘连（pi P-7）。
     session_id: str | None = None
     # 输入预算（token）：由打包方用 resolve_runtime_zones 填充（ratio=A_eff）。
-    # stream_fn 以此为 max_tokens 钳制基准；None 时回退模型 context_window 推导。
+    # client 以此为 max_tokens 钳制基准；None 时回退模型 context_window 推导。
     input_budget: int | None = None
 
 

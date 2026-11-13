@@ -9,7 +9,7 @@ from prismclaw.assembly.plugins.plugin_lifecycle import (
     PluginLifecycleManager,
     PluginRuntimeBundle,
 )
-from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.assembly.runtime_coordinator import (
     apply_app_runtime_bundle,
     build_plugin_reload_runtime_bundle,

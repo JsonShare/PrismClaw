@@ -417,13 +417,17 @@ def test_websocket_handler_wiring():
 
 def test_engine_closure_source_wiring():
     """引擎闭包接线（源码断言）：LoopConfig 字段 + 骨架消费点 + 闭包实现。"""
-    al_src = (
+    wiring_src = (
         Path(__file__).resolve().parents[1]
-        / "src/prismclaw/engine/execution/loop/agent_loop.py"
+        / "src/prismclaw/engine/execution/loop/wiring.py"
     ).read_text(encoding="utf-8")
-    assert "Step 1.5: steering" in al_src
-    assert "get_steering_messages=get_steering_messages," in al_src
-    assert 'role="user"' in al_src  # 落树原样 user 身份（无前缀）
+    assert "get_steering_messages=partial(_terminal.get_steering_messages, rt)" in wiring_src
+
+    terminal_src = (
+        Path(__file__).resolve().parents[1]
+        / "src/prismclaw/engine/execution/loop/terminal.py"
+    ).read_text(encoding="utf-8")
+    assert 'role="user"' in terminal_src  # 落树原样 user 身份（无前缀）
 
     types_src = (
         Path(__file__).resolve().parents[1]

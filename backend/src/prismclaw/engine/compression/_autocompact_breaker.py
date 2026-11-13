@@ -15,18 +15,13 @@ if TYPE_CHECKING:
 
 @dataclass
 class AutocompactBreaker:
-    """Per-session consecutive-failure counter for autocompact.
+    """Autocompact 熔断：连续失败计数。
 
-    Mirrors Claude's
-    ``MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES = 3`` from
-    ``autoCompact.ts``.  When the counter reaches the threshold, the
-    coordinator raises :class:`CircuitBreakerException` instead of
-    burning more API calls in a doomed ``prompt_too_long`` loop.
+    连续失败达到阈值后，协调器不再在 ``prompt_too_long`` 循环中
+    浪费 API 调用，而是主动抛 :class:`CircuitBreakerException`。
 
-    The breaker state is intentionally simple — a single counter per
-    instance.  Lifecycle is owned by the runner (one breaker per
-    session) so the counter survives across turns.
-    """
+    状态刻意保持简单——每 session 一个计数器，生命周期由 runner
+    持有，跨 turn 保留。"""
 
     consecutive_failures: int = 0
 
@@ -119,9 +114,7 @@ _METRIC_AUTOCOMPACT_FAILURE = "autocompact.summary_failure"
 _METRIC_AUTOCOMPACT_GAUGE = "autocompact.consecutive_failures"
 _METRIC_AUTOCOMPACT_OPEN = "autocompact.circuit_breaker_open"
 
-# PTL retry constants mirror Claude's compact.ts:451-475.
-# MAX_PTL_RETRIES is the number of additional attempts after the
-# first call, so the compact API can be invoked up to 4 times total.
+# PTL 重试常量：首个调用失败后再尝试 3 次，compact API 总共最多调用 4 次。
 _MAX_PTL_RETRIES = 3
 _PROMPT_TOO_LONG_REASON = "prompt_too_long"
 

@@ -1341,7 +1341,7 @@ export default function MessageBubble({
                           onClick={() => onQuickReply?.(q)}
                           disabled={!onQuickReply}
                           className="w-full px-4 py-2 text-left flex items-center justify-between gap-3 rounded-[var(--radius-control)]
-                                     hover:bg-[var(--c-surface-2)]/60 hover:shadow-[var(--shadow-sm)] active:scale-[0.995] transition-all cursor-pointer
+                                     hover:bg-[var(--c-surface-2)]/60 hover:shadow-[var(--shadow-hover)] active:scale-[0.995] transition-all cursor-pointer
                                      disabled:opacity-60 disabled:cursor-default"
                         >
                           <span className="text-[length:var(--fs-sm)] text-[var(--c-text)]">{q}</span>

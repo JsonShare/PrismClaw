@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from prismclaw.schema.llm.types import LLMStreamFn
+from prismclaw.schema.llm.types import LLMClient
 
 # ── 领域常量 ──────────────────────────────────────────
 
@@ -53,7 +53,7 @@ class EdgeStoreProtocol(Protocol):
     ) -> list[MemoryEdge]: ...
     async def edge_degree(self, session_key: str, entry_id: str) -> int: ...
     async def edges_applicable_in_context(
-        self, edges: list[MemoryEdge], context: str, llm_client: LLMStreamFn,
+        self, edges: list[MemoryEdge], context: str, llm_client: LLMClient,
     ) -> list[MemoryEdge]: ...
 
 

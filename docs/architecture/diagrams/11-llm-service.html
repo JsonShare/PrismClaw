@@ -56,7 +56,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">&#8943;</button>
         </div>
       </div>
-      <p class="subtitle">Factory &rarr; ProviderResolver &rarr; StreamFn &rarr; PromptOptimizer &mdash; Call chain with retry, fallback, and SOP extraction</p>
+      <p class="subtitle">ProviderResolver &rarr; LiteLLMClient &rarr; PromptOptimizer &mdash; Call chain with retry, fallback, and SOP extraction</p>
     </div>
 
     <div class="diagram-container">
@@ -79,14 +79,6 @@
         <rect x="50" y="25" width="1000" height="510" rx="12" fill="#0f172a" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
         <text x="72" y="47" fill="#34d399" font-size="11" font-weight="600">LLM Call Chain</text>
 
-        <!-- LLMStreamFnFactory -->
-        <rect x="350" y="143" width="400" height="70" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="550" y="168" fill="white" font-size="12" font-weight="600" text-anchor="middle">LLMStreamFnFactory</text>
-        <text x="550" y="186" fill="#94a3b8" font-size="9" text-anchor="middle">get_for_tenant() | register_tenant_fn() &mdash; per-tenant stream fn management</text>
-        <text x="550" y="202" fill="#34d399" font-size="7" text-anchor="middle">factory.py</text>
-
-        <line x1="550" y1="213" x2="550" y2="238" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
-
         <!-- ProviderResolver -->
         <rect x="130" y="241" width="460" height="120" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
         <text x="360" y="265" fill="white" font-size="12" font-weight="600" text-anchor="middle">ProviderResolver</text>
@@ -103,9 +95,9 @@
         <line x1="590" y1="301" x2="630" y2="301" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
         <text x="608" y="296" fill="#94a3b8" font-size="7">credentials</text>
 
-        <!-- LiteLLMStreamFn -->
+        <!-- LiteLLMClient -->
         <rect x="633" y="241" width="390" height="120" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="828" y="265" fill="white" font-size="12" font-weight="600" text-anchor="middle">LiteLLMStreamFn</text>
+        <text x="828" y="265" fill="white" font-size="12" font-weight="600" text-anchor="middle">LiteLLMClient</text>
         <text x="828" y="283" fill="#94a3b8" font-size="8" text-anchor="middle">stream() &rarr; AsyncIterator[LLMStreamChunk]</text>
         <text x="828" y="299" fill="#94a3b8" font-size="8" text-anchor="middle">complete() &rarr; LLMResponse</text>
         <text x="828" y="315" fill="#94a3b8" font-size="8" text-anchor="middle">3x retry | non-stream fallback | tool arg sanitize</text>
@@ -124,7 +116,7 @@
         <text x="280" y="432" fill="#94a3b8" font-size="8" text-anchor="middle">LLM-driven prompt rewrite | temp=0.3</text>
         <text x="280" y="444" fill="#34d399" font-size="7" text-anchor="middle">_strip_markdown_code_block()</text>
 
-        <!-- Arrow from StreamFn to PromptOptimizer -->
+        <!-- Arrow from LiteLLMClient to PromptOptimizer -->
         <path d="M 700 361 L 700 375 L 430 375 L 430 388" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrowhead)"/>
         <text x="560" y="372" fill="#94a3b8" font-size="7">LLM rewrite call</text>
 
@@ -211,7 +203,7 @@
           <h3>LLM Call Chain</h3>
         </div>
         <ul>
-          <li>&#8226; Factory &#8594; ProviderResolver &#8594; StreamFn</li>
+          <li>&#8226; ProviderResolver &#8594; LiteLLMClient</li>
           <li>&#8226; 3x retry: stream &#8594; stream &#8594; complete (fallback)</li>
           <li>&#8226; Tool call arg sanitization for malformed JSON</li>
           <li>&#8226; Qwen thinking auto-disable on non-DashScope</li>

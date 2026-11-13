@@ -22,7 +22,7 @@ from prismclaw.schema.session.types import CustomEntry, DECISION_LEDGER_EVENT_CU
 from prismclaw.schema.session.event_logger import SessionEventLogger
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.engine.execution.dispatch.execution import ResultCompactionTurn
 
 from prismclaw.engine.execution.dispatch.turn_utils import (

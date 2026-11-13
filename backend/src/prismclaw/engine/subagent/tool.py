@@ -23,20 +23,20 @@ import asyncio
 import copy
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.security.gate.types import (
+    ParallelTaskExtras,
+    TaskRuntimeContext,
+)
 from prismclaw.engine.subagent.core.contract import (
     build_context_snapshot,
     context_snapshot_json_schema,
 )
 from prismclaw.engine.subagent.core.executor import SubAgentExecutor
 from prismclaw.engine.subagent.definition.registry import SubAgentRegistry, _closest_match
-from prismclaw.engine.security.gate.types import (
-    ParallelTaskExtras,
-    TaskRuntimeContext,
-)
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 from prismclaw.schema.config.config import SubAgentConfig
 from prismclaw.schema.content.content_types import TextBlock, ToolResult
@@ -46,7 +46,8 @@ logger = logging.getLogger(__name__)
 _AUDIT_LOGGER_NAME = "prismclaw.audit.subagent"
 
 
-# Agent item schema (dynamically injected with agent_name enum at access time).
+# Agent item schema（静态：不再动态注入 agent_name enum）。
+# 插件子代理名由 subagent_search 逐级披露；未知名由 execute 的校验给出最近邻提示。
 # Each item supports optional model override for multi-LLM parallel scenarios.
 _AGENT_ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -54,8 +55,8 @@ _AGENT_ITEM_SCHEMA: dict[str, Any] = {
         "agent_name": {
             "type": "string",
             "description": (
-                "子代理角色名。必须与 <available_subagents> 列表中的名称完全一致，"
-                "区分大小写，且仅允许小写字母、数字和连字符。"
+                "子代理角色名。核心子代理见 `<subagents>`，插件子代理由 "
+                "`subagent_search` 检索得到；名称必须逐字一致，区分大小写。"
             ),
         },
         "task": {
@@ -197,34 +198,10 @@ class SubAgentTool:
         self._settings = settings
         self._capability_catalog = capability_catalog
         self._audit = audit_logger or logging.getLogger(_AUDIT_LOGGER_NAME)
-        # parameters 是 property，每次 ToolRegistry 构建 JSON Schema 时
-        # 实时注入当前 agent_name enum；避免 manifest 变更后 schema 与
-        # 注册表不同步的陈旧风险。description 同理。
+        # 静态 schema：插件子代理名不再注入 enum —— 发现面是 subagent_search，
+        # 未知名由 execute 的校验给出最近邻提示，避免每轮请求携带全量名单。
+        self.parameters = copy.deepcopy(_PARAMETERS_TEMPLATE)
         self.description = self._render_description()
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        """Dynamic parameters schema with agent_name enum injected at access time.
-
-        Rebuilt on each property access so agent_name enum is always pulled from
-        the current CapabilityCatalogService (same registry used at dispatch).
-        This guarantees the JSON Schema surfaced to the LLM and the names accepted
-        at execution can NEVER drift apart.
-        """
-        schema = copy.deepcopy(_PARAMETERS_TEMPLATE)
-        try:
-            catalog = self._capability_catalog
-            entries = catalog.list_agent_entries()
-        except Exception:
-            entries = []
-        if entries:
-            names = sorted({e.name for e in entries})
-            agent_item = schema["properties"]["agents"]["items"]
-            agent_item["properties"]["agent_name"]["enum"] = names
-            existing_desc = agent_item["properties"]["agent_name"]["description"]
-            enum_hint = " Available: " + ", ".join(f"'{n}'" for n in names)
-            agent_item["properties"]["agent_name"]["description"] = existing_desc + enum_hint
-        return schema
 
     @property
     def registry(self):
@@ -237,16 +214,6 @@ class SubAgentTool:
     @property
     def capability_catalog(self) -> CapabilityCatalogService:
         return self._capability_catalog
-
-    def refresh_catalog(
-        self,
-        capability_catalog: CapabilityCatalogService,
-    ) -> None:
-        self._capability_catalog = capability_catalog
-        self.refresh_description()
-
-    def refresh_description(self) -> None:
-        self.description = self._render_description()
 
     def resolve_dispatch_timeout_seconds(self, args: dict[str, Any]) -> float:
         """子代理分发外层超时——恒为 0（不封顶），时长交由内部 turn loop 掌控。
@@ -713,7 +680,7 @@ class SubAgentTool:
             payload: dict[str, Any] = {
                 "event": "subagent_invocation",
                 "event_type": "subagent_spawn",
-                "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "subagent_name": manifest.name,
                 "subagent_source": getattr(manifest, "source", "user"),
                 "execution_mode": manifest.execution_mode,

@@ -5,6 +5,7 @@ from typing import Any
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
 from prismclaw.engine.execution.capabilities.discovery_runtime import (
     SkillDiscoveryRuntime,
+    SubagentDiscoveryRuntime,
     ToolDiscoveryRuntime,
 )
 
@@ -171,6 +172,63 @@ def _render_skill_matches(query: str, matches: list[Any]) -> str:
     return "\n".join(lines)
 
 
+def _subagent_origin(match: Any) -> str:
+    parts = []
+    if match.package:
+        parts.append(f"包 {match.package}")
+    if match.sub_plugin:
+        parts.append(f"子插件 {match.sub_plugin}")
+    return " / ".join(parts)
+
+
+def _render_subagent_matches(query: str, matches: list[Any]) -> str:
+    lines = [
+        f"根据“{query}”找到 {len(matches)} 个插件子代理。",
+        "",
+        "### 可用子代理：",
+        "**下一步：用下方完全一致的名称调用 `sub_agent`（agents=[{agent_name, task}]）；"
+        "逐字符复制，不要缩写或改变大小写。**",
+        "",
+    ]
+    for match in matches:
+        lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
+        origin = _subagent_origin(match)
+        if origin:
+            lines.append(f"  {origin}")
+    lines.append(
+        "\n---\n"
+        "若这些子代理都不匹配任务，请自行处理或改用核心子代理——不要猜测其他名称，"
+        "也不要用近似查询重复运行 subagent_search。"
+    )
+    return "\n".join(lines)
+
+
+def _render_subagent_fallback(query: str, all_agents: list[Any]) -> str:
+    if not all_agents:
+        return (
+            f"未找到匹配“{query}”的插件子代理，该范围内没有可用条目。"
+            "核心子代理已列在 `<subagents>`；任务简单时请直接自行处理。"
+        )
+    lines = [
+        f"按关键词未匹配到插件子代理“{query}”。",
+        "",
+        "### 全部插件子代理（请按名称/描述选择最接近的一项）：",
+        "**调用 `sub_agent` 时必须使用下方完全一致的名称。**",
+        "",
+    ]
+    for match in all_agents:
+        lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
+        origin = _subagent_origin(match)
+        if origin:
+            lines.append(f"  {origin}")
+    lines.append(
+        "\n---\n"
+        "核心子代理已列在 `<subagents>`；若无合适插件子代理，请自行处理。"
+        "不要用相同或近似查询重复运行 subagent_search。"
+    )
+    return "\n".join(lines)
+
+
 class ToolSearchTool:
     name = "tool_search"
     description = (
@@ -299,3 +357,57 @@ class SkillSearchTool:
             all_skills = self._runtime.list_all(workspace_path=context.workspace_path)
             return text_result(call_id, _render_skill_fallback(query, all_skills))
         return text_result(call_id, _render_skill_matches(query, matches))
+
+
+class SubagentSearchTool:
+    name = "subagent_search"
+    description = (
+        "按领域、职责或任务检索插件提供的子代理。"
+        "仅用于发现；调用仍用 `sub_agent`。核心子代理见 `<subagents>`。"
+    )
+    tool_class = "read"
+    parameters = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "用自然语言描述你需要的子代理职责、领域或任务。",
+            },
+            "package": {
+                "type": "string",
+                "description": "可选：限定插件包名或子插件名。",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "返回条数上限（默认 10，最大 20）。",
+            },
+        },
+        "required": ["query"],
+        "additionalProperties": False,
+    }
+    side_effect = False
+    effect_class = "pure_read"
+
+    def __init__(self, *, capability_catalog: CapabilityCatalogService):
+        self._runtime = SubagentDiscoveryRuntime(capability_catalog=capability_catalog)
+
+    async def execute(self, args: dict[str, Any], context: ToolContext):
+        call_id = args.get("_call_id", "")
+        query = args.get("query", "")
+        if not isinstance(query, str) or not query.strip():
+            return error_result(call_id, "缺少必填参数 'query'")
+        raw_package = args.get("package")
+        package = raw_package.strip() if isinstance(raw_package, str) and raw_package.strip() else None
+        raw_limit = args.get("limit", 10)
+        limit = raw_limit if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) else 10
+        matches = self._runtime.search(query, package=package, limit=limit)
+        if not matches:
+            # 0 结果兜底：列出范围内插件子代理，避免模型盲目重试同一 query
+            return text_result(
+                call_id,
+                _render_subagent_fallback(
+                    query,
+                    self._runtime.list_plugin_agents(limit=20, package=package),
+                ),
+            )
+        return text_result(call_id, _render_subagent_matches(query, matches))

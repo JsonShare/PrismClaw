@@ -1,4 +1,4 @@
-"""LiteLLMStreamFn — LLMStreamFn implementation backed by litellm."""
+"""LiteLLMClient — LLMClient implementation backed by litellm."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from prismclaw.engine.services.llm.provider_resolver import (
 )
 
 if TYPE_CHECKING:
-    from prismclaw.schema.llm.provider_types import ProviderConfig
+    from prismclaw.schema.llm.provider_types import ModelEntry, ProviderConfig
 
 logger = logging.getLogger(__name__)
 
@@ -44,51 +44,62 @@ _CONTEXT_PAYLOAD_TRANSPORT_KEY = "prism_context_transport"
 class ProviderPreparedRequest:
     messages: list[dict[str, Any]]
     extensions: dict[str, Any]
-    transport_mode: Literal["none", "structured_extension", "legacy_bridge"]
 
 
-# vLLM / OpenAI 兼容端点下默认开启思考（reasoning）的模型前缀。这类模型在
-# function-calling 结构化输出时若不关闭思考，会陷入长 reasoning 循环——持续吐
-# reasoning_content 而不产出 content/tool_calls/stop，最终耗尽阶段预算
-# （2026-10 glm-53 实证：divergent_directions 300s、mining_candidates_v3 720s
-#  两阶段预算先后耗尽，日志 chunks 数万但 text_chars=0、finish_reason 空）。
-# 统一经 chat_template_kwargs.enable_thinking=False 关闭（vLLM 通用约定，
-# Qwen / GLM 系列均遵循）。
-_THINKING_CONTROLLED_MODEL_PREFIXES = ("qwen", "glm")
+def _model_entry(
+    model: str,
+    providers: Mapping[str, ProviderConfig],
+) -> ModelEntry | None:
+    """按裸模型名在 providers 配置中查找模型条目（未配置则返回 None）。"""
+    for provider in providers.values():
+        entry = (provider.models or {}).get(model)
+        if entry is not None:
+            return entry
+    return None
 
 
 def _should_disable_thinking(
     *,
     model: str,
-    llm_provider: str | None,
+    providers: Mapping[str, ProviderConfig],
     api_base: str | None,
+    override: bool | None = None,
 ) -> bool:
-    """判断是否需要关闭模型的思考模式（/no_think）。
+    """按 ``models.yaml`` 中模型声明的 ``disable_thinking`` 决定是否下发 enable_thinking=False。
 
-    覆盖场景：
-    - llm_provider="openai" 且非阿里云 DashScope → 关闭（本地 vLLM / OpenAI 兼容端点）
-    - llm_provider=None（fallback 模式，无 providers dict）→ 关闭
-    - DashScope 官方端点 → 不关闭（原生支持思考模式控制）
+    该开关是模型/端点能力问题（vLLM 通用约定），由配置声明而非模型名前缀推断；
+    DashScope 官方端点原生支持思考模式控制，不强制关闭。
     """
-    if not model.lower().startswith(_THINKING_CONTROLLED_MODEL_PREFIXES):
+    if "dashscope" in (api_base or "").lower():
         return False
-    normalized_base = (api_base or "").lower()
-    if "dashscope" in normalized_base:
-        return False
-    if (llm_provider or "").lower() == "openai":
-        return True
-    if llm_provider is None:
-        # fallback 模式：无 providers dict，通常是本地 vLLM 等兼容端点
-        return True
-    return False
+    if override is not None:
+        return override
+    entry = _model_entry(model, providers)
+    return bool(entry is not None and entry.disable_thinking)
+
+
+def _declared_reasoning_effort_levels(
+    model: str,
+    providers: Mapping[str, ProviderConfig],
+) -> tuple[str, ...]:
+    """取模型在配置中声明的合法推理强度档位（未声明则返回空）。
+
+    交由 litellm 自身按 ``model_info.reasoning_effort_levels`` 做就近取整，
+    避免为每个端点手写取值兼容逻辑。
+    """
+    entry = _model_entry(model, providers)
+    if entry is None or not entry.reasoning_effort_levels:
+        return ()
+    return tuple(entry.reasoning_effort_levels)
 
 
 # llm_request_start 的输入规模估算：中英混合文本约 1 token / 3 字节
 # （工具 schema 亦计入——tools 是每轮固定开销的大头，需要可见）。
+# 字节→token 的系数由 token_counting 插件统一提供，调用方不再持有魔法数。
 def _estimate_input_tokens(messages: list[Any], tools: list[Any]) -> int:
-    import json
+    from prismclaw.token_counting import count_bytes
 
-    def _size(obj: Any) -> list[int]:
+    def _size(obj: Any) -> int:
         try:
             payload = json.dumps(obj, ensure_ascii=False, default=str)
         except Exception:
@@ -96,7 +107,7 @@ def _estimate_input_tokens(messages: list[Any], tools: list[Any]) -> int:
         return len(payload.encode("utf-8"))
 
     total = sum(_size(m) for m in messages) + sum(_size(t) for t in tools)
-    return total // 3
+    return count_bytes(total, kind="json")
 
 
 class ProviderRequestAdapter:
@@ -120,7 +131,6 @@ class ProviderRequestAdapter:
             return ProviderPreparedRequest(
                 messages=prepared_messages,
                 extensions={},
-                transport_mode=transport_mode,
             )
 
         context_payload = request.context_payload
@@ -145,7 +155,6 @@ class ProviderRequestAdapter:
                         "prism_context_block_count": block_count,
                     },
                 },
-                transport_mode=transport_mode,
             )
 
         prepared_messages = self._adapt_with_legacy_context_bridge(
@@ -156,7 +165,6 @@ class ProviderRequestAdapter:
         return ProviderPreparedRequest(
             messages=prepared_messages,
             extensions={},
-            transport_mode=transport_mode,
         )
 
     def _select_transport_mode(
@@ -273,13 +281,6 @@ def _provider_prefers_block_system_messages(provider_name: str | None) -> bool:
 def _should_apply_cache_breakpoints(prompt_cache_runtime: Any | None) -> bool:
     if prompt_cache_runtime is None:
         return False
-    if isinstance(prompt_cache_runtime, Mapping):
-        return bool(
-            prompt_cache_runtime.get("pending_post_compaction")
-            or prompt_cache_runtime.get("cache_deletions_pending")
-            or prompt_cache_runtime.get("cache_editing_header_latched")
-            or prompt_cache_runtime.get("thinking_clear_latched")
-        )
     return bool(
         getattr(prompt_cache_runtime, "pending_post_compaction", False)
         or getattr(prompt_cache_runtime, "cache_deletions_pending", False)
@@ -372,16 +373,37 @@ def _extract_usage(raw: Any) -> LLMUsage | None:
     )
 
 
-def _normalize_tool_call_delta(delta: Any) -> dict[str, Any]:
+def _normalize_tool_call(tc: Any, *, index: int | None = None) -> dict[str, Any]:
+    function = _get(tc, "function")
     return {
-        "index": _get(delta, "index") or 0,
-        "id": _get(delta, "id"),
-        "type": _get(delta, "type") or "function",
+        "index": index if index is not None else (_get(tc, "index") or 0),
+        "id": _get(tc, "id"),
+        "type": _get(tc, "type") or "function",
         "function": {
-            "name": _get(_get(delta, "function"), "name"),
-            "arguments": _get(_get(delta, "function"), "arguments") or "",
+            "name": _get(function, "name"),
+            "arguments": _get(function, "arguments") or "",
         },
     }
+
+
+def _reasoning_text(payload: Any) -> str:
+    return (
+        _get(payload, "reasoning_content")
+        or _get(payload, "reasoning")
+        or _get(payload, "thinking")
+        or ""
+    )
+
+
+def _usage_only_chunk(
+    raw: Any,
+    *,
+    finish_reason: str | None = None,
+) -> LLMStreamChunk | None:
+    usage = _extract_usage(raw)
+    if usage is None:
+        return None
+    return LLMStreamChunk(usage=usage, finish_reason=finish_reason)
 
 
 def _convert_chunk(raw: Any) -> LLMStreamChunk | None:
@@ -390,29 +412,17 @@ def _convert_chunk(raw: Any) -> LLMStreamChunk | None:
     except Exception:
         return None
     if not choices:
-        usage = _extract_usage(raw)
-        if usage is not None:
-            return LLMStreamChunk(usage=usage)
-        return None
+        return _usage_only_chunk(raw)
 
     choice = choices[0]
     delta = _get(choice, "delta") or {}
-    text_delta = _get(delta, "content") or ""
-    reasoning_delta = (
-        _get(delta, "reasoning_content")
-        or _get(delta, "reasoning")
-        or _get(delta, "thinking")
-        or ""
-    )
-    tool_call_deltas = _get(delta, "tool_calls") or []
-    finish_reason = _get(choice, "finish_reason")
-
-    normalized_deltas = [_normalize_tool_call_delta(d) for d in tool_call_deltas]
     return LLMStreamChunk(
-        text_delta=text_delta or "",
-        reasoning_delta=reasoning_delta or "",
-        tool_call_deltas=normalized_deltas,
-        finish_reason=finish_reason,
+        text_delta=_get(delta, "content") or "",
+        reasoning_delta=_reasoning_text(delta),
+        tool_call_deltas=[
+            _normalize_tool_call(tc) for tc in (_get(delta, "tool_calls") or [])
+        ],
+        finish_reason=_get(choice, "finish_reason"),
         usage=_extract_usage(raw),
     )
 
@@ -423,53 +433,30 @@ def _convert_nonstream_response(raw: Any) -> LLMStreamChunk | None:
     except Exception:
         return None
     if not choices:
-        usage = _extract_usage(raw)
-        if usage is not None:
-            return LLMStreamChunk(usage=usage, finish_reason="stop")
-        return None
+        return _usage_only_chunk(raw, finish_reason="stop")
 
     choice = choices[0]
     msg = _get(choice, "message") or {}
-    text = _get(msg, "content") or ""
-    reasoning = (
-        _get(msg, "reasoning_content")
-        or _get(msg, "reasoning")
-        or _get(msg, "thinking")
-        or ""
-    )
     tool_calls = _get(msg, "tool_calls") or []
-    finish_reason = _get(choice, "finish_reason") or _get(raw, "finish_reason") or "stop"
 
     normalized_calls: list[dict[str, Any]] = []
     if isinstance(tool_calls, list):
         for i, tc in enumerate(tool_calls):
             if not isinstance(tc, Mapping):
                 continue
-            normalized_calls.append(
-                _normalize_tool_call_delta(
-                    {
-                        "index": i,
-                        "id": _get(tc, "id"),
-                        "type": _get(tc, "type") or "function",
-                        "function": {
-                            "name": _get(_get(tc, "function"), "name"),
-                            "arguments": _get(_get(tc, "function"), "arguments") or "",
-                        },
-                    }
-                )
-            )
+            normalized_calls.append(_normalize_tool_call(tc, index=i))
 
     return LLMStreamChunk(
-        text_delta=text or "",
-        reasoning_delta=reasoning or "",
+        text_delta=_get(msg, "content") or "",
+        reasoning_delta=_reasoning_text(msg),
         tool_call_deltas=normalized_calls,
-        finish_reason=finish_reason,
+        finish_reason=_get(choice, "finish_reason") or _get(raw, "finish_reason") or "stop",
         usage=_extract_usage(raw),
     )
 
 
 # ---------------------------------------------------------------------------
-# LiteLLMStreamFn
+# LiteLLMClient
 # ---------------------------------------------------------------------------
 
 def compute_max_tokens_clamp(
@@ -539,8 +526,8 @@ def _report_context_window_pressure(
     return over_budget or over_window
 
 
-class LiteLLMStreamFn:
-    """Concrete LLMStreamFn implementation backed by litellm."""
+class LiteLLMClient:
+    """Concrete LLMClient implementation backed by litellm."""
 
     def __init__(
         self,
@@ -551,6 +538,7 @@ class LiteLLMStreamFn:
         providers: Mapping[str, ProviderConfig] | None = None,
         default_provider: str | None = None,
         unknown_prefix_policy: Literal["fail", "default"] = "fail",
+        disable_thinking: bool | None = None,
     ) -> None:
         from prismclaw.engine.services.llm.provider_resolver import _normalize_base_url
 
@@ -565,6 +553,8 @@ class LiteLLMStreamFn:
             self._fallback_base = _normalize_base_url(api_base) if api_base else None
         self._default_provider = default_provider
         self._unknown_prefix_policy: Literal["fail", "default"] = unknown_prefix_policy
+        # 无 providers 配置的直连场景（如视觉端点）可显式声明是否关思考。
+        self._disable_thinking = disable_thinking
 
     async def stream(
         self,
@@ -600,18 +590,11 @@ class LiteLLMStreamFn:
         payload_messages = prepared_request.messages
         request_extensions = prepared_request.extensions
 
-        # We assume messages are clean by the time they reach LiteLLMStreamFn.
+        # We assume messages are clean by the time they reach LiteLLMClient.
         # RequestPackager is responsible for stripping internal metadata.
         for m in payload_messages:
             if isinstance(m, dict) and m.get("tool_calls") is not None:
                 m["tool_calls"] = _sanitize_tool_call_arguments_json(m.get("tool_calls"))
-
-        if api_base:
-            cleaned = api_base.replace("`", "").strip()
-            cleaned = "".join(cleaned.split())
-            if cleaned != api_base:
-                logger.warning("sanitized api_base at call-time: %r -> %r", api_base, cleaned)
-                api_base = cleaned or None
 
         if self._providers and messages_have_user_image_content(payload_messages):
             if not model_supports_input(
@@ -641,8 +624,9 @@ class LiteLLMStreamFn:
         extra.update(request_extensions)
         _thinking_disabled = _should_disable_thinking(
             model=effective_model,
-            llm_provider=llm_provider,
+            providers=self._providers,
             api_base=api_base,
+            override=self._disable_thinking,
         )
         if _thinking_disabled:
             # litellm 自动将非白名单参数透传至 extra_body，无需手动嵌套合并
@@ -657,12 +641,17 @@ class LiteLLMStreamFn:
             )
         # effort → 推理强度：litellm 统一参数 reasoning_effort（low/medium/high）。
         # 与强制关思考互斥——关思考时下发会与 enable_thinking=False 冲突，故跳过。
+        # 模型若在配置中声明了 reasoning_effort_levels，则通过 model_info 交给
+        # litellm 做就近取整（如 DeepSeek V4.1 无 medium 档，会取到 high）。
         if reasoning_effort and not _thinking_disabled:
             extra["reasoning_effort"] = reasoning_effort
+            _effort_levels = _declared_reasoning_effort_levels(effective_model, self._providers)
+            if _effort_levels:
+                extra["model_info"] = {"reasoning_effort_levels": list(_effort_levels)}
 
         # max_tokens 硬上限：按模型配置下发，并钳制到「窗口 − 估算输入 − 余量」。
-        # 旧实现直接下发 max_output_tokens=131072（=整窗），prompt 50k + 131k > 窗口
-        # 会触发服务端校验失败或 KV 预留排队。钳制后单次请求不再越过窗口。
+        # max_output_tokens 可能等于整窗，prompt 较大时直接下发会越窗，触发
+        # 服务端校验失败或 KV 预留排队。
         try:
             from prismclaw.engine.execution.request.model_fallback import get_model_spec
 
@@ -672,10 +661,10 @@ class LiteLLMStreamFn:
         except Exception:
             _model_max_tokens = None
             _context_window = None
+        _est_in = _estimate_input_tokens(payload_messages, tools or [])
         if _model_max_tokens:
             _input_budget = getattr(request, "input_budget", None)
-            # 估算一次，钳制与压力埋点共用（压力埋点原本重复估算一次）。
-            _est_in = _estimate_input_tokens(payload_messages, tools or [])
+            # 输入 token 估算只做一次，钳制与压力埋点共用。
             _clamped, _est_in = compute_max_tokens_clamp(
                 model_max_tokens=_model_max_tokens,
                 context_window=_context_window,
@@ -688,15 +677,14 @@ class LiteLLMStreamFn:
                     _model_max_tokens, _est_in, _input_budget, _context_window, _clamped,
                 )
             # G4：超窗计数/预警（估算输入超 input_budget 或 +max_output 超窗口）。
-            try:
-                _report_context_window_pressure(
-                    est_input=_est_in,
-                    input_budget=_input_budget,
-                    context_window=_context_window,
-                    model_max_tokens=_model_max_tokens if _model_max_tokens else None,
-                )
-            except Exception:
-                pass
+            # 用钳制后的 max_output 判定：实际请求已保证 input+output 不越窗，
+            # 用配置上限会误报 over_window。
+            _report_context_window_pressure(
+                est_input=_est_in,
+                input_budget=_input_budget,
+                context_window=_context_window,
+                model_max_tokens=_clamped,
+            )
             _model_max_tokens = _clamped
             extra["max_tokens"] = _model_max_tokens
 
@@ -782,7 +770,7 @@ class LiteLLMStreamFn:
                         llm_provider or "",
                         len(payload_messages),
                         len(tools or []),
-                        _estimate_input_tokens(payload_messages, tools or []),
+                        _est_in,
                         request_timeout_s,
                         role_counts_str,
                         last_role,

@@ -1,33 +1,30 @@
 /**
- * metrics.ts — Per-turn aggregate statistics for the ledger Turn header.
+ * metrics.ts — 每个 turn 的聚合统计，供 ledger Turn 标题使用。
  *
- * Ported from DSH layout.ts groupDescription, extended for PrismClaw's
- * richer per-cell metrics (tokens / cache / reasoning — PrismClaw ≥ DSH):
- *   - Wall-span duration: max(completed) − min(started), i.e. the turn's
- *     wall clock — parallel tool calls contribute their span, not their
- *     summed durations (DSH groupDescription semantics).
- *   - Tool histogram: `bash×6`-style counts of top-level tool calls
- *     (kind === 'tool'; subtool calls stay nested under their parent).
+ * Wall-span duration: max(completed) − min(started)，即 turn 的墙钟时间
+ * — 并行工具调用贡献的是它们的 span，而非各自时长之和。
+ * Tool histogram: `bash×6` 风格的顶层工具调用计数
+ * （kind === 'tool'；subtool 调用嵌套在父节点下）。
  */
 
 import type { TrajectoryCell } from '../../../types'
 
 export interface TrajectoryTurnMetrics {
-  /** Turn wall clock (max completed − min started), null without any span. */
+  /** Turn 墙钟（max completed − min started）；无 span 时为 null。 */
   readonly wallMs: number | null
-  /** Σ own cell durations (Σ completed − started). */
+  /** Σ 自身 cell 时长（Σ completed − started）。 */
   readonly sumMs: number
   readonly inputTokens: number
   readonly outputTokens: number
   readonly cacheReadTokens: number
   readonly cacheWriteTokens: number
   readonly reasoningTokens: number
-  /** Top-level tool call counts by name, most-frequent first. */
+  /** 顶层工具调用按名称计数，按频次倒序。 */
   readonly toolHistogram: readonly { readonly name: string; readonly count: number }[]
   readonly errorCount: number
 }
 
-/** Tool display name — backend tool_name first, tool_calls_summary fallback. */
+/** 工具显示名 — 优先 backend tool_name，否则从 tool_calls_summary 提取。 */
 function toolNameOf(cell: TrajectoryCell): string {
   if (cell.tool_name) return cell.tool_name
   const summary = cell.tool_calls_summary[0]
@@ -37,9 +34,9 @@ function toolNameOf(cell: TrajectoryCell): string {
 }
 
 /**
- * Aggregate one turn's cells into header metrics.
- * @param cells - The turn's cells (any order).
- * @returns Aggregate statistics for the sticky Turn header.
+ * 聚合一个 turn 的 cells 为 header 统计数据。
+ * @param cells — 该 turn 的 cells（任意顺序）
+ * @returns 吸附式 Turn header 所需的聚合统计
  */
 export function trajectoryTurnMetrics(cells: readonly TrajectoryCell[]): TrajectoryTurnMetrics {
   let minStart: number | null = null
@@ -93,9 +90,9 @@ export function trajectoryTurnMetrics(cells: readonly TrajectoryCell[]): Traject
 }
 
 /**
- * Format the DSH-style tool histogram suffix (`bash×6 ls grep`).
- * @param histogram - Aggregated tool call counts.
- * @returns Compact histogram label, or `''` with no tool calls.
+ * 格式化工具直方图后缀（`bash×6 ls grep`）。
+ * @param histogram — 聚合后的工具调用计数
+ * @returns 紧凑的直方图标签；无工具调用时返回空串
  */
 export function formatToolHistogram(
   histogram: readonly { readonly name: string; readonly count: number }[],

@@ -142,16 +142,16 @@ async def test_matcher_hit_rewrites_result_on_main_loop_path():
     dispatcher = HookDispatcher()
     dispatcher.register(
         HookEvent.POST_TOOL,
-        MatcherFilteredHandler(recorder, r"tech-mining\.science-mining__fanout_search"),
+        MatcherFilteredHandler(recorder, r"tech-mining\.demo-tools__fanout_search"),
     )
 
     registry = _StubRegistry([
-        _StubTool("tech-mining.science-mining:fanout_search", LONG_OUTPUT),
+        _StubTool("tech-mining.demo-tools:fanout_search", LONG_OUTPUT),
     ])
     ctx = _make_ctx(dispatcher)
 
     results = await execute_tool_calls(
-        registry, [_call("tech-mining.science-mining__fanout_search", "c1")], ctx,
+        registry, [_call("tech-mining.demo-tools__fanout_search", "c1")], ctx,
     )
 
     assert len(results) == 1
@@ -160,7 +160,7 @@ async def test_matcher_hit_rewrites_result_on_main_loop_path():
     assert not results[0].is_error
     # hook 收到完整载荷：tool_name 是 LLM 调用名（__ 形式），tool_output 是结果文本
     assert len(recorder.seen) == 1
-    assert recorder.seen[0].tool_name == "tech-mining.science-mining__fanout_search"
+    assert recorder.seen[0].tool_name == "tech-mining.demo-tools__fanout_search"
     assert recorder.seen[0].tool_output == LONG_OUTPUT
 
 
@@ -216,16 +216,16 @@ async def test_subagent_preflighted_path_also_rewrites():
     dispatcher = HookDispatcher()
     dispatcher.register(
         HookEvent.POST_TOOL,
-        MatcherFilteredHandler(recorder, r"science-mining__fanout_search"),
+        MatcherFilteredHandler(recorder, r"demo-tools__fanout_search"),
     )
 
     registry = _StubRegistry([
-        _StubTool("tech-mining.science-mining:fanout_search", LONG_OUTPUT),
+        _StubTool("tech-mining.demo-tools:fanout_search", LONG_OUTPUT),
     ])
     ctx = _make_ctx(dispatcher)
 
     results = await execute_preflighted_tool_calls(
-        registry, [_call("tech-mining.science-mining__fanout_search", "c1")], ctx,
+        registry, [_call("tech-mining.demo-tools__fanout_search", "c1")], ctx,
     )
 
     assert _text(results[0]) == SLIMMED_OUTPUT

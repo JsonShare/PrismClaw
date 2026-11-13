@@ -1,18 +1,15 @@
-"""Loop callback protocol — converges scattered functional fields on deps."""
+"""Loop behavioral callbacks."""
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import Any, Awaitable, Callable
 
 
-@runtime_checkable
-class LoopCallbacks(Protocol):
-    """Agent loop behavioral callbacks — converges scattered function fields on deps.
+@dataclass(slots=True)
+class AgentCallbacks:
+    """Agent loop 行为回调容器，可按需替换单个回调。"""
 
-    Aligned with Pi's minimal injection philosophy: all behavioral callbacks
-    that were previously scattered as individual fields on AgentRunnerDeps
-    are now grouped into a single protocol.
-    """
-    on_compaction_node: Callable[..., None] | None
-    on_mcp_death: Callable[[str], Awaitable[None]] | None
-    on_subagent_progress: Callable[[Any], Awaitable[None]] | None
-    on_stream_event: Callable[[Any], Awaitable[None]] | None
+    on_compaction_node: Callable[..., None] | None = None
+    on_mcp_death: Callable[[str], Awaitable[None]] | None = None
+    on_subagent_progress: Callable[[Any], Awaitable[None]] | None = None
+

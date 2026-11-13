@@ -144,15 +144,12 @@ async def _compact_with_ptl_retry(
     checkpoint: Any,
     compaction_ctx: CompactionContext,
 ) -> CompactResult:
-    """Call the context compactor with Claude-style PTL retry loop.
+    """压缩 API 调用 + PTL 重试循环。
 
-    If the compact request itself returns ``prompt_too_long``,
-    ``truncate_head_for_ptl_retry`` drops the oldest API round groups
-    (one assistant turn plus its trailing tool/user messages), sized by
-    the parsed token overflow gap. Grouping preserves the
-    tool_use/tool_result pairing invariant. Retries up to 3 times;
-    any non-PTL failure aborts the loop immediately.
-    """
+    压缩请求本身若返回 ``prompt_too_long``，``truncate_head_for_ptl_retry``
+    从最早的 API 轮开始砍（一轮 assistant 及其后续 tool/user 消息），
+    砍掉的量按 token 溢出缺口计算；分组保留 tool_use/tool_result 配对不变量。
+    最多重试 3 次；非 PTL 类错误立即终止循环。"""
     api_messages = list(base_messages)
     last_result: CompactResult | None = None
     for attempt in range(_MAX_PTL_RETRIES + 1):
@@ -185,7 +182,7 @@ async def _compact_with_ptl_retry(
         last_result = result
         if result.ok or result.reason_code != _PROMPT_TOO_LONG_REASON:
             return result
-        # PTL hit: shrink the prompt and retry (Claude compact.ts:464).
+        # PTL 命中：砍头重试
         logger.warning(
             "prompt_too_long on compact attempt=%d/%d; truncating head",
             attempt,

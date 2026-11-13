@@ -1,8 +1,7 @@
-"""Post-compact file re-injection（查询时重建，ephemeral）.
+"""压缩后文件重建注入（查询时重建，ephemeral）.
 
-对齐 Claude-Code：attachments 不持久化到 messages 数组，每次查询重新
-读取最新文件内容注入 ``messages_for_query``，仅当会话已发生过压缩
-（存在 CompactionEntry）时启用。
+attachments 不持久化到 messages 数组，每次查询重新读取最新文件内容
+注入 ``messages_for_query``，仅当会话已发生过压缩（存在 CompactionEntry）时启用。
 
 预算按 128K 缩放：5 文件 × 3,200 tokens = 16,000 tokens 全局。
 """

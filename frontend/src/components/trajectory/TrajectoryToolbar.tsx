@@ -1,8 +1,5 @@
 /**
- * TrajectoryToolbar — Search, timeline-mode and collapse controls.
- * Inspired by DSH's TrajectoryToolbar: DSH exposes a single Duration toggle
- * (sequence ↔ duration). We expose the full 3-state projection switch
- * (sequence / duration-compressed / actual) — ≥ DSH.
+ * TrajectoryToolbar — 搜索框、时间线模式切换、折叠控制。
  */
 import { Search, Minus, Plus } from 'lucide-react'
 import type { TrajectoryTimelineMode } from './lib/timeline'
@@ -10,10 +7,10 @@ import type { TrajectoryTimelineMode } from './lib/timeline'
 interface TrajectoryToolbarProps {
   searchQuery: string
   onSearchQueryChange: (query: string) => void
-  /** Derived: every collapsible turn is folded (DSH toggleAllTurns pressed state). */
+  /** 派生：所有可折叠回合都已折叠时为 true。 */
   allTurnsCollapsed: boolean
   onToggleAllTurns: () => void
-  /** Derived: every collapsible assistant's tool calls are folded (DSH toggleAllAssistants). */
+  /** 派生：所有可折叠 assistant 的工具调用都已折叠时为 true。 */
   allAssistantsCollapsed: boolean
   onToggleAllAssistants: () => void
   turnCount: number
@@ -23,9 +20,9 @@ interface TrajectoryToolbarProps {
 }
 
 const MODE_OPTIONS: { value: TrajectoryTimelineMode; label: string; title: string }[] = [
-  { value: 'sequence', label: '顺序', title: '等宽投影：每条记录占一个单位（DSH sequence）' },
-  { value: 'duration', label: '时长', title: '真实时长·压缩空闲（DSH duration）' },
-  { value: 'actual', label: '实时', title: '真实时间轴·含空闲（DSH actual）' },
+  { value: 'sequence', label: '顺序', title: '等宽投影：每条记录占一个单位' },
+  { value: 'duration', label: '时长', title: '真实时长·压缩空闲' },
+  { value: 'actual', label: '实时', title: '真实时间轴·含空闲' },
 ]
 
 export function TrajectoryToolbar({
@@ -46,7 +43,7 @@ export function TrajectoryToolbar({
       role="toolbar"
       aria-label="轨迹工具栏"
     >
-      {/* Collapse / expand all turns (DSH toolbar "Turns" — pressed = all collapsible folded) */}
+      {/* 折叠 / 展开所有回合 */}
       <button
         type="button"
         onClick={onToggleAllTurns}
@@ -59,7 +56,7 @@ export function TrajectoryToolbar({
         <span>回合</span>
       </button>
 
-      {/* Collapse / expand all tool-call runs (DSH toolbar "Calls") */}
+      {/* 折叠 / 展开所有工具调用 */}
       <button
         type="button"
         onClick={onToggleAllAssistants}
@@ -72,7 +69,7 @@ export function TrajectoryToolbar({
         <span>调用</span>
       </button>
 
-      {/* Timeline projection mode — DSH Duration toggle, extended 3-state */}
+      {/* 时间线投影模式切换 */}
       <div
         className="flex items-center rounded-[var(--radius-md)] border border-[var(--c-border)] overflow-hidden"
         role="group"

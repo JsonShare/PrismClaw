@@ -172,7 +172,7 @@ class TrajectoryAuditService:
     def handle_event(self, ev: object) -> None:
         """Generic subscriber registered for EVERY event type (sync).
 
-        This is the DSH firehose equivalent. apply() dispatches on type.
+ This is the firehose 风格. apply() dispatches on type.
         Purely synchronous — no I/O, no await, O(μs).
         """
         # Validate event belongs to this session (bus = per-session today,
@@ -197,7 +197,7 @@ class TrajectoryAuditService:
                 "trajectory event: sid=%s type=%s", self.session_id, ev_name,
             )
 
-        # DSH parity: ConversationNodeAdded → per-conversation-event cell.
+ # ConversationNodeAdded → per-conversation-event cell.
         # The event carries the COMPLETE cell payload (detail texts, metrics,
         # time range, iteration) because the runner stashes an
         # LLMMetricsSnapshot into the trajectory runtime ctx before the
@@ -233,7 +233,7 @@ class TrajectoryAuditService:
         self.state = new_state
 
     def _handle_cell_event(self, ev: "evmod.ConversationNodeAdded") -> None:
-        """DSH-aligned cell handler: build a TrajectoryCell from the event
+        """Build a TrajectoryCell from the event
         and schedule a non-blocking async upsert.
 
         Sync (bus subscriber contract). Uses asyncio.ensure_future to fire

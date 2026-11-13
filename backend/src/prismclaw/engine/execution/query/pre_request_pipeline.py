@@ -8,7 +8,7 @@ import time as _time
 from prismclaw.engine.execution.query.state import QueryLoopState
 from prismclaw.engine.execution.query.builder import rebuild_query_loop_state
 from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.engine.execution.query.turn_preparation import TurnPreflightResult
+from prismclaw.engine.execution.query._turn_helpers import TurnPreflightResult
 from prismclaw.engine.toolkit.registry.governance import resolve_registry_tool_governance
 from prismclaw.engine.execution.checkpoint import RequestAssemblySnapshot
 from prismclaw.engine.state.turn_state import ToolGovernanceState, TurnState
@@ -381,7 +381,7 @@ class PreRequestPipeline:
                 audit_trail.append({"action": "pruned_replacement_state", "tool_call_id": removed_id})
 
         packed_request = preflight.packed_request if preflight is not None else None
-        # 批 4b-2：为 stream_fn 填充 input_budget
+        # 批 4b-2：为 client 填充 input_budget
         # （absolute=window−image_tokens，仅影响钳制与日志，不改 history 预算计算）。
         if packed_request is not None:
             _budget_cfg = deps.config.context.budget

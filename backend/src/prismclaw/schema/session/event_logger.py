@@ -1,6 +1,6 @@
 """SessionEventLogger — Event factory for Session Event Sourcing.
 
-Constructs SessionEvents with payloads aligned with DSH SessionEventMap.
+Constructs SessionEvents with payloads aligned with 会话事件映射.
 Pure factory: builds events, never writes.
 
 Turn/step lifecycle events are published via SessionBus (engine/trajectory),
@@ -120,7 +120,7 @@ def parse_entry(data: dict[str, Any]) -> SessionEntry | None:
 
 
 class SessionEventLogger:
-    """Factory for constructing SessionEvent instances (DSH-aligned).
+    """Factory for constructing SessionEvent instances.
 
     Message/tool/compaction events only. Turn/step lifecycle events are
     published via SessionBus (engine/trajectory), not this logger.
@@ -301,7 +301,7 @@ class SessionEventLogger:
             data={"type": "session_deleted"},
         )
 
-    # ── High-level converters: SessionEntry → DSH events ──────
+    # ── High-level converters: SessionEntry → events ──────
 
     def message_entry(
         self,
@@ -309,7 +309,7 @@ class SessionEventLogger:
         entry: SessionEntry,
         leaf_id: str,
     ) -> list[SessionEvent]:
-        """Convert a MessageEntry into the appropriate DSH event(s).
+        """Convert a MessageEntry into the appropriate event(s).
 
         - role=user → USER_MESSAGE
         - role=assistant → ASSISTANT_MESSAGE (tool_calls inlined;
@@ -381,7 +381,7 @@ class SessionEventLogger:
         entries: list[SessionEntry],
         leaf_id: str,
     ) -> list[SessionEvent]:
-        """Convert a batch of SessionEntry into DSH-aligned events."""
+        """Convert a batch of SessionEntry into the appropriate events."""
         events: list[SessionEvent] = []
         for entry in entries:
             events.extend(self.message_entry(session_id, entry, leaf_id))

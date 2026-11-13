@@ -20,7 +20,6 @@ class TaskRequestPolicyProvider(Protocol):
         *,
         tree: "SessionTree",
         run_seconds: int = 300,
-        channel: str = "cli",
     ) -> RequestMode | None: ...
 
     def runtime_strategy_notes(

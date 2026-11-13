@@ -59,7 +59,7 @@ def _extract_plugin_name(manifest: Any) -> str | None:
         "hooks", "safety", "tools", "output-styles", "scripts",
         "config", "managed-agent-cookbooks",
     }
-    excluded_files = {"SKILL.md", "plugin.json", ".plugin", "PRISMCLAW.md"}
+    excluded_files = {"SKILL.md", "plugin.json", ".plugin", "PLUGIN.md"}
 
     depth = 0
     for parent in p.parents:
@@ -71,8 +71,8 @@ def _extract_plugin_name(manifest: Any) -> str | None:
             continue
         if name.endswith(".md") or name.endswith(".yaml") or name.endswith(".yml"):
             continue
-        # 检测该目录是否为插件根目录（包含 PRISMCLAW.md 或 .plugin 子目录）
-        has_prismclaw = (parent / "PRISMCLAW.md").is_file()
+        # 检测该目录是否为插件根目录（包含 PLUGIN.md 或 .plugin 子目录）
+        has_prismclaw = (parent / "PLUGIN.md").is_file()
         has_plugin_dir = (parent / ".plugin").is_dir()
         if has_prismclaw or has_plugin_dir:
             return name

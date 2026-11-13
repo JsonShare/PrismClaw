@@ -67,7 +67,7 @@ export default function EffortToggle() {
         aria-expanded={open}
       >
         <Gauge size={14} className="shrink-0" />
-        <span className="text-[length:var(--fs-sm)] font-medium truncate max-w-[60px] -translate-y-px">
+        <span className="text-[length:var(--fs-sm)] font-medium leading-none truncate max-w-[60px]">
           {current.label}
         </span>
         <ChevronDown

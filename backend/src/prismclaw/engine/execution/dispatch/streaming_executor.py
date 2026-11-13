@@ -27,16 +27,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, AsyncIterator
+from typing import Any
 
+from prismclaw.engine.foundation.metrics import emit
 from prismclaw.engine.observability.feature_flags import (
     FLAG_SCHEDULER_V2,
     FLAG_STREAMING_V2,
     is_enabled,
 )
-from prismclaw.engine.foundation.metrics import emit
 
 logger = logging.getLogger(__name__)
 
@@ -414,29 +415,10 @@ class StreamingExecutor:
             # arguments field; re-implementing parsing logic here was a source
             # of drift (same input, different recovery outcome depending on
             # which execution path was taken).
-            from prismclaw.engine.execution.dispatch.execution_entry import _error, _function_args
+            from prismclaw.engine.execution.dispatch.execution_entry import _function_args
 
             call_shape = {"function": fn}
             arguments = _function_args(call_shape)
-
-            # Short-circuit unrecoverable argument corruption.  Mirror the
-            # logic in _dispatch_single: passing `{"_raw": …}` to tools makes
-            # them return generic field-missing errors that trigger retry
-            # loops.  We surface the root cause immediately.
-            if isinstance(arguments, dict) and set(arguments.keys()) == {"_raw"}:
-                raw = arguments["_raw"]
-                n = len(raw) if isinstance(raw, (str, bytes)) else -1
-                preview = raw[:200] if isinstance(raw, str) else repr(raw)[:200]
-                msg = (
-                    f"工具 {tool_name!r} 的参数是格式错误的 JSON"
-                    f"（共 {n} 字节，以下为前 {min(n, 200)} 字节）：\n```\n{preview}\n```\n"
-                    "请以合法的 JSON 对象重新传入 'arguments'——"
-                    "重复调用这一完全相同的调用必然失败。"
-                )
-                tracked.result = _error(tool_call_id, msg)
-                tracked.status = ToolStatus.FAILED
-                _end_status = "bad_args"
-                return
 
             # Execute
             try:
@@ -460,7 +442,7 @@ class StreamingExecutor:
                 tracked.result = result
                 tracked.status = ToolStatus.COMPLETED
                 _end_status = "error" if getattr(result, "is_error", False) else "ok"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 from prismclaw.schema.agent.data_types import TextBlock
                 from prismclaw.schema.content.content_types import ToolResult
                 tracked.result = ToolResult(
@@ -472,9 +454,9 @@ class StreamingExecutor:
                 _end_status = "timeout"
                 _end_detail = f"limit={_dispatch_timeout_s}s"
             except Exception as exc:
-                from prismclaw.schema.shared import MCPServerDeadError
                 from prismclaw.schema.agent.data_types import TextBlock
                 from prismclaw.schema.content.content_types import ToolResult
+                from prismclaw.schema.shared import MCPServerDeadError
 
                 if isinstance(exc, MCPServerDeadError):
                     tm = self._tool_ctx.task_manager

@@ -4,7 +4,7 @@
 
 ## 职责概述
 
-执行引擎是 PrismClaw Agent 的运行时核心，负责 LLM 流式交互、工具调度、状态持久化和迭代控制。其设计哲学是 **"骨架与肌肉分离"**：`run_loop()` 作为纯控制流骨架不依赖任何子系统，所有行为通过 `LoopConfig` 的 callback 注入；`create_loop_config()` 是唯一知道子系统存在的闭包组装器，将 Arbiter、SafetyGate、HookDispatcher 映射为 callback 函数。
+执行引擎是 PrismClaw Agent 的运行时核心，负责 LLM 流式交互、工具调度、状态持久化和迭代控制。其设计哲学是 **"骨架与肌肉分离"**：`run_loop()` 作为纯控制流骨架不依赖任何子系统，只消费 `LoopConfig` 的三个端口（Prepare / Stream / Execute）与可选插槽；`wiring.build_loop_config()` 是唯一知道子系统存在的端口绑定点，`runtime.build_runtime()` 负责装配 `LoopRuntime`（预算、完成内核、终态文案、责任投影器）。
 
 ## 架构总览
 
@@ -21,7 +21,7 @@
 │                            │                                    │
 │  ┌─────────────────────────▼─────────────────────────────────┐  │
 │  │              Agent Loop (run_loop)                         │  │
-│  │  纯控制流骨架，7+3 callback，单层 while True 循环           │  │
+│  │  纯控制流骨架，3 端口 + 可选插槽，单层 while True 循环      │  │
 │  └──┬──────────┬──────────┬──────────┬──────────┬────────────┘  │
 │     │          │          │          │          │                │
 │     ▼          ▼          ▼          ▼          ▼                │
@@ -32,10 +32,11 @@
 │  └──────┘  └──────┬───────┘  └───────┘  └──────┘  └──────┘      │
 │                    │                                             │
 │     ┌──────────────▼──────────────┐                             │
-│     │    LoopConfig 闭包组装器     │                             │
-│     │  Arbiter → should_continue  │                             │
-│     │  SafetyGate → before_tool   │                             │
-│     │  HookDispatch → after_tool  │                             │
+│     │  wiring.build_loop_config    │                             │
+│     │  PreparePort → prepare_turn │                             │
+│     │  StreamPort  → stream_llm   │                             │
+│     │  ExecutePort → tools/HITL   │                             │
+│     │  should_continue → Decision │                             │
 │     └─────────────────────────────┘                             │
 │                                                                 │
 │  循环: prepare_turn → stream_llm                                 │
@@ -60,20 +61,38 @@
 
 ## 核心组件
 
-### 1. Agent Loop (`loop/agent_loop.py`)
+### 1. Agent Loop (`loop/agent_loop.py` + 六个 stage 模块)
 
-**核心函数：`run_loop()`**
+**核心函数：`run_loop()`**（`agent_loop.py` 只保留这一个函数）
 
-纯控制流骨架，6 个核心 callback + 5 个 B/S 架构独有 callback：
+纯控制流骨架，消费 `LoopConfig` 的三个端口 + 可选插槽：
 
-| Callback | 签名 | 作用 |
-|----------|------|------|
-| `prepare_next_turn` | `(state) -> TurnUpdate` | 准备下一轮 |
-| `stream_llm` | `(state) -> LLMStreamResult` | LLM 流式调用 |
-| `should_continue` | `(state, phase) -> bool` | 前置/后置继续判断 |
-| `before_tool_call` | `(ctx) -> BeforeToolCallResult` | 工具调用前拦截 |
-| `execute_tools` | `(calls, state) -> list` | 执行工具调用 |
-| `after_tool_call` | `(ctx) -> AfterToolCallResult` | 工具调用后处理 |
+| 端口 / 插槽 | 签名 | 作用 |
+|------------|------|------|
+| `PreparePort.prepare_next_turn` | `(state) -> TurnUpdate` | 每轮上下文重建 |
+| `StreamPort.stream_llm` | `(state) -> AsyncIterator` | LLM 流式调用，写入 `state.llm_outcome` |
+| `ExecutePort.execute_tools` | `(state, response, calls)` | handoff 分派 + 工具执行 + 落树 |
+| `ExecutePort.before_tool_call` | `(ctx) -> BeforeToolCallResult \| None` | 冻结签名 + 安全门 |
+| `ExecutePort.after_tool_call` | `(ctx) -> AfterToolCallResult \| None` | 完成契约收敛提示 |
+| `LoopConfig.should_continue` | `(state, response, *, event) -> Decision` | 续跑 / 终态唯一裁决 |
+| `ExecutePort.persist_denied_turn` | `(state, response, blocked)` | 全拒回合落树 |
+| `ExecutePort.persist_clarified_turn` | `(state, response, calls, ask_id, answer)` | HITL 回合落树 |
+| `ExecutePort.check_hitl` | `(state, calls) -> HITLCheckResult` | AskUserQuestion 识别 |
+| `ExecutePort.wait_for_clarification` | `(hitl) -> str \| None` | 等待用户作答（不落树，由 persist 统一落树） |
+| `LoopConfig.get_steering_messages` | `() -> list[str]` | iteration 边界取 steering（可选） |
+
+**Stage 模块划分**（`loop/`，各模块第一参数统一为 `rt: LoopRuntime`）：
+
+| 模块 | 职责 |
+|------|------|
+| `agent_loop.py` | `run_loop` 纯控制流，不 import 任何 deps 子系统 |
+| `runtime.py` | `LoopRuntime` 依赖容器 + `build_runtime()` 装配 |
+| `wiring.py` | `build_loop_config()`：把 stage 函数绑定到端口 |
+| `terminal.py` | 幂等终态 `terminate`、`persist_turn`、HITL、steering |
+| `continue_.py` | `should_continue`：统一续跑/终态决策 |
+| `tools.py` | `gate_tool_call` / `after_tool_call` / `execute_tools` |
+| `prepare.py` | `prepare_next_turn`：每轮上下文重建 |
+| `stream.py` | `stream_llm`：LLM 调用 + usage 埋点 + context_overflow 恢复 |
 
 **核心数据流：**
 
@@ -96,20 +115,19 @@ prepare_next_turn
 | 上下文准备 | `prepare_next_turn` | PreRequestPipeline 9 步管道 + 压缩重启；`state.pending_messages`（预算警告、工具循环指导等）在此合并进 override 的 appended_messages |
 | LLM 流式 | `stream_llm` | 流式调用 LLM，收集 usage |
 | 预检 | `should_continue` (pre) | 预算 / abort / max_iterations 检查 |
-| 工具执行前 | `before_tool_call` | SafetyGate + HookDispatcher(PRE_TOOL) 拦截 |
+| 工具执行前 | `before_tool_call` | 冻结工具签名 + SafetyGate 拦截（PRE_TOOL hooks 在 dispatch 层逐调用派发） |
 | 工具执行 | `execute_tools` | Handoff dispatch + 工具执行 + Skill dispatch |
-| 工具执行后 | `after_tool_call` | HookDispatcher(POST_TOOL) + post_tool_review |
+| 工具执行后 | `after_tool_call` | 完成契约机械核验；无缺口时注入一次收尾提示（POST_TOOL hooks 在 dispatch 层逐调用派发） |
 | 轮次后检 | `should_continue` (post) | 工具循环 / 所有工具被拒 / abort 检查；终态交由 `CompletionKernel` 唯一裁决 |
 
-**LoopCallbacks Protocol**（`schema/agent/callbacks.py`）将分散在 `AgentRunnerDeps` 上的行为回调收敛为单一协议：
+**AgentCallbacks**（`schema/agent/callbacks.py`）将分散在 `AgentRunnerDeps` 上的行为回调收敛为单一 dataclass：
 
 ```python
-@runtime_checkable
-class LoopCallbacks(Protocol):
-    on_compaction_node: Callable[..., None] | None
-    on_mcp_death: Callable[[str], Awaitable[None]] | None
-    on_subagent_progress: Callable[[Any], Awaitable[None]] | None
-    on_stream_event: Callable[[Any], Awaitable[None]] | None
+@dataclass(slots=True)
+class AgentCallbacks:
+    on_compaction_node: Callable[..., None] | None = None
+    on_mcp_death: Callable[[str], Awaitable[None]] | None = None
+    on_subagent_progress: Callable[[Any], Awaitable[None]] | None = None
 ```
 
 | 回调 | 职责 | 调用时机 | 返回值 |
@@ -117,11 +135,10 @@ class LoopCallbacks(Protocol):
 | `on_compaction_node` | 通知压缩节点产生 | 压缩完成后 | `None`（同步） |
 | `on_mcp_death` | 处理 MCP 服务器断连 | MCP 连接死亡时 | `Awaitable[None]` |
 | `on_subagent_progress` | 转发子代理进度 | 子代理执行期间 | `Awaitable[None]` |
-| `on_stream_event` | 转发流式事件 | LLM 流式响应期间 | `Awaitable[None]` |
 
 约束：所有回调均可为 `None`（循环引擎调用前必须检查）；回调中不得抛出未处理异常；异步回调应有超时保护。
 
-**LoopConfig 闭包组装**：`create_loop_config()` 是唯一知道子系统存在的地方。`run_loop()` 不直接 import Arbiter、SafetyGate、HookDispatcher，所有行为通过 `LoopConfig` 的 callback 注入，确保循环骨架纯化、子系统可独立替换、测试友好。
+**端口绑定**：`wiring.build_loop_config()` 是唯一知道子系统存在的地方。`run_loop()` 不直接 import Arbiter、SafetyGate、HookDispatcher，所有行为通过 `LoopConfig` 的端口注入，确保循环骨架纯化、子系统可独立替换、测试友好。`LoopRuntime` 把原先闭包隐式捕获的变量（deps、request、recovery、state_machine、completion_kernel、budget_guard 等）显式化为 dataclass 字段，无运行期行为。
 
 ### 2. Runner 入口 (`loop/runner.py`)
 
@@ -205,13 +222,14 @@ plan_handoff_dispatch()
 
 | 类型 | 作用 |
 |------|------|
-| `RunLoopState` | 跨迭代可变状态（累加计数器、消息队列通道、状态机对象、语义演化对象） |
-| `LoopConfig` | 7+3 callback 配置 |
-| `BeforeToolCallContext/Result` | 工具调用前上下文和结果 |
-| `AfterToolCallContext/Result` | 工具调用后上下文和结果 |
-| `TurnUpdate` | 轮次更新（含 `restart` 标志） |
+| `RunLoopState` | 跨迭代可变状态（累加计数器、消息队列通道、状态机对象、语义演化对象）；run_loop 以扁平名访问，底部 property 是唯一扁平访问层 |
+| `LoopConfig` | 端口配置：`PreparePort` / `StreamPort` / `ExecutePort` + `should_continue` + 可选 `get_steering_messages` |
+| `LoopRuntime` | stage 函数的显式依赖容器（`runtime.py`），由 `build_runtime()` 装配 |
+| `BeforeToolCallContext/Result` | 前检上下文（`tool_call` / `args` / `state`）与结果（`block` / `reason`） |
+| `AfterToolCallContext/Result` | 后检上下文（`tool_calls` / `state`）与结果（`inject_messages`） |
+| `TurnUpdate` | 轮次更新（含 `restart` 标志与 `pending_messages`） |
 | `HITLCheckResult` | 人机交互检查结果 |
-| `LoopTiming` | 循环时序统计 |
+| `LoopTiming` | 单 iteration 时序统计（`pre_request_pipeline_ms` / `llm_stream_ms` / `tool_execution_ms` / `total_iteration_ms`） |
 
 ### 8. RunState & StateMachine (`checkpoint/`)
 
@@ -410,7 +428,8 @@ RunState.recovery_state → RunStateMachine.recovery_chain_for_arbiter()
 |------|---------|------|
 | 主入口 | `run_agent_stream()` | Agent 运行入口 |
 | 循环骨架 | `run_loop()` | 纯控制流循环 |
-| 闭包组装 | `create_loop_config()` | 注入子系统 callback |
+| 端口绑定 | `wiring.build_loop_config()` | 把 stage 函数绑定到 LoopConfig 端口 |
+| 运行时装配 | `runtime.build_runtime()` | 构造 LoopRuntime（预算 / 完成内核 / 投影器） |
 | LLM 调用 | `call_llm_stream_with_outcome()` | 流式 LLM 请求 |
 | 工具执行 | `execute_tool_calls_with_handoff()` | 工具调度入口 |
 | 仲裁 | `consult_arbiter()` | 统一仲裁入口 |
@@ -420,10 +439,23 @@ RunState.recovery_state → RunStateMachine.recovery_chain_for_arbiter()
 
 ```
 execution/
-  ├── loop/agent_loop.py → loop/types.py, loop/arbiter.py
-  ├── loop/runner.py → loop/agent_loop.py, dispatch/pipeline.py,
-  │                     dispatch/execution.py, checkpoint/state_machine.py,
-  │                     handoff/supervisor.py, capabilities/catalog.py
+  ├── loop/agent_loop.py → loop/types.py, loop/_loop_helpers.py,
+  │                        control/kernel.py (LoopEvent), dispatch/pipeline.py
+  ├── loop/wiring.py → loop/{prepare,stream,tools,terminal,continue_}.py,
+  │                    loop/runtime.py, loop/types.py
+  ├── loop/runtime.py → control/{kernel,completion,artifacts}.py,
+  │                     projection/project.py
+  ├── loop/continue_.py → control/{kernel,completion}.py, loop/terminal.py,
+  │                       loop/_loop_helpers.py
+  ├── loop/runner.py → loop/wiring.py, loop/preparer.py, loop/teardown.py,
+  │                    loop/trajectory_scope.py,
+  │                    dispatch/pipeline.py, dispatch/execution.py,
+  │                    checkpoint/state_machine.py, handoff/supervisor.py,
+  │                    capabilities/catalog.py
+  ├── loop/deps.py → AgentRunnerDeps + 子容器（Dream/Plugin/Persistence）
+  ├── loop/tree_writer.py → loop/deps.py, loop/_bootstrap_helpers.py,
+  │                         schema/session/types.py
+  ├── loop/entry_runtime.py → loop/tree_writer.py, loop/deps.py
   ├── dispatch/pipeline.py → (LLM SDK)
   ├── dispatch/execution.py → dispatch/streaming_executor.py,
   │                           dispatch/call_handling.py
@@ -443,12 +475,20 @@ execution/
 
 | 概念 | 文件路径 |
 |------|---------|
-| LoopCallbacks Protocol | `schema/agent/callbacks.py` |
+| AgentCallbacks | `schema/agent/callbacks.py` |
 | AgentHook Protocol + HookRegistry + HookDispatcher | `engine/hooks/__init__.py` |
 | AllowedToolsPolicy | `schema/agent/security.py` |
 | 7-Reducer Governance 链 | `engine/toolkit/registry/governance.py` |
 | request_handoff 工具 | `engine/execution/handoff/request_handoff.py` |
-| Agent Loop 核心 | `engine/execution/loop/agent_loop.py` |
+| Agent Loop 核心（仅 run_loop） | `engine/execution/loop/agent_loop.py` |
+| 端口绑定 | `engine/execution/loop/wiring.py` |
+| 运行时容器 | `engine/execution/loop/runtime.py` |
+| 终态 / HITL / steering | `engine/execution/loop/terminal.py` |
+| 续跑与终态裁决 | `engine/execution/loop/continue_.py` |
+| 工具执行主流程 | `engine/execution/loop/tools.py` |
+| 上下文重建 | `engine/execution/loop/prepare.py` |
+| LLM 流式调用 | `engine/execution/loop/stream.py` |
+| 循环类型定义 | `engine/execution/loop/types.py` |
 
 ## 配置项
 

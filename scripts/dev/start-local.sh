@@ -9,6 +9,13 @@ set -euo pipefail
 
 source "$(dirname "$0")/../lib/common.sh"
 
+# 后端默认 DSN 为 postgresql+asyncpg，asyncpg 属于可选 extra postgres。
+if ! "$PYTHON_BIN" -c "import asyncpg" >/dev/null 2>&1; then
+  echo "✗ 后端缺少 postgres 依赖（asyncpg），无法启动："
+  echo "    cd backend && uv sync --extra postgres"
+  exit 1
+fi
+
 PC_DIST="$PROJECT_ROOT/frontend/dist"
 MOBILE_DIST="$PROJECT_ROOT/frontend-app/dist/h5"
 

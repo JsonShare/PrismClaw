@@ -235,9 +235,8 @@ export function useChatSocket(
           const savedToolCalls = runtimeBefore?.tool_calls ?? []
           const savedSubagentTrace = runtimeBefore?.subagent_trace ?? []
           // 正文真相源：优先用后端 chat.done.final_message。按新协议
-          // （Claude Code mode），final_message 已是全部迭代的完整正文
-          // （所有轮次的 prose 拼接），而非仅最后一轮答案。
-          // 与 reload 路径 _build_display_messages 的口径完全一致（live 与刷新后
+          // final_message 已是全部迭代的完整正文（所有轮次 prose 拼接），
+          // 而非仅最后一轮答案。与 reload 路径口径完全一致（live 与刷新后
           // 历史回放单一真相源，避免双真相源导致"正文两遍答案"）。
           // streamingText（实时全轮拼接）仅作为 final_message 缺失（中断/异常）
           // 时的兜底，保证中止场景下仍有可见文本落库。
@@ -435,29 +434,6 @@ export function useChatSocket(
       case 'error': {
         if (convId) streamStartRef.current.delete(convId)
         if (convId) {
-          // 与 chat.done 同口径：在 finalizeStreaming 清空前，把正文 + 执行时间线 +
-          // 工具调用/子代理轨迹一并捕获。异常终止（如 repair_evidence_stalled 的
-          // 「任务已阻塞」）时后端 chat.done 的 final_message 为空，正文只能回退到
-          // streamingText，执行过程只能靠这里抓取的 timeline 落库——此前只解构 text，
-          // timeline 被丢弃并随 finalizeStreaming 清空，是「异常终止后执行过程丢失」
-          // 的直接根因。
-          const runtimeBefore = chat.convStates[convId]?.activeTaskRuntime
-          const savedToolCalls = runtimeBefore?.tool_calls ?? []
-          const savedSubagentTrace = runtimeBefore?.subagent_trace ?? []
-          const { text, timeline } = chat.finalizeStreaming(convId)
-          // finalizeStreaming 已统一清 runGate / clarifyRequest / clarifySession
-          if (text || timeline.length > 0) {
-            const partialMsg: Message = {
-              id: `asst_partial_${Date.now()}`,
-              role: 'assistant',
-              content: text,
-              timestamp: Date.now(),
-              toolCalls: savedToolCalls.length > 0 ? savedToolCalls : undefined,
-              subagentTrace: savedSubagentTrace.length > 0 ? savedSubagentTrace : undefined,
-              timeline: timeline.length > 0 ? timeline : undefined,
-            }
-            chat.appendMessage(convId, partialMsg)
-          }
           const errMsg: Message = {
             id: `err_${Date.now()}`,
             role: 'error',

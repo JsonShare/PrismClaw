@@ -9,11 +9,6 @@ from prismclaw.engine.toolkit.registry.tool_runtime import Tool
 
 _VALID_TOOL_CLASSES: frozenset[str] = frozenset(("read", "memory-write-safe", "write"))
 
-# Calibrated bytes-per-token for the tool-schema JSON wire block. Two real runs
-# give 4.92 and 5.05 (see ``wire_tokens_estimate``), so this is measurement, not
-# a guess; revise only against fresh provider-reported ``input_tokens``.
-_WIRE_BYTES_PER_TOKEN = 5
-
 
 class ToolRegistry:
     def __init__(self) -> None:
@@ -148,8 +143,9 @@ class ToolRegistry:
         overestimated tool schemas by ~1.8× (11,840 est. vs. ~6,450 actual for
         31 tools), which made the drift sentinel report a permanent false
         alarm (~40% of input). The unit is now serialized UTF-8 bytes ÷
-        ``_WIRE_BYTES_PER_TOKEN``, calibrated against the provider's reported
-        ``input_tokens`` on two real runs:
+        ``token_counting.heuristic.wire_bytes_per_token`` (default 3.5),
+        calibrated against the provider's reported ``input_tokens`` on two
+        real runs:
 
           31,720 B (29 visible tools) ↔ ~6,450 tok → 4.92 B/token
           29,811 B (25 visible tools) ↔ ~5,900 tok → 5.05 B/token
@@ -159,7 +155,7 @@ class ToolRegistry:
         un-accounted remainder is exactly the tools block. Schema JSON is
         ASCII-dominated, so bytes and chars coincide in practice; bytes is the
         measured unit. CJK descriptions would tokenize at ~4 B/token, i.e. this
-        constant would over-estimate them — acceptable for a conservative
+        divisor would over-estimate them — acceptable for a conservative
         budget, and visible as drift if it ever matters.
 
         Fingerprint-cached: any register/unregister/schema change invalidates
@@ -174,6 +170,8 @@ class ToolRegistry:
         cached = self._wire_tokens_cache
         if cached is not None and cached[0] == fingerprint:
             return cached[1]
-        tokens = len(canonical.encode("utf-8")) // _WIRE_BYTES_PER_TOKEN
+        from prismclaw.token_counting import count_bytes
+
+        tokens = count_bytes(len(canonical.encode("utf-8")), kind="wire")
         self._wire_tokens_cache = (fingerprint, tokens)
         return tokens

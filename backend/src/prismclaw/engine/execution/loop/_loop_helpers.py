@@ -188,7 +188,7 @@ async def _persist_clarified_turn(
     from prismclaw.engine.execution.output.tool_result_rendering import (
         tool_result_to_llm_content,
     )
-    from prismclaw.engine.execution.loop.bootstrap import _append
+    from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.agent.data_types import TextBlock
     from prismclaw.schema.content.content_types import ToolResult
@@ -280,7 +280,7 @@ async def _persist_blocked_tool_results(
     )
     from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.session.types import generate_entry_id, now_iso
-    from prismclaw.engine.execution.loop.bootstrap import _append
+    from prismclaw.engine.execution.loop.tree_writer import _append
 
     entry_ids = set(tree.entries.keys())
     for event in blocked_events:
@@ -329,7 +329,7 @@ async def _close_orphaned_tool_calls(
             _covered_ids.add(_tcid)
     from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.session.types import generate_entry_id, now_iso
-    from prismclaw.engine.execution.loop.bootstrap import _append
+    from prismclaw.engine.execution.loop.tree_writer import _append
 
     _synth_content = "[错误] 工具在执行前即失败"
     entry_ids = set(tree.entries.keys())
@@ -352,7 +352,7 @@ async def _close_orphaned_tool_calls(
 
 
 # ---------------------------------------------------------------------------
-# create_loop_config 闭包使用的辅助函数
+# stage 模块（terminal / tools）使用的辅助函数
 # ---------------------------------------------------------------------------
 
 def _build_clarify_request(ask_call: Any, tool_ctx: Any, deps: Any, request: Any) -> Any:

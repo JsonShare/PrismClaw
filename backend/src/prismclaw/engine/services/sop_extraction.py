@@ -14,7 +14,7 @@ import time
 import uuid
 from typing import Any
 
-from prismclaw.engine.services.llm.stream_fn import LiteLLMStreamFn
+from prismclaw.engine.services.llm.client import LiteLLMClient
 from prismclaw.schema.llm.request import PackedLLMRequest
 from prismclaw.schema.session.ids import derive_memory_session_key
 from prismclaw.schema.config.config import EvolutionConfig
@@ -192,7 +192,7 @@ async def extract_sop_background(
     memory_store: MemoryStore,
     session_store: SessionStore,
     redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMStreamFn,
+    llm_client: LiteLLMClient,
     session_id: str,
     settings: EvolutionConfig,
 ) -> ExtractionResult:
@@ -347,7 +347,7 @@ async def maybe_spawn_extraction(
     memory_store: MemoryStore,
     session_store: SessionStore,
     redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMStreamFn,
+    llm_client: LiteLLMClient,
     session_id: str,
     settings: Any,  # noqa: ANN401
     min_tool_calls: int | None = None,
@@ -441,7 +441,7 @@ async def extract_sops_sync(
     memory_store: MemoryStore,
     session_store: SessionStore,
     redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMStreamFn,
+    llm_client: LiteLLMClient,
     session_id: str,
     settings: Any,  # noqa: ANN401
     min_tool_calls: int | None = None,
@@ -542,7 +542,7 @@ async def _extract_then_reset(
     memory_store: MemoryStore,
     session_store: SessionStore,
     redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMStreamFn,
+    llm_client: LiteLLMClient,
     session_id: str,
     settings: Any,  # noqa: ANN401
     nudge_hook: Any,  # noqa: ANN401
@@ -574,7 +574,7 @@ async def _extract_then_reset(
 
 
 async def _call_llm_with_retry(
-    llm_client: LiteLLMStreamFn,
+    llm_client: LiteLLMClient,
     prompt_text: str,
     model: str | None,
 ) -> list[dict[str, Any]]:

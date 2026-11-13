@@ -11,66 +11,14 @@ from prismclaw.engine.security.gate.governance import (
     build_task_context_contract,
     build_turn_semantics,
 )
-from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.schema.session.types import SessionTree, generate_entry_id, now_iso
+from prismclaw.schema.session.types import SessionTree
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.schema.agent.types import RunRequest
 
 logger = logging.getLogger(__name__)
-
-
-async def _persist_partial_assistant(
-    deps: "AgentRunnerDeps",
-    tree: SessionTree,
-    text: str,
-) -> None:
-    """Persist already-streamed assistant text as a partial=True MessageEntry.
-
-    Best-effort persistence: failures (e.g., Redis connection drop in
-    session_store.commit_events) are logged at WARNING and SHALL NOT propagate.
-    The caller's `yield ErrorEvent(...)` is the must-deliver cross-layer
-    signal; partial persistence is data enrichment that can be sacrificed
-    under storage pressure.
-
-    `except Exception` is deliberate — `asyncio.CancelledError` and
-    `KeyboardInterrupt` inherit from `BaseException` (Python 3.8+) so they
-    propagate normally, which is correct (cancellation must not be swallowed).
-
-    Caller MUST gate on non-empty text. Caller MUST only invoke from
-    Bucket B paths (mid-stream / LLM-raised ErrorEvent exits).
-    """
-    if not text:
-        return
-    from prismclaw.engine.execution.loop.bootstrap import _append
-    from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
-
-    # 流式中间态也可能已经出现完整的 <thinking>...</thinking> block
-    # （模型在中途结束一段推理后开始正文）。strip 掉已经闭合的 block；
-    # 未闭合的（如只看到 <thinking> 还没 </thinking>）会被正则忽略，
-    # 等最终完整响应到达 append_assistant_response 时再做一次彻底清洗。
-    cleaned = strip_thinking(text)
-    if not cleaned.strip():
-        return  # strip 后只剩空/思考区 —— 不持久化空 partial
-
-    entry = MessageEntry(
-        id=generate_entry_id(set(tree.entries.keys())),
-        parent_id=tree.leaf_id,
-        timestamp=now_iso(),
-        role="assistant",
-        content=cleaned,
-        partial=True,
-    )
-    try:
-        await _append(deps, tree, entry)
-    except Exception:
-        logger.warning(
-            "failed to persist partial assistant content (best-effort); "
-            "ErrorEvent dispatch will still proceed",
-            exc_info=True,
-        )
 
 
 async def _apply_fresh_governance_fields(

@@ -1,27 +1,26 @@
 /**
- * TrajectoryTimeline — DSH-aligned 3-lane overview with drag-to-select.
+ * TrajectoryTimeline — 3 轨道时间线概览，支持拖拽选区。
  *
- * Projection logic lives in ./trajectory/timeline.ts (ported from DSH
- * timeline.ts): 4 modes — sequence (equal-width), duration (idle-compressed
- * real time), time (equal-duration instants), actual (full real time).
+ * 投影逻辑见 ./lib/timeline.ts，支持 4 种模式：
+ * sequence（等宽）、duration（压缩空闲的真实时长）、time（等宽瞬时）、actual（完整真实时间）。
  *
- *   • 50px plot · 44px label column · 3 lanes × 14px · 8px bar (DSH dims)
- *   • kind-driven solid colour per cell (data-timeline-span='kind')
- *   • assistant bar linear-gradient TTFT (pale) → Decoding (deep/red)
- *     (data-assistant-timing='true' + --trajectory-assistant-ttft)
- *   • error cells override to red (data-error='true')
- *   • turn boundaries as 1px vertical lines, recomputed per mode
- *   • DSH-style rich tooltip: kind label + time range + Total + TTFT · Decoding
+ *   • 50px 绘图区 · 44px 标签列 · 3 轨道 × 14px · 8px 柱
+ *   • kind 驱动的实色填充（data-timeline-span='kind'）
+ *   • assistant 柱线性渐变 TTFT（浅）→ Decoding（深/红）
+ *     （data-assistant-timing='true' + --trajectory-assistant-ttft）
+ *   • error cell 覆盖为红色（data-error='true'）
+ *   • turn 边界为 1px 竖线，按模式重新计算
+ *   • 富文本 tooltip：kind 标签 + 时间范围 + Total + TTFT · Decoding
  *
- * Interaction (ported from DSH):
- *   • drag-to-select range (pointer down/move/up) → onRangeChange
- *   • selection dimming (data-selected='false' → opacity 0.2)
- *   • search match dimming (data-search-match='false' → opacity 0.14)
- *   • hover line (vertical cursor line on whitespace)
- *   • click span → onRecordSelect(index); click whitespace → onRecordFocus(nearest)
- *   • Escape / double-click clears range
+ * 交互：
+ *   • 拖拽选区（pointer down/move/up）→ onRangeChange
+ *   • 选区变暗（data-selected='false' → opacity 0.2）
+ *   • 搜索匹配变暗（data-search-match='false' → opacity 0.14）
+ *   • 空白处显示竖直指示线
+ *   • 点击柱 → onRecordSelect(index)；点击空白 → onRecordFocus(nearest)
+ *   • Escape / 双击清空选区
  *
- * Data: TrajectoryCell[] (one cell per conversation-tree node).
+ * 数据：TrajectoryCell[]（每个 conversation-tree 节点一个 cell）。
  */
 import { useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type KeyboardEvent } from 'react'
 import type { TrajectoryCell, TrajectoryCellKind } from '../../types'
@@ -35,16 +34,16 @@ interface TrajectoryTimelineProps {
   cells: TrajectoryCell[]
   onSpanClick: (cellIndex: number) => void
   selectedIndex: number | null
-  /** Active selection range in the current mode's domain; null when none. */
+  /** 当前投影模式下的活跃选区；无选区时为 null。 */
   range: { start: number; end: number } | null
   onRangeChange: (range: { start: number; end: number } | null) => void
-  /** Cell indexes matching the active ledger search; null without a query. */
+  /** 匹配 ledger 搜索的 cell 索引集合；无查询时为 null。 */
   searchMatchIndexes: ReadonlySet<number> | null
-  /** Timeline projection mode (DSH TrajectoryTimelineMode). */
+  /** 时间线投影模式。 */
   mode: TrajectoryTimelineMode
 }
 
-// ── DSH 7-kind model ────────────────────────────────────────────
+// ── 7 种 cell kind 标签与配色 ────────────────────────────────────
 const KIND_LABEL: Record<TrajectoryCellKind, string> = {
   system: 'SYSTEM', user: 'USER', context: 'CONTEXT',
   compacted: 'COMPACTED', message: 'ASSISTANT',
@@ -61,11 +60,11 @@ const KIND_COLOR: Record<TrajectoryCellKind, string> = {
   subtool:   'hsl(38, 65%, 60%)',
 }
 
-// Assistant timing gradient colours (DSH color-mix approximation).
+// Assistant 耗时渐变配色
 const ASSISTANT_DECODING_COLOR = 'hsl(15, 82%, 48%)'
 const ASSISTANT_TTFT_COLOR = 'hsl(15, 48%, 72%)'
 
-// ── Layout constants — 1:1 with DSH ────────────────────────────
+// ── 布局常量 ────────────────────────────────────────────────
 const PLOT_HEIGHT = 50
 const LABEL_WIDTH = 44
 const LANE_TOP = 7
@@ -73,11 +72,10 @@ const LANE_HEIGHT = 14
 const BAR_HEIGHT = 8
 const BAR_GAP_Y = (LANE_HEIGHT - BAR_HEIGHT) / 2
 
-// DSH interaction thresholds
+// 交互阈值
 const MINIMUM_DRAG_PX = 3
 
-// Equal-duration bars in 'time' mode get a fixed pixel width (DSH
-// [data-equal-duration='true'] → width: 8px).
+// 'time' 模式下等时长柱的固定像素宽度（[data-equal-duration='true'] → width: 8px）
 const EQUAL_DURATION_BAR_PX = 8
 
 function formatMs(ms: number | null | undefined): string {
@@ -151,9 +149,8 @@ interface TimelineModel {
   turnBoundaries: { turn: number | null; time: number }[]
 }
 
-/** Wrap the ported DSH projection, re-attaching the source cell per span
- * (the module keeps spans minimal; the renderer needs the cell for colour /
- * TTFT gradient / tooltip). */
+/** 封装投影模块，为每个 span 附加源 cell（模块本身保持 spans 最小化；
+ * 渲染器需要 cell 来获取颜色 / TTFT 渐变 / tooltip）。 */
 function deriveTimelineModel(
   cells: TrajectoryCell[],
   mode: TrajectoryTimelineMode,
@@ -266,14 +263,13 @@ export function TrajectoryTimeline({
     dragRef.current = null
     setDraft(null)
     const click = Math.abs(event.clientX - drag.anchorClientX) < MINIMUM_DRAG_PX
-    // Click on a span → select that record
+    // 点击柱 → 选中该记录
     if (click && drag.recordIndex !== null) {
       onRangeChange(null)
       onSpanClick(drag.recordIndex)
       return
     }
-    // Drag too small → centered minimum selection (DSH minimumSelectionDuration
-    // = min(domainDuration, fullDuration / spans.length) — one average unit)
+    // 拖拽过短 → 居中最小选区（= min(domainDuration, fullDuration / spans.length)，一个平均单位）
     const minimumSelectionDuration = Math.min(domainDuration, domainDuration / model.spans.length)
     let committedRange = selected
     if (selected.end - selected.start < minimumSelectionDuration) {
@@ -284,7 +280,7 @@ export function TrajectoryTimeline({
       committedRange = { start, end: start + minimumSelectionDuration }
     }
     onRangeChange(committedRange)
-    // Click on whitespace → focus nearest span (DSH onRecordFocus)
+    // 点击空白 → 聚焦最近的 span
     if (click) {
       const point = selected.start
       let nearest = model.spans[0]
@@ -310,13 +306,12 @@ export function TrajectoryTimeline({
     setHover(null)
   }
 
-  // Selection fraction (committed or draft)
+  // 选区比例（确认或草稿）
   const visibleRange = draft ?? range
   const selLeft = visibleRange != null ? percent(visibleRange.start - domainStart) : null
   const selWidth = visibleRange != null ? percent(visibleRange.end - visibleRange.start) : null
 
-  // Domain summary varies by mode: sequence counts records; timed modes
-  // report (possibly compressed) span.
+  // Domain 摘要随模式变化：sequence 计数记录数；timed 模式报告（可能压缩的）span
   const modeLabel = mode === 'sequence' ? '顺序'
     : mode === 'duration' ? '时长·压缩空闲'
     : mode === 'time' ? '时刻·等宽' : '实时'
@@ -337,12 +332,12 @@ export function TrajectoryTimeline({
         </span>
       </div>
 
-      {/* DSH-style 50px plot: 44px label column + 1fr track */}
+      {/* 50px 绘图区：44px 标签列 + 1fr 轨道 */}
       <div
         className="grid overflow-hidden rounded-[var(--radius-control)] bg-[var(--c-surface-2)]"
         style={{ gridTemplateColumns: `${LABEL_WIDTH}px minmax(0, 1fr)`, height: PLOT_HEIGHT }}
       >
-        {/* Lane labels — Input / Model / Tools (DSH LaneLabels) */}
+        {/* 轨道标签 — Input / Model / Tools */}
         <div className="relative border-r border-[var(--c-border)]" aria-hidden="true">
           {['Input', 'Model', 'Tools'].map((label, i) => (
             <span
@@ -355,7 +350,7 @@ export function TrajectoryTimeline({
           ))}
         </div>
 
-        {/* Track — DSH interactive area */}
+        {/* 轨道 — 交互区域 */}
         <div
           ref={trackRef}
           className="relative overflow-hidden cursor-crosshair touch-none"
@@ -370,7 +365,7 @@ export function TrajectoryTimeline({
           onPointerLeave={() => { if (dragRef.current === null) setHover(null) }}
           onDoubleClick={(e) => { e.preventDefault(); onRangeChange(null) }}
         >
-          {/* Hover line — DSH hoverLine (only on whitespace, no draft) */}
+          {/* 悬停指示线 — 仅在空白处且无草稿选区时显示 */}
           {hover !== null && hover.recordIndex === null && draft === null && (
             <div
               className="absolute top-0 bottom-0 w-[2px] bg-[var(--c-accent)] pointer-events-none z-[4]"
@@ -379,7 +374,7 @@ export function TrajectoryTimeline({
             />
           )}
 
-          {/* Selection box — DSH selection */}
+          {/* 选区框 */}
           {selLeft != null && selWidth != null && (
             <>
               <div
@@ -390,7 +385,7 @@ export function TrajectoryTimeline({
                 }}
                 aria-hidden="true"
               />
-              {/* Selection edges — DSH selectionEdges */}
+              {/* 选区边缘 */}
               <div
                 className="absolute top-0 bottom-0 z-[4] pointer-events-none"
                 style={{
@@ -404,7 +399,7 @@ export function TrajectoryTimeline({
             </>
           )}
 
-          {/* Turn boundary vertical lines */}
+          {/* turn 边界竖线 */}
           {model.turnBoundaries.map((b, i) => {
             const left = percent(b.time - domainStart)
             return (
@@ -417,11 +412,10 @@ export function TrajectoryTimeline({
             )
           })}
 
-          {/* Cells — one bar per TrajectoryCell (DSH spans) */}
+          {/* Cells — 每个 TrajectoryCell 渲染一条柱 */}
           {model.spans.map((span) => {
             const leftPct = percent(span.start - domainStart)
-            // 'time' mode collapses spans to zero width — DSH gives them a
-            // fixed pixel width ([data-equal-duration] → 8px).
+            // 'time' 模式下 span 宽度坍缩为零，渲染时给它一个固定像素宽度
             const widthPct = mode === 'time'
               ? 0
               : Math.max(0.5, percent(span.end - span.start))
@@ -448,13 +442,13 @@ export function TrajectoryTimeline({
 
             const tooltipText = timelineTooltipLabel(cell.kind, detail)
 
-            // DSH dimming states
+            // 变暗状态：选区 + 搜索匹配
             const inRange = activeRange != null
               && span.start <= activeRange.end && span.end >= activeRange.start
             const isSearchMatch = searchMatchIndexes == null ? null
               : searchMatchIndexes.has(span.index)
 
-            // opacity: DSH uses CSS [data-selected='false']→0.2, [data-search-match='false']→0.14
+            // 不透明度：消息/错误柱默认 1，其它 0.78；选中外 0.2，搜索不匹配 0.14
             let opacity = (cell.kind === 'message' || span.isError) ? 1 : 0.78
             if (activeRange != null && !inRange) opacity = 0.2
             else if (searchMatchIndexes != null && isSearchMatch === false) opacity = 0.14
@@ -494,7 +488,7 @@ export function TrajectoryTimeline({
                   cursor: 'pointer',
                 } as CSSProperties}
               >
-                {/* Rich hover tooltip — DSH-style multiline */}
+                {/* 富文本悬停 tooltip */}
                 {hover?.recordIndex === span.index && (
                   <span
                     className="absolute left-1/2 -translate-x-1/2 rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-xs)] leading-[14px] z-40 whitespace-pre pointer-events-none"

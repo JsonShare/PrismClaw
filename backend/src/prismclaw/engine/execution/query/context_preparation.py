@@ -1,58 +1,46 @@
 from __future__ import annotations
+
 import logging
 import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.engine.execution.loop.runner import RunRequest
     from prismclaw.schema.session import SessionTree
 
-from prismclaw.schema.session.types import now_iso
-
-from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
 from prismclaw.engine.compression.context_zones import zone_of
+
+# --- extracted sub-modules ---
+from prismclaw.engine.execution.query._catalog_builder import (
+    _build_available_skills_catalog,
+    _build_available_subagents_catalog,
+    _session_follow_up_notes,
+    _subagent_catalog_state,
+    _tool_prompt_summaries,
+)
+from prismclaw.engine.execution.query._static_context_types import (
+    StaticContextResult,
+    StaticTurnShellSnapshot,
+    _load_prior_replacement_state,
+    _resolve_static_shell_cache,
+    _shell_cache_key,
+    _skill_catalog_fingerprint,
+    _subagent_catalog_fingerprint,
+)
+from prismclaw.engine.execution.query._turn_helpers import _require_capability_catalog
+from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
 from prismclaw.engine.execution.request.system_prompt import (
     PromptInputs,
     build_frozen_prefix,
     build_identity_text,
     build_preferences_text,
 )
-from prismclaw.engine.security.gate.governance import runtime_notes_for
 from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
+from prismclaw.engine.security.gate.governance import runtime_notes_for
 from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.skills import SkillInvocationState
-from prismclaw.engine.execution.query._turn_helpers import _require_capability_catalog
-
-# --- re-export from extracted sub-modules ---
-from prismclaw.engine.execution.query._catalog_builder import (  # noqa: F401
-    _session_follow_up_notes,
-    _build_lightweight_repo_map,
-    _tool_prompt_summaries,
-    _subagent_catalog_state,
-    _compact_description,
-    _rough_token_count,
-    _skill_catalog_budget_tokens,
-    _hard_cap_names,
-    _within_budget_catalog,
-    _effective_context_window_tokens,
-    _build_available_skills_catalog,
-    _build_available_subagents_catalog,
-)
-from prismclaw.engine.execution.query._static_context_types import (  # noqa: F401
-    ShellCacheKey,
-    StaticContextResult,
-    StaticTurnShellSnapshot,
-    StaticTurnShellCache,
-    _load_prior_cache_strategy,
-    _load_prior_replacement_state,
-    _coerce_cache_strategy_snapshot,
-    _resolve_static_shell_cache,
-    _plugin_generation,
-    _skill_catalog_fingerprint,
-    _subagent_catalog_fingerprint,
-    _shell_cache_key,
-)
+from prismclaw.schema.session.types import now_iso
 
 logger = logging.getLogger(__name__)
 _HOTPATH = HotPathTelemetry()
@@ -88,9 +76,9 @@ class StaticContextBuilder:
     async def build(
         self,
         *,
-        request: "RunRequest",
-        deps: "AgentRunnerDeps",
-        tree: "SessionTree",
+        request: RunRequest,
+        deps: AgentRunnerDeps,
+        tree: SessionTree,
         tool_workspace_path: str | None,
         effective_model: str,
         mode: WorkspaceMode = "work",
@@ -111,11 +99,9 @@ class StaticContextBuilder:
                 tiers=deps.config.effort,
             )
             run_seconds = _effort_budget.hard_s
-            channel = deps.channel if hasattr(deps, "channel") else "cli"
             request_mode = deps.task_request_policy.resolve_request_mode(
                 tree=tree,
                 run_seconds=run_seconds,
-                channel=channel,
             )
             is_fast_path = request_mode == "fast_path"
             capability_catalog = _require_capability_catalog(deps)
@@ -160,33 +146,26 @@ class StaticContextBuilder:
             )
             tool_summaries = list(shell_snapshot.tool_summaries)
             strategy_notes.extend(_session_follow_up_notes(tree, tool_summaries))
-            # The full catalogs live in the frozen prefix (built once in
-            # _build_shell_snapshot) and are surfaced every turn via the static
-            # section, so the model can pull any skill/agent itself (semi-pull).
+            # 冻结前缀只索引项目技能名、插件包计数与核心子代理；插件内的
+            # 技能/子代理由 skill_search / subagent_search 按需披露。
             available_skills = shell_snapshot.available_skills
             prompt_inputs = PromptInputs(
                 session_id=request.session_id,
                 workspace_id=request.workspace_id,
                 agent_id=request.agent_id,
                 model=shell_snapshot.model,
-                identity=build_identity_text(mode),
+                identity=build_identity_text(),
                 preferences=build_preferences_text(),
                 tools=tool_summaries,
-                available_skills=available_skills,
-                available_skills_note=shell_snapshot.available_skills_note,
+                project_skill_names=available_skills,
                 marketplace_summaries=shell_snapshot.marketplace_summaries,
                 available_subagents=shell_snapshot.available_subagents,
-                available_subagents_refreshed_at=shell_snapshot.available_subagents_refreshed_at,
                 workspace_path=shell_snapshot.workspace_path,
-                repo_map=shell_snapshot.repo_map,
                 subagent_registry_size=shell_snapshot.subagent_registry_size,
                 handoff_enabled=shell_snapshot.handoff_enabled,
                 any_manifest_has_can_handoff_to=shell_snapshot.any_manifest_has_can_handoff_to,
                 max_handoff_chain_length=shell_snapshot.max_handoff_chain_length,
-                max_context_tokens=_effective_context_window_tokens(
-                    shell_snapshot.model, deps
-                ),
-                request_mode=request_mode,
+                workspace_mode=mode,
                 task_spec=task_spec,
                 review_requirements=review_requirements,
                 active_skill_name=skill_invocation.skill_name if skill_invocation else None,
@@ -207,7 +186,6 @@ class StaticContextBuilder:
                 frozen_result=shell_snapshot.frozen_result,
                 history_budget=shell_snapshot.history_budget,
                 request_mode=request_mode,
-                prior_cache_strategy=_load_prior_cache_strategy(tree),
                 prior_replacement_state=_load_prior_replacement_state(tree),
                 shell_snapshot=shell_snapshot,
             )
@@ -226,8 +204,8 @@ class StaticContextBuilder:
     async def _build_shell_snapshot(
         self,
         *,
-        request: "RunRequest",
-        deps: "AgentRunnerDeps",
+        request: RunRequest,
+        deps: AgentRunnerDeps,
         capability_catalog: Any,
         tool_workspace_path: str | None,
         effective_model: str,
@@ -262,23 +240,17 @@ class StaticContextBuilder:
                 capability_catalog
             )
         workspace_path = str(tool_workspace_path) if tool_workspace_path else None
-        # Full catalogs live in the frozen (cached) prefix so the model can
-        # pull any skill/agent itself (semi-pull). Ordering is deterministic
-        # so the static prefix stays byte-stable across turns and cacheable.
-        available_skills, marketplace_summaries, available_skills_note = _build_available_skills_catalog(
+        # 冻结前缀只放项目技能名、插件包计数与核心子代理；插件内能力由
+        # skill_search / subagent_search 披露。排序确定性保证跨轮字节稳定。
+        available_skills, marketplace_summaries = _build_available_skills_catalog(
             capability_catalog=capability_catalog,
             workspace_path=workspace_path,
             tool_summaries=tool_summaries,
-            skill_invocation=skill_invocation,
-            context_window_tokens=_effective_context_window_tokens(effective_model, deps),
         )
-        available_subagents, available_subagents_refreshed_at, available_subagents_total = (
-            _build_available_subagents_catalog(
-                capability_catalog=capability_catalog,
-                tool_summaries=tool_summaries,
-            )
+        available_subagents = _build_available_subagents_catalog(
+            capability_catalog=capability_catalog,
+            tool_summaries=tool_summaries,
         )
-        repo_map_str = "" if is_fast_path else _build_lightweight_repo_map(workspace_path)
         bootstrap_text = None
         if not is_fast_path:
             bootstrap_text = await StaticContextBuilder._load_bootstrap_text(
@@ -290,23 +262,18 @@ class StaticContextBuilder:
             workspace_id=request.workspace_id,
             agent_id=request.agent_id,
             model=effective_model,
-            identity=build_identity_text(mode),
+            identity=build_identity_text(),
             preferences=build_preferences_text(),
             tools=tool_summaries,
-            available_skills=available_skills,
-            available_skills_note=available_skills_note,
+            project_skill_names=available_skills,
             marketplace_summaries=marketplace_summaries,
             available_subagents=available_subagents,
-            available_subagents_refreshed_at=available_subagents_refreshed_at,
-            available_subagents_total=available_subagents_total,
             workspace_path=workspace_path,
-            repo_map=repo_map_str,
             subagent_registry_size=subagent_registry_size,
             handoff_enabled=handoff_enabled,
             any_manifest_has_can_handoff_to=any_manifest_has_can_handoff_to,
             max_handoff_chain_length=max_handoff_chain_length,
-            max_context_tokens=_effective_context_window_tokens(effective_model, deps),
-            request_mode=request_mode,
+            workspace_mode=mode,
             workspace_tag=getattr(request, "workspace_tag", None),
         )
         # SDD R-A2 / W13: deduct the measured tool-schema wire cost (fingerprint
@@ -352,7 +319,6 @@ class StaticContextBuilder:
             model=effective_model,
             request_mode=request_mode,
             tool_summaries=tool_summaries,
-            repo_map=repo_map_str,
             subagent_registry_size=subagent_registry_size,
             handoff_enabled=handoff_enabled,
             any_manifest_has_can_handoff_to=any_manifest_has_can_handoff_to,
@@ -360,8 +326,6 @@ class StaticContextBuilder:
             available_skills=available_skills,
             marketplace_summaries=marketplace_summaries,
             available_subagents=available_subagents,
-            available_subagents_refreshed_at=available_subagents_refreshed_at,
-            available_skills_note=available_skills_note,
             frozen_result=build_frozen_prefix(
                 frozen_prompt_inputs,
                 budget=system_zone_budget,

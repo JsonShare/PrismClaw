@@ -24,7 +24,7 @@ from prismclaw.engine.execution.loop.types import (
     RunLoopState,
     StreamPort,
 )
-from prismclaw.schema.content.streaming import Done
+from prismclaw.schema.content.streaming import Done, ToolClarifyRequest
 
 
 async def _noop_prepare(state: RunLoopState):
@@ -277,7 +277,7 @@ async def test_all_denied_persists_turn():
     assert loop.state.last_tool_results == []
 
 
-# ── HITL：wait_for_clarification 被调用（answer 落树由闭包负责）──
+# ── HITL：wait_for_clarification 被调用（answer 落树由 persist_clarified_turn 负责）──
 
 
 async def test_hitl_waits_and_closes_timeline():
@@ -294,9 +294,15 @@ async def test_hitl_waits_and_closes_timeline():
 
     class _FakeClarifyResult:
         needs_clarification = True
-        clarification_request = {"question": "which file?", "tool_call_id": "c1"}
+        clarification_request = ToolClarifyRequest(
+            approval_id="a1",
+            run_id="r1",
+            turn_id="t1",
+            tool_call_id="c1",
+            questions=[{"question": "which file?"}],
+        )
 
-    def check_hitl(state, calls):
+    def check_hitl(calls):
         return _FakeClarifyResult()
 
     async def wait_for_clarification(hitl_result):
@@ -401,7 +407,7 @@ async def test_compression_restart_replays_pending_messages():
         ),
         should_continue=should_continue,
     )
-    async for ev in run_loop(loop.state, cfg):
+    async for _ev in run_loop(loop.state, cfg):
         pass
 
     assert len(restart_seen) == 1

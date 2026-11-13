@@ -196,6 +196,7 @@
   - `maybe_pretrim_history()` — 条件触发压缩（含 cooldown 保护）
   - `recover_from_context_overflow()` — 溢出恢复（force=True）
   - `predict_compaction_trigger()` — 预测性触发
+- **溢出恢复接线**：`loop/stream.py` 捕获 `LLMErrorCode.CONTEXT_OVERFLOW` 时调用一次 `recover_from_context_overflow()` 并重启本回合；同一 run 内第二次溢出直接终态，避免无限压缩循环。
 - **数据类**：`CompactionOutcome`（ok, compacted, error_code, error_message, result）
 - **Cooldown**：`_resolve_min_interval_entries()` — 最小间隔条目数
 - **Carry-forward**（C-1）：`carry_forward_missing_sections()` — 确定性章节前向传递

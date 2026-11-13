@@ -45,6 +45,10 @@ _REASONING_PUSH_INTERVAL_S = 0.12
 
 _EXECUTION_TIMELINE_ENTRY_TYPE = "execution_timeline"
 
+# 软着陆错误码：错误帧本身没有额外信息量（纯超时 / 预算耗尽），
+# 省略 error 帧；正文本身就是连贯答案，不追加任何系统说明。
+_SOFT_LANDING_CODES = frozenset({"timeout", "budget_seconds", "budget_iterations"})
+
 
 def _extract_tool_result_text(event: Any) -> str:
     if not event or not getattr(event, "result", None):

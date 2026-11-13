@@ -46,14 +46,13 @@ def evaluate_soft_budget(
     *,
     soft_budget: Any | None,
 ) -> SoftBudgetVerdict:
-    """Decide whether to inject a warning or terminate.
+    """判定是否注入警告或强制收尾。
 
-    Mirrors Claude's two-tier pattern:
+    两层阈值：
     - ``token_usage / effective_window`` >= ``warning_ratio`` → warn
     - ``>= terminate_ratio`` → terminate
 
-    Defensive against bad config / zero window: returns ``action="none"``.
-    """
+    防御坏配置 / 零窗口：返回 ``action="none"``。"""
     if not soft_budget or effective_window <= 0:
         return SoftBudgetVerdict(
             action="none",
@@ -165,15 +164,10 @@ def inject_budget_warning(
     soft_budget: Any | None,
     enabled: bool = True,
 ) -> list[Any]:
-    """Prepend the budget warning to the first system message.
+    """在首条 system message 前注入预算警告。
 
-    Mirrors Claude's pattern of "tell the LLM actively".  The
-    original message list is not mutated; a new list is returned.
-
-    ``enabled`` is the soft-budget kill switch.  When False, the
-    function is a no-op — the caller falls back to the
-    pre-refactor passive re-compression path.
-    """
+    原消息列表不被修改，返回新列表。
+    ``enabled`` 是软预算总开关，关闭时退化为被动压缩。"""
     if not enabled or not verdict.should_warn:
         return list(messages)
     warning_text = render_budget_warning(verdict, soft_budget=soft_budget)

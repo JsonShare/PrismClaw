@@ -60,16 +60,10 @@ class BootstrapProvider:
     ) -> None:
         self._workspace_store = workspace_store
         self._bootstrap_files = bootstrap_files if bootstrap_files is not None else [
-            # PrismClaw native paths
             "/etc/prismclaw/AGENTS.md",
             "~/.prismclaw/assets/AGENTS.md",
             ".work/AGENTS.md",
             "AGENTS.md",
-            "/etc/prismclaw/prismclaw.md",
-            "~/.prismclaw/assets/prismclaw.md",
-            ".work/prismclaw.md",
-            "prismclaw.md",
-            "prismclaw.local.md",
         ]
         self._cache: dict[str, str] = {}
 

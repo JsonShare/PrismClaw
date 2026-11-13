@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import Request
 
-from prismclaw.engine.services.llm.stream_fn import LiteLLMStreamFn
+from prismclaw.engine.services.llm.client import LiteLLMClient
 from prismclaw.schema.llm.request import PackedLLMRequest
 
 logger = logging.getLogger(__name__)
@@ -43,13 +43,13 @@ OCR_PROMPT = "请输出这张病历图片中的全部文字。"
 def get_medical_llm(request: Request) -> Any | None:
     """核心文本模型客户端（模型名由 models.default_model 全局决定）。
 
-    返回 LiteLLMStreamFn 实例，未装配时为 None。
+    返回 LiteLLMClient 实例，未装配时为 None。
     """
     deps = getattr(request.app.state, "runner_deps", None)
     return getattr(deps, "llm", None)
 
 
-def get_medical_vision(request: Request) -> LiteLLMStreamFn | None:
+def get_medical_vision(request: Request) -> LiteLLMClient | None:
     """
     视觉模型客户端，按 settings.vision 构造并缓存在 app.state 上。
 
@@ -67,10 +67,12 @@ def get_medical_vision(request: Request) -> LiteLLMStreamFn | None:
         logger.warning("未配置视觉模型，扫描件病历无法 OCR")
         return None
 
-    client = LiteLLMStreamFn(
+    client = LiteLLMClient(
         default_model=model,
         api_key=getattr(vision, "api_key", "") or "",
         api_base=base_url,
+        # OCR 场景不需要长思考，且该端点无 providers 配置可声明
+        disable_thinking=True,
     )
     setattr(request.app.state, _VISION_STATE_KEY, client)
     return client

@@ -439,7 +439,7 @@ _collect_evidence_from_messages()（模块级函数）
 
 ```
 子代理模块
-  ├── engine.services.llm              — LLM 调用（stream_fn）
+  ├── engine.services.llm              — LLM 调用（client）
   ├── engine.toolkit                    — 工具注册与执行
   ├── engine.subagent.definition        — 自身定义层
   ├── engine.subagent.runtime           — 自身运行时层

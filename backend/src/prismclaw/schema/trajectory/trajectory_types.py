@@ -231,11 +231,11 @@ class TrajectorySnapshot(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# DSH-aligned per-conversation-event cell model
+# 对齐 per-conversation-event cell model
 # ---------------------------------------------------------------------------
 
 class TrajectoryCell(BaseModel):
-    """One DSH-style trajectory cell = one conversation-tree node."""
+    """One trajectory cell = one conversation-tree node."""
     model_config = ConfigDict(extra="forbid")
 
     cell_id: str

@@ -12,7 +12,7 @@ from prismclaw.schema.agent.data_types import CacheStrategySnapshot
 from prismclaw.schema.content.context import ContextBlock, ContextPackLayout
 
 if TYPE_CHECKING:
-    from prismclaw.engine.services.llm.stream_fn import LLMUsage
+    from prismclaw.schema.llm.types import LLMUsage
     # 仅类型注解所需，runtime 不依赖 execution。
     from prismclaw.engine.execution.checkpoint import PromptCacheRuntimeState
 

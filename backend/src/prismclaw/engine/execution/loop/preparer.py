@@ -74,13 +74,14 @@ from prismclaw.schema.session.types import SessionTree, generate_entry_id, now_i
 from prismclaw.schema.agent.session import SystemReminderProjection
 from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState
 
-from prismclaw.engine.execution.loop.bootstrap import (
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+from prismclaw.engine.execution.loop.entry_runtime import (
     EntryRuntimeBootstrapError,
-    AgentRunnerDeps,
+    _bootstrap_entry_runtime,
+)
+from prismclaw.engine.execution.loop.tree_writer import (
     ensure_session,
     _append,
-    _build_task_runtime_from_spec,
-    _bootstrap_entry_runtime,
     _persist_task_spec_snapshot,
     _persist_task_runtime_snapshot,
     _persist_review_requirements_snapshot,
@@ -98,14 +99,15 @@ from prismclaw.engine.execution.state.task_persistence import (
 from prismclaw.engine.execution.state.streaming import (
     _apply_fresh_governance_fields,
 )
-from prismclaw.engine.execution.loop.bootstrap import (
+from prismclaw.engine.execution.loop._bootstrap_helpers import (
     _build_manual_confirmation_evidence,
     _build_preflight_probe_evidence,
     _build_recovery_probe_evidence,
+    _build_task_runtime_from_spec,
     _build_workspace_state_evidence,
 )
 from prismclaw.engine.execution.loop.pending_queue import PendingMessageQueue
-from prismclaw.engine.execution.loop.session_manager import (
+from prismclaw.engine.execution.loop.trajectory_scope import (
     setup_trajectory_early,
     TrajectoryScope,
 )
@@ -138,7 +140,6 @@ class EarlyExit:
     profiler: TurnProfiler | None = None
     active_skill_invocation: SkillInvocationState | None = None
     initial_task_spec: Any = None
-    run_state: Any = None
     iteration: int = 0
 
 
@@ -413,7 +414,6 @@ class RunPreparer:
                     profiler=profiler,
                     active_skill_invocation=active_skill_invocation,
                     initial_task_spec=initial_task_spec,
-                    run_state=run_state,
                 )
 
             request.request_id = request.request_id or f"req_{generate_entry_id(set())}"
@@ -574,7 +574,6 @@ class RunPreparer:
                     profiler=profiler,
                     active_skill_invocation=active_skill_invocation,
                     initial_task_spec=initial_task_spec,
-                    run_state=run_state,
                 )
             if not bootstrapped_runtime_for_new_task:
                 await _persist_review_requirements_snapshot(
@@ -882,7 +881,6 @@ class RunPreparer:
                     profiler=profiler,
                     active_skill_invocation=active_skill_invocation,
                     initial_task_spec=initial_task_spec,
-                    run_state=run_state,
                 )
 
             elif pending_confirmation_state == "awaiting_risk_confirmation":
@@ -949,7 +947,6 @@ class RunPreparer:
                         profiler=profiler,
                         active_skill_invocation=active_skill_invocation,
                         initial_task_spec=initial_task_spec,
-                        run_state=run_state,
                     )
 
                 resume_mutation = _new_task_mutation(
@@ -994,7 +991,6 @@ class RunPreparer:
                 profiler=profiler,
                 active_skill_invocation=active_skill_invocation,
                 initial_task_spec=initial_task_spec,
-                run_state=run_state,
             )
 
         _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
@@ -1040,7 +1036,7 @@ class RunPreparer:
             parallel_task_store=deps.parallel_task_store,
             session_store=deps.session_store,
             session_tree=tree,
-            mcp_death_handler=deps.resolved_mcp_death_handler,
+            mcp_death_handler=deps.callbacks.on_mcp_death if deps.callbacks is not None else None,
             decision_audit_logger=deps.audit_logger,
             mcp_runtime_manager=deps.plugin.runtime_mcp_manager,
             context_engine=deps.context_engine,
@@ -1063,8 +1059,9 @@ class RunPreparer:
                     exc_info=True,
                 )
 
-        if deps.resolved_subagent_progress_sink is not None:
-            tool_ctx.subagent_progress_sink = deps.resolved_subagent_progress_sink
+        _progress_sink = deps.callbacks.on_subagent_progress if deps.callbacks is not None else None
+        if _progress_sink is not None:
+            tool_ctx.subagent_progress_sink = _progress_sink
 
         for key, value in request.tool_context_extras.items():
             if hasattr(tool_ctx, key):

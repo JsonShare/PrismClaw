@@ -7,7 +7,7 @@ from prismclaw.schema.session.types import SessionTree
 from prismclaw.schema.agent.session import ProjectionInputMessage
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.engine.execution.loop.runner import RunRequest
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
     from prismclaw.engine.execution.query.state import (
@@ -86,7 +86,7 @@ def _trajectory_capture_projector(
         # shows "Layer ① = 0 messages" while Layers ②/③/④ show 1+.
         _appended_count = len(list(appended_messages or []))
 
-        # DSH parity: extract actual content previews so the panel can
+ # extract actual content previews so the panel can
         # show WHAT the user asked and WHAT tools returned, not just
         # "[user] xxx[:80]" snippets.
         #   user_message_preview = last role='user' message text (500 chars)
@@ -225,19 +225,3 @@ def _build_source_query_loop_state(
         if attachment_guidance is not None
         else None,
     )
-
-
-def _post_baseline_stable_prefix_follow_up_turn_count(tree: SessionTree) -> int:
-    snapshots = tree.get_cache_strategy_snapshots()
-    if len(snapshots) <= 1:
-        return 0
-    return sum(1 for snapshot in snapshots[1:] if snapshot.get("request_mode") == "follow_up")
-
-
-def _existing_context_compaction_artifact_keys(tree: SessionTree) -> set[tuple[str, str]]:
-    keys: set[tuple[str, str]] = set()
-    for artifact in tree.get_persisted_artifacts().values():
-        if artifact.scope != "context_block":
-            continue
-        keys.add((artifact.artifact_id, artifact.source_digest or ""))
-    return keys

@@ -106,7 +106,7 @@ execution ↔ compression 互引 32 行，是唯一的双向紧耦合。**结论
 
 | 断点 | 位置 | 现状 |
 |------|------|------|
-| A | `bootstrap.py` AgentRunnerDeps | 无 governance 字段 |
+| A | `loop/deps.py` AgentRunnerDeps | 无 governance 字段 |
 | B | `runner_assembly.py` assemble_runner_deps | 未传入 governance |
 | C | `governance.py` ToolGovernance.__init__ | reducers or (默认7个) 是替换而非追加 |
 | D | `pre_request_pipeline.py` 等 4 个调用点 | governance=None |
@@ -679,7 +679,7 @@ async def _lifespan(app: FastAPI):
 
 | # | 改造 | 文件 |
 |---|------|------|
-| 1 | AgentRunnerDeps 新增 `governance: ToolGovernance \| None = field(default=None)` | `bootstrap.py` |
+| 1 | AgentRunnerDeps 新增 `governance: ToolGovernance \| None = field(default=None)` | `loop/deps.py` |
 | 2 | ToolGovernance 新增 `extra_reducers` 参数：追加在默认 7 个之后 | `governance.py` |
 | 3 | 4 个调用点传入 `governance=deps.governance` | `pre_request_pipeline.py` / `_loop_mixin.py` / `catalog.py` |
 
@@ -1014,7 +1014,7 @@ medical = "subpackages.medical.integration.bundle:MedicalBundle"
 
 | # | 改造 | 文件 |
 |---|------|------|
-| 1.1 | AgentRunnerDeps 新增 governance 字段 | `engine/execution/loop/bootstrap.py` |
+| 1.1 | AgentRunnerDeps 新增 governance 字段 | `engine/execution/loop/deps.py` |
 | 1.2 | ToolGovernance extra_reducers 追加语义 | `engine/toolkit/registry/governance.py` |
 | 1.3 | 4 个调用点传入 governance | `pre_request_pipeline.py` / `_loop_mixin.py` / `catalog.py` |
 | 1.4 | assemble_runner_deps 构造域 governance | `wiring/workspace/runner_assembly.py` |

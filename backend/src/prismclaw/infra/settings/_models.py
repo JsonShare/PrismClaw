@@ -59,6 +59,53 @@ class SpeechSettings(BaseSettings):
     )
 
 
+class TokenCountingHeuristicSettings(BaseSettings):
+    """内置启发式 token 计数器的系数（token_counting.heuristic 块）。
+
+    这些系数是全局唯一的调参入口：迁移前散落在 schema/utils、compaction、
+    LLM client、tool registry 里，改一处容易漏改另一处。
+    """
+
+    # CJK（中日韩）字符平均 token 数；0.90 为 glm-53/Qwen 实测校准值
+    cjk_tokens_per_char: float = Field(0.90, gt=0)
+    # 非 CJK 字符平均每个 token 的字符数；3.4 为英文散文与 JSON/代码的中间值
+    other_chars_per_token: float = Field(3.4, gt=0)
+    # 工具 JSON schema：UTF-8 字节数 ÷ 本值 = token（drift sentinel 校准）
+    wire_bytes_per_token: float = Field(3.5, gt=0)
+    # 通用请求 JSON（messages 等）：UTF-8 字节数 ÷ 本值 = token
+    json_bytes_per_token: float = Field(3.0, gt=0)
+    # 单条消息固定信封开销（role/content/JSON 括号）
+    message_envelope_tokens: int = Field(8, ge=0)
+    # 单个 tool_call 的 id/type/function 信封开销
+    tool_call_envelope_tokens: int = Field(5, ge=0)
+
+    model_config = SettingsConfigDict(
+        env_prefix="PRISMCLAW_TOKEN_COUNTING_HEURISTIC_",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+
+class TokenCountingSettings(BaseSettings):
+    """Token 计数插件配置（token_counting 块，models.yaml）。
+
+    ``provider`` 选择算法实现：默认 ``heuristic``（本地启发式，无网络依赖）。
+    其他实现可通过 ``token_counting.register_token_provider()`` 注册后在此启用。
+    """
+
+    provider: str = Field("heuristic")
+
+    heuristic: TokenCountingHeuristicSettings = Field(
+        default_factory=lambda: TokenCountingHeuristicSettings()
+    )
+
+    model_config = SettingsConfigDict(
+        env_prefix="PRISMCLAW_TOKEN_COUNTING_",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+
 class ProviderSettings(BaseSettings, ProviderConfig):
     """Provider configuration with env-var / JSON-file binding.
 

@@ -1062,15 +1062,22 @@ def test_m18_full_medical_e2e():
 # ═══════════════════════════════════════════════════════════════
 
 def test_m19_medical_advisory_evidence_rules():
-    """验证 prompt advisory 包含面向医疗场景的证据规则。"""
-    from prismclaw.engine.execution.request._prompt_advisory import _build_advisory_text
+    """证据规则归属固定段 <subagents>（唯一 owner）。"""
+    from prismclaw.engine.execution.request._prompt_types import PromptInputs
+    from prismclaw.engine.execution.request.system_prompt import subagents_section
 
-    # 关键医疗场景规则
-    assert "证据与准确性规则" in _build_advisory_text()
-    assert "后果重大" in _build_advisory_text()
-    assert "不得提升置信度" in _build_advisory_text()
-    assert "高风险主张必须有 [HIGH] 证据" in _build_advisory_text()
-    assert "标出证据缺口" in _build_advisory_text() or "未经核实" in _build_advisory_text()
+    text = subagents_section(PromptInputs(
+        session_id="s",
+        workspace_id="w",
+        agent_id="a",
+        model="m",
+        tools=[("sub_agent", "delegate")],
+    ))
+    assert text is not None
+    assert "置信度不得提升" in text
+    assert "高风险主张需 [HIGH]" in text
+    assert "证据缺口标出" in text
+    assert "[LOW]/[UNVERIFIED]" in text
 
 
 # ═══════════════════════════════════════════════════════════════

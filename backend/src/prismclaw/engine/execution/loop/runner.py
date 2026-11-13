@@ -5,6 +5,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.schema.content.streaming import IterationBoundary
@@ -14,17 +15,18 @@ __all__ = ["run_agent_stream"]
 logger = logging.getLogger(__name__)
 
 
-from prismclaw.engine.execution.loop.bootstrap import (
+from prismclaw.engine.execution.loop.deps import (
     AgentRunnerDeps,
 )
 
 from prismclaw.engine.execution.control.kernel import TerminalReason
 from prismclaw.engine.execution.query.pre_request_pipeline import PreRequestPipeline
-from prismclaw.engine.execution.loop.session_manager import (
+from prismclaw.engine.execution.loop.teardown import (
     TeardownParams,
     run_teardown,
 )
-from prismclaw.engine.execution.loop.agent_loop import run_loop, create_loop_config
+from prismclaw.engine.execution.loop.agent_loop import run_loop
+from prismclaw.engine.execution.loop.wiring import build_loop_config
 from prismclaw.engine.execution.loop.types import IterationFrame, RunLedger, RunLoopState
 from prismclaw.schema.agent.types import RunRequest
 from prismclaw.engine.execution.loop.preparer import (
@@ -65,7 +67,6 @@ async def run_agent_stream(
                 iteration=result.iteration,
                 terminated_by=TerminalReason.EARLY_EXIT,
                 initial_task_spec=result.initial_task_spec,
-                run_state=result.run_state,
                 tree=result.tree,
                 snapshot=result.snapshot,
                 tool_ctx=result.tool_ctx,
@@ -144,7 +145,7 @@ async def run_agent_stream(
                 profiler=profiler,
                 prompt_cache_runtime=prompt_cache_runtime,
             )
-            _loop_config = create_loop_config(
+            _loop_config = build_loop_config(
                 deps=deps,
                 request=request,
                 recovery=recovery,
@@ -164,8 +165,8 @@ async def run_agent_stream(
                 abort_event=abort_event,
                 run_deadline_s=run_deadline_s,
                 run_started=run_started,
-                _mode=_mode,
-                _traj_scope=_traj_scope,
+                mode=_mode,
+                traj_scope=_traj_scope,
                 attachment_guidance=attachment_decision.attachment_guidance if attachment_decision else None,
             )
 
@@ -192,7 +193,7 @@ async def run_agent_stream(
                         yield _create_aborted_tool_result(call_id)
 
             # ── 写入 turn-end reason 到 trajectory scope ──
-            _traj_scope._terminated_by_cell[0] = (
+            _traj_scope.terminated_by = (
                 _loop_state.ctx.terminated_by if _loop_state.ctx is not None else prepared.terminated_by
             )
 
@@ -201,7 +202,6 @@ async def run_agent_stream(
             if _loop_state.ctx is not None:
                 prepared.terminated_by = _loop_state.ctx.terminated_by
             prepared.active_skill_invocation = _loop_state.active_skill_invocation
-            prepared.run_state = _loop_state.run_state
             prepared.snapshot = _loop_state.snapshot
             prepared.tree = _loop_state.tree
             prepared.ctx = _loop_state.ctx
@@ -225,7 +225,6 @@ async def run_agent_stream(
                 terminated_by=prepared.terminated_by,
                 initial_task_spec=prepared.initial_task_spec,
                 latest_review_decision=prepared.latest_review_decision,
-                run_state=prepared.run_state,
                 tree=prepared.tree,
                 snapshot=prepared.snapshot,
                 tool_ctx=prepared.tool_ctx,

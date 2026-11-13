@@ -1,33 +1,25 @@
 /**
- * timeline.ts — Operation-sequence and recorded-time projections for the
- * trajectory overview.
+ * timeline.ts — 执行序列与记录时间投影，供轨迹概览使用。
  *
- * Ported from DSH:
- *   packages/client/ui-trajectory/src/client/timeline.ts (200 lines)
- *
- * Adaptations to PrismClaw's model (documented per function):
- *   - Input is a FLAT TrajectoryCell[] (grouped by turn internally) instead
- *     of DSH's turns[].groups[].cells nested layout.
- *   - `cellRange` reads the stored endpoints directly
- *     (started_at_ms / completed_at_ms) instead of DSH's
- *     startedAt + timeSeconds*1000 computation.
- *   - `requestOnly` filter branch deleted (no such concept here).
- *   - span.index = position in the flat cells array (caller indexes back
- *     into cells[span.index] for rendering).
+ * 适配 PrismClaw 数据模型：
+ *   - 输入是扁平 TrajectoryCell[]（内部按 turn 分组）。
+ *   - cell 直接携带 started_at_ms / completed_at_ms 端点，无需二次计算。
+ *   - 没有 requestOnly 过滤分支。
+ *   - span.index 是扁平 cells 数组中的位置，调用方用它反向索引 cells[]。
  */
 
 import type { TrajectoryCell, TrajectoryCellKind } from '../../../types'
 
-/** Horizontal projection used by the trajectory timeline. */
+/** 时间线的水平投影模式。 */
 export type TrajectoryTimelineMode = 'sequence' | 'duration' | 'time' | 'actual'
 
-/** Inclusive selection in the active timeline projection's domain. */
+/** 当前投影域内的闭区间选区。 */
 export interface TrajectoryTimeRange {
   start: number
   end: number
 }
 
-/** One ledger record projected into the active timeline domain. */
+/** ledger 记录在当前投影域的一条 span。 */
 export interface TrajectoryTimelineSpan extends TrajectoryTimeRange {
   index: number
   isError: boolean
@@ -36,20 +28,19 @@ export interface TrajectoryTimelineSpan extends TrajectoryTimeRange {
   lane: number
 }
 
-/** One turn boundary in the active timeline domain. */
+/** 当前投影域内的一个 turn 边界。 */
 export interface TrajectoryTimelineTurnBoundary {
   turn: number | null
   time: number
 }
 
-/** Full-domain model used by the overview. */
+/** 概览所需的完整域模型。 */
 export interface TrajectoryTimelineModel extends TrajectoryTimeRange {
   spans: readonly TrajectoryTimelineSpan[]
   turnBoundaries: readonly TrajectoryTimelineTurnBoundary[]
 }
 
-/** Format a timeline duration as an integer-millisecond label.
- * Ported from DSH trajectory-record.ts formatDurationMillis. */
+/** 将 timeline duration 格式化为整数毫秒标签。 */
 export function formatDurationMillis(milliseconds: number): string {
   const integer = String(Math.round(milliseconds))
   return `${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} ms`
@@ -64,14 +55,14 @@ function laneFor(kind: TrajectoryCellKind): number {
 
 function cellRange(cell: TrajectoryCell): TrajectoryTimeRange | null {
   if (!Number.isFinite(cell.started_at_ms)) return null
-  // Adapted: we persist both endpoints; clamp inverted data to zero width.
+  // 直接读取持久化的端点；倒置数据钳制为零宽度
   const end = cell.completed_at_ms != null && Number.isFinite(cell.completed_at_ms)
     ? Math.max(cell.started_at_ms, cell.completed_at_ms)
     : cell.started_at_ms
   return { start: cell.started_at_ms, end }
 }
 
-/** Flat cells grouped into consecutive runs of the same turn. */
+/** 扁平 cells 按 turn 分组成连续块。 */
 interface IndexedCell {
   cell: TrajectoryCell
   index: number
@@ -98,16 +89,15 @@ function groupByTurn(cells: readonly TrajectoryCell[]): TurnGroup[] {
 }
 
 function isErrorOf(cell: TrajectoryCell): boolean {
-  // ≥ DSH: DSH checks isError only; we also treat a populated error
-  // message as an error state (server-side error marking sets both).
+  // 除了 is_error 标记外，也把非空 error 消息视为错误态（服务端标记两者）
   return cell.is_error === true || cell.error != null
 }
 
 /**
- * Project every visible record into a stable three-lane timeline.
- * @param cells - Unfiltered flat trajectory cells.
- * @param mode - Independent equal/recorded duration and compressed/complete time projection.
- * @returns Timeline model, or `null` when no record is visible.
+ * 将每条可见记录投影到稳定的 3 轨道时间线上。
+ * @param cells — 未过滤的扁平轨迹 cells
+ * @param mode — 等宽/记录时长与压缩/完整时间投影的独立选择
+ * @returns 时间线模型，无可见记录时返回 null
  */
 export function deriveTrajectoryTimeline(
   cells: readonly TrajectoryCell[],
@@ -175,8 +165,8 @@ function deriveTimedTimeline(
   const rawSpans = timedTurns.flatMap(turn => turn.rawSpans)
   if (rawSpans.length === 0) return null
 
-  // Idle compression: scan spans in start order and accumulate the removed
-  // idle gap per span (duration mode folds inter-span whitespace).
+  // 空闲压缩：按 start 排序扫描 spans，累积每个 span 前被消除的空闲间隙
+  //（duration 模式折叠 span 之间的空白）
   const removedIdleBySpan = new Map<TrajectoryTimelineSpan, number>()
   let removedIdle = 0
   let coveredUntil: number | null = null
@@ -197,8 +187,7 @@ function deriveTimedTimeline(
       return {
         ...span,
         start: span.start - offset,
-        // time mode (equal-duration): spans collapse to zero width at their
-        // start instant — the renderer gives them a fixed pixel width.
+        // time 模式（等时长）：spans 在起始瞬时坍缩为零宽度，渲染器给固定像素宽
         end: (actualDuration ? span.end : span.start) - offset,
       }
     })
@@ -220,11 +209,11 @@ function deriveTimedTimeline(
 }
 
 /**
- * Identify records active at any point inside an inclusive selected interval.
- * @param cells - Unfiltered flat trajectory cells.
- * @param range - Selected interval in the active projection.
- * @param mode - Independent equal/recorded duration and compressed/complete time projection.
- * @returns Record indexes inside the focus interval.
+ * 找出活跃于闭区间选区内的记录索引。
+ * @param cells — 未过滤的扁平轨迹 cells
+ * @param range — 当前投影域内的选区区间
+ * @param mode — 等宽/记录时长与压缩/完整时间投影的独立选择
+ * @returns 选区范围内的记录索引集合
  */
 export function trajectoryTimelineFocusIndexes(
   cells: readonly TrajectoryCell[],

@@ -35,9 +35,9 @@ _BLOCKED_NAMES = frozenset({
     "skills", "sandbox",
 })
 
-# 目录扫描深度上限（单一来源）。对标参考实现（Claude Code 无硬上限）：PrismClaw
-# 以 SKILL.md 叶子终止为发现主机制，深度上限只是防止病态树的安全网。原值 3 会漏掉
-# 深层嵌套插件（如 marketplace/<plugin>/skills/<group>/<skill>/SKILL.md），放宽到 8。
+# 目录扫描深度上限（单一来源）。PrismClaw 以 SKILL.md 叶子终止为发现主机制，
+# 深度上限只是防止病态树的安全网。原值 3 会漏掉深层嵌套插件
+# （如 marketplace/<plugin>/skills/<group>/<skill>/SKILL.md），放宽到 8。
 # node_modules/.git 等仍由 _BLOCKED_NAMES 屏蔽，放宽深度不会扫入依赖/版本目录。
 SKILL_SCAN_MAX_DEPTH = 8
 

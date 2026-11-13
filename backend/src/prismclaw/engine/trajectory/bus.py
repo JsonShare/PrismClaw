@@ -1,6 +1,6 @@
 """Core event bus — **core-domained, trajectory-agnostic**.
 
-Implements the PrismClaw variant of DSH Session.append → firehose → Projection
+Implements the PrismClaw variant of Session.append → firehose → Projection
 architecture (see docs/trajectory-upgrade-plan-v2-decoupled.md §3.1 / §3.3).
 
 Core publisher (runner.py, context_helpers.py, turn_preparation.py) imports
@@ -20,8 +20,8 @@ Design principles (all enforced by tests):
 3. **Ordering**. Within one event type, handlers run in registration order.
    No lock — bus is assumed single-task-owned per session (the agent runner
    loop is serialised per RunRequest). For multi-event parallel safety we
-   do NOT apply DSH's strict `frozen event` constraint yet; we copy the
-   payload references we use in apply() to avoid mutation bugs.
+   暂不启用严格的 `frozen event` 约束；apply() 里会拷贝用到的
+   payload 引用以避免突变 bug。
 4. **No backpressure**. Handlers are not awaited inline for sync publishers
    unless the caller explicitly calls `await publish_async(event)`.
 5. **AsyncEvent** is used for sync+async subscriptions; the same handler can

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from prismclaw.engine.services.llm.stream_fn import LiteLLMStreamFn
+from prismclaw.engine.services.llm.client import LiteLLMClient
 from prismclaw.schema.llm.request import PackedLLMRequest
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class PromptOptimizer:
 
     def __init__(
         self,
-        llm_client: LiteLLMStreamFn,
+        llm_client: LiteLLMClient,
         *,
         system_prompt: str | None = None,
         temperature: float = 0.3,

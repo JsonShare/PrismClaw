@@ -791,9 +791,9 @@ async def get_session_trajectory_audit(
 
 
 # ================================================================
-# DSH-aligned per-conversation-event cell trajectory endpoint.
+# 对齐 per-conversation-event cell trajectory endpoint.
 # Returns TrajectoryCell rows (one per tree node) for the timeline/ledger
-# to render as DSH-style cells (NOT per-LLM-iteration records).
+# to render as cells (NOT per-LLM-iteration records).
 # ================================================================
 
 @web_router.get("/sessions/{session_id}/trajectory/cells")
@@ -804,10 +804,10 @@ async def get_session_trajectory_cells(
     request: Request = ...,
     user_id: str = Depends(get_current_user),
 ) -> dict:
-    """DSH parity: per-conversation-event cells (one cell per tree node).
+    """per-conversation-event cells (one cell per tree node).
 
     Distinct from /sessions/{id}/trajectory (per-LLM-iteration records).
-    This endpoint powers the timeline + ledger's DSH-style cell view.
+    This endpoint powers the timeline + ledger's cell view.
 
     ``after_seq > 0`` switches to the incremental poll mode: only rows
     newer than the cursor are returned (cells are written complete in one

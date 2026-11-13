@@ -46,9 +46,6 @@ agent:
       history_floor_divisor: 4
       # 子额度（sub-caps）：上下文分区细粒度预算
       subcaps:
-        subagents: 1500
-        skills_ratio: 0.01
-        listing_desc_chars: 250
         runtime_status: 500
         l1_snapshot: 500
         skill_attachment: 6000
@@ -70,7 +67,7 @@ agent:
       chunk_token_budget: 8000
 
       history:
-        # 压缩后保留的最近原文 token 数（对齐 pi/claude-code 的 20k 基线）
+        # 压缩后保留的最近原文 token 数（默认 20k，约 5-8 轮完整对话）
         keep_recent_tokens: 20000
         # 摘要输出上限；越大越详细，但会挤占历史预算
         summary_output_token_cap: 20000

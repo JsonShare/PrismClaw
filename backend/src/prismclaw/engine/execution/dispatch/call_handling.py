@@ -77,10 +77,7 @@ def parse_tool_calls(tool_calls: list[dict[str, Any]]) -> list[ParsedToolCall]:
 
     IMPORTANT: argument parsing is delegated to ``_function_args`` in
     ``execution_entry.py``, which is the **only** code path authorised to
-    interpret the ``function.arguments`` field.  ``call_handling.py``
-    previously had its own ``json.loads`` + ``{"_raw": …}`` fallback —
-    that duplicate was the root cause of "same input, different outcome"
-    bugs depending on which consumer you hit.
+    interpret the ``function.arguments`` field (parse → repair → {}).
     """
     from prismclaw.engine.execution.dispatch.execution_entry import _function_args
 
@@ -88,9 +85,9 @@ def parse_tool_calls(tool_calls: list[dict[str, Any]]) -> list[ParsedToolCall]:
     for call in tool_calls:
         fn = (call or {}).get("function") or {}
         name = fn.get("name", "") or ""
-        # Single source of truth: _function_args guarantees two shapes only:
-        #   1. A real argument dict   → tools see their expected keys
-        #   2. Exactly ``{"_raw": bytes}`` → execution layer short-circuits
+        # Single source of truth: _function_args always returns a dict —
+        # either the parsed argument dict, or ``{}`` when the payload is
+        # unrecoverable (repair_json_args already ran inside it).
         arguments = _function_args({"function": fn})
         parsed_calls.append(
             ParsedToolCall(
@@ -376,7 +373,7 @@ async def prepare_call(
 
     Returns PreparedCall (ready to execute) or ImmediateResult (intercepted).
     """
-    from prismclaw.engine.execution.dispatch.prepared_types import PreparedCall, ImmediateResult
+    from prismclaw.engine.execution.dispatch.prepared_types import ImmediateResult, PreparedCall
     from prismclaw.schema.content.content_types import ToolResult
 
     tool_name = (tool_call.get("function") or {}).get("name", "")

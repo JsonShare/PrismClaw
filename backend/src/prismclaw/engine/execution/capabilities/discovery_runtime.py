@@ -15,6 +15,7 @@ _EXCLUDED_TOOL_NAMES = frozenset(
     {
         "tool_search",
         "skill_search",
+        "subagent_search",
     }
 )
 
@@ -69,6 +70,15 @@ class SkillDiscoveryEntry:
     marketplace_name: str | None = None
     marketplace_description: str | None = None
     plugin_name: str | None = None
+
+
+@dataclass(frozen=True)
+class SubagentDiscoveryEntry:
+    name: str
+    description: str
+    package: str | None
+    sub_plugin: str | None
+    score: int
 
 
 class ToolDiscoveryRuntime:
@@ -220,3 +230,84 @@ class SkillDiscoveryRuntime:
             )
         entries.sort(key=lambda item: item.name)
         return entries[:limit]
+
+
+class SubagentDiscoveryRuntime:
+    """插件子代理检索——固定 prompt 只披露包索引，具体代理按需检索。
+
+    数据源与派发校验同源（``CapabilityCatalogService.list_agent_entries``）。
+    工作区核心子代理（``plugin_name is None``）已在 ``<subagents>`` 列出，
+    本检索默认排除，避免重复披露。
+    """
+
+    _DESC_LIMIT = 200
+
+    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
+        self._catalog = capability_catalog
+
+    def search(
+        self,
+        query: str,
+        *,
+        package: str | None = None,
+        limit: int = 10,
+    ) -> list[SubagentDiscoveryEntry]:
+        tokens = _tokenize_query(query)
+        package_key = package.strip().lower() if package else None
+        matches: list[SubagentDiscoveryEntry] = []
+        for agent in self._plugin_agents():
+            if package_key is not None and package_key not in {
+                (agent.marketplace_name or "").lower(),
+                (agent.plugin_name or "").lower(),
+            }:
+                continue
+            score = _score_text(
+                tokens,
+                agent.name,
+                agent.description,
+                agent.marketplace_name or "",
+                agent.marketplace_description or "",
+                agent.plugin_name or "",
+            )
+            if score <= 0:
+                continue
+            matches.append(self._entry(agent, score=score))
+        matches.sort(key=lambda item: (-item.score, item.name))
+        return matches[: self._clamp_limit(limit)]
+
+    def list_plugin_agents(
+        self, *, limit: int = 20, package: str | None = None
+    ) -> list[SubagentDiscoveryEntry]:
+        """无关键词兜底：列出插件子代理，避免模型盲目重试同一 query。"""
+        package_key = package.strip().lower() if package else None
+        entries = [
+            self._entry(agent, score=0)
+            for agent in self._plugin_agents()
+            if package_key is None
+            or package_key
+            in {
+                (agent.marketplace_name or "").lower(),
+                (agent.plugin_name or "").lower(),
+            }
+        ]
+        entries.sort(key=lambda item: item.name)
+        return entries[: self._clamp_limit(limit)]
+
+    def _plugin_agents(self) -> list:
+        return [
+            entry for entry in self._catalog.list_agent_entries()
+            if entry.plugin_name is not None
+        ]
+
+    def _entry(self, agent, *, score: int) -> SubagentDiscoveryEntry:
+        return SubagentDiscoveryEntry(
+            name=agent.name,
+            description=(agent.description or "")[: self._DESC_LIMIT],
+            package=agent.marketplace_name,
+            sub_plugin=agent.plugin_name,
+            score=score,
+        )
+
+    @staticmethod
+    def _clamp_limit(limit: int) -> int:
+        return max(1, min(int(limit), 20))

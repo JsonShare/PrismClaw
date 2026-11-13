@@ -1,23 +1,21 @@
 /**
- * TrajectoryLedger — DSH-aligned compact 2-column cell ledger.
+ * TrajectoryLedger — 紧凑 2 列 cell ledger。
  *
- * Ported from DSH TrajectoryTable.tsx row structure:
- *   • 2-column table: `event` (kind tag + turn rail) | `content` (one-line
- *     display text; tools show `name(args) → result`)
- *   • Sticky collapsible Turn headers (wall-span duration · tokens · tool
- *     histogram, via ./trajectory/metrics.ts — DSH groupDescription ≥)
- *   • DSH fold five: summarizeTurn / collapseTurnRecords /
+ *   • 2 列表：`event`（kind tag + turn rail）| `content`（单行文本；
+ *     工具显示 `name(args) → result`）
+ *   • 吸附式可折叠 Turn 标题（wall-span duration · tokens · tool histogram，
+ *     见 ./trajectory/metrics.ts）
+ *   • 5 折叠规则：summarizeTurn / collapseTurnRecords /
  *     assistantToolCalls / summarizeAssistantTools / collapseAssistantRecords
- *     — collapsed turns and collapsed assistant tool-call runs render as
- *     "… summary" rows (click or double-click to expand)
- *   • Double-click folding (DSH onDoubleClick): collapsed row → expand;
- *     message row with tool calls → fold its tools; turn-start row → fold
- *     the whole turn
- *   • Timeline focus dimming at DSH's opacity 0.24 (no hover recovery)
- *   • Multi-term AND search filtering via searchMatchIds (Panel's
- *     TrajectorySearchIndex — DSH parity); searching suspends all folding
+ *     — 折叠的 turn 和 assistant tool-call run 渲染为
+ *     "… summary" 行（点击或双击展开）
+ *   • 双击折叠：collapsed row → expand；带 tool calls 的 message row →
+ *     折叠它的 tools；turn-start row → 折叠整个 turn
+ *   • 时间线选区外的行 opacity 0.24 变暗（无 hover 恢复）
+ *   • 多词 AND 搜索过滤 via searchMatchIds（Panel 的 TrajectorySearchIndex）；
+ *     搜索时挂起所有折叠
  *
- * Data: TrajectoryCell[] (one cell per conversation-tree node).
+ * 数据：TrajectoryCell[]（每个 conversation-tree 节点一个 cell）。
  */
 import { useMemo, useRef, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -28,7 +26,7 @@ import {
 import type { TrajectoryCell, TrajectoryCellKind } from '../../types'
 import { trajectoryTurnMetrics, formatToolHistogram } from './lib/metrics'
 
-// DSH TrajectoryTable virtualization constants.
+// 虚拟化常量
 const VIRTUALIZATION_THRESHOLD = 100
 const VIRTUAL_OVERSCAN_ROWS = 12
 const HEADER_ROW_HEIGHT = 33
@@ -40,19 +38,18 @@ interface TrajectoryLedgerProps {
   selectedIndex: number | null
   onSelect: (index: number) => void
   searchQuery: string
-  /** Fold state is OWNED by the Panel (DSH TrajectoryView structure) — the
-   *  toolbar's derived all-collapsed pressed states need it there. */
+  /** 折叠状态由 Panel 持有 — toolbar 的全折叠派生按钮需要。 */
   collapsedTurns: ReadonlySet<number>
   collapsedAssistants: ReadonlySet<string>
   onToggleTurn: (turn: number) => void
   onToggleAssistant: (id: string) => void
-  /** Cell indexes inside the active timeline selection; null when no range. */
+  /** 活跃 timeline 选区内的 cell 索引；无选区时为 null。 */
   focusIndexes?: ReadonlySet<number> | null
-  /** Matching cell ids from the Panel's TrajectorySearchIndex (multi-term AND); null without a query. */
+  /** Panel 的 TrajectorySearchIndex 匹配的 cell id（多词 AND）；无查询时为 null。 */
   searchMatchIds?: ReadonlySet<string> | null
 }
 
-// DSH 7-kind aligned — identical colour mapping to TrajectoryTimeline.
+// 与 TrajectoryTimeline 一致的 7 种 cell kind 配色
 const KIND_META: Record<TrajectoryCellKind, { label: string; bg: string; color: string }> = {
   system:    { label: 'SYSTEM',    bg: 'hsla(210, 8%, 55%, 0.16)',  color: 'hsl(210, 8%, 30%)' },
   user:      { label: 'USER',      bg: 'hsla(210, 70%, 50%, 0.16)', color: 'hsl(210, 65%, 30%)' },
@@ -93,7 +90,7 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n) + '…'
 }
 
-/** Tool display name — backend tool_name first, tool_calls_summary fallback. */
+/** 工具显示名 — 优先 backend tool_name，否则从 tool_calls_summary 提取。 */
 function toolName(cell: TrajectoryCell): string {
   if (cell.tool_name) return cell.tool_name
   if (cell.tool_calls_summary.length > 0) {
@@ -126,7 +123,7 @@ interface CellWithIndex {
   originalIndex: number
 }
 
-/** DSH fold five #3: tool/subtool records directly following an assistant record. */
+/** 折叠规则 #3：assistant record 后紧跟的 tool/subtool records。 */
 function assistantToolCalls(
   items: readonly CellWithIndex[],
   assistantOriginalIndex: number,
@@ -143,7 +140,7 @@ function assistantToolCalls(
   return calls
 }
 
-/** DSH fold five #1 (adapted: iterations replace DSH's Step groups). */
+/** 折叠规则 #1（迭代计数替代 Step groups）。 */
 function summarizeTurn(items: readonly CellWithIndex[]): string {
   const iterations = items.filter(item => item.cell.kind === 'message').length
   const toolCalls = items.filter(item =>
@@ -152,7 +149,7 @@ function summarizeTurn(items: readonly CellWithIndex[]): string {
   return `${iterations} 次迭代 · ${toolCalls} 次工具调用`
 }
 
-/** DSH fold five #4. */
+/** 折叠规则 #4。 */
 function summarizeAssistantTools(items: readonly CellWithIndex[]): string {
   const names = [...new Set(items.map(item => toolName(item.cell)).filter(n => n !== ''))]
   const count = items.length
@@ -160,7 +157,7 @@ function summarizeAssistantTools(items: readonly CellWithIndex[]): string {
   return names.length > 0 ? `${summary} · ${names.join(', ')}` : summary
 }
 
-/** One projected ledger row: a real cell or a DSH-style collapsed summary. */
+/** 一个投影后的 ledger 行：真实 cell 或折叠摘要。 */
 type LedgerRow =
   | {
     type: 'cell'
@@ -175,16 +172,16 @@ type LedgerRow =
   | {
     type: 'collapsed-assistant'
     summary: string
-    /** The collapsed assistant message's cell_id — the toggle target. */
+    /** 折叠的 assistant message 的 cell_id — 切换目标。 */
     assistantId: string
     turnEnd: boolean
   }
 
 /**
- * DSH fold five #2 + #5 applied to one turn's rows:
- * collapsedTurn folds everything after the first content row into a
- * "… N iterations · N tool calls" row; collapsedAssistants fold each
- * assistant's consecutive tool-call run into a "… N tool calls · names" row.
+ * 对一个 turn 的 rows 应用折叠规则 #2 + #5：
+ * collapsedTurn 将第一条内容行之后的所有内容折叠为
+ * "… N 次迭代 · N 次工具调用" 行；collapsedAssistants 将每个
+ * assistant 连续的 tool-call run 折叠为 "… N 次工具调用 · names" 行。
  */
 function projectRows(
   items: readonly CellWithIndex[],
@@ -205,8 +202,7 @@ function projectRows(
     pending = []
   }
 
-  // Turn collapse (DSH collapseTurnRecords): keep system rows + the first
-  // content row, replace the rest with one summary row.
+  // Turn 折叠：保留 system 行 + 第一条内容行，其余合并为一条摘要行
   if (turnCollapsed) {
     const content = items.filter(item => item.cell.kind !== 'system')
     if (content.length > 1) {
@@ -219,7 +215,7 @@ function projectRows(
     }
   }
 
-  // Assistant collapse (DSH collapseAssistantRecords).
+  // Assistant 折叠
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
     if (item === undefined) continue
@@ -245,11 +241,11 @@ function projectRows(
 }
 
 /**
- * DSH-aligned compact cell row.
+ * 紧凑 cell 行。
  *
- * Layout (2-column grid, mirrors DSH `<tr><td.event/><td.content/>`):
- *   [event]  kind tag (icon + label) + turn rail at turn start
- *   [content] one-line text; tools show `name(args) → result`
+ * 布局（2 列 grid）：
+ *   [event]  kind tag（icon + label）+ turn 起始时的 turn rail
+ *   [content] 单行文本；工具显示 `name(args) → result`
  */
 function CellRow({
   cell,
@@ -274,12 +270,10 @@ function CellRow({
   const hasError = !!cell.error || cell.is_error
   const isTool = cell.kind === 'tool' || cell.kind === 'subtool'
 
-  // DSH parity: timeline selection dimming — rows outside the focus range
-  // are de-emphasised at DSH's 0.24 opacity (no hover recovery there).
+  // 时间线选区变暗 — 选区外行 opacity 0.24（无 hover 恢复）
   const inFocus = focusIndexes == null ? null : focusIndexes.has(originalIndex)
 
-  // Content line — DSH-style: tool shows `name(args) → result`,
-  // others show content/input/output preview
+  // Content 行 — 工具显示 `name(args) → result`，其他显示 content/input/output 预览
   let contentLine: ReactNode
   if (isTool) {
     const name = toolName(cell)
@@ -326,7 +320,7 @@ function CellRow({
       : null
   }
 
-  // Right-side compact metrics (assistant: tokens + duration; others: duration)
+  // 右侧紧凑 metrics（assistant: tokens + duration；其他: duration）
   const durationMs = cell.completed_at_ms != null
     ? cell.completed_at_ms - cell.started_at_ms
     : null
@@ -389,7 +383,7 @@ function CellRow({
   )
 }
 
-/** DSH collapsed-summary row: "… summary", click to expand. */
+/** 折叠摘要行："… summary"，点击展开。 */
 function CollapsedRow({
   summary,
   kind,
@@ -433,7 +427,7 @@ function CollapsedRow({
 
 const TURN_HUES = [210, 270, 190, 150, 38, 330, 240, 0]
 
-/** Sticky turn header button — shared by the plain and virtualized renderers. */
+/** 吸附式 turn 标题按钮 — 普通渲染器和虚拟化渲染器共用。 */
 function TurnHeaderButton({
   turn,
   cells,
@@ -449,7 +443,7 @@ function TurnHeaderButton({
   const hasError = cells.some(c => c.cell.error != null || c.cell.is_error)
   const hue = TURN_HUES[(turn - 1) % TURN_HUES.length]
 
-  // Aggregate turn stats — DSH groupDescription parity via ./trajectory/metrics.ts
+  // Turn 聚合统计 — wall duration · tokens · tool histogram via ./trajectory/metrics.ts
   const metrics = useMemo(() => trajectoryTurnMetrics(cells.map(c => c.cell)), [cells])
 
   return (
@@ -474,7 +468,7 @@ function TurnHeaderButton({
       <span className="text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]">
         {count} cells
       </span>
-      {/* Group description — DSH-style aggregate: wall duration · tokens · tool histogram */}
+      {/* 聚合描述：wall duration · tokens · tool histogram */}
       {(metrics.wallMs != null || metrics.inputTokens > 0 || metrics.outputTokens > 0) && (
         <span className="text-[length:var(--fs-xs)] text-[var(--c-text-tertiary)] tabular-nums ml-auto truncate">
           {metrics.wallMs != null && <span title="turn wall clock">{formatMs(metrics.wallMs)}</span>}
@@ -496,7 +490,7 @@ function TurnHeaderButton({
   )
 }
 
-/** One flat ledger row for the virtualized renderer (DSH TrajectoryVirtualRow). */
+/** 虚拟化渲染器用的扁平 ledger row。 */
 type VirtualRow =
   | { type: 'header'; turn: number; cells: CellWithIndex[]; key: string }
   | { type: 'cell'; cell: TrajectoryCell; originalIndex: number; turnStart: boolean; key: string }
@@ -511,7 +505,7 @@ function virtualRowHeight(row: VirtualRow): number {
   }
 }
 
-/** Shared double-click fold handler (DSH onDoubleClick semantics). */
+/** 共享双击折叠处理器。 */
 function rowDoubleClickHandler(
   cellsOfTurn: readonly CellWithIndex[],
   turnCollapsed: boolean,
@@ -548,8 +542,7 @@ export function TrajectoryLedger({
   const scrollRef = useRef<HTMLDivElement>(null)
   const isSearching = searchMatchIds != null
 
-  // Filter by the Panel's multi-term AND index (DSH filterRecords parity),
-  // then group by turn (ascending).
+  // 用 Panel 的多词 AND 索引过滤，再按 turn（升序）分组
   const turnGroups = useMemo(() => {
     const filtered: CellWithIndex[] = []
     for (let i = 0; i < cells.length; i++) {
@@ -569,14 +562,13 @@ export function TrajectoryLedger({
   const toggleTurn = onToggleTurn
 
   const isCollapsed = (turn: number): boolean => {
-    // DSH parity: searching suspends folding so every match stays visible.
+    // 搜索时挂起折叠，让所有匹配可见
     if (isSearching) return false
     return collapsedTurns.has(turn)
   }
 
-  // Flat projected rows: header + fold-projected rows per turn. Feeds BOTH
-  // the plain renderer and the virtualized window (DSH TrajectoryTable
-  // projects its rows once and virtualizes over them).
+  // 扁平投影行：每个 turn 的 header + fold-projected rows。
+  // 普通渲染器和虚拟化窗口共用
   const rows = useMemo<VirtualRow[]>(() => {
     const out: VirtualRow[] = []
     for (const [turn, groupCells] of turnGroups) {
@@ -608,8 +600,7 @@ export function TrajectoryLedger({
     return out
   }, [turnGroups, collapsedTurns, collapsedAssistants, isSearching])
 
-  // DSH parity: virtualize only past the threshold — small ledgers keep the
-  // plain (sticky-header) renderer.
+  // 仅超过阈值时启用虚拟化 — 小 ledger 用吸附 header 的普通渲染器
   const virtualizationEnabled = rows.length > VIRTUALIZATION_THRESHOLD
   const virtualizer = useVirtualizer({
     count: virtualizationEnabled ? rows.length : 0,
@@ -620,7 +611,7 @@ export function TrajectoryLedger({
     overscan: VIRTUAL_OVERSCAN_ROWS,
   })
 
-  /** Render one flat row (shared by both renderers). */
+  /** 渲染一条扁平行（两种渲染器共用）。 */
   const renderRow = (row: VirtualRow, turnCollapsed: boolean) => {
     if (row.type === 'header') {
       return (

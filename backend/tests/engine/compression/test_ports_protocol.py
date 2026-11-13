@@ -57,7 +57,7 @@ def test_context_runtime_ports_has_all_required_methods():
 
 def test_execution_runtime_ports_satisfies_protocol():
     """ExecutionRuntimePorts 实例必须通过 isinstance 检查。"""
-    from prismclaw.engine.execution.loop.bootstrap import (
+    from prismclaw.engine.execution.loop.deps import (
         ExecutionRuntimePorts,
     )
 
@@ -72,7 +72,7 @@ def test_execution_runtime_ports_satisfies_protocol():
 
 def test_execution_runtime_ports_method_signatures():
     """ExecutionRuntimePorts 必须实现协议声明的全部方法。"""
-    from prismclaw.engine.execution.loop.bootstrap import (
+    from prismclaw.engine.execution.loop.deps import (
         ExecutionRuntimePorts,
     )
 

@@ -59,7 +59,7 @@ async def init_pg_schema(session_factory: async_sessionmaker[AsyncSession]) -> N
             await session.execute(text("SELECT pg_advisory_xact_lock(742101)"))
             await session.execute(text(sql_models.CREATE_TRAJECTORY_SESSION_TABLE))
             await session.execute(text(sql_models.CREATE_TRAJECTORY_RECORD_TABLE))
-            # DSH parity: per-conversation-event cell table
+ # per-conversation-event cell table
             await session.execute(text(sql_models.CREATE_TRAJECTORY_CELL_TABLE))
             # Migration tracking table (also CREATE IF NOT EXISTS)
             await session.execute(text(sql_models.CREATE_SCHEMA_MIGRATIONS_TABLE))
@@ -180,7 +180,7 @@ def _record_to_params(record: RequestAuditRecord) -> dict[str, Any]:
         # Fix F: appended msg count (messages injected downstream via
         # appended_messages_override). Stored as INTEGER NOT NULL DEFAULT 0.
         "projector_appended_msg_count": record.projector_appended_msg_count,
-        # DSH parity: actual content previews
+ # actual content previews
         "projector_user_message_preview": record.projector_user_message_preview,
         "projector_tool_results_preview": _to_jsonb(list(record.projector_tool_results_preview)),
         "projector_meta": _to_jsonb(record.projector_meta),
@@ -275,7 +275,7 @@ def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
         # Fix F: read with .get() for forward-compat with rows loaded from
         # older DB schemas that don't have the column yet (returns 0 default).
         projector_appended_msg_count=row.get("projector_appended_msg_count", 0) or 0,
-        # DSH parity: read content previews with .get() for forward-compat
+ # read content previews with .get() for forward-compat
         # with rows loaded from older DB schemas that don't have the columns yet.
         projector_user_message_preview=row.get("projector_user_message_preview"),
         projector_tool_results_preview=tuple(_parse_jsonb(row.get("projector_tool_results_preview")) or []),
@@ -565,11 +565,11 @@ async def read_snapshot_v2_pg(
 
 
 # ============================================================================
-# DSH-aligned per-conversation-event cell persistence
+# 对齐 per-conversation-event cell persistence
 # ============================================================================
 
 def _cell_to_params(cell: TrajectoryCell) -> dict[str, Any]:
-    """Serialize a TrajectoryCell to SQL params (DSH-aligned)."""
+    """Serialize a TrajectoryCell to SQL params."""
     return {
         "cell_id": cell.cell_id,
         "session_id": cell.session_id,
@@ -582,7 +582,7 @@ def _cell_to_params(cell: TrajectoryCell) -> dict[str, Any]:
         "tool_calls_summary": _to_jsonb(list(cell.tool_calls_summary)),
         "tool_call_id": cell.tool_call_id,
         "tool_name": cell.tool_name,
-        # DSH parity: full-content + metric fields
+ # full-content + metric fields
         "input_detail": cell.input_detail,
         "output_detail": cell.output_detail,
         "thinking_detail": cell.thinking_detail,
@@ -618,7 +618,7 @@ def _row_to_cell(row: Any) -> TrajectoryCell:
         tool_calls_summary=tuple(_parse_jsonb(row.get("tool_calls_summary")) or []),
         tool_call_id=row.get("tool_call_id"),
         tool_name=row.get("tool_name"),
-        # DSH parity: full-content + metric fields (use .get() for
+ # full-content + metric fields (use .get() for
         # forward-compat with rows loaded from older DB schemas that don't
         # have these columns yet — defaults to the model's None / False).
         input_detail=row.get("input_detail"),
@@ -646,7 +646,7 @@ async def insert_cell_pg(
     session_factory: async_sessionmaker[AsyncSession],
     cell: TrajectoryCell,
 ) -> None:
-    """Upsert a single TrajectoryCell (DSH-aligned, per-conversation-event).
+    """Upsert a single TrajectoryCell.
 
     The ConversationNodeAdded event carries the COMPLETE cell payload
     (detail texts, LLM metrics, time range, iteration) — a single INSERT
@@ -673,9 +673,8 @@ async def mark_or_synthesize_error_pg(
 ) -> None:
     """Mark a failed LLM iteration's assistant cell, or synthesize one.
 
-    Failure paths persist partial assistant output BEFORE publishing
-    LLMRequestFailed (streaming.py runs _persist_partial_assistant first),
-    so a partial cell usually already exists — UPDATE it. When no partial
+    Failure paths may already have persisted the live assistant cell during
+    streaming, so a partial cell usually exists — UPDATE it. When no partial
     output was produced (e.g. idle timeout before the first token), no
     cell exists — synthesize one so the failure is visible on the
     timeline. UPDATE-then-conditionally-INSERT in ONE task/transaction
@@ -788,7 +787,7 @@ async def read_cells_pg(
     *,
     after_seq: int = 0,
 ) -> list[TrajectoryCell]:
-    """Read trajectory cells for a session, ordered by seq (DSH-aligned).
+    """Read trajectory cells for a session, ordered by seq.
 
     With ``after_seq > 0`` returns only rows newer than the cursor (the
     incremental poll set). Cells are written complete in one INSERT —
@@ -906,7 +905,7 @@ class PgTrajectoryPersistence:
     ) -> TrajectorySnapshot:
         return await read_snapshot_v2_pg(
             session_id, self._sf, limit=limit, ascending=ascending,
-            view_fn=self._view,
+            view_fn=self._view, state_initializer=self._init,
         )
 
     async def read_cells(

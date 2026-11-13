@@ -38,9 +38,8 @@ class TaskProfileService:
         *,
         tree: "SessionTree",
         run_seconds: int = 300,
-        channel: str = "cli",
     ) -> RequestMode | None:
-        if run_seconds < 30 and channel == "cli":
+        if run_seconds < 30:
             return "fast_path"
             
         prior_entries = []

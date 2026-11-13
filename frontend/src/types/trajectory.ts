@@ -236,7 +236,7 @@ export interface RequestAuditRecord {
   projector_msg_roles: string[]
   projector_head: string[]
   projector_tail: string[]
-  // DSH parity: actual content previews (not just 80-char snippets)
+  // 实际内容预览（不是 80 字符截断片段）
   projector_user_message_preview: string | null
   projector_tool_results_preview: string[]
 
@@ -256,7 +256,7 @@ export interface RequestAuditRecord {
   pipeline_out_budget_summary: Record<string, number>
   pipeline_out_compressors_used: string[]
   pipeline_out_compaction_happened: boolean
-  // DSH parity: compaction content preview (up to 500 chars)
+  // compaction 内容预览（最多 500 字符）
   pipeline_out_compaction_summary: string | null
 
   // layer ④: packer final
@@ -272,7 +272,7 @@ export interface RequestAuditRecord {
   packer_final_system_prompt_budget: number | null
   packer_final_tool_schema_total_chars: number | null
   packer_final_response_format_text: string | null
-  // DSH parity: actual tool schema JSON text (up to 1000 chars)
+  // 实际工具 schema JSON 文本（最多 1000 字符）
   packer_final_tool_schema_text: string | null
 
   // LLM response side
@@ -286,7 +286,7 @@ export interface RequestAuditRecord {
   usage_reasoning_tokens: number | null
   ttft_ms: number | null
   total_ms: number | null
-  // DSH parity: actual LLM response content previews
+  // 实际 LLM response 内容预览
   assistant_text_preview: string | null
   tool_calls_summary: string[]
 
@@ -311,10 +311,10 @@ export interface TrajectorySnapshot {
   meta: TrajectorySnapshotMeta
 }
 
-// ── DSH-aligned per-conversation-event cell model ─────────────────
-// One cell = one conversation-tree node.  This is the DSH trajectory data
-// model — timeline + ledger render cells, NOT iterations.  Iterations stay
-// as a separate "LLM call audit" panel for debugging the 4-layer pipeline.
+// ── per-conversation-event cell 数据模型 ─────────────────
+// One cell = one conversation-tree node。time + ledger 渲染 cells（不是
+// iterations）。iterations 保持为独立的 "LLM 调用审计" 面板，用于调试
+// 4 层 pipeline。
 export type TrajectoryCellKind =
   | 'system'    // system prompt          (lane 0 / Input)
   | 'user'      // user message           (lane 0 / Input)
@@ -341,11 +341,11 @@ export interface TrajectoryCell {
   iteration: number | null  // assistant cell → LLM iteration
   error: string | null
 
-  // DSH parity: full-content + metric fields (DSH TrajectoryCellProps).
-  // Populated by backend bootstrap._append (input/output/thinking detail +
-  // is_error + schema_detail) and enriched for assistant cells via
-  // LLMResponseReceived → update_cell_metrics_pg (model / finish_reason /
-  // usage_* / ttft_ms / decoding_ms / output_detail / completed_at_ms).
+  // 全量内容 + 指标字段。
+  // 由后端 bootstrap._append（input/output/thinking detail + is_error +
+  // schema_detail）填充，assistant cell 另由 LLMResponseReceived →
+  // update_cell_metrics_pg（model / finish_reason / usage_* / ttft_ms /
+  // decoding_ms / output_detail / completed_at_ms）补齐。
   input_detail: string | null         // full input content (user msg / tool args)
   output_detail: string | null        // full output content (assistant response / tool result)
   thinking_detail: string | null      // reasoning text (assistant thinking / compaction)

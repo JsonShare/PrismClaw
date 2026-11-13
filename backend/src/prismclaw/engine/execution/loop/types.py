@@ -14,49 +14,34 @@
 """
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.control.kernel import Decision
-    from prismclaw.engine.execution.loop.arbiter import RunContext
-    from prismclaw.engine.execution.loop.ownership import _RunOwnershipLease
-    from prismclaw.engine.execution.query.pre_request_pipeline import PreparedTurn
+    from prismclaw.engine.compression.cache_block_packing import PromptCacheRuntimeContract
+    from prismclaw.engine.execution.checkpoint import RunSnapshot, RunStateMachine
     from prismclaw.engine.execution.checkpoint.models import RunState
+    from prismclaw.engine.execution.control.kernel import Decision
     from prismclaw.engine.execution.dispatch.pipeline import (
         LLMStreamError,
         LLMStreamNoResponse,
         LLMStreamResult,
         LLMStreamRetry,
     )
-    from prismclaw.engine.execution.checkpoint import RunSnapshot, RunStateMachine
-    from prismclaw.engine.state.tool_loop_state import ToolLoopState
-    from prismclaw.engine.services.llm.stream_fn import LLMResponse
-    from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
+    from prismclaw.engine.execution.loop.arbiter import RunContext
+    from prismclaw.engine.execution.loop.ownership import _RunOwnershipLease
+    from prismclaw.engine.execution.query.pre_request_pipeline import PreparedTurn
     from prismclaw.engine.foundation.telemetry.profiler import TurnProfiler
-    from prismclaw.engine.compression.cache_block_packing import PromptCacheRuntimeContract
-    from prismclaw.schema.session.types import SessionTree
-    from prismclaw.schema.agent.task_runtime import EvidenceRecord, TaskRuntimeState
-    from prismclaw.schema.services.skills import SkillInvocationState
-    from prismclaw.schema.content.streaming import Done, ErrorEvent, ToolClarifyRequest
-    from prismclaw.schema.content.content_types import ToolResult
+    from prismclaw.schema.llm.types import LLMResponse
+    from prismclaw.engine.state.tool_loop_state import ToolLoopState
+    from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
     from prismclaw.schema.agent.session import ProjectionInputMessage
-
-
-# ---------------------------------------------------------------------------
-# LoopContext — 每次迭代的上下文快照
-# ---------------------------------------------------------------------------
-
-@dataclass
-class LoopContext:
-    """每次迭代的上下文快照。
-
-    包含 tree 快照、待注入消息、工具定义等。
-    """
-    tree_snapshot: dict[str, Any] | None = None
-    pending_messages: list[ProjectionInputMessage] = field(default_factory=list)
-    tool_defs: list[dict[str, Any]] = field(default_factory=list)
+    from prismclaw.schema.agent.task_runtime import EvidenceRecord, TaskRuntimeState
+    from prismclaw.schema.content.content_types import ToolResult
+    from prismclaw.schema.content.streaming import Done, ErrorEvent, ToolClarifyRequest
+    from prismclaw.schema.services.skills import SkillInvocationState
+    from prismclaw.schema.session.types import SessionTree
 
 
 # ---------------------------------------------------------------------------
@@ -67,16 +52,14 @@ class LoopContext:
 class LoopTiming:
     """单次迭代的计时数据。
 
-    在 run_loop() 的关键路径打点，用于 Phase -1 性能基线采集。
+    在 run_loop() 的关键路径打点，只在走到循环底部 bookkeeping 时记录；
+    无工具调用的回合会跳过 bookkeeping（见 TurnPerf 说明）。
     所有时间单位为毫秒。
     """
     iteration: int = 0
     pre_request_pipeline_ms: float = 0.0
     llm_stream_ms: float = 0.0
     tool_execution_ms: float = 0.0
-    persist_snapshot_ms: float = 0.0
-    persist_snapshot_count: int = 0
-    evidence_persist_ms: float = 0.0
     total_iteration_ms: float = 0.0
 
 
@@ -88,14 +71,12 @@ class LoopTiming:
 class TurnPerf:
     """一次 run_loop 的累加计时（跨 iteration 聚合，不随迭代重置）。
 
-    与 ``LoopTiming`` 的分工：LoopTiming 只保存"当前 iteration"的读数，
-    且只在走到循环底部 bookkeeping 时被记录——纯文本回合（无工具调用）
-    在骨架 L243 直接 continue，bookkeeping 被跳过，因此 LoopTiming 对
-    咨询类回合几乎是无感的。TurnPerf 在**计时的当处**累加（prepare /
-    stream / execute 三个点），与后续控制流分支无关。
+    与 ``LoopTiming`` 的分工：LoopTiming 保存"当前 iteration"的读数，只在
+    走到循环底部 bookkeeping 时记录——纯文本回合（无工具调用）会跳过
+    bookkeeping，因此对咨询类回合无感。TurnPerf 在**计时的当处**累加
+    （prepare / stream / execute），与后续控制流分支无关。
 
-    用途：回合结束后单行汇总，回答"这一回合慢在哪、发散了没有"。
-    只做度量，不参与任何决策。
+    用途：回合结束后单行汇总。只做度量，不参与任何决策。
     """
 
     # 单调时钟起点（run_loop 首次进入时打点）
@@ -140,14 +121,18 @@ class IterationFrame:
     query_loop_state 后清空。
     """
     pending_messages: list[ProjectionInputMessage] = field(default_factory=list)
-    llm_outcome: LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStreamNoResponse | None = None
+    llm_outcome: (
+        LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStreamNoResponse | None
+    ) = None
     llm_response: LLMResponse | None = None
     llm_start_monotonic: float = 0.0
     last_tool_results: list[ToolResult] = field(default_factory=list)
     blocked_tool_results: list[Any] = field(default_factory=list)
     frozen_counted_this_turn: set[str] = field(default_factory=set)
-    max_tokens_hit_in_step: bool = False   # 本 step 是否触发过 max_tokens（用于路径 C 粘性保留）
-    _pending_tool_call_ids: list[str] = field(default_factory=list)  # 本批次所有 parsed call ids（abort 闭合用）
+    # 本 step 是否触发过 max_tokens（终止判定用）
+    max_tokens_hit_in_step: bool = False
+    # 本批次所有 parsed call ids（abort 闭合用）
+    _pending_tool_call_ids: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -183,9 +168,9 @@ class RunLoopState:
     - ``ledger``（RunLedger）：Run 级仅追加账本
     - 其余扁平字段：Run 级状态机对象 / 语义演化对象 / 终止事件
 
-    骨架（run_loop 函数体）是冻结契约（SDD §2.1/§5.1），以扁平名
-    访问迭代单元——文件底部的 property 委托层是唯一的骨架兼容层；
-    闭包与适配器一律直写 ``state.frame.*`` / ``state.ledger.*``。
+    run_loop 以扁平名访问迭代单元（冻结契约，SDD §2.1/§5.1）；
+    文件底部的 property 是唯一的扁平访问层，其余代码一律直写
+    ``state.frame.*`` / ``state.ledger.*``。
     """
 
     # ── Run 级状态机对象（构造时注入，跨迭代存活）──
@@ -304,12 +289,8 @@ class RunLoopState:
 @dataclass
 class BeforeToolCallContext:
     """工具执行前检查的上下文。"""
-    assistant_message: dict[str, Any] | None = None
     tool_call: dict[str, Any] | None = None
     args: dict[str, Any] | None = None
-    context: LoopContext | None = None
-
-    # B/S 架构独有：session 上下文
     state: RunLoopState | None = None
 
 
@@ -332,12 +313,10 @@ class BeforeToolCallResult:
 class AfterToolCallContext:
     """工具执行后处理的上下文。
 
-    批量处理一轮的所有工具结果（POST_TOOL hooks 等）。
+    批量处理一轮的所有工具结果（POST_TOOL hooks 等）。结果与 assistant
+    消息经 ``state``（``last_tool_results`` / ``llm_response``）读取。
     """
-    assistant_message: dict[str, Any] | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
-    results: list[ToolResult] = field(default_factory=list)
-    context: LoopContext | None = None
     state: RunLoopState | None = None
 
 
@@ -417,11 +396,15 @@ class ExecutePort:
     与全拒持久化（persist_denied_turn）为 B/S 架构独有，可选。
     """
     execute_tools: Callable[..., AsyncIterator]
-    before_tool_call: Callable[[BeforeToolCallContext], Awaitable[BeforeToolCallResult | None]] | None = None
-    after_tool_call: Callable[[AfterToolCallContext], Awaitable[AfterToolCallResult | None]] | None = None
+    before_tool_call: (
+        Callable[[BeforeToolCallContext], Awaitable[BeforeToolCallResult | None]] | None
+    ) = None
+    after_tool_call: (
+        Callable[[AfterToolCallContext], Awaitable[AfterToolCallResult | None]] | None
+    ) = None
     persist_denied_turn: Callable[[RunLoopState, Any, list[Any]], Awaitable[None]] | None = None
     persist_clarified_turn: Callable[..., Awaitable[None]] | None = None
-    check_hitl: Callable[..., HITLCheckResult | None] | None = None
+    check_hitl: Callable[[list[Any]], HITLCheckResult | None] | None = None
     # 等待用户回答：返回用户作答文本；**返回 None 表示非用户作答**
     # （abort / stale / 会话结束）——骨架据此终止本轮，绝不用假答案继续。
     # 等待本身无超时：只有用户提交才恢复执行。**实现不落树 answer**——
@@ -450,13 +433,13 @@ class LoopConfig:
     完成裁决单点，绑定闭包只做翻译，不含独立决策逻辑。
     ``get_steering_messages`` 是 B/S 独有插槽（headless/subagent 无）。
 
-    run_loop 函数体以扁平名消费端口闭包（SDD §5.1 冻结契约）——
-    下方 property 是唯一的骨架兼容层，闭包与适配器一律直取端口对象。
+    run_loop 以扁平名消费端口闭包（SDD §5.1 冻结契约）——
+    下方 property 是唯一的扁平访问层，其余代码一律直取端口对象。
     """
     prepare: PreparePort
     stream: StreamPort
     execute: ExecutePort
-    should_continue: Callable[..., Awaitable["Decision"]]
+    should_continue: Callable[..., Awaitable[Decision]]
     # steering 消费（B/S 独有）：iteration 边界取一批用户中途注入文本。
     # 闭包负责 drain 会话队列 + 落树 role="user" MessageEntry（原样内容、
     # 无前缀）；steering 随树进入下一轮 prepare 投影，无需失效标志。

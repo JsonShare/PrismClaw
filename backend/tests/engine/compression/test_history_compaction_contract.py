@@ -250,10 +250,10 @@ def test_predict_compaction_already_over_budget_returns_false():
 
 
 def test_estimate_message_tokens_chinese_weighted():
-    """中文消息 token 估算 ≈ 0.75 tokens/char，远高于 len//4。"""
+    """中文消息 token 估算 ≈ 0.90 tokens/char，远高于 len//4。"""
     chinese_msg = {"role": "user", "content": "液压油改进剂密度调整" * 20}
     tokens = estimate_message_tokens(chinese_msg)
-    # 中文字符数 × 0.75 至少大于 len//4
+    # 中文字符数 × 0.90 至少大于 len//4
     char_count = len(chinese_msg["content"])
     legacy = char_count // 4
     assert tokens > legacy  # v2 校准生效

@@ -1,4 +1,4 @@
-"""Provider resolution utilities — extracted from core/agent/llm.py for Phase 1 LLM abstraction."""
+"""Provider routing, credential resolution, and error classification for the LLM layer."""
 
 from __future__ import annotations
 
@@ -17,16 +17,9 @@ logger = logging.getLogger(__name__)
 def _normalize_base_url(value: str | None) -> str | None:
     if value is None:
         return None
-    s = str(value)
-    s = s.replace("`", "")
-    prev: str | None = None
-    while prev != s:
-        prev = s
-        s = s.strip()
-        if len(s) >= 2 and s[0] == s[-1] and s[0] in ("`", "'", '"'):
-            s = s[1:-1]
-            continue
-        s = s.strip("`").strip()
+    s = str(value).replace("`", "").strip()
+    while len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
+        s = s[1:-1].strip()
 
     if not s:
         return None
@@ -43,9 +36,18 @@ def _normalize_base_url(value: str | None) -> str | None:
 
 def _should_retry_transient_provider_error(exc: Exception) -> bool:
     msg = str(exc).lower()
+    # 超时不重试：httpx.TransportError / APIConnectionError 都覆盖了超时子类。
+    try:
+        import httpx
+        import openai
+
+        if isinstance(exc, (httpx.TimeoutException, openai.APITimeoutError)):
+            return False
+    except Exception:
+        pass
     # Transient network errors — the server may be temporarily overloaded
     # or the connection dropped mid-request. A quick retry often succeeds.
-    if "connection error" in msg or "server disconnected" in msg or "connectionrefusederror" in msg:
+    if isinstance(exc, _connection_error_types()):
         return True
     if "expecting ',' delimiter" in msg:
         return True
@@ -61,7 +63,7 @@ def _should_retry_transient_provider_error(exc: Exception) -> bool:
 # 连接/传输层异常族：流式响应被截断（代理/上游切断 SSE 流）或连接建立失败时，
 # aiohttp / httpx / litellm 抛出的底层异常。按异常类型（而非消息子串）判定，
 # 因为 camelCase 的 "APIConnectionError" 与传输层包装器无法被子串启发式命中。
-# classify_error 与 stream_fn 共用同一判定。
+# classify_error 与 client 共用同一判定。
 _CONNECTION_ERROR_TYPES: tuple[type, ...] = ()
 
 
@@ -70,7 +72,8 @@ def _connection_error_types() -> tuple[type, ...]:
     global _CONNECTION_ERROR_TYPES
     if _CONNECTION_ERROR_TYPES:
         return _CONNECTION_ERROR_TYPES
-    types: list[type] = []
+    # builtin ConnectionError 覆盖 ConnectionRefusedError/ResetError。
+    types: list[type] = [ConnectionError]
     try:
         from litellm.exceptions import (
             APIConnectionError as _LiteLLMAPIConnectionError,
@@ -211,13 +214,6 @@ def format_vision_capable_models(
     return "; ".join(parts) if parts else "(none configured)"
 
 
-_format_vision_capable_models = format_vision_capable_models
-
-
-def is_anthropic_model(provider_name: str) -> bool:
-    return "anthropic" in provider_name.lower() or "claude" in provider_name.lower()
-
-
 def resolve_credentials(
     model: str,
     providers: dict[str, ProviderConfig],
@@ -229,7 +225,7 @@ def resolve_credentials(
     """Resolve API credentials for a given model.
 
     Standalone version of the original LLMClient._resolve_credentials so that
-    LiteLLMStreamFn can call it without a class instance.
+    LiteLLMClient can call it without a class instance.
     """
     if not providers:
         return fallback_key, fallback_base, None, None

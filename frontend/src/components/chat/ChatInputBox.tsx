@@ -417,7 +417,7 @@ export default function ChatInputBox({
 
           <div className={`flex items-center justify-between ${toolbarPadClass} pt-1 pb-3`}>
           {abilitiesEnabled && (
-            <div className="relative" ref={toolbarRef} onMouseEnter={cancelCollapse} onMouseLeave={scheduleCollapse}>
+            <div className="relative flex items-center" ref={toolbarRef} onMouseEnter={cancelCollapse} onMouseLeave={scheduleCollapse}>
             <button type="button" onClick={() => { dismissTrigger(); setPlusMenuOpen((p) => !p); setSkillPanelOpen(false); setPluginPanelOpen(false); setContextFlyoutOpen(false) }} disabled={isUploading || isStreaming || isClarifying}
               className="btn btn-circle btn-ghost"
               data-state={anySubPanelOpen ? 'accent' : undefined}

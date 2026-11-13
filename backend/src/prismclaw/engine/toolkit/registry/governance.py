@@ -29,13 +29,14 @@ logger = logging.getLogger(__name__)
 #   - present_files：交付物的可选声明通道（表现层还会扫描 outputs/ 兜底），
 #     任何产出文件的 skill 都应能调用它，但不能调用不该导致任务无法完成。
 #   - ask_user_question：人机澄清，skill 经常需要向用户确认。
-#   - tool_search / skill_search / activate_skill：技能发现与激活，是 skill
-#     生态的入口，被白名单屏蔽会导致无法切换/发现技能。
+#   - tool_search / skill_search / subagent_search / activate_skill：能力发现
+#     与激活，是插件生态的入口，被白名单屏蔽会导致无法切换/发现能力。
 _UNIVERSAL_TOOLS = frozenset({
     "present_files",
     "ask_user_question",
     "tool_search",
     "skill_search",
+    "subagent_search",
     "activate_skill",
 })
 
@@ -55,6 +56,7 @@ _CORE_VISIBLE_TOOLS = frozenset({
     "ask_user_question",
     "tool_search",
     "skill_search",
+    "subagent_search",
     "activate_skill",
     "present_files",
 })

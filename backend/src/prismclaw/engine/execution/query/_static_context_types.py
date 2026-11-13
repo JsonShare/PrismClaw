@@ -13,12 +13,10 @@ from prismclaw.engine.execution.capabilities.catalog import (
     CapabilityKind,
 )
 from prismclaw.engine.execution.request.system_prompt import (
-    AvailableSkillEntry,
     AvailableSubagentEntry,
     MarketplaceSummary,
     SystemPromptResult,
 )
-from prismclaw.schema.agent.data_types import CacheStrategySnapshot
 from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.content.replacement_state import ReplacementDecisionState
 from prismclaw.schema.services.skills import SkillInvocationState
@@ -48,7 +46,6 @@ class StaticContextResult:
     frozen_result: SystemPromptResult
     history_budget: int
     request_mode: str | None
-    prior_cache_strategy: CacheStrategySnapshot | None
     prior_replacement_state: ReplacementDecisionState | None
     shell_snapshot: "StaticTurnShellSnapshot | None" = None
 
@@ -60,18 +57,15 @@ class StaticTurnShellSnapshot:
     model: str
     request_mode: str | None
     tool_summaries: tuple[tuple[str, str], ...]
-    repo_map: str | None
     subagent_registry_size: int
     handoff_enabled: bool
     any_manifest_has_can_handoff_to: bool
     max_handoff_chain_length: int
-    available_skills: tuple[AvailableSkillEntry, ...]
+    available_skills: tuple[str, ...]
     available_subagents: tuple[AvailableSubagentEntry, ...]
-    available_subagents_refreshed_at: str
     frozen_result: SystemPromptResult
     history_budget: int
-    available_skills_note: str = ""
-    # §4.10 静态层：marketplace 包索引（永不截断），与技能行解耦
+    # 插件包索引：`<packages>` 的数据源
     marketplace_summaries: tuple[MarketplaceSummary, ...] = ()
     # SDD R-A2: measured tool-schema wire cost already deducted from
     # history_budget; carried on the snapshot so the drift sentinel
@@ -97,16 +91,6 @@ class StaticTurnShellCache:
         self._entries.clear()
 
 
-def _load_prior_cache_strategy(tree: "SessionTree") -> CacheStrategySnapshot | None:
-    try:
-        engine: SessionProjectionEngine = SessionProjectionEngine(tree)
-        cache_strategy = engine.cache.get_last_strategy()
-    except Exception:
-        logger.warning("get_last_cache_strategy failed", exc_info=True)
-        return None
-    return _coerce_cache_strategy_snapshot(cache_strategy)
-
-
 def _load_prior_replacement_state(tree: "SessionTree") -> ReplacementDecisionState | None:
     try:
         engine: SessionProjectionEngine = SessionProjectionEngine(tree)
@@ -115,16 +99,6 @@ def _load_prior_replacement_state(tree: "SessionTree") -> ReplacementDecisionSta
         logger.warning("get_replacement_decision_state failed", exc_info=True)
         return None
     return state if state.decisions else None
-
-
-def _coerce_cache_strategy_snapshot(value: Any) -> CacheStrategySnapshot | None:
-    if not isinstance(value, dict):
-        return None
-    snapshot: CacheStrategySnapshot = {}
-    for key, raw in value.items():
-        if isinstance(raw, (str, int, bool)) or raw is None:
-            snapshot[key] = raw
-    return snapshot or None
 
 
 def _resolve_static_shell_cache(deps: Any) -> StaticTurnShellCache:
@@ -172,9 +146,9 @@ def _skill_catalog_fingerprint(catalog: CapabilityCatalogService | None) -> str:
 def _subagent_catalog_fingerprint(catalog: CapabilityCatalogService | None) -> str:
     """Stable fingerprint of the enabled subagent set.
 
-    Same rationale as _skill_catalog_fingerprint: frozen prefix contains the
-    full <available_subagents> block, so cache keys must break on any
-    install/remove/enable/disable. Derived from canonical ids only.
+    Same rationale as _skill_catalog_fingerprint: the frozen prefix contains
+    the <packages> index and the core <subagents> block, so cache keys must
+    break on any install/remove/enable/disable. Derived from canonical ids only.
     """
     if catalog is None:
         return ""

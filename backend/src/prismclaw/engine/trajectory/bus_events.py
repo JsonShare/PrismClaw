@@ -4,9 +4,9 @@ These are the **typed contracts** between core (publisher) and downstream
 subscribers (audit trajectory, token meter projection, context-pressure
 meter etc.).
 
-The design mirrors DSH SessionEventMap (63 event types) but the PrismClaw
+The design mirrors 会话事件映射 (63 event types) but the PrismClaw
 Phase 0' (解耦) set is intentionally minimal — it covers the 5 trajectory
-snapshot layers plus Turn/Iteration lifecycle gates (DSH turn/start vs
+snapshot layers plus Turn/Iteration lifecycle gates (turn/start vs
 step/start equivalents). Subscribers other than trajectory will likely
 need NEW event types later; extend HERE (not in subscriber-owned modules),
 then re-subscribe from the subscriber side. Core must NOT hard-code
@@ -14,7 +14,7 @@ assumptions about which subscribers need which events.
 
 Every event type is a frozen pydantic BaseModel for two reasons:
 1. Payload immutability — a subscriber cannot mutate the data another
-   subscriber is about to read (the same reason DSH does `deepFreeze` on
+ subscriber is about to read (the same reason does `deepFreeze` on
    every appended event).
 2. Validated fields — publishers pass Python primitives; pydantic coerces
    `tuple[int, ...]` / `tuple[str, ...]` from any iterable. This avoids
@@ -37,10 +37,10 @@ from prismclaw.engine.execution.control.kernel import TerminalReason
 # ----------------------------------------------------------------------------
 # Turn / Iteration lifecycle events
 #
-# DSH equivalents: turn/start  →  SessionTurnStarted
+# 对应： turn/start → SessionTurnStarted
 #                  step/start  →  SessionIterationStarted
 #                  turn/end    →  SessionTurnFinished
-# DSH emits step/start (iteration) inside a single turn — we mirror this
+# emits step/start (iteration) inside a single turn — we mirror this
 # because a user turn may trigger multiple LLM iterations (tool-call loop).
 # ----------------------------------------------------------------------------
 
@@ -125,7 +125,7 @@ class ProjectorInputDone(BaseModel):
     Core publisher responsibility: take `list(tree.order or [])` and
     snapshot each entry's `entry.type`, `entry.id`, `entry.seq`,
     `entry.parent_id` as frozen tuples — don't pass raw Entry references
-    that could be mutated by subsequent steps (DSH deepFreeze equivalent
+ that could be mutated by subsequent steps (deepFreeze equivalent
     at publish time via pydantic frozen + coerced tuples).
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -156,7 +156,7 @@ class ProjectorOutputDone(BaseModel):
     panel shows "Layer ① = 0 messages" while Layers ②/③/④ show 1+,
     which looks broken but is actually correct pipeline behavior.
 
-    DSH parity: `user_message_preview` carries the latest user message
+ `user_message_preview` carries the latest user message
     content (up to 500 chars) so the trajectory panel can show WHAT the
     user asked, not just "1 user message". `tool_results_preview` carries
     the previous iteration's tool-result content (role='tool' messages
@@ -173,7 +173,7 @@ class ProjectorOutputDone(BaseModel):
     head: tuple[str, ...] = ()
     tail: tuple[str, ...] = ()
     appended_msg_count: int = 0
-    # DSH parity: actual user/tool content previews (not just 80-char snippets)
+ # actual user/tool content previews (not just 80-char snippets)
     user_message_preview: str | None = None
     tool_results_preview: tuple[str, ...] = ()
 
@@ -207,7 +207,7 @@ class PipelineOutDone(BaseModel):
     # Per-layer metadata — previously `set_pipeline_out_snapshot` kwargs
     budget_summary: dict[str, int] = Field(default_factory=dict)
     compressors_used: tuple[str, ...] = ()
-    # DSH parity: compaction input/output preview (up to 500 chars) so the
+ # compaction input/output preview (up to 500 chars) so the
     # panel can show WHAT was compressed, not just "compact_history:trim"
     # labels. None when no compaction happened this iteration.
     compaction_summary: str | None = None
@@ -229,7 +229,7 @@ class PackerFinalDone(BaseModel):
     system_text_chars: int | None = None
     tool_schema_chars: int | None = None
     response_format_chars: int | None = None
-    # DSH parity: actual system prompt + tool schema TEXT (up to 1000 chars).
+ # actual system prompt + tool schema TEXT (up to 1000 chars).
     # The existing *_chars fields only carry counts — useless for "what did
     # the system prompt actually say". These give the panel real content.
     system_prompt_text: str | None = None
@@ -263,12 +263,12 @@ class PackerFinalDone(BaseModel):
 
 
 class LLMResponseReceived(BaseModel):
-    """LLM 成功响应事件 — runner.py L1882 response 构造后 publish.
+    """LLM 成功响应事件 — response 构造后 publish.
 
-    不传 llm_provider — provider 解析在 LiteLLMStreamFn 内部,
+    不传 llm_provider — provider 解析在 LiteLLMClient 内部,
     runner 不可见. 消费者按 model 前缀推断 provider.
 
-    DSH parity: `assistant_text_preview` carries the LLM response text
+ `assistant_text_preview` carries the LLM response text
     (up to 500 chars) so the panel can show WHAT the assistant answered,
     not just "model=X, output_tokens=Y". `tool_calls_summary` carries
     one string per emitted tool call in `name(args[:200])` format —
@@ -289,17 +289,17 @@ class LLMResponseReceived(BaseModel):
     ttft_ms: float | None = None        # real first-token time minus _llm_start
     total_ms: float | None = None       # _llm_end - _llm_start
     completed_at_ms: int
-    # DSH parity: actual content previews (not just token counts)
+ # actual content previews (not just token counts)
     assistant_text_preview: str | None = None
     tool_calls_summary: tuple[str, ...] = ()
 
 
 class LLMRequestFailed(BaseModel):
-    """LLM 失败事件 — runner.py L1884-1941 的 except 分支 publish.
+    """LLM 失败事件 — LLM 调用异常时 publish.
 
     重构清理: 删除 partial_chunks / partial_text_chars / attempt 字段.
-      * partial_*: 在 llm.py 内部 nonlocal 维护, runner 作用域不可见.
-        Partial text 已通过 _persist_partial_assistant 持久化到 SessionTree.
+      * partial_*: 在 llm.py 内部 nonlocal 维护, runner 作用域不可见;
+        部分正文的持久化由消费方（Web 收尾路径）负责，事件层不携带.
       * attempt: 无消费者. 事件层携带但 RequestAuditRecord model 无该字段,
         apply 不写, read_snapshot_v2 返回的 model_dump 不含, API 读不到.
         重试审计若将来需要, 应走 metrics counter, 不在事件层提前设计.
@@ -325,12 +325,12 @@ class LLMRequestFailed(BaseModel):
 
 
 # ----------------------------------------------------------------------------
-# Conversation-tree node events (DSH parity — per-conversation-event cells)
+# Conversation-tree node events ( — per-conversation-event cells)
 #
-# DSH derives trajectory cells from conversation-tree nodes (one cell per
+# derives trajectory cells from conversation-tree nodes (one cell per
 # node).  PrismClaw's SessionTree.append() is the canonical "a node was
 # added" boundary, so we publish ConversationNodeAdded here for the
-# cell-projector to consume.  This is the DSH-aligned data source for the
+# cell-projector to consume. This is the 对齐 data source for the
 # trajectory timeline — NOT per-LLM-iteration records (those stay in
 # RequestAuditRecord as a separate "LLM call audit" panel).
 # ----------------------------------------------------------------------------
@@ -338,9 +338,9 @@ class LLMRequestFailed(BaseModel):
 
 class ConversationNodeAdded(BaseModel):
     """Published by bootstrap._append() every time a node is added to
-    SessionTree.  One event = one DSH-style trajectory cell.
+ SessionTree. One event = one trajectory cell.
 
-    DSH mapping (trajectory-record.ts → layout.ts):
+ mapping (trajectory-record.ts → layout.ts):
       role='user'        → kind='user'      (lane 0 / Input)
       role='assistant'   → kind='message'   (lane 1 / Model)
                            + each tool_call in entry.tool_calls → kind='tool'
@@ -361,11 +361,11 @@ class ConversationNodeAdded(BaseModel):
     seq: int                            # position in SessionTree.order
     turn: int                           # 1-based user-message counter
     role: str                           # 'user' | 'assistant' | 'tool' | 'system'
-    kind: str                           # DSH kind: 'user'|'message'|'tool'|'system'|'compacted'|'context'|'subtool'
+    kind: str                           # kind: 'user'|'message'|'tool'|'system'|'compacted'|'context'|'subtool'
     content_preview: str | None = None  # content text up to 500 chars
     tool_calls_summary: tuple[str, ...] = ()  # name(args[:200]) per call (assistant only)
     tool_call_id: str | None = None     # for role='tool' cells
-    # DSH parity: full-content + flag fields carried at publish time so the
+    # full-content + flag fields carried at publish time so the
     # cell projector can persist them in the same INSERT as the cell.
     input_detail: str | None = None     # full input content (user msg / tool args)
     output_detail: str | None = None    # full output content (assistant response / tool result)
@@ -394,8 +394,8 @@ class ConversationNodeAdded(BaseModel):
     tool_name: str | None = None        # tool cell → tool name (schema lookup)
 
 
-# Aliases that match the names DSH uses (helps cross-reference when
-# porting future DSH logic).  Not used directly by trajectory projection.
+# Aliases that match the names uses (helps cross-reference when
+# porting future logic). Not used directly by trajectory projection.
 DSH_EVENT_ALIASES: dict[str, type[BaseModel]] = {
     "turn/start": SessionTurnStarted,
     "turn/end": SessionTurnFinished,
@@ -426,14 +426,14 @@ ALL_EVENTS: tuple[type[BaseModel], ...] = (
     # TrajectoryAuditService.handle_event needs them registered here.
     LLMResponseReceived,
     LLMRequestFailed,
-    # DSH parity: conversation-tree node events (per-cell trajectory source).
+    # conversation-tree node events (per-cell trajectory source).
     # Consumed by the cell-projector, NOT the iteration-projector.
     ConversationNodeAdded,
 )
 
 
 def event_typename(ev: Any) -> str:
-    """Human-readable type name — identical to DSH event.type convention.
+    """Human-readable type name — identical to event.type convention.
 
     Example: `ProjectorOutputDone(session_id=..., ...)` →
     `"ProjectorOutputDone"`.

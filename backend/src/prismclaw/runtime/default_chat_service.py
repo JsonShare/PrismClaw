@@ -9,7 +9,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from prismclaw.schema.agent.types import RunRequest
-from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.loop.runner import run_agent_stream
 from prismclaw.schema.agent.run_control_types import RunControl
 

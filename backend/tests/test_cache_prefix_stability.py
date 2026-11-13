@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from prismclaw.engine.services.llm.stream_fn import _PROVIDER_REQUEST_ADAPTER
+from prismclaw.engine.services.llm.client import _PROVIDER_REQUEST_ADAPTER
 
 _PAYLOAD = {"blocks": [{"id": "runtime_context", "content": "时间上下文"}]}
 

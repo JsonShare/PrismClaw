@@ -1,19 +1,18 @@
 /**
- * useTrajectoryCells — DSH-aligned per-conversation-event cell fetcher.
+ * useTrajectoryCells — per-conversation-event cell 抓取 hook。
  *
- * Calls GET /api/sessions/{sid}/trajectory/cells and returns TrajectoryCell[]
- * (one cell per tree node).  This is the DSH-style data source for the
- * timeline + ledger — they render cells, NOT per-LLM-iteration records.
+ * 调用 GET /api/sessions/{sid}/trajectory/cells 返回 TrajectoryCell[]
+ * （每个 tree 节点一个 cell）。这是 timeline + ledger 的数据源 —— 它们
+ * 渲染 cells，不是 per-LLM-iteration 的 records。
  *
- * Incremental polling (C8): while the panel is open, polls
- * ?after_seq=<latest_seq> every POLL_INTERVAL_MS. The backend returns new
- * rows (seq > after_seq) plus rows still pending metrics enrichment
- * (completed_at_ms IS NULL — assistant cells get usage/model/output
- * backfilled after insert), which are merged by cell_id and re-sorted by
- * seq. Full refresh stays available for the manual refresh button.
+ * 增量轮询（C8）：面板打开期间，每 POLL_INTERVAL_MS 用
+ * ?after_seq=<latest_seq> 轮询一次。后端返回新行（seq > after_seq）
+ * 以及仍在等待 metrics 补齐的行（completed_at_ms IS NULL — assistant cell
+ * 在 insert 后回填 usage/model/output），前端按 cell_id 合并并按 seq 重排。
+ * 手动刷新按钮仍可用作全量刷新。
  *
- * Records (RequestAuditRecord) are fetched separately via useTrajectory,
- * and used only by the Inspector panel for debugging the 4-layer pipeline.
+ * records（RequestAuditRecord）通过 useTrajectory 单独抓取，
+ * 仅在 Inspector 面板中用于调试 4 层 pipeline。
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiUrl } from '../../lib/system-adapter'
@@ -29,16 +28,16 @@ interface UseTrajectoryCellsResult {
 }
 
 /**
- * Chronological order for the trajectory ledger:
- *  1. group by conversation turn (turn ASC)
- *  2. float the system-prompt cell (Input / lane 0) to the head of its turn,
- *     so each turn reads "system → user → assistant → tools" instead of the
- *     system snapshot being pinned to the end of the whole timeline (its seq
- *     is MAX+1 by design — see INSERT_SYSTEM_CELL in sql_models.py).
- *  3. preserve natural seq order within the turn.
+ * ledger 里的 cell 按时间顺序排列：
+ *  1. 按 conversation turn 分组（turn ASC）
+ *  2. system-prompt cell（Input / lane 0）浮到所在 turn 的最前面，
+ *     让每个 turn 的阅读顺序是 "system → user → assistant → tools"，
+ *     而不是 system 快照被钉在整条时间线末尾（它的 seq 设计上是 MAX+1 ——
+ *     见 sql_models.py 的 INSERT_SYSTEM_CELL）。
+ *  3. turn 内保持自然 seq 顺序。
  *
- * Mirrors the backend ORDER BY in sql_models.SELECT_CELLS_* so the full-load
- * and incremental-poll paths render identically.
+ * 镜像后端 sql_models.SELECT_CELLS_* 的 ORDER BY，保证全量加载和
+ * 增量轮询两条路径渲染结果一致。
  */
 function cellOrder(c: TrajectoryCell): [number, number, number] {
   return [c.turn, c.kind === 'system' ? 0 : 1, c.seq]
@@ -51,7 +50,7 @@ function sortCells(cells: readonly TrajectoryCell[]): TrajectoryCell[] {
   })
 }
 
-/** Merge an incremental batch into the current cells (by cell_id, chronological order). */
+/** 将一批增量结果合并进当前 cells（按 cell_id，保持时间顺序）。 */
 function mergeCells(
   current: readonly TrajectoryCell[],
   batch: readonly TrajectoryCell[],
@@ -103,7 +102,7 @@ export function useTrajectoryCells(
     }
   }, [sessionId, token, onUnauthorized])
 
-  // Incremental poll: rows newer than the seq cursor, merged client-side.
+  // 增量轮询：取 seq 游标之后的行，前端合并
   const pollIncremental = useCallback(async () => {
     if (!sessionId || !token) return
     try {
@@ -124,11 +123,11 @@ export function useTrajectoryCells(
       latestSeqRef.current = json.latest_seq ?? latestSeqRef.current
       setCells(prev => mergeCells(prev, batch))
     } catch {
-      // Polling is best-effort; surface nothing — the manual refresh reports errors.
+      // 轮询尽力而为，不暴露错误 — 手动刷新负责报错
     }
   }, [sessionId, token, onUnauthorized])
 
-  // Initial full load on open / session switch.
+  // 打开 / 切换 session 时初次全量加载
   useEffect(() => {
     if (!enabled) return
     latestSeqRef.current = 0
@@ -136,7 +135,7 @@ export function useTrajectoryCells(
     void refresh()
   }, [enabled, refresh])
 
-  // Poll while open.
+  // 打开期间持续轮询
   useEffect(() => {
     if (!enabled) return
     const timer = window.setInterval(() => { void pollIncremental() }, POLL_INTERVAL_MS)

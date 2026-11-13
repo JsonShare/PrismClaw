@@ -21,31 +21,13 @@ def _wrap_xml(tag: str, content: str | None) -> str | None:
     return f"<{tag}>\n{content.strip()}\n</{tag}>"
 
 
-@dataclass
-class AvailableSkillEntry:
-    name: str
-    # 契约式渲染：构建期经 _subagent_compact_description 截断（100 字符），
-    # skills_section 逐技能行输出 "- `name` — description"。
-    description: str = ""
-    category: str | None = None
-    plugin_name: str | None = None
-    priority: int = 0
-    is_active: bool = False
-    # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
-    marketplace_name: str | None = None
-    # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
-    marketplace_description: str | None = None
-    # 技能准入策略：auto(双通道)/user_only(仅用户指定)/model_only(仅模型)/disabled(禁用)
-    invocation_policy: str = "auto"
-
-
 @dataclass(frozen=True)
 class MarketplaceSummary:
-    """marketplace 包索引行——独立于技能行预算，永不截断。
+    """插件包索引行（`<packages>` 的唯一数据源）。
 
-    §4.10 静态层：组行的职责是"让模型知道存在某个能力域"（命名空间目录），
-    其渲染不依赖组内技能行是否被预算截断，因此从截断前的全量条目聚合，
-    与 AvailableSkillEntry 列表解耦。skill_count 含被截断的技能。
+    只承载"存在某个能力域"这一事实：包名、外层描述、技能计数。子插件、
+    技能名、子代理名一律不进入固定 prompt，由 skill_search / subagent_search
+    逐级披露。
     """
 
     name: str
@@ -53,21 +35,21 @@ class MarketplaceSummary:
     skill_count: int = 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class AvailableSubagentEntry:
-    """Single authoritative sub-agent listing surfaced in the frozen prompt.
+    """子代理目录条目（固定 prompt 与包计数共用）。
 
-    Single catalog source: CapabilityCatalogService.list_agent_entries().
-    No manifest-drift risk because the catalog is built from the same registry
-    used at dispatch time. refreshed_at is stamped when the catalog snapshot
-    is taken so the model can detect stale advice vs current state.
+    Single catalog source: CapabilityCatalogService.list_agent_entries()，
+    与派发时使用同一注册表，prompt 名单与运行时校验不可能漂移。
+
+    ``plugin_name is None`` 表示工作区核心子代理（进入 ``<subagents>``）；
+    插件子代理只用于 ``<packages>`` 计数与 ``subagent_search`` 检索，其名称
+    不进入固定 prompt。
     """
 
     name: str
     description: str  # already truncated to 100 chars for prompt compactness
-    can_handoff_to: tuple[str, ...] = ()
-    source: str | None = None
-    # v5 渐进式披露：所属 marketplace 名称与描述
+    plugin_name: str | None = None
     marketplace_name: str | None = None
     marketplace_description: str | None = None
 
@@ -79,23 +61,20 @@ class PromptInputs:
     agent_id: str
     model: str
     tools: Sequence[tuple[str, str]] = ()
-    available_skills: Sequence[AvailableSkillEntry] = ()
-    available_skills_note: str = ""
-    # §4.10 静态层：marketplace 包索引（永不截断），与 available_skills 解耦
+    # 仅项目级技能名（用户主动安装、数量有界）；插件技能走 skill_search。
+    project_skill_names: tuple[str, ...] = ()
+    # 插件包索引：`<packages>` 的技能计数与描述来源
     marketplace_summaries: Sequence[MarketplaceSummary] = ()
     available_subagents: Sequence[AvailableSubagentEntry] = ()
-    available_subagents_refreshed_at: str = ""  # ISO-8601 UTC; empty means registry empty
-    available_subagents_total: int = 0  # SDD D11：目录总数（>len 时渲染 truncation trailer）
     workspace_path: str | None = None
-    repo_map: str | None = None
     now_iso: str | None = None
-    identity: str | None = None  # 由 build_identity_text(mode) 从 IDENTITY.md 读取；缺失时为空
+    identity: str | None = None  # 由 build_identity_text() 从 IDENTITY.md 读取；缺失时为空
     preferences: str | None = None  # 由 build_preferences_text() 显式传入；文件缺失时为空
     subagent_registry_size: int = 0
     handoff_enabled: bool = False
     any_manifest_has_can_handoff_to: bool = False
     max_handoff_chain_length: int = 5
-    request_mode: str | None = None
+    workspace_mode: str = "work"
     runtime_strategy_notes: Sequence[str] = ()
     task_spec: TaskSpec | None = None
     review_requirements: ReviewRequirements | None = None
@@ -107,9 +86,6 @@ class PromptInputs:
     invocation_context: str = "skill"
     invoked_skill_attachments: str | None = None  # 压缩后重新注入的已调用技能片段
     workspace_tag: WorkspaceTag | None = None  # 工作区安全标签，用于领域安全指令注入
-    # 从配置推导（agent.context.budget.window_tokens / per-model contextWindow），
-    # 由构造方显式传入；未传时技能目录预算退化为固定上限。
-    max_context_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, TypeAdapter
 from prismclaw.schema.content import (
     CompactionArtifact,
 )
-from prismclaw.schema.agent.data_types import CacheStrategySnapshot, ContentBlock
+from prismclaw.schema.agent.data_types import ContentBlock
 from prismclaw.schema.agent.session import (
     AgentMessageDict,
     MessageEntry,
@@ -20,7 +20,6 @@ from prismclaw.schema.agent.session import (
     SessionEvent,
     SessionEventType,
     SessionHeader,
-    SessionHistorySummary,
     SystemReminderProjection,
     TurnRuntimeMetricsSnapshot,
 )
@@ -42,7 +41,6 @@ FORK_TASK_PROJECTION_CUSTOM_TYPE = "fork_task_projection"
 HANDOFF_REQUEST_CUSTOM_TYPE = "handoff_request"
 
 # Typed custom_type constants (replace string matching with these)
-CACHE_STRATEGY_CUSTOM_TYPE = "cache_strategy_snapshot"
 SEARCH_EVIDENCE_CUSTOM_TYPE = "search_evidence"
 EXTRACT_EVIDENCE_CUSTOM_TYPE = "extract_evidence"
 TASK_RUNTIME_CUSTOM_TYPE = "task_runtime_snapshot"
@@ -54,7 +52,6 @@ TASK_MUTATION_CUSTOM_TYPE = "task_mutation"
 SESSION_MEMORY_CUSTOM_TYPE = "session_memory_snapshot"
 SESSION_STATE_CUSTOM_TYPE = "session_state_snapshot"
 REPLACEMENT_DECISION_CUSTOM_TYPE = "replacement_decision"
-CONTEXT_COMPACTION_REFERENCE_CUSTOM_TYPE = "context_compaction_reference"
 RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE = "result_compaction_reference"
 FEEDBACK_CUSTOM_TYPE = "feedback"
 OUTPUT_FILES_CUSTOM_TYPE = "output_files"
@@ -65,11 +62,6 @@ TRANSIENT_RETRY_NOTICE_CUSTOM_TYPE = "transient_retry_notice"
 RUN_PROJECTION_CUSTOM_TYPE = "run_projection"
 
 # Typed payload models for CustomEntry.data (discriminated union)
-
-
-class _CustomPayloadCacheStrategy(BaseModel):
-    custom_type: Literal["cache_strategy_snapshot"]
-    data: CacheStrategySnapshot = {}
 
 
 class _CustomPayloadTurnMetrics(BaseModel):
@@ -162,11 +154,6 @@ class _CustomPayloadExecutionTimeline(BaseModel):
     data: dict[str, Any]
 
 
-class _CustomPayloadContextCompactionReference(BaseModel):
-    custom_type: Literal["context_compaction_reference"]
-    data: dict[str, Any]
-
-
 class _CustomPayloadResultCompactionReference(BaseModel):
     custom_type: Literal["result_compaction_reference"]
     data: dict[str, Any]
@@ -219,7 +206,6 @@ class _CustomPayloadRunProjection(BaseModel):
 
 CustomPayload = Annotated[
     Union[
-        _CustomPayloadCacheStrategy,
         _CustomPayloadTurnMetrics,
         _CustomPayloadTaskRuntime,
         _CustomPayloadTaskSpec,
@@ -239,7 +225,6 @@ CustomPayload = Annotated[
         _CustomPayloadOutputFiles,
         _CustomPayloadFileChanges,
         _CustomPayloadExecutionTimeline,
-        _CustomPayloadContextCompactionReference,
         _CustomPayloadResultCompactionReference,
         _CustomPayloadDecisionLedgerEvent,
         _CustomPayloadTransientRetryNotice,
@@ -293,7 +278,7 @@ def now_iso() -> str:
 
 
 def now_ms_epoch() -> int:
-    """Return current UTC time as epoch milliseconds (DSH time-seeking)."""
+    """Return current UTC time as epoch milliseconds."""
     return int(time.time() * 1000)
 
 
@@ -628,26 +613,14 @@ class SessionTree(BaseModel):
     def get_turn_runtime_metrics_snapshots(self) -> list[TurnRuntimeMetricsSnapshot]:
         return self._proj().cache.get_turn_metrics_snapshots()
 
-    def get_stable_prefix_reuse_turn_count(self) -> int:
-        return self._proj().cache.get_stable_prefix_reuse_turn_count()
-
-    def get_stable_prefix_digest_change_count(self) -> int:
-        return self._proj().cache.get_stable_prefix_digest_change_count()
-
     def get_replacement_decision_state(self) -> ReplacementDecisionState:
         return self._proj().replacement.get_state()
-
-    def get_last_cache_strategy(self) -> CacheStrategySnapshot | None:
-        return self._proj().cache.get_last_strategy()
 
     def build_runtime_messages(self) -> list[AgentMessageDict]:
         return self._proj().messages.build_runtime_messages()
 
     def build_runtime_meta_messages(self) -> list[SystemReminderProjection]:
         return self._proj().messages.build_runtime_meta_messages()
-
-    def get_cache_strategy_snapshots(self) -> list[CacheStrategySnapshot]:
-        return self._proj().cache.get_snapshots()
 
     def get_persisted_artifacts(self) -> dict[str, CompactionArtifact]:
         return self._proj().replacement.get_persisted_artifacts()
@@ -770,31 +743,6 @@ def _as_str_list(value: Any) -> list[str]:
 
 
 
-def _collect_last_cache_strategy(
-    branch: list[SessionEntry],
-) -> CacheStrategySnapshot | None:
-    for entry in reversed(branch):
-        if not isinstance(entry, CustomEntry) or entry.custom_type != CACHE_STRATEGY_CUSTOM_TYPE:
-            continue
-        data = entry.data or {}
-        return _coerce_cache_strategy_snapshot(data)
-    return None
-
-
-def _collect_cache_strategy_snapshots(
-    branch: list[SessionEntry],
-) -> list[CacheStrategySnapshot]:
-    snapshots: list[CacheStrategySnapshot] = []
-    for entry in branch:
-        if not isinstance(entry, CustomEntry) or entry.custom_type != CACHE_STRATEGY_CUSTOM_TYPE:
-            continue
-        data = entry.data or {}
-        snapshot = _coerce_cache_strategy_snapshot(data)
-        if snapshot is not None:
-            snapshots.append(snapshot)
-    return snapshots
-
-
 def _collect_turn_runtime_metrics_snapshots(
     branch: list[SessionEntry],
 ) -> list[TurnRuntimeMetricsSnapshot]:
@@ -806,48 +754,6 @@ def _collect_turn_runtime_metrics_snapshots(
         if snapshot is not None:
             snapshots.append(snapshot)
     return snapshots
-
-
-def _snapshot_reused_stable_prefix(snapshot: CacheStrategySnapshot) -> bool:
-    if snapshot.get("reused_prior_strategy") is not True:
-        return False
-    if not _snapshot_requires_replacement_reuse(snapshot):
-        return True
-    return snapshot.get("reused_replacement_state") is True
-
-
-def _snapshot_has_stable_prefix_drift(snapshot: CacheStrategySnapshot) -> bool:
-    static_digest = snapshot.get("static_digest")
-    prior_static_digest = snapshot.get("prior_static_digest")
-    static_drift = (
-        isinstance(static_digest, str)
-        and isinstance(prior_static_digest, str)
-        and static_digest != prior_static_digest
-    )
-    if static_drift:
-        return True
-    if not _snapshot_requires_replacement_reuse(snapshot):
-        return False
-    return snapshot.get("replacement_state_digest") != snapshot.get("prior_replacement_state_digest")
-
-
-def _snapshot_requires_replacement_reuse(snapshot: CacheStrategySnapshot) -> bool:
-    decision_count = snapshot.get("replacement_decision_count")
-    return (
-        isinstance(snapshot.get("replacement_state_digest"), str)
-        or isinstance(snapshot.get("prior_replacement_state_digest"), str)
-        or (isinstance(decision_count, int) and decision_count > 0)
-    )
-
-
-def _coerce_cache_strategy_snapshot(data: Any) -> CacheStrategySnapshot | None:
-    if not isinstance(data, dict):
-        return None
-    snapshot: CacheStrategySnapshot = {}
-    for key, value in data.items():
-        if isinstance(value, (str, int, bool)) or value is None:
-            snapshot[key] = value
-    return snapshot or None
 
 
 def _coerce_turn_runtime_metrics_snapshot(data: Any) -> TurnRuntimeMetricsSnapshot | None:

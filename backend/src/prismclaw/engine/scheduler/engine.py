@@ -1,10 +1,10 @@
 """Scheduler engine — 1s tick loop, leader-only, with nextFireAt caching.
 
-Design aligned with Kairos (Claude-Code cronScheduler.ts):
-- Deterministic jitter per task ID (anti-thundering-herd)
-- In-memory nextFireAt cache (invalidated on CRUD)
-- Leader election via LockManager (not WorkerRegistry list ordering)
-- Missed task detection on first leader tick (leader-only, once)
+设计要点：
+- 每个任务 ID 确定性抖动（防惊群）
+- 进程内 nextFireAt 缓存（CRUD 时失效）
+- 通过 LockManager 选主（不用 WorkerRegistry 列表排序）
+- 首次 leader tick 检测漏掉的任务（仅 leader、仅一次）
 
 Cache invalidation across workers (cloud mode):
 - The nextFireAt cache is process-local. A CRUD performed on worker A must

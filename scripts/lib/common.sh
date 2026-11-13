@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # 供 scripts/*.sh `source` 的公共环境（不设置 set -euo pipefail，由各脚本自行声明）。
-# 统一项目根目录、端口、日志/PID 目录、Python 解释器解析与后台进程工具。
+# 统一项目根目录、端口、日志/PID 目录与后台进程工具。
+# 约定：调用方先激活项目运行环境，脚本只使用当前 PATH 中的 python。
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_ROOT"
@@ -25,44 +26,19 @@ else
   export PRISMCLAW_SANDBOX_ENFORCE=false
 fi
 
-# 项目自带虚拟环境优先，避免误用全局 Python 导致依赖版本不匹配
-resolve_python_bin() {
-  if [ -n "${PYTHON_BIN:-}" ] && [ -x "${PYTHON_BIN}" ]; then
-    printf '%s\n' "${PYTHON_BIN}"
-    return
-  fi
-  if [ -x "$PROJECT_ROOT/backend/.venv/bin/python" ]; then
-    printf '%s\n' "$PROJECT_ROOT/backend/.venv/bin/python"
-    return
-  fi
-  if [ -n "${VIRTUAL_ENV:-}" ] && [ -x "${VIRTUAL_ENV}/bin/python" ]; then
-    printf '%s\n' "${VIRTUAL_ENV}/bin/python"
-    return
-  fi
-  if [ -n "${CONDA_PREFIX:-}" ] && [ -x "${CONDA_PREFIX}/bin/python" ]; then
-    printf '%s\n' "${CONDA_PREFIX}/bin/python"
-    return
-  fi
-  if command -v uvicorn >/dev/null 2>&1; then
-    local uvicorn_bin uvicorn_shebang uvicorn_python
-    uvicorn_bin="$(command -v uvicorn)"
-    uvicorn_shebang="$(head -n 1 "${uvicorn_bin}" 2>/dev/null || true)"
-    if [[ "${uvicorn_shebang}" == '#!'* ]]; then
-      uvicorn_python="${uvicorn_shebang#\#!}"
-      if [ -x "${uvicorn_python}" ]; then
-        printf '%s\n' "${uvicorn_python}"
-        return
-      fi
-    fi
-  fi
-  if command -v python >/dev/null 2>&1; then
-    command -v python
-    return
-  fi
-  printf '%s\n' "python3"
-}
-
-PYTHON_BIN="$(resolve_python_bin)"
+# 使用调用方已激活环境中的 python，不做任何环境探测或回退。
+# hash -r：避免激活环境后仍命中激活前缓存的 python 路径。
+hash -r 2>/dev/null || true
+PYTHON_BIN="$(command -v python || command -v python3 || true)"
+if [ -z "$PYTHON_BIN" ]; then
+  echo "✗ 未找到 python，请先激活项目运行环境" >&2
+  exit 1
+fi
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; then
+  echo "✗ 当前 python 不满足 >=3.12：${PYTHON_BIN}（$("$PYTHON_BIN" -V 2>&1)）" >&2
+  echo "  请先激活项目运行环境（如：conda activate pyclaw）后重跑" >&2
+  exit 1
+fi
 
 # 以独立会话启动，避免进程随启动它的终端退出而被清理。
 # 用追加模式：日志框架会原地截断滚动，O_APPEND 保证崩溃输出仍落在当前文件里。

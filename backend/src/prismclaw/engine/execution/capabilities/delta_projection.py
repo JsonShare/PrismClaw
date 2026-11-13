@@ -21,9 +21,9 @@ def build_capability_delta_blocks(
 
     The only genuinely per-turn capability delta is the tool listing: deferred
     tools become visible once unlocked by discovery. Skill and sub-agent
-    discovery are already handled authoritatively in the frozen prompt by
-    ``skills_section`` (marketplace-folded index) and ``subagents_section``
-    (single source of truth), so they are no longer re-projected here.
+    discovery are handled in the frozen prompt by ``skills_section``
+    (project names) / ``packages_section`` (package index) and
+    ``subagents_section`` (core agents), so they are not re-projected here.
     """
     if capability_catalog is None:
         return []

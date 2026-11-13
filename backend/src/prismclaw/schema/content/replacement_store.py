@@ -10,7 +10,6 @@ from prismclaw.schema.content import (
 from prismclaw.schema.content.compaction import CompactionArtifact, parse_compaction_artifact
 from prismclaw.schema.content.context import ContextBlock
 from prismclaw.schema.session import (
-    CONTEXT_COMPACTION_REFERENCE_CUSTOM_TYPE,
     REPLACEMENT_DECISION_CUSTOM_TYPE,
     RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE,
 )
@@ -31,7 +30,7 @@ def collect_replacement_decision_state(branch: list[Any]) -> ReplacementDecision
             if decision is not None:
                 explicit.append(decision)
             continue
-        if custom_type not in {CONTEXT_COMPACTION_REFERENCE_CUSTOM_TYPE, RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE}:
+        if custom_type != RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE:
             continue
         artifact = parse_compaction_artifact(data)
         decision = replacement_decision_from_artifact(artifact)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 from prismclaw.engine.execution.checkpoint import RunSnapshot
 from prismclaw.schema.agent.task_runtime import ReviewRequirements

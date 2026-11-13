@@ -173,7 +173,7 @@ class RedisSessionStore:
     ) -> list[SessionEvent]:
         """Read events from the Event Log filtered by time range (epoch ms).
 
-        Aligns with DSH time-seeking: events are filtered by time_ms
+ Aligns with 时间对齐: events are filtered by time_ms
         and returned in seq order (monotonically increasing with time).
         """
         raw = await self._client.lrange(self._events_key(session_id), 0, -1)
@@ -366,7 +366,7 @@ class RedisSessionStore:
             await pipe.execute()
 
     async def _apply_projections_from_events(self, session_id: str, events: list[SessionEvent]) -> None:
-        """Apply projection updates derived from event data (DSH-aligned).
+        """Apply projection updates derived from event data.
 
         Events that produce surface entries:
         - user/message → MessageEntry(role=user)

@@ -2,7 +2,7 @@
 
 锁定不变量（重构过程必须持续通过）：
 1. estimate_tokens 单一权威入口位于 prismclaw.schema.shared.utils
-2. 中文 0.75 tokens/char 校准生效（v2 estimator）
+2. 中文 0.90 tokens/char 校准生效（v2 estimator，glm-53 复核）
 3. 空文本 → 0；非空 → >= 1
 4. estimate_message_tokens：8 token base + content + tool_calls
 5. estimate_messages_tokens：sum(单条)
@@ -37,23 +37,21 @@ def test_estimate_tokens_non_empty_at_least_one():
 
 
 def test_estimate_tokens_calibrated_constants():
-    """校准常量保持稳定（v2 校准生效）。
+    """校准常量保持稳定。
 
-    _OTHER_CHARS_PER_TOKEN 从 2.72 → 4.0（2026-11-05 drift sentinel 校准）：
-    原 2.72 是 8-21 生产对话（中文为主）拟合，但对英文 JSON/system-prompt
-    系统性高估 60-85%，导致 token_usage drift 持续 -6-7K tokens。
-    调至 4.0 后 CJK/ASCII 在 ~4 B/token 字节效率上对齐，覆盖实际 provider
-    tokenizer（qwen/gpt-4o 等）的英文 token 效率区间（3.5-5 B/token）。
+    2026-11-13 glm-53 drift 复核：原 CJK 0.75 / ASCII 4.0 持续低估 27-31%。
+    调至 CJK 0.90（中文模型 CJK≈0.9-1.0 tok/char）、ASCII 3.4（2.72 高估与
+    4.0 低估之间的中间值）。
     """
-    assert _CJK_TOKENS_PER_CHAR == 0.75
-    assert _OTHER_CHARS_PER_TOKEN == 4.0
+    assert _CJK_TOKENS_PER_CHAR == 0.90
+    assert _OTHER_CHARS_PER_TOKEN == 3.4
 
 
 # ──────────────────────────── 2. 中文校准契约（核心） ────────────────────────────
 
 
 def test_estimate_tokens_chinese_higher_than_legacy_len_div_4():
-    """中文消息 token 估算 ≈ 0.75 tokens/char，远高于 len//4。"""
+    """中文消息 token 估算 ≈ 0.90 tokens/char，远高于 len//4。"""
     chinese_text = "液压油改进剂密度调整" * 20  # 220 中文字符
     estimated = estimate_tokens(chinese_text)
     legacy = len(chinese_text) // 4  # 55
@@ -62,7 +60,7 @@ def test_estimate_tokens_chinese_higher_than_legacy_len_div_4():
 
 
 def test_estimate_tokens_chinese_english_mixed():
-    """中英混合文本：CJK 部分按 0.75，其他按 1/2.72。"""
+    """中英混合文本：CJK 部分按 0.90，其他按 1/3.4。"""
     text = "你好 world"  # 2 中文 + 6 非中文（含空格）
     estimated = estimate_tokens(text)
     # 至少大于 legacy len//4
@@ -70,11 +68,11 @@ def test_estimate_tokens_chinese_english_mixed():
 
 
 def test_estimate_tokens_chinese_long_text_within_budget():
-    """长中文文本估算符合 0.75 tokens/char 比例。"""
+    """长中文文本估算符合 0.90 tokens/char 比例。"""
     text = "中" * 1000  # 纯中文 1000 字符
     estimated = estimate_tokens(text)
-    # 应接近 750 (1000 × 0.75)，允许 max(1, int(...)) 取整误差
-    assert 700 <= estimated <= 760
+    # 应接近 900 (1000 × 0.90)，允许 max(1, int(...)) 取整误差
+    assert 850 <= estimated <= 950
 
 
 # ──────────────────────────── 3. PRISMCLAW_COMPACTION_ESTIMATOR_V2 rollback 开关 ────────────────────────────
@@ -158,6 +156,7 @@ def test_estimate_message_tokens_with_tool_calls():
         + estimate_tokens("calling tool")
         + estimate_tokens("read")
         + estimate_tokens('{"file_path": "/tmp/test.txt"}')
+        + 5  # tool_call id/type/function envelope
     )
     assert tokens == expected
 
@@ -181,6 +180,7 @@ def test_estimate_message_tokens_tool_call_dict_arguments():
         8
         + estimate_tokens("read")
         + estimate_tokens(str({"file_path": "/tmp/test.txt"}))
+        + 5  # tool_call id/type/function envelope
     )
     assert tokens == expected
 
@@ -217,3 +217,45 @@ def test_estimate_tokens_single_authoritative_source():
     # wrapper 应与权威实现返回相同结果
     test_text = "测试 token 估算一致性 hello world"
     assert wrapper(test_text) == estimate_tokens(test_text)
+
+
+# ──────────────────────────── 7. 独立插件契约 ────────────────────────────
+
+
+def test_heuristic_counter_honors_custom_coefficients():
+    """配置化系数生效：插件不再依赖散落的模块级魔法数。"""
+    from prismclaw.token_counting import HeuristicTokenCounter
+
+    counter = HeuristicTokenCounter(
+        cjk_tokens_per_char=2.0,
+        other_chars_per_token=1.0,
+    )
+    assert counter.count_text("中" * 10) == 20
+
+
+def test_heuristic_counter_count_bytes_by_kind():
+    """字节→token 按 kind 选择系数；空载荷为 0。"""
+    from prismclaw.token_counting import HeuristicTokenCounter
+
+    counter = HeuristicTokenCounter(wire_bytes_per_token=3.5, json_bytes_per_token=3.0)
+    assert counter.count_bytes(0) == 0
+    assert counter.count_bytes(350, kind="wire") == 100
+    assert counter.count_bytes(300, kind="json") == 100
+
+
+def test_active_counter_is_swappable():
+    """注册表可替换全局实现，schema 门面立即跟随。"""
+    from prismclaw.token_counting import (
+        HeuristicTokenCounter,
+        reset_token_counter,
+        set_token_counter,
+    )
+
+    try:
+        set_token_counter(
+            HeuristicTokenCounter(cjk_tokens_per_char=1.0, other_chars_per_token=1.0)
+        )
+        assert estimate_tokens("中" * 10) == 10
+    finally:
+        reset_token_counter()
+    assert estimate_tokens("中" * 100) == 90

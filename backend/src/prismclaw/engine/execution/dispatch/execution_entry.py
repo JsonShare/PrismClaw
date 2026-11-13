@@ -5,17 +5,18 @@ import contextlib
 import json
 import logging
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable
+from datetime import UTC
+from typing import Any
 
-from prismclaw.schema.content.content_types import ToolResult
-
-from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.engine.execution.dispatch.streaming_executor import (
     _resolve_is_concurrency_safe,
 )
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
+from prismclaw.schema.content.content_types import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ async def _apply_post_tool_hooks(
     dispatcher = getattr(context, "hook_dispatcher", None)
     if dispatcher is None:
         return
-    from prismclaw.engine.hooks import HookEvent, HookContext, _log_hook_outcome
+    from prismclaw.engine.hooks import HookContext, HookEvent, _log_hook_outcome
 
     if not getattr(dispatcher, "_hooks", {}).get(HookEvent.POST_TOOL):
         return
@@ -553,34 +554,6 @@ async def _execute_subagent_with_failsoft(
 
     log_tool_call("start", session_id=context.session_id, name=name, call_id=call_id)
 
-    # Mirror the unrecoverable-args short-circuit from _dispatch_single.
-    if isinstance(args, dict) and set(args.keys()) == {"_raw"}:
-        raw = args["_raw"]
-        n = len(raw) if isinstance(raw, (str, bytes)) else -1
-        preview = raw[:200] if isinstance(raw, str) else repr(raw)[:200]
-        logger.warning(
-            "tool_dispatch_unrecoverable_args name=%s call_id=%s bytes=%d path=subagent",
-            name,
-            call_id,
-            n,
-        )
-        _log_end("bad_args")
-        return ToolResult(
-            tool_call_id=call_id,
-            content=[
-                TextBlock(
-                    text=(
-                        f"[子代理执行失败：参数格式错误] "
-                        f"工具 {name!r} 的参数是格式错误的 JSON "
-                        f"（共 {n} 字节，以下为前 {min(n, 200)} 字节）：\n"
-                        f"```\n{preview}\n```\n"
-                        "请以合法的 JSON 对象重新传入参数。"
-                    )
-                )
-            ],
-            is_error=True,
-        )
-
     tool = registry.get(name)
     if tool is None:
         _log_end("not_registered")
@@ -645,12 +618,12 @@ def _emit_fanout_rate_limited_audit(
     rejected_n: int,
     progress_batch_id: str | None,
 ) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     audit_logger = logging.getLogger("prismclaw.audit.subagent")
     payload: dict[str, Any] = {
         "event": "subagent_fanout_rate_limited",
-        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "parent_session_id": parent_session_id,
         "requested_n": requested_n,
         "accepted_n": accepted_n,
@@ -695,33 +668,6 @@ async def _dispatch_single(
         )
 
     log_tool_call("start", session_id=context.session_id, name=name or "<unknown>", call_id=call_id)
-
-    # Short-circuit unrecoverable argument corruption BEFORE dispatching to
-    # the tool.  Passing ``{"_raw": "<malformed-bytes>"}`` down to tools
-    # makes every tool's field-checks fail with generic messages like
-    # ``write: 'path' is required``, which the LLM misinterprets as a
-    # field-name mistake and blindly retries — wasting three turns on a
-    # payload that can never succeed.  We surface the root cause here so
-    # the LLM sees "argument JSON is malformed" and regenerates cleanly.
-    if isinstance(args, dict) and set(args.keys()) == {"_raw"}:
-        raw = args["_raw"]
-        n = len(raw) if isinstance(raw, (str, bytes)) else -1
-        preview = raw[:200] if isinstance(raw, str) else repr(raw)[:200]
-        hint = (
-            f"工具 {name!r} 的参数是格式错误的 JSON"
-            f"（共 {n} 字节，以下为前 {min(n, 200)} 字节）：\n```\n{preview}\n```\n"
-            "请以合法的 JSON 对象重新传入 'arguments'。"
-            "原样重发这次调用不会成功：参数 JSON 已损坏，无法补救；"
-            "请重新生成完整、合法的 JSON。"
-        )
-        logger.warning(
-            "tool_dispatch_unrecoverable_args name=%s call_id=%s bytes=%d",
-            name or "<unknown>",
-            call_id,
-            n,
-        )
-        _log_end("bad_args")
-        return _error(call_id, hint)
 
     if not name:
         _log_end("no_name")
@@ -787,7 +733,8 @@ async def _dispatch_single(
     # Apply output_bound truncation for non-error results
     if isinstance(result, ToolResult) and not result.is_error:
         from pathlib import Path as _Path
-        from prismclaw.engine.execution.output.output_bound import output_bound, OutputBoundConfig
+
+        from prismclaw.engine.execution.output.output_bound import OutputBoundConfig, output_bound
 
         text_content = ""
         for block in result.content:
@@ -840,26 +787,35 @@ def _function_name(call: dict[str, Any]) -> str | None:
     return fn.get("name") if isinstance(fn, dict) else None
 
 
+def repair_json_args(raw: str) -> dict[str, Any] | None:
+    """Attempt to recover a valid argument dict from a malformed JSON string.
+
+    Single salvage point for tool-call arguments.  Delegates to
+    :func:`_salvage_json_object` (the repo's only JSON-recovery
+    implementation) so there is exactly one heuristic set in the codebase.
+
+    Returns the recovered dict, or ``None`` when the payload is
+    unrecoverable.
+    """
+    from prismclaw.schema.llm.tool_call_types import _salvage_json_object
+
+    return _salvage_json_object(raw)
+
+
 def _function_args(call: dict[str, Any]) -> dict[str, Any]:
     """Parse a tool call's ``function.arguments`` string into a dict.
 
-    This is the single parsing entry point for tool execution.
+    Single parsing entry point for tool execution.
 
-    **Guarantee from upstream** (:meth:`ToolCallSlot.to_openai_dict` in
-    ``tool_call_stream.py``): the ``arguments`` field is always a JSON
-    string representing a dict.  The dict has one of two shapes:
+    Pipeline:
+    1. ``json.loads`` on the arguments string.
+    2. :func:`repair_json_args` to recover a valid dict from a malformed
+       payload (truncation, duplicated JSON, dropped closing brace).
+    3. ``{}`` when nothing else works — the tool's ``validate()`` /
+       ``execute()`` surfaces the missing-field error.
 
-    * Normal case: the real tool argument dict, e.g. ``{"url": "..."}``
-    * Unrecoverable case: exactly ``{"_raw": <malformed_bytes>}``
-
-    Because the JSON-salvage pipeline runs *once* upstream during
-    finalisation, this function does NOT re-run recovery logic.  If we
-    get a `_raw` wrapper here, we pass it through unchanged — the
-    execution surface has tool-level error handling and will surface it
-    with a readable message.  Attempting to salvage again here would
-    mean two slightly-different recovery implementations in the codebase,
-    which is how the whole class of "same input, different results by
-    call-site" bugs started in the first place.
+    No ``_raw`` wrapper: the previous wrap-then-check indirection has been
+    collapsed into this single function.
     """
     fn = call.get("function") or {}
     args = fn.get("arguments") if isinstance(fn, dict) else None
@@ -867,16 +823,15 @@ def _function_args(call: dict[str, Any]) -> dict[str, Any]:
         try:
             parsed = json.loads(args)
         except (TypeError, ValueError):
-            # If to_openai_dict emitted an invalid JSON string despite its
-            # contract, wrap the original bytes — do not attempt recovery,
-            # we already closed that loop upstream during finalisation.
-            return {"_raw": args}
+            parsed = None
         if isinstance(parsed, dict):
             return parsed
-        # Non-dict top-level value (list / string / null) — not a valid tool
-        # call payload; wrap as _raw so the caller can see exactly what was
-        # produced.
-        return {"_raw": args}
+        # Non-dict top-level value or parse failure — attempt salvage.
+        recovered = repair_json_args(args)
+        if recovered is not None:
+            return recovered
+        # Unrecoverable: empty dict so tool validation reports missing fields.
+        return {}
     if isinstance(args, dict):
         return args
     return {}
@@ -1013,7 +968,7 @@ def _needs_legacy_parallel_path(
         tool = registry.get(name)
         if tool is not None and getattr(tool, "timeout_seconds", None) is not None:
             try:
-                override = float(getattr(tool, "timeout_seconds"))
+                override = float(tool.timeout_seconds)
             except (TypeError, ValueError):
                 override = None
             if override is not None and override != default_tool_timeout_s:

@@ -226,7 +226,7 @@ async def _run_chat(state: ConnectionState, msg: ChatSendMessage, settings: WebS
 ```
 
 关键机制：
-- **单 pass 实时正文（Claude Code 模式）**：所有轮次的 `TextChunk` 即时推送 `chat.delta`，token 级零缓冲；`Done` 时提交 `final_message = "\n\n".join(full_transcript_parts)` 作为全转录权威提交源（与实时流逐字节相等，I3 不变量）。中间轮过程文本保留在正文，不再撤回/归入思考区。
+- **单 pass 实时正文（PrismClaw 模式）**：所有轮次的 `TextChunk` 即时推送 `chat.delta`，token 级零缓冲；`Done` 时提交 `final_message = "\n\n".join(full_transcript_parts)` 作为全转录权威提交源（与实时流逐字节相等，I3 不变量）。中间轮过程文本保留在正文，不再撤回/归入思考区。
 - **chat.done 指数退避**：覆盖 WS 短暂断开（退避序列 0.5, 1, 2, 4, 6, 8, 10, 15s，共 8 次）
 - **交付物确定策略**：仅 LLM 通过 `present_files` 主动声明的文件才展示；自动扫描 `outputs/` 仅用于验证
 

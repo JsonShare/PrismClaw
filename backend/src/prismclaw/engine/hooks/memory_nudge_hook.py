@@ -13,10 +13,10 @@ from prismclaw.schema.content.compaction import CompactResult
 # 注入内容: <nudge> 周期性提醒使用 memory 工具持久化事实/工作流
 # 注入时机: append 侧，每 interval 轮触发一次
 # 与 L1 的重叠关系:
-#   - _GOAL_POLICY 有"能用工具验证的疑问不要猜测"——是"遇到疑问时用工具"的通用原则
-#   - memory_nudge 是"主动主动持久化"的周期性提醒，语义不同，非冗余
+#   - _RULES 有"能用工具验证的猜测不要下结论"——是"遇到疑问时用工具"的通用原则
+#   - memory_nudge 是"主动持久化"的周期性提醒，语义不同，非冗余
 #   - runtime_context_section 的 TaskSpec 可能声明了任务上下文，但不含"记忆持久化"引导
-# 保留理由: 周期性提醒与 GOAL_POLICY 的通用原则互补，不重复
+# 保留理由: 周期性提醒与 _RULES 的通用原则互补，不重复
 
 _NUDGE_TEXT = (
     "<nudge>可考虑使用 `memory` 工具（action=\"save\"）将重要事实或工作流"

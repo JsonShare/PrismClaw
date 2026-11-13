@@ -301,7 +301,7 @@ def microcompact_query_messages(
     *,
     working_dir: str | Path | None = None,
 ) -> QueryMicrocompactResult:
-    """Layer 3 read-time microcompact (Claude-Code ``query.ts`` alignment).
+    """Layer 3 读时微压缩：清理旧工具结果的内容，保留 tool_use/tool_result 结构。
 
     Clears the content of old compactable tool results while preserving
     the tool_use/tool_result pair structure. Pure projection: the input

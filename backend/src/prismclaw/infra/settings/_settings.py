@@ -17,6 +17,7 @@ from ._models import (
     EmbeddingSettings,
     ModelsSettings,
     SpeechSettings,
+    TokenCountingSettings,
     VisionSettings,
 )
 from ._plugins import PluginSettings, SchedulerSettings, SubAgentSettings
@@ -59,6 +60,9 @@ class Settings(BaseSettings):
     speech: SpeechSettings = Field(default_factory=lambda: SpeechSettings())
     agent: AgentSettings = Field(default_factory=lambda: AgentSettings())
     models: ModelsSettings = Field(default_factory=lambda: ModelsSettings())
+    token_counting: TokenCountingSettings = Field(
+        default_factory=lambda: TokenCountingSettings()
+    )
     channels: ChannelsSettings = Field(default_factory=lambda: ChannelsSettings())
     workspaces: WorkspaceSettings = Field(default_factory=lambda: WorkspaceSettings())
     skills: SkillSettings = Field(default_factory=lambda: SkillSettings())

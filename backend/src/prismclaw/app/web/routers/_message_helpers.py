@@ -277,11 +277,9 @@ def _coerce_tool_arguments(args: Any) -> dict[str, Any]:
             return {}
         try:
             parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                return parsed
-            return {"_raw": parsed}
-        except Exception:
-            return {"_raw": raw}
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
     return {}
 
 

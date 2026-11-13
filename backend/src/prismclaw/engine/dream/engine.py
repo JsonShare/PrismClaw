@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
-from prismclaw.schema.llm.types import LLMStreamFn
+from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.llm.request import PackedLLMRequest
 from prismclaw.schema.dream.dream import DreamAuditLogger
 from prismclaw.schema.dream.dream_types import DreamAuditEntry
@@ -56,7 +56,7 @@ class DreamEngine:
         self,
         memory_store: MemoryStore,
         session_store: SessionStore,
-        llm_client: LLMStreamFn,
+        llm_client: LLMClient,
         *,
         audit_log: DreamAuditLogger | None = None,
         candidate_store: DreamCandidateStore | None = None,
@@ -256,10 +256,9 @@ class DreamEngine:
 
         now = datetime.now(timezone.utc).timestamp()
         
-        # V4.1: Delay Active Session Dreaming
-        # We significantly extend the wait time for dreaming to allow Claude's native Prompt Caching 
-        # to handle short-term history losslessly. We only dream (archive) when the session goes truly cold.
-        effective_threshold_s = max(self._light_sleep_threshold_s, 12 * 3600)  # Wait at least 12 hours
+        # V4.1: 延迟活跃会话的 dream。等待时间显著拉长，让模型原生的 prefix caching
+        # 无损承接短期历史；只有会话真正冷却才触发 dream（归档）。
+        effective_threshold_s = max(self._light_sleep_threshold_s, 12 * 3600)  # 至少等 12 小时
         
         candidates = [
             e for e in l1_entries

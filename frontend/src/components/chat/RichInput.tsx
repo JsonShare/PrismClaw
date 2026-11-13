@@ -481,9 +481,19 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
   }), [deleteBeforeCaret, emitCaret, insertChip, placeCaretAtEnd, removeChip])
 
   const handleInput = useCallback(() => {
-    if (composingRef.current) return
+    if (composingRef.current) {
+      // 输入法组字期间浏览器已把拼音写进 DOM，但这里不同步给受控值（避免半成品
+      // 文本流到上层）；占位符与高度仍要按当前 DOM 刷新，否则 placeholder 会和
+      // 正在输入的组字文本叠在一起。
+      const el = editorRef.current
+      if (el) {
+        el.dataset.empty = serializeNode(el).length === 0 ? 'true' : 'false'
+        resize()
+      }
+      return
+    }
     emit()
-  }, [emit])
+  }, [emit, resize])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.nativeEvent.isComposing || composingRef.current) return

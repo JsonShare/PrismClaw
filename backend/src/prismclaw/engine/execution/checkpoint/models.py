@@ -4,12 +4,8 @@ from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from prismclaw.schema.agent.capability import EffectClass
 from prismclaw.schema.services.skills import SkillInvocationState
-# 由 checkpoint/__init__ 再导出；ruff 视为未使用，不能删。
-from prismclaw.schema.session.cache_types import (
-    CompressionRuntimeState,
-    PromptCacheRuntimeState,
-)
 
 
 class ResumeBoundary(str, Enum):
@@ -17,10 +13,6 @@ class ResumeBoundary(str, Enum):
     BEFORE_TOOL_DISPATCH = "before_tool_dispatch"
     AFTER_TOOL_RESULT_PERSIST = "after_tool_result_persist"
     AFTER_TURN_FINALIZE = "after_turn_finalize"
-
-
-# EffectClass 已迁移到 schema 层，此处 re-export 保持兼容
-from prismclaw.schema.agent.capability import EffectClass  # noqa: F811,E402
 
 
 class CommitState(str, Enum):

@@ -322,15 +322,20 @@ class CapabilityCatalogService:
                     f"CapabilityCatalogService: missing agent manifest payload for {canonical_id!r}"
                 )
             manifest = AgentManifest.model_validate(payload)
+            raw_plugin_name = node.metadata.get("plugin_name")
+            # 空字符串统一收敛为 None：核心/插件子代理的判定口径只认 None。
+            plugin_name = (
+                raw_plugin_name
+                if isinstance(raw_plugin_name, str) and raw_plugin_name
+                else None
+            )
             entries.append(
                 AgentCatalogEntry(
                     name=canonical_id,
                     description=manifest.description or "",
                     can_handoff_to=tuple(manifest.can_handoff_to or ()),
                     manifest=manifest,
-                    plugin_name=node.metadata.get("plugin_name")
-                    if isinstance(node.metadata.get("plugin_name"), str)
-                    else None,
+                    plugin_name=plugin_name,
                     origin=node.metadata.get("origin")
                     if isinstance(node.metadata.get("origin"), str)
                     else None,

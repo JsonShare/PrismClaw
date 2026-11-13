@@ -11,7 +11,6 @@ import {
 import SkillDetailModal from '../../../components/modals/SkillDetailModal'
 import legalPluginIcon from '../../../images/plugin_icon/legal-chineselaw.png'
 import medicalPluginIcon from '../../../images/plugin_icon/medical-healthcare.png'
-import sciencePluginIcon from '../../../images/plugin_icon/science-research.png'
 import { apiUrl } from '../../../lib/system-adapter'
 import { useAuth } from '../../../context/AuthContext'
 import { useUiStore } from '../../../stores/ui'
@@ -150,7 +149,6 @@ function ExpertIconTile({ name, Icon, size = 36 }: { name: string; Icon: LucideI
 const PLUGIN_ICONS: Record<string, string> = {
   'legal-chineselaw': legalPluginIcon,
   'medical-healthcare': medicalPluginIcon,
-  'science-research': sciencePluginIcon,
 }
 
 function pluginIconOf(name: string): string | null {

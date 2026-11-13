@@ -6,7 +6,7 @@ from prismclaw.schema.llm.cache_types import (
     with_cache_control,
 )
 from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.schema.llm.types import LLMStreamChunk, LLMStreamFn
+from prismclaw.schema.llm.types import LLMStreamChunk, LLMClient
 from prismclaw.schema.llm.request_format import (
     inject_cache_control_breakpoints,
     render_context_payload_text,
@@ -16,7 +16,7 @@ from prismclaw.schema.llm.request_mode import RequestMode
 __all__ = [
     "EPHEMERAL_CACHE_CONTROL",
     "LLMStreamChunk",
-    "LLMStreamFn",
+    "LLMClient",
     "PackedLLMRequest",
     "RequestMode",
     "inject_cache_control_breakpoints",

@@ -60,12 +60,10 @@ def _resolve_aggregate_budget_chars(deps: Any, result_count: int) -> int:
 
     prompt_budget = deps.config.context.budget
 
-    # Prefer the budget-aware effective context window derived from
-    # the active model + ``max_output_tokens_for_summary`` over the
-    # static ``context.budget.window_tokens`` default.  This mirrors
-    # Claude's ``getEffectiveContextWindowSize`` and prevents
-    # over/under-reserving for models with very different
-    # context/output ratios (e.g. gpt-4.1 @ 1M vs gpt-4o @ 128K).
+    # 优先使用「模型感知」的 effective context window（由 active model +
+    # max_output_tokens_for_summary 推导），而非静态 context.budget.window_tokens
+    # 默认值。这样避免了大上下文/小输出比（如 gpt-4.1 @ 1M）与小上下文/大输出比
+    # （如 gpt-4o @ 128K）模型的预留量错位。
     model = _resolve_model_for_budget(deps)
     fallback_window = int(deps.config.context.budget.window_tokens)
     # 4.4.4：摘要输出预留夹紧到历史预算的 40%（history_budget 取生效值）。

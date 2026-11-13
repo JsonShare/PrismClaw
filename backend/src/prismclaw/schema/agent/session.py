@@ -27,7 +27,7 @@ def _now_iso() -> str:
 
 
 def _now_ms_epoch() -> int:
-    """Return current UTC time as epoch milliseconds (DSH time-seeking)."""
+    """Return current UTC time as epoch milliseconds."""
     return int(time.time() * 1000)
 
 
@@ -131,7 +131,7 @@ class MessageEntry(SessionEntryBase):
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     partial: bool = False
-    # tool-result failure flag (DSH parity — drives the red timeline span
+ # tool-result failure flag ( — drives the red timeline span
     # and the ledger error marker). Set by the tool execution loop when the
     # ToolResult carries is_error.
     is_error: bool = False
@@ -145,7 +145,7 @@ class MessageEntry(SessionEntryBase):
 
 
 class SessionEventType(str, Enum):
-    """Session event types — aligned with DSH SessionEventMap.
+    """Session event types — aligned with 会话事件映射.
 
     Lifecycle: turn → step → message → tool → result
     """
@@ -179,7 +179,7 @@ class SessionEventType(str, Enum):
 class SessionEvent(BaseModel):
     """Immutable session event — core of Event Sourcing.
 
-    Aligned with DSH SessionEvent type:
+ Aligned with 会话事件类型:
     - seq: monotonic sequence number (Redis INCR, cross-worker safe)
     - time: epoch milliseconds (int, sortable, time-range query support)
     - type: event type from SessionEventMap

@@ -1,10 +1,8 @@
 """Turn preparation: assemble context, project messages, and pack LLM requests.
 
-Pure helper functions and dataclasses have been extracted into
-``_turn_helpers.py`` to keep this module focused on the
-``QueryTurnPreparator`` orchestrator and the top-level async entry-points.
-They are re-exported here so that existing ``from … import`` statements
-continue to work without changes.
+Pure helper functions and dataclasses live in ``_turn_helpers.py``; this module
+keeps only the ``QueryTurnPreparator`` orchestrator and the top-level async
+entry-points.
 """
 
 from __future__ import annotations
@@ -15,7 +13,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.query.context_preparation import StaticContextResult
+    from prismclaw.engine.execution.query._static_context_types import StaticContextResult
 
 from prismclaw.engine.compression.budget_orchestrator import (
     load_budget_audit_trail,
@@ -39,27 +37,16 @@ from prismclaw.engine.state.turn_state import TurnState
 from prismclaw.schema.content.content_types import RuntimeControlArtifact
 from prismclaw.schema.content.context import ContextBlock
 
-# Re-export all public helpers from _turn_helpers so that existing imports
-# like ``from … import log_session_runtime_metrics`` continue to work.
-from prismclaw.engine.execution.query._turn_helpers import (  # noqa: F401
+from prismclaw.engine.execution.query._turn_helpers import (
     DynamicContextResult,
     TurnPreflightResult,
-    TurnTokenTelemetry,
     _build_runtime_status_blocks,
     _require_capability_catalog,
     _try_auto_activate_skill,
-    apply_context_layout_budgets,
-    build_turn_context_layout,
-    compute_turn_token_telemetry,
-    context_block,
-    dynamic_payload_tokens,
-    ensure_user_message,
-    log_session_runtime_metrics,
-    log_session_success_verdict,
-    log_turn_token_usage,
-    orchestrate_context_layout_budgets,
     apply_request_mode_skeleton,
-    sum_block_tokens,
+    build_turn_context_layout,
+    ensure_user_message,
+    orchestrate_context_layout_budgets,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,7 +64,6 @@ async def _prepare_query_turn_from_prompt_inputs(
     frozen_result: SystemPromptResult,
     history_budget: int,
     request_mode: str | None,
-    prior_cache_strategy: dict[str, Any] | None = None,
     prior_replacement_state: ReplacementDecisionState | None = None,
     attachment_guidance: str | None,
     message_set: ProjectionMessageSet,
@@ -92,7 +78,6 @@ async def _prepare_query_turn_from_prompt_inputs(
         frozen_result=frozen_result,
         history_budget=history_budget,
         request_mode=request_mode,
-        prior_cache_strategy=prior_cache_strategy,
         prior_replacement_state=prior_replacement_state,
         attachment_guidance=attachment_guidance,
         message_set=message_set,
@@ -119,7 +104,6 @@ async def prepare_query_turn_from_static_context(
         frozen_result=static_result.frozen_result,
         history_budget=static_result.history_budget,
         request_mode=static_result.request_mode,
-        prior_cache_strategy=static_result.prior_cache_strategy,
         prior_replacement_state=static_result.prior_replacement_state,
         attachment_guidance=attachment_guidance,
         message_set=message_set,
@@ -425,7 +409,6 @@ class QueryTurnPreparator:
         frozen_result: SystemPromptResult,
         history_budget: int,
         request_mode: str | None,
-        prior_cache_strategy: dict[str, Any] | None = None,
         prior_replacement_state: ReplacementDecisionState | None = None,
         attachment_guidance: str | None,
         message_set: ProjectionMessageSet,
@@ -513,7 +496,7 @@ class QueryTurnPreparator:
                 except Exception:
                     _compressors_used = ()
                 msg_count, roles, head, tail = summarize_messages(list(_projected))
-                # DSH parity: derive compaction_summary — a human-readable
+ # derive compaction_summary — a human-readable
                 # preview of what was compacted. We sample the assemble_entry
                 # (pre-compaction) vs pipeline_out (post-compaction) head/tail
                 # difference into a short string so the panel can show
@@ -557,7 +540,6 @@ class QueryTurnPreparator:
             projection=dynamic_result.projection,
             model=model,
             request_mode=request_mode,
-            previous_cache_strategy=prior_cache_strategy,
             previous_replacement_state=prior_replacement_state,
             # D2/F5：主链路透传 session_id 作 prompt_cache_key 来源。
             session_id=getattr(request, "session_id", None),
@@ -608,7 +590,7 @@ class QueryTurnPreparator:
                     _sys_chars = None
                 _schema_chars: int | None = None
                 _resp_chars: int | None = None
-                # DSH parity: actual system prompt + tool schema TEXT (up to 1000 chars).
+ # actual system prompt + tool schema TEXT (up to 1000 chars).
                 # The existing *_chars fields only carry counts — useless for
                 # "what did the system prompt actually say". These give the
                 # panel real content to display.
@@ -651,7 +633,7 @@ class QueryTurnPreparator:
                             _ctx_payload, ensure_ascii=False, default=str,
                         )
                         _schema_chars = len(_schema_str)
-                        # DSH parity: also keep the actual schema text (up to 1000 chars)
+ # also keep the actual schema text (up to 1000 chars)
                         if _schema_str:
                             _tool_schema_text = _schema_str[:1000]
                             if len(_schema_str) > 1000:

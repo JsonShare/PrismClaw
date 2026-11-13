@@ -345,19 +345,11 @@ def get_effective_context_window(
 ) -> int:
     """Return the effective context window for a model.
 
-    Mirrors Claude's ``getEffectiveContextWindowSize(model)``::
+    effective = context_window - min(max_output_tokens, output_reservation)
 
-        effective = context_window - min(max_output_tokens,
-                                         MAX_OUTPUT_TOKENS_FOR_SUMMARY)
-
-    ``max_output_tokens_for_summary`` is the operator-controlled upper
-    bound (Claude uses ``MAX_OUTPUT_TOKENS_FOR_SUMMARY = 20_000``).
-
-    When ``fallback`` is provided, return it instead of raising
-    :class:`UnknownModelError` for unknown models.  This is used by
-    the soft-budget pre-check, which must never crash the run loop
-    on a missing spec.
-    """
+    ``max_output_tokens_for_summary`` 是运营可控的输出预留上限（默认 20_000）。
+    当 ``fallback`` 提供时，未知模型返回该值而非抛 UnknownModelError——
+    软预算预检查必须不能因为 spec 缺失而崩溃。"""
     try:
         spec = get_model_spec(model)
     except UnknownModelError:

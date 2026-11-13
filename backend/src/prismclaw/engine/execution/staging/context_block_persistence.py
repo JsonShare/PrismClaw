@@ -65,8 +65,8 @@ def persist_context_block(
         filename = f"cb_{_safe_segment(block_id)}_{content_hash}.txt"
         persist_path = blocks_dir / filename
         # 同一 block_id 写新内容时，删掉旧版本（glob cb_<block_id>_*.txt 除当前 hash 外的全删）。
-        # 原因：subagents / repository_map 等 block 里含时间戳（refreshed_at），每次刷新 timestamp 不同
-        # → content_hash 不同 → 每次 budget 触发都产生新文件，无限增长。
+        # 原因：block 内容变化会得到不同 content_hash，不清理会让每次预算触发
+        # 都留下一个新文件，无限增长。
         _prefix = f"cb_{_safe_segment(block_id)}_"
         for _old in blocks_dir.glob(f"{_prefix}*.txt"):
             if _old.name != filename:

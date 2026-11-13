@@ -148,7 +148,7 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_traj_record_started_at ON pc_trajectory_record (started_at_ms)",
     # GIN index for JSONB array queries (if needed later)
     "CREATE INDEX IF NOT EXISTS idx_traj_record_projector_entry_types ON pc_trajectory_record USING GIN (projector_input_entry_types)",
-    # DSH parity: cell table index — common query "all cells for session, by seq"
+ # cell table index — common query "all cells for session, by seq"
     "CREATE INDEX IF NOT EXISTS idx_trajectory_cell_session ON pc_trajectory_cell (session_id, seq)",
     # Error-marking lookups: (session_id, turn, iteration, kind)
     "CREATE INDEX IF NOT EXISTS idx_trajectory_cell_turn_iter ON pc_trajectory_cell (session_id, turn, iteration, kind)",
@@ -228,7 +228,7 @@ ON CONFLICT (session_id) DO UPDATE SET
 """
 
 # ============================================================================
-# DSH-aligned per-conversation-event cell table
+# 对齐 per-conversation-event cell table
 # ============================================================================
 
 CREATE_TRAJECTORY_CELL_TABLE = """
@@ -244,7 +244,7 @@ CREATE TABLE IF NOT EXISTS pc_trajectory_cell (
     tool_calls_summary JSONB    NOT NULL DEFAULT '[]',
     tool_call_id     TEXT,
     tool_name        TEXT,
-    -- DSH parity: full-content + metric fields (TrajectoryCellProps)
+ -- full-content + metric fields (TrajectoryCellProps)
     input_detail     TEXT,
     output_detail    TEXT,
     thinking_detail  TEXT,
@@ -460,7 +460,7 @@ DELETE_CELLS_BY_SESSION = """
 DELETE FROM pc_trajectory_cell WHERE session_id = :session_id
 """
 
-# DSH parity: idempotent column adds for the new cell detail/metric columns
+# idempotent column adds for the new cell detail/metric columns
 # on existing DBs. CREATE TABLE IF NOT EXISTS does NOT add columns to an
 # existing table.
 # Each statement is a standalone ALTER TABLE ... ADD COLUMN IF NOT EXISTS
@@ -671,7 +671,7 @@ ALTER TABLE pc_trajectory_record
     ADD COLUMN IF NOT EXISTS projector_appended_msg_count INTEGER NOT NULL DEFAULT 0
 """
 
-# DSH parity: idempotent column adds for the 6 new content-preview fields.
+# idempotent column adds for the 6 new content-preview fields.
 # Each ALTER only fires if the column doesn't exist yet — safe to re-run.
 ADD_CONTENT_PREVIEW_COLUMNS = """
 ALTER TABLE pc_trajectory_record

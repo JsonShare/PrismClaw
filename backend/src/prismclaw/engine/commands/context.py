@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 
 @dataclass

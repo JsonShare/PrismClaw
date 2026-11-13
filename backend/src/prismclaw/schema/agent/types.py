@@ -16,7 +16,7 @@ WorkspaceMode = Literal["chat", "work"]
 """
 
 from prismclaw.schema.services.env_types import ExecutionEnv
-from prismclaw.schema.llm.types import LLMStreamFn
+from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.storage.storage_types import SessionStore
 
 from typing import TYPE_CHECKING
@@ -90,21 +90,18 @@ class AgentDeps(Protocol):
     delivery 层通过 AgentDeps 引用，不依赖 AgentRunnerDeps 的具体字段。
 
     解耦原理：delivery 层不再直接引用 AgentRunnerDeps 的字段名
-    （audit_logger / subagent_progress_sink / channel），
+    （audit_logger / callbacks / channel），
     而是通过 with_request_context() 的参数名注入请求级上下文。
     """
 
     @property
-    def llm(self) -> LLMStreamFn: ...
+    def llm(self) -> LLMClient: ...
 
     @property
     def runtime_client(self) -> ExecutionEnv | None: ...
 
     @property
     def session_store(self) -> SessionStore | None: ...
-
-    @property
-    def bus(self) -> Any: ...  # SessionBus，避免 contracts 依赖 bus 模块
 
     def with_request_context(
         self,

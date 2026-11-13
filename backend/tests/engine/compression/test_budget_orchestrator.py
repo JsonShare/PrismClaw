@@ -202,8 +202,8 @@ class _FakePorts:
 def _frozen_zone_blocks() -> list[ContextBlock]:
     """复刻 SDD D3 之后的真实冻结区：l1_snapshot 已移出，不再出现于此区。"""
     return [
-        _make_block("identity", "identity", "你是 PrismClaw。" * 5, estimated_tokens=35, priority="critical"),
-        _make_block("repository_map", "repository_map", "r" * 4000, estimated_tokens=1000, priority="medium"),
+        _make_block("role", "role", "你是 PrismClaw。" * 5, estimated_tokens=35, priority="critical"),
+        _make_block("bootstrap", "bootstrap", "b" * 4000, estimated_tokens=1000, priority="high"),
         _make_block("tools", "tools", "t" * 3180, estimated_tokens=796, priority="high"),
         _make_block("skills", "skills", "s" * 1050, estimated_tokens=263, priority="high"),
         _make_block("subagents", "subagents", "a" * 9190, estimated_tokens=2298, priority="high"),
@@ -212,11 +212,11 @@ def _frozen_zone_blocks() -> list[ContextBlock]:
 
 
 def test_system_zone_over_budget_keeps_discovery_surface():
-    """冻结区超预算：先撤可重建的 repository_map，tools/skills 发现面必须保留。
+    """冻结区超预算：先撤可重建的 bootstrap，tools/skills 发现面必须保留。
 
     回归背景（同源事故）：<memory_index> 曾占满冻结区导致 tools/skills 被裁、
-    插件生态对模型不可见。SDD D3 后记忆索引移入动态区，冻结区的增长源只剩
-    repository_map/subagents；本测试锁定"发现面永远最后撤"的不变量。
+    插件生态对模型不可见。SDD D3 后记忆索引移入动态区；本测试锁定
+    "发现面永远最后撤"的不变量。
     """
     orchestrator = BudgetOrchestrator(working_dir="/tmp/unused", ports=_FakePorts())
     result = orchestrator.apply_context_layout_budgets(
@@ -231,7 +231,7 @@ def test_system_zone_over_budget_keeps_discovery_surface():
         block.source: block.metadata.get("persisted")
         for block in result.context_layout.static_blocks
     }
-    assert persisted.get("repository_map") is True
+    assert persisted.get("bootstrap") is True
 
 
 def test_dynamic_zone_drops_l1_snapshot_first():

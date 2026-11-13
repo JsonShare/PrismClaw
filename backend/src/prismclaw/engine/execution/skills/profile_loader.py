@@ -75,7 +75,7 @@ def _load_plugin_profile(
         plugins_root = _join_plugins_dir(root_resolved, plugins_dir)
         plugin_root = plugins_root / plugin_name
 
-        for fname in ("PRISMCLAW.md", "prismclaw.md", "README.md"):
+        for fname in ("PLUGIN.md", "plugin.md", "README.md"):
             candidate = plugin_root / fname
             if not candidate.is_file():
                 continue

@@ -18,7 +18,7 @@ _JSON_OBJECT_RE = re.compile(r"\{[\s\S]*\}")
 _MAX_ENTRY_PREVIEW_CHARS = 220
 _MAX_ARCHIVE_PREVIEW_CHARS = 260
 # SDD D16：LLM selector 单次调用预算（现场 3.9-18.9s 占检索耗时的主因）。
-# LLMStreamFn.complete 无 timeout 参数，只能 wait_for 包装——取消后服务端
+# LLMClient.complete 无 timeout 参数，只能 wait_for 包装——取消后服务端
 # 请求可能继续执行、token 费用照计（已知代价，换取回合不被单点拖垮）。
 _SELECTOR_LIMIT_S = 8.0
 

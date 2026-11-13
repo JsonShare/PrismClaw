@@ -405,8 +405,9 @@ def log_turn_token_usage(
     cache_creation = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
     cache_read_ratio_pct = (cache_read / input_tokens) * 100 if input_tokens > 0 else 0.0
 
-    # tools_tokens is the calibrated full-registry schema cost (UTF-8 bytes ÷ 5,
-    # see ``ToolRegistry.wire_tokens_estimate``), so it is accounted for here
+    # tools_tokens is the calibrated full-registry schema cost (UTF-8 bytes ÷
+    # token_counting.wire_bytes_per_token, see ``ToolRegistry.wire_tokens_estimate``),
+    # so it is accounted for here
     # just like every other wire component. Prior behavior omitted it because
     # the old CJK heuristic overestimated schemas by ~1.8× (11,840 vs ~6,450 for
     # 31 tools), which made drift permanently positive (~40% of input) and
@@ -500,9 +501,6 @@ def log_session_runtime_metrics(
     logger_: logging.Logger,
     turn_metrics_snapshots: list[TurnRuntimeMetricsSnapshot],
     history_compaction_count: int,
-    stable_prefix_follow_up_turns: int,
-    stable_prefix_reuse_turns: int,
-    stable_prefix_digest_changes: int,
 ) -> None:
     turn_count = len(turn_metrics_snapshots)
     total_dynamic_payload = sum(
@@ -528,26 +526,15 @@ def log_session_runtime_metrics(
     cache_read_ratio_pct = (
         (total_cache_read_tokens / total_input_tokens) * 100 if total_input_tokens > 0 else 0.0
     )
-    stable_prefix_reuse_ratio = (
-        (stable_prefix_reuse_turns / stable_prefix_follow_up_turns) * 100
-        if stable_prefix_follow_up_turns > 0
-        else 0.0
-    )
     logger_.info(
         "session_runtime_metrics turns=%d average_dynamic_payload=%d "
         "average_result_payload_reduction=%d cache_read_ratio=%.2f "
-        "history_compactions=%d "
-        "stable_prefix_follow_up_turns=%d stable_prefix_reuse_turns=%d "
-        "stable_prefix_reuse_ratio=%.2f stable_prefix_digest_changes=%d",
+        "history_compactions=%d",
         turn_count,
         average_dynamic_payload,
         average_result_payload_reduction,
         cache_read_ratio_pct,
         history_compaction_count,
-        stable_prefix_follow_up_turns,
-        stable_prefix_reuse_turns,
-        stable_prefix_reuse_ratio,
-        stable_prefix_digest_changes,
     )
 
 
@@ -555,9 +542,6 @@ def log_session_success_verdict(
     *,
     logger_: logging.Logger,
     turn_metrics_snapshots: list[TurnRuntimeMetricsSnapshot],
-    stable_prefix_follow_up_turns: int,
-    stable_prefix_reuse_turns: int,
-    stable_prefix_digest_changes: int,
 ) -> None:
     turn_count = len(turn_metrics_snapshots)
     first_turn = turn_metrics_snapshots[0] if turn_metrics_snapshots else None
@@ -598,15 +582,10 @@ def log_session_success_verdict(
             else "flat_or_lower"
         )
 
-    stable_prefix_status = "not_applicable"
-    if stable_prefix_follow_up_turns > 0:
-        stable_prefix_status = "preserved" if stable_prefix_digest_changes == 0 else "drifted"
-
     logger_.info(
         "session_success_verdict turns=%d follow_up_turns=%d "
         "dynamic_payload_status=%s baseline_dynamic_payload=%d follow_up_average_dynamic_payload=%d "
-        "cache_read_status=%s baseline_cache_read_ratio=%.2f follow_up_cache_read_ratio=%.2f "
-        "stable_prefix_status=%s stable_prefix_reuse_turns=%d stable_prefix_follow_up_turns=%d",
+        "cache_read_status=%s baseline_cache_read_ratio=%.2f follow_up_cache_read_ratio=%.2f",
         turn_count,
         follow_up_count,
         dynamic_payload_status,
@@ -615,9 +594,6 @@ def log_session_success_verdict(
         cache_read_status,
         baseline_cache_read_ratio,
         follow_up_cache_read_ratio,
-        stable_prefix_status,
-        stable_prefix_reuse_turns,
-        stable_prefix_follow_up_turns,
     )
 
 

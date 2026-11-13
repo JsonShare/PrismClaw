@@ -23,7 +23,7 @@ def test_absolute_zero_drift():
 
 
 def test_max_tokens_clamp_window_geometry():
-    from prismclaw.engine.services.llm.stream_fn import compute_max_tokens_clamp
+    from prismclaw.engine.services.llm.client import compute_max_tokens_clamp
 
     # 钳制只看窗口几何：max_tokens ≤ window − est_input − headroom。
     clamped, est = compute_max_tokens_clamp(

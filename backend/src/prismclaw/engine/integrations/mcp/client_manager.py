@@ -30,7 +30,7 @@ The manager exposes:
   closes the underlying ``ClientSessionGroup``.
 
 Architectural invariant: ``prismclaw.engine.*`` MUST NOT import this module.
-Wiring is via ``deps.mcp_death_handler`` (a bound coroutine published into
+Wiring is via ``deps.callbacks.on_mcp_death`` (a bound coroutine published into
 ``ToolContext``) and the ``external_tool_registrar`` callback on
 the agent factory.
 """

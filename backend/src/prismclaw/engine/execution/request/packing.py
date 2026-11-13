@@ -8,7 +8,6 @@ from prismclaw.engine.compression.cache_block_packing import (
     MIN_CACHE_TOKENS,
     CacheBlockPacker,
 )
-from prismclaw.schema.llm.request_format import inject_cache_control_breakpoints
 from prismclaw.schema.content.replacement_state import ReplacementDecisionState
 from prismclaw.schema.content import (
     append_replacement_decisions,

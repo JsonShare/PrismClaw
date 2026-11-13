@@ -24,12 +24,11 @@ logger = logging.getLogger(__name__)
 #     "subagents" 曾漏登记，导致该块因落不到名次而永远最后被裁。
 #     data_safety 故意不登记：安全约束内容极短，且不应先于任何内容被撤。
 SYSTEM_TRUNCATION_PRIORITY = [
-    "repository_map",
     "bootstrap",
     "subagents",
-    "workspace",
-    "invoked_skill_attachments",  # cacheable=False 段，撤掉不影响前面的缓存
+    "packages",
     "skills",
+    "workspace",
     "tools",
 ]
 
@@ -40,9 +39,10 @@ DYNAMIC_TRUNCATION_PRIORITY = [
     "hooks_append",
     "memory_archives",
     "memory_procedures",
-    "subagent_advisory",
+    "handoff_advisory",
     "attachment_guidance",
     "memory_facts",
+    "domain_advisory",
     "runtime_context",
 ]
 

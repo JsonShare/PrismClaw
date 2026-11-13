@@ -51,7 +51,7 @@ def test_g3_l1_snapshot_short_untouched():
 def test_g4_context_window_pressure_warning(caplog):
     import logging
 
-    from prismclaw.engine.services.llm.stream_fn import _report_context_window_pressure
+    from prismclaw.engine.services.llm.client import _report_context_window_pressure
 
     caplog.set_level(logging.WARNING)
     # 估算输入 100 > input_budget 50 → over_budget
@@ -69,7 +69,7 @@ def test_g4_context_window_pressure_warning(caplog):
 
 
 def test_g4_compute_max_tokens_clamp_smoke():
-    from prismclaw.engine.services.llm.stream_fn import compute_max_tokens_clamp
+    from prismclaw.engine.services.llm.client import compute_max_tokens_clamp
 
     # 不变量：max_tokens ≤ window − 估算输入 − headroom；仅向下钳制。
     clamped, est = compute_max_tokens_clamp(
@@ -95,7 +95,7 @@ def test_g4_compute_max_tokens_clamp_smoke():
 def test_g5_context_payload_stays_out_of_message_tree():
     from prismclaw.schema.llm.request import PackedLLMRequest
     from prismclaw.schema.llm.request_format import render_context_payload_text
-    from prismclaw.engine.services.llm.stream_fn import _PROVIDER_REQUEST_ADAPTER
+    from prismclaw.engine.services.llm.client import _PROVIDER_REQUEST_ADAPTER
     from prismclaw.schema.agent.session import MessageEntry
 
     payload = {

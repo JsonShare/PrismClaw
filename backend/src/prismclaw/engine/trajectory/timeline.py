@@ -200,27 +200,9 @@ def _now_iso() -> str:
 
 
 def _format_args_text(arguments: dict[str, Any] | None) -> str | None:
-    """把工具参数格式化为人类可读文本：每参数一行 ``key: value``，多行字符串值换行缩排展示。
-
-    自动展开 ``_raw`` 包装层：LLM 原始参数有时以 ``{"_raw": <json-string-or-dict>}``
-    形式抵达（见 call_handling.py / execution_entry.py 的容错路径），
-    此时应先解包 ``_raw`` 再渲染，避免前端看到 ``_raw: {...}`` 这种噪声。
-    """
+    """把工具参数格式化为人类可读文本：每参数一行 ``key: value``，多行字符串值换行缩排展示。"""
     if not arguments:
         return None
-
-    # —— 解包 _raw 包装 —— #
-    if set(arguments.keys()) == {"_raw"}:
-        raw = arguments["_raw"]
-        if isinstance(raw, str):
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, dict):
-                    arguments = parsed
-            except (TypeError, ValueError):
-                pass
-        elif isinstance(raw, dict):
-            arguments = raw
 
     lines: list[str] = []
     for key, value in arguments.items():

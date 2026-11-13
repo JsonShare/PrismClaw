@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 from prismclaw.schema.llm.errors import LLMError
-from prismclaw.engine.services.llm.stream_fn import LLMResponse, LLMUsage
+from prismclaw.schema.llm.types import LLMResponse, LLMUsage
 from prismclaw.engine.foundation.runtime_util import (
     AgentAbortedError,
     AgentTimeoutError,
@@ -35,7 +35,6 @@ from prismclaw.engine.foundation.runtime_util import (
 from prismclaw.schema.llm.tool_call_types import ToolCallBuffer
 from prismclaw.engine.execution.loop.housekeeping import _heartbeat_decision, _log_exec_phase
 from prismclaw.engine.execution.loop.arbiter import RunContext
-from prismclaw.engine.execution.state.streaming import _persist_partial_assistant
 from prismclaw.engine.trajectory.bus_context import LLMMetricsSnapshot, trajectory_runtime
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.content.streaming import ErrorEvent, HeartbeatEvent, ReasoningChunk, TextChunk
@@ -214,8 +213,6 @@ async def call_llm_stream_with_outcome(
             )
             async for chunk in guarded_iter:
                 if _run_timed_out():
-                    if text_parts:
-                        await _persist_partial_assistant(deps, tree, "".join(text_parts))
                     _outcome.outcome = LLMStreamError(
                         error_event=ErrorEvent(
                             error_code="timeout",
@@ -230,8 +227,6 @@ async def call_llm_stream_with_outcome(
                         ctx.iteration,
                         len(text_parts),
                     )
-                    if text_parts:
-                        await _persist_partial_assistant(deps, tree, "".join(text_parts))
                     _outcome.outcome = LLMStreamError(
                         error_event=ErrorEvent(
                             error_code="aborted",
@@ -373,8 +368,6 @@ async def call_llm_stream_with_outcome(
                 and not tool_calls_buffer
             ):
                 continue
-            if text_parts:
-                await _persist_partial_assistant(deps, tree, "".join(text_parts))
             await _publish_llm_failure(
                 session_id=request.session_id,
                 turn_counter=params.traj_turn_counter,
@@ -391,8 +384,6 @@ async def call_llm_stream_with_outcome(
             return
 
         except AgentAbortedError:
-            if text_parts:
-                await _persist_partial_assistant(deps, tree, "".join(text_parts))
             await _publish_llm_failure(
                 session_id=request.session_id,
                 turn_counter=params.traj_turn_counter,
@@ -421,7 +412,7 @@ async def call_llm_stream_with_outcome(
                 continue
 
             from prismclaw.schema.session.types import CustomEntry, TRANSIENT_RETRY_NOTICE_CUSTOM_TYPE
-            from prismclaw.engine.execution.loop.bootstrap import _append
+            from prismclaw.engine.execution.loop.tree_writer import _append
 
             if exc.code in ("timeout", "rate_limit", "server_error", "connection_error"):
                 logger.warning("LLM API transient error (%s): %s. Attempting to retry.", exc.code, str(exc))
@@ -447,8 +438,6 @@ async def call_llm_stream_with_outcome(
                     continue
 
             logger.error("LLM error: code=%s message=%s", exc.code, str(exc)[:500])
-            if text_parts:
-                await _persist_partial_assistant(deps, tree, "".join(text_parts))
             await _publish_llm_failure(
                 session_id=request.session_id,
                 turn_counter=params.traj_turn_counter,
@@ -510,7 +499,7 @@ async def _publish_llm_response(
         _bus_resp = current_bus()
         if _bus_resp is None or _bus_resp._is_noop:
             return
-        # DSH parity: derive content previews at the publish boundary so
+ # derive content previews at the publish boundary so
         # downstream subscribers (projection → persistence → API → UI)
         # receive ready-to-store strings, not raw response objects.
         _assistant_preview: str | None = None
@@ -569,8 +558,8 @@ async def _publish_llm_failure(
     """失败路径 publish LLMRequestFailed.
 
     Called from each except branch of the LLM call site (AgentTimeoutError /
-    AgentAbortedError / LLMError final failure), after _persist_partial_assistant
-    and before `yield ErrorEvent`.
+    AgentAbortedError / LLMError final failure) before `yield ErrorEvent`.
+    已流出的部分正文由调用方（Web 收尾路径）负责持久化，本层不再落库。
 
     重构清理:
       * 删除 attempt 参数 (无消费者, 见 LLMRequestFailed docstring)

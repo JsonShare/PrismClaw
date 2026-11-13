@@ -1,11 +1,10 @@
 /**
- * TrajectoryPanel — 轨迹审计弹窗 (DSH-aligned).
+ * TrajectoryPanel — 轨迹审计弹窗。
  *
- * Timeline + Ledger 渲染 TrajectoryCell[] (per-conversation-event cells,
- * 每个 tree 节点一个 cell) — 这是 DSH 真正的数据模型.
- * Inspector 也是 cell 驱动 (DSH-aligned)，展示选中 cell 的
+ * Timeline + Ledger 渲染 TrajectoryCell[]（per-conversation-event，
+ * 每个 tree 节点一个 cell），Inspector 也是 cell 驱动，展示选中 cell 的
  * content/tokens/timing/schema；assistant cell 附带按 turn+iteration
- * 匹配的 RequestAuditRecord 显示 4 层快照 bonus (PrismClaw 特有 ≥ DSH).
+ * 匹配的 RequestAuditRecord 显示 4 层调用快照。
  */
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { RefreshCw, BarChart3, Eye } from 'lucide-react'
@@ -32,13 +31,13 @@ interface TrajectoryPanelProps {
   onUnauthorized?: () => void
 }
 
-// DSH detailsResizeHandle constants (TrajectoryTable.tsx).
+// Inspector 宽度常量
 const INSPECTOR_MIN_WIDTH = 320
 const INSPECTOR_MAX_WIDTH = 720
 const LEDGER_MIN_WIDTH = 280
 const INSPECTOR_RESIZE_STEP = 16
 
-/** DSH clampDetailsWidth: clamp to [320, min(720, split − 280)]. */
+/** 将 Inspector 宽度限制在 [320, min(720, split − 280)] 范围内。 */
 function clampInspectorWidth(width: number, splitWidth: number): number {
   const maxWidth = Math.max(
     INSPECTOR_MIN_WIDTH,
@@ -61,46 +60,39 @@ export function TrajectoryPanel({
   token,
   onUnauthorized,
 }: TrajectoryPanelProps) {
-  // Data fetching — cells (primary, DSH per-conversation-event) + records
-  // (secondary, per-LLM-iteration, for assistant cells' 4-layer bonus)
+  // 数据获取 — cells（主键，per-conversation-event）+ records
+  //（辅键，per-LLM-iteration，用于 assistant cell 的 4 层快照）
   const { data, readWarning, loading, error, refresh } = useTrajectory(sessionId, token, open, onUnauthorized)
   const { cells, loading: cellsLoading, refresh: refreshCells } = useTrajectoryCells(sessionId, token, open, onUnauthorized)
 
-  // UI state — selectedIndex indexes into cells[] (NOT records[])
+  // UI 状态 — selectedIndex 索引 cells[]（不是 records[]）
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
-  // Fold state owned HERE (DSH TrajectoryView structure) — the toolbar's
-  // all-collapsed pressed states derive from collapsibility, which needs
-  // the full cells[] the Panel already holds.
+  // 折叠状态在 Panel 层持有 — toolbar 的全折叠按钮状态由此派生
   const [collapsedTurns, setCollapsedTurns] = useState<ReadonlySet<number>>(new Set())
   const [collapsedAssistants, setCollapsedAssistants] = useState<ReadonlySet<string>>(new Set())
-  // DSH parity: timeline drag-to-select range + search match indexes drive
-  // timeline dimming + ledger focus highlighting. The range lives in the
-  // ACTIVE MODE's domain (sequence = record units, timed = ms).
+  // 时间线拖拽选区 + 搜索匹配索引，共同驱动 timeline 变暗 + ledger 高亮
   const [timelineRange, setTimelineRange] = useState<{ start: number; end: number } | null>(null)
-  // DSH default is 'sequence' (equal-width); switchable in the toolbar.
   const [timelineMode, setTimelineMode] = useState<TrajectoryTimelineMode>('sequence')
-  // Inspector split width — DSH detailsWidth: null = default half split,
-  // draggable handle + arrow keys + double-click reset.
+  // Inspector 面板宽度：null = 默认对半分
   const [inspectorWidth, setInspectorWidth] = useState<number | null>(null)
   const splitRef = useRef<HTMLDivElement>(null)
   const inspectorDragRef = useRef<InspectorResizeDrag | null>(null)
 
-  // A selection from one projection is meaningless in another — clear it
-  // on mode switch (DSH clears the range on mode change the same way).
+  // 不同投影模式的选区互不通用 — 切换模式时清空选区
   const handleTimelineModeChange = (mode: TrajectoryTimelineMode) => {
     setTimelineMode(mode)
     setTimelineRange(null)
   }
 
-  // Records — drop orphaned rows (defensive; backend now drops at projection)
+  // Records — 丢弃孤儿行（防御性；后端现在在投影时已丢弃）
   const visibleRecords = useMemo(() => {
     if (!data?.records) return []
     return data.records.filter((r) => r.status !== 'orphaned')
   }, [data?.records])
 
-  // Sync selected cell index when cells change (e.g. refresh shortens array)
+  // cells 变化时同步选中索引（例如刷新后数组缩短）
   useEffect(() => {
     if (selectedIndex == null) return
     if (selectedIndex >= cells.length) {
@@ -108,17 +100,16 @@ export function TrajectoryPanel({
     }
   }, [cells.length, selectedIndex])
 
-  // Handle span click from timeline / row click from ledger — both index
-  // into cells[], keeping timeline + ledger + inspector in sync (DSH parity).
+  // 处理 timeline span 点击 / ledger 行点击 — 两者都索引 cells[]，
+  // 保持 timeline + ledger + inspector 三者同步
   const handleSelect = (index: number) => {
     setSelectedIndex(index)
     setInspectorOpen(true)
   }
 
-  // DSH parity fold controls (TrajectoryView toggleAllTurns/toggleAllAssistants):
-  // collapsibility is DERIVED from cells — turns with >1 non-system content row,
-  // and message cells directly followed by a tool/subtool cell. The toolbar's
-  // pressed state = "every collapsible one is folded".
+  // 折叠控制：可折叠性从 cells 派生 —
+  // turns 有 >1 条非 system 内容行，及 message cell 后紧跟 tool/subtool cell。
+  // toolbar 按下态 = "每个可折叠的都已折叠"。
   const collapsibleTurnIds = useMemo(() => {
     const byTurn = new Map<number, number>()
     for (const cell of cells) {
@@ -182,27 +173,24 @@ export function TrajectoryPanel({
     })
   }
 
-  // Selected cell (cell-driven inspector — DSH-aligned)
+  // 选中 cell（cell 驱动 inspector）
   const selectedCell: TrajectoryCell | null = useMemo(() => {
     if (selectedIndex == null) return null
     return cells[selectedIndex] ?? null
   }, [selectedIndex, cells])
 
-  // Matching per-iteration record for the selected assistant cell — used
-  // for the 4-layer snapshot bonus tab (PrismClaw ≥ DSH richness).
-  // Match by (turn, iteration); assistant cells carry iteration on the cell.
+  // assistant cell 的匹配迭代记录 — 用于 4 层调用快照 tab。
+  // 按 (turn, iteration) 匹配；assistant cell 自身携带 iteration。
   const matchingRecord: RequestAuditRecord | null = useMemo(() => {
     if (!selectedCell) return null
-    // Only assistant cells have a matching LLM iteration record
+    // 只有 assistant cell 有对应的 LLM 迭代记录
     if (selectedCell.kind !== 'message' || selectedCell.iteration == null) return null
     return visibleRecords.find(r =>
       r.turn === selectedCell.turn && r.iteration === selectedCell.iteration,
     ) ?? null
   }, [selectedCell, visibleRecords])
 
-  // DSH RequestUsagePanel "Session cumulative": sum usage of every assistant
-  // cell up to and including the selected one (frontend aggregate of what
-  // the audit layer already persists — no backend change needed).
+  // 会话累计 usage：选中 cell 之前（含自身）所有 assistant cell 的 usage 汇总
   const cumulativeUsage = useMemo<TrajectoryCumulativeUsage | null>(() => {
     if (!selectedCell || selectedCell.kind !== 'message') return null
     const acc = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0 }
@@ -217,17 +205,14 @@ export function TrajectoryPanel({
     return acc
   }, [cells, selectedCell])
 
-  // Turn / cell counts for toolbar stats
+  // toolbar 统计用 turn / cell 计数
   const turnCount = useMemo(() => {
     const turns = new Set(cells.map(c => c.turn).filter(t => t != null))
     return turns.size
   }, [cells])
   const recordCount = cells.length
 
-  // DSH parity: incremental multi-term AND search index — drives BOTH the
-  // timeline dimming (non-matches → 0.14) and the ledger row filter.
-  // (ported TrajectorySearchIndex; entries reparse Markdown only when a
-  // cell's sources actually change across refreshes)
+  // 增量多词 AND 搜索索引 — 同时驱动 timeline 变暗（不匹配 → 0.14）和 ledger 行过滤
   const searchIndexRef = useRef(new TrajectorySearchIndex())
   const searchMatchIds = useMemo<ReadonlySet<string> | null>(() => {
     if (!searchQuery.trim()) return null
@@ -243,9 +228,7 @@ export function TrajectoryPanel({
     return indexes
   }, [cells, searchMatchIds])
 
-  // DSH parity: focus indexes → ledger highlight for cells inside the active
-  // timeline selection, computed in the ACTIVE MODE's projection domain
-  // (ported trajectoryTimelineFocusIndexes, inclusive interval overlap).
+  // timeline 选区内的 cell 索引 → ledger 高亮，在当前投影模式下计算
   const focusIndexes = useMemo<ReadonlySet<number> | null>(() => {
     if (timelineRange == null) return null
     return trajectoryTimelineFocusIndexes(cells, timelineRange, timelineMode)
@@ -292,7 +275,7 @@ export function TrajectoryPanel({
         </div>
       )}
 
-      {/* Data content — cells[] is the primary data source (DSH parity) */}
+      {/* 主体 — cells[] 是数据源 */}
       {cells.length ? (
         <div className="flex flex-col h-[75vh]">
           {/* Toolbar */}
@@ -309,7 +292,7 @@ export function TrajectoryPanel({
             onTimelineModeChange={handleTimelineModeChange}
           />
 
-          {/* Timeline — renders TrajectoryCell[] (per-conversation-event) */}
+          {/* Timeline — 渲染 TrajectoryCell[]（per-conversation-event） */}
           <TrajectoryTimeline
             cells={cells}
             onSpanClick={handleSelect}
@@ -320,7 +303,7 @@ export function TrajectoryPanel({
             mode={timelineMode}
           />
 
-          {/* Main content: Ledger + Inspector (resizable split, DSH parity) */}
+          {/* 主内容区：Ledger + Inspector（可拖拽分割） */}
           <div className="flex flex-1 overflow-hidden" ref={splitRef}>
             {/* Ledger */}
             <div className="flex-1 min-w-0 overflow-y-auto">
@@ -356,9 +339,7 @@ export function TrajectoryPanel({
               </button>
             )}
 
-            {/* Inspector — cell-driven (DSH-aligned), with matching record bonus.
-                Width is draggable (DSH detailsResizeHandle): drag / arrow keys
-                resize, double-click resets to the default half split. */}
+            {/* Inspector — cell 驱动，可拖拽 / 方向键调整宽度，双击重置 */}
             {inspectorOpen && (
               <>
                 <div

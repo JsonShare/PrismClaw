@@ -1,6 +1,6 @@
-"""TrajectoryAuditProjection — DSH-style pure 3-function fold over bus events.
+"""TrajectoryAuditProjection — pure 3-function fold over bus events.
 
-DIRECTLY mirrors `ProjectionDefinition<K,S>` from DSH (see
+DIRECTLY mirrors `ProjectionDefinition<K,S>` from (see
 packages/session/session-projection/src/index.ts §5 L42-L73, plus
 `TokenMeter`'s usage-projection apply switch at usage-projection.ts L107-140
 / L163-206).
@@ -8,7 +8,7 @@ packages/session/session-projection/src/index.ts §5 L42-L73, plus
 Schema:
     S (state) = dict of
         version: int              (= STATE_VERSION = 1, bumps = state-layout change
-                                   triggers full re-fold like DSH `stateVersion++`)
+ triggers full re-fold like stateVersion++)
         session_id: str
         records: list[RequestAuditRecord]          # committed (iteration finished)
         pending: RequestAuditRecord | None         # iteration currently being written
@@ -21,13 +21,13 @@ Schema:
     K (event types) = 9 types declared in bus_events (4 lifecycle + 5 layers).
 
 Three pure functions:
-    init(session_id)        → new blank state (no input state; DSH init(null))
+ init(session_id) → new blank state (no input state; init(null))
     apply(state, event)     → new state. Must NOT mutate input state in-place!
                               If state unchanged, it MUST return the SAME
                               reference (Object.is / Python `is` check). This
                               is the dirty-signal we use for on_changed
                               tracking — identical-ref means no downstream
-                              work. Mirrors DSH's Object.is() fast-path.
+ work. 镜像 Object.is() fast-path.
     view(state, *, limit, ascending) → TrajectorySnapshot (final output form,
                               same model as before). Pure: given same state +
                               same args → same snapshot bytes.
@@ -58,7 +58,7 @@ logger = logging.getLogger(__name__)
 # Fix D: llm_provider inference from model name.
 #
 # bus_events.LLMResponseReceived deliberately does NOT carry llm_provider
-# (provider is resolved inside LiteLLMStreamFn via resolve_credentials, which the
+# (provider is resolved inside LiteLLMClient via resolve_credentials, which the
 # runner cannot see). The bus_events.py docstring states the design contract:
 # "消费者按 model 前缀推断 provider" — consumer infers from model prefix.
 #
@@ -140,8 +140,7 @@ LayerEvent: TypeAlias = Union[
 def apply(state: TrajectoryProjectionState, event: Any) -> TrajectoryProjectionState:
     """Fold `event` into `state` → NEW state. Input state is NOT mutated.
 
-    Performance: on DSH's hot-path (63 types), apply is just switch-case
-    + per-type pure update. We follow the same pattern.
+ 性能：热路径上 apply 就是 switch-case + 按类型纯函数更新。
     """
     # Event → handler dispatch.
     et = type(event)
@@ -173,8 +172,7 @@ def apply(state: TrajectoryProjectionState, event: Any) -> TrajectoryProjectionS
         return _apply_llm_response(state, event)
     if et is evmod.LLMRequestFailed:
         return _apply_llm_failure(state, event)
-    # Unknown event → same-ref return (no change signal). DSH-equivalent
-    # `return state if unchanged`.
+    # 未知事件 → 同引用返回（无变更信号）。`return state if unchanged`。
     return state
 
 
@@ -272,7 +270,7 @@ def _apply_turn_started(
     ns = _copy_state(s)
     if ns.session_id in (None, ""):
         ns.session_id = ev.session_id
-    # DSH turn/start sets `turn_counter` — we just ensure state tracks it.
+ # turn/start sets `turn_counter` — we just ensure state tracks it.
     ns.turn_counter = ev.turn_counter
     return ns
 
@@ -396,9 +394,8 @@ def _apply_layer_event(
     """Generic layer-event applier: ensure pending exists, then run updater(rec).
 
     If pending doesn't exist for this iteration, create it via _ensure_pending
-    with a synthetic started_at = ev.*_at_ms or fallback 0. DSH's foldEvent
-    does the same thing — events arriving out-of-order (layer before
-    step/start) is a valid scenario, we tolerate it.
+    with a synthetic started_at = ev.*_at_ms or fallback 0.
+    乱序到达的事件（layer 在 step/start 之前）是合法场景，这里做容错。
     """
     # Ensure pending for (turn, iter)
     if (
@@ -443,7 +440,7 @@ def _apply_projector_output(
         # Fix F: surface appended_msg_count so the panel can show
         # "history=0 + appended=N → total N" instead of misleading "0".
         r.projector_appended_msg_count = e.appended_msg_count
-        # DSH parity: actual content previews
+ # actual content previews
         r.projector_user_message_preview = e.user_message_preview
         r.projector_tool_results_preview = tuple(e.tool_results_preview)
     return _apply_layer_event(s, ev, up)
@@ -483,7 +480,7 @@ def _apply_pipeline_out(
             r.pipeline_out_msg_count > 0
             and (r.assemble_entry_msg_count - r.pipeline_out_msg_count) > 0
         )
-        # DSH parity: compaction content preview
+ # compaction content preview
         r.pipeline_out_compaction_summary = e.compaction_summary
     return _apply_layer_event(s, ev, up)
 
@@ -505,7 +502,7 @@ def _apply_packer_final(
             r.packer_final_response_format_text = (
                 f"<chars={e.response_format_chars}>"
             )
-        # DSH parity: actual text previews
+ # actual text previews
         r.packer_final_system_prompt_text = e.system_prompt_text
         r.packer_final_tool_schema_text = e.tool_schema_text
     return _apply_layer_event(s, ev, up)
@@ -516,7 +513,7 @@ def _apply_packer_final(
 #
 # Both reuse the generic _apply_layer_event framework — it handles
 # _ensure_pending (so out-of-order arrival like "LLMResponseReceived before
-# SessionIterationStarted" creates a synthetic pending, mirroring DSH's
+# SessionIterationStarted" creates a synthetic pending, 镜像
 # foldEvent tolerance) and clones the record so projection state remains
 # immutable.
 #
@@ -564,7 +561,7 @@ def _apply_llm_response(
             # 模型 (与 llm_model 同值, 但消费者可能从 packer_final_*
             # 字段组读取, 所以两个地方都要有).
             r.packer_final_model = e.model
-            # DSH parity: actual response content previews
+ # actual response content previews
             r.assistant_text_preview = e.assistant_text_preview
             r.tool_calls_summary = tuple(e.tool_calls_summary)
         return _apply_layer_event(s, ev, up)

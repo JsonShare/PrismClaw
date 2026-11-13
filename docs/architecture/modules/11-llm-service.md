@@ -20,12 +20,6 @@ LLM 服务模块封装了与大型语言模型（LLM）的所有交互，包括�
 ┌──────────────────────────────────────────────────────────────────┐
 │                     LLM 服务调用链架构                            │
 │                                                                  │
-│  ┌─────────────────┐                                            │
-│  │     Factory     │  per-tenant LLMStreamFn 管理               │
-│  │  (factory.py)   │                                            │
-│  └────────┬────────┘                                            │
-│           │ get_for_tenant()                                     │
-│           ▼                                                      │
 │  ┌──────────────────────┐                                       │
 │  │  ProviderResolver    │  模型→provider 匹配                   │
 │  │  (provider_resolver) │  凭据解析 + 错误分类                  │
@@ -33,14 +27,14 @@ LLM 服务模块封装了与大型语言模型（LLM）的所有交互，包括�
 │             │ resolve_credentials()                              │
 │             ▼                                                    │
 │  ┌──────────────────────┐                                       │
-│  │   StreamFn           │  litellm 流式/非流式调用               │
-│  │  (stream_fn.py)      │  重试 + 降级 + 工具参数消毒           │
+│  │   LiteLLMClient      │  litellm 流式/非流式调用               │
+│  │  (client.py)         │  重试 + 降级 + 工具参数消毒           │
 │  └──────────┬───────────┘                                       │
 │             │                                                    │
 │             ▼                                                    │
 │  ┌──────────────────────┐                                       │
 │  │  PromptOptimizer     │  LLM 驱动提示词重写（温度 0.3）       │
-│  │ (prompt_optimizer)   │  依赖 StreamFn 调用 LLM               │
+│  │ (prompt_optimizer)   │  依赖 LiteLLMClient 调用 LLM         │
 │  └──────────────────────┘                                       │
 │                                                                  │
 │  ┌──────────────────────────────────────┐                       │
@@ -56,11 +50,11 @@ LLM 服务模块封装了与大型语言模型（LLM）的所有交互，包括�
 
 ## 核心组件
 
-### LiteLLMStreamFn
+### LiteLLMClient
 
 ```python
-# llm/stream_fn.py
-class LiteLLMStreamFn:
+# llm/client.py
+class LiteLLMClient:
     # litellm-backed 实现
     async def stream()    → AsyncIterator[LLMStreamChunk]
     async def complete()  → LLMResponse
@@ -101,17 +95,6 @@ def resolve_credentials()         # 返回 (api_key, api_base, provider_name, ll
 def model_supports_input()        # 检查模型是否支持特定输入类型
 def messages_have_user_image_content()  # 检测消息是否包含图像
 def format_vision_capable_models()      # 格式化视觉模型列表
-def is_anthropic_model()                # 判断是否为 Anthropic 模型
-```
-
-### LLMStreamFnFactory
-
-```python
-# llm/factory.py
-class LLMStreamFnFactory:
-    # per-tenant LLMStreamFn 管理
-    def get_for_tenant()      # 获取或创建 tenant 的 stream fn
-    def register_tenant_fn()  # 注册自定义 stream fn
 ```
 
 ### PromptOptimizer
@@ -192,7 +175,7 @@ class LLMErrorCode:
 
 ```
 AgentInstance / ChatService
-  → LiteLLMStreamFn.stream(messages, tools, ...)
+  → LiteLLMClient.stream(messages, tools, ...)
     → resolve_provider_for_model(model)
       → models dict 精确匹配 / 前缀匹配 / 首段匹配 / 单 provider 回退
     → resolve_credentials(provider, model)
@@ -208,7 +191,7 @@ AgentInstance / ChatService
 ### 重试与降级流
 
 ```
-LiteLLMStreamFn.stream()
+LiteLLMClient.stream()
   → 第 1 次尝试: stream=True
     → 瞬态错误 (RATE_LIMIT/CONNECTION_ERROR/TIMEOUT)
       → 第 2 次尝试: stream=True
@@ -264,12 +247,11 @@ resolve_provider_for_model(model)
 
 | 接口 | 类型 | 说明 |
 |------|------|------|
-| `LiteLLMStreamFn.stream()` | 方法 | 流式 LLM 调用 |
-| `LiteLLMStreamFn.complete()` | 方法 | 非流式 LLM 调用 |
+| `LiteLLMClient.stream()` | 方法 | 流式 LLM 调用 |
+| `LiteLLMClient.complete()` | 方法 | 非流式 LLM 调用 |
 | `resolve_provider_for_model()` | 函数 | 模型→provider 解析 |
 | `classify_error()` | 函数 | 异常→错误码分类 |
 | `resolve_credentials()` | 函数 | 凭据解析 |
-| `LLMStreamFnFactory.get_for_tenant()` | 方法 | per-tenant stream fn |
 | `PromptOptimizer` | 类 | LLM 提示词重写 |
 | `extract_sop_background()` | 函数 | SOP 后台提取管道 |
 | `maybe_spawn_extraction()` | 函数 | 条件式提取启动 |
@@ -297,7 +279,7 @@ LLM 服务模块
 
 | 配置 | 位置 | 说明 | 默认值 |
 |------|------|------|--------|
-| LiteLLM 重试次数 | `stream_fn.py` | 瞬态错误重试 | `3` |
+| LiteLLM 重试次数 | `client.py` | 瞬态错误重试 | `3` |
 | PromptOptimizer temperature | `prompt_optimizer.py` | 重写温度 | `0.3` |
 | `_call_llm_with_retry` 次数 | `sop_extraction.py` | SOP 提取 LLM 重试 | `2` |
 | `_tool_result_preview` 长度 | `_sop_parse.py` | 工具结果预览字符数 | `2000` |

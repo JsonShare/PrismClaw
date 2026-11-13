@@ -9,16 +9,13 @@ from typing import Any
 from prismclaw.engine.compression.budget_orchestrator import BudgetOrchestrator
 from prismclaw.engine.hooks import HookRegistry, PromptBuildContext
 from prismclaw.engine.execution.request._prompt_advisory import (
-    _looks_like_english,
-    subagent_advisory_section,
+    domain_advisory_section,
+    handoff_advisory_section,
 )
 from prismclaw.engine.execution.request._prompt_budget import _block_from_text
-# AvailableSkillEntry / AvailableSubagentEntry / PromptInputs 供测试与下游
-# 从本模块导入（再导出），本模块自身不用。
 from prismclaw.engine.execution.request._prompt_types import (
-    AvailableSkillEntry,
-    AvailableSubagentEntry,
-    MarketplaceSummary,
+    AvailableSubagentEntry,  # noqa: F401  # re-export for tests/downstream
+    MarketplaceSummary,  # noqa: F401  # re-export for tests/downstream
     PromptInputs,
     PromptSectionSpec,
     SystemPromptResult,
@@ -118,31 +115,34 @@ def _read_profile_md(name: str) -> str:
     _PROFILE_CACHE[str(path)] = (mtime, text)
     return text
 
-_CONDUCT = (
-    "<conduct>\n"
-    "只做必要改动。改前先检查相关内容，能用工具验证的不要猜测。同一方法失败两次换策略。\n"
-    "可用 present_files 声明重点交付物（临时文件不声明）。\n"
-    "禁止暴露内部过程（受阻原因、状态报告、策略调整、下一步计划都不要提）。遇阻碍换方法，直接交付结果。\n"
-    "正文里不要提问或求确认；用户决策用 ask_user_question（唯一通道）。\n"
-    "不确定时：能探索先探索；能假设先假设（声明）；只有用户知道且后果显著才 ask_user_question；实在不行才 declare_blocked。\n"
-    "</conduct>"
-)
-_GOAL_POLICY = (
-    "<goal_policy>\n"
-    "1. 完成由机械准则核对（产物存在、非空、格式可解析）。语义要求不阻塞。停止调用工具即申报完成。\n"
-    "2. 有机械缺口别报完成：继续或指出缺口。\n"
-    "3. 交付物必须落 workspace 声明的会话目录，否则 present_files 拒绝。\n"
-    "4. 工具成功≠任务完成，按交付物核对。\n"
-    "5. 实在推进不了才 declare_blocked（附 reason_code + 阻塞条件）。困难、不确定、想收手都不是阻塞。\n"
-    "</goal_policy>"
+_RULES = (
+    "<rules>\n"
+    "完成与验证：\n"
+    "1. 完成由机械准则核对：产物存在且非空，或回答有依据、引用可定位、格式可解析；语义要求不阻塞。\n"
+    "2. 停止调用工具即进入完成核对；有机械缺口不得报完成，继续或指出缺口。\n"
+    "3. 工具成功 ≠ 任务完成；按交付物或回答要求核对。\n"
+    "4. 实在推进不了才 declare_blocked（reason_code + 阻塞条件）；困难、不确定、想收手都不是阻塞。\n"
+    "\n"
+    "执行：\n"
+    "5. 只做达成任务所需的改动；改前只检查会影响正确性的内容；影响结论的才验证，不影响的不验证；同一方法失败两次换策略。\n"
+    "6. 不暴露内部过程（受阻原因、状态报告、策略调整、下一步计划）；遇阻碍换方法，直接交付结果。\n"
+    "7. 风险、歧义、数据质量问题是交付内容，应主动指出；过程状态不报。\n"
+    "8. 正文不提问或求确认；用户决策走 ask_user_question；探索以「足以行动」为界，能假设先假设（声明），只有用户知道且后果显著才问。\n"
+    "9. 交付物只落 workspace 的 outputs/，否则 present_files 拒绝；临时文件不声明；present_files 只声明重点交付物（只读模式不适用）。\n"
+    "10. 交付对齐目标：用户要什么就给什么，达成即停，不主动扩大范围；问原因就给原因，不额外给方案；问现状就给现状，不额外给改进。\n"
+    "</rules>"
 )
 
-_READ_ONLY_MODE_DIRECTIVE = (
-    "<mode>\n"
-    "当前模式：Chat（只读）——可搜索、读取、分析文件；\n"
-    "不可修改、创建、删除，也不执行有副作用的命令。聚焦回答问题与解释内容。\n"
-    "</mode>\n\n"
-)
+_MODE_DIRECTIVES = {
+    "chat": (
+        "当前模式：Chat（只读）。\n"
+        "可搜索、读取、分析；不可修改、创建、删除，不执行有副作用的命令。"
+    ),
+    "work": (
+        "当前模式：Work（可写）。\n"
+        "可读取、修改、创建文件，执行有副作用的操作。"
+    ),
+}
 
 _SENSITIVE_DATA_SAFETY = (
     "<data_safety>\n"
@@ -162,12 +162,9 @@ def build_data_safety_prompt(workspace_tag: WorkspaceTag | None) -> str:
     return ""
 
 
-def build_identity_text(mode: str | None = None) -> str:
-    """Build the identity text for PromptInputs, with mode directive if chat."""
-    identity = _read_profile_md("IDENTITY.md")
-    if mode == "chat":
-        return _READ_ONLY_MODE_DIRECTIVE + identity
-    return identity
+def build_identity_text() -> str:
+    """Build the role text for PromptInputs from IDENTITY.md."""
+    return _read_profile_md("IDENTITY.md")
 
 
 def build_preferences_text() -> str:
@@ -178,8 +175,15 @@ def build_preferences_text() -> str:
     return f"<preferences>\n{text}\n</preferences>"
 
 
+def mode_section(inputs: PromptInputs) -> str | None:
+    directive = _MODE_DIRECTIVES.get(inputs.workspace_mode, _MODE_DIRECTIVES["work"])
+    return _wrap_xml("mode", directive)
+
+
 def identity_section(inputs: PromptInputs) -> str | None:
-    return inputs.identity if inputs.identity else None
+    if not inputs.identity:
+        return None
+    return _wrap_xml("role", inputs.identity)
 
 
 def preferences_section(inputs: PromptInputs) -> str | None:
@@ -187,116 +191,108 @@ def preferences_section(inputs: PromptInputs) -> str | None:
 
 
 def tooling_section(inputs: PromptInputs) -> str | None:
-    """全局工具约束（L1）——只放跨所有工具的路由/权限/格式规则。
+    """全局工具约束（L1）——只放跨所有工具的路由/格式规则。
 
-    工具自身的参数/返回/使用说明（L2）在各 tool 模块的 description 字段里。
-    本函数不应出现针对某个具体工具的操作指导（那是 tool description 的职责）。
+    工具自身的参数/返回/使用说明（L2）在各 tool 模块的 description 字段里；
+    本函数不列基线工具，也不做文件类型路由。
     """
-    if not inputs.tools:
-        return None
-    tool_names = ", ".join(f"`{name}`" for name, _desc in inputs.tools)
-    lines = [
-        "工具 schema 由运行时单独提供。",
-        f"基线可用工具：{tool_names}",
-    ]
     tool_name_set = {name for name, _desc in inputs.tools}
-    if "tool_search" in tool_name_set and "skill_search" in tool_name_set:
-        lines.append(
-            "按能力找工具用 `tool_search`，按工作流找技能用 `skill_search`。"
-        )
-        if "activate_skill" in tool_name_set:
-            lines.append(
-                "技能被列出≠已激活：确定合适的技能后用其精确名称调用 `activate_skill` 解锁。"
-                "技能明显匹配任务时尽早激活，遵循其指令而非通用工具。"
-            )
-        lines.append(
-            "本段只列基线工具；延迟解锁的工具用 `tool_search` 检索。"
-        )
-    # persisted-output 是磁盘溢出机制，属于全局约束（所有大结果都可能触发）
-    # 但详细的 read 操作指导下沉到 read 工具的 description（L2）
+    routes: list[str] = []
+    if "tool_search" in tool_name_set:
+        routes.append("工具用 `tool_search`")
+    if "skill_search" in tool_name_set:
+        routes.append("技能用 `skill_search`")
+    if "subagent_search" in tool_name_set:
+        routes.append("插件子代理用 `subagent_search`")
+    lines = ["工具 schema 由运行时提供；参数与返回说明见各工具描述。"]
+    if routes:
+        lines.append("、".join(routes) + " 按需检索。")
     lines.append(
-        "过大的工具结果会写入磁盘，替换为 `<persisted-output>` 引用——"
-        "用 `read` 读取该路径即可，预览不是完整结果。"
+        "过大的工具结果会落盘为 `<persisted-output>`，用 `read` 读取；预览不是完整结果。"
     )
-    # 文件类型路由是全局约束（L1），read 工具的参数细节在其 description（L2）
-    lines.append(
-        "文件类型路由：`read` 处理所有可读文件——文本/代码、"
-        "文档（.docx/.xlsx/.pptx/.pdf/.md）、图片（.png/.jpg/.gif/.webp/.svg）。"
-        "图片返回视觉描述而非原始字节。"
-    )
-    return _wrap_xml("available_tools", "\n".join(lines))
+    return _wrap_xml("tools", "\n".join(lines))
+
+
+_PACKAGE_LIST_LIMIT = 5
+_PACKAGE_DESC_TOKENS = 30
+
+
+def packages_section(inputs: PromptInputs) -> str | None:
+    """插件包索引——逐级披露的第一层：只披露包名、外层描述与能力计数。
+
+    子插件、技能名、子代理名一律不进入固定 prompt；包内能力由
+    ``skill_search`` / ``subagent_search`` 检索。技能计数来自
+    ``marketplace_summaries``，子代理计数从全量子代理目录按包聚合。
+    """
+    tool_name_set = {name for name, _desc in inputs.tools}
+    if not ({"skill_search", "subagent_search"} & tool_name_set):
+        return None
+
+    summaries = {s.name: s for s in inputs.marketplace_summaries}
+    agent_counts: dict[str, int] = {}
+    agent_descriptions: dict[str, str] = {}
+    for entry in inputs.available_subagents:
+        if not entry.marketplace_name:
+            continue
+        agent_counts[entry.marketplace_name] = agent_counts.get(entry.marketplace_name, 0) + 1
+        if entry.marketplace_description:
+            agent_descriptions.setdefault(entry.marketplace_name, entry.marketplace_description)
+
+    package_names = sorted(set(summaries) | set(agent_counts))
+    if not package_names:
+        return None
+
+    lines: list[str] = []
+    for name in package_names[:_PACKAGE_LIST_LIMIT]:
+        summary = summaries.get(name)
+        raw_desc = (summary.description if summary is not None else "") or agent_descriptions.get(name, "")
+        desc = _truncate_by_tokens(raw_desc, _PACKAGE_DESC_TOKENS) if raw_desc else ""
+        counts: list[str] = []
+        if summary is not None and summary.skill_count:
+            counts.append(f"{summary.skill_count} skill" + ("s" if summary.skill_count != 1 else ""))
+        agent_count = agent_counts.get(name, 0)
+        if agent_count:
+            counts.append(f"{agent_count} subagent" + ("s" if agent_count != 1 else ""))
+        line = f"`{name}`" + (f" — {desc}" if desc else "")
+        if counts:
+            line += f"（{' / '.join(counts)}）"
+        lines.append(line)
+
+    if len(package_names) > _PACKAGE_LIST_LIMIT:
+        overflow = len(package_names) - _PACKAGE_LIST_LIMIT
+        if "skill_search" in tool_name_set:
+            lines.append(f"…另有 {overflow} 个包，用 `skill_search` 检索。")
+        elif "subagent_search" in tool_name_set:
+            lines.append(f"…另有 {overflow} 个包，用 `subagent_search` 检索。")
+        else:
+            lines.append(f"…另有 {overflow} 个包。")
+    invoke_tools = [
+        tool for tool in ("`activate_skill`", "`sub_agent`") if tool.strip("`") in tool_name_set
+    ]
+    if invoke_tools:
+        lines.append(f"用 {' / '.join(invoke_tools)} 调用包内能力。")
+    return _wrap_xml("packages", "\n".join(lines))
 
 
 def skills_section(inputs: PromptInputs) -> str | None:
-    """技能目录——契约式渲染：每个可见名都能被 activate_skill 解析。
+    """项目技能名索引——插件技能不进固定 prompt。
 
-    §4.10 静态层，两个载体职责分离：
-
-    - 项目级技能逐名列出（全量，不参与预算——用户主动安装的能力）；
-    - marketplace 包索引行从 ``inputs.marketplace_summaries`` 渲染（含技能
-      计数，**永不截断**）——组内技能行即使全部被预算裁掉，包索引仍在，
-      模型始终知道"存在某个能力域"，可用 skill_search 触达。
-
-    本目录位于 frozen (cached) prefix，输出必须跨轮字节稳定——不渲染
-    is_active 等运行时状态（active 状态由动态段 active_skill_name 承载）。
+    项目技能是用户主动安装、数量有界的能力，逐个列名；插件技能由
+    ``skill_search`` 检索、``activate_skill`` 按名激活。输出必须跨轮字节
+    稳定（frozen prefix），不渲染 active 等运行时状态。
     """
     tool_name_set = {name for name, _desc in inputs.tools}
     if "skill_search" not in tool_name_set:
         return None
-    if not inputs.available_skills and not inputs.marketplace_summaries:
+    names = inputs.project_skill_names
+    if not names:
         return None
-
-    # 分组：项目级技能 vs 插件级技能（按 marketplace_name 聚合）
-    project_names: list[str] = []
-    marketplace_groups: dict[str, list[AvailableSkillEntry]] = {}
-
-    for entry in inputs.available_skills:
-        if entry.marketplace_name:
-            marketplace_groups.setdefault(entry.marketplace_name, []).append(entry)
-        else:
-            project_names.append(entry.name)
-
-    project_names.sort()
-    lines: list[str] = []
-
-    # 项目级技能：逐个列名（名称索引行，沿用现状格式）
-    if project_names:
-        lines.append(", ".join(f"`{n}`" for n in project_names))
-
-    # 插件包索引：组行永不截断（含技能计数），组内列被保留的技能行
-    summaries_by_name = {s.name: s for s in inputs.marketplace_summaries}
-    for mp_name in sorted(summaries_by_name):
-        summary = summaries_by_name[mp_name]
-        if summary.description:
-            # CJK 感知 token 截断：预算 ~40 tokens（约 50 汉字或 100 英文字符）
-            desc = _truncate_by_tokens(summary.description, 40)
-            lines.append(
-                f"# 插件包 {mp_name} — {desc}（{summary.skill_count} 个技能，skill_search 可检索）"
-            )
-        else:
-            lines.append(
-                f"# 插件包 {mp_name}（{summary.skill_count} 个技能，skill_search 可检索）"
-            )
-        for entry in sorted(marketplace_groups.get(mp_name, []), key=lambda e: e.name):
-            if entry.description:
-                lines.append(f"- `{entry.name}` — {entry.description}")
-            else:
-                lines.append(f"- `{entry.name}`")
-
-    logger.debug(
-        "skills_section: %d project skills + %d marketplaces (%d plugin skills listed)",
-        len(project_names),
-        len(summaries_by_name),
-        sum(len(v) for v in marketplace_groups.values()),
+    content = "项目技能：" + ", ".join(f"`{name}`" for name in names)
+    footer = (
+        "用 `skill_search` 检索插件技能；用精确名称 `activate_skill` 激活；"
+        "技能列出 ≠ 已激活。"
     )
-
-    content = "\n".join(lines)
-    footer = "用 `skill_search` 按主题检索技能；找到后用 `activate_skill` 按精确名称激活。"
-    parts = ["<available_skills>", content, footer]
-    if inputs.available_skills_note:
-        parts.append(inputs.available_skills_note)
-    parts.append("</available_skills>")
-    return "\n".join(parts)
+    return _wrap_xml("skills", f"{content}\n{footer}")
 
 
 _SUBAGENT_DESC_TRUNCATE = 100  # 与方案对齐：description 100 字截断
@@ -311,97 +307,56 @@ def _subagent_compact_description(text: str | None, max_len: int = _SUBAGENT_DES
     return collapsed[:max_len].rstrip() + "…"
 
 
+_SUBAGENT_RULES = """\
+选择：
+- 简单修改不派子代理；用于并行调研、独立审查或大上下文任务。
+- 名称逐字复制自本段或 `subagent_search` 结果；不要构造名称。
+- 结果用 `reduce_subagent_results` 合并；连续调用同一代理时，上轮结果经 context_snapshot 自动传递。
+
+移交：
+- [HANDOFF_REQUEST] 必须评估：可派发、可合并、可拒绝，但不得静默忽略。
+- 拒绝时用 `reduce_subagent_results` 或自行处理，保留 handoff_chain_id。
+
+证据：
+- 置信度不得提升；合并取最低。
+- [LOW]/[UNVERIFIED] 支撑的陈述必须限定；证据缺口标出；冲突并列；高风险主张需 [HIGH]。
+- 多代理同源引用去重，取最高置信度。"""
+
+
 def subagents_section(inputs: PromptInputs) -> str | None:
-    """Authoritative <available_subagents> block for the frozen prompt.
+    """核心子代理索引 + 编排规则。
 
-    Single source of truth: CapabilityCatalogService (same backend used at
-    dispatch time). refreshed_at is stamped so the model can reconcile stale
-    cached blocks vs current state. BLOCKING handoff rule lives here (not
-    buried in advisory) because it is a hard correctness constraint.
+    插件子代理名称不进入固定 prompt：``<packages>`` 只给包与计数，
+    具体子代理由 ``subagent_search`` 逐级披露。本段是子代理规则的唯一
+    owner（编排 / 移交 / 证据），动态区只保留移交协议变体。
     """
-    if not inputs.available_subagents:
+    tool_name_set = {name for name, _desc in inputs.tools}
+    if "sub_agent" not in tool_name_set:
         return None
 
-    entries = sorted(inputs.available_subagents, key=lambda e: e.name)
-    name_index = ", ".join(f"`{e.name}`" for e in entries)
-
-    lines: list[str] = [
-        "<available_subagents>",
-        "",
-        f"refreshed_at: {inputs.available_subagents_refreshed_at or '（未知）'}",
-        "",
-        "子代理名称索引：",
-        "  " + name_index,
-        "",
-        "详细列表：",
-    ]
-
-    for entry in entries:
-        desc = entry.description or "（无描述）"
-        handoff_line = (
-            f"  → can_handoff_to: {', '.join(f'`{n}`' for n in entry.can_handoff_to)}"
-            if entry.can_handoff_to
-            else ""
-        )
-        # v5 渐进式披露：插件 agent 显示 marketplace 归属
-        mp_info = ""
-        if entry.marketplace_name:
-            mp_desc = f" — {_truncate_by_tokens(entry.marketplace_description, 30)}" if entry.marketplace_description else ""
-            mp_info = f" [{entry.marketplace_name}{mp_desc}]"
-        lines.append(f"  - `{entry.name}`: {desc}{mp_info}")
-        if handoff_line:
-            lines.append(handoff_line)
-
-    # SDD D11：目录被 token 预算截断时提示剩余数量（渐进披露）。
-    if inputs.available_subagents_total > len(entries):
-        hidden = inputs.available_subagents_total - len(entries)
-        lines.extend([
-            "",
-            f"…及 {hidden} 个未列出的子代理（可按需检索）。",
-        ])
-
-    lines.extend([
-        "",
-        "使用规则（BLOCKING，必须遵守）：",
-        "  1. agent_name 必须从名称索引中复制（直接复制，不要手打）",
-        "  2. 若 sub_agent 返回结果中包含 [HANDOFF_REQUEST] 移交标记：",
-        "     - 评估移交建议是否合理，结合当前任务上下文做决策",
-        "     - 如决定执行移交：按标记建议的 agent_name + task 调用 sub_agent",
-        "     - 如决定不执行：用 reduce_subagent_results 合并结果或自行处理",
-        "     - 禁止静默忽略移交标记（破坏 handoff_chain_id 追踪链路）",
-        "  3. 没有匹配的子代理时直接自己处理，不要猜测名称构造不存在的 agent",
-        "  4. 连续多轮调用同一子代理时，前轮结果自动通过 context_snapshot 传递，无需在 task 中重复描述",
-        "",
-        "</available_subagents>",
-    ])
-
-    return "\n".join(lines)
-
-
-def repository_map_section(inputs: PromptInputs) -> str | None:
-    if not inputs.repo_map:
-        return None
-    lines = [
-        "以下是用户工作区的结构地图。用它快速定位相关文件，不要猜测路径，也不要执行大量 `find`/`ls` 命令。",
-        "",
-        inputs.repo_map
-    ]
-    return _wrap_xml("repository_map", "\n".join(lines))
+    core = [e for e in inputs.available_subagents if e.plugin_name is None]
+    lines: list[str] = []
+    if core:
+        lines.append("核心子代理：")
+        for entry in core:
+            desc = f" — {entry.description}" if entry.description else ""
+            lines.append(f"- `{entry.name}`{desc}")
+    else:
+        lines.append("工作区未定义核心子代理。")
+    lines.append("插件子代理用 `subagent_search` 按领域/任务检索；用精确名称调用 `sub_agent`。")
+    lines.append("")
+    lines.append(_SUBAGENT_RULES)
+    return _wrap_xml("subagents", "\n".join(lines))
 
 
 def workspace_section(inputs: PromptInputs) -> str | None:
-    if not inputs.workspace_path and not inputs.workspace_id:
+    if not inputs.workspace_path:
         return None
     lines: list[str] = []
-    if inputs.workspace_id:
-        lines.append(f"[Environment] 工作区 ID：`{inputs.workspace_id}`")
-    if inputs.session_id:
-        lines.append(f"[Environment] 当前会话 ID：`{inputs.session_id}`")
 
     # ── 虚拟路径词汇表（模型写文件必须遵守的前缀契约）─────────────────
     # 去掉宿主绝对路径暴露，模型只需要知道虚拟前缀语义。
     vocab = [
-        "",
         "### 虚拟路径前缀契约（所有文件工具共用）",
         "- `project/<rel>` — 用户项目文件，直达原件（读写）。禁止写入 `sessions/` 和 `.work/` 子树。",
         "- `inputs/<rel>` — 工作区级共享上传（只读）。",
@@ -431,12 +386,38 @@ def build_frozen_prompt_sections(
 ) -> list[PromptSectionSpec]:
     sections: list[PromptSectionSpec] = []
 
-    # goal 政策段（完成/阻塞判定规则）：常量文本、与任务模式无关，静态化
-    # 进入 frozen 区（Phase 2 C8）——首轮内容不再依赖 TaskSpec 就绪时序。
+    mode_text = mode_section(inputs)
+    if mode_text:
+        sections.append(
+            PromptSectionSpec(
+                name="mode",
+                text=mode_text,
+                zone="static",
+                truncatable=False,
+                cacheable=True,
+                priority="critical",
+                stability="stable",
+            )
+        )
+
+    role_text = identity_section(inputs)
+    if role_text:
+        sections.append(
+            PromptSectionSpec(
+                name="role",
+                text=role_text,
+                zone="static",
+                truncatable=False,
+                cacheable=True,
+                priority="critical",
+                stability="stable",
+            )
+        )
+
     sections.append(
         PromptSectionSpec(
-            name="goal_policy",
-            text=_GOAL_POLICY,
+            name="rules",
+            text=_RULES,
             zone="static",
             truncatable=False,
             cacheable=True,
@@ -444,19 +425,6 @@ def build_frozen_prompt_sections(
             stability="stable",
         )
     )
-
-    identity_text = identity_section(inputs)
-    if identity_text:
-        sections.append(
-            PromptSectionSpec(
-                name="identity",
-                text=identity_text,
-                zone="static",
-                truncatable=False,
-                cacheable=True,
-                priority="critical",
-            )
-        )
 
     preferences_text = preferences_section(inputs)
     if preferences_text:
@@ -468,6 +436,7 @@ def build_frozen_prompt_sections(
                 truncatable=False,
                 cacheable=True,
                 priority="high",
+                stability="stable",
             )
         )
 
@@ -481,33 +450,23 @@ def build_frozen_prompt_sections(
                 truncatable=True,
                 cacheable=True,
                 priority="high",
+                stability="stable",
             )
         )
 
-    skills_text = skills_section(inputs)
-    if skills_text:
+    # 稳定段收尾：workspace 契约与安全指令在会话内不变，先于半固定目录，
+    # 保证缓存断点落在稳定前缀末尾。
+    workspace_text = workspace_section(inputs)
+    if workspace_text:
         sections.append(
             PromptSectionSpec(
-                name="skills",
-                text=skills_text,
+                name="workspace",
+                text=workspace_text,
                 zone="static",
                 truncatable=True,
                 cacheable=True,
                 priority="high",
-            )
-        )
-
-    subagents_text = subagents_section(inputs)
-    if subagents_text:
-        sections.append(
-            PromptSectionSpec(
-                name="subagents",
-                text=subagents_text,
-                zone="static",
-                truncatable=True,
-                cacheable=True,
-                priority="high",
-                stability="semi_stable",  # 子代理注册表变更时会变
+                stability="stable",
             )
         )
 
@@ -522,35 +481,49 @@ def build_frozen_prompt_sections(
                 truncatable=False,  # 安全规则不可截断
                 cacheable=True,
                 priority="critical",
-                stability="semi_stable",
+                stability="stable",
             )
         )
 
-    workspace_text = workspace_section(inputs)
-    if workspace_text:
+    packages_text = packages_section(inputs)
+    if packages_text:
         sections.append(
             PromptSectionSpec(
-                name="workspace",
-                text=workspace_text,
+                name="packages",
+                text=packages_text,
                 zone="static",
                 truncatable=True,
                 cacheable=True,
                 priority="high",
-                stability="semi_stable",
+                stability="semi_stable",  # 插件包注册表变更时会变
             )
         )
 
-    repo_map_text = repository_map_section(inputs)
-    if repo_map_text:
+    skills_text = skills_section(inputs)
+    if skills_text:
         sections.append(
             PromptSectionSpec(
-                name="repository_map",
-                text=repo_map_text,
+                name="skills",
+                text=skills_text,
                 zone="static",
                 truncatable=True,
                 cacheable=True,
-                priority="medium",
-                stability="semi_stable",
+                priority="high",
+                stability="semi_stable",  # 技能注册表变更时会变
+            )
+        )
+
+    subagents_text = subagents_section(inputs)
+    if subagents_text:
+        sections.append(
+            PromptSectionSpec(
+                name="subagents",
+                text=subagents_text,
+                zone="static",
+                truncatable=True,
+                cacheable=True,
+                priority="high",
+                stability="semi_stable",  # 子代理注册表变更时会变
             )
         )
 
@@ -571,24 +544,10 @@ def build_frozen_prompt_sections(
     # 动态记忆不得进入 static shell cache，否则缓存命中即冻结记忆。
     # invoked_skill_attachments 同样移至 per-turn 动态区（volatile，不缓存）。
 
-    # conduct 段（行为准则）：内容跨轮稳定，归入 frozen 静态区以进入缓存前缀，
-    # 避免每轮作为 volatile 段重复计入 per_turn 开销。
-    sections.append(
-        PromptSectionSpec(
-            name="conduct",
-            text=_CONDUCT,
-            zone="static",
-            truncatable=False,  # 行为准则不可截断
-            cacheable=True,
-            priority="critical",
-            stability="semi_stable",
-        )
-    )
-
     return sections
 
 
-def runtime_context_section(inputs: PromptInputs, user_prompt: str | None) -> str | None:
+def runtime_context_section(inputs: PromptInputs) -> str | None:
     now_iso_str = inputs.now_iso or datetime.now(timezone.utc).isoformat()
     # 解析 UTC ISO 时间，生成人类可读的本地化日期时间
     try:
@@ -608,21 +567,7 @@ def runtime_context_section(inputs: PromptInputs, user_prompt: str | None) -> st
             f"[System Time] UTC：{now_iso_str}（请以此为准，禁止使用训练数据中的日期信息）",
         ]
 
-    lines = [
-        "## 运行环境",
-        f"[Session Info] agent={inputs.agent_id} | model={inputs.model} | session={inputs.session_id}",
-        *time_lines,
-    ]
-    if inputs.workspace_id:
-        lines.append(f"[Environment] 工作区 ID：`{inputs.workspace_id}`")
-
-    # 输出语言直接在此处追加
-    if _looks_like_english(user_prompt):
-        lines.append("[Output Language] 请使用英文回答。")
-    else:
-        lines.append("[Output Language] 请使用中文回答。所有自然语言解释必须使用中文，禁止中英文混用。仅允许保留专有名词、路径、URL 等无法翻译的内容。")
-    if inputs.request_mode:
-        lines.append(f"[Turn Mode] {inputs.request_mode}")
+    lines = [*time_lines]
     if inputs.active_skill_name:
         if getattr(inputs, "invocation_context", "skill") == "command":
             lines.append(f"[Active Command] {inputs.active_skill_name}")
@@ -714,11 +659,11 @@ async def build_per_turn_prompt_sections(
             )
         )
 
-    advisory_text = subagent_advisory_section(inputs)
+    advisory_text = handoff_advisory_section(inputs)
     if advisory_text:
         sections.append(
             PromptSectionSpec(
-                name="subagent_advisory",
+                name="handoff_advisory",
                 text=advisory_text,
                 zone="dynamic",
                 truncatable=True,
@@ -727,14 +672,14 @@ async def build_per_turn_prompt_sections(
             )
         )
 
-    runtime_text = runtime_context_section(inputs, user_prompt)
-    if runtime_text:
+    domain_text = domain_advisory_section()
+    if domain_text:
         sections.append(
             PromptSectionSpec(
-                name="runtime_context",
-                text=runtime_text,
+                name="domain_advisory",
+                text=domain_text,
                 zone="dynamic",
-                truncatable=False,
+                truncatable=True,
                 cacheable=False,
                 priority="high",
             )
@@ -789,6 +734,20 @@ async def build_per_turn_prompt_sections(
                     stability="volatile",
                 )
             )
+
+    # 运行时上下文只保留时间等无法静态化的信息，固定排在动态段末尾。
+    runtime_text = runtime_context_section(inputs)
+    if runtime_text:
+        sections.append(
+            PromptSectionSpec(
+                name="runtime_context",
+                text=runtime_text,
+                zone="dynamic",
+                truncatable=False,
+                cacheable=False,
+                priority="high",
+            )
+        )
 
     return sections
 

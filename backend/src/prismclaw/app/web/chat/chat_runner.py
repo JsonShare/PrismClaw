@@ -12,6 +12,7 @@ from prismclaw.app.auth import resolve_profile_and_mode
 from prismclaw.app.web.chat._chat_helpers import (  # noqa: F401
     _EXECUTION_TIMELINE_ENTRY_TYPE,
     _REASONING_PUSH_INTERVAL_S,
+    _SOFT_LANDING_CODES,
     _build_execution_timeline_payload,
     _build_task_runtime_idempotency_key,
     _build_task_runtime_projection_payload,
@@ -493,24 +494,69 @@ async def _run_chat(
                 msg.conversation_id, seq,
             )
 
-    async def _emit_terminal_error(
+    async def _finalize_terminated_run(
         *,
+        error_code: str,
         message: str,
         aborted: bool,
     ) -> None:
-        if not aborted:
+        """异常终止的唯一收尾路径：正文只持久化一次、终态只发送一次。
+
+        软着陆（超时 / 预算耗尽）：已流出的正文本身就是连贯答案
+        （模型在正常生成中被截断，不会输出系统状态词），直接落库 + 发
+        done，不追加任何系统说明。error 帧也省略（无额外信息量）。
+
+        其余错误（阻塞 / 内部 / 上游 LLM）：保留 error 帧交代真实原因；
+        已流出的正文照常落库并随 done 下发，避免刷新后正文消失。
+
+        用户 abort：不落 partial（看到哪算哪），只发 done(aborted=true)。
+        """
+        nonlocal assistant_message_id
+        # 单次收尾护栏：终态已送达、或本轮已有落库挂靠点时不再重复落库，
+        # 避免「ErrorEvent 收尾后又抛异常」产生第二条内容相同的 partial。
+        if terminal_done_sent:
+            return
+        if _current_part[0]:
+            full_transcript_parts.append(_current_part[0])
+            _current_part[0] = ""
+        body = "\n\n".join(p for p in full_transcript_parts if p).strip()
+
+        if error_code == "aborted":
+            await _emit_terminal_done(
+                final_message="", usage={}, aborted=True, message_id=None
+            )
+            return
+
+        soft_landing = error_code in _SOFT_LANDING_CODES
+        if not soft_landing and message:
             await send_event(
                 state,
                 SERVER_ERROR,
                 msg.conversation_id,
-                {"message": message, "code": ProtocolErrorCode.INTERNAL_ERROR.value},
+                {"message": message, "code": error_code},
             )
+
+        if not body and not projector.has_content():
+            await _emit_terminal_done(
+                final_message="", usage={}, aborted=aborted, message_id=None
+            )
+            return
+
+        content = body
+        if assistant_message_id is None:
+            assistant_message_id = await _persist_partial_assistant_message(
+                deps,
+                session_id=session_id,
+                projector=projector,
+                transcript_text=content,
+            ) or assistant_message_id
         await _emit_terminal_done(
-            final_message="",
+            final_message=content,
             usage={},
             aborted=aborted,
-            message_id=None,
+            message_id=assistant_message_id,
         )
+
     try:
         base_questions_task = asyncio.create_task(
             _generate_followup_questions_for_request(
@@ -555,8 +601,6 @@ async def _run_chat(
             conversation_id=msg.conversation_id,
             session_id=session_id,
         )
-        # ── 单遍实时流式（Claude Code 模式） ────
-        #
         # 所有自然语言 TextChunk（中间草稿迭代与最终答案）都即时 send_event(
         # SERVER_CHAT_DELTA) 推到正文 chat.delta，不做缓冲、不做打字机回放、不做延迟。
         # 全量正文由 full_transcript_parts 累积（每助手轮一段），在 Done 以
@@ -945,38 +989,20 @@ async def _run_chat(
                     conversation_id=msg.conversation_id,
                     active=False,
                 )
-                # 异常退出：文本已实时推送到正文，无需缓冲区刷新。
+                # 异常退出：正文已实时推送到正文区，收尾统一走 _finalize_terminated_run。
                 aborted = event.error_code == "aborted"
-                if aborted:
-                    if rc.chat_done_handled_externally:
-                        rc.chat_done_handled_externally = False
-                        terminal_done_sent = True
-                    else:
-                        await _emit_terminal_error(message=event.message, aborted=True)
+                if aborted and rc.chat_done_handled_externally:
+                    rc.chat_done_handled_externally = False
+                    terminal_done_sent = True
                 else:
-                    await _emit_terminal_error(message=event.message, aborted=False)
+                    await _finalize_terminated_run(
+                        error_code=event.error_code,
+                        message=event.message,
+                        aborted=aborted,
+                    )
                 if projector.has_content():
-                    # 异常终止时骨架不落终态 assistant 消息（assistant_message_id
-                    # 为 None）→ _persist_execution_timeline 会因挂靠点缺失被跳过，
-                    # 执行过程刷新后永久丢失。此处合成 partial assistant 消息
-                    # 兜底（partial=True，正文=已推送转录），让 timeline 可持久化。
-                    # aborted 用户主动停止：交互意图明确（看到哪算哪），不落
-                    # partial 消息，避免正常中止被回放成残缺回答。
-                    if not aborted and not assistant_message_id:
-                        # flush 未收尾的转录段落（ErrorEvent 不走 Done 的 flush 路径）
-                        if _current_part[0]:
-                            full_transcript_parts.append(_current_part[0])
-                            _current_part[0] = ""
-                        partial_id = await _persist_partial_assistant_message(
-                            deps,
-                            session_id=session_id,
-                            projector=projector,
-                            transcript_text="\n\n".join(
-                                p for p in full_transcript_parts if p
-                            ),
-                        )
-                        if partial_id:
-                            assistant_message_id = partial_id
+                    # 执行过程挂靠在收尾落库的 partial 消息上；无挂靠点
+                    # （如用户中止且无落库）则跳过，避免 timeline 挂到无人引用的 id。
                     err_snapshot_mid = assistant_message_id
                     session_queue.get_or_create_web_runtime_projection(
                         msg.conversation_id
@@ -1017,26 +1043,16 @@ async def _run_chat(
             )
     except Exception:
         logger.exception("error running chat for conversation %s", msg.conversation_id)
-        await _emit_terminal_error(message="Internal error", aborted=True)
+        # runner 崩溃与 ErrorEvent 同族：统一收尾（error 帧交代崩溃，已流出的
+        # 正文照常落库保留执行现场）。
+        await _finalize_terminated_run(
+            error_code=ProtocolErrorCode.INTERNAL_ERROR.value,
+            message="Internal error",
+            aborted=False,
+        )
         try:
             if projector.has_content():
-                # runner 崩溃路径与 ErrorEvent 同族：骨架必然未落终态 assistant
-                # 消息，补 partial 消息让执行过程可持久化回放（aborted=True 仅为
-                # 协议标记——崩溃不是用户中止，仍应保留执行现场）。
-                if not assistant_message_id:
-                    if _current_part[0]:
-                        full_transcript_parts.append(_current_part[0])
-                        _current_part[0] = ""
-                    partial_id = await _persist_partial_assistant_message(
-                        deps,
-                        session_id=session_id,
-                        projector=projector,
-                        transcript_text="\n\n".join(
-                            p for p in full_transcript_parts if p
-                        ),
-                    )
-                    if partial_id:
-                        assistant_message_id = partial_id
+                # 挂靠到收尾落库的 partial 消息上，让执行过程可持久化回放。
                 exc_snapshot_mid = assistant_message_id
                 session_queue.get_or_create_web_runtime_projection(
                     msg.conversation_id

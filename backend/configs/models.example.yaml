@@ -1,5 +1,5 @@
 # 模型与端点：主对话模型注册表 + 多模态（向量/视觉/语音）端点。
-# 归属顶层键：embedding / vision / speech / models
+# 归属顶层键：embedding / vision / speech / models / token_counting
 #
 # 运行时由 /models 管理接口写回本文件（models_registry.save）；
 # 写回使用 ruamel round-trip，因此本文件的注释与键顺序会被保留。
@@ -31,6 +31,25 @@ speech:
   stream_url: "ws://127.0.0.1:8020/ws/asr"
   stream_connect_timeout: 10
 
+# Token 计数插件：预算、压缩、drift sentinel 共用同一套计数口径。
+token_counting:
+  # 计数实现：heuristic（内置启发式，默认；纯本地、无网络依赖）
+  # 其他实现（如端点 tokenizer）需先在代码中 register_token_provider() 注册再启用
+  provider: "heuristic"
+  heuristic:
+    # CJK（中日韩）字符平均 token 数；0.90 为 glm-53/Qwen 实测校准值
+    cjk_tokens_per_char: 0.90
+    # 非 CJK 字符平均每个 token 的字符数；3.4 为英文散文与 JSON/代码的中间值
+    other_chars_per_token: 3.4
+    # 工具 JSON schema：UTF-8 字节数 ÷ 本值 = token；3.5 为 schema 实测中间值
+    wire_bytes_per_token: 3.5
+    # 通用请求 JSON（messages 等）：UTF-8 字节数 ÷ 本值 = token
+    json_bytes_per_token: 3.0
+    # 单条消息固定信封开销（role/content/JSON 括号）
+    message_envelope_tokens: 8
+    # 单个 tool_call 的 id/type/function 信封开销
+    tool_call_envelope_tokens: 5
+
 models:
   # 默认模型为裸模型名（不带 provider 前缀）
   default_model: "your-model"
@@ -52,4 +71,15 @@ models:
           context_window: 131072
           # 单次生成上限；同时参与输出预留计算，不要设为窗口值
           max_output_tokens: 32768
+          # 可选：该端点接受的推理强度档位，取值 minimal/low/medium/high/xhigh/max。
+          # 运行时按 effort 下发档位（quick→low、standard→medium、deep→high），
+          # 不在列表内的档位由 litellm 就近向上取整，避免端点拒绝（400）。
+          # 不写本项 = 不校验，档位原样下发。示例：只支持 low/high 的端点：
+          # reasoning_effort_levels: ["low", "high"]
+          #
+          # 可选：强制关闭该模型思考模式（下发 chat_template_kwargs.enable_thinking=False）。
+          # 适用于 vLLM / OpenAI 兼容端点上开思考做 function-calling 会持续吐 reasoning、
+          # 不产出正文并耗尽阶段预算的模型（qwen/glm 系实证）。
+          # DashScope 官方端点不受本项影响（原生支持思考控制）。默认 false。
+          # disable_thinking: true
           builtin: true

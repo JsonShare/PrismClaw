@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import Any
-
 from prismclaw.engine.execution.query._catalog_builder import (
     _build_available_subagents_catalog,
 )
@@ -46,10 +43,10 @@ def test_l1_snapshot_filters_non_active() -> None:
 class _FakeEntry:
     def __init__(self, index: int) -> None:
         self.name = f"agent-{index}"
+        self.description = "d" * 200
         self.plugin_name = "p"
         self.marketplace_name = "mp"
         self.marketplace_description = "x" * 200
-        self.manifest = SimpleNamespace(description="d" * 200)
         self.can_handoff_to = []
 
 
@@ -61,20 +58,20 @@ class _FakeCatalog:
         return self._entries
 
 
-def test_subagents_catalog_truncates_by_token_budget() -> None:
-    kept, _refreshed, total = _build_available_subagents_catalog(
+def test_subagents_catalog_is_full_and_bounded() -> None:
+    """目录全量返回（固定 prompt 只渲染核心子代理，体积由渲染侧裁剪）。"""
+    entries = _build_available_subagents_catalog(
         capability_catalog=_FakeCatalog(30),  # type: ignore[arg-type]
         tool_summaries=[("sub_agent", "desc")],
-        token_budget=1100,  # 修复 v2 estimator 后实际每 entry ≈ 40 tokens，
-                           # 30 条 ≈ 1200 → 用 1100 保证截断逻辑被覆盖
     )
-    assert total == 30
-    assert 0 < len(kept) < 30
+    assert len(entries) == 30
+    assert all(e.plugin_name == "p" for e in entries)
+    assert all(len(e.description) <= 101 for e in entries)  # 100 字 + 省略号
 
 
 def test_subagents_catalog_empty_when_tool_absent() -> None:
-    kept, _refreshed, total = _build_available_subagents_catalog(
+    entries = _build_available_subagents_catalog(
         capability_catalog=_FakeCatalog(5),  # type: ignore[arg-type]
         tool_summaries=[],
     )
-    assert kept == () and total == 0
+    assert entries == ()

@@ -27,7 +27,6 @@ from prismclaw.schema.content import (
     CompactionArtifact,
     parse_compaction_artifact,
 )
-from prismclaw.schema.agent.data_types import CacheStrategySnapshot
 from prismclaw.schema.agent.session import (
     AgentMessageDict,
     SessionContextState,
@@ -52,17 +51,13 @@ from prismclaw.schema.session import (
     TASK_MUTATION_CUSTOM_TYPE,
     TASK_RUNTIME_CUSTOM_TYPE,
     TASK_SPEC_CUSTOM_TYPE,
-    _collect_cache_strategy_snapshots,
     _collect_custom_models,
-    _collect_last_cache_strategy,
     _collect_turn_runtime_metrics_snapshots,
     _effective_fork_task_projection_entries,
     _find_latest_custom_model,
     _history_compaction_reduction,
     _latest_custom_entry_index,
     _message_entry_to_dict,
-    _snapshot_has_stable_prefix_drift,
-    _snapshot_reused_stable_prefix,
 )
 from prismclaw.schema.agent.task_runtime import (
     EvidenceRecord,
@@ -260,29 +255,8 @@ class CacheProjector:
     def __init__(self, tree: SessionTree) -> None:
         self._tree = tree
 
-    def get_last_strategy(self) -> CacheStrategySnapshot | None:
-        return _collect_last_cache_strategy(self._tree.get_branch())
-
-    def get_snapshots(self) -> list[CacheStrategySnapshot]:
-        return _collect_cache_strategy_snapshots(self._tree.get_branch())
-
     def get_turn_metrics_snapshots(self) -> list[Any]:
         return _collect_turn_runtime_metrics_snapshots(self._tree.get_branch())
-
-    def get_stable_prefix_follow_up_turn_count(self) -> int:
-        return sum(1 for snapshot in self.get_snapshots() if snapshot.get("request_mode") == "follow_up")
-
-    def get_stable_prefix_reuse_turn_count(self) -> int:
-        return sum(1 for snapshot in self.get_snapshots() if snapshot.get("request_mode") == "follow_up" and _snapshot_reused_stable_prefix(snapshot))
-
-    def get_stable_prefix_digest_change_count(self) -> int:
-        changes = 0
-        for snapshot in self.get_snapshots():
-            if snapshot.get("request_mode") != "follow_up":
-                continue
-            if _snapshot_has_stable_prefix_drift(snapshot):
-                changes += 1
-        return changes
 
 class SearchProjector:
     def __init__(self, tree: SessionTree) -> None:

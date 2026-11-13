@@ -5,7 +5,7 @@ from pathlib import Path
 import dataclasses
 
 from prismclaw.assembly.plugins.plugin_lifecycle import PluginLifecycleManager
-from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps, PluginBundle
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps, PluginBundle
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.infra.paths import build_project_capability_layout
 from prismclaw.infra.settings import Settings

@@ -54,6 +54,7 @@ CONFIG_KEY_OWNERS = {
     "storage": "infra.yaml",
     "sandbox": "security.yaml",
     "models": "models.yaml",
+    "token_counting": "models.yaml",
     "embedding": "models.yaml",
     "vision": "models.yaml",
     "speech": "models.yaml",

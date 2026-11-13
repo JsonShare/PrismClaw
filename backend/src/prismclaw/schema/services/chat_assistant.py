@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
-from prismclaw.schema.llm.types import LLMStreamFn
+from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.storage.storage_types import SessionStore
 
 if TYPE_CHECKING:
@@ -211,7 +211,7 @@ def format_transcript_text(
 
 
 async def generate_followup_questions(
-    llm: LLMStreamFn,
+    llm: LLMClient,
     session_store: SessionStore | None,
     *,
     session_id: str,

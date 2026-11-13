@@ -266,10 +266,10 @@
         <path d="M 100 243 L 65 243 L 65 167 L 95 167" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
         <text x="40" y="210" fill="#a78bfa" font-size="8">restart</text>
 
-        <!-- LoopConfig Closure Box -->
+        <!-- LoopConfig Port Wiring Box -->
         <rect x="100" y="280" width="280" height="48" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
-        <text x="240" y="300" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">LoopConfig 闭包组装器</text>
-        <text x="240" y="316" fill="#94a3b8" font-size="8" text-anchor="middle">Arbiter→should_continue | SafetyGate→before_tool</text>
+        <text x="240" y="300" fill="#34d399" font-size="9" font-weight="600" text-anchor="middle">wiring.build_loop_config</text>
+        <text x="240" y="316" fill="#94a3b8" font-size="8" text-anchor="middle">Prepare/Stream/Execute ports + should_continue</text>
 
         <!-- PreRequestPipeline -->
         <rect x="410" y="280" width="180" height="48" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
@@ -399,9 +399,9 @@
           <h3>Agent Loop Cycle</h3>
         </div>
         <ul>
-          <li>&#8226; 9-step callback pipeline in single while True</li>
+          <li>&#8226; 9-step pipeline in single while True</li>
           <li>&#8226; TurnUpdate.restart enables turn restart via continue</li>
-          <li>&#8226; 7 core + 3 B/S-specific callbacks</li>
+          <li>&#8226; 3 ports (Prepare/Stream/Execute) + optional slots</li>
           <li>&#8226; Skeleton-muscle separation: run_loop is pure control flow</li>
         </ul>
       </div>

@@ -102,13 +102,11 @@ async def run_per_result_fork_agent(
     tool_name: str,
     deps: Any,
 ) -> str | None:
-    """Invoke the per-result LLM summarizer (mirrors Claude's
-    ``runCompactForkAgent`` pattern, single-result variant).
+    """逐结果 LLM 摘要——单次摘要变体。
 
-    The summarizer is injected as ``deps.summarize_fn`` (an
-    awaitable callable: ``async def summarize_fn(prompt: str) -> str``).
-    When the dependency is missing or the call fails, the caller
-    falls back to character truncation.
+    摘要器以 ``deps.summarize_fn``（可等待 callable:
+    ``async def summarize_fn(prompt: str) -> str``）形式注入。
+    缺失依赖或调用失败时回退到字符截断。
 
     The public name ``run_per_result_fork_agent`` matches the plan.
     """

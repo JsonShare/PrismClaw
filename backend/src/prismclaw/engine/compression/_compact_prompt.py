@@ -38,16 +38,12 @@ def _strip_md_frontmatter(text: str) -> str:
 # ──────────────────────────── No-Tools Preamble ────────────────────────────
 
 
-# Leading "do NOT use tools" instruction shipped to the LLM that
-# performs the compaction pass.  Sonnet 4.6+ with adaptive
-# thinking sometimes still attempts tool calls even after being
-# told "return plain text"; per Claude's own telemetry this
-# triggers the 2.79% prompt_too_long storm.  Mirrors
-# ``NO_TOOLS_PREAMBLE`` in ``prompt.ts:20-30``.
+# 给执行压缩 pass 的 LLM 的「禁止工具调用」前置指令。
+# 某些模型（如带自适应思考的 Sonnet 4.6+）即使被要求返回纯文本
+# 仍可能尝试工具调用，触发 prompt_too_long 风暴。
 #
-# Note: the preamble is intentionally appended to the **user** message,
-# not the system message, so it does not perturb the prefix-cache key
-# on the system side.
+# 前置指令刻意追加到 **user message** 而非 system message，
+# 避免扰动 system 侧的 prefix-cache 键。
 NO_TOOLS_PREAMBLE = (
     "关键：只输出文本，不要调用任何工具。\n"
     "\n"
@@ -73,11 +69,8 @@ def inject_no_tools_preamble(
     is False the function is a no-op (used for the ``FLAG_NO_TOOLS_PREAMBLE``
     off path and for tests that need a clean baseline).
 
-    The preamble is appended to the user message rather than the
-    system message so the prefix-cache key on the system side
-    (which Claude ships as a stable, cacheable block) is not
-    perturbed.  See ``prompt.ts:20-30`` for the upstream rationale.
-    """
+    前置指令追加在 user message 而非 system message，
+    避免扰动 system 侧的 prefix-cache 键。"""
     if not enabled or not messages:
         return list(messages)
     preamble = NO_TOOLS_PREAMBLE

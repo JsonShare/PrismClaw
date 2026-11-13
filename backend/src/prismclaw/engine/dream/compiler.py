@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Any, Awaitable, Callable
 
-from prismclaw.schema.llm.types import LLMStreamFn
+from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.llm.request import PackedLLMRequest
 from prismclaw.engine.dream.candidates import DreamCandidateStore, DreamMemoryCandidate
 from prismclaw.engine.dream.models import DreamPublishResult, DreamPublishableMemory
@@ -29,7 +29,7 @@ class DreamCompiler:
         self,
         *,
         memory_store: MemoryStore,
-        llm_client: LLMStreamFn,
+        llm_client: LLMClient,
         candidate_store: DreamCandidateStore | None,
         publish_memory: Callable[[str, DreamPublishableMemory], Awaitable[DreamPublishResult]],
         stability_score_fn: Callable[[MemoryEntry, int], float],

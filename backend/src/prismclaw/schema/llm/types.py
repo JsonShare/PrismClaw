@@ -16,7 +16,7 @@ class LLMUsage:
 
 @dataclass
 class LLMStreamChunk:
-    """LLM 流式输出块。对齐 core/agent/llm.py LLMStreamChunk 的纯数据类。"""
+    """LLM 流式输出块（纯数据）。"""
     text_delta: str = ""
     reasoning_delta: str = ""
     tool_call_deltas: list[dict[str, Any]] = field(default_factory=list)
@@ -33,44 +33,29 @@ class LLMResponse:
     reasoning: str = ""
 
 
-class LLMStreamFn(Protocol):
+class LLMClient(Protocol):
     """Agent 运行时与具体 LLM 实现之间的唯一契约。
 
     允许 throw — 调用方负责 try/except 归约。
     这不是 Pi 的 "must not throw"，而是 Python 的务实选择。
 
-    签名对齐：runner_pipeline.py L196 的调用方式为
-    deps.llm.stream(request=..., model=..., tools=..., ...)。
-    LLMStreamFn 定义 stream() 方法匹配此调用模式，
-    runner_pipeline.py 零改动。
+    调用方统一使用关键字参数：
+    `llm.stream(request=..., model=..., tools=..., ...)`。
     """
 
     default_model: str
 
     async def stream(
         self,
+        *,
         request: Any,
-        model: str,
+        model: str | None = None,
         tools: list[dict] | None = None,
         prompt_cache_runtime: Any | None = None,
         idle_seconds: float = 0.0,
         abort_event: Any | None = None,
         temperature: float | None = None,
-        *,
-        provider_hints: dict[str, Any] | None = None,
-    ) -> AsyncIterator[LLMStreamChunk]: ...
-
-    async def __call__(
-        self,
-        request: Any,
-        model: str,
-        tools: list[dict] | None = None,
-        prompt_cache_runtime: Any | None = None,
-        idle_seconds: float = 0.0,
-        abort_event: Any | None = None,
-        temperature: float | None = None,
-        *,
-        provider_hints: dict[str, Any] | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMStreamChunk]: ...
 
     async def complete(
@@ -83,7 +68,8 @@ class LLMStreamFn(Protocol):
         idle_seconds: float = 0.0,
         abort_event: Any | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> Any: ...
 
 
-__all__ = ["LLMStreamChunk", "LLMStreamFn", "LLMUsage", "LLMResponse"]
+__all__ = ["LLMStreamChunk", "LLMClient", "LLMUsage", "LLMResponse"]

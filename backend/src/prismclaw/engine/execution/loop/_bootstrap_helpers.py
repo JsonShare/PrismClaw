@@ -1,4 +1,5 @@
-"""Pure / helper functions extracted from bootstrap.py for maintainability.
+"""Pure helper functions shared by the loop assembly (deps / tree_writer /
+entry_runtime) and the run preparer.
 
 All functions in this module are *pure* (or close to it): they do not depend on
 ``AgentRunnerDeps`` or any class instance state.  They operate on plain data
@@ -26,11 +27,20 @@ from prismclaw.schema.session.types import SessionTree
 # ---------------------------------------------------------------------------
 
 def _user_message_count(tree: SessionTree) -> int:
-    """1-based user-message counter over tree.order (DSH turn semantics)."""
+    """1-based user-message counter over tree.order (turn 语义).
+
+    跳过 ``metadata.kind == "clarification_answer"`` 的 user entry——
+    HITL 澄清答案是人机交互回合的延续，不是新的用户问题；Chat 页面
+    (``_build_display_messages``) 已据此抑制为独立气泡，trajectory
+    的 turn 划分必须与之对齐，否则会把"跳过提问 → agent 续执行"
+    渲染成新 Turn 里的独立咨询内容。
+    """
     count = 0
     for eid in tree.order:
         e = tree.entries.get(eid)
         if isinstance(e, MessageEntry) and e.role == "user":
+            if isinstance(e.metadata, dict) and e.metadata.get("kind") == "clarification_answer":
+                continue
             count += 1
     return count
 

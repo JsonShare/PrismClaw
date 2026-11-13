@@ -1,19 +1,15 @@
 /**
- * TrajectoryInspector — Cell-driven detail panel (DSH-aligned).
+ * TrajectoryInspector — Cell 驱动的详情面板。
  *
- * Ported from DSH TrajectoryTable inspector:
- *   • Driven by the selected TrajectoryCell (per-conversation-event),
- *     NOT a separate RequestAuditRecord — fixes the index-misalignment
- *     bug where cells[] and records[] were different arrays.
- *   • Tab structure follows DSH detailTabs: markdown kinds (user/context/
- *     message/compacted) get 原文 (raw) + 预览 (rendered); tool kinds get
- *     概要 / 参数 (Payload) / 结果 (Result) / Schema
- *   • Tokens tab (assistant): usage breakdown (DSH UsageRows style) +
- *     Session cumulative block (DSH RequestUsagePanel "Session cumulative")
- *   • Timing tab (assistant): TTFT/Decoding/Total/Throughput
- *     (DSH AssistantTimingPanel style)
- *   • 调用快照 tab (assistant + matching record): 4-layer snapshot
- *     (PrismClaw bonus — ≥ DSH richness)
+ * 由选中的 TrajectoryCell（per-conversation-event）驱动，
+ * 独立于 RequestAuditRecord，避免 cells[] 和 records[] 不同数组导致的索引错位。
+ *
+ * Tab 结构：
+ *   • Markdown kind（user/context/message/compacted）：原文 + 预览
+ *   • Tool kind：概要 / 参数 / 结果 / Schema
+ *   • Tokens tab（assistant）：本次 token 分解 + 会话累计
+ *   • Timing tab（assistant）：TTFT/Decoding/Total/Throughput
+ *   • 调用快照 tab（assistant + matching record）：4 层快照
  */
 import { useState } from 'react'
 import {
@@ -24,7 +20,7 @@ import MarkdownRenderer from '../chat/MarkdownRenderer'
 import { HairlineDivider } from '../ui/HairlineDivider'
 import type { TrajectoryCell, TrajectoryCellKind, RequestAuditRecord } from '../../types'
 
-/** Disjoint token buckets for the cumulative usage block (DSH TrajectoryUsage). */
+/** 会话累计 usage 的 5 类 token 桶。 */
 export interface TrajectoryCumulativeUsage {
   input: number
   cacheRead: number
@@ -35,9 +31,9 @@ export interface TrajectoryCumulativeUsage {
 
 interface TrajectoryInspectorProps {
   cell: TrajectoryCell | null
-  /** Matching per-iteration record (for assistant cells' 4-layer bonus). */
+  /** 匹配的 per-iteration record（assistant cell 的 4 层快照用）。 */
   record: RequestAuditRecord | null
-  /** Session-cumulative usage up to and including this cell (assistant). */
+  /** 截止到当前 cell 的会话累计 usage（assistant）。 */
   cumulativeUsage?: TrajectoryCumulativeUsage | null
 }
 
@@ -67,7 +63,7 @@ function formatTokens(n: number | null | undefined): string {
 
 type TabId = 'content' | 'preview' | 'payload' | 'result' | 'tokens' | 'timing' | 'schema' | 'snapshot'
 
-/** Markdown source of the cell (DSH markdownSource). */
+/** 从 cell 中提取 Markdown 源文本。 */
 function markdownSource(cell: TrajectoryCell): string | null {
   if (cell.kind === 'user' || cell.kind === 'context' || cell.kind === 'system') {
     return cell.input_detail
@@ -78,7 +74,7 @@ function markdownSource(cell: TrajectoryCell): string | null {
   return null
 }
 
-/** Available tabs depend on cell kind — DSH detailTabs parity. */
+/** 根据 cell kind 决定可用的 tabs。 */
 function availableTabs(cell: TrajectoryCell, hasRecord: boolean): { id: TabId; label: string; icon: typeof Cpu }[] {
   const tabs: { id: TabId; label: string; icon: typeof Cpu }[] = []
   if (cell.kind === 'tool' || cell.kind === 'subtool') {
@@ -90,7 +86,7 @@ function availableTabs(cell: TrajectoryCell, hasRecord: boolean): { id: TabId; l
     )
     return tabs
   }
-  // Markdown kinds (DSH isMarkdownRecord): raw + rendered preview.
+  // Markdown kind：原文 + 渲染预览
   tabs.push({ id: 'content', label: '原文', icon: FileJson })
   if (markdownSource(cell)) tabs.push({ id: 'preview', label: '预览', icon: Eye })
   if (cell.kind === 'message') {
@@ -122,7 +118,7 @@ export function TrajectoryInspector({ cell, record, cumulativeUsage }: Trajector
   const hasError = !!cell.error || cell.is_error
   const hasRecord = record != null
   const tabs = availableTabs(cell, hasRecord)
-  // Clamp activeTab if it's not available for this kind
+  // 如果当前 activeTab 对该 kind 不可用，回退到第一个
   const tab = tabs.some(t => t.id === activeTab) ? activeTab : tabs[0].id
 
   const durationMs = cell.completed_at_ms != null
@@ -211,15 +207,14 @@ function ContentTab({ cell }: { cell: TrajectoryCell }) {
   const isAssistant = cell.kind === 'message' || cell.kind === 'compacted'
   const isInput = cell.kind === 'user' || cell.kind === 'system' || cell.kind === 'context'
 
-  // Tool kinds: DSH shows a summary here; full payload/result live in their
-  // own tabs (概要 / 参数 / 结果 separation).
+  // Tool kind 在这里展示概要；完整 payload/result 放到各自的 tab
   if (isTool) {
     return (
       <div className="space-y-3">
         {cell.error && (
           <div className="p-2.5 rounded-[var(--radius-control)] bg-[var(--c-danger, #dc2626)]/10 border border-[var(--c-danger, #dc2626)]/30">
             <div className="font-medium text-[var(--c-danger, #dc2626)] mb-0.5">错误</div>
-            <div className="text-[var(--fs-xs)] text-[var(--c-text)] whitespace-pre-wrap break-all">
+            <div className="text-[length:var(--fs-xs)] text-[var(--c-text)] whitespace-pre-wrap break-all">
               {cell.error}
             </div>
           </div>
@@ -304,7 +299,7 @@ function ContentTab({ cell }: { cell: TrajectoryCell }) {
   )
 }
 
-/* ─── Tab: Preview (rendered markdown — DSH 'rendered' tab) ─── */
+/* ─── Tab: Preview (渲染后的 markdown) ─── */
 
 function PreviewTab({ cell }: { cell: TrajectoryCell }) {
   const source = markdownSource(cell)
@@ -316,7 +311,7 @@ function PreviewTab({ cell }: { cell: TrajectoryCell }) {
   )
 }
 
-/* ─── Tab: Payload (tool input_detail — DSH 'input' tab) ─── */
+/* ─── Tab: Payload (tool input_detail / 参数) ─── */
 
 function PayloadTab({ cell }: { cell: TrajectoryCell }) {
   if (!cell.input_detail) return <p className="text-[var(--c-text-secondary)]">未记录参数</p>
@@ -327,7 +322,7 @@ function PayloadTab({ cell }: { cell: TrajectoryCell }) {
   )
 }
 
-/* ─── Tab: Result (tool output_detail — DSH 'output' tab) ─── */
+/* ─── Tab: Result (tool output_detail / 结果) ─── */
 
 function ResultTab({ cell }: { cell: TrajectoryCell }) {
   if (!cell.output_detail) return <p className="text-[var(--c-text-secondary)]">未记录结果</p>
@@ -366,7 +361,7 @@ function DetailBlock({
   )
 }
 
-/* ─── Tab: Tokens (assistant only — DSH UsageRows + cumulative style) ─── */
+/* ─── Tab: Tokens (assistant only / Token 分解 + 会话累计) ─── */
 
 function TokensTab({
   cell,
@@ -396,7 +391,6 @@ function TokensTab({
     { label: '正文 (Content)', value: content, color: 'bg-[var(--c-text-tertiary)]' },
   ]
 
-  // DSH RequestUsagePanel: "This request" + "Session cumulative" side by side.
   const cumulative = cumulativeUsage == null ? null : [
     { label: '输入合计 (Input)', value: cumulativeUsage.input + cumulativeUsage.cacheRead + cumulativeUsage.cacheWrite },
     { label: '缓存命中 (Cache Read)', value: cumulativeUsage.cacheRead },
@@ -450,7 +444,7 @@ function TokensTab({
   )
 }
 
-/* ─── Tab: Timing (assistant only — DSH AssistantTimingPanel style) ─── */
+/* ─── Tab: Timing (assistant only / TTFT·Decoding·Total·Throughput) ─── */
 
 function TimingTab({ cell, durationMs }: { cell: TrajectoryCell; durationMs: number | null }) {
   const ttftMs = cell.ttft_ms
@@ -545,7 +539,7 @@ function SchemaTab({ cell }: { cell: TrajectoryCell }) {
   )
 }
 
-/* ─── Tab: 调用快照 (assistant + matching record — PrismClaw bonus) ─── */
+/* ─── Tab: 调用快照 (assistant + matching record) ─── */
 
 function SnapshotTab({ record }: { record: RequestAuditRecord }) {
   const layers = [

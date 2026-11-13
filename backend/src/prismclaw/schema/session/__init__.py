@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from prismclaw.schema.session.types import (
-    CACHE_STRATEGY_CUSTOM_TYPE,
-    CONTEXT_COMPACTION_REFERENCE_CUSTOM_TYPE,
     CustomEntry,
     CustomPayload,
     CustomType,
@@ -30,7 +28,6 @@ from prismclaw.schema.session.types import (
     SessionEvent,
     SessionEventType,
     SessionHeader,
-    SessionHistorySummary,
     SessionTree,
     TASK_MUTATION_CUSTOM_TYPE,
     TASK_RUNTIME_CUSTOM_TYPE,
@@ -40,27 +37,19 @@ from prismclaw.schema.session.types import (
     generate_entry_id,
     now_iso,
     now_ms_epoch,
-    _coerce_cache_strategy_snapshot,
-    _coerce_custom_payload,
-    _coerce_turn_runtime_metrics_snapshot,
-    _collect_cache_strategy_snapshots,
-    _collect_custom_models,
-    _collect_last_cache_strategy,
-    _collect_turn_runtime_metrics_snapshots,
-    _content_blocks_to_llm,
-    _CustomPayloadFactSheet,
-    _effective_fork_task_projection_entries,
-    _event_to_message_entry,
-    _find_latest_custom_model,
-    _history_compaction_reduction,
-    _latest_custom_entry_index,
-    _message_entry_to_dict,
-    _parse_entry,
-    _repair_parent_chain,
-    _snapshot_has_stable_prefix_drift,
-    _snapshot_reused_stable_prefix,
-    _snapshot_requires_replacement_reuse,
+    _collect_custom_models as _collect_custom_models,
+    _collect_turn_runtime_metrics_snapshots as _collect_turn_runtime_metrics_snapshots,
+    _CustomPayloadFactSheet as _CustomPayloadFactSheet,
+    _effective_fork_task_projection_entries as _effective_fork_task_projection_entries,
+    _event_to_message_entry as _event_to_message_entry,
+    _find_latest_custom_model as _find_latest_custom_model,
+    _history_compaction_reduction as _history_compaction_reduction,
+    _latest_custom_entry_index as _latest_custom_entry_index,
+    _message_entry_to_dict as _message_entry_to_dict,
+    _parse_entry as _parse_entry,
+    _repair_parent_chain as _repair_parent_chain,
 )
+from prismclaw.schema.agent.session import SessionHistorySummary
 from prismclaw.schema.session.projection import (
     CacheProjector,
     ForkTaskProjector,
@@ -74,8 +63,6 @@ from prismclaw.schema.session.projection import (
 )
 
 __all__ = [
-    "CACHE_STRATEGY_CUSTOM_TYPE",
-    "CONTEXT_COMPACTION_REFERENCE_CUSTOM_TYPE",
     "CacheProjector",
     "CompactionEntry",
     "CustomEntry",

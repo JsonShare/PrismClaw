@@ -6,8 +6,8 @@
   列表时触发。刻意保持简短：调用方已为生成完整结果付出成本，不应让
   LLM 再花长时间来总结它。
 
-  末尾追加标识符保留块，以保住文件路径、函数名、错误码与 UUID/哈希——
-  PrismClaw 在标识符保留上比 Claude 更严格（与会话级压缩提示词一致）。
+  末尾追加标识符保留块，以保住文件路径、函数名、错误码与 UUID/哈希
+  （与会话级压缩提示词一致）。
 
   ``P2_2_PER_RESULT_PROMPT``（
   ``prismclaw.engine.compression._result_llm_summary``）中的原文在此

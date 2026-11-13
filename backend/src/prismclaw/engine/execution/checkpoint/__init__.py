@@ -4,13 +4,10 @@ from __future__ import annotations
 from prismclaw.engine.execution.checkpoint.models import (
     BatchRuntimeRecord,
     CommitState,
-    CompressionRuntimeState,
     CompressionState,
-    EffectClass,
     InvokedSkillRecord,
     InvokedSkillState,
     LoopState,
-    PromptCacheRuntimeState,
     RecoveryState,
     RequestAssemblySnapshot,
     ResumeBoundary,
@@ -20,6 +17,11 @@ from prismclaw.engine.execution.checkpoint.models import (
     SystemPromptSectionRecord,
     SystemPromptSectionState,
     ToolEffectRecord,
+)
+from prismclaw.schema.agent.capability import EffectClass
+from prismclaw.schema.session.cache_types import (
+    CompressionRuntimeState,
+    PromptCacheRuntimeState,
 )
 from prismclaw.engine.execution.checkpoint.persistence import (
     CURRENT_RUN_SNAPSHOT_VERSION,

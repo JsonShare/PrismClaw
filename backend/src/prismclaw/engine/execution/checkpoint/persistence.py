@@ -8,15 +8,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from prismclaw.engine.state.turn_state import TurnState
 from prismclaw.schema.agent.task_runtime import ReviewRequirements
 from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.agent.capability import EffectClass
 from prismclaw.schema.agent.task_runtime import TaskRuntimeState
+from prismclaw.schema.session.cache_types import (
+    CompressionRuntimeState,
+    PromptCacheRuntimeState,
+)
 
 from prismclaw.engine.execution.checkpoint.models import (
     BatchRuntimeRecord,
     CommitState,
-    CompressionRuntimeState,
-    EffectClass,
     InvokedSkillState,
-    PromptCacheRuntimeState,
     RequestAssemblySnapshot,
     ResumeBoundary,
     ResumeDisposition,

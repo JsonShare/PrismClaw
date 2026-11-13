@@ -210,12 +210,20 @@ _ATEXIT_REGISTERED = False
 
 
 def _resolve_log_dir() -> Path | None:
-    """解析日志目录：PRISMCLAW_LOG_DIR 显式指定（off=禁用），默认项目根/logs/app。"""
+    """解析日志目录：PRISMCLAW_LOG_DIR 显式指定（off=禁用），默认项目根/logs/app。
+
+    在 pytest 下默认不写文件日志——避免测试用例的 WARNING/ERROR 污染生产
+    logs/app/error.log。如需在测试中验证落盘行为，显式设置 PRISMCLAW_LOG_DIR。
+    """
+    import sys
+
     raw = (os.getenv("PRISMCLAW_LOG_DIR") or "").strip().lower()
     if raw == "off":
         return None
     if raw:
         return Path(raw).expanduser()
+    if "_pytest" in sys.modules or "pytest" in sys.modules:
+        return None
     from prismclaw.infra.paths import resolve_project_root
 
     return resolve_project_root() / "logs" / "app"
@@ -589,11 +597,6 @@ def _install_noise_filters(*, litellm_debug: bool) -> None:
                 if record.levelno < logging.WARNING:
                     return False
                 if "response_cost_failure_debug_information" in msg:
-                    return False
-                if (
-                    "could not pre-load bedrock-runtime response stream shape" in msg
-                    or "could not pre-load sagemaker-runtime response stream shape" in msg
-                ):
                     return False
 
             return True

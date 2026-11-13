@@ -126,9 +126,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     try:
         raw = await asyncio.wait_for(websocket.receive_json(), timeout=30)
-    except (TimeoutError, WebSocketDisconnect):
+    except TimeoutError:
         logger.warning("ws close 4001: identify timeout (client did not send identify within 30s)")
         await websocket.close(4001, "Identify timeout")
+        return
+    except WebSocketDisconnect:
+        # 客户端已主动断开（1001 等），连接已关，不能再发 close——
+        # 否则 starlette 抛 RuntimeError: Unexpected ASGI message 'websocket.close'。
         return
 
     parsed = parse_client_message(raw)

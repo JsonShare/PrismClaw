@@ -7,7 +7,7 @@ from typing import Any, Callable, TYPE_CHECKING
 
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
 from prismclaw.engine.execution.capabilities.runtime_bundle import RuntimeCapabilityBundle
-from prismclaw.engine.execution.loop.bootstrap import AgentRunnerDeps
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.skills.runtime import SkillRuntime
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.infra.settings import Settings
@@ -108,6 +108,7 @@ def register_subagent_tools(
     """
     from prismclaw.engine.execution.handoff.request_handoff import RequestHandoffTool
     from prismclaw.engine.subagent import SubAgentExecutor, SubAgentTool
+    from prismclaw.engine.toolkit.registry.discovery import SubagentSearchTool
     from prismclaw.engine.toolkit.subagent.reduce_subagent_results import (
         ReduceSubAgentResultsTool,
     )
@@ -115,7 +116,12 @@ def register_subagent_tools(
 
     subagent_config = SubAgentConfig.model_validate(settings.subagent.model_dump())
 
-    for name in ("sub_agent", "reduce_subagent_results", "request_handoff"):
+    for name in (
+        "sub_agent",
+        "reduce_subagent_results",
+        "request_handoff",
+        "subagent_search",
+    ):
         registry.unregister(name)
 
     if not settings.subagent.enabled:
@@ -147,6 +153,7 @@ def register_subagent_tools(
     )
     registry.register(ReduceSubAgentResultsTool())
     registry.register(RequestHandoffTool())
+    registry.register(SubagentSearchTool(capability_catalog=capability_catalog))
     return subagent_config
 
 
