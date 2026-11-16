@@ -5296,12 +5296,16 @@ body,
 .nt-hero-line {
   display: block;
 }
+/* 首行与装饰引号同行，引号跟随文字宽度，不写死偏移 */
+.nt-hero-first {
+  display: flex;
+  align-items: flex-start;
+}
 .nt-quote {
-  position: absolute;
-  left: 92px;
-  top: -3px;
+  flex: 0 0 auto;
   width: 12px;
   height: 12px;
+  margin: 2px 0 0 6px;
 }
 .nt-shuffle {
   position: absolute;

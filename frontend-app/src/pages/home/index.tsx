@@ -232,9 +232,11 @@ export default function Home() {
         <View className='nt-scroll'>
           <View className='nt-hero'>
           <View className='nt-hero-title'>
-            <Text className='nt-hero-line'>搭子帮你</Text>
-            <Text className='nt-hero-line'>开启今天的工作</Text>
-            <Image className='nt-quote' src={QUOTE_MARK} mode='aspectFit' />
+            <View className='nt-hero-line nt-hero-first'>
+              <Text>随时随地</Text>
+              <Image className='nt-quote' src={QUOTE_MARK} mode='aspectFit' />
+            </View>
+            <Text className='nt-hero-line'>帮您高效干活</Text>
           </View>
           <View
             className='nt-shuffle'
