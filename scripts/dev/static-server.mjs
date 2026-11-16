@@ -68,9 +68,16 @@ const logAccess = (req, res, startedAt) => {
 const sendStatic = (res, filePath, status = 200) => {
   const ext = extname(filePath).toLowerCase()
   const immutable = /\/assets\/|\.[0-9a-f]{8,}\./i.test(filePath)
+  const isHtml = ext === '.html'
   res.writeHead(status, {
     'Content-Type': MIME[ext] || 'application/octet-stream',
-    'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+    // 入口 HTML 必须每次回源校验，否则手机上会一直跑旧版本的 JS 引用
+    'Cache-Control': isHtml
+      ? 'no-store, no-cache, must-revalidate, max-age=0'
+      : immutable
+        ? 'public, max-age=31536000, immutable'
+        : 'no-cache',
+    ...(isHtml ? { Pragma: 'no-cache', Expires: '0' } : {}),
   })
   createReadStream(filePath).pipe(res)
 }

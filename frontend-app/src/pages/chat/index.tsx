@@ -5,6 +5,7 @@ import { useEffect } from 'react'
 import ChatHeader from '../../components/ChatHeader'
 import ConversationPane from '../../components/ConversationPane'
 import { useThemeClass } from '../../hooks/useThemeClass'
+import { splitMentions } from '../../lib/chat/markers'
 import { contentToText } from '../../services/sessions'
 import { useAppStore } from '../../stores/useAppStore'
 import { useChatStore } from '../../stores/useChatStore'
@@ -44,12 +45,16 @@ export default function Chat() {
   // 直接打开旧会话（不在当前分页列表）时，用首条用户消息兜底标题
   const firstUserMessage = conv?.messages.find((message) => message.role === 'user')
   const fallbackTitle = firstUserMessage
-    ? contentToText(firstUserMessage.content).replace(/\s+/g, ' ').trim().slice(0, 24)
+    ? splitMentions(contentToText(firstUserMessage.content))
+        .text.replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 24)
     : ''
   const title = current?.title?.trim() || fallbackTitle || '新任务'
+  const pageClass = useThemeClass('page')
 
   return (
-    <View className={useThemeClass('page')}>
+    <View className={`${pageClass} chat-page`}>
       <ChatHeader
         sessionId={activeId}
         title={title}

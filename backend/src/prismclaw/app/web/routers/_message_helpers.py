@@ -403,6 +403,21 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
         if not isinstance(entry, MessageEntry):
             continue
         if entry.role == "tool":
+            # AskUserQuestion 是执行边界：提问气泡必须在工具结果处收束，
+            # 否则用户作答后的续执行文本会被并入提问气泡（HITL 答案本身
+            # 只作为该工具结果存在，不再额外落 user entry）。
+            _tool_name = str(entry.tool_name or "").lower()
+            _is_ask_result = "ask_user" in _tool_name or "askuser" in _tool_name
+            if not _is_ask_result:
+                for _tc in pending_tool_calls:
+                    if _tc.get("id") != entry.tool_call_id:
+                        continue
+                    _fn = _tc.get("function")
+                    _name = str((_fn or {}).get("name") or "").lower() if isinstance(_fn, dict) else ""
+                    _is_ask_result = "ask_user" in _name or "askuser" in _name
+                    break
+            if _is_ask_result:
+                flush_assistant()
             continue
         sanitized_content = _sanitize_content(entry.content, workspace_id=workspace_id)
         has_visible_content = _message_has_visible_content(sanitized_content)
@@ -416,18 +431,10 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
             continue
 
         if entry.role == "user":
-            # 人机交互澄清追问答案：已被标记 metadata.kind=="clarification_answer"。
-            # 答案已作为「人机交互」步骤内嵌在提问气泡的执行时间线（ask_user 工具行
-            # 的 question+answer），此处不再单独成气泡，否则会与上传记录割裂为两条
-            # user 记录。落树仍保留该独立 user entry（模型上下文需要）。
-            # 仅更新 last_user_ts_ms 维持后续 assistant 时长计算口径，不 emit 气泡。
-            _entry_meta = getattr(entry, "metadata", None)
-            if isinstance(_entry_meta, dict) and _entry_meta.get("kind") == "clarification_answer":
-                # 与正常 user 记录同效：先 flush 前置的 assistant 提问气泡（含
-                # ask_user 工具调用 / 执行时间线）。否则该提问气泡会因 pending 被
-                # 后续 assistant 覆盖而丢失、或并入下一轮回复（历史回放里整条
-                # 「人机交互」问答消失）。答案已内嵌在提问步骤的时间线，此处不
-                # emit 独立气泡，仅更新 last_user_ts_ms 维持后续 assistant 时长口径。
+            # 仅历史会话：旧版本把 HITL 答案落成独立 user entry。新会话不再
+            # 产生该形态；读取时仍抑制为气泡，避免旧会话出现重复用户消息。
+            _legacy_meta = getattr(entry, "metadata", None)
+            if isinstance(_legacy_meta, dict) and _legacy_meta.get("kind") == "clarification_answer":
                 flush_assistant()
                 last_user_ts_ms = _iso_to_ms(entry.timestamp)
                 continue

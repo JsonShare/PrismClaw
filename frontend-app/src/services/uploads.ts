@@ -5,7 +5,7 @@ import { ApiError, apiUrl, getToken } from './request'
 
 const IS_H5 = process.env.TARO_ENV === 'h5'
 /** 与 PC 端一致：单条消息最多 10 个附件 */
-const MAX_FILES = 10
+export const MAX_ATTACHMENTS = 10
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -38,6 +38,7 @@ interface UploadItem {
 interface SkippedItem {
   name: string
   code: string
+  message?: string
 }
 
 interface UploadResponse {
@@ -59,24 +60,44 @@ function newId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
-/** H5 下用隐藏 input 取文件；取消选择不会触发 change，靠 focus 兜底回收 */
-function pickH5(configure: (input: HTMLInputElement) => void): Promise<LocalFile[]> {
+function nativeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object') {
+    const message = (error as { errMsg?: unknown }).errMsg
+    if (typeof message === 'string') return message
+  }
+  return ''
+}
+
+/** 小程序取消选择是正常操作；其余错误转成可直接展示的 Error。 */
+async function settlePick<T>(operation: () => Promise<T>, fallback: string): Promise<T | null> {
+  try {
+    return await operation()
+  } catch (error) {
+    const raw = nativeErrorMessage(error)
+    if (/cancel/i.test(raw)) return null
+    const detail = raw.replace(/^[\w.]+:fail:?\s*/, '')
+    throw new Error(detail || fallback)
+  }
+}
+
+/** H5 下用隐藏 input 取文件；取消选择时通过 cancel 与页面回到前台事件回收 */
+function pickH5(
+  configure: (input: HTMLInputElement) => void,
+  limit: number,
+): Promise<LocalFile[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.style.display = 'none'
     configure(input)
     let settled = false
-    const finish = (files: LocalFile[]) => {
-      if (settled) return
-      settled = true
-      input.remove()
-      resolve(files)
-    }
-    input.onchange = () => {
-      const chosen = Array.from(input.files || []).slice(0, MAX_FILES)
+    let returnTimer: ReturnType<typeof setTimeout> | null = null
+
+    const onChange = () => {
+      const picked = input.files ? Array.from(input.files) : []
       finish(
-        chosen.map((file) => ({
+        picked.slice(0, limit).map((file) => ({
           id: newId(),
           name: file.name,
           size: file.size,
@@ -85,21 +106,57 @@ function pickH5(configure: (input: HTMLInputElement) => void): Promise<LocalFile
         })),
       )
     }
-    window.addEventListener('focus', () => setTimeout(() => finish([]), 500), { once: true })
+    const onCancel = () => finish([])
+    const onReturn = () => {
+      if (returnTimer) clearTimeout(returnTimer)
+      // 部分浏览器 change 晚于 focus / visibilitychange，延迟后再判断选择结果
+      returnTimer = setTimeout(() => {
+        returnTimer = null
+        if (settled) return
+        if ((input.files?.length ?? 0) > 0) onChange()
+        else finish([])
+      }, 500)
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') onReturn()
+    }
+    const finish = (files: LocalFile[]) => {
+      if (settled) return
+      settled = true
+      if (returnTimer) clearTimeout(returnTimer)
+      input.removeEventListener('change', onChange)
+      input.removeEventListener('cancel', onCancel)
+      window.removeEventListener('focus', onReturn)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      input.remove()
+      resolve(files)
+    }
+
+    // iOS / 内置浏览器可能不触发 focus，优先使用 input 的原生取消事件
+    input.addEventListener('cancel', onCancel)
+    // 用 addEventListener：属性式 onchange 在部分内置浏览器里不回调多选结果
+    input.addEventListener('change', onChange)
+    window.addEventListener('focus', onReturn)
+    document.addEventListener('visibilitychange', onVisibilityChange)
     document.body.appendChild(input)
     input.click()
   })
 }
 
 /** 选择本地文件：H5 走隐藏 input，小程序走聊天文件选择器 */
-export async function pickLocalFiles(): Promise<LocalFile[]> {
+export async function pickLocalFiles(limit = MAX_ATTACHMENTS): Promise<LocalFile[]> {
   if (IS_H5) {
     return pickH5((input) => {
       input.multiple = true
-    })
+      input.setAttribute('multiple', 'multiple')
+    }, limit)
   }
 
-  const res = await Taro.chooseMessageFile({ count: MAX_FILES, type: 'all' })
+  const res = await settlePick(
+    () => Taro.chooseMessageFile({ count: limit, type: 'all' }),
+    '选择文件失败',
+  )
+  if (!res) return []
   return (res.tempFiles || []).map((file) => ({
     id: newId(),
     name: file.name || file.path.split('/').pop() || '未命名文件',
@@ -110,27 +167,38 @@ export async function pickLocalFiles(): Promise<LocalFile[]> {
 }
 
 /** 拍照或从相册选图：H5 用 capture 属性唤起相机，小程序走 chooseMedia */
-export async function pickPhotos(from: 'camera' | 'album'): Promise<LocalFile[]> {
+export async function pickPhotos(
+  from: 'camera' | 'album',
+  limit = MAX_ATTACHMENTS,
+): Promise<LocalFile[]> {
   if (IS_H5) {
     return pickH5((input) => {
       input.accept = 'image/*'
-      input.multiple = from === 'album'
+      if (from === 'album') {
+        input.multiple = true
+        input.setAttribute('multiple', 'multiple')
+      }
       if (from === 'camera') input.setAttribute('capture', 'environment')
-    })
+    }, limit)
   }
 
-  const res = await Taro.chooseMedia({
-    count: MAX_FILES,
-    mediaType: ['image'],
-    sourceType: [from],
-  })
+  const res = await settlePick(
+    () => Taro.chooseMedia({
+      count: from === 'camera' ? 1 : limit,
+      mediaType: ['image'],
+      sourceType: [from],
+    }),
+    '选择图片失败',
+  )
+  if (!res) return []
   return (res.tempFiles || []).map((file) => {
     const name = file.tempFilePath.split('/').pop() || '照片.jpg'
     return {
       id: newId(),
       name,
       size: file.size || 0,
-      mimeType: guessMime(name),
+      // 部分机型返回无扩展名的临时路径，但 chooseMedia 已保证这里是图片
+      mimeType: IMAGE_MIME_BY_EXT[extOf(name)] || 'image/jpeg',
       source: file.tempFilePath,
     }
   })
@@ -167,18 +235,43 @@ async function uploadWeapp(
         name: 'files',
         header: { Authorization: `Bearer ${getToken()}` },
       })
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw new ApiError(res.statusCode, `上传失败（${res.statusCode}）`)
+      let data: UploadResponse & { detail?: string }
+      try {
+        data = JSON.parse(res.data) as UploadResponse & { detail?: string }
+      } catch {
+        throw new Error('服务器返回了无法识别的上传结果')
       }
-      const data = JSON.parse(res.data) as UploadResponse
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw new ApiError(res.statusCode, data.detail || `上传失败（${res.statusCode}）`)
+      }
       merged.files.push(...(data.files || []))
       merged.skipped.push(...(data.skipped || []))
       if (data.session_id) merged.session_id = data.session_id
     } catch (error) {
-      merged.skipped.push({ name: file.name, code: (error as Error).message || 'transfer_failed' })
+      merged.skipped.push({
+        name: file.name,
+        code: 'transfer_failed',
+        message: nativeErrorMessage(error) || '网络连接失败',
+      })
     }
   }
   return merged
+}
+
+function skippedMessage(item: SkippedItem): string {
+  if (item.message) return `「${item.name}」${item.message}`
+  switch (item.code) {
+    case 'blocked_type':
+      return `「${item.name}」类型不支持`
+    case 'noise':
+      return `「${item.name}」是系统文件，无法上传`
+    case 'disk_full':
+      return `「${item.name}」上传失败，磁盘空间不足`
+    case 'invalid_path':
+      return `「${item.name}」路径无效`
+    default:
+      return `「${item.name}」上传失败，请重试`
+  }
 }
 
 function readImageBase64(file: LocalFile): Promise<string> {
@@ -218,11 +311,21 @@ export async function uploadAttachments(
     `session_id=${encodeURIComponent(options.sessionId)}`,
   ].join('&')
   const res = IS_H5 ? await uploadH5(files, params) : await uploadWeapp(files, params)
+  // 任意附件失败都保留当前草稿并明确提示，避免悄悄发送不完整的附件组合
+  if (res.skipped.length) {
+    throw new Error(res.skipped.map(skippedMessage).join('；'))
+  }
 
-  const uploadedByName = new Map(res.files.map((item) => [item.original_name, item]))
+  const uploadedByName = new Map<string, UploadItem[]>()
+  for (const item of res.files) {
+    const sameName = uploadedByName.get(item.original_name) || []
+    sameName.push(item)
+    uploadedByName.set(item.original_name, sameName)
+  }
   const blocks: AttachmentBlock[] = []
   for (const file of files) {
-    const uploaded = uploadedByName.get(file.name)
+    // 同名文件按上传顺序逐一消费，不能让多个附件都指向最后一个同名文件
+    const uploaded = uploadedByName.get(file.name)?.shift()
     if (!uploaded) continue
     if (file.mimeType.startsWith('image/')) {
       const data = await readImageBase64(file)
@@ -243,11 +346,6 @@ export async function uploadAttachments(
     }
   }
 
-  if (!blocks.length) {
-    const skipped = res.skipped[0]
-    throw new Error(
-      skipped ? `「${skipped.name}」无法上传` : '文件上传失败，请重试',
-    )
-  }
+  if (!blocks.length) throw new Error('文件上传失败，请重试')
   return blocks
 }

@@ -177,9 +177,9 @@ async def _persist_clarified_turn(
       - 同批次其余调用：跳过说明（is_error=True，模型可见、可重发）
 
     落树顺序（唯一正确序，wait_for_clarification 不再落树的原因）：
-    assistant(tool_calls) → tool 结果（ask 答案 + 其余跳过）→ user answer。
-    user 消息若先落会插在 assistant 提问之前、且隔断 tool_calls ↔ tool
-    结果配对（provider 400）。
+    assistant(tool_calls) → tool 结果（ask 答案 + 其余跳过）。
+    用户作答只作为 ask 工具的结果存在，不再额外落 user entry——人机交互
+    是执行步骤的一部分，不是新的用户轮次。
     """
     from prismclaw.engine.execution.dispatch.response_handling import (
         append_assistant_response,
@@ -238,26 +238,6 @@ async def _persist_clarified_turn(
         )
         entry_ids.add(entry.id)
         await _append(deps, tree, entry)
-    # user answer 最后落树：模型下轮从 tree 重建时看到完整对话
-    # （提问 → 工具结果 → 用户回答），answer 跨轮持久。
-    if answer is not None:
-        await _append(
-            deps,
-            tree,
-            MessageEntry(
-                id=generate_entry_id(entry_ids),
-                parent_id=tree.leaf_id,
-                timestamp=now_iso(),
-                role="user",
-                content=answer,
-                # 标记为人机交互的澄清追问答案：落树保留为独立 user entry（模型
-                # 上下文需要，下一轮 prepare_next_turn 才能看到用户作答），但
-                # 显示投影 (_build_display_messages) 据此抑制为独立气泡——答案
-                # 已作为「人机交互」步骤内嵌在提问气泡的执行时间线里，无需再拆
-                # 成第二条 user 记录造成割裂。
-                metadata={"kind": "clarification_answer", "ask_tool_call_id": ask_call_id},
-            ),
-        )
 
 
 async def _persist_blocked_tool_results(

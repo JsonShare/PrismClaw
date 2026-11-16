@@ -9,6 +9,13 @@
 
 export type ChipKind = 'skill' | 'plugin' | 'file'
 
+/** 输入框 chip 与历史气泡 chip 共用同一套图标 */
+export const CHIP_ICONS: Record<ChipKind, string> = {
+  skill: 'hammer',
+  plugin: 'blocks',
+  file: 'at-sign',
+}
+
 export interface Chip {
   /** `kind:value`，用于去重与列表 key */
   id: string
@@ -61,4 +68,35 @@ export function markersToReadable(text: string): string {
     const value = safeDecode(raw)
     return `@${kind === 'file' ? fileNameOf(value) : value}`
   })
+}
+
+const LEADING_MARKER_RE = /^\s*<\|(skill|plugin|file)\|([^|<>]*)\|>/
+const LEADING_AT_RE = /^\s*@([^\s@]+)/
+
+/**
+ * 拆出正文开头的技能/专家/文件卡片。
+ *
+ * 发送时卡片已序列化进正文；历史消息里可能是原始标记，也可能是后端还原的
+ * `@标题`。两种形态都拆成 chip，气泡里按输入框的同款标签渲染。
+ */
+export function splitMentions(source: string): { chips: Chip[]; text: string } {
+  const chips: Chip[] = []
+  let rest = source
+  let marker = LEADING_MARKER_RE.exec(rest)
+  if (marker) {
+    while (marker) {
+      chips.push(makeChip(marker[1] as ChipKind, safeDecode(marker[2])))
+      rest = rest.slice(marker[0].length)
+      marker = LEADING_MARKER_RE.exec(rest)
+    }
+  } else {
+    let at = LEADING_AT_RE.exec(rest)
+    while (at) {
+      // 只有 `@标题` 时已无从得知类型，按文件类 chip 渲染成 `@` 图标
+      chips.push(makeChip('file', at[1]))
+      rest = rest.slice(at[0].length)
+      at = LEADING_AT_RE.exec(rest)
+    }
+  }
+  return { chips, text: rest.replace(/^\n+/, '') }
 }

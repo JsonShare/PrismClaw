@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 
-import { markersToReadable } from '../lib/chat/markers'
 import { nextTimelineState } from '../lib/chat/timelineSync'
 import {
   contentToText,
@@ -56,6 +55,8 @@ export interface ConvState {
   streamingText: string
   liveTimeline: TimelineNode[]
   liveOutputFiles: string[]
+  /** 运行中收到的参考来源（event:reference 早于定稿时落到这里） */
+  liveReferenceSources: string[]
   clarify: ClarifyRequest | null
   isStreaming: boolean
   queuedPosition: number | null
@@ -89,11 +90,12 @@ interface ChatStore {
   loadOlder: (sessionId: string) => Promise<void>
   renameConversation: (sessionId: string, title: string) => void
   removeConversation: (sessionId: string) => void
+  /** 返回乐观插入的用户消息 id（无内容发送时返回 undefined） */
   sendMessage: (
     sessionId: string,
     content: string,
     options: { workspaceId: string; mode: Mode; attachments?: AttachmentBlock[] },
-  ) => void
+  ) => string | undefined
   abort: (sessionId: string) => void
   answerClarify: (sessionId: string, answer: string) => void
   submitFeedback: (sessionId: string, messageId: string, vote: 'up' | 'down' | 'none') => void
@@ -106,6 +108,7 @@ function emptyConv(): ConvState {
     streamingText: '',
     liveTimeline: [],
     liveOutputFiles: [],
+    liveReferenceSources: [],
     clarify: null,
     isStreaming: false,
     queuedPosition: null,
@@ -194,6 +197,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         streamingText: '',
         liveTimeline: [],
         liveOutputFiles: [],
+        liveReferenceSources: [],
         clarify: null,
         isStreaming: false,
         queuedPosition: null,
@@ -218,6 +222,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
           streamingText: '',
           liveTimeline: [],
           liveOutputFiles: [],
+          liveReferenceSources: [],
           clarify: null,
           queuedPosition: null,
           isStreaming: true,
@@ -291,6 +296,34 @@ export const useChatStore = create<ChatStore>((set, get) => {
         break
       }
 
+      // 参考来源在定稿前后都可能到达：先挂 live，已定稿则合并到对应回答
+      case 'event:reference': {
+        const sources = (frame.data.sources ?? []).filter(
+          (source) => typeof source === 'string' && source.trim().length > 0,
+        )
+        if (!sources.length) break
+        // 没有 message_id 且本轮仍在运行时，不能挂到上一轮回答上；先落 live，
+        // 由 chat.done 并入本轮消息
+        const targetId =
+          frame.data.message_id ||
+          (conv.isStreaming
+            ? ''
+            : [...conv.messages].reverse().find((m) => m.role === 'assistant')?.id)
+        const target = targetId ? conv.messages.find((m) => m.id === targetId) : undefined
+        if (!target) {
+          patchConv(sessionId, { liveReferenceSources: sources })
+          break
+        }
+        updateConv(sessionId, (c) => ({
+          messages: c.messages.map((m) =>
+            m.id === target.id
+              ? { ...m, metadata: { ...m.metadata, referenceSources: sources } }
+              : m,
+          ),
+        }))
+        break
+      }
+
       // 引导问题在 chat.done 之后异步下发（后端最多等 3s 生成），挂到对应回答上
       case 'event:questions': {
         const questions = (frame.data.questions ?? [])
@@ -345,6 +378,11 @@ export const useChatStore = create<ChatStore>((set, get) => {
         const metadata = {
           ...(finalMessage && typeof finalMessage === 'object' ? finalMessage.metadata : {}),
           ...(conv.liveOutputFiles.length ? { outputFiles: conv.liveOutputFiles } : {}),
+          // event:reference 可能先于 chat.done 到达：定稿时把 live 来源并入消息，
+          // 否则 finishTurn 清空 live 态会让本轮资料行丢失
+          ...(conv.liveReferenceSources.length
+            ? { referenceSources: conv.liveReferenceSources }
+            : {}),
           // 用户主动停止：本轮回复不完整，给消息打上可见标记
           ...(frame.data.aborted ? { interrupted: true } : {}),
         }
@@ -503,6 +541,8 @@ export const useChatStore = create<ChatStore>((set, get) => {
             hasMore: offset > 0,
             streamingText: '',
             liveTimeline: [],
+            liveOutputFiles: [],
+            liveReferenceSources: [],
             clarify: null,
             isStreaming: false,
             queuedPosition: null,
@@ -552,18 +592,18 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
     sendMessage: (sessionId, content, options) => {
       const text = content.trim()
-      if (!text) return
       const attachments = options.attachments ?? []
+      // 只发附件、不写文字时也应正常发送
+      if (!text && !attachments.length) return undefined
       const conv = get().convStates[sessionId] ?? emptyConv()
-      const readable = markersToReadable(text)
-      // 乐观消息按用户可读形态展示：正文去标记 + 附件块
+      // 乐观消息保留原始标记：气泡里按 chip 渲染技能/专家，与刷新后的历史气泡一致
       const blocks: ContentBlock[] = []
-      if (readable.trim()) blocks.push({ type: 'text', text: readable })
+      if (text) blocks.push({ type: 'text', text })
       blocks.push(...attachments)
       const userMessage: Message = {
         id: `user_${Date.now()}`,
         role: 'user',
-        content: attachments.length ? blocks : readable,
+        content: attachments.length ? blocks : text,
         timestamp: Date.now(),
       }
       const workspaceId = conv.workspaceId || options.workspaceId
@@ -582,6 +622,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         mode: options.mode,
         ...(attachments.length ? { attachments } : {}),
       })
+      return userMessage.id
     },
 
     abort: (sessionId) => {

@@ -191,7 +191,7 @@ async def wait_for_clarification(
     非用户作答（abort / stale / 会话结束），骨架据此终止本轮。
 
     **不落树 answer**：落树由 ``persist_turn(kind="clarified")`` 统一负责
-    （assistant → tool 结果 → user answer 的唯一正确序）。
+    （assistant(tool_calls) → tool 结果；答案只存在于 ask 工具结果中）。
 
     **等待时间不计入运行预算**：用户在想问题 / 打字回答的时间不是引擎
     消耗的算力。返回时扣除等待时间——把 ``run_started``、``soft_at``、

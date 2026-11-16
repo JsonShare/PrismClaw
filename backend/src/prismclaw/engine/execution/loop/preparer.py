@@ -535,16 +535,15 @@ class RunPreparer:
         run_state = snapshot.run_state
         if not recovery_mode:
             run_state.run_id = request.request_id
-            # 新 run 边界：复位"本 run"语义的台账字段（run 生命周期
-            # 护栏，sdd-convergence-efficiency D1 复核发现 F1/F2）。
-            # recovery 保持同 run_id，台账延续（续跑语义）。
-            # convergence_advisory_sent：收敛 advisory 每 run 至多一次，
-            # 跨任务残留会让新任务首回合误判"已提示过"。
-            # 注意：RunState.tool_loop_state 是 dict（checkpoint
-            # 持久化层），runner 加载时才经 from_dict 还原为对象。
+
             _tls = snapshot.run_state.tool_loop_state
             if _tls:
                 _tls["convergence_advisory_sent"] = False
+
+            run_state.loop_state.steps_spent = 0
+            run_state.loop_state.tool_calls_spent = 0
+            run_state.loop_state.soft_at = 0.0
+            run_state.loop_state.hard_at = 0.0
         snapshot.worker_id = getattr(deps, "worker_id", None)
         run_state.current_phase = "prepare"
 

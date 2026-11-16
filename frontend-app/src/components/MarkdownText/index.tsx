@@ -256,7 +256,11 @@ export function MarkdownText({ text }: MarkdownTextProps) {
             <View key={key} className='md-list'>
               {block.items.map((item, itemIndex) => (
                 <View key={`${key}-${itemIndex}`} className='md-list-item'>
-                  <Text className='md-list-mark'>{block.ordered ? `${itemIndex + 1}.` : '•'}</Text>
+                  {block.ordered ? (
+                    <Text className='md-list-mark'>{`${itemIndex + 1}.`}</Text>
+                  ) : (
+                    <View className='md-list-dot' />
+                  )}
                   <Text className='md-list-text'>{renderInline(item, `${key}-${itemIndex}`)}</Text>
                 </View>
               ))}

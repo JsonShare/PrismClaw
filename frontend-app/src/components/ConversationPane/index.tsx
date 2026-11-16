@@ -1,5 +1,6 @@
 import { ScrollView, Text, View } from '@tarojs/components'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import Taro from '@tarojs/taro'
 
 import AppDialog from '../AppDialog'
 import Composer from '../Composer'
@@ -8,10 +9,12 @@ import EmptyState from '../EmptyState'
 import Icon from '../Icon'
 import { ChatMessage } from '../ChatMessage'
 import { ClarifyCard } from '../ClarifyCard'
-import { ExecutionTimeline } from '../ExecutionTimeline'
-import LiveProgress from '../LiveProgress'
+import { ExecutionSheet } from '../ExecutionTimeline'
+import type { StepRow } from '../../lib/chat/stepRows'
 import { MarkdownText } from '../MarkdownText'
 import ModePicker from '../ModePicker'
+import ReferenceRow from '../ReferenceRow'
+import WorkspacePicker from '../WorkspacePicker'
 import { ThinkingIndicator } from '../ThinkingIndicator'
 import { composeContent } from '../../lib/chat/markers'
 import FilePreview from '../FilePreview'
@@ -31,6 +34,7 @@ const EMPTY_CONV: ConvState = {
   streamingText: '',
   liveTimeline: [],
   liveOutputFiles: [],
+  liveReferenceSources: [],
   clarify: null,
   isStreaming: false,
   queuedPosition: null,
@@ -53,7 +57,7 @@ export interface ConversationPaneProps {
  */
 export default function ConversationPane({
   sessionId,
-  placeholder = '发消息给 PrismClaw',
+  placeholder = '描述任务或按住说话',
 }: ConversationPaneProps) {
   const conv = useChatStore((s) => s.convStates[sessionId]) ?? EMPTY_CONV
   const openConversation = useChatStore((s) => s.openConversation)
@@ -72,16 +76,26 @@ export default function ConversationPane({
   // 手动上翻的位置强行拉回底部
   const [endAnchor, setEndAnchor] = useState('chat-end-0')
   const endTickRef = useRef(0)
+  // 新提问的顶部锚点：发送后把该条问题定位到视口顶部，让用户自上而下读回答
+  const [topAnchor, setTopAnchor] = useState<string | null>(null)
+  // 撑在问题下方的填充高度：让问题有足够滚动余量停在顶部
+  const [pinFillHeight, setPinFillHeight] = useState(0)
+  // 实际触发滚动的位置（与 topAnchor 解耦，保证填充生效后再滚）
+  const [scrollTarget, setScrollTarget] = useState('')
   const [wsState, setWsState] = useState(socket.getState())
   // 是否已离开底部（决定底部中央的回到底部按钮）
   const [awayFromBottom, setAwayFromBottom] = useState(false)
   // 应用内文件预览（消息附件点击）
   const [preview, setPreview] = useState<PreviewFile | null>(null)
+  // 执行详情浮层：在页面根节点渲染，避免被消息滚动容器裁切层级
+  const [execSheet, setExecSheet] = useState<{ rows: StepRow[]; finished: boolean } | null>(null)
   const loadedOffsetRef = useRef(conv.loadedOffset)
   const reconnectedRef = useRef(false)
   // 用户向上翻阅历史时不再跟随流式输出自动贴底
   const stickBottomRef = useRef(true)
   const bottomGapRef = useRef(Number.POSITIVE_INFINITY)
+  // 消息滚动视口高度：用于按「距底部像素」判断是否贴底（对齐 PC 的 clientHeight 算法）
+  const [viewportHeight, setViewportHeight] = useState(0)
   // 用户是否离开过顶部：离开后再回到顶部才自动加载更早消息
   const topArmedRef = useRef(false)
 
@@ -108,8 +122,55 @@ export default function ConversationPane({
 
   const scrollToEnd = () => {
     endTickRef.current += 1
+    setTopAnchor(null)
+    setScrollTarget('')
     setEndAnchor(`chat-end-${endTickRef.current}`)
   }
+
+  // 测量消息滚动视口高度（H5/小程序通用），供贴底判断使用；窗口尺寸变化时重测
+  useEffect(() => {
+    const measure = () => {
+      Taro.createSelectorQuery()
+        .select('#chat-scroll')
+        .boundingClientRect((rect) => {
+          const height = (rect as { height?: number } | null)?.height
+          if (height && height > 0) setViewportHeight(Math.round(height))
+        })
+        .exec()
+    }
+    measure()
+    if (typeof Taro.onWindowResize === 'function') {
+      Taro.onWindowResize(measure)
+      return () => Taro.offWindowResize?.(measure)
+    }
+    return undefined
+  }, [])
+
+  // 撑高：量出提问本身高度，补足到一屏，使提问能真正停在视口顶部
+  useEffect(() => {
+    if (!topAnchor || !viewportHeight) {
+      setPinFillHeight(0)
+      return
+    }
+    Taro.createSelectorQuery()
+      .select(`#${topAnchor}`)
+      .boundingClientRect((rect) => {
+        const height = (rect as { height?: number } | null)?.height ?? 0
+        setPinFillHeight(Math.max(0, viewportHeight - height))
+      })
+      .exec()
+  }, [topAnchor, viewportHeight])
+
+  // 填充高度生效后再触发滚动，确保提问能滚动到顶部
+  useEffect(() => {
+    if (!topAnchor || pinFillHeight <= 0) return
+    setScrollTarget(topAnchor)
+  }, [topAnchor, pinFillHeight])
+
+  // 回答结束后取消贴顶状态，撤掉多余的撑高
+  useEffect(() => {
+    if (topAnchor && !conv.isStreaming) setTopAnchor(null)
+  }, [conv.isStreaming, topAnchor])
 
   // 加载更早消息会向前插入内容，此时保持当前位置，避免被强制拉回底部
   useEffect(() => {
@@ -126,10 +187,14 @@ export default function ConversationPane({
   ])
 
   const handleScroll = (top: number, scrollHeight: number) => {
-    // 越接近底部，scrollHeight - scrollTop 越小；记录历史最小值作为“贴底”基线
+    // 距底部像素：scrollHeight - scrollTop - 视口高度。
+    // 旧实现用「历史最小 gap」当基线，会被 iOS 回弹（滚过头）和内容增长污染，
+    // 导致已经贴底时按钮还在显示，故改为显式测量视口高度。
     const gap = scrollHeight - top
     if (gap < bottomGapRef.current) bottomGapRef.current = gap
-    const stick = gap - bottomGapRef.current < 80
+    const viewport = viewportHeight || Math.min(bottomGapRef.current, gap)
+    // 贴顶模式下（发送后问题停在顶部）不算贴底，避免流式输出把视图拉回底部
+    const stick = !topAnchor && gap - viewport < 80
     stickBottomRef.current = stick
     setAwayFromBottom(!stick)
 
@@ -154,12 +219,18 @@ export default function ConversationPane({
     const attachments = files.length
       ? await uploadAttachments(files, { workspaceId: wsId, sessionId })
       : []
-    stickBottomRef.current = true
-    sendMessage(sessionId, composeContent(text, chips), {
+    // 发送后不跟随底部：把新提问顶到视口顶部，回答从下方逐段展开
+    stickBottomRef.current = false
+    const userMessageId = sendMessage(sessionId, composeContent(text, chips), {
       workspaceId: wsId,
       mode,
       attachments,
     })
+    if (userMessageId) {
+      setScrollTarget('')
+      setEndAnchor('')
+      setTopAnchor(`msg-top-${userMessageId}`)
+    }
   }
 
   const openMessageFile = (path: string) => {
@@ -179,6 +250,7 @@ export default function ConversationPane({
       key={message.id}
       message={message}
       onOpenFile={openMessageFile}
+      onOpenTimeline={(rows, finished) => setExecSheet({ rows, finished })}
       onFeedback={
         message.id.startsWith('user_') || message.role !== 'assistant'
           ? undefined
@@ -199,7 +271,8 @@ export default function ConversationPane({
   const live = conv.isStreaming
   // 对话一旦开始（已有消息或正在输出），就不再提供 chat / 工作区切换入口
   const started = conv.messages.length > 0 || live
-  const showLive = live && (conv.liveTimeline.length > 0 || conv.streamingText.trim().length > 0)
+  // 运行态常驻一条 assistant 消息：无正文时显示执行状态，有正文时在末尾显示回复状态
+  const showLive = live && !conv.clarify
   const showEmpty =
     conv.messages.length === 0 &&
     !showLive &&
@@ -216,14 +289,19 @@ export default function ConversationPane({
 
       <View className='chat-scroll-wrap'>
         <ScrollView
+          id='chat-scroll'
           scrollY
           className='app-body'
           style={{ height: 0, flex: 1, minHeight: 0 }}
-          scrollIntoView={endAnchor}
+          scrollIntoView={scrollTarget || endAnchor}
+          scrollIntoViewAlignment='start'
           scrollWithAnimation={false}
           onScroll={(event) => handleScroll(event.detail.scrollTop, event.detail.scrollHeight)}
         >
-          <View className='chat-body'>
+          <View
+            className='chat-body'
+            style={topAnchor && viewportHeight ? { minHeight: `${viewportHeight}px` } : undefined}
+          >
             {conv.hydration === 'loading' && conv.messages.length === 0 ? (
               <View className='chat-loading'>
                 <Text>正在加载会话…</Text>
@@ -265,22 +343,37 @@ export default function ConversationPane({
                 </View>
               </EmptyState>
             ) : (
-              conv.messages.map((message, index) =>
-                renderMessage(message, index === conv.messages.length - 1),
-              )
+              conv.messages.map((message, index) => (
+                <Fragment key={message.id}>
+                  {message.role === 'user' ? (
+                    // 用户提问外层包一层锚点容器：发送后按它的高度补足撑高
+                    <View id={`msg-top-${message.id}`}>
+                      {renderMessage(message, index === conv.messages.length - 1)}
+                    </View>
+                  ) : (
+                    renderMessage(message, index === conv.messages.length - 1)
+                  )}
+                </Fragment>
+              ))
             )}
 
             {showLive ? (
               <View className='msg msg-ai'>
                 <View className='msg-main'>
-                  <ExecutionTimeline nodes={conv.liveTimeline} />
+                  <ReferenceRow sources={conv.liveReferenceSources} live />
                   {conv.streamingText.trim() ? (
-                    <View className='msg-text'>
-                      <MarkdownText text={conv.streamingText} />
-                      <View className='caret' />
-                    </View>
+                    <>
+                      <View className='msg-text'>
+                        <MarkdownText text={conv.streamingText} />
+                      </View>
+                      <View className='live-status'>
+                        <ThinkingIndicator text='回复中...' />
+                      </View>
+                    </>
                   ) : (
-                    <ThinkingIndicator text='正在思考…' />
+                    <View className='live-status'>
+                      <ThinkingIndicator text='正在执行...' />
+                    </View>
                   )}
                   {conv.liveOutputFiles.length ? (
                     <View className='msg-outputs'>
@@ -300,16 +393,6 @@ export default function ConversationPane({
               </View>
             ) : null}
 
-            {live && !showLive && !conv.clarify ? (
-              <View className='msg msg-ai'>
-                <View className='msg-main'>
-                  <ThinkingIndicator
-                    text={wsState === 'ready' ? '正在思考…' : '准备中…'}
-                  />
-                </View>
-              </View>
-            ) : null}
-
             {conv.queuedPosition ? (
               <View className='chat-hint'>
                 <Icon name='clock' size={13} color='#9AA0A8' />
@@ -317,13 +400,9 @@ export default function ConversationPane({
               </View>
             ) : null}
 
-            {conv.clarify ? (
-              <ClarifyCard
-                key={conv.clarify.approvalId}
-                clarify={conv.clarify}
-                onSubmit={(answer) => answerClarify(sessionId, answer)}
-                onSkip={() => answerClarify(sessionId, '（用户跳过了所有问题）')}
-              />
+            {/* 发送新提问后撑满一屏，使问题能定位到视口顶部，回答在其下方展开 */}
+            {pinFillHeight > 0 ? (
+              <View className='chat-pin-fill' style={{ height: `${pinFillHeight}px` }} />
             ) : null}
 
             <View id={endAnchor} style={{ height: '1px' }} />
@@ -337,29 +416,44 @@ export default function ConversationPane({
         ) : null}
       </View>
 
-      <LiveProgress
-        active={conv.isStreaming}
-        nodes={conv.liveTimeline}
-        hasText={conv.streamingText.trim().length > 0}
-        queued={conv.queuedPosition}
-        clarifying={!!conv.clarify}
-        ready={wsState === 'ready'}
-      />
+      <View className='chat-dock'>
+        <Composer
+          composerKey={sessionId}
+          placeholder={placeholder}
+          flat
+          streaming={conv.isStreaming}
+          onSend={handleSend}
+          onAbort={() => abort(sessionId)}
+          footer={
+            started ? undefined : (
+              <View className='mode-dock'>
+                <ModePicker />
+                <WorkspacePicker />
+              </View>
+            )
+          }
+        />
+        {started ? <Text className='chat-note'>内容由 AI 生成</Text> : null}
+      </View>
 
-      <Composer
-        composerKey={sessionId}
-        placeholder={placeholder}
-        streaming={conv.isStreaming}
-        onSend={handleSend}
-        onAbort={() => abort(sessionId)}
-        footer={
-          started ? undefined : (
-            <View className='mode-dock'>
-              <ModePicker />
-            </View>
-          )
-        }
-      />
+      {conv.clarify ? (
+        <View className='clarify-overlay' onClick={(e) => e.stopPropagation()}>
+          <ClarifyCard
+            key={conv.clarify.approvalId}
+            clarify={conv.clarify}
+            onSubmit={(answer) => answerClarify(sessionId, answer)}
+            onSkip={() => answerClarify(sessionId, '（用户跳过了所有问题）')}
+          />
+        </View>
+      ) : null}
+
+      {execSheet ? (
+        <ExecutionSheet
+          rows={execSheet.rows}
+          finished={execSheet.finished}
+          onClose={() => setExecSheet(null)}
+        />
+      ) : null}
 
       <FilePreview file={preview} onClose={() => setPreview(null)} />
 

@@ -51,14 +51,11 @@ def test_reload_body_is_full_transcript():
     assert assistants[0]["tool_calls"][0]["name"] == "web_search"
 
 
-def test_clarification_answer_not_emitted_as_standalone_bubble():
-    """HITL 澄清追问的答案（metadata.kind=="clarification_answer"）不得作为
-    独立 user 气泡出现——它已内嵌在提问气泡的执行时间线（ask_user 步骤的
-    question+answer），单独成气泡会与上传记录割裂为两条 user 记录。
+def test_assistant_bubbles_around_hitl_tool_not_merged():
+    """HITL 提问气泡 a1 与其后的回复 a2 必须各自独立成气泡。
 
-    关键回归护栏：答案之后通常还有 agent 的后续回复（a2）。若跳过答案节点时
-    未先 flush 前置的提问气泡 a1，a1 会被 a2 覆盖而丢失 / 并入 a2。本测试显式
-    构造 [u1, a1, t1, u2(答案), a2] 来兜住该回归（此前测试无 a2，假绿）。
+    关键回归护栏：若处理 tool 结果时未先 flush 前置的提问气泡 a1，a1 会被
+    a2 覆盖而丢失 / 并入 a2。本测试显式构造 [u1, a1, t1, a2] 兜住该回归。
     """
     entries = {
         # 上传记录：普通 user 气泡，必须照常出现
@@ -70,23 +67,17 @@ def test_clarification_answer_not_emitted_as_standalone_bubble():
             tool_calls=[{"id": "c1", "function": {"name": "ask_user_question",
                        "arguments": '{"questions":[{"question":"如何处理？","header":"处理"}]}'}}],
         ),
+        # 用户作答只作为 ask 工具结果存在，不落独立 user entry
         "t1": MessageEntry(id="t1", parent_id="a1", role="tool",
                            content="排期文档处理：评估排期合理性", tool_call_id="c1"),
-        # 澄清答案：被标记为 clarification_answer，不应成为独立气泡
-        "u2": MessageEntry(
-            id="u2", parent_id="t1", role="user",
-            content="排期文档处理：评估排期合理性",
-            metadata={"kind": "clarification_answer", "ask_tool_call_id": "c1"},
-        ),
         # 答案之后 agent 的后续回复（真实 HITL 流程必有）
-        "a2": MessageEntry(id="a2", parent_id="u2", role="assistant",
+        "a2": MessageEntry(id="a2", parent_id="t1", role="assistant",
                            content="已按排期处理，请查收。"),
     }
-    tree = _tree(entries, ["u1", "a1", "t1", "u2", "a2"])
+    tree = _tree(entries, ["u1", "a1", "t1", "a2"])
     msgs = _build_display_messages(tree, review_utils=None)
 
     user_msgs = [m for m in msgs if m["role"] == "user"]
-    # 仅上传记录成气泡；澄清答案被抑制（不出现第二条 user 记录）
     assert len(user_msgs) == 1, [m["id"] for m in user_msgs]
     assert user_msgs[0]["id"] == "u1"
     assert "排期文档处理" not in (user_msgs[0].get("content") or "")
@@ -103,9 +94,52 @@ def test_clarification_answer_not_emitted_as_standalone_bubble():
     assert "已按排期处理" in (a2.get("content") or "")
 
 
+async def test_clarification_answer_stays_in_tool_result(monkeypatch):
+    """HITL 答案只作为 ask 工具结果落树，不再追加独立 user entry。
+
+    人机交互是执行步骤的一部分；若额外落一条 role=user，会被 turn 计数、
+    轨迹分组和客户端渲染当成一次新的用户轮次。
+    """
+    import prismclaw.engine.execution.dispatch.response_handling as response_handling
+    import prismclaw.engine.execution.loop.tree_writer as tree_writer
+    from prismclaw.engine.execution.loop._loop_helpers import _persist_clarified_turn
+
+    appended: list = []
+
+    async def fake_append_assistant_response(**kwargs):
+        appended.append(("assistant", kwargs.get("tool_calls")))
+
+    async def fake_append(deps, tree, entry):
+        appended.append(entry)
+
+    monkeypatch.setattr(
+        response_handling, "append_assistant_response", fake_append_assistant_response
+    )
+    monkeypatch.setattr(tree_writer, "_append", fake_append)
+
+    tree = SimpleNamespace(entries={}, order=[], leaf_id="leaf", header=SimpleNamespace(id="s1"))
+    call = SimpleNamespace(call_id="c1", name="ask_user_question", call={"id": "c1"})
+
+    await _persist_clarified_turn(
+        deps=SimpleNamespace(),
+        tree=tree,
+        response=SimpleNamespace(text="", tool_calls=[]),
+        allowed_calls=[call],
+        ask_call_id="c1",
+        answer="方案 B",
+    )
+
+    roles = [item[0] if isinstance(item, tuple) else item.role for item in appended]
+    assert "user" not in roles
+    tool_entries = [
+        item for item in appended if not isinstance(item, tuple) and item.role == "tool"
+    ]
+    assert len(tool_entries) == 1
+    assert "方案 B" in str(tool_entries[0].content)
+
+
 def test_normal_user_message_still_emitted():
-    """回归护栏：普通 user 消息（无 clarification_answer 标记）必须照常成气泡，
-    上面的抑制逻辑不能误伤正常用户输入。"""
+    """回归护栏：普通 user 消息必须照常成气泡，不能被其他逻辑误伤。"""
     entries = {
         "u1": MessageEntry(id="u1", parent_id=None, role="user", content="普通提问"),
         "a1": MessageEntry(id="a1", parent_id="u1", role="assistant", content="好的"),

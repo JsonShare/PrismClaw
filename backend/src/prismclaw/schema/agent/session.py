@@ -138,9 +138,7 @@ class MessageEntry(SessionEntryBase):
     # tool cell → tool name (used for schema_detail resolution in the
     # trajectory projector). Set by the tool execution loop.
     tool_name: str | None = None
-    # 任意业务标记（向后兼容，默认 None）。当前用途：HITL 澄清追问答案标记为
-    # {"kind": "clarification_answer", "ask_tool_call_id": ...}，供
-    # _build_display_messages 识别并抑制为独立气泡（答案已内嵌到提问步骤的时间线）。
+    # 任意业务标记（默认 None），供展示层/分析层按需识别。
     metadata: dict | None = None
 
 

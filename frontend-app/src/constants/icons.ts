@@ -33,6 +33,19 @@ export const ICONS: Record<string, string> = {
     '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   'file-text':
     '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+  'file-search':
+    '<path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M4.268 21a2 2 0 0 0 1.727 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"/><path d="m9 18-1.5-1.5"/><circle cx="5" cy="14" r="3"/>',
+  'file-pen-line':
+    '<path d="m18 5-2.414-2.414A2 2 0 0 0 14.172 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2"/><path d="M21.378 12.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/><path d="M8 18h1"/>',
+  globe:
+    '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  'square-terminal':
+    '<path d="m7 11 2-2-2-2"/><path d="M11 13h4"/><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>',
+  'help-circle':
+    '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+  'circle-x':
+    '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+  loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
   folder:
     '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
   'folder-open':
@@ -88,5 +101,12 @@ export const ICONS: Record<string, string> = {
   'thumb-down':
     '<path d="M17 13.5V3"/><path d="M9 18.1 9.9 14H4.3a2 2 0 0 1-1.95-2.46l1.7-7.2A2 2 0 0 1 6 3h13.5A1.5 1.5 0 0 1 21 4.5v7.5A1.5 1.5 0 0 1 19.5 13.5h-1.7a2 2 0 0 0-1.83 1.2L12.5 21.2a3 3 0 0 1-3.5-3.1Z"/>',
   share:
-    '<path d="M4 12.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6.5"/><path d="m8 6.5 4-4 4 4"/><path d="M12 2.5V15"/>'
+    '<path d="M4 12.5V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6.5"/><path d="m8 6.5 4-4 4 4"/><path d="M12 2.5V15"/>',
+  'audio-wave':
+    '<circle cx="7" cy="12" r="1.2" fill="currentColor" stroke="none"/><path d="M10.1 8.8a4.6 4.6 0 0 1 0 6.4"/><path d="M13.6 5.8a8.9 8.9 0 0 1 0 12.4"/>',
+  smile:
+    '<circle cx="12" cy="12" r="9.2"/><path d="M8.5 14.2a4.2 4.2 0 0 0 7 0"/><path d="M9 9.6h.01"/><path d="M15 9.6h.01"/>',
+  briefcase:
+    '<rect width="20" height="14" x="2" y="7" rx="2.5"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+  'quote-mark': '<path d="M8 15.5 11 6"/><path d="M14.5 15.5 17.5 6"/>'
 }

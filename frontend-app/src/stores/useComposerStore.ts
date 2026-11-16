@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import type { Chip } from '../lib/chat/markers'
+import { MAX_ATTACHMENTS } from '../services/uploads'
 import type { LocalFile } from '../services/uploads'
 
 /** 首页尚未创建会话时的输入态归属 */
@@ -47,7 +48,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
     const seen = new Set(current.map((item) => item.id))
     const merged = current.concat(files.filter((item) => !seen.has(item.id)))
     // 与 PC 端一致：单条消息最多 10 个附件
-    set({ files: { ...get().files, [key]: merged.slice(0, 10) } })
+    set({ files: { ...get().files, [key]: merged.slice(0, MAX_ATTACHMENTS) } })
   },
 
   removeFile: (key, fileId) => {

@@ -408,8 +408,8 @@ class ExecutePort:
     # 等待用户回答：返回用户作答文本；**返回 None 表示非用户作答**
     # （abort / stale / 会话结束）——骨架据此终止本轮，绝不用假答案继续。
     # 等待本身无超时：只有用户提交才恢复执行。**实现不落树 answer**——
-    # 落树由 persist_clarified_turn 统一负责（顺序：assistant → tool 结果
-    # → user answer；先落会把 user 消息插在提问之前并隔断 tool 配对）。
+    # 落树由 persist_clarified_turn 统一负责（顺序：assistant(tool_calls)
+    # → tool 结果；答案只作为 ask 工具结果存在，不额外落 user entry）。
     wait_for_clarification: Callable[[HITLCheckResult], Awaitable[str | None]] | None = None
 
 

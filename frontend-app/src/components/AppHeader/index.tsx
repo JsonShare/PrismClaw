@@ -31,7 +31,10 @@ export default function AppHeader({
         <View className='icon-btn' onClick={onMenu}>
           <Icon name='menu' size={20} />
         </View>
-        <View className='header-mid' />
+        <View className='header-mid'>
+          <Text className='header-title'>{title || '新任务'}</Text>
+        </View>
+        <View className='header-spacer' />
       </View>
     )
   }

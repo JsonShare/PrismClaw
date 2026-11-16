@@ -25,12 +25,20 @@ interface Row {
   task?: ScheduledTask
 }
 
+function periodOf(timeMs: number) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const weekStart = today - ((now.getDay() + 6) % 7) * 86400000
+  if (timeMs >= weekStart) return '本周'
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  return timeMs >= monthStart ? '本月' : '更早'
+}
+
 export default function Tasks() {
   const conversations = useChatStore((s) => s.conversations)
   const listLoading = useChatStore((s) => s.listLoading)
   const listHasMore = useChatStore((s) => s.listHasMore)
   const loadConversations = useChatStore((s) => s.loadConversations)
-  const loadAllConversations = useChatStore((s) => s.loadAllConversations)
   const removeConversation = useChatStore((s) => s.removeConversation)
   const renameConversation = useChatStore((s) => s.renameConversation)
 
@@ -41,36 +49,32 @@ export default function Tasks() {
   const triggerTask = useTaskStore((s) => s.trigger)
   const removeTask = useTaskStore((s) => s.remove)
 
-  const workspaces = useAppStore((s) => s.workspaces)
-  const loadWorkspaces = useAppStore((s) => s.loadWorkspaces)
   const openDialog = useAppStore((s) => s.openDialog)
   const nickname = useAuthStore((s) => s.nickname)
+  const userId = useAuthStore((s) => s.userId)
+  const displayName = nickname || userId || '未登录'
 
-  const [scope, setScope] = useState(SCOPE_ALL)
   const [sorter, setSorter] = useState<'recent' | 'name'>('recent')
-  const [keyword, setKeyword] = useState('')
   const [listError, setListError] = useState('')
-
-  useEffect(() => {
-    loadWorkspaces().catch(() => undefined)
-  }, [])
+  const [open, setOpen] = useState(true)
+  const [closing, setClosing] = useState(false)
 
   useEffect(() => {
     setListError('')
-    loadConversations(scope, true).catch((error: Error) => setListError(error.message))
-    loadTasks(scope).catch((error: Error) => toast(error.message))
-  }, [scope, loadConversations, loadTasks])
+    loadConversations(SCOPE_ALL, true).catch((error: Error) => setListError(error.message))
+    loadTasks(SCOPE_ALL).catch((error: Error) => toast(error.message))
+  }, [loadConversations, loadTasks])
 
   const retryList = () => {
     setListError('')
-    loadConversations(scope, true).catch((error: Error) => setListError(error.message))
+    loadConversations(SCOPE_ALL, true).catch((error: Error) => setListError(error.message))
   }
 
   const loadMore = () => {
     // 直接读 store：滚动事件可能在同一帧内连续触发，闭包里的 listLoading 会滞后
     const state = useChatStore.getState()
     if (state.listLoading || !state.listHasMore) return
-    loadConversations(scope, false).catch((error: Error) => toast(error.message))
+    loadConversations(SCOPE_ALL, false).catch((error: Error) => toast(error.message))
   }
 
   const rows = useMemo(() => {
@@ -95,13 +99,17 @@ export default function Tasks() {
         task,
       })
     })
-    const filtered = keyword.trim()
-      ? list.filter((row) => row.title.toLowerCase().includes(keyword.trim().toLowerCase()))
-      : list
     return sorter === 'name'
-      ? filtered.slice().sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'))
-      : filtered.slice().sort((a, b) => b.timeMs - a.timeMs)
-  }, [conversations, tasks, keyword, sorter])
+      ? list.slice().sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'))
+      : list.slice().sort((a, b) => b.timeMs - a.timeMs)
+  }, [conversations, tasks, sorter])
+
+  const rowGroups = useMemo(() => {
+    if (sorter === 'name') return rows.length ? [{ label: '历史任务', items: rows }] : []
+    return ['本周', '本月', '更早']
+      .map((label) => ({ label, items: rows.filter((row) => periodOf(row.timeMs) === label) }))
+      .filter((group) => group.items.length > 0)
+  }, [rows, sorter])
 
   const openRow = (row: Row) => {
     if (row.kind === 'scheduled') {
@@ -202,88 +210,50 @@ export default function Tasks() {
     })
   }
 
-  const pickScope = () => {
-    const open = () =>
-      openDialog({
-        kind: 'sheet',
-        title: '切换工作区',
-        items: [
-          { label: '全部工作区', value: SCOPE_ALL, active: scope === SCOPE_ALL },
-          ...workspaces.map((workspace) => ({
-            label: workspace.name,
-            value: workspace.id,
-            active: workspace.id === scope,
-          })),
-        ],
-        onSelect: (value) => setScope(value),
-      })
-    if (workspaces.length) {
-      open()
-      return
-    }
-    loadWorkspaces(true)
-      .then(open)
-      .catch((error: Error) => toast(error.message))
-  }
-
   const pickSorter = () => {
     openDialog({
       kind: 'sheet',
       title: '列表排序',
       items: [
-        { label: '最近活动', value: 'recent', active: sorter === 'recent' },
+        { label: '按时间', value: 'recent', active: sorter === 'recent' },
         { label: '按名称', value: 'name', active: sorter === 'name' },
       ],
       onSelect: (value) => setSorter(value === 'name' ? 'name' : 'recent'),
     })
   }
 
-  const search = () => {
-    openDialog({
-      kind: 'form',
-      title: '搜索任务',
-      confirmText: '搜索',
-      fields: [{ key: 'keyword', label: '关键词', value: keyword, placeholder: '输入会话或自动化名称' }],
-      onConfirm: (values) => {
-        const next = values.keyword.trim()
-        setKeyword(next)
-        // 关键词只在前端过滤，先把列表翻到底再过滤，避免漏掉首屏之外的任务
-        if (next) loadAllConversations(scope).catch((error: Error) => toast(error.message))
-      },
-    })
-  }
-
-  const scopeLabel = workspaces.find((workspace) => workspace.id === scope)?.name || '全部任务'
-
   const goHome = () => {
     if (Taro.getCurrentPages().length > 1) Taro.navigateBack()
     else Taro.reLaunch({ url: '/pages/home/index' })
   }
 
-  return (
-    <View className={useThemeClass('page at-page')}>
-      <View className='at-head'>
-        <View className='at-title' onClick={pickScope}>
-          <Text className='at-title-text'>{scopeLabel}</Text>
-          <View className='at-caret' />
-        </View>
-        <View className='at-capsule'>
-          <View className='at-icobtn' onClick={search}>
-            <Icon name='search' size={20} color='#111114' strokeWidth={2.1} />
-          </View>
-          <View className='at-avatar' onClick={() => Taro.navigateTo({ url: '/pages/me/index' })}>
-            <Text>{(nickname || 'P').slice(0, 1)}</Text>
-          </View>
-        </View>
-      </View>
+  const closeDrawer = (action: () => void) => {
+    if (closing) return
+    setClosing(true)
+    window.setTimeout(action, 280)
+  }
 
+  return (
+    <View className={`${useThemeClass('page at-drawer-page')}${open && !closing ? ' is-open' : ''}`}>
+      <View className='at-drawer-mask' onClick={() => closeDrawer(goHome)} />
+      <View className='at-drawer-panel'>
       <View className='at-entries'>
-        <View className='at-entry' onClick={() => Taro.navigateTo({ url: '/pages/automations/index' })}>
-          <Icon name='clock' size={22} color='#111114' strokeWidth={2} />
+        <View className='at-entry' onClick={() => closeDrawer(goHome)}>
+          <View className='at-entry-icon'>
+            <Icon name='message-plus' size={22} color='#1F232B' strokeWidth={1.8} />
+          </View>
+          <Text>新任务</Text>
+        </View>
+        <View className='at-entry' onClick={() => closeDrawer(() => Taro.navigateTo({ url: '/pages/automations/index' }))}>
+          <View className='at-entry-icon'>
+            <Icon name='clock' size={22} color='#1F232B' strokeWidth={1.8} />
+          </View>
           <Text>自动化</Text>
         </View>
-        <View className='at-entry' onClick={() => Taro.navigateTo({ url: '/pages/files/index' })}>
-          <Icon name='folder' size={22} color='#111114' strokeWidth={2} />
+        <View className='at-entry' onClick={() => closeDrawer(() => Taro.navigateTo({ url: '/pages/files/index' }))}>
+          <View className='at-entry-icon'>
+            <Icon name='folder' size={22} color='#1F232B' strokeWidth={1.8} />
+          </View>
           <Text>我的文件</Text>
         </View>
       </View>
@@ -291,16 +261,11 @@ export default function Tasks() {
       <View className='at-rule' />
 
       <View className='at-section'>
+        <Text className='at-section-title'>任务历史</Text>
         <View className='at-sort' onClick={pickSorter}>
-          <Text>{sorter === 'name' ? '按名称' : '最近活动'}</Text>
-          <Icon name='chevron-down' size={14} color='#8E8E93' strokeWidth={2} />
+          <Text>{sorter === 'name' ? '按名称' : '按时间'}</Text>
+          <Icon name='chevron-down' size={13} color='#8E8E93' strokeWidth={1.8} />
         </View>
-        {keyword ? (
-          <View className='at-sort' onClick={() => setKeyword('')}>
-            <Text>{`搜索：${keyword}`}</Text>
-            <Icon name='x' size={14} color='#8E8E93' strokeWidth={2} />
-          </View>
-        ) : null}
       </View>
 
       <ScrollView
@@ -310,45 +275,46 @@ export default function Tasks() {
         lowerThreshold={120}
         onScrollToLower={loadMore}
       >
-        {rows.length ? (
-          rows.map((row) => (
-            <View
-              className='at-row'
-              key={row.key}
-              onClick={() => openRow(row)}
-              onLongPress={() => openRowActions(row)}
-            >
-              <View className='at-chip'>
-                <Icon
-                  name={row.kind === 'scheduled' ? 'clock' : 'message'}
-                  size={20}
-                  color='#111114'
-                  strokeWidth={2}
-                />
-              </View>
-              <View className='at-main'>
-                <Text className='at-name'>{row.title}</Text>
-                <View className='at-meta'>
-                  <Icon
-                    name={row.kind === 'scheduled' ? 'clock' : 'message'}
-                    size={12}
-                    color='#9A9AA0'
-                  />
-                  <Text>{row.meta}</Text>
-                </View>
-              </View>
-              <View className='at-side'>
-                <Text className='at-time'>{formatRelative(row.timeMs)}</Text>
+        {rowGroups.length ? (
+          rowGroups.map((group) => (
+            <View className='at-group' key={group.label}>
+              <Text className='at-group-title'>{group.label}</Text>
+              {group.items.map((row) => (
                 <View
-                  className='at-more'
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    openRowActions(row)
-                  }}
+                  className='at-row'
+                  key={row.key}
+                  onClick={() => closeDrawer(() => openRow(row))}
+                  onLongPress={() => openRowActions(row)}
                 >
-                  <Icon name='more-horizontal' size={16} color='#9A9AA0' strokeWidth={2} />
+                  <View className='at-chip'>
+                    <Icon
+                      name={row.kind === 'scheduled' ? 'clock' : 'message'}
+                      size={19}
+                      color='#1F232B'
+                      strokeWidth={1.7}
+                    />
+                    {row.kind === 'scheduled' && row.task?.enabled ? <View className='at-status-dot' /> : null}
+                  </View>
+                  <View className='at-main'>
+                    <Text className='at-name'>{row.title}</Text>
+                    <View className='at-meta'>
+                      <Text>{row.meta}</Text>
+                    </View>
+                  </View>
+                  <View className='at-side'>
+                    <Text className='at-time'>{formatRelative(row.timeMs)}</Text>
+                    <View
+                      className='at-more'
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openRowActions(row)
+                      }}
+                    >
+                      <Icon name='more-horizontal' size={17} color='#9A9AA0' strokeWidth={1.8} />
+                    </View>
+                  </View>
                 </View>
-              </View>
+              ))}
             </View>
           ))
         ) : (
@@ -362,11 +328,7 @@ export default function Tasks() {
               </>
             ) : (
               <Text>
-                {listLoading || tasksLoading
-                  ? '加载中…'
-                  : keyword
-                    ? '没有匹配的任务'
-                    : '这个工作区还没有任务'}
+                {listLoading || tasksLoading ? '加载中…' : '还没有历史任务，点击「新任务」开始'}
               </Text>
             )}
           </View>
@@ -378,8 +340,16 @@ export default function Tasks() {
         ) : null}
       </ScrollView>
 
-      <View className='at-fab' onClick={goHome}>
-        <Icon name='message-plus' size={26} color='#FFFFFF' strokeWidth={1.9} />
+      <View className='at-profile' onClick={() => closeDrawer(() => Taro.navigateTo({ url: '/pages/me/index' }))}>
+        <View className='at-avatar'>
+          <Text>{displayName.trim().charAt(0).toUpperCase() || '?'}</Text>
+        </View>
+        <View className='at-profile-copy'>
+          <Text className='at-profile-name'>{displayName}</Text>
+          <Text className='at-profile-sub'>账号与设置</Text>
+        </View>
+        <Icon name='chevron-right' size={20} color='#8E8E93' strokeWidth={1.8} />
+      </View>
       </View>
 
       <AppDialog />

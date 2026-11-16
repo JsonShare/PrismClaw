@@ -29,11 +29,9 @@ from prismclaw.schema.session.types import SessionTree
 def _user_message_count(tree: SessionTree) -> int:
     """1-based user-message counter over tree.order (turn 语义).
 
-    跳过 ``metadata.kind == "clarification_answer"`` 的 user entry——
-    HITL 澄清答案是人机交互回合的延续，不是新的用户问题；Chat 页面
-    (``_build_display_messages``) 已据此抑制为独立气泡，trajectory
-    的 turn 划分必须与之对齐，否则会把"跳过提问 → agent 续执行"
-    渲染成新 Turn 里的独立咨询内容。
+    历史会话可能仍有 ``metadata.kind == "clarification_answer"`` 的 user
+    entry（旧版本落树方式）；新会话的 HITL 答案只存在于 ask 工具结果中，
+    不再产生此类 entry。读取时跳过旧 entry，避免历史 turn 计数漂移。
     """
     count = 0
     for eid in tree.order:

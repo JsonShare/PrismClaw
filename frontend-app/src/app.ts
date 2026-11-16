@@ -23,6 +23,30 @@ function App({ children }: PropsWithChildren<any>) {
     applyThemeToDOM(theme === 'system' ? system : theme)
   }, [theme, system])
 
+  // 移动端软键盘不会改变布局视口：用 visualViewport 与 innerHeight 的差值算出键盘高度，
+  // 通过 --kb 让页面把输入区整体抬到键盘上方（不再缩小页面高度，避免 iOS 把页面平移出黑边）
+  useEffect(() => {
+    if (process.env.TARO_ENV !== 'h5' || typeof window === 'undefined') return
+    const vv = window.visualViewport
+    const apply = () => {
+      const diff = window.innerHeight - (vv ? vv.height : window.innerHeight)
+      const kb = diff > 120 ? Math.round(diff) : 0
+      const root = document.documentElement
+      root.style.setProperty('--kb', `${kb}px`)
+      if (kb > 0) root.style.setProperty('--safe-bottom', '0px')
+      else root.style.removeProperty('--safe-bottom')
+    }
+    apply()
+    vv?.addEventListener('resize', apply)
+    vv?.addEventListener('scroll', apply)
+    window.addEventListener('orientationchange', apply)
+    return () => {
+      vv?.removeEventListener('resize', apply)
+      vv?.removeEventListener('scroll', apply)
+      window.removeEventListener('orientationchange', apply)
+    }
+  }, [])
+
   // 默认跟随系统：监听系统外观变化
   useEffect(() => {
     if (process.env.TARO_ENV === 'h5' && typeof window !== 'undefined' && window.matchMedia) {

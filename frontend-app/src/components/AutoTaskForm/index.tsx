@@ -316,7 +316,8 @@ export default function AutoTaskForm({ open, task, onClose }: Props) {
               </>
             ) : (
               <>
-                <Picker
+                <View className={type === 'day' ? 'tf-row' : ''}>
+                  <Picker
                   mode='selector'
                   range={TYPES.map((item) => item.label)}
                   value={typeIndex}
@@ -330,6 +331,17 @@ export default function AutoTaskForm({ open, task, onClose }: Props) {
                     <Icon name='chevron-down' size={16} color='#8B95A8' strokeWidth={1.8} />
                   </View>
                 </Picker>
+
+                  {type === 'day' ? (
+                    <>
+                      {hourPicker}
+                      <Text className='tf-unit'>:</Text>
+                      {minutePicker}
+                    </>
+                  ) : null}
+                </View>
+
+                
 
                 {type === 'minute' ? (
                   <View className='tf-row'>
@@ -365,7 +377,7 @@ export default function AutoTaskForm({ open, task, onClose }: Props) {
                   </View>
                 ) : null}
 
-                {type === 'day' ? timePickers : null}
+                
 
                 {type === 'week' ? (
                   <View className='tf-row'>

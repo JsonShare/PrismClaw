@@ -16,10 +16,55 @@ export interface VoiceOptions {
   onFinal: (text: string) => void
   onError: (message: string) => void
   onStateChange?: (state: VoiceState) => void
+  /** 每帧音频的能量（RMS，0~1），用于界面声波律动 */
+  onLevel?: (level: number) => void
 }
 
 export interface VoiceSession {
   stop: () => void
+}
+
+/**
+ * 麦克风流缓存：浏览器只在首次授权时弹窗，但部分 webview（微信内置、无痕模式、
+ * iOS 主屏应用）会按调用次数重复询问。这里整段会话复用同一条流，
+ * 进入语音态申请一次、离开语音态释放，避免「每次按住都申请」。
+ */
+let micStream: MediaStream | null = null
+let micPending: Promise<MediaStream> | null = null
+
+function hasLiveTrack(stream: MediaStream | null): stream is MediaStream {
+  return !!stream && stream.getAudioTracks().some((track) => track.readyState === 'live')
+}
+
+async function ensureMic(): Promise<MediaStream> {
+  if (hasLiveTrack(micStream)) return micStream
+  if (!micPending) {
+    micPending = navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        micStream = stream
+        return stream
+      })
+      .finally(() => {
+        micPending = null
+      })
+  }
+  return micPending
+}
+
+/** 进入语音态时先申请一次（在用户手势内），后续按住不再重复弹权限 */
+export function prewarmMicrophone(): void {
+  if (!IS_H5) return
+  void ensureMic().catch(() => undefined)
+}
+
+/** 离开语音态释放麦克风，避免录音指示灯常亮 */
+export function releaseMicrophone(): void {
+  if (!IS_H5) return
+  if (micStream) {
+    micStream.getTracks().forEach((track) => track.stop())
+    micStream = null
+  }
 }
 
 function speechUrl(): string {
@@ -125,7 +170,7 @@ function startH5(options: VoiceOptions): VoiceSession {
     } catch {
       // 音频图可能已被关闭，忽略
     }
-    current.stream.getTracks().forEach((track) => track.stop())
+    // 麦克风流留在缓存里复用，等离开语音态时统一释放
     void current.ctx.close().catch(() => undefined)
     if (current.ws.readyState === WebSocket.OPEN) current.ws.close()
   }
@@ -145,11 +190,8 @@ function startH5(options: VoiceOptions): VoiceSession {
     finalTimer = setTimeout(() => fail('没有识别到语音，请重试'), FINAL_TIMEOUT_MS)
     options.onStateChange?.('finishing')
     current.ws.send(JSON.stringify({ type: 'finish' }))
-    // 让 worklet 把最后一帧吐出来再断开麦克风
+    // 让 worklet 把最后一帧吐出来；麦克风流仍保留给下一次按住复用
     current.node.port.postMessage('flush')
-    setTimeout(() => {
-      current.stream.getTracks().forEach((track) => track.stop())
-    }, 120)
   }
 
   options.onStateChange?.('connecting')
@@ -163,7 +205,7 @@ function startH5(options: VoiceOptions): VoiceSession {
   }
 
   ws.onmessage = (event) => {
-    if (typeof event.data !== 'string') return
+    if (closed || typeof event.data !== 'string') return
     let frame: { type?: string; text?: string; message?: string }
     try {
       frame = JSON.parse(event.data)
@@ -172,17 +214,17 @@ function startH5(options: VoiceOptions): VoiceSession {
     }
     if (frame.type === 'ready') {
       if (connectTimer) clearTimeout(connectTimer)
-      options.onStateChange?.('recording')
+      if (!closed) options.onStateChange?.('recording')
       return
     }
     if (frame.type === 'partial' && typeof frame.text === 'string') {
-      options.onPartial(frame.text)
+      if (!closed) options.onPartial(frame.text)
       return
     }
     if (frame.type === 'final') {
       gotFinal = true
       if (finalTimer) clearTimeout(finalTimer)
-      options.onFinal(typeof frame.text === 'string' ? frame.text : '')
+      if (!closed) options.onFinal(typeof frame.text === 'string' ? frame.text : '')
       cleanup()
       return
     }
@@ -203,12 +245,16 @@ function startH5(options: VoiceOptions): VoiceSession {
 
   void (async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await ensureMic()
       let ctx: AudioContext
       try {
         ctx = new AudioContext({ sampleRate: TARGET_RATE })
       } catch {
         ctx = new AudioContext()
+      }
+      // 浏览器自动播放策略：用户手势外创建的 AudioContext 默认 suspended，需显式 resume
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
       }
       const workletUrl = URL.createObjectURL(
         new Blob([PCM_WORKLET_SOURCE], { type: 'application/javascript' }),
@@ -216,7 +262,7 @@ function startH5(options: VoiceOptions): VoiceSession {
       await ctx.audioWorklet.addModule(workletUrl)
       URL.revokeObjectURL(workletUrl)
       if (closed) {
-        stream.getTracks().forEach((track) => track.stop())
+        // 流与权限保留给下一次按住，只回收本次音频上下文
         void ctx.close()
         return
       }
@@ -231,6 +277,14 @@ function startH5(options: VoiceOptions): VoiceSession {
       node.port.onmessage = (event) => {
         if (closed || !(event.data instanceof ArrayBuffer)) return
         if (ws.readyState === WebSocket.OPEN) ws.send(event.data)
+        // 用同一帧 PCM 算能量，驱动界面声波，不额外开销
+        const pcm = new Int16Array(event.data)
+        let sum = 0
+        for (let i = 0; i < pcm.length; i += 1) {
+          const sample = pcm[i] / 32768
+          sum += sample * sample
+        }
+        options.onLevel?.(Math.sqrt(sum / pcm.length))
       }
       resources = { ws, ctx, stream, source, node, sink }
     } catch (error) {
@@ -247,17 +301,33 @@ function startH5(options: VoiceOptions): VoiceSession {
   }
 }
 
+type WeappRecorder = Taro.RecorderManager & {
+  offError?: (callback: Taro.RecorderManager.OnErrorCallback) => void
+  offFrameRecorded?: (callback: Taro.RecorderManager.OnFrameRecordedCallback) => void
+  offStop?: (callback: Taro.RecorderManager.OnStopCallback) => void
+}
+
 function startWeapp(options: VoiceOptions): VoiceSession {
   let closed = false
+  let recorderStarted = false
+  let stopRequested = false
   let task: Taro.SocketTask | null = null
   let finalTimer: ReturnType<typeof setTimeout> | null = null
-  const recorder = Taro.getRecorderManager()
+  let connectTimer: ReturnType<typeof setTimeout> | null = null
+  const recorder = Taro.getRecorderManager() as WeappRecorder
 
   const cleanup = () => {
     if (closed) return
     closed = true
     if (finalTimer) clearTimeout(finalTimer)
-    recorder.stop()
+    if (connectTimer) clearTimeout(connectTimer)
+    recorder.offFrameRecorded?.(handleFrameRecorded)
+    recorder.offError?.(handleRecorderError)
+    recorder.offStop?.(handleRecorderStop)
+    if (recorderStarted) {
+      recorderStarted = false
+      recorder.stop()
+    }
     if (task) {
       void task.close({})
       task = null
@@ -265,29 +335,62 @@ function startWeapp(options: VoiceOptions): VoiceSession {
   }
 
   const fail = (message: string) => {
+    if (closed) return
     cleanup()
     options.onError(message)
   }
 
-  recorder.onFrameRecorded(({ frameBuffer }) => {
+  const beginFinish = () => {
+    if (closed || finalTimer) return
+    options.onStateChange?.('finishing')
+    finalTimer = setTimeout(() => fail('没有识别到语音，请重试'), FINAL_TIMEOUT_MS)
+  }
+
+  const handleFrameRecorded: Taro.RecorderManager.OnFrameRecordedCallback = ({ frameBuffer }) => {
     if (closed || !frameBuffer || !task) return
     task.send({ data: frameBuffer, fail: () => undefined })
-  })
-  recorder.onError(() => fail('无法启动录音'))
-  recorder.onStop(() => {
+    // 小程序同样用 PCM 帧计算能量，否则声波在整个录音期间都不会变化
+    const pcm = new Int16Array(frameBuffer)
+    if (!pcm.length) return
+    let sum = 0
+    for (let i = 0; i < pcm.length; i += 1) {
+      const sample = pcm[i] / 32768
+      sum += sample * sample
+    }
+    options.onLevel?.(Math.sqrt(sum / pcm.length))
+  }
+
+  const handleRecorderError: Taro.RecorderManager.OnErrorCallback = ({ errMsg }) => {
+    if (closed) return
+    fail(/auth|permission|deny/i.test(errMsg) ? '需要麦克风权限才能语音输入' : '无法启动录音')
+  }
+
+  const handleRecorderStop: Taro.RecorderManager.OnStopCallback = () => {
+    recorderStarted = false
     if (closed || !task) return
+    beginFinish()
     task.send({ data: JSON.stringify({ type: 'finish' }), fail: () => undefined })
-  })
+  }
+
+  recorder.onFrameRecorded(handleFrameRecorded)
+  recorder.onError(handleRecorderError)
+  recorder.onStop(handleRecorderStop)
 
   options.onStateChange?.('connecting')
+  connectTimer = setTimeout(() => fail('语音识别连接超时，请重试'), CONNECT_TIMEOUT_MS)
   Taro.connectSocket({ url: speechUrl() })
     .then((socketTask) => {
+      if (closed) {
+        void socketTask.close({})
+        return
+      }
       task = socketTask
       socketTask.onOpen(() => {
+        if (closed) return
         socketTask.send({ data: JSON.stringify({ type: 'identify', token: getToken() }) })
       })
       socketTask.onMessage(({ data }) => {
-        if (typeof data !== 'string') return
+        if (closed || typeof data !== 'string') return
         let frame: { type?: string; text?: string; message?: string }
         try {
           frame = JSON.parse(data)
@@ -295,6 +398,12 @@ function startWeapp(options: VoiceOptions): VoiceSession {
           return
         }
         if (frame.type === 'ready') {
+          if (connectTimer) clearTimeout(connectTimer)
+          if (stopRequested) {
+            fail('没有识别到语音，请重试')
+            return
+          }
+          recorderStarted = true
           options.onStateChange?.('recording')
           recorder.start({
             format: 'PCM',
@@ -326,9 +435,14 @@ function startWeapp(options: VoiceOptions): VoiceSession {
 
   return {
     stop: () => {
-      if (closed) return
-      options.onStateChange?.('finishing')
-      finalTimer = setTimeout(() => fail('没有识别到语音，请重试'), FINAL_TIMEOUT_MS)
+      if (closed || finalTimer) return
+      stopRequested = true
+      // 连接尚未就绪时不启动录音，直接结束，避免松手后后台又开始录
+      if (!recorderStarted) {
+        fail('没有识别到语音，请重试')
+        return
+      }
+      beginFinish()
       recorder.stop()
     },
   }

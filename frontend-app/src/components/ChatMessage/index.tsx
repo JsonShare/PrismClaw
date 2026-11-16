@@ -1,13 +1,16 @@
-import { Image, Text, View } from '@tarojs/components'
+import { Image, ScrollView, Text, View } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 
 import { apiUrl, withToken } from '../../services/request'
 import { contentToText } from '../../services/sessions'
 import type { ContentBlock, ImageBlock, Message } from '../../types'
 import { displayTitle } from '../../lib/chat/displayName'
+import { CHIP_ICONS, splitMentions } from '../../lib/chat/markers'
+import type { StepRow } from '../../lib/chat/stepRows'
 import { ExecutionTimeline } from '../ExecutionTimeline'
 import Icon from '../Icon'
 import { MarkdownText } from '../MarkdownText'
+import ReferenceRow from '../ReferenceRow'
 
 interface ChatMessageProps {
   message: Message
@@ -15,6 +18,8 @@ interface ChatMessageProps {
   onFeedback?: (vote: 'up' | 'down' | 'none') => void
   /** 点击引导问题：直接以该问题发起下一轮 */
   onQuickReply?: (text: string) => void
+  /** 打开执行详情浮层（由页面根节点渲染，保证层级最高） */
+  onOpenTimeline: (rows: StepRow[], finished: boolean) => void
 }
 
 function imageSrc(block: ImageBlock): string {
@@ -50,6 +55,33 @@ function ImageGrid({ blocks }: { blocks: ContentBlock[] }) {
   )
 }
 
+/** 已发送的图片附件：设计稿为左对齐横向缩略条，可左右滑动，点击预览 */
+function AttachmentStrip({ blocks }: { blocks: ContentBlock[] }) {
+  const images = blocks
+    .filter((block): block is ImageBlock => block.type === 'image')
+    .map((block) => ({ ...block, src: imageSrc(block) }))
+    .filter((item) => item.src)
+  if (!images.length) return null
+  const urls = images.map((item) => item.src)
+  return (
+    <ScrollView className='msg-attach-strip' scrollX>
+      <View className='msg-attach-strip-inner'>
+        {images.map((item, index) => (
+          <View
+            key={`${item.source_path || index}`}
+            className='msg-attach-thumb'
+            onClick={() =>
+              Taro.previewImage({ urls, current: item.src }).catch(() => undefined)
+            }
+          >
+            <Image className='msg-attach-thumb-img' src={item.src} mode='aspectFill' />
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  )
+}
+
 function FileChips({
   blocks,
   onOpenFile,
@@ -78,26 +110,57 @@ function FileChips({
   )
 }
 
-export function ChatMessage({ message, onOpenFile, onFeedback, onQuickReply }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  onOpenFile,
+  onFeedback,
+  onQuickReply,
+  onOpenTimeline,
+}: ChatMessageProps) {
   if (message.role === 'user') {
     const content = message.content
+    const hasImages =
+      Array.isArray(content) && content.some((block) => block.type === 'image')
+    const hasText =
+      typeof content === 'string'
+        ? content.trim().length > 0
+        : content.some((block) => block.type === 'text' && block.text.trim().length > 0)
+    const hasFiles =
+      Array.isArray(content) && content.some((block) => block.type === 'file')
+    // 技能/专家卡片在正文里以标记或 `@标题` 存在：拆出来按输入框同款 chip 展示
+    const parts = (typeof content === 'string'
+      ? [content]
+      : content.filter((block) => block.type === 'text').map((block) => block.text)
+    ).map(splitMentions)
+    const chips = parts.flatMap((part) => part.chips)
+    const bodyText = parts
+      .map((part) => part.text)
+      .filter((text) => text.trim().length > 0)
+      .join('\n')
     return (
-      <View className='msg msg-me'>
-        <View className='bubble-me'>
-          {typeof content === 'string' ? (
-            <Text>{content}</Text>
-          ) : (
-            <>
-              {content
-                .filter((block) => block.type === 'text')
-                .map((block, index) => (
-                  <Text key={index}>{block.type === 'text' ? block.text : ''}</Text>
+      <View className={`msg msg-me${hasImages ? ' has-attach-strip' : ''}`}>
+        {Array.isArray(content) ? <AttachmentStrip blocks={content} /> : null}
+        {typeof content === 'string' || hasText || hasFiles ? (
+          <View className='bubble-me'>
+            {chips.length ? (
+              <View className='msg-chips'>
+                {chips.map((chip, index) => (
+                  <View className='msg-chip' key={`${chip.id}-${index}`}>
+                    <Icon
+                      name={CHIP_ICONS[chip.kind]}
+                      size={13}
+                      color='#111316'
+                      strokeWidth={2}
+                    />
+                    <Text className='msg-chip-text'>{chip.label}</Text>
+                  </View>
                 ))}
-              <ImageGrid blocks={content} />
-              <FileChips blocks={content} onOpenFile={onOpenFile} />
-            </>
-          )}
-        </View>
+              </View>
+            ) : null}
+            {bodyText.trim() ? <Text>{bodyText}</Text> : null}
+            {Array.isArray(content) ? <FileChips blocks={content} onOpenFile={onOpenFile} /> : null}
+          </View>
+        ) : null}
       </View>
     )
   }
@@ -146,8 +209,9 @@ export function ChatMessage({ message, onOpenFile, onFeedback, onQuickReply }: C
   return (
     <View className='msg msg-ai'>
       <View className='msg-main'>
+        <ReferenceRow sources={message.metadata?.referenceSources} />
         {message.timeline && message.timeline.length > 0 ? (
-          <ExecutionTimeline nodes={message.timeline} />
+          <ExecutionTimeline nodes={message.timeline} onOpenDetail={onOpenTimeline} />
         ) : null}
         {text.trim() ? <MarkdownText text={text} /> : null}
         {Array.isArray(message.content) ? <ImageGrid blocks={message.content} /> : null}

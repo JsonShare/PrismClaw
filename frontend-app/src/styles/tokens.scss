@@ -43,18 +43,20 @@
   --backdrop-glow-2: rgba(168, 85, 247, 0.14);
   --backdrop-glow-3: rgba(255, 77, 148, 0.10);
 
-  --glass-sheet: rgba(255, 255, 255, 0.10);
-  --glass-modal: rgba(30, 32, 38, 0.92);
-  --glass-card: rgba(255, 255, 255, 0.08);
-  --glass-soft: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.18);
+  /* 玻璃面在近黑底上掺一点冷蓝，透光时更像玻璃而不是灰雾 */
+  --glass-sheet: rgba(138, 174, 240, 0.1);
+  --glass-modal: rgba(26, 31, 42, 0.92);
+  --glass-card: rgba(138, 174, 240, 0.08);
+  --glass-soft: rgba(138, 174, 240, 0.06);
+  --glass-input: rgba(138, 174, 240, 0.11);
+  --glass-border: rgba(170, 200, 255, 0.16);
   --glass-blur: 16px;
   --glass-blur-strong: 20px;
   --glass-scrim: rgba(6, 8, 12, 0.42);
-  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.06),
+  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 0 1px rgba(120, 160, 255, 0.08),
     0 18px 48px rgba(0, 0, 0, 0.55);
   --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.16),
-    0 0 0 1px rgba(255, 255, 255, 0.05), 0 10px 28px rgba(0, 0, 0, 0.45);
+    0 0 0 1px rgba(120, 160, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.45);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
@@ -66,7 +68,7 @@ page {
   --primary-soft: #e9eef9;
 
   /* 近白冷灰底：只留极淡冷调，避免蓝紫与白色卡片频繁交织 */
-  --bg: #f3f5f8;
+  --bg: #f5f8fd;
   --surface: #ffffff;
   --surface-2: #f5f6f8;
   --surface-3: #eceef1;
@@ -90,30 +92,33 @@ page {
   --surface-trans: rgba(255, 255, 255, 0.78);
   --hover: rgba(23, 25, 28, 0.05);
 
-  /* 玻璃拟态：极淡冷色调 + 大面积柔光；玻璃之下有层次但不抢眼 */
+  /* 玻璃拟态：清透冷调（只留蓝、不加紫）+ 大面积柔光；玻璃之下有层次但不抢眼 */
   --backdrop-wash: linear-gradient(
     165deg,
-    rgba(88, 122, 210, 0.05) 0%,
-    rgba(122, 112, 200, 0.04) 46%,
-    rgba(72, 150, 215, 0.05) 100%
+    rgba(96, 140, 225, 0.03) 0%,
+    rgba(104, 150, 226, 0.02) 46%,
+    rgba(84, 160, 228, 0.035) 100%
   );
-  --backdrop-glow-1: rgba(70, 115, 220, 0.12);
-  --backdrop-glow-2: rgba(130, 100, 210, 0.08);
-  --backdrop-glow-3: rgba(60, 150, 220, 0.10);
+  --backdrop-glow-1: rgba(80, 135, 230, 0.07);
+  --backdrop-glow-2: rgba(95, 155, 232, 0.05);
+  --backdrop-glow-3: rgba(72, 163, 232, 0.06);
 
-  --glass-sheet: rgba(255, 255, 255, 0.58);
+  /* 玻璃面：近白冷调，只让白里透一点蓝，避免整体发灰或发紫 */
+  --glass-sheet: rgba(250, 253, 255, 0.62);
   /* 弹层要承载正文与列表：不透明些，避免被深色遮罩染成灰黄 */
-  --glass-modal: rgba(255, 255, 255, 0.88);
-  --glass-card: rgba(255, 255, 255, 0.48);
-  --glass-soft: rgba(255, 255, 255, 0.32);
-  --glass-border: rgba(255, 255, 255, 0.68);
+  --glass-modal: rgba(252, 254, 255, 0.9);
+  --glass-card: rgba(248, 252, 255, 0.5);
+  --glass-soft: rgba(244, 250, 255, 0.34);
+  /* 输入框浮面：比卡片实、比弹层透，兼顾磨砂质感与文字可读性 */
+  --glass-input: rgba(252, 254, 255, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.74);
   --glass-blur: 16px;
   --glass-blur-strong: 20px;
   --glass-scrim: rgba(17, 19, 24, 0.28);
-  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(24, 28, 36, 0.04),
-    0 16px 40px rgba(31, 35, 40, 0.10);
-  --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.85),
-    0 0 0 1px rgba(24, 28, 36, 0.04), 0 8px 22px rgba(31, 35, 40, 0.07);
+  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 0 0 1px rgba(70, 100, 160, 0.06),
+    0 16px 40px rgba(35, 55, 95, 0.1);
+  --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 0 0 1px rgba(70, 100, 160, 0.05), 0 8px 22px rgba(35, 55, 95, 0.08);
 
   --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.05);
 }
@@ -159,6 +164,7 @@ $glass-sheet: var(--glass-sheet);
 $glass-modal: var(--glass-modal);
 $glass-card: var(--glass-card);
 $glass-soft: var(--glass-soft);
+$glass-input: var(--glass-input);
 $glass-border: var(--glass-border);
 $glass-blur: var(--glass-blur);
 $glass-blur-strong: var(--glass-blur-strong);
