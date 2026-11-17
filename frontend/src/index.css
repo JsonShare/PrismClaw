@@ -246,6 +246,28 @@ code, pre {
 .markdown-message > * { margin: 0; }
 .markdown-message p { margin: 0; line-height: inherit; }
 
+/* ── 状态表情 → 软底线性图标（仅渲染层替换，消息原文不变）── */
+.md-emoji {
+  --md-emoji-color: var(--c-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.25em;
+  border-radius: 0.22em;
+  background: color-mix(in srgb, var(--md-emoji-color) 16%, transparent);
+  color: var(--md-emoji-color);
+  vertical-align: -0.12em;
+  line-height: 1;
+}
+.md-emoji > svg { width: 0.7em; height: 0.7em; }
+.md-emoji[data-tone="success"] { --md-emoji-color: var(--c-success); }
+.md-emoji[data-tone="warning"] { --md-emoji-color: var(--c-warning); }
+.md-emoji[data-tone="danger"]  { --md-emoji-color: var(--c-danger); }
+.md-emoji[data-tone="info"]    { --md-emoji-color: var(--c-info); }
+.md-emoji[data-tone="violet"]  { --md-emoji-color: var(--c-violet); }
+
 .markdown-message h1,
 .markdown-message h2,
 .markdown-message h3 {

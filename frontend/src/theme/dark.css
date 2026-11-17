@@ -69,6 +69,8 @@
   --c-danger-soft: rgba(217, 36, 38, 0.14);
   --c-success-soft: rgba(63, 185, 80, 0.12);
   --c-accent-soft: rgba(49, 103, 220, 0.14);
+  --c-info: #5B9BFF;                    /* 提示类表情图标 */
+  --c-violet: #A78BFA;                  /* 文件类表情图标 */
 
   /* ── 组件专属点缀（技能卡色相）────────────────────── */
   --c-tag-pink-bg: rgba(217, 36, 38, 0.14);

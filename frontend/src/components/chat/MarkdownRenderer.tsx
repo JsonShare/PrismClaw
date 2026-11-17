@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import { Check, ChevronDown, ChevronRight, Copy, Download, Maximize2, Minus, Plus, RotateCcw, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, FileText, Lightbulb, Maximize2, Minus, Plus, RotateCcw, Search, X, XCircle } from 'lucide-react';
 import { createHighlighterCore } from '@shikijs/core';
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript';
 import githubLight from '@shikijs/themes/github-light';
@@ -22,7 +22,7 @@ import sqlLanguage from '@shikijs/langs/sql';
 import tsxLanguage from '@shikijs/langs/tsx';
 import typescriptLanguage from '@shikijs/langs/typescript';
 import yamlLanguage from '@shikijs/langs/yaml';
-import { hasUnclosedMarkdownFence, markStreamRevealTail, normalizeDataSpec, normalizeMarkdownTables, normalizePreviewSpec, rehypeTableLabels, remarkCjkStrong, splitStreamingMarkdown } from '../../lib/chat/markdown-utils';
+import { hasUnclosedMarkdownFence, markStreamRevealTail, MD_EMOJI_IFRAME_CSS, normalizeDataSpec, normalizeMarkdownTables, normalizePreviewSpec, replaceEmojiIconsInHtml, rehypeEmojiIcons, rehypeTableLabels, remarkCjkStrong, splitStreamingMarkdown } from '../../lib/chat/markdown-utils';
 // @ts-ignore
 import { STREAM_REVEAL_ANIMATION_MS } from '../../stream-reveal.mjs';
 import 'katex/dist/katex.min.css';
@@ -183,6 +183,21 @@ class RichBlockBoundary extends React.Component<{ fallback: React.ReactNode; chi
 
 function IconButton({ label, onClick, children, disabled }: { label: string; onClick: () => void; children: React.ReactNode; disabled?: boolean }) {
   return <button className="rich-icon-button" type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled}>{children}</button>;
+}
+
+const MARKDOWN_EMOJI_ICONS: Record<string, { Icon: React.ElementType; label: string }> = {
+  'check-circle': { Icon: CheckCircle2, label: '完成' },
+  'x-circle': { Icon: XCircle, label: '失败' },
+  'alert-triangle': { Icon: AlertTriangle, label: '注意' },
+  'lightbulb': { Icon: Lightbulb, label: '提示' },
+  'search': { Icon: Search, label: '搜索' },
+  'file-text': { Icon: FileText, label: '文件' },
+};
+
+function MarkdownEmojiIcon({ icon, tone }: { icon: string; tone: string }) {
+  const spec = MARKDOWN_EMOJI_ICONS[icon];
+  const Icon = spec?.Icon || Lightbulb;
+  return <span className="md-emoji" data-tone={tone} role="img" aria-label={spec?.label || '状态'}><Icon strokeWidth={2} aria-hidden="true" /></span>;
 }
 
 function RichFrame({ title, actions, children, className = '' }: { title: string; actions?: React.ReactNode; children: React.ReactNode; className?: string }) {
@@ -424,7 +439,10 @@ function HtmlFrame({ item, context, fullscreen = false }: { item: PreviewItem; c
   const resource = useTextResource(previewUrl(item.src, context));
   if (resource.error) return <p className="rich-preview-error">{resource.error}</p>;
   if (resource.loading) return <p className="rich-loading">正在读取 HTML…</p>;
-  return <iframe className={fullscreen ? 'rich-fullscreen-iframe' : undefined} title={item.title || item.label || 'HTML preview'} sandbox="" srcDoc={resource.text} />;
+  // emoji → 软底徽章 SVG，同时注入 md-emoji CSS
+  const processed = replaceEmojiIconsInHtml(resource.text);
+  const srcdoc = `<style>${MD_EMOJI_IFRAME_CSS}</style>${processed}`;
+  return <iframe className={fullscreen ? 'rich-fullscreen-iframe' : undefined} title={item.title || item.label || 'HTML preview'} sandbox="" srcDoc={srcdoc} />;
 }
 
 function wrapHtmlForRender(fragment: string): string {
@@ -433,6 +451,8 @@ function wrapHtmlForRender(fragment: string): string {
   const bodyMatch = content.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   if (bodyMatch) content = bodyMatch[1].trim();
   else if (/<!doctype|<html/i.test(content)) content = content.replace(/<!doctype[^>]*>/gi, '').replace(/<\/?html[^>]*>/gi, '').replace(/<head[\s\S]*<\/head>/gi, '').replace(/<\/?body[^>]*>/gi, '').trim();
+  // 状态表情 → 软底徽章 SVG（跳过 code/pre/script/style）
+  content = replaceEmojiIconsInHtml(content);
 
   const tokens = `<style>
 :root {
@@ -492,6 +512,7 @@ function wrapHtmlForRender(fragment: string): string {
   }
 }
 body { margin: 0; padding: 16px; font-family: var(--font-sans); color: var(--color-text-primary); background: var(--color-background-primary); }
+${MD_EMOJI_IFRAME_CSS}
 </style>`;
   const reporter = `<script>
 (function(){
@@ -679,8 +700,8 @@ const MarkdownTable = memo(function MarkdownTable({ children, node }: { children
 const MarkdownChunk = memo(function MarkdownChunk({ content, context, depth, streaming, streamReveal }: { content: string; context: PreviewContext; depth: number; streaming: boolean; streamReveal?: StreamRevealMeta }) {
   const incompleteFence = streaming && hasUnclosedMarkdownFence(content);
   const rehypePlugins = streamReveal?.appendedGraphemes
-    ? [rehypeKatex, [rehypeStreamRevealTail, streamReveal], rehypeTableLabels]
-    : [rehypeKatex, rehypeTableLabels];
+    ? [rehypeKatex, rehypeEmojiIcons, [rehypeStreamRevealTail, streamReveal], rehypeTableLabels]
+    : [rehypeKatex, rehypeEmojiIcons, rehypeTableLabels];
   return <ReactMarkdown
     // remark-gfm 默认 singleTilde: true，会把 "1~2 袋，一日 1~2 次" 里的
     // 两个单波浪号配对当删除线，中间大段文字被划掉。关闭 singleTilde 后
@@ -707,6 +728,8 @@ const MarkdownChunk = memo(function MarkdownChunk({ content, context, depth, str
         return safe ? <a href={href} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openSafeMarkdownLink(href); }} {...props}>{children}</a> : <span>{children}</span>;
       },
       span: ({ children, ...props }) => {
+        const icon = String((props as any)['data-md-icon'] || '');
+        if (icon) return <MarkdownEmojiIcon icon={icon} tone={String((props as any)['data-md-tone'] || 'neutral')} />;
         const revision = String((props as any)['data-stream-reveal-revision'] || '');
         return revision
           ? <StreamRevealTail revision={revision} {...props}>{children}</StreamRevealTail>

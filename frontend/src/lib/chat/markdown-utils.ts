@@ -151,6 +151,177 @@ export function remarkCjkStrong() {
   };
 }
 
+// ---------------------------------------------------------------------------
+// 状态类表情 → 软底线性图标。
+// 只替换有明确语义的表情，语气表情（🙂😂🎉）保持原样；代码块、链接内的
+// 文本不处理。替换只发生在渲染层，消息原文与复制内容不受影响。
+// ---------------------------------------------------------------------------
+
+const EMOJI_ICONS: Record<string, { icon: string; tone: string }> = {
+  '✅': { icon: 'check-circle', tone: 'success' },
+  '❌': { icon: 'x-circle', tone: 'danger' },
+  '⚠': { icon: 'alert-triangle', tone: 'warning' },
+  '💡': { icon: 'lightbulb', tone: 'info' },
+  '🔍': { icon: 'search', tone: 'info' },
+  '📄': { icon: 'file-text', tone: 'violet' },
+};
+
+const EMOJI_CHARS = Object.keys(EMOJI_ICONS);
+// 非捕获组：所有候选字符都统一接受可选 VS16（\uFE0F）
+const EMOJI_TEST_RE = new RegExp(`(?:${EMOJI_CHARS.join('|')})\\uFE0F?`);
+// 捕获组用于提取 base emoji 键；g 标志配合 .exec() 循环；[ \\t]? 吞掉表情后一个空格/制表符
+const EMOJI_SPLIT_RE = new RegExp(`(${EMOJI_CHARS.join('|')})\\uFE0F?[ \\t]?`, 'g');
+const EMOJI_SKIP_TAGS = new Set(['code', 'pre', 'a', 'script', 'style', 'svg', 'math', 'kbd']);
+
+function emojiNodes(value: string): any[] {
+  const nodes: any[] = [];
+  let cursor = 0;
+  EMOJI_SPLIT_RE.lastIndex = 0;
+  for (let match = EMOJI_SPLIT_RE.exec(value); match; match = EMOJI_SPLIT_RE.exec(value)) {
+    if (match.index > cursor) nodes.push({ type: 'text', value: value.slice(cursor, match.index) });
+    nodes.push({
+      type: 'element',
+      tagName: 'span',
+      properties: {
+        dataMdIcon: EMOJI_ICONS[match[1]].icon,
+        dataMdTone: EMOJI_ICONS[match[1]].tone,
+      },
+      children: [],
+    });
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < value.length) nodes.push({ type: 'text', value: value.slice(cursor) });
+  return nodes;
+}
+
+export function rehypeEmojiIcons() {
+  return (tree: any) => {
+    const visit = (node: any, skip: boolean) => {
+      if (!Array.isArray(node?.children)) return;
+      const tag = String(node.tagName || '').toLowerCase();
+      const nextSkip = skip || EMOJI_SKIP_TAGS.has(tag);
+      const next: any[] = [];
+      for (const child of node.children) {
+        if (child?.type === 'text' && !nextSkip && typeof child.value === 'string' && EMOJI_TEST_RE.test(child.value)) {
+          next.push(...emojiNodes(child.value));
+          continue;
+        }
+        visit(child, nextSkip);
+        next.push(child);
+      }
+      node.children = next;
+    };
+    visit(tree, false);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// iframe HTML 路径 emoji 替换：对 HTML 字符串做正则替换，跳过 code/pre/script/style
+// ---------------------------------------------------------------------------
+
+// lucide 线性图标的内联 SVG（与 MarkdownEmojiIcon 使用的 lucide-react 组件一一对应）
+const EMOJI_HTML_ICONS: Record<string, { icon: string; tone: string; svg: string }> = {
+  '✅': {
+    icon: 'check-circle',
+    tone: 'success',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path></svg>',
+  },
+  '❌': {
+    icon: 'x-circle',
+    tone: 'danger',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="m15 9-6 6"></path><path d="m9 9 6 6"></path></svg>',
+  },
+  '⚠': {
+    icon: 'alert-triangle',
+    tone: 'warning',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>',
+  },
+  '💡': {
+    icon: 'lightbulb',
+    tone: 'info',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"></path><path d="M9 18h6"></path><path d="M10 22h4"></path></svg>',
+  },
+  '🔍': {
+    icon: 'search',
+    tone: 'info',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>',
+  },
+  '📄': {
+    icon: 'file-text',
+    tone: 'violet',
+    svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path></svg>',
+  },
+};
+
+const EMOJI_HTML_CHARS = Object.keys(EMOJI_HTML_ICONS);
+const EMOJI_HTML_RE = new RegExp(`(${EMOJI_HTML_CHARS.join('|')})\\uFE0F?[ \\t]?`, 'g');
+// 跳过的标签：code / pre / script / style，匹配开标签（含可能的属性）到对应闭标签
+const HTML_SKIP_TAGS = ['code', 'pre', 'script', 'style'];
+
+/**
+ * 对 HTML 字符串做 emoji → 软底徽章内联 SVG 的替换。
+ * 跳过 <code>、<pre>、<script>、<style> 标签内的内容。
+ */
+export function replaceEmojiIconsInHtml(html: string): string {
+  let result = '';
+  let cursor = 0;
+  // 按 startIndex 排序所有 skip 区间
+  type SkipRange = { start: number; end: number };
+  const skipRanges: SkipRange[] = [];
+  for (const tag of HTML_SKIP_TAGS) {
+    const openRe = new RegExp(`<${tag}[\\s/>]`, 'gi');
+    let match;
+    openRe.lastIndex = 0;
+    while ((match = openRe.exec(html)) !== null) {
+      const tagStart = match.index;
+      // 找到闭合标签 </tag>
+      const closeRe = new RegExp(`</${tag}>`, 'gi');
+      closeRe.lastIndex = openRe.lastIndex;
+      const closeMatch = closeRe.exec(html);
+      if (closeMatch) {
+        skipRanges.push({ start: tagStart, end: closeMatch.index + closeMatch[0].length });
+      } else {
+        // 没有闭合标签，取到字符串末尾
+        skipRanges.push({ start: tagStart, end: html.length });
+      }
+    }
+  }
+  skipRanges.sort((a, b) => a.start - b.start);
+
+  // 遍历 emoji 匹配，落在 skip 区间里的跳过
+  EMOJI_HTML_RE.lastIndex = 0;
+  for (let match = EMOJI_HTML_RE.exec(html); match; match = EMOJI_HTML_RE.exec(html)) {
+    const emojiStart = match.index;
+    const emojiEnd = match.index + match[0].length;
+    // 检查是否落在某个 skip 区间内
+    const inSkip = skipRanges.some((r) => emojiStart >= r.start && emojiStart < r.end);
+    if (inSkip) continue;
+    // 追加从上次 cursor 到 emoji 起点的内容
+    if (emojiStart > cursor) result += html.slice(cursor, emojiStart);
+    const baseEmoji = match[1];
+    const spec = EMOJI_HTML_ICONS[baseEmoji];
+    if (spec) {
+      result += `<span class="md-emoji" data-tone="${spec.tone}">${spec.svg}</span>`;
+    } else {
+      result += match[0];
+    }
+    cursor = emojiEnd;
+  }
+  if (cursor < html.length) result += html.slice(cursor);
+  return result;
+}
+
+/** iframe 内联 CSS，与外层 .md-emoji 样式对齐 */
+export const MD_EMOJI_IFRAME_CSS = `
+.md-emoji{--md-emoji-color:#59636e;display:inline-flex;align-items:center;justify-content:center;width:1em;height:1em;margin-right:.25em;border-radius:.22em;background:color-mix(in srgb,var(--md-emoji-color) 16%,transparent);color:var(--md-emoji-color);vertical-align:-.12em;line-height:1}
+.md-emoji>svg{width:.7em;height:.7em;display:block}
+.md-emoji[data-tone="success"]{--md-emoji-color:var(--color-text-success)}
+.md-emoji[data-tone="warning"]{--md-emoji-color:var(--color-text-warning)}
+.md-emoji[data-tone="danger"]{--md-emoji-color:var(--color-text-danger)}
+.md-emoji[data-tone="info"]{--md-emoji-color:var(--color-text-info)}
+.md-emoji[data-tone="violet"]{--md-emoji-color:#7a4dd6}
+@media (prefers-color-scheme:dark){.md-emoji[data-tone="violet"]{--md-emoji-color:#a78bfa}}`;
+
 export function normalizePreviewSpec(source: string): PreviewSpec | null {
   let parsed: any;
   try {

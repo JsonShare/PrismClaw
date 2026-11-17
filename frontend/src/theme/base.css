@@ -52,7 +52,7 @@
     --c-bg, --c-canvas, --c-surface, --c-surface-2, --c-surface-3, --c-exec-block, --c-exec-block-inset, --c-select-bg, --c-sidebar,
     --c-border, --c-border-strong, --c-divider, --c-ring,
     --c-text, --c-text-secondary, --c-text-tertiary,
-    --c-accent, --c-brand, --c-danger, --c-success, --c-warning,
+    --c-accent, --c-brand, --c-danger, --c-success, --c-warning, --c-info, --c-violet,
     --c-btn-primary-bg, --c-btn-primary-hover, --c-btn-primary-fg,
     --overlay-bg, --overlay-border, --overlay-scrim,
     --shadow-sm, --shadow-md, --shadow-lg;
