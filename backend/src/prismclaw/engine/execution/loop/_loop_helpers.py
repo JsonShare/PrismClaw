@@ -170,8 +170,8 @@ async def _persist_clarified_turn(
       3. 树中若有孤立 tool_calls，prepare_next_turn 重建上下文时被
          provider 拒绝（400）。
 
-    结果合成规则（对齐 deepseek exclusive-barrier 语义——同批次仅 ask
-    生效，其余以可见的跳过说明收尾，模型可按需重发）：
+    结果合成规则（同批次仅 ask 生效，其余以可见的跳过说明收尾，
+    模型可按需重发）：
       - ask_call：answer 非空 = 用户答案（is_error=False）；
         None = 中止说明（is_error=True）
       - 同批次其余调用：跳过说明（is_error=True，模型可见、可重发）

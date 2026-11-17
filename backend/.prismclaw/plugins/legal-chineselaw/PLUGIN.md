@@ -4,7 +4,7 @@ Original: https://github.com/anthropics/legal-chineselaw
 Licensed under Apache License 2.0
 -->
 
-# PRISMCLAW.md
+# PLUGIN.md
 
 本仓库的工作指南。`legal-chineselaw` 是一个 PrismClaw 插件市场——包含十二个第一方法律插件、一个第三方供应商插件，以及五个托管 Agent Cookbook。此处的工作主要是编辑提示词内容（skills、agents、hooks）、插件元数据或 Cookbook 配置，而非应用代码。
 
@@ -15,7 +15,7 @@ Licensed under Apache License 2.0
 <plugin>/                         # 12 个第一方插件（commercial-legal、privacy-legal……）
   .plugin/plugin.json      # 插件清单（name、version、description、author）
   .mcp.json                       # 插件连接的 MCP 服务器
-  PRISMCLAW.md                       # 执业档案模板（详见下方"插件 PRISMCLAW.md"）
+  PLUGIN.md                       # 执业档案模板（详见下方"插件 PLUGIN.md"）
   README.md                       # 各插件文档
   skills/<name>/SKILL.md          # 每个目录对应一个 skill
   agents/<name>.md                # 子 Agent 定义
@@ -70,9 +70,9 @@ python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json'
 
 引用技能时要用完整命名：`/<子插件>:<技能名>`（如 `/commercial-legal:nda-review`），裸技能名解析不到。内置命令（`/mcp`、`/plugin`）直接可用。
 
-### 插件 PRISMCLAW.md 是模板，不是项目上下文
+### 插件 PLUGIN.md 是模板，不是项目上下文
 
-每个 `<plugin>/PRISMCLAW.md` 是一个执业档案模板，由 `cold-start-interview` skill 复制到用户机器上的 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md`。安装插件时，它*不会*作为项目上下文加载——插件加载器会对此发出警告，这是预期行为。不要通过将内容移入 skill 来"修复"这个警告。
+每个 `<plugin>/PLUGIN.md` 是一个执业档案模板，由 `cold-start-interview` skill 复制到用户机器上的 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PLUGIN.md`。安装插件时，它*不会*作为项目上下文加载——插件加载器会对此发出警告，这是预期行为。不要通过将内容移入 skill 来"修复"这个警告。
 
 ### `external_plugins/` 由供应商维护
 
@@ -97,5 +97,5 @@ python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json'
 ## 不要动的内容
 
 - 各插件的 `.gitignore` 文件在不同插件间存在细微差异，可能是有意为之；统一前请先询问。
-- 本市场当前没有任何子插件配置 `hooks/hooks.json`。Hook 是可选的，缺失这些文件不是 bug。护栏规则写在各技能正文与 `PRISMCLAW.md` 里，不依赖工具级 hook。
-- `references/` 仅存在于仓库根目录，不随任何插件目录一起发布。部分插件的 `PRISMCLAW.md` 模板引用它时好像它在目录内——这是已知的缺口，不要悄悄移动它。
+- 本市场当前没有任何子插件配置 `hooks/hooks.json`。Hook 是可选的，缺失这些文件不是 bug。护栏规则写在各技能正文与 `PLUGIN.md` 里，不依赖工具级 hook。
+- `references/` 仅存在于仓库根目录，不随任何插件目录一起发布。部分插件的 `PLUGIN.md` 模板引用它时好像它在目录内——这是已知的缺口，不要悄悄移动它。

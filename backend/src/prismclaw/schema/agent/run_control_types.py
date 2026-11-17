@@ -43,7 +43,6 @@ class RunControl:
 
     abort_event: asyncio.Event = field(default_factory=asyncio.Event)
     active: bool = False
-    chat_done_handled_externally: bool = False
     pending_steers: list[SteerMessage] = field(default_factory=list)
 
     def stop(self) -> None:

@@ -25,7 +25,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果它
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`。如果它
    包含 `[PLACEHOLDER]`，停止并指向 `/ip-legal:cold-start-interview`。如果
    执业档案显示仅商标或版权（无专利执业），
    说明并路由用户到其他地方——这是错误的工具。
@@ -90,7 +90,7 @@ Licensed under Apache License 2.0
 ## Matter context
 
 **Matter context.** 检查执业级
-PRISMCLAW.md 中的 `## Matter workspaces`。
+PLUGIN.md 中的 `## Matter workspaces`。
 如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的
 其余部分——skills 使用执业级上下文，事项机制不可见。
 如果已启用且没有活跃事项，询问："这是哪个事项的？
@@ -109,7 +109,7 @@ PRISMCLAW.md 中的 `## Matter workspaces`。
 ## 首先加载执业档案
 
 **在阅读披露之前，阅读
-`~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。** 如果它
+`~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`。** 如果它
 缺失或仍包含占位符，停止并运行 `/ip-legal:cold-start-interview`。执业
 档案告诉你：
 

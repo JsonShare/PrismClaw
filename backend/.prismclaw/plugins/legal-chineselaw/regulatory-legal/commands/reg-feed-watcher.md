@@ -22,7 +22,7 @@ Licensed under Apache License 2.0
 
 # /reg-feed-watcher
 
-1. 读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 关注清单、重要性阈值、信息源配置。
+1. 读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 关注清单、重要性阈值、信息源配置。
 2. 使用以下工作流。
 3. 拉取每个信息源。按重要性过滤。
 4. 输出：新内容，按重要性档分类。
@@ -35,7 +35,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 关注清单、重要性阈值、信息源配置、摘要输出路径（如已设）。
+`~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 关注清单、重要性阈值、信息源配置、摘要输出路径（如已设）。
 
 `${PRISMCLAW_PLUGIN_ROOT}/references/reg-feed-watcher/source-catalog.md`（在此技能目录中）→ 各类信息源的整理目录（覆盖中央层级、地方层级、行业协会、二级来源等）。在配置新源或用户的关注清单存在覆盖缺口时使用（参见步骤 0）。
 
@@ -50,9 +50,9 @@ Licensed under Apache License 2.0
 
 如果存在明显缺口——例如，用户在关注清单监视"网信办"，但信息源配置里只有一个 `cac.gov.cn`，遗漏地方网信办、相关协会、最高院数据条线——在摘要顶部一次性提出：
 
-> **信息源覆盖缺口提醒：** 你的关注清单包含 [类别]，但仅配置了 [N] 个源。源目录在此类别中列出了 [X] 个选项（例如，[前 2-3 个名称]）。要我建议添加吗？运行 `/regulatory-legal:cold-start-interview --redo` 进行更新，或直接编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`。
+> **信息源覆盖缺口提醒：** 你的关注清单包含 [类别]，但仅配置了 [N] 个源。源目录在此类别中列出了 [X] 个选项（例如，[前 2-3 个名称]）。要我建议添加吗？运行 `/regulatory-legal:cold-start-interview --redo` 进行更新，或直接编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md`。
 
-不要反复唠叨相同的缺口——如果用户明确表示"暂时跳过地方监管"，请尊重。在 PRISMCLAW.md 中记录状态以便保持。
+不要反复唠叨相同的缺口——如果用户明确表示"暂时跳过地方监管"，请尊重。在 PLUGIN.md 中记录状态以便保持。
 
 ### 步骤 1：拉取
 
@@ -72,7 +72,7 @@ Licensed under Apache License 2.0
 
 **第 2 级——栏目页轮询（主力方案，覆盖元典未覆盖的源）**
 
-对 PRISMCLAW.md 中 `## 信息源配置` 标 `栏目页` 类型的源：
+对 PLUGIN.md 中 `## 信息源配置` 标 `栏目页` 类型的源：
 
 - **URL 时效检查**：读配置中的 `验证日期` 和 `状态` 字段。若状态为 `❌ 待补`，跳过轮询，在简报底部注："[监管] 栏目页状态为待补，未执行轮询。跑 `cold-start-interview --redo` 重新搜索验证有效 URL。"若验证日期为空或超过 **90 天**，先尝试浏览器访问验证 URL 仍可达；如不可达，执行一次联网搜索重新确认当前有效 URL，更新配置后再轮询。
 - **获取栏目页**：抓取政策列表页（`<title, link, publish_date>` 结构）
@@ -91,7 +91,7 @@ Licensed under Apache License 2.0
 | 国家市场监管总局 samr.gov.cn | 反垄断、广告、消费者权益 |
 | 工业和信息化部 miit.gov.cn | 通信、电子、APP 治理 |
 
-**⚠️ 注意**：上表**不含**可直接使用的栏目页 URL。所有具体栏目页 URL 必须在 cold-start 时通过联网检索工具 + 浏览器验证确认当前有效性后才能登记到 PRISMCLAW.md。政务网站改版频繁，静态列表易失效。
+**⚠️ 注意**：上表**不含**可直接使用的栏目页 URL。所有具体栏目页 URL 必须在 cold-start 时通过联网检索工具 + 浏览器验证确认当前有效性后才能登记到 PLUGIN.md。政务网站改版频繁，静态列表易失效。
 
 **第 3 级——付费订阅源（如果配置）**
 
@@ -114,7 +114,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 2：分类
 
-每个项目根据 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 获得重要性档：
+每个项目根据 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 获得重要性档：
 
 | 项目类型 | 与阈值匹配 |
 |---|---|
@@ -141,7 +141,7 @@ Licensed under Apache License 2.0
 
 对于以任何高于"跳过"档分类的每个征求意见稿：
 - 提取评议截止日期
-- 如果在 PRISMCLAW.md 中启用了评议跟踪：附加到 `comment-tracker.yaml`，状态为"未决定"，以及来自 PRISMCLAW.md 的默认评议决策所有者
+- 如果在 PLUGIN.md 中启用了评议跟踪：附加到 `comment-tracker.yaml`，状态为"未决定"，以及来自 PLUGIN.md 的默认评议决策所有者
 - 在输出条目中包含评议截止日期
 
 ### 步骤 3：丰富
@@ -157,11 +157,11 @@ Licensed under Apache License 2.0
 
 ## 输出
 
-摘要默认进入聊天。**同时将其写入可共享文件**，每当输出包含一个或多个高于仅供参考的项目时，除非用户的 PRISMCLAW.md 明确设置 `摘要输出 → 仅聊天`。
+摘要默认进入聊天。**同时将其写入可共享文件**，每当输出包含一个或多个高于仅供参考的项目时，除非用户的 PLUGIN.md 明确设置 `摘要输出 → 仅聊天`。
 
 **文件输出行为：**
 
-1. 在 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中查找 `摘要输出路径`。如果已设置，则写入此处。如果未设置的默认值：`~/regulatory-legal-digests/reg-digest-YYYY-MM-DD.md`。
+1. 在 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 中查找 `摘要输出路径`。如果已设置，则写入此处。如果未设置的默认值：`~/regulatory-legal-digests/reg-digest-YYYY-MM-DD.md`。
 2. 如需要则创建父目录。
 3. 将完整摘要写入为 Markdown（与聊天输出内容相同，包括工作产品标题、源标签和核验引用页脚）。
 4. 如果该路径今天已存在文件，则附加带有时间戳子标题的新部分而不是覆盖——同一天可能会看到多次运行。
@@ -216,10 +216,10 @@ Licensed under Apache License 2.0
 
 ## 配置依赖的后备方案
 
-此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取关注清单、重要性阈值和信息源配置。当所需值仍然是 `[PLACEHOLDER]` 或为空时，在输出中具体说明：
+此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 读取关注清单、重要性阈值和信息源配置。当所需值仍然是 `[PLACEHOLDER]` 或为空时，在输出中具体说明：
 
-- **关注清单为空：** 停止并说"你配置中的关注清单为空。我不知道要监视哪些监管机构，无法拉取信息源。运行 `/regulatory-legal:cold-start-interview --redo` 或编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 并添加至少一个监管机构。"
-- **重要性阈值为空：** 回退到默认档并附加："此输出使用了默认重要性档，因为你的配置没有设置自定义阈值。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 进行调整。"
+- **关注清单为空：** 停止并说"你配置中的关注清单为空。我不知道要监视哪些监管机构，无法拉取信息源。运行 `/regulatory-legal:cold-start-interview --redo` 或编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 并添加至少一个监管机构。"
+- **重要性阈值为空：** 回退到默认档并附加："此输出使用了默认重要性档，因为你的配置没有设置自定义阈值。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 进行调整。"
 - **信息源配置为空：** 仅运行公开网页源（元典 MCP 如可用，否则手工录入）并附加："此输出仅使用了公开网页源，因为你的配置没有列出任何经验证的栏目页 URL 或付费订阅源。使用 `/regulatory-legal:cold-start-interview --redo` 添加信息源。"
 
 当相关值已填充时，不说明配置。
@@ -234,12 +234,12 @@ Licensed under Apache License 2.0
 
 ## 用下一步决策树结束
 
-根据 PRISMCLAW.md `## 输出` 以下一步决策树结束。根据此技能刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+根据 PLUGIN.md `## 输出` 以下一步决策树结束。根据此技能刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## 此技能不做什么
 
 - 完整阅读每个项目。它进行分类和丰富；深度阅读适用于通过过滤的项目。
-- 更改重要性阈值。如果过滤器错误，编辑 PRISMCLAW.md。
+- 更改重要性阈值。如果过滤器错误，编辑 PLUGIN.md。
 - 需要元典或其他付费工具。公开网页源是基线；付费工具增加深度。
 
 

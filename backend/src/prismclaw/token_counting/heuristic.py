@@ -19,7 +19,10 @@ from typing import Any, Literal
 CJK_TOKENS_PER_CHAR = 0.90
 OTHER_CHARS_PER_TOKEN = 3.4
 # 工具 schema JSON 的 UTF-8 字节/token（生产 drift sentinel 实测校准）。
-WIRE_BYTES_PER_TOKEN = 3.5
+# 2026-11-16 error.log 复核：25899 B / 25 visible tools ↔ ~5060 tok → 5.12 B/token；
+# 历史实测两次为 4.92 / 5.05。旧的 3.5 使 tools 估算偏高 ~45%，导致
+# drift sentinel 每轮误报 ERROR（accounted 10805 vs real 8514）。
+WIRE_BYTES_PER_TOKEN = 5.0
 # 通用请求 JSON 的 UTF-8 字节/token（对应旧实现的 //3）。
 JSON_BYTES_PER_TOKEN = 3.0
 # 单条消息固定信封开销（role/content/JSON 括号）。

@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /irac-practice
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 课程、考试格式、大纲位置、学习风格。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 课程、考试格式、大纲位置、学习风格。
 2. 应用以下框架。
 3. 确定模式：学生提供的假设 + 答案，或 skill 生成的假设配合学生的答案。
 4. 仔细阅读答案。对照预期的 IRAC 组件映射。
@@ -50,7 +50,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、考试格式、大纲位置、学习风格
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 当前课程、考试格式、大纲位置、学习风格
 - `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/irac-sessions/[student]/tracker.md`（如果存在）——跨会话模式跟踪
 - 学生提供的假设（如果在特定提示上练习）和他们的书面答案
 
@@ -175,7 +175,7 @@ Licensed under Apache License 2.0
 
 ## 以下一步决策树结束
 
-按照 PRISMCLAW.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+按照 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 

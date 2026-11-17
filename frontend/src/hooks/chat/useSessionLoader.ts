@@ -14,11 +14,17 @@ interface SessionListResponse {
   type?: 'normal' | 'scheduled'
 }
 
-interface MessageHistoryEntry {
+export interface MessageHistoryEntry {
   role: string
   content?: string | ContentBlock[]
   id?: string
   timestamp?: string
+  // 服务端事件 seq：权威层水位据此推进（sync 的 after_seq）。
+  seq?: number
+  // user 消息的客户端标识：用于把本地乐观气泡 re-key 为服务端 entry。
+  client_message_id?: string
+  // 该轮仍在执行：由 live 叠加层负责展示，历史层不得落成半成品气泡。
+  in_progress?: boolean
   feedback?: string | null
   output_files?: string[]
   file_changes?: FileChange[]
@@ -119,6 +125,65 @@ function toToolCalls(raw: MessageHistoryEntry['tool_calls']): ToolCallInfo[] | u
     })
   }
   return out.length > 0 ? out : undefined
+}
+
+/**
+ * 历史全量与 sync 增量共用的映射入口：后端 snake_case 展示消息 → 前端 Message。
+ * 两处同源，避免刷新回放与增量补差出现两套字段口径。
+ */
+export function mapHistoryEntries(entries: MessageHistoryEntry[]): Message[] {
+  return entries
+    // in_progress 的轮次由 live 叠加层渲染，落进权威层就会与流式气泡并列成半成品。
+    .filter((e) => e.in_progress !== true)
+    .map((e) => {
+      const content = normalizeContent(e.content)
+      const role: Message['role'] = e.role === 'user' ? 'user' : 'assistant'
+      let metadata: Message['metadata'] = undefined
+      // 后端刷新重放回填的 durationMs（_build_display_messages 计算）：直接透传。
+      const backendMeta = e.metadata && typeof e.metadata === 'object' ? (e.metadata as Record<string, unknown>) : undefined
+      if (backendMeta && typeof backendMeta.durationMs === 'number' && backendMeta.durationMs > 0) {
+        metadata = { durationMs: backendMeta.durationMs }
+      }
+      if (e.feedback === 'up' || e.feedback === 'down') metadata = { ...(metadata ?? {}), feedback: e.feedback }
+      else if (e.feedback === 'none') metadata = { ...(metadata ?? {}), feedback: null }
+      const outputFiles = Array.isArray(e.output_files)
+        ? e.output_files.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+        : []
+      if (outputFiles.length > 0) metadata = { ...(metadata ?? {}), outputFiles }
+      const fileChanges = Array.isArray(e.file_changes)
+        ? e.file_changes.filter(
+            (c): c is FileChange => !!c && typeof c === 'object' && typeof (c as any).path === 'string',
+          )
+        : []
+      if (fileChanges.length > 0) metadata = { ...(metadata ?? {}), fileChanges }
+      // 执行过程持久化：后端把 timeline 终态落库（CustomEntry: execution_timeline），
+      // GET messages / sync 时附着到 item.timeline。这里恢复到 message.timeline，
+      // 供 MessageBubble 的 ExecutionTimeline 历史回放——刷新页面后仍能看到完整执行过程。
+      //
+      // 水合过滤：持久化数据进入前端的唯一边界，挡掉类型不在
+      // TimelineNode 联合里的未知节点。渲染层（buildStepRows / timelineSync）
+      // 按当前类型契约直接读字段，不做未知类型兜底——否则真实数据缺陷会被
+      // 静默吞掉；换成这里的单点过滤，既安全又不污染渲染层。
+      const timeline = Array.isArray(e.timeline) ? e.timeline.filter(isKnownTimelineNode) : []
+      return {
+        id: e.id ?? `msg_${Math.random().toString(36).slice(2)}`,
+        role,
+        content,
+        timestamp: e.timestamp ? new Date(e.timestamp).getTime() : Date.now(),
+        seq: typeof e.seq === 'number' ? e.seq : undefined,
+        clientMessageId:
+          typeof e.client_message_id === 'string' ? e.client_message_id : undefined,
+        toolCalls: toToolCalls(e.tool_calls),
+        metadata,
+        timeline: timeline.length > 0 ? timeline : undefined,
+      }
+    })
+    // 水合过滤：只保留「有可见正文」或「携带执行过程(timeline)」的消息。
+    // 注意：agent 的某些回合正文为空（纯工具调用 / 仅交付物 / 空答案），但
+    // 仍产出了有价值的执行过程 timeline。若仅按 hasVisibleContent 过滤，这类
+    // 消息会被整条丢弃，连带其 timeline 一起丢失——表现为「切换菜单再切回任务，
+    // 执行过程不显示」。后端已在展示消息上附着 timeline，这里必须放行。
+    .filter((m) => hasVisibleContent(m.content) || (m.timeline != null && m.timeline.length > 0))
 }
 
 // 会话在后端已不存在（多为 Redis TTL 过期、历史索引被惰性 GC 清除）：若该
@@ -323,62 +388,16 @@ export function useSessionLoader(token: string | null, wsState: WSState, workspa
           useChatStore.getState().setHistoryStatus(convId, 'idle')
           return
         }
-        const serverMsgs: Message[] = entries
-          .map((e) => {
-            const content = normalizeContent(e.content)
-            const role: Message['role'] = e.role === 'user' ? 'user' : 'assistant'
-            let metadata: Message['metadata'] = undefined
-            // 后端刷新重放回填的 durationMs（_build_display_messages 计算）：直接透传。
-            const backendMeta = e.metadata && typeof e.metadata === 'object' ? (e.metadata as Record<string, unknown>) : undefined
-            if (backendMeta && typeof backendMeta.durationMs === 'number' && backendMeta.durationMs > 0) {
-              metadata = { durationMs: backendMeta.durationMs }
-            }
-            if (e.feedback === 'up' || e.feedback === 'down') metadata = { ...(metadata ?? {}), feedback: e.feedback }
-            else if (e.feedback === 'none') metadata = { ...(metadata ?? {}), feedback: null }
-            const outputFiles = Array.isArray(e.output_files)
-              ? e.output_files.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
-              : []
-            if (outputFiles.length > 0) metadata = { ...(metadata ?? {}), outputFiles }
-            const fileChanges = Array.isArray(e.file_changes)
-              ? e.file_changes.filter(
-                  (c): c is FileChange => !!c && typeof c === 'object' && typeof (c as any).path === 'string',
-                )
-              : []
-            if (fileChanges.length > 0) metadata = { ...(metadata ?? {}), fileChanges }
-            // 执行过程持久化：后端把 timeline 终态落库（CustomEntry: execution_timeline），
-            // GET messages 时附着到 item.timeline（见 routes.py:2346）。这里恢复到
-            // message.timeline，供 MessageBubble 的 ExecutionTimeline 历史回放——刷新
-            // 页面后仍能看到完整执行过程，不依赖被 finalizeStreaming 清空的 liveTimeline。
-            //
-            // 水合过滤：持久化数据进入前端的唯一边界，挡掉类型不在
-            // TimelineNode 联合里的未知节点。渲染层（buildStepRows / timelineSync）
-            // 按当前类型契约直接读字段，不做未知类型兜底——否则真实数据缺陷会被
-            // 静默吞掉；换成这里的单点过滤，既安全又不污染渲染层。
-            const timeline = Array.isArray(e.timeline) ? e.timeline.filter(isKnownTimelineNode) : []
-            return {
-              id: e.id ?? `msg_${Math.random().toString(36).slice(2)}`,
-              role,
-              content,
-              timestamp: e.timestamp ? new Date(e.timestamp).getTime() : Date.now(),
-              toolCalls: toToolCalls(e.tool_calls),
-              metadata,
-              timeline: timeline.length > 0 ? timeline : undefined,
-            }
-          })
-          // 水合过滤：只保留「有可见正文」或「携带执行过程(timeline)」的消息。
-          // 注意：agent 的某些回合正文为空（纯工具调用 / 仅交付物 / 空答案），但
-          // 仍产出了有价值的执行过程 timeline。若仅按 hasVisibleContent 过滤，这类
-          // 消息会被整条丢弃，连带其 timeline 一起丢失——表现为「切换菜单再切回任务，
-          // 执行过程不显示」。后端已在 GET /messages 把 timeline 附着到对应消息
-          // （routes.py:602），这里必须放行 timeline 非空的消息，否则历史回放拿不到。
-          .filter((m) => hasVisibleContent(m.content) || (m.timeline != null && m.timeline.length > 0))
+        const serverMsgs = mapHistoryEntries(entries)
         const local = useChatStore.getState().convStates[convId]?.messages ?? []
         if (serverMsgs.length === 0 && local.length > 0) {
           // 服务端无消息但本地有（刚发送的乐观消息）：保留本地，视为已加载。
           useChatStore.getState().setHistoryStatus(convId, 'loaded')
           return
         }
-        setMessages(convId, serverMsgs) // setMessages 内部置 historyStatus='loaded'
+        // 首次历史是全量入口：把权威水位对齐到已返回的最大 seq，后续 sync 从这里补差。
+        const maxSeq = serverMsgs.reduce((max, m) => Math.max(max, m.seq ?? 0), 0)
+        setMessages(convId, serverMsgs, { settledSeq: maxSeq }) // setMessages 内部置 historyStatus='loaded'
       } catch {
         useChatStore.getState().setHistoryStatus(convId, 'idle')
       }

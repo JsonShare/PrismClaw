@@ -1,10 +1,8 @@
 """插件 Manifest Schema。
 
-对标参考实现 ``schemas.ts`` L1340 ``PluginManifestSchema``，做减法。
-
-抄的字段：metadata、hooks、commands、agents、skills、
-mcp_servers、user_config、dependencies。
-不抄的字段：channels、lsp_servers、keywords、settings、output_styles。
+支持的字段：metadata、hooks、commands、agents、skills、mcp_servers、
+user_config、dependencies。
+不支持的字段：channels、lsp_servers、keywords、settings、output_styles。
 """
 
 from __future__ import annotations
@@ -17,7 +15,7 @@ from prismclaw.engine.plugins.registry.identity import is_valid_plugin_name
 
 
 class PluginAuthor(BaseModel):
-    """对标参考实现 ``PluginAuthorSchema``。"""
+    """插件作者信息。"""
 
     name: str | None = None
     email: str | None = None
@@ -27,7 +25,7 @@ class PluginAuthor(BaseModel):
 
 
 class UserConfigOption(BaseModel):
-    """用户可配置选项。参考实现 ``PluginUserConfigOptionSchema`` (L560)。
+    """用户可配置选项。
 
     sensitive=True 时存 keychain，非 sensitive 存 settings.json。
     值通过 ``${user_config.KEY}`` 在 hook command 中引用。
@@ -47,7 +45,7 @@ class UserConfigOption(BaseModel):
 
 
 class CommandMetadata(BaseModel):
-    """命令元数据。参考实现 ``CommandMetadataSchema`` (L430)。
+    """命令元数据。
 
     source 和 content 互斥。
     """
@@ -69,9 +67,9 @@ class CommandMetadata(BaseModel):
 
 
 class PluginManifest(BaseModel):
-    """插件 manifest。对标参考实现 ``PluginManifestSchema`` (L1340)。
+    """插件 manifest。
 
-    commands 支持三种格式（对标参考实现 L1410）：
+    commands 支持三种格式：
     1. 单路径字符串: ``"./commands"``
     2. 路径数组: ``["./cmd1", "./cmd2"]``
     3. 对象映射: ``{"slug": {"source": "./x.md", "description": "..."}}``

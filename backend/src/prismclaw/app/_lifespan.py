@@ -267,21 +267,24 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.project_root = project_root
 
     # ── 启动同步：backend/.prismclaw → ~/.prismclaw ──────────────────────
-    # SKILL.md / PRISMCLAW.md 全写 ~/.prismclaw 路径，repo 里权威源在
+    # SKILL.md / PLUGIN.md 全写 ~/.prismclaw 路径，repo 里权威源在
     # backend/.prismclaw/；运行时代码和文档统一读 ~/.prismclaw，启动时
     # 把静态能力目录（skills/plugins/agents）同步过去，运行时数据保留。
     try:
         from prismclaw.infra.prismclaw_home import sync_prismclaw_home
-        sync_prismclaw_home(project_root)
+
+        sync_result = sync_prismclaw_home(project_root)
+        if not sync_result.ok:
+            # 静默失效是历史 bug：拷贝失败时启动照常，运行时继续用旧资产。
+            logger.error(
+                "启动资产同步未完全生效：failed=%s drifted=%s"
+                "（子代理/技能可能是旧版本；可执行 "
+                "`python -m prismclaw.infra.prismclaw_home <project_root>` 手动同步）",
+                sync_result.failed,
+                sync_result.drifted[:10],
+            )
     except Exception:
         logger.exception("sync_prismclaw_home failed; continuing startup")
-
-    # 清理 workspace 根的旧目录（uploads/outputs/context_blocks/tool_results/tmp）
-    try:
-        from prismclaw.infra.prismclaw_home import cleanup_stale_workspace_dirs
-        cleanup_stale_workspace_dirs()
-    except Exception:
-        logger.exception("cleanup_stale_workspace_dirs failed; continuing startup")
 
     # Shared PostgreSQL engine — used by user store, memory store, scheduler,
     # dream, curator, and context audit subsystems.
@@ -472,6 +475,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         runner_deps = runtime_bundle.runner_deps
         runner_deps.worker_id = worker_id
         runner_deps.persistence.run_ownership_store = getattr(infra_bundle, "run_ownership_store", None)
+        if runner_deps.subagent_collaboration is not None:
+            runner_deps.subagent_collaboration.set_worker_id(worker_id)
+            runner_deps.subagent_collaboration.start()
 
         # 发布唯一项目能力布局：聚合启动日志 + 供 /api/health 读取（含降级诊断）。
         _publish_capability_layout(app, runner_deps)
@@ -748,7 +754,24 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if scheduler_engine is not None:
             scheduler_engine.stop()
 
-        await shutdown_app_runtime(app, close_client_fn=close_client)
+        # 跨 worker 运行态监听（中止 Pub/Sub）：先于 Redis 客户端释放关闭。
+        _run_presence = getattr(app.state, "run_presence", None)
+        if _run_presence is not None:
+            try:
+                await _run_presence.stop()
+            except Exception:
+                logger.debug("run_presence stop failed (expected during shutdown)", exc_info=True)
+
+        try:
+            await shutdown_app_runtime(app, close_client_fn=close_client)
+        except asyncio.CancelledError:
+            # 进程退出时 lifespan 可能先被取消（Ctrl+C 两次 / uvicorn 超时）。
+            # 此时继续向上抛会让 uvicorn 把一次正常停机记成未处理异常；
+            # 各清理步骤本身已是 best-effort，这里只记录事实并让 lifespan 收尾。
+            logger.warning(
+                "shutdown cancelled before cleanup completed; "
+                "remaining resources are released best-effort"
+            )
 
         # Release the shared PostgreSQL engine.
         _db_engine = getattr(app.state, "db_engine", None)

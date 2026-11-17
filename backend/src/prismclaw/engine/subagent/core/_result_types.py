@@ -34,27 +34,6 @@ def _coerce_skill_invocation(invoked_skill_state: Any) -> SkillInvocationState |
         return None
 
 
-def _render_terminal_result_text(
-    *,
-    outcome: str,
-    turns: int,
-    timeout_s: float,
-    final_text: str,
-) -> str:
-    detail = final_text.strip()
-    if outcome == "timeout":
-        prefix = f"[子代理超时：{timeout_s:g}s 后共执行 {turns} 轮]"
-    elif outcome == "aborted":
-        prefix = "[子代理已被父级中止]"
-    elif outcome == "max_turns_exceeded":
-        prefix = f"[子代理已达最大轮次上限（{turns} 轮）]"
-    else:
-        prefix = "[子代理执行失败：unexpected_error]"
-    if detail:
-        return f"{prefix}\n{detail}"
-    return prefix
-
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------

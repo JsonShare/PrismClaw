@@ -89,7 +89,7 @@ export function useClarifyFlow(
     (s) => s.convStates[conversationId]?.clarifyRequest ?? null,
   )
   // clarifySession: store 级 HITL 选择态。与 clarifyRequest 同生命周期——
-  // runGate 切走时由 setClarifyRequest / finalizeStreaming / initStreaming 同步清。
+  // runGate 切走时由 setClarifyRequest / clearLive / initStreaming 同步清。
   // 上提到 store 让刷新后能恢复半完成的选择流程。
   const clarifySession = useChatStore(
     (s) => s.convStates[conversationId]?.clarifySession ?? null,

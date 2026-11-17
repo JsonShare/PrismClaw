@@ -17,17 +17,17 @@ class PluginSettings(BaseSettings):
         default_factory=dict
     )
 
-    # 配置驱动发现。对标参考实现 ``settings.enabledPlugins``。
+    # 配置驱动发现。
     # 显式启用的插件 ID 列表（name@source 格式）。
     enabled: list[str] = Field(default_factory=list)
 
-    # 企业策略锁定的插件名。对标参考实现 ``managedPluginNames``。
+    # 企业策略锁定的插件名。
     managed_names: set[str] = Field(default_factory=set)
 
-    # 被策略封锁的来源。对标参考实现 ``blockedMarketplaces``。
+    # 被策略封锁的来源。
     blocked_sources: set[str] = Field(default_factory=set)
 
-    # 白名单来源（非空时只允许白名单内的来源）。对标参考实现 ``strictKnownMarketplaces``。
+    # 白名单来源（非空时只允许白名单内的来源）。
     strict_known_sources: set[str] | None = Field(
         default=None
     )

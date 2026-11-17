@@ -91,8 +91,8 @@ export default function ChatPage() {
     activeWorkspaceId && !activeWorkspaceId.startsWith('未')
       ? activeWorkspaceId
       : 'default'
-  // hydrateRunning 已改为用户级查询（后端内存权威源），不再需要工作区参数：
-  // 刷新瞬间 activeWorkspaceId 尚未恢复，按工作区查会漏掉运行中会话。
+  // 重连补差已收敛到 useChatSocket 的 sync（用户级 /conversations/running 只是候选集），
+  // 不再需要在这里传工作区参数：刷新瞬间 activeWorkspaceId 尚未恢复，按工作区过滤会漏会话。
   const { wsState, send, forceReconnect, wsDebug, subscribeNotification } = useChatSocket(
     token,
     () => logout('登录已过期，请重新登录'),
@@ -158,7 +158,7 @@ export default function ChatPage() {
 
   // 审阅面板（右侧 aside）仅在 xl(≥1280px) 显示
   const isXl = useMediaQuery('(min-width: 1280px)')
-  const clearStreamingState = (convId: string) => useChatStore.getState().finalizeStreaming(convId)
+  const clearStreamingState = (convId: string) => useChatStore.getState().clearLive(convId)
 
   const conversations = useSessionStore((s) => s.conversations)
 
@@ -539,12 +539,17 @@ export default function ChatPage() {
   }, [activeConvId, conversations, schedulerTasks, sessionsLoaded, sessionsHasMore, setActiveConvId, wsState])
 
   // activeConvId 变化（侧栏选择、scheduler 跳转、删除后回落等）→ 确保历史已加载。
+  // historyStatus 也作为依赖：sync 判定 history_reset 时会把状态打回 idle，
+  // 必须立即重建基线，否则当前会话会一直白屏到用户切走再切回。
   // ensureHistory 内部幂等（loaded/loading/有本地消息均不重取），无需 autoLoadedConvIdRef。
+  const activeHistoryStatus = useChatStore((s) =>
+    activeConvId ? s.convStates[activeConvId]?.historyStatus : undefined,
+  )
   useEffect(() => {
     if (wsState !== 'ready') return
     if (!activeConvId) return
     void controller.ensureHistory(activeConvId)
-  }, [activeConvId, controller, wsState])
+  }, [activeConvId, controller, wsState, activeHistoryStatus])
 
   const handleNewSession = useCallback(() => {
     if (activeConvId) clearStreamingState(activeConvId)

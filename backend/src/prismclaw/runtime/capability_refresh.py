@@ -86,14 +86,14 @@ def register_subagent_tools(
     memory_store: Any,
     skill_runtime: Any,
     channel: str | None = None,
+    collaboration: Any = None,
 ) -> "SubAgentConfig":
-    """Register the sub-agent tool trio (sub_agent / reduce / handoff).
+    """Register the sub-agent tools (sub_agent / reduce / handoff / search / task 查询).
 
-    Single wiring point shared by startup assembly (runner_assembly) and
-    runtime capability refresh (refresh_runner_capabilities), so the
-    SubAgentExecutor construction cannot drift between the two paths.
-    Idempotent: existing registrations are replaced; at startup the names
-    simply do not exist yet and unregister is a no-op.
+    单点装配，供启动装配（runner_assembly）与运行时能力刷新
+    （refresh_runner_capabilities）共用，避免 SubAgentExecutor 的构造在两条路径
+    之间漂移。幂等：已存在的注册会被替换；启动时这些名字尚不存在，unregister
+    为空操作。
 
     The runner-level ``settings.subagent`` (SubAgentSettings) is validated
     into the strong-typed SubAgentConfig that SubAgentExecutor and
@@ -121,6 +121,10 @@ def register_subagent_tools(
         "reduce_subagent_results",
         "request_handoff",
         "subagent_search",
+        "subagent_control",
+        "check_subagent_task",
+        "list_subagent_tasks",
+        "cancel_task",
     ):
         registry.unregister(name)
 
@@ -149,11 +153,38 @@ def register_subagent_tools(
             registry=subagent_registry,
             settings=subagent_config,
             capability_catalog=capability_catalog,
+            # one-shot 后台句柄仅在单进程可用；persistent 由协作服务通过 lease
+            # 和持久子会话支持跨 worker 接管，SubAgentTool 会分别校验两种路径。
+            allow_background=not bool(
+                getattr(getattr(settings, "affinity", None), "enabled", False)
+            ),
+            collaboration=collaboration,
         )
     )
+    if collaboration is not None:
+        from prismclaw.engine.subagent.control_tool import SubagentControlTool
+
+        registry.register(
+            SubagentControlTool(
+                collaboration=collaboration,
+                capability_catalog=capability_catalog,
+                executor=executor,
+            )
+        )
     registry.register(ReduceSubAgentResultsTool())
     registry.register(RequestHandoffTool())
     registry.register(SubagentSearchTool(capability_catalog=capability_catalog))
+    # 任务管理面与 sub_agent 同生命周期：没有子代理能力时不应出现，
+    # 有子代理能力时必须可见（不可 skill_gated，否则派发回执引用的工具不可见）。
+    from prismclaw.engine.toolkit.builtin.task_tools import (
+        CancelTaskTool,
+        CheckSubagentTaskTool,
+        ListSubagentTasksTool,
+    )
+
+    registry.register(CheckSubagentTaskTool())
+    registry.register(ListSubagentTasksTool())
+    registry.register(CancelTaskTool())
     return subagent_config
 
 
@@ -267,7 +298,7 @@ def refresh_runner_capabilities(
         skill_parser=parse_skill_file,
     )
 
-    # 同步插件级指令（PRISMCLAW.md）到 SkillRuntime
+    # 同步插件级指令（PLUGIN.md）到 SkillRuntime
     if extension_manager is not None and hasattr(extension_manager, "iter_plugin_descriptors"):
         for descriptor in extension_manager.iter_plugin_descriptors():
             instr = getattr(descriptor, "plugin_instructions", None)
@@ -321,6 +352,7 @@ def refresh_runner_capabilities(
         memory_store=_extract_memory_store_from_deps(deps),
         skill_runtime=skill_runtime,
         channel=deps.channel,
+        collaboration=deps.subagent_collaboration,
     )
 
     return RuntimeCapabilityBundle(

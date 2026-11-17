@@ -20,10 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class DomainRegistry:
-    """发现、加载、编排 DomainBundle。
-
-    对标 Pi Agent 的 PackageManager + Harness 的 Cordis Plugin Loader。
-    """
+    """发现、加载、编排 DomainBundle。"""
 
     def __init__(self) -> None:
         self._bundles: dict[str, DomainBundle] = {}

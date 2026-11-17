@@ -12,6 +12,7 @@ from prismclaw.engine.subagent.core.contract import (
 )
 from prismclaw.engine.subagent.prompting import (
     coerce_allowed_tool_names,
+    expand_allowed_tool_names,
     resolve_preloaded_skill_context,
 )
 from prismclaw.engine.subagent.shared_types import PreloadedSkillContext
@@ -344,7 +345,12 @@ class ContextMixin:
 
     def _build_sub_context(self) -> ToolContext:
         from dataclasses import replace as _replace
-        sub_session_id = f"{self._parent_ctx.session_id}#sub:{uuid.uuid4().hex[:12]}"
+        run_context = getattr(self, "_run_context", None)
+        sub_session_id = (
+            run_context.child_session_id
+            if run_context is not None
+            else f"{self._parent_ctx.session_id}#sub:{uuid.uuid4().hex[:12]}"
+        )
         return _replace(
             self._parent_ctx,
             session_id=sub_session_id,
@@ -379,8 +385,13 @@ class ContextMixin:
         *,
         manifest: Any,
         preload_ctx: PreloadedSkillContext,
+        available: set[str] | None = None,
     ) -> set[str] | None:
-        manifest_allowed = coerce_allowed_tool_names(manifest.allowed_tools)
+        manifest_allowed = (
+            expand_allowed_tool_names(manifest.allowed_tools, available)
+            if available is not None
+            else coerce_allowed_tool_names(manifest.allowed_tools)
+        )
         preload_allowed = preload_ctx.allowed_tools_limit
         if manifest_allowed is None:
             return set(preload_allowed) if preload_allowed is not None else None

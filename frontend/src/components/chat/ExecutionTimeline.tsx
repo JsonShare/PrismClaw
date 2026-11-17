@@ -40,7 +40,7 @@ interface Props {
 /* ─── 完成状态条（仅重路径；设计图标准：灰色勾 + 「执行完成」，无耗时） ─── */
 
 function DoneEntry() {
-  // 延迟 120ms 显示，跳过 finalizeStreaming → appendMessage 之间的中间帧，
+  // 延迟 120ms 显示，跳过 sync 清空叠加层 → 定稿消息渲染之间的中间帧，
   // 避免"执行完成"在空 timeline 上短暂闪烁。
   const [visible, setVisible] = useState(false)
   useEffect(() => {

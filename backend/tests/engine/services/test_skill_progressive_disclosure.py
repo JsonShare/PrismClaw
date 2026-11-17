@@ -246,10 +246,10 @@ class TestSubagentsSection:
         from prismclaw.engine.execution.request.system_prompt import subagents_section
         result = subagents_section(_make_prompt_inputs(subagents=[_make_subagent("architect")]))
         assert result is not None
-        assert "[HANDOFF_REQUEST]" in result
-        assert "置信度不得提升" in result
+        assert "主 Agent 自己规划、拆解和综合" in result
+        assert "不机械采用全体最低置信度" in result
         assert "`reduce_subagent_results`" in result
-        assert "context_snapshot" in result
+        assert "`subagent_control.send`" in result
 
 
 # ==========================================================================

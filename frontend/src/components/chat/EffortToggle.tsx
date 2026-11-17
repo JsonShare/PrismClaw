@@ -12,19 +12,19 @@ const EFFORTS: ReadonlyArray<{
     value: 'quick',
     label: '快速',
     helpTitle: '快速（少步数、短时限）',
-    helpRules: ['steps 3 / 工具 6 次', '适合简单问答、快速确认', '复杂任务可能提前收敛'],
+    helpRules: ['steps 10 / 工具 6 次', '适合简单问答、快速确认', '复杂任务可能提前收敛'],
   },
   {
     value: 'standard',
     label: '标准',
     helpTitle: '标准（默认档位）',
-    helpRules: ['steps 6 / 工具 12 次', '适合大多数日常任务', '在深度与速度间平衡'],
+    helpRules: ['steps 50 / 工具 24 次', '适合大多数日常任务', '在深度与速度间平衡'],
   },
   {
     value: 'deep',
     label: '深度',
     helpTitle: '深度（多步数、长时限）',
-    helpRules: ['steps 15 / 工具 24 次', '适合长链路检索、复杂产出', '耗时更长，结果更充分'],
+    helpRules: ['steps 100 / 工具 96 次', '适合长链路检索、复杂产出', '耗时更长，结果更充分'],
   },
 ]
 

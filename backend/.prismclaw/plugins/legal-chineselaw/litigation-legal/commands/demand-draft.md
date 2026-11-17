@@ -23,10 +23,10 @@ Licensed under Apache License 2.0
 # /demand-draft
 
 1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/intake.md`。如果缺失或战略块为空（对于重大催告），拒绝。
-2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 催告函实践、内部风格、种子文档表。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 催告函实践、内部风格、种子文档表。
 3. 遵循以下工作流和参考。
 4. 运行起草前门槛：特权过滤器、自认风险、和解清偿、和解通信保密姿态、放弃扫描、语气、事实准确性。在每个都被回应之前不要继续。
-5. 模板选择：如果在 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中提供了种子文档则使用；否则使用催告类型的软模板。
+5. 模板选择：如果在 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中提供了种子文档则使用；否则使用催告类型的软模板。
 6. 在聊天中起草供审查。迭代直到用户批准。
 7. 使用 docx skill 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/draft-v[N].docx`。
 8. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/checklist.md`（发送后检查清单）。
@@ -94,7 +94,7 @@ Licensed under Apache License 2.0
 ## 加载上下文
 
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/demand-letters/[slug]/intake.md` — 必需；如缺失则拒绝继续
-- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 催告函实践（种子文档路径、保险提交时机、事项创建的重大性阈值）、内部风格。**语气、合规期限、签署人来自 `## 此事项的姿态`——它们是事项级的，不是执业级的。**
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 催告函实践（种子文档路径、保险提交时机、事项创建的重大性阈值）、内部风格。**语气、合规期限、签署人来自 `## 此事项的姿态`——它们是事项级的，不是执业级的。**
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 检查现有相关事项（同一对方）并提供交叉链接
 
 ## 起草前门槛
@@ -140,7 +140,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 1：种子文档
 
-检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 催告函实践 → intake 催告类型的种子文档表。
+检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 催告函实践 → intake 催告类型的种子文档表。
 
 - **提供了种子文档：** 阅读它。匹配结构、语气、签名块、特权标记、典型章节排序。种子文档就是模板。
 - **无种子文档：** 使用下方催告类型的软模板。
@@ -217,7 +217,7 @@ Licensed under Apache License 2.0
    - 联系地址和电话
    - 日期
 
-7. **按内部风格的特权标记。** 精确应用 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 特权惯例。
+7. **按内部风格的特权标记。** 精确应用 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 特权惯例。
 
 ## 输出
 
@@ -273,7 +273,7 @@ Licensed under Apache License 2.0
 - [ ] 保险已投保（如按内部实践要求）
 - [ ] 冲突已确认（如尚未清除）
 
-**在信函发送之前（重大行为）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是非律师：
+**在信函发送之前（重大行为）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是非律师：
 
 > 发送此律师函/催告函有法律后果——它创建记录、可能中断诉讼时效（民法典第195条）、可能触发反诉。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >
@@ -311,7 +311,7 @@ Licensed under Apache License 2.0
 
 - **以下任一情况默认为是：**
   - 催告类型为停止侵权、违约补救、雇佣离职或保全
-  - 期望结果金额 ≥ `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中等严重性区间
+  - 期望结果金额 ≥ `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中等严重性区间
   - 对方是客户、竞争对手或根据业务格局的常见对手方
 - **否则默认为否**
 

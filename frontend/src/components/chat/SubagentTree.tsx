@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Bot,
   CheckCircle2,
+  ChevronDown,
   ChevronUp,
   CircleSlash,
+  CornerDownRight,
   LoaderCircle,
   Sparkles,
   XCircle,
@@ -40,8 +42,68 @@ function StatusIcon({ status }: { status: SubagentPanelItem['partial_status'] })
 function describe(item: SubagentPanelItem): string {
   if (item.task_hint) return item.task_hint
   if (item.from_subagent) return `由 ${item.from_subagent} 移交`
-  if (item.current_tool) return `正在执行 ${item.current_tool}`
+  // 有最近动作用于第二行展示时，这里不再重复当前工具名。
+  if (!item.recent_activity?.length && item.current_tool) return `正在执行 ${item.current_tool}`
   return STATUS_LABEL[item.partial_status]
+}
+
+/**
+ * 「最近动作」两态视图：默认只显示最后一条（证明它还在干活），
+ * 多条时给一个计数按钮展开完整的有界序列（≤5，时间正序，末条高亮）。
+ */
+function ActivityLines({
+  activity,
+  expanded,
+  onToggle,
+}: {
+  activity: string[]
+  expanded: boolean
+  onToggle: () => void
+}) {
+  if (activity.length === 0) return null
+  const latest = activity[activity.length - 1]
+  const canExpand = activity.length > 1
+  return (
+    <>
+      <div className="flex items-center gap-1.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]/60">
+        <CornerDownRight size={11} className="shrink-0" />
+        <span className="min-w-0 flex-1 truncate font-mono" title={latest}>
+          {latest}
+        </span>
+        {canExpand && (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={onToggle}
+            className="shrink-0 inline-flex items-center gap-0.5 cursor-pointer hover:text-[var(--c-text)]"
+          >
+            {expanded ? '收起' : `动作 ${activity.length}`}
+            <ChevronDown
+              size={11}
+              className={`transition-transform ${expanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+        )}
+      </div>
+      {expanded && canExpand && (
+        <ol className="ml-[5px] space-y-0.5 border-l border-[var(--c-border)] pl-2">
+          {activity.map((entry, index) => (
+            <li
+              key={`${index}-${entry}`}
+              title={entry}
+              className={`truncate font-mono text-[length:var(--fs-xs)] ${
+                index === activity.length - 1
+                  ? 'text-[var(--c-text)]/80'
+                  : 'text-[var(--c-text-secondary)]/50'
+              }`}
+            >
+              {entry}
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
+  )
 }
 
 /**
@@ -50,6 +112,16 @@ function describe(item: SubagentPanelItem): string {
  */
 export function SubagentTree({ items }: { items: SubagentPanelItem[] }) {
   const [open, setOpen] = useState(true)
+  // 单卡「最近动作」展开态：纯视图状态，不进 store。
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const toggleExpanded = (id: string): void => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
   const [now, setNow] = useState(() => Date.now())
   // 后端只在工具边界推送 duration_so_far，单次长工具期间会「停表」。
   // 用首次见到该子代理的时刻反推起点，本地每秒推进，避免计时看起来卡死。
@@ -160,6 +232,11 @@ export function SubagentTree({ items }: { items: SubagentPanelItem[] }) {
                       <div className="text-[length:var(--fs-xs)] leading-relaxed text-[var(--c-text-secondary)]/80 line-clamp-2">
                         {describe(item)}
                       </div>
+                      <ActivityLines
+                        activity={item.recent_activity ?? []}
+                        expanded={expandedIds.has(item.sub_session_id)}
+                        onToggle={() => toggleExpanded(item.sub_session_id)}
+                      />
                       <div className="flex items-center gap-1.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]/60">
                         <span>{STATUS_LABEL[item.partial_status]}</span>
                         <span>·</span>

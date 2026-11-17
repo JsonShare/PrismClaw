@@ -1,7 +1,7 @@
 ---
 name: corporate-cold-start-interview
 description: '公司冷启动访谈（请求清单 + 先前备忘录），或使用 --new-deal 进行交易特定上下文。模块化：识别哪些执业领域适用（M&A、董事会与秘书、上市公司、实体管理），然后针对每个活跃模块询问有针对性的问题，并仅将相关章节写入
-  plugin 配置。在新安装时、当 PRISMCLAW.md 仍有 [PLACEHOLDER] 标记时、开始新交易时，或重新检查集成或刷新模块时使用。
+  plugin 配置。在新安装时、当 PLUGIN.md 仍有 [PLACEHOLDER] 标记时、开始新交易时，或重新检查集成或刷新模块时使用。
 
   '
 argument_hint: '[--redo | --new-deal | --check-integrations | --module [m&a | board
@@ -18,11 +18,11 @@ Licensed under Apache License 2.0
 
 # /corporate-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`。如果是 `--new-deal`，跳到每个交易设置。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分的"连接了什么？"检查，并重写 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## Available integrations` 表。探测时：只有在 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记为 ⚪，并附一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——这会误导用户以为某些东西已连接，而实际上并没有。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md`。如果是 `--new-deal`，跳到每个交易设置。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分的"连接了什么？"检查，并重写 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md` 中的 `## Available integrations` 表。探测时：只有在 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记为 ⚪，并附一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——这会误导用户以为某些东西已连接，而实际上并没有。
 2. 运行以下访谈（先进行第 0 部分——角色 + 集成——然后是模块）。
 3. 种子文档：尽调请求清单 + 一份先前的问题备忘录。
 4. 提取：类别、阈值、备忘录格式、AI 工具配置。
-5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`（根据需要创建父目录）。对于 `--new-deal`，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md`（根据需要创建父目录）。对于 `--new-deal`，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/deal-context.md`。
 
 ---
 
@@ -32,13 +32,13 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复的选项。
 - **包含 `[PLACEHOLDER]` 标记但无暂停注释** → 模板从未完成；提供重新开始或从占位符开始的地方恢复。
 - **已填充（无占位符，无暂停注释）** → 已配置；跳过，除非使用 `--redo` 或 `--module [name]`。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其用作章节脚手架。将完成的执业档案写入配置路径，根据需要创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——将其用作章节脚手架。将完成的执业档案写入配置路径，根据需要创建父目录。
 
 
 - `--redo` — 完整重新访谈，覆盖所有章节
@@ -89,7 +89,7 @@ Licensed under Apache License 2.0
 
 **为什么这很重要。** 此 plugin 中的每个命令都从此访谈写入的配置中读取。通用配置给出通用输出——默认重要性阈值、默认问题备忘录格式、默认同意风格、默认关闭检查清单结构。告诉 plugin 你实际如何运行 M&A、董事会、上市公司或实体工作，是"一个公司 AI 工具"和"一个按你的方式工作的工具"之间的区别。你的回答越具体——你的真实重要性切分、你的真实决议语言、你的真实内部格式——输出看起来越像来自你的办公桌。
 
-**全新专业档案。** 设置从用户的回答和他们明确共享的文档构建全新的专业档案。它不读取用户的个人 PrismClaw 历史、无关对话或他们主目录的 PRISMCLAW.md。如果当前对话上下文中浮现了相关内容（例如，他们之前提到了他们的公司），在使用前询问——除非用户输入或批准，否则不要将任何个人内容折叠到公司执业档案中。
+**全新专业档案。** 设置从用户的回答和他们明确共享的文档构建全新的专业档案。它不读取用户的个人 PrismClaw 历史、无关对话或他们主目录的 PLUGIN.md。如果当前对话上下文中浮现了相关内容（例如，他们之前提到了他们的公司），在使用前询问——除非用户输入或批准，否则不要将任何个人内容折叠到公司执业档案中。
 
 推论：访谈的输入是用户的打字回答和他们明确共享的文档。不要从环境上下文、之前的会话或用户记忆中提取来填补空白。
 
@@ -104,11 +104,11 @@ Licensed under Apache License 2.0
 - **对于上传（问题备忘录、会议纪要、同意、组织结构图）：** "粘贴内容、共享文件路径，或说'暂时跳过'。如果你跳过，我会在你的执业档案中标记差距以便以后填写。"然后真的等待。这些种子文档驱动格式提取——静默跳过意味着每个未来的输出都将采用通用模板而不是内部格式。
 - **在写入执业档案之前：** 回顾访谈，列出所有被跳过或用占位符回答的问题——特别是每个活跃模块的种子文档。说："在我写入你的执业档案之前，还有以下内容未完成：[list]。要现在填写其中的任何内容，还是留作占位符？"然后等待答案。
 - **绝不**无声地写入有空白的执业档案。每个占位符都应该是用户有意选择跳过的，而不是从屏幕上滚过去的问题。
-- **暂停和恢复。** 预先告诉用户："如果需要停下来，说'暂停'（或'停止'，或'让我稍后回来'），我会保存你的进度。稍后再次运行 `/corporate-legal:cold-start-interview`，我会从你停下的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /corporate-legal:cold-start-interview to resume -->` 注释，未回答字段使用 `[PENDING]` 标记（区别于 `[PLACEHOLDER]`）。当设置重新运行并发现暂停的配置时，问候用户："欢迎回来。你在 [section] 暂停了。你之前的回答已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已经回答过的问题。
+- **暂停和恢复。** 预先告诉用户："如果需要停下来，说'暂停'（或'停止'，或'让我稍后回来'），我会保存你的进度。稍后再次运行 `/corporate-legal:cold-start-interview`，我会从你停下的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /corporate-legal:cold-start-interview to resume -->` 注释，未回答字段使用 `[PENDING]` 标记（区别于 `[PLACEHOLDER]`）。当设置重新运行并发现暂停的配置时，问候用户："欢迎回来。你在 [section] 暂停了。你之前的回答已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已经回答过的问题。
 
 ---
 
-**在设置过程中出现时验证用户陈述的法律事实。** 当用户用具体的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或登记号码回答访谈问题时——如果这是你可以进行合理检查的内容——在将其写入配置之前进行检查。如果他们所说的与你的理解或他们粘贴的内容冲突，说出来："你说阈值是 X；我的理解是 Y——能确认哪个写入档案吗？`[premise flagged — verify]`"写入 PRISMCLAW.md 的错误事实会传播到每个未来的输出中；在这里发现它是产品中杠杆最高的时刻之一。
+**在设置过程中出现时验证用户陈述的法律事实。** 当用户用具体的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或登记号码回答访谈问题时——如果这是你可以进行合理检查的内容——在将其写入配置之前进行检查。如果他们所说的与你的理解或他们粘贴的内容冲突，说出来："你说阈值是 X；我的理解是 Y——能确认哪个写入档案吗？`[premise flagged — verify]`"写入 PLUGIN.md 的错误事实会传播到每个未来的输出中；在这里发现它是产品中杠杆最高的时刻之一。
 
 ## 访谈
 
@@ -444,7 +444,7 @@ Licensed under Apache License 2.0
 
 以关于可更改性的备注结束：
 
-> "你的执业档案在 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md`——它是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
+> "你的执业档案在 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md`——它是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件以进行快速更改（新阈值、添加的司法管辖区、重命名的委员会）
 > - 运行 `/corporate-legal:cold-start-interview --redo` 进行完整重新访谈

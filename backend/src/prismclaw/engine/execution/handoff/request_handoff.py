@@ -131,13 +131,9 @@ class RequestHandoffTool:
             getattr(manifest, "skill_origin", None) if manifest is not None else None
         )
         preload_skills = (
-            getattr(manifest, "declared_invoke_sequence", None) if manifest is not None else None
+            getattr(manifest, "preload_skills", None) if manifest is not None else None
         )
-        is_fork = (
-            getattr(manifest, "execution_mode", "sync") == "parallel"
-            if manifest is not None
-            else False
-        )
+        is_fork = bool(context.task_runtime_ctx.is_fork)
 
         source_chain_id = context.task_runtime_ctx.handoff_chain_id or uuid.uuid4().hex
         source_hop_index = context.task_runtime_ctx.handoff_hop_index or 0

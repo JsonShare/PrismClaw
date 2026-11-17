@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /ramp
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 是否已设置。如果是占位符："请 [教授] 先运行 `/legal-clinic:cold-start-interview`。"
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 是否已设置。如果是占位符："请 [教授] 先运行 `/legal-clinic:cold-start-interview`。"
 2. 使用以下介绍工作流。
 3. 逐步进行：诊所上下文（来自手册）→ 命令 → 实践练习（模拟接案、练习起草、研究路线图）→ 验证习惯。
 4. `--card`：生成一页参考卡。
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所档案、执业领域、司法管辖区、手册路径、督导方式、执业领域模板。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 诊所档案、执业领域、司法管辖区、手册路径、督导方式、执业领域模板。
 
 如果该文件缺失或仍有占位符："诊所尚未设置。请 [督导教授] 先运行 `/clinic-cold-start-interview`。"
 
@@ -58,13 +58,13 @@ Licensed under Apache License 2.0
 
 ### 第 1 部分：此诊所（5 分钟）
 
-从 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 和已摄取的手册中读取。交互式覆盖：
+从 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 和已摄取的手册中读取。交互式覆盖：
 
 - **执业领域** — 诊所处理什么，不处理什么（以及如果有人带着范围外的问题走进来时转介到哪里）
 - **客户** — 他们是谁，面临什么，语言
 - **司法管辖区** — 哪些法院，哪些法官，本地特性是什么
 - **案件管理** — 案件如何跟踪，文件存在哪里，良好文档化的案件是什么样的
-- **督导** — 在此诊所中审查如何运作（按照 PRISMCLAW.md 中的督导方式）。具体说明："在任何内容发送给客户或法院之前，[进入审查队列 / 您与教授 X 确认 / 等等]"
+- **督导** — 在此诊所中审查如何运作（按照 PLUGIN.md 中的督导方式）。具体说明："在任何内容发送给客户或法院之前，[进入审查队列 / 您与教授 X 确认 / 等等]"
 
 不要说教——检查理解。"那么如果客户带来驱逐通知但还提到他们没有合法身份，您怎么做？"（答案：两个问题都在接案中注明；移民问题可能需要转介或标记给教授，取决于诊所的范围。）
 
@@ -116,7 +116,7 @@ Licensed under Apache License 2.0
 - **在使用前验证每个引用。** `/research-start` 提供线索，不是权威。
 - **检查司法管辖区特定细节。** 插件从设置中知道您的州，但本地法院特性会变化——对照当前本地规则双重检查。
 - **当不确定时，它会说出来。** 如果输出有 `[UNCERTAIN: ...]` 标记，那是提示去研究或问教授，而不是删除标记继续。
-- **[按 PRISMCLAW.md 方式的督导提醒]** — 什么在发出前被审查，以及如何审查。
+- **[按 PLUGIN.md 方式的督导提醒]** — 什么在发出前被审查，以及如何审查。
 
 ### 关闭
 
@@ -131,7 +131,7 @@ Licensed under Apache License 2.0
 - 命令（第 2 部分的表格，压缩版）
 - PrismClaw 能帮助什么 / 不能帮助什么（起点可以，最终工作成果不行，权威引用不行）
 - 验证习惯（第 4 部分的要点）
-- 卡住时问谁（PRISMCLAW.md 中的教授姓名）
+- 卡住时问谁（PLUGIN.md 中的教授姓名）
 
 可打印。一页。第一天分发。
 

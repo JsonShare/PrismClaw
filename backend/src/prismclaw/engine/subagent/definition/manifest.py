@@ -25,16 +25,6 @@ class AgentManifest(BaseModel):
             "'isolated' → 零上下文（全新代理）"
         ),
     )
-    execution_mode: Literal["sync", "parallel"] = Field(
-        default="parallel",
-        description=(
-            "执行模式："
-            "'sync' → 顺序执行；"
-            "'parallel' → 与其他子代理并发执行。"
-            "默认：'parallel'。"
-        ),
-    )
-
     # -- Prompt Cache sharing configuration --
     max_inherit_messages: int = Field(
         default=20,

@@ -21,7 +21,7 @@ category: AI治理
 2. 使用以下工作流运行访谈（包括第 0 部分角色 + 集成检查）。
 3. 种子文档：AI/可接受使用政策（URL 或文件）、先前合规评估、主要供应商 AI 协议、AI系统清单（如存在）。读取所有提供的文档。
 4. 提取：政策承诺和禁止、供应商立场（注意与声明的差距）、合规评估结构、已备案/禁止列表。
-5. 迁移：如旧缓存路径存在已填充的 PRISMCLAW.md，将其复制到配置路径并告知用户。
+5. 迁移：如旧缓存路径存在已填充的 PLUGIN.md，将其复制到配置路径并告知用户。
 6. 写入执业档案（根据需要创建父目录）。显示摘要。提供第一个任务。
 
 ## 标志
@@ -206,7 +206,7 @@ category: AI治理
 
 **结束时说明可更改性：**
 
-> 完成了。你的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`——直接可读可编辑的纯文本文件。随时运行 `--redo` 重新访谈或 `--check-integrations` 重检连接器。
+> 完成了。你的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PLUGIN.md`——直接可读可编辑的纯文本文件。随时运行 `--redo` 重新访谈或 `--check-integrations` 重检连接器。
 >
 > 最常需要更新的内容：备案状态（完成备案后更新）、新 AI 系统上线（更新 ai-systems.yaml）、法规更新（更新监管足迹）。
 

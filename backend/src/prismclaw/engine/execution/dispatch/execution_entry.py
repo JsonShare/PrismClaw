@@ -82,7 +82,7 @@ async def _apply_post_tool_hooks(
     - hook 返回的 ``updated_mcp_tool_output`` 为字符串时改写对应 ToolResult 的
       文本内容（保留原 call_id/错误位/artifact）；非字符串（dict 等）以 JSON
       序列化为文本；
-    - hook 失败/超时只记日志不改写（non_blocking 语义，与参考实现一致）；
+    - hook 失败/超时只记日志不改写（non_blocking 语义）；
     - 无 hook_dispatcher 或无已注册 POST_TOOL handler 时零开销通过。
     """
     dispatcher = getattr(context, "hook_dispatcher", None)

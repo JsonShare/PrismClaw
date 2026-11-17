@@ -1,8 +1,4 @@
-"""插件加载缓存层。
-
-对标参考实现 ``pluginLoader.ts`` L3180 ``loadAllPlugins`` memoize +
-L3210 ``loadAllPluginsCacheOnly`` + L3270 ``clearPluginCache``。
-"""
+"""插件加载缓存层。"""
 from __future__ import annotations
 
 import asyncio
@@ -16,9 +12,6 @@ logger = logging.getLogger(__name__)
 
 class PluginLoadCache:
     """插件加载结果缓存。
-
-    对标参考实现 ``loadAllPlugins`` memoize (L3180) +
-    ``loadAllPluginsCacheOnly`` (L3210)。
 
     两个缓存：
     - full: 完整加载结果（含网络请求）
@@ -36,7 +29,7 @@ class PluginLoadCache:
         self._cached_trusted: bool | None = None
 
     async def load_all(self, *, workspace_trusted: bool = True) -> PluginLoadResult:
-        """完整加载（含网络请求）。对标参考实现 ``loadAllPlugins``。
+        """完整加载（含网络请求）。
 
         用 memoize 缓存结果，重复调用返回缓存。
         信任状态变化时自动 invalidate。
@@ -54,7 +47,7 @@ class PluginLoadCache:
             return result
 
     async def load_all_cache_only(self, *, workspace_trusted: bool = True) -> PluginLoadResult:
-        """快速启动路径。对标参考实现 ``loadAllPluginsCacheOnly`` (L3210)。
+        """快速启动路径。
 
         跳过网络请求，直接读 installed_plugins.json 的 install_path。
         信任状态变化时自动 invalidate。
@@ -72,7 +65,7 @@ class PluginLoadCache:
             return result
 
     def clear(self, reason: str = "unknown") -> None:
-        """清除两个缓存。对标参考实现 ``clearPluginCache`` (L3270)。"""
+        """清除两个缓存。"""
         if self._full_cache is not None or self._cache_only_cache is not None:
             logger.debug("Clearing plugin load cache: %s", reason)
         self._full_cache = None

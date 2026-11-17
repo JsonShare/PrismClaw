@@ -1,7 +1,5 @@
 """插件身份模型。
 
-对标参考实现 ``pluginIdentifier.ts`` + ``schemas.ts`` L1430 ``PluginIdSchema``。
-
 PluginID = "{name}@{source}"，source ∈ builtin | marketplace | session | local
 """
 from __future__ import annotations
@@ -10,7 +8,7 @@ import re
 from dataclasses import dataclass
 from functools import total_ordering
 
-# 对标参考实现 PluginIdSchema 正则
+# PluginID / 插件名的合法字符集正则
 PLUGIN_ID_PATTERN = re.compile(r"^[a-z0-9][-a-z0-9._]*@[a-z0-9][-a-z0-9._]*$", re.IGNORECASE)
 NAME_PATTERN = re.compile(r"^[a-z0-9][-a-z0-9._]*$", re.IGNORECASE)
 
@@ -23,9 +21,8 @@ VALID_SOURCES = frozenset({BUILTIN_SOURCE, MARKETPLACE_SOURCE, SESSION_SOURCE, L
 
 
 def parse_plugin_identifier(plugin_id: str) -> tuple[str, str]:
-    """解析 ``name@source`` 格式。
+    """解析 ``name@source`` 格式的标识。
 
-    参考实现 ``parsePluginIdentifier``。
     缺省 source 视为 ``builtin``。
     """
     if "@" not in plugin_id:
@@ -50,7 +47,7 @@ def is_valid_plugin_name(name: str) -> bool:
 @total_ordering
 @dataclass(frozen=True, slots=True)
 class PluginID:
-    """插件唯一标识。对标参考实现 ``PluginIdSchema``。"""
+    """插件唯一标识。"""
 
     name: str
     source: str
@@ -78,8 +75,7 @@ class PluginID:
     def priority_rank(self) -> int:
         """优先级排序值：session > marketplace > local > builtin。
 
-        数值越大优先级越高，对标参考实现 ``mergePluginSources`` 的
-        ``session > marketplace > builtin`` 顺序。
+        数值越大优先级越高。
         """
         return _SOURCE_PRIORITY.get(self.source, 0)
 

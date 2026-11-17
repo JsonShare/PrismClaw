@@ -115,6 +115,27 @@ def build_app_web_deps(
         effective_runner_deps.session_queue = session_queue
     connection_registry = ConnectionRegistry()
     audit_logger = AuditLogger()
+
+    # 跨 worker 运行态：owner 写 Redis 心跳，任意 worker 都能判活；
+    # 中止请求经 Pub/Sub 转成本地 rc.stop()（非 owner 连接上没有 RunControl）。
+    # 插件热重载会重建 WebDeps：复用已有实例，只热更新回调，避免监听任务泄漏。
+    from prismclaw.app.web.chat.run_presence import RunPresence
+
+    def _abort_local_run(conversation_id: str) -> None:
+        rc = session_queue.get_run_control(conversation_id)
+        if rc.is_active():
+            rc.stop()
+            session_queue.release_pending_approvals(conversation_id)
+
+    run_presence = getattr(state, "run_presence", None)
+    if not isinstance(run_presence, RunPresence):
+        run_presence = RunPresence(
+            getattr(state, "redis_client", None), on_abort=_abort_local_run
+        )
+        state.run_presence = run_presence
+    else:
+        run_presence.set_on_abort(_abort_local_run)
+
     return WebDeps(
         session_store=session_store,
         session_router=session_router,
@@ -124,6 +145,7 @@ def build_app_web_deps(
         connection_registry=connection_registry,
         settings_full=effective_settings,
         redis_client=getattr(state, "redis_client", None),
+        run_presence=run_presence,
         memory_store=getattr(state, "memory_store", None),
         task_manager=task_manager,
         evolution_settings=(

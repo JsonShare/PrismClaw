@@ -98,12 +98,26 @@ class RuntimeControlArtifact(BaseModel):
     context_modifier: ToolContextModifier | None = None
 
 
+class SubagentResultItem(BaseModel):
+    name: str
+    agent_id: str | None = None
+    run_id: str | None = None
+    child_session_id: str | None = None
+    status: str
+    envelope: SubagentResultEnvelope | None = None
+    error: str | None = None
+
+
 class SubagentEnvelopeArtifact(BaseModel):
     execution_mode: str | None = None
     context_mode: str | None = None
     fork_status: str | None = None
     agent_name: str | None = None
     agent_source: str | None = None
+    agent_id: str | None = None
+    run_id: str | None = None
+    child_session_id: str | None = None
+    lifecycle: str | None = None
     outcome: str | None = None
     turns: int | None = None
     tokens_input: int | None = None
@@ -116,6 +130,7 @@ class SubagentEnvelopeArtifact(BaseModel):
     final_text: str | None = None
     preservation_summary: dict[str, Any] | None = None
     result_envelope: SubagentResultEnvelope | None = None
+    results: list[SubagentResultItem] = Field(default_factory=list)
     handoff_request: HandoffRequestPayload | None = None
 
 

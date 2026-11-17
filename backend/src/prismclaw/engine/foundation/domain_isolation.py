@@ -1,6 +1,6 @@
 """域模块故障隔离 — 包裹域工具和钩子，防止异常传播到核心执行流程。
 
-对标 DeepSeek Harness 的 try/except 包裹 + Pi Agent 的隔离执行。
+所有域工具与钩子统一经本模块 try/except 包裹，异常只记日志、不外溢。
 """
 from __future__ import annotations
 

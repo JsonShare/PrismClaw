@@ -22,7 +22,7 @@ Licensed under Apache License 2.0
 
 # /matter-intake
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（用于分流）、landscape（用于上下文、冲突方法）、stakeholders（用于通知谁）。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 风险校准（用于分流）、landscape（用于上下文、冲突方法）、stakeholders（用于通知谁）。
 2. 遵循以下工作流和参考。
 3. 运行统一 intake：识别、冲突检查、来源、风险分流、重要性、外部律师、内部所有者、证据保全通知、关键日期、初始姿态。
 4. 从事项名称生成 slug（小写、连字符、年份）。
@@ -41,7 +41,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` — 风险校准（分流阈值、重要性、和解阶梯）、landscape（stakeholders、外部律师名册）。
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` — 风险校准（分流阈值、重要性、和解阶梯）、landscape（stakeholders、外部律师名册）。
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 确认 slug 唯一性。
 
 ## Intake
@@ -60,10 +60,10 @@ Licensed under Apache License 2.0
 
 ### 2. 冲突检查
 
-在继续之前，按照 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → Conflicts clearance 运行冲突步骤。
+在继续之前，按照 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → Conflicts clearance 运行冲突步骤。
 
 - **状态：** `cleared | pending | not-run | waived`
-- **方法：** 匹配 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 声明的内容（`corporate-legal | outside-counsel | system-check | informal | other`）。
+- **方法：** 匹配 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 声明的内容（`corporate-legal | outside-counsel | system-check | informal | other`）。
 - **由谁清理：** 名称 / 团队 / 律所
 - **清理日期：** YYYY-MM-DD
 - **检查对象：** 运行的具体名称/实体的简要列表（对方当事人、已知关联方、对方代理律师（如已知）、关键证人）。薄是可以的；"否"不可以。
@@ -76,9 +76,9 @@ Licensed under Apache License 2.0
 - `waived` → 罕见；需要冲突放弃理由（编写放弃不在本 skill 范围内——捕获放弃存在、谁签署了它、它在哪里）。
 - `not-run` → **停止。这是一个关卡。** 在冲突姿态解决之前，skill 不会创建 `matter.md`、`history.md` 或 `_log.yaml` 条目。三个可接受的路径：
 
-  **路径 1 — 现在运行冲突。** 暂停此 intake。按照 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` Conflicts clearance 清理。带着 `status: cleared` 或 `status: waived` 附带理由返回。
+  **路径 1 — 现在运行冲突。** 暂停此 intake。按照 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` Conflicts clearance 清理。带着 `status: cleared` 或 `status: waived` 附带理由返回。
 
-  **路径 2 — 标记待定并附上所有者 + 到期日。** 仅当 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` Conflicts clearance 声明并行 intake 可接受时允许。
+  **路径 2 — 标记待定并附上所有者 + 到期日。** 仅当 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` Conflicts clearance 声明并行 intake 可接受时允许。
 
   **路径 3 — 绕过并附有记录的理由。** 仅当用户明确确认绕过时。在 `conflicts.override` 中记录：
 
@@ -103,17 +103,17 @@ Licensed under Apache License 2.0
 
 ### 4. 风险分流——对照内部校准
 
-- 严重性：high | medium | low（参考 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 严重性带——金额以人民币计）
-- 可能性：high | medium | low（参考 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 可能性带）
+- 严重性：high | medium | low（参考 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 严重性带——金额以人民币计）
+- 可能性：high | medium | low（参考 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 可能性带）
 - 结果风险评级（按照矩阵）：high | medium | low | critical
 - 损害敞口范围（最佳估计，以人民币计）
 - 非金钱敞口（禁令？整改令？媒体曝光？先例？）
 
-如果 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的风险校准薄，不要伪造精确度。使用用户的直觉并记录薄度。
+如果 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中的风险校准薄，不要伪造精确度。使用用户的直觉并记录薄度。
 
 ### 5. 重要性
 
-对照 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的内部阈值：
+对照 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中的内部阈值：
 - `reserved | disclosed | monitored | none`
 - 如果 `reserved`：储备金额以及是否已通知财务
 - 如果 `disclosed`（适用A股上市公司）：公告位置（上交所/深交所）
@@ -131,7 +131,7 @@ Licensed under Apache License 2.0
 
 ### 7. 内部所有者
 
-从 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` landscape——涉及哪些内部 stakeholder？
+从 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` landscape——涉及哪些内部 stakeholder？
 - 业务负责人
 - HR 合作伙伴（如劳动争议）
 - 通讯/公关联系人（如声誉风险）
@@ -324,7 +324,7 @@ Licensed under Apache License 2.0
 
 ## 关闭时使用下一步决策树
 
-根据 PRISMCLAW.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
+根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 

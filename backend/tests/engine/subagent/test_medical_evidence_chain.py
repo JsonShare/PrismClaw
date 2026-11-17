@@ -6,7 +6,7 @@
 
 核心验证目标：
   1. 大文本 quoted_text 截断不影响关键信息保留
-  2. 并行多 subagent 跨文献检索的 evidence 去重与合并
+  2. 并行多 subagent 跨文献检索的 evidence 独立保留
   3. 跨轮次 evidence 累积——模拟多轮追问的循证咨询
   4. 置信度分级在医疗场景下的正确传播
   5. 非 success（超时/部分完成）时 evidence 不丢失
@@ -15,11 +15,11 @@
 
 20 轮模拟场景：
   M01: 单 researcher 检索药品说明书（大文本 read）
-  M02: 并行 3 个 researcher 分别检索不同文献（evidence 合并+去重）
+  M02: 并行 3 个 researcher 分别检索不同文献（evidence 独立保留）
   M03: researcher 检索临床指南（web_fetch 大文本）+ 超时退出
   M04: architect 基于前轮 evidence 推理药物交互（reasoning evidence）
   M05: 第二轮追问——prior_evidence 传递验证
-  M06: 大量 evidence（20+条）的去重与截断
+  M06: 大量 evidence（20+条）的 prior_evidence 截断
   M07: 混合置信度——[HIGH]药品说明书 + [MEDIUM]文献 + [LOW]推理
   M08: auditor 验证——检查 evidence 中 quoted_text 与原文一致性
   M09: 第三轮追问——累积 evidence 超过 20 条的截断处理
@@ -29,7 +29,7 @@
   M13: render handover 包含完整 evidence 列表（大文本场景）
   M14: 动态上限——大量 facts 时 findings limit 提升
   M15: 空证据查询——evidence 为空但 findings 有内容
-  M16: 重复文献被不同 subagent 检索——去重
+  M16: 重复文献被不同 subagent 检索——独立保留
   M17: 同一文献不同章节（不同 offset）——保留多条
   M18: 端到端：3 轮追问 × 多 subagent × 大文本 × 完整链路
   M19: prompt advisory 在医疗场景下的证据规则约束
@@ -338,13 +338,12 @@ def test_m01_researcher_read_drug_label():
 
 
 # ═══════════════════════════════════════════════════════════════
-# M02: 并行 3 个 researcher 分别检索不同文献（evidence 合并+去重）
+# M02: 并行 3 个 researcher 分别检索不同文献（evidence 独立保留）
 # ═══════════════════════════════════════════════════════════════
 
 def test_m02_parallel_researchers_different_literatures():
-    """3 个 researcher 并行检索药品说明书、临床指南、文献检索结果，evidence 去重合并。"""
+    """3 个 researcher 的来源独立保留，聚合器不自动合并。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
 
     # Researcher 1: 药品说明书
     msg1 = _make_read_messages("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100)
@@ -361,19 +360,15 @@ def test_m02_parallel_researchers_different_literatures():
     all_evidence = ev1 + ev2 + ev3
     assert len(all_evidence) == 3
 
-    # 无重复，去重后仍为 3
-    merged = _dedupe_evidence(all_evidence)
-    assert len(merged) == 3
-
-    # 验证三条来源路径各不相同——去重没有误删
-    paths = {e.source_path for e in merged}
+    # 验证三条来源路径各不相同
+    paths = {e.source_path for e in all_evidence}
     assert len(paths) == 3
     assert "/data/drug_labels/metformin.txt" in paths
     assert "/data/guidelines/t2dm_2024.txt" in paths
     assert "https://pubmed.cn/sglt2i-metformin-meta-analysis" in paths
 
-    # 验证三种 source_type
-    types = {e.source_type for e in merged}
+    # 验证来源类型
+    types = {e.source_type for e in all_evidence}
     assert types == {"file", "web"}
 
 
@@ -436,15 +431,14 @@ def test_m03_researcher_timeout_with_evidence():
 
 
 # ═══════════════════════════════════════════════════════════════
-# M04: architect 基于前轮 evidence 推理药物交互
+# M04: 推理型子代理基于前轮 evidence 推理药物交互
 # ═══════════════════════════════════════════════════════════════
 
-def test_m04_architect_reasoning_with_evidence():
-    """architect 基于已有 evidence 进行推理，验证 evidence 经过聚合函数后的完整性。"""
-    from prismclaw.engine.subagent.tool import _dedupe_evidence, _assess_overall_confidence
+def test_m04_reasoning_evidence_preserved():
+    """推理型子代理的结果保留自己的 evidence 与 confidence。"""
     from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
 
-    # 模拟 architect 的 envelope——包含推理型 findings
+    # 模拟推理型子代理的 envelope——包含推理型 findings
     evidence = [
         EvidenceRef(source_type="file", source_path="/data/drug_labels/metformin.txt",
                    source_location="L1-L101", quoted_text=DRUG_LABEL_METFORMIN[:500], confidence="high"),
@@ -465,13 +459,8 @@ def test_m04_architect_reasoning_with_evidence():
         confidence_assessment="medium",
     )
 
-    # 经过 _dedupe_evidence 后不丢失
-    deduped = _dedupe_evidence(envelope.evidence)
-    assert len(deduped) == 3
-
-    # 经过 _assess_overall_confidence 后正确传播
-    confidence = _assess_overall_confidence([envelope])
-    assert confidence == "medium"
+    assert len(envelope.evidence) == 3
+    assert envelope.confidence_assessment == "medium"
 
     # 经过 render 后 evidence 可见
     rendered = render_result_envelope_handover(envelope)
@@ -525,13 +514,12 @@ def test_m05_prior_evidence_carried_to_next_round():
 
 
 # ═══════════════════════════════════════════════════════════════
-# M06: 大量 evidence（20+条）的去重与截断
+# M06: 大量 evidence（20+条）的 prior_evidence 截断
 # ═══════════════════════════════════════════════════════════════
 
-def test_m06_large_evidence_dedup_and_truncation():
-    """20+ 条 evidence 去重，_collect_prior_evidence 最多 20 条。"""
+def test_m06_large_evidence_prior_evidence_truncation():
+    """_collect_prior_evidence 对输入最多保留 20 条。"""
     from prismclaw.engine.subagent.core.contract import _collect_prior_evidence
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
 
     # 生成 25 条 evidence，其中 5 条重复
     base_evs = []
@@ -551,12 +539,10 @@ def test_m06_large_evidence_dedup_and_truncation():
             confidence="high",
         ))
 
-    # 去重后应为 25 条
-    merged = _dedupe_evidence(base_evs)
-    assert len(merged) == 25
+    assert len(base_evs) == 30
 
     # _collect_prior_evidence 截断到 20 条
-    ev_dicts = [e.model_dump() for e in merged]
+    ev_dicts = [e.model_dump() for e in base_evs]
     state = _make_session_state(evidence=ev_dicts)
     prior = _collect_prior_evidence(state)
     assert len(prior) == 20
@@ -567,31 +553,27 @@ def test_m06_large_evidence_dedup_and_truncation():
 # ═══════════════════════════════════════════════════════════════
 
 def test_m07_mixed_confidence_medical_scenario():
-    """医疗场景下混合置信度的正确传播。"""
-    from prismclaw.engine.subagent.tool import _assess_overall_confidence
+    """医疗场景下各 Agent 的置信度分别保留。"""
+    envelopes = [
+        SubagentResultEnvelope(
+            summary="药品说明书检索完成",
+            confidence_assessment="high",
+        ),
+        SubagentResultEnvelope(
+            summary="文献检索完成",
+            confidence_assessment="medium",
+        ),
+        SubagentResultEnvelope(
+            summary="基于推理的药物交互评估",
+            confidence_assessment="low",
+        ),
+    ]
 
-    # 3 个 subagent 不同置信度
-    e1 = SubagentResultEnvelope(
-        summary="药品说明书检索完成",
-        confidence_assessment="high",  # 一手来源
-    )
-    e2 = SubagentResultEnvelope(
-        summary="文献检索完成",
-        confidence_assessment="medium",  # 二手文献
-    )
-    e3 = SubagentResultEnvelope(
-        summary="基于推理的药物交互评估",
-        confidence_assessment="low",  # 逻辑推理
-    )
-
-    # 取最低 → low
-    assert _assess_overall_confidence([e1, e2, e3]) == "low"
-
-    # 只有 high + medium → medium
-    assert _assess_overall_confidence([e1, e2]) == "medium"
-
-    # 只有 high → high
-    assert _assess_overall_confidence([e1]) == "high"
+    assert [item.confidence_assessment for item in envelopes] == [
+        "high",
+        "medium",
+        "low",
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -861,23 +843,41 @@ def test_m15_empty_evidence_with_findings():
 
 
 # ═══════════════════════════════════════════════════════════════
-# M16: 重复文献被不同 subagent 检索——去重
+# M16: 重复文献被不同 subagent 检索——独立保留
 # ═══════════════════════════════════════════════════════════════
 
 def test_m16_duplicate_literature_across_agents():
-    """两个 researcher 检索了同一篇文献，evidence 应去重。"""
+    """两个 researcher 检索同一篇文献，各自保留自己的 evidence。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
+    from prismclaw.engine.subagent.tool import SubAgentTool
 
-    # Researcher 1 和 2 都检索了同一个 URL
     msg1 = _make_web_fetch_messages("https://pubmed.cn/sglt2i-meta", LITERATURE_SGLT2I)
     msg2 = _make_web_fetch_messages("https://pubmed.cn/sglt2i-meta", LITERATURE_SGLT2I)
-
     ev1 = _collect_evidence_from_messages(msg1)
     ev2 = _collect_evidence_from_messages(msg2)
 
-    merged = _dedupe_evidence(ev1 + ev2)
-    assert len(merged) == 1  # 去重后只剩 1 条
+    results = [
+        _make_subagent_tool_result(
+            agent_name="researcher-1",
+            outcome="success",
+            envelope=SubagentResultEnvelope(summary="检索完成", evidence=ev1),
+        ),
+        _make_subagent_tool_result(
+            agent_name="researcher-2",
+            outcome="success",
+            envelope=SubagentResultEnvelope(summary="检索完成", evidence=ev2),
+        ),
+    ]
+    aggregated = SubAgentTool._aggregate_results(None, results, "call_m16")
+
+    assert aggregated.subagent_envelope is not None
+    assert aggregated.subagent_envelope.result_envelope is None
+    items = aggregated.subagent_envelope.results
+    assert len(items) == 2
+    assert [item.envelope.evidence[0].source_path for item in items] == [
+        "https://pubmed.cn/sglt2i-meta",
+        "https://pubmed.cn/sglt2i-meta",
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -885,20 +885,17 @@ def test_m16_duplicate_literature_across_agents():
 # ═══════════════════════════════════════════════════════════════
 
 def test_m17_same_file_different_sections():
-    """同一药品说明书的不同章节（不同 offset），evidence 保留多条。"""
+    """同一药品说明书的不同章节保留各自的 source_location。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
 
-    # 检索说明书不同部分
     msg1 = _make_read_messages("/data/drug_labels/metformin.txt", "【适应症】部分内容", offset=1, limit=50)
     msg2 = _make_read_messages("/data/drug_labels/metformin.txt", "【禁忌】部分内容", offset=51, limit=50)
 
     ev1 = _collect_evidence_from_messages(msg1)
     ev2 = _collect_evidence_from_messages(msg2)
 
-    # 不同 offset → 不同 source_location → 不去重
-    merged = _dedupe_evidence(ev1 + ev2)
-    assert len(merged) == 2
+    retained = ev1 + ev2
+    assert len(retained) == 2
     assert ev1[0].source_location == "L1-L51"
     assert ev2[0].source_location == "L51-L101"
 
@@ -910,7 +907,6 @@ def test_m17_same_file_different_sections():
 def test_m18_full_medical_e2e():
     """医疗循证咨询完整端到端：3 轮追问，每轮多 subagent，大文本。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.tool import _dedupe_evidence, _assess_overall_confidence
     from prismclaw.engine.subagent.core.contract import (
         build_context_snapshot,
         render_context_snapshot,
@@ -952,10 +948,14 @@ def test_m18_full_medical_e2e():
         confidence_assessment="medium",
     )
 
-    # 聚合
-    all_ev = _dedupe_evidence(env1.evidence + env2.evidence + env3.evidence)
-    confidence = _assess_overall_confidence([env1, env2, env3])
-    assert confidence == "medium"
+    # 模拟主 Agent 显式综合；聚合器不负责去重或统一置信度。
+    assert [env.confidence_assessment for env in [env1, env2, env3]] == [
+        "high",
+        "high",
+        "medium",
+    ]
+    all_ev = env1.evidence + env2.evidence + env3.evidence
+    confidence = "medium"
 
     merged = SubagentResultEnvelope(
         summary="Round 1: 3个研究员完成检索",
@@ -1074,10 +1074,10 @@ def test_m19_medical_advisory_evidence_rules():
         tools=[("sub_agent", "delegate")],
     ))
     assert text is not None
-    assert "置信度不得提升" in text
-    assert "高风险主张需 [HIGH]" in text
-    assert "证据缺口标出" in text
-    assert "[LOW]/[UNVERIFIED]" in text
+    assert "主 Agent 直接比较各 Agent 的结果" in text
+    assert "不机械采用全体最低置信度" in text
+    assert "冲突" in text
+    assert "证据缺口" in text
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1087,7 +1087,6 @@ def test_m19_medical_advisory_evidence_rules():
 def test_m20_extreme_pressure_8_agents():
     """8 个并行 subagent：5 成功 + 2 超时 + 1 错误，大文本，验证 evidence 完整性。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.tool import _dedupe_evidence, _assess_overall_confidence
     from prismclaw.engine.state.state_protocol import (
         _extract_structured_tool_result_sections,
         _merge_subagent_result_update,
@@ -1136,19 +1135,25 @@ def test_m20_extreme_pressure_8_agents():
         confidence_assessment="low",
     ))
 
-    # 聚合
-    merged_evidence = _dedupe_evidence(all_evidence)
-    confidence = _assess_overall_confidence(envelopes)
+    # 各 Agent 的 evidence 和 confidence 独立保留，不被其他结果改写。
+    assert len(all_evidence) == 7  # 5 read + 2 web
+    assert [env.confidence_assessment for env in envelopes] == [
+        "high",
+        "high",
+        "high",
+        "medium",
+        "medium",
+        "low",
+        "low",
+        "low",
+    ]
 
-    assert len(merged_evidence) == 7  # 5 read + 2 web
-    assert confidence == "low"  # 有 low 级别
-
-    # 完整持久化链路
+    # 模拟主 Agent 综合后进行持久化，而非聚合器自动合并。
     merged = SubagentResultEnvelope(
         summary="8个研究员并行检索：5成功2超时1错误",
         findings=[f for e in envelopes for f in e.findings],
-        evidence=merged_evidence,
-        confidence_assessment=confidence,
+        evidence=all_evidence,
+        confidence_assessment="low",
     )
 
     envelope_json = merged.model_dump_json()
@@ -1170,9 +1175,9 @@ def test_m20_extreme_pressure_8_agents():
     assert "evidence:" in handover
     assert "confidence: low" in handover
 
-    # 关键验证：无证据的 finding（文献7）在 handover 中被标记为 [LOW]
+    # 无证据的 finding（文献7）保留 [LOW] 标记。
     assert "[LOW] 无法获取文献7数据" in handover
-    # 且整体 confidence 为 low（因为有无证据的 finding 参与）
+    # 此处的 low 来自上文显式模拟的主 Agent 综合，而非聚合器自动降级。
     assert "confidence: low" in handover
 
 
@@ -1211,17 +1216,19 @@ def test_evidence_source_location_for_guidelines():
     assert evidence[0].source_location == "L42-L72"
 
 
-def test_confidence_propagation_high_medium_low():
-    """医疗三级置信度传播：药品说明书[HIGH] → 文献[MEDIUM] → 推理[LOW]。"""
-    from prismclaw.engine.subagent.tool import _assess_overall_confidence
+def test_confidence_remains_scoped_to_each_medical_result():
+    """医疗三级置信度分别属于各 Agent，不自动传播为全体最低值。"""
+    envelopes = [
+        SubagentResultEnvelope(summary="药品说明书", confidence_assessment="high"),
+        SubagentResultEnvelope(summary="文献综述", confidence_assessment="medium"),
+        SubagentResultEnvelope(summary="推理结论", confidence_assessment="low"),
+    ]
 
-    e_high = SubagentResultEnvelope(summary="药品说明书", confidence_assessment="high")
-    e_med = SubagentResultEnvelope(summary="文献综述", confidence_assessment="medium")
-    e_low = SubagentResultEnvelope(summary="推理结论", confidence_assessment="low")
-
-    assert _assess_overall_confidence([e_high, e_med, e_low]) == "low"
-    assert _assess_overall_confidence([e_high, e_med]) == "medium"
-    assert _assess_overall_confidence([e_high]) == "high"
+    assert [env.confidence_assessment for env in envelopes] == [
+        "high",
+        "medium",
+        "low",
+    ]
 
 
 def test_render_prior_evidence_with_long_quotes():
@@ -1295,19 +1302,13 @@ def _make_subagent_tool_result(
 
 
 def test_integrate_aggregate_results_medical():
-    """通过 _aggregate_results 验证真实 subagent 聚合链路。
+    """聚合链路保留 3 个 researcher 的独立结果。
 
-    模拟 3 个 researcher 并行检索：
     - researcher-1: 药品说明书（file evidence, confidence=high）
     - researcher-2: 临床指南（web evidence, confidence=high）
     - researcher-3: 超时退出（已有 file evidence, confidence=low）
 
-    验证：
-    1. evidence 合并去重
-    2. confidence_assessment 取最低
-    3. findings 去重合并
-    4. ToolResult.subagent_envelope.result_envelope 携带 evidence
-    5. readable text 包含 evidence 和 confidence
+    聚合器只投影 results[]；后续持久化使用测试显式构造的主 Agent 综合。
     """
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
     from prismclaw.engine.subagent.tool import SubAgentTool
@@ -1383,35 +1384,52 @@ def test_integrate_aggregate_results_medical():
     # 验证 1: ToolResult 不是 error
     assert not aggregated.is_error
 
-    # 验证 2: subagent_envelope 存在且携带 evidence
-    assert aggregated.subagent_envelope is not None
-    merged_envelope = aggregated.subagent_envelope.result_envelope
-    assert merged_envelope is not None
+    artifact = aggregated.subagent_envelope
+    assert artifact is not None
+    assert artifact.result_envelope is None
+    items = artifact.results
+    assert [item.name for item in items] == [
+        "researcher-1",
+        "researcher-2",
+        "researcher-3",
+    ]
+    assert [item.status for item in items] == ["success", "success", "timeout"]
+    assert [len(item.envelope.evidence) for item in items] == [1, 1, 1]
+    assert [item.envelope.confidence_assessment for item in items] == [
+        "high",
+        "high",
+        "low",
+    ]
+    assert [len(item.envelope.findings) for item in items] == [2, 2, 1]
 
-    # 验证 3: evidence 合并去重后数量正确
-    assert len(merged_envelope.evidence) == 3  # 1 file + 1 web + 1 file
-    paths = {e.source_path for e in merged_envelope.evidence}
-    assert "/data/drug_labels/metformin.txt" in paths
-    assert "https://guidelines.diabetes.cn/t2dm-2024" in paths
-    assert "/data/guidelines/ckd_dosing.txt" in paths
+    paths = {
+        evidence.source_path
+        for item in items
+        for evidence in item.envelope.evidence
+    }
+    assert paths == {
+        "/data/drug_labels/metformin.txt",
+        "https://guidelines.diabetes.cn/t2dm-2024",
+        "/data/guidelines/ckd_dosing.txt",
+    }
 
-    # 验证 4: confidence_assessment 取最低
-    assert merged_envelope.confidence_assessment == "low"
-
-    # 验证 5: findings 合并
-    assert len(merged_envelope.findings) == 5
-
-    # 验证 6: readable text 包含 evidence 和 confidence
     text = aggregated.content[0].text
     assert "evidence:" in text
+    assert "confidence: high" in text
     assert "confidence: low" in text
 
-    # 验证 7: 持久化链路——extract_state_update 能从 ToolResult 提取 evidence
+    # 模拟主 Agent 显式综合，再验证既有 SessionState 持久化链路。
     from prismclaw.engine.state.state_protocol import (
         _extract_structured_tool_result_sections,
         _merge_subagent_result_update,
     )
-    sections = _extract_structured_tool_result_sections(merged_envelope.model_dump_json())
+    synthesized = SubagentResultEnvelope(
+        summary="主 Agent 综合检索结果",
+        findings=[finding for item in items for finding in item.envelope.findings],
+        evidence=[evidence for item in items for evidence in item.envelope.evidence],
+        confidence_assessment="low",
+    )
+    sections = _extract_structured_tool_result_sections(synthesized.model_dump_json())
     assert sections is not None
     assert "evidence" in sections
     assert len(sections["evidence"]) == 3
@@ -1492,16 +1510,29 @@ def test_integrate_aggregate_results_with_errors():
     # 不是全部 error → is_error = False
     assert not aggregated.is_error
 
-    # evidence 只来自成功/超时的 subagent，不来自 error
-    merged = aggregated.subagent_envelope.result_envelope
-    assert len(merged.evidence) == 2  # r1 + r3
-    assert merged.confidence_assessment == "low"
+    artifact = aggregated.subagent_envelope
+    assert artifact is not None
+    assert artifact.result_envelope is None
+    by_name = {item.name: item for item in artifact.results}
+    assert set(by_name) == {"researcher-1", "researcher-2", "researcher-3"}
+    assert by_name["researcher-1"].envelope.confidence_assessment == "high"
+    assert len(by_name["researcher-1"].envelope.evidence) == 1
+    assert by_name["researcher-2"].status == "error"
+    assert by_name["researcher-2"].envelope is None
+    assert by_name["researcher-2"].error == "Network timeout"
+    assert by_name["researcher-3"].status == "timeout"
+    assert by_name["researcher-3"].envelope.confidence_assessment == "low"
+    assert len(by_name["researcher-3"].envelope.evidence) == 1
 
-    # 全部 error 时 is_error = True
+    # 全部 error 时也保留各项身份和错误，不生成统一 envelope。
     all_error = [
         _make_subagent_tool_result(agent_name="r1", outcome="error", error_message="fail"),
         _make_subagent_tool_result(agent_name="r2", outcome="error", error_message="fail"),
     ]
     aggregated_error = SubAgentTool._aggregate_results(None, all_error, "call_test_003")
     assert aggregated_error.is_error
-    assert aggregated_error.subagent_envelope is None  # 无 envelope
+    error_artifact = aggregated_error.subagent_envelope
+    assert error_artifact is not None
+    assert error_artifact.result_envelope is None
+    assert [item.status for item in error_artifact.results] == ["error", "error"]
+    assert [item.error for item in error_artifact.results] == ["fail", "fail"]

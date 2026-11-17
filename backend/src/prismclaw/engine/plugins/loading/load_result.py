@@ -1,7 +1,4 @@
-"""插件加载结果与结构化错误。
-
-对标参考实现 ``types/plugin.ts`` 的 ``PluginLoadResult`` + ``PluginError``。
-"""
+"""插件加载结果与结构化错误。"""
 
 from __future__ import annotations
 
@@ -21,7 +18,7 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True)
 class PluginError:
-    """结构化错误。参考实现 ``PluginError``。
+    """结构化错误。
 
     子类化体系 + 统一 format_message 方法。基类 type 是 PluginErrorType 枚举
     （str 子类，与裸字符串 100% 等价），下游可 isinstance 判断进入结构化字段，
@@ -194,7 +191,7 @@ class PluginActivationRuntimeError(PluginError):
 
 @dataclass(slots=True)
 class LoadedPlugin:
-    """已加载插件描述。对标参考实现 ``LoadedPlugin``。
+    """已加载插件描述。
 
     直接持有结构化字段，ExtensionManager._build_plugin_descriptor 直接读取构建 PluginDescriptor。
     """
@@ -229,7 +226,7 @@ class LoadedPlugin:
     # v5 渐进式披露：所属 marketplace 描述（来自市场级 plugin.json 的 description）
     # 比 manifest.description 更完整，系统提示词优先使用此字段。
     marketplace_description: str | None = None
-    # 插件指令：PRISMCLAW.md 内容（子插件级 + marketplace 级继承）
+    # 插件指令：PLUGIN.md 内容（子插件级 + marketplace 级继承）
     # 包含安全规则、输出规范、方法论、护栏等关键行为定义。
     plugin_instructions: str | None = None
 
@@ -245,7 +242,7 @@ class LoadedPlugin:
 
 @dataclass(slots=True)
 class PluginLoadResult:
-    """三段式加载结果。参考实现 ``PluginLoadResult``。"""
+    """三段式加载结果。"""
 
     enabled: list[LoadedPlugin] = field(default_factory=list)
     disabled: list[LoadedPlugin] = field(default_factory=list)

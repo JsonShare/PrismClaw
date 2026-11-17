@@ -24,7 +24,7 @@ Licensed under Apache License 2.0
 ## 要做什么
 
 1. **阅读配置。**阅读
-   `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`。
+   `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PLUGIN.md`。
    如果它不存在或仍有 `[PLACEHOLDER]` 标记，请引导用户先运行 `/ai-governance-legal:cold-start-interview`。
 
 2. **阅读清单。**清单位于

@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 1. 解析 `$ARGUMENTS` —— 主题和 N。如果缺失，询问：
    > 什么主题，多少问题？（例如，`Evidence 10` 或 `Contracts 5 --essay`。）
-2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 司法管辖区、考试格式、薄弱学科。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 司法管辖区、考试格式、薄弱学科。
 3. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/study-plan.yaml`（如存在）。阅读此主题的 `session_history` 以权倾向于学生薄弱的子主题。
 4. 按方法标志路由：
    - `--mbe`（bar prep 科目的默认值）：加载 `bar-prep-questions` skill，运行 N 个 MBE 风格问题。应用司法管辖区处理（请参阅该 skill 的 `## Jurisdiction handling`）。将每个标记为 `[UBE/majority]` 或 `[state-specific]`。

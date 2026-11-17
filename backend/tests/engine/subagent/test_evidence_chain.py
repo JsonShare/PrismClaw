@@ -1,43 +1,9 @@
-"""Evidence Chain 端到端自动化测试——模拟 20 轮 subagent 任务。
+"""Evidence Chain 端到端自动化测试。
 
-覆盖链路:
-  1. _collect_evidence_from_messages: 从模拟 messages 中自动提取 evidence
-  2. SubagentResultEnvelope: evidence + confidence_assessment 字段
-  3. _dedupe_evidence: source_path + source_location + quoted_text 三元组去重
-  4. _assess_overall_confidence: 整体置信度取最低, 空字符串不降级
-  5. _extract_structured_tool_result_sections: 从 JSON payload 解析 evidence
-  6. _merge_subagent_result_update: evidence 写入 SessionStateUpdate
-  7. SessionContextState.apply_update: evidence 去重合并到 session state
-  8. _collect_prior_evidence: 从 session state 提取 prior_evidence
-  9. build_context_snapshot: prior_evidence 传递 + 动态上限
- 10. render_context_snapshot: prior_evidence XML 渲染
- 11. render_result_envelope_handover: evidence + confidence 渲染
- 12. render_task_envelope: confidence_assessment 字段引导
- 13. normalize_state_payload: evidence 透传
- 14. merge_state_payloads: evidence 去重合并
- 15. <subagents>: 证据与准确性规则（固定段唯一 owner）
-
-每轮模拟一种场景, 共 20 轮:
-  R01: 单 researcher 成功返回, evidence 包含 read/grep/web_fetch
-  R02: 并行 2 个 researcher, evidence 去重合并
-  R03: researcher 超时退出, evidence 仍被收集
-  R04: subagent error 退出, 部分 evidence 被保留
-  R05: evidence 中有重复 source_path + quoted_text, 去重
-  R06: evidence 中有相同 source_path 但不同 source_location, 保留
-  R07: confidence_assessment 全为 high, 整体为 high
-  R08: 混合 confidence (high + low), 整体为 low
-  R09: confidence_assessment 为空字符串, 不降级
-  R10: 跨轮次 prior_evidence 传递
-  R11: 动态上限——facts > 6 时 findings limit 为 12
-  R12: builder 成功执行, evidence 包含 bash
-  R13: auditor 验证通过, confidence_assessment 为 high
-  R14: _render_subagent_result_handover 输出包含 evidence 行
-  R15: apply_update 去重——相同 source_path + quoted_text 不重复追加
-  R16: normalize_state_payload 透传 evidence
-  R17: merge_state_payloads 去重合并 evidence
-  R18: render_result_envelope_handover 包含 confidence 行
-  R19: prompt advisory 包含 Evidence & Accuracy Rules
-  R20: 完整链路——从 evidence 收集到 prior_evidence 传递的端到端
+覆盖 evidence 收集、结构化解析、SessionState 持久化、跨轮 prior_evidence、
+handover 渲染和 Prompt 规则。多 Agent 聚合只投影独立 results[]，不自动
+去重证据、合并结论或计算全体最低置信度；主 Agent 负责显式综合。
+SessionState 自身已有的 evidence 去重行为保持独立验证。
 """
 
 from __future__ import annotations
@@ -212,20 +178,47 @@ def test_r01_collect_evidence_from_multiple_tools():
 
 
 # ═══════════════════════════════════════════════════════════════
-# R02: 并行 2 个 researcher, evidence 去重合并
+# R02: 并行结果保留各 Agent 的独立 evidence，不自动合并去重
 # ═══════════════════════════════════════════════════════════════
 
-def test_r02_dedupe_evidence_across_parallel_agents():
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
+def test_r02_parallel_results_preserve_independent_evidence():
+    from prismclaw.engine.subagent.tool import SubAgentTool
+    from prismclaw.schema.content.content_types import (
+        SubagentEnvelopeArtifact,
+        TextBlock,
+        ToolResult,
+    )
 
-    ev1 = EvidenceRef(source_type="file", source_path="/src/main.py", quoted_text="def main(): pass", confidence="high")
-    ev2 = EvidenceRef(source_type="file", source_path="/src/main.py", quoted_text="def main(): pass", confidence="high")
-    ev3 = EvidenceRef(source_type="file", source_path="/src/utils.py", quoted_text="def helper():", confidence="high")
+    evidence = EvidenceRef(
+        source_type="file",
+        source_path="/src/main.py",
+        quoted_text="def main(): pass",
+        confidence="high",
+    )
 
-    merged = _dedupe_evidence([ev1, ev2, ev3])
-    assert len(merged) == 2
-    assert merged[0].source_path == "/src/main.py"
-    assert merged[1].source_path == "/src/utils.py"
+    def raw_result(name: str) -> dict:
+        envelope = SubagentResultEnvelope(summary=name, evidence=[evidence])
+        tool_result = ToolResult(
+            tool_call_id="call-r02",
+            content=[TextBlock(text=envelope.model_dump_json())],
+            subagent_envelope=SubagentEnvelopeArtifact(result_envelope=envelope),
+        )
+        return {"agent_name": name, "outcome": "success", "tool_result": tool_result}
+
+    aggregated = SubAgentTool._aggregate_results(
+        None,
+        [raw_result("explorer-1"), raw_result("explorer-2")],
+        "call-r02",
+    )
+
+    assert aggregated.subagent_envelope is not None
+    assert aggregated.subagent_envelope.result_envelope is None
+    items = aggregated.subagent_envelope.results
+    assert len(items) == 2
+    assert [item.envelope.evidence[0].source_path for item in items] == [
+        "/src/main.py",
+        "/src/main.py",
+    ]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -273,72 +266,41 @@ def test_r04_partial_evidence_on_error():
 
 
 # ═══════════════════════════════════════════════════════════════
-# R05: evidence 去重——相同 source_path + quoted_text
+# R05: 每个 Agent 的 confidence 独立保留，不计算全体最低值
 # ═══════════════════════════════════════════════════════════════
 
-def test_r05_dedupe_same_path_same_text():
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
+def test_r05_confidence_remains_scoped_to_each_agent():
+    from prismclaw.engine.subagent.tool import SubAgentTool
+    from prismclaw.schema.content.content_types import (
+        SubagentEnvelopeArtifact,
+        TextBlock,
+        ToolResult,
+    )
 
-    ev1 = EvidenceRef(source_type="file", source_path="/a.py", source_location="", quoted_text="hello", confidence="high")
-    ev2 = EvidenceRef(source_type="file", source_path="/a.py", source_location="", quoted_text="hello", confidence="high")
-    # source_path + source_location + quoted_text 全相同 → 去重
-    merged = _dedupe_evidence([ev1, ev2])
-    assert len(merged) == 1
+    def raw_result(name: str, confidence: str) -> dict:
+        envelope = SubagentResultEnvelope(
+            summary=name,
+            confidence_assessment=confidence,
+        )
+        tool_result = ToolResult(
+            tool_call_id="call-r05",
+            content=[TextBlock(text=envelope.model_dump_json())],
+            subagent_envelope=SubagentEnvelopeArtifact(result_envelope=envelope),
+        )
+        return {"agent_name": name, "outcome": "success", "tool_result": tool_result}
 
+    aggregated = SubAgentTool._aggregate_results(
+        None,
+        [raw_result("high", "high"), raw_result("low", "low")],
+        "call-r05",
+    )
 
-# ═══════════════════════════════════════════════════════════════
-# R06: 相同 source_path 但不同 source_location, 保留
-# ═══════════════════════════════════════════════════════════════
-
-def test_r06_dedupe_same_path_different_location():
-    from prismclaw.engine.subagent.tool import _dedupe_evidence
-
-    ev1 = EvidenceRef(source_type="file", source_path="/a.py", source_location="L10", quoted_text="hello", confidence="high")
-    ev2 = EvidenceRef(source_type="file", source_path="/a.py", source_location="L50", quoted_text="hello", confidence="high")
-    # source_location 不同 → 保留两条
-    merged = _dedupe_evidence([ev1, ev2])
-    assert len(merged) == 2
-
-
-# ═══════════════════════════════════════════════════════════════
-# R07: confidence_assessment 全为 high, 整体为 high
-# ═══════════════════════════════════════════════════════════════
-
-def test_r07_overall_confidence_all_high():
-    from prismclaw.engine.subagent.tool import _assess_overall_confidence
-
-    e1 = SubagentResultEnvelope(summary="a", confidence_assessment="high")
-    e2 = SubagentResultEnvelope(summary="b", confidence_assessment="high")
-    assert _assess_overall_confidence([e1, e2]) == "high"
-
-
-# ═══════════════════════════════════════════════════════════════
-# R08: 混合 confidence (high + low), 整体为 low
-# ═══════════════════════════════════════════════════════════════
-
-def test_r08_overall_confidence_mixed():
-    from prismclaw.engine.subagent.tool import _assess_overall_confidence
-
-    e1 = SubagentResultEnvelope(summary="a", confidence_assessment="high")
-    e2 = SubagentResultEnvelope(summary="b", confidence_assessment="low")
-    assert _assess_overall_confidence([e1, e2]) == "low"
-
-
-# ═══════════════════════════════════════════════════════════════
-# R09: confidence_assessment 为空字符串, 不降级
-# ═══════════════════════════════════════════════════════════════
-
-def test_r09_overall_confidence_empty_string_not_downgrade():
-    from prismclaw.engine.subagent.tool import _assess_overall_confidence
-
-    e1 = SubagentResultEnvelope(summary="a", confidence_assessment="high")
-    e2 = SubagentResultEnvelope(summary="b", confidence_assessment="")  # LLM 没填
-    # 空字符串不参与降级，所以整体仍为 high
-    assert _assess_overall_confidence([e1, e2]) == "high"
-
-    # 全部为空 → 返回空字符串
-    e3 = SubagentResultEnvelope(summary="c", confidence_assessment="")
-    assert _assess_overall_confidence([e3]) == ""
+    assert aggregated.subagent_envelope is not None
+    assert aggregated.subagent_envelope.result_envelope is None
+    assert [
+        item.envelope.confidence_assessment
+        for item in aggregated.subagent_envelope.results
+    ] == ["high", "low"]
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -536,9 +498,11 @@ def test_r19_subagents_section_contains_evidence_rules():
     ))
     assert result is not None
     assert "证据" in result
-    assert "置信度不得提升" in result
-    assert "高风险主张需 [HIGH]" in result
-    assert "[HANDOFF_REQUEST]" in result
+    assert "主 Agent 直接比较各 Agent 的结果" in result
+    assert "不机械采用全体最低置信度" in result
+    assert "冲突" in result
+    assert "subagent_control.send" in result
+    assert "不重叠的修改范围" in result
 
 
 def test_r19_handoff_advisory_is_protocol_only():
@@ -591,14 +555,13 @@ def test_r19_domain_advisory_renders_registered_rules():
 def test_r20_full_evidence_chain_e2e():
     """模拟完整链路:
     1. subagent 执行 → 收集 evidence
-    2. 聚合 → 去重 + 置信度评估
+    2. 主 Agent 保留来源并综合各 Agent 结果
     3. 写入 SessionStateUpdate → apply_update
     4. 下一轮 build_context_snapshot → prior_evidence
     5. render_context_snapshot → XML
     6. render_task_envelope → JSON 格式引导
     """
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.tool import _dedupe_evidence, _assess_overall_confidence
     from prismclaw.engine.subagent.core.contract import (
         render_result_envelope_handover,
         render_context_snapshot,
@@ -633,14 +596,12 @@ def test_r20_full_evidence_chain_e2e():
         confidence_assessment="medium",
     )
 
-    # 去重
-    all_evidence = env1.evidence + env2.evidence
-    merged_evidence = _dedupe_evidence(all_evidence)
+    # 主 Agent 综合时保留独立来源；这里不存在重复证据，无需改写。
+    merged_evidence = env1.evidence + env2.evidence
     assert len(merged_evidence) == 3  # 2 from env1 + 1 from env2
 
-    # 置信度评估
-    confidence = _assess_overall_confidence([env1, env2])
-    assert confidence == "medium"  # high + medium → medium
+    # 主 Agent 按来源质量作判断，而非由聚合器机械取最低值。
+    confidence = "medium"
 
     # ---- Step 3: 写入 session state ----
     merged_envelope = SubagentResultEnvelope(
@@ -803,10 +764,25 @@ def test_quoted_text_truncated_at_2000():
     assert len(evidence[0].quoted_text) == 2000
 
 
-def test_assess_overall_confidence_empty_envelopes():
-    from prismclaw.engine.subagent.tool import _assess_overall_confidence
+def test_empty_confidence_is_not_rewritten_by_result_projection():
+    from prismclaw.engine.subagent.tool import SubAgentTool
+    from prismclaw.schema.content.content_types import (
+        SubagentEnvelopeArtifact,
+        TextBlock,
+        ToolResult,
+    )
 
-    assert _assess_overall_confidence([]) == "low"
+    envelope = SubagentResultEnvelope(summary="unknown", confidence_assessment="")
+    tool_result = ToolResult(
+        tool_call_id="call-empty-confidence",
+        content=[TextBlock(text=envelope.model_dump_json())],
+        subagent_envelope=SubagentEnvelopeArtifact(result_envelope=envelope),
+    )
+    item = SubAgentTool._result_item(
+        {"agent_name": "explorer", "outcome": "success", "tool_result": tool_result}
+    )
+    assert item.envelope is not None
+    assert item.envelope.confidence_assessment == ""
 
 
 def test_collect_prior_evidence_handles_invalid_dict():

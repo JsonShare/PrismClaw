@@ -17,14 +17,14 @@ Licensed under Apache License 2.0
 
 # /student-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`。如果已填充且没有 `--redo`，覆盖前先确认。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md`。如果已填充且没有 `--redo`，覆盖前先确认。
 2. 应用下面的访谈工作流。
 3. 完成第 0 部分（谁在使用 / 连接了什么——学生 vs 应届毕业生 vs 其他；文档存储可用性）、第 1 部分（你在哪里）、第 2 部分（你如何学习——主动挑战 vs 先解释）、第 3 部分（强项/薄弱/回避）、第 4 部分（材料摄取——目标 10-20 项）。
 4. 重新阅读捕获的答案。发现矛盾、偏移的细节、值得现在说明的空缺。
-5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`（根据需要创建父目录），包括 `## 谁在使用这个` 和 `## 可用集成`。如果分享的材料少于 10 项，添加 `LIMITED DATA` 标记。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md`（根据需要创建父目录），包括 `## 谁在使用这个` 和 `## 可用集成`。如果分享的材料少于 10 项，添加 `LIMITED DATA` 标记。
 6. 与用户确认："这是我记录的内容——有什么不对吗？"
 
-**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查。在不触及角色或其他档案内容的情况下更新 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` 中的 `## 可用集成`。在添加或删除 MCP 连接器后使用。
+**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查。在不触及角色或其他档案内容的情况下更新 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` 中的 `## 可用集成`。在添加或删除 MCP 连接器后使用。
 
 探测时：只有当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪，附带一行确认说明。永远不要仅凭 `.mcp.json` 声明就报告 ✓——这会让用户误以为某个连接器已经连通，实际上并没有。
 
@@ -36,13 +36,13 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 向学生打招呼，提议从该部分继续。
 - **包含 `[PLACEHOLDER]` 标记但无暂停注释** → 模板从未完成；提议重新开始或从占位符开始处继续。
 - **已填充（无占位符，无暂停注释）** → 已配置；除非有 `--redo` 否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——用它作为部分脚手架。将完成的实践档案写入配置路径，根据需要创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——用它作为部分脚手架。将完成的实践档案写入配置路径，根据需要创建父目录。
 
 ## 检查共享公司档案
 
@@ -77,7 +77,7 @@ Licensed under Apache License 2.0
 
 - **此 plugin 维护的内容：** 你的档案（课程、考试日期、薄弱环节、学习风格）、学习计划、每科大纲、抽认卡存储桶、练习考试日志。
 - **此设置的作用：** 帮助学生学习法律——大纲、案例摘要、课堂提问准备、考试预测、律师资格考试备考——以适合他们实际学习方式的格式进行。学习学习风格、科目和考试时间表，并将其写入 plugin 每次读取的纯文本文件。所有内容之后都可以更改。完成后，命令将按照学生的学习方式工作，而不是按照通用模板的方式。
-- **数据来源：** 设置仅从学生的答案构建新的学习档案。它不读取个人 PrismClaw 历史、其他对话或主目录 PRISMCLAW.md。如果当前对话中出现了相关内容（例如某门课程或考试日期），在使用之前先询问。除非学生输入或批准，否则不将任何内容添加到配置中。
+- **数据来源：** 设置仅从学生的答案构建新的学习档案。它不读取个人 PrismClaw 历史、其他对话或主目录 PLUGIN.md。如果当前对话中出现了相关内容（例如某门课程或考试日期），在使用之前先询问。除非学生输入或批准，否则不将任何内容添加到配置中。
 
 **为什么这很重要。** 此 plugin 中的每个命令都从此访谈写入的配置中读取。通用配置给出通用输出——默认大纲格式、默认练习强度，以及没有针对任何人实际课程校准的考试预测。告诉 plugin 学生实际如何学习——主动挑战 vs 先解释、科目、教授、回避什么——才是"一个学习 AI 工具"和"以你需要的方式推动你的工具"之间的区别。答案越具体，上传的材料越多（大纲、评分论文、旧考试），输出就越符合学生的课程。
 
@@ -99,10 +99,10 @@ Licensed under Apache License 2.0
 - **对于上传（教学大纲、大纲、评分论文、旧考试、MBE 题集）：** "粘贴内容、提供文件路径，或说'暂时跳过'。如果你跳过，我会在实践档案中标记差距，以便你之后填写。" 然后真正等待。不要静默地继续。
 - **在写入实践档案之前：** 回顾访谈。列出每个被跳过或用占位符回答的问题。说："Before I write your practice profile, here's what's still open: [list]. Want to fill any of these now, or leave them as placeholders?" 然后等待答案。
 - **永远不要**带着静默的空缺写入实践档案。每个占位符都应该是学生有意选择跳过的——而不是因为他们停下来思考时问题就滚过去了。
-- **暂停和继续。** 预先告知学生："如果你需要停止，说'暂停'（或'停止'，或'让我回来再看这个'），我会保存你的进度。稍后重新运行 `/law-student:cold-start-interview`，我会从你停下的地方继续。" 当学生暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`，在顶部添加 `<!-- SETUP PAUSED AT: [section name] — run /law-student:cold-start-interview to resume -->` 注释，并在未回答的字段上添加 `[PENDING]` 标记（与 `[PLACEHOLDER]` 区分）。当设置重新运行并发现暂停的配置时，问候学生："欢迎回来。你在 [部分] 暂停了。你之前的答案已保存。从上次继续，还是重新开始？" 不要重新询问已经回答的问题。
+- **暂停和继续。** 预先告知学生："如果你需要停止，说'暂停'（或'停止'，或'让我回来再看这个'），我会保存你的进度。稍后重新运行 `/law-student:cold-start-interview`，我会从你停下的地方继续。" 当学生暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md`，在顶部添加 `<!-- SETUP PAUSED AT: [section name] — run /law-student:cold-start-interview to resume -->` 注释，并在未回答的字段上添加 `[PENDING]` 标记（与 `[PLACEHOLDER]` 区分）。当设置重新运行并发现暂停的配置时，问候学生："欢迎回来。你在 [部分] 暂停了。你之前的答案已保存。从上次继续，还是重新开始？" 不要重新询问已经回答的问题。
 - **批次大小——计算子部分。** "每轮不超过 2-3 个问题"意味着 2-3 个*可回答的提示*，包括子部分。一个有 5 个子部分的问题就是 5 个问题。测试：用户能不滚动就回答吗？如果问题不能放在一屏内，就太多了。尽可能使用结构化的点击式问题——它们不需要滚动或输入。
 
-**在设置中核实用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——如果你可以进行合理性检查——在将其写入配置之前进行检查。如果他们说的与你的理解或他们粘贴的内容冲突，指出来："You said the threshold is X; my understanding is Y — can you confirm which goes in the profile? `[premise flagged — verify]`" 写入 PRISMCLAW.md 的错误事实会传播到每个未来的输出；在这里捕捉它是产品中杠杆最高的时刻之一。
+**在设置中核实用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——如果你可以进行合理性检查——在将其写入配置之前进行检查。如果他们说的与你的理解或他们粘贴的内容冲突，指出来："You said the threshold is X; my understanding is Y — can you confirm which goes in the profile? `[premise flagged — verify]`" 写入 PLUGIN.md 的错误事实会传播到每个未来的输出；在这里捕捉它是产品中杠杆最高的时刻之一。
 
 ## 访谈
 
@@ -249,7 +249,7 @@ Licensed under Apache License 2.0
 
 ## 写入实践档案
 
-按照 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md` 的模板。简短——关于一个人的。
+按照 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md` 的模板。简短——关于一个人的。
 
 **LIMITED DATA 标记：** 如果在访谈中分享的材料少于 10 项，在 plugin 配置顶部添加 `> LIMITED DATA` 说明（在写入日期下方），说明："This practice profile was written from [N] materials. Downstream skills will operate but outputs will be thinner — the outline builder doesn't have your format yet, the exam forecast has thin signal on your professors, the IRAC grader won't know your writing patterns. Re-run `/law-student:cold-start-interview --redo` after gathering more outlines, graded essays, or old exams to sharpen it."
 
@@ -293,7 +293,7 @@ Licensed under Apache License 2.0
 
 然后以"你可以稍后更改任何内容"的说明结尾：
 
-> 完成。你的配置在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md`——一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
+> 完成。你的配置在 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md`——一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/law-student:cold-start-interview --redo` 进行完整重新访谈

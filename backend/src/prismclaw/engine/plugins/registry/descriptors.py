@@ -50,7 +50,7 @@ class PluginDescriptor(BaseDescriptor):
     hook_handlers: dict[str, list[Any]] = field(default_factory=dict)
     mcp_servers: dict[str, Any] = field(default_factory=dict)
     output_styles: dict[str, str] = field(default_factory=dict)
-    # 插件级指令：来自 PRISMCLAW.md（子插件级 + marketplace 级继承）
+    # 插件级指令：来自 PLUGIN.md（子插件级 + marketplace 级继承）
     plugin_instructions: str | None = None
     # 身份与生命周期（v4 核心字段）
     plugin_id: PluginID | None = None

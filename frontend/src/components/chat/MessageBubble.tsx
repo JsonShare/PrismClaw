@@ -807,8 +807,8 @@ export default function MessageBubble({
   }, [attachments, fileAttachments, isUser, uploadAttachments])
 
   // assistant 消息结构（F7 后）：
-  // - content（displayText）：流式期间来自 streamingText，done 时由 useChatSocket
-  //   finalizeStreaming 落定；reload 时由后端 _build_display_messages 累积全迭代文本。
+  // - content（displayText）：流式期间来自 streamingText；回合结束后由 sync 返回的
+  //   权威消息提供（chat.done 不再合成正文）；reload 时由后端 _build_display_messages 累积全迭代文本。
   //   不再读 final_message.content。
   // - timeline：承载执行过程（步骤 + 工具调用），toolCalls/subagents/fileChanges
   //   统一归于此，不再单独展示。渲染权重按 isReadOnlyTimeline 自适应（见渲染处）。

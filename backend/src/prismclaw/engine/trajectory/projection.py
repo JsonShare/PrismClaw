@@ -1,9 +1,7 @@
 """TrajectoryAuditProjection — pure 3-function fold over bus events.
 
-DIRECTLY mirrors `ProjectionDefinition<K,S>` from (see
-packages/session/session-projection/src/index.ts §5 L42-L73, plus
-`TokenMeter`'s usage-projection apply switch at usage-projection.ts L107-140
-/ L163-206).
+采用「状态 + 事件 → 新状态」的纯函数折叠：声明初始状态、事件处理分支与
+快照边界，全程不做 IO，便于重放与测试。
 
 Schema:
     S (state) = dict of

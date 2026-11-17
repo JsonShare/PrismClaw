@@ -253,13 +253,19 @@ def _parse_jsonb(val: Any) -> Any:
 
 def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
     """Convert a PostgreSQL row dict back to a RequestAuditRecord."""
+    started_ms = int(row["started_at_ms"] or 0)
+    completed_ms = row.get("completed_at_ms")
+    if completed_ms is not None and completed_ms < started_ms:
+        # 历史记录可能因 wall-clock 回拨出现倒序；拒收整条会丢失审计节点，
+        # 读取时把时长归一到 0。
+        completed_ms = started_ms
     return RequestAuditRecord(
         schema_version=row.get("schema_version", 1),
         session_id=row["session_id"],
         iteration=row["iteration"],
         turn=row.get("turn"),
-        started_at_ms=row["started_at_ms"],
-        completed_at_ms=row.get("completed_at_ms"),
+        started_at_ms=started_ms,
+        completed_at_ms=completed_ms,
         status=row["status"],
         # Layer 0.5 (JSONB → parse to list)
         projector_input_order_count=row["projector_input_order_count"],

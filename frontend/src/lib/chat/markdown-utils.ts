@@ -241,6 +241,45 @@ export function normalizeMarkdownTables(content: string): string {
   return out.join('\n');
 }
 
+function hastText(node: any): string {
+  if (!node) return '';
+  if (node.type === 'text') return String(node.value ?? '');
+  return Array.isArray(node.children) ? node.children.map(hastText).join('') : '';
+}
+
+// ---------------------------------------------------------------------------
+// Annotate table cells with their header text as `data-label`.
+// Narrow screens turn multi-column tables into card lists (see index.css), but
+// pure CSS cannot know which header a cell belongs to, so the label has to be
+// baked into the HTML here.
+// ---------------------------------------------------------------------------
+export function rehypeTableLabels() {
+  return (tree: any) => {
+    const annotate = (table: any) => {
+      const sections: any[] = table.children || [];
+      const headRow = sections.find((section) => section.tagName === 'thead')?.children?.find((child: any) => child.tagName === 'tr');
+      const labels: string[] = (headRow?.children || []).map((cell: any) => hastText(cell).trim());
+      if (!labels.some(Boolean)) return;
+      for (const section of sections) {
+        for (const row of section.children || []) {
+          if (row.tagName !== 'tr') continue;
+          (row.children || []).forEach((cell: any, index: number) => {
+            if (cell.tagName !== 'td' && cell.tagName !== 'th') return;
+            const label = labels[index];
+            if (!label) return;
+            cell.properties = { ...(cell.properties || {}), dataLabel: label };
+          });
+        }
+      }
+    };
+    const visit = (node: any) => {
+      if (node?.tagName === 'table') annotate(node);
+      if (Array.isArray(node?.children)) node.children.forEach(visit);
+    };
+    visit(tree);
+  };
+}
+
 export function normalizeDataSpec(spec: DataSpec | null): { columns: string[]; columnDefs: Array<{ key: string; label: string; type: string }>; rows: DataValue[][] } {
   const rows = Array.isArray(spec?.rows) ? spec.rows : [];
   const objectColumns = rows.flatMap((row: any) => row && !Array.isArray(row) && typeof row === 'object' ? Object.keys(row) : []);

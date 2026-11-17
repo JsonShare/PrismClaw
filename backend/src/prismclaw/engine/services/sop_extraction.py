@@ -96,7 +96,7 @@ EXTRACTION_PROMPT_TEMPLATE = """\
 其中是否包含可被未来不同任务复用的、类别级（class-level）流程。
 
 严格拒绝规则——若命中以下任一情况，输出空数组 `[]`：
-- 任务是具体实例（特定文件路径、PR 编号、错误字符串、项目名）
+- 任务是具体实例（特定路径、编号、引文、专名）
 - 任务是反复试错，没有清晰最终流程
 - 流程过于琐碎（任何称职代理都能想出的 1–2 步）
 - 模式不确定（下次需要不同做法）
@@ -117,7 +117,7 @@ EXTRACTION_PROMPT_TEMPLATE = """\
 - 绝不要包含凭据、API key、具体 URL、用户名或 PII
 
 有效输出示例：
-{{"sops": [{{"name": "deploy-k8s-helm", "description": "通过 Helm 将容器化应用部署到 Kubernetes", "procedure": "1. 构建镜像\\n2. 推送到镜像仓库\\n3. 应用 helm chart\\n4. 验证滚动发布"}}]}}
+{{"sops": [{{"name": "monthly-report-delivery", "description": "月度报告定稿后的分发流程", "procedure": "1. 核对数据口径\\n2. 生成定稿\\n3. 交叉复核\\n4. 分发给相关方"}}]}}
 
 输出格式：只调用 `sop_extractor`。若没有合格内容，则以 `{{"sops": []}}` 调用它。
 

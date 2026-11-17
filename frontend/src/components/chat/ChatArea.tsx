@@ -691,7 +691,6 @@ export default function ChatArea({
       content: streamingText,
       timestamp: Date.now(),
       toolCalls: liveToolCalls.length > 0 ? liveToolCalls : undefined,
-      subagentTrace: liveSubagentItems.length > 0 ? liveSubagentItems : undefined,
       timeline: liveTimeline.length > 0 ? liveTimeline : undefined,
     }
     return [...base, streaming]

@@ -17,11 +17,11 @@ Licensed under Apache License 2.0
 
 # /ip-cold-start-interview
 
-运行冷启动访谈。首次运行写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`；后续运行加 `--redo` 会重新访谈并在覆盖前显示差异。
+运行冷启动访谈。首次运行写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`；后续运行加 `--redo` 会重新访谈并在覆盖前显示差异。
 
 ## 说明
 
-1. **检查当前状态：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]` 或 `[Your Company Name]`，继续进行全新访谈。如果已填充且未传入 `--redo`，询问："看起来您已设置好了。要重新运行访谈吗？这会覆盖 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`（我会先显示差异）。"
+1. **检查当前状态：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`。如果包含 `[PLACEHOLDER]` 或 `[Your Company Name]`，继续进行全新访谈。如果已填充且未传入 `--redo`，询问："看起来您已设置好了。要重新运行访谈吗？这会覆盖 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`（我会先显示差异）。"
 
 2. **遵循以下访谈脚本。**
 
@@ -30,18 +30,18 @@ Licensed under Apache License 2.0
 4. **阅读共享文档**并提取实际立场——执法阈值、审批链、品牌监控设置、OSS 规则。注意声明立场与模板/手册实际要求之间的差异。
 
 
-5. **写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`**（按需创建父目录），遵循以下结构。尽量使用律师自己的措辞。
+5. **写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`**（按需创建父目录），遵循以下结构。尽量使用律师自己的措辞。
 
 6. **种子化投资组合登记册**（如果用户共享了投资组合导出或 IP 管理系统访问权限）：写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。如果未共享任何内容，留下一个占位符指针供投资组合追踪器后续填充。
 
 7. **显示摘要并提议下一步：**
-   - "这是我听到的内容——`~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 已写入。我哪里理解有误？"
+   - "这是我听到的内容——`~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md` 已写入。我哪里理解有误？"
    - 提供测试："想将一个提议商标投入查询测试，或查看投资组合登记册中即将到来的内容吗？"
    - 如果连接了 IP 管理系统：提议批量加载投资组合登记册并展示即将到来的续期。
 
 ## `--check-integrations`
 
-重新运行集成可用性检查（IP 管理系统、专利研究、法律研究、文档存储、Slack）并更新 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md` 中的 `## 可用集成`。不重新访谈。在连接或断开 MCP 后使用，希望 plugin 感知变化而无需重新运行完整设置。
+重新运行集成可用性检查（IP 管理系统、专利研究、法律研究、文档存储、Slack）并更新 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md` 中的 `## 可用集成`。不重新访谈。在连接或断开 MCP 后使用，希望 plugin 感知变化而无需重新运行完整设置。
 
 在探测时：只有在 MCP 工具调用实际成功时才报告 ✓。已配置但未经测试的连接器应标记为 ⚪，并附一行确认方式说明。永远不要仅凭 `.mcp.json` 声明就报告 ✓——这会误导用户以为某项功能已接入，而实际上并没有。
 
@@ -69,13 +69,13 @@ Licensed under Apache License 2.0
 
 ## "冷启动"的含义
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 向用户问候并提议从该章节继续。
 - **包含 `[PLACEHOLDER]` 或 `[Your Company Name]` 标记但无暂停注释** → 模板从未完成；提议重新开始或从占位符开始处继续。
 - **已填充（无占位符，无暂停注释）** → 已配置；除非 `--redo` 否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其作为章节脚手架使用。将完成的执业档案写入配置路径，根据需要创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——将其作为章节脚手架使用。将完成的执业档案写入配置路径，根据需要创建父目录。
 
 
 如果用户明确要求重新运行设置（"让我们重新做访谈"、"我的执法立场改变了"），再次运行并在覆盖前显示差异。
@@ -121,7 +121,7 @@ Licensed under Apache License 2.0
 
 **为什么重要**（如果用户对时间成本提出质疑时提供）。此 plugin 中的每个命令都从这次访谈写入的配置中读取。通用配置产生通用输出——通用执法立场、通用审批链、通用查询阈值。告诉 plugin 您的执业实际如何工作——您真实的审批链、您真实的"何时发送停止侵权函"触发条件、您真实的品牌监控列表——才是"一个法律 AI 工具"和"一个按您的方式工作的工具"之间的区别。
 
-**全新执业档案。** 设置从用户的回答和明确共享的文档构建全新的执业档案。它不读取用户的个人 PrismClaw 历史、无关对话或用户主目录的 PRISMCLAW.md。如果当前对话上下文中已有相关信息（例如，他们之前提到了公司），在使用前询问——不要将个人内容折叠进执业档案，除非用户输入或批准。
+**全新执业档案。** 设置从用户的回答和明确共享的文档构建全新的执业档案。它不读取用户的个人 PrismClaw 历史、无关对话或用户主目录的 PLUGIN.md。如果当前对话上下文中已有相关信息（例如，他们之前提到了公司），在使用前询问——不要将个人内容折叠进执业档案，除非用户输入或批准。
 
 推论：访谈的输入是用户输入的回答和明确共享的文档。不要从环境上下文、先前会话或用户记忆中填补空白。
 
@@ -371,11 +371,11 @@ Licensed under Apache License 2.0
 
 ## 写入执业档案
 
-按照 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`（模板）的结构写入 plugin 配置。尽量使用他们自己的措辞。这是一份*关于他们执业的*文档，他们会阅读和编辑——它不是配置文件。
+按照 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`（模板）的结构写入 plugin 配置。尽量使用他们自己的措辞。这是一份*关于他们执业的*文档，他们会阅读和编辑——它不是配置文件。
 
 写入前，重新阅读第 3 部分共享的任何文档——投资组合、模板、手册、OSS 政策。不要依赖对话早期的记忆。
 
-写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`（按需创建父目录）。如果用户共享了投资组合导出，也用提取的注册信息种子化 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。
+写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`（按需创建父目录）。如果用户共享了投资组合导出，也用提取的注册信息种子化 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/portfolio.yaml`。
 
 **基于角色的工作产品标题。** 在写入的 `## 输出` 章节中，根据 `## 谁在使用这个` 选择正确的标题。不要写两种变体。律师 → 特权/工作产品；非律师 → 研究笔记。
 
@@ -414,7 +414,7 @@ Licensed under Apache License 2.0
 
 4. **以可更改说明结束。** 以类似这样的内容结束：
 
-   > "完成。您的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`——一份您可以直接阅读和编辑的纯文本文件。您的任何回答都可以更改：
+   > "完成。您的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`——一份您可以直接阅读和编辑的纯文本文件。您的任何回答都可以更改：
    >
    > - 直接编辑文件以进行快速更改（新审批人、修订的监控列表、司法管辖区调整）
    > - 运行 `/ip-legal:cold-start-interview --redo` 进行完整重新访谈

@@ -7,7 +7,8 @@
 - 从 `.md` 清单文件发现和注册子代理定义
 - 根据上下文模式（isolated/inherit）构建子代理的初始消息上下文
 - 执行子代理的 turn 循环，包括 LLM 调用、工具分发和进度上报
-- 支持 sync 和 parallel 两种执行模式
+- 支持 sync 和 parallel 两种执行模式，以及 `dispatch_mode=background` 的后台派发
+- 后台任务的进程内句柄映射、真实取消与终态投递
 - 自动从工具调用历史中收集证据（EvidenceRef），并根据 URL/内容推断领域字段
 - 管理并行任务的生命周期和 follow-up 通知
 
@@ -104,7 +105,7 @@ allowed_tools: [read, bash]             # 可选。白名单，None=不限制
 max_turns: 15                            # 可选。最大迭代轮次
 timeout_seconds: 240.0                   # 可选。超时秒数
 preload_skills: [clinical-assessment]   # 可选。预加载技能
-can_handoff_to: [architect]             # 可选。Handoff 白名单，None=开放，非空=白名单
+can_handoff_to: [reviewer]             # 可选。Handoff 白名单，None=开放，非空=白名单
 ---
 ```
 
@@ -161,7 +162,6 @@ class AgentInstance(LifecycleMixin, ContextMixin, LoopMixin):
 class LifecycleMixin:
     def run(self)              # 主入口：深度检查、技能预加载、工具表面治理、上下文构建、循环执行、结果组装
     def _cleanup_light()                   # MCP 清理、hook 注销、文件状态缓存清除
-    def on_complete()                      # 完成回调系统
 
 > 注：`_collect_evidence_from_messages()` 和 `_infer_domain_fields()` 是模块级函数（`core/_lifecycle_mixin.py`），而非 LifecycleMixin 的方法。
 ```
@@ -203,9 +203,11 @@ class LoopMixin:
 ```python
 # core/executor.py
 class SubAgentExecutor:
-    def run(self)  # 创建 AgentInstance → 管理 ParallelTaskRuntimeRecord 生命周期
-                   # scheduled → running → completed/failed/cancelled
-                   # 结果上盖章 SubagentEnvelopeArtifact（含 task_id）
+    def run(self, task, *, background=False, task_id=None)
+        # 单点写入记录：scheduled → running → 终态（_finalize 唯一出口）
+        # 结果上盖章 SubagentEnvelopeArtifact（含 task_id）
+    def launch_background(manifest, task, parent_ctx, *, call_id="", context_snapshot=None)
+        # 闸门 → TaskManager.spawn → 登记 task_id → 立即返回 task_id
 ```
 
 ### SubagentResultEnvelope（合约层）
@@ -236,10 +238,11 @@ class SubAgentTool:
     visibility_scope = "main_only"
 
     # parameters 属性：动态注入 agent_name enum（来自 CapabilityCatalogService）
-    def execute()               # 验证深度（max_depth）→ 解析代理 → 分发 sync/parallel
+    def execute()               # 深度校验 → 解析代理 → 按 dispatch_mode 分发 now/background
     def _run_single_agent()     # 深拷贝上下文 → 构建 TaskRuntimeContext → executor.run()
     def _run_parallel_agents()  # asyncio.gather + 异常归一化
     def _aggregate_results()    # 合并多代理 SubagentResultEnvelope（去重证据、综合置信度）
+    def _aggregate_background_results()  # 后台派发回执：task_id + 进行中状态，不含结果正文
 ```
 
 ### ParallelTaskRuntimeRecord
@@ -249,17 +252,65 @@ class SubAgentTool:
 class ParallelTaskRuntimeRecord(BaseModel):
     task_id: str
     owner_session_id: str
+    source_call_id: str | None
     kind: Literal["subagent", "fork"]
-    status: str                     # scheduled → running → completed/failed/cancelled
-    notification_state: str
-    projection_payload: dict | None
+    status: Literal["scheduled", "running", "completed", "failed", "cancelled"]
+    run_id: str | None
+    agent_name: str | None
+    agent_source: str | None
+    started_at_epoch_ms / completed_at_epoch_ms: int | None
+    result_summary / error_summary: str | None
+    projection_payload: dict
 
 class ParallelTaskStore(Protocol):
     def append() / get() / list_for_session() / cancel()
 
 class SessionParallelTaskStore:
-    """session-store-backed 实现，含分布式锁"""
+    """session-store-backed 实现；append 依赖 commit_events 的内部锁，不再外层加锁"""
 ```
+
+### 后台执行（P1a）
+
+`background` 是 `sub_agent` 的调用参数，而非 manifest 属性（一次调用可含多个 agent，manifest 级开关会产生混合语义）：
+
+```json
+{"dispatch_mode": "now | background", "agents": [{"agent_name": "...", "task": "..."}]}
+```
+
+派发后立即返回任务列表，不含结果正文：
+
+```
+已派出 2 个后台子任务：
+- pt:3f9a1c2d8e4b explorer（进行中）
+- pt:7c21b45f0a9d executor（进行中）
+完成状态会自动更新；结果用 check_subagent_task 获取，停止用 cancel_task。
+```
+
+状态机与写入约束：
+
+```
+scheduled ──► running ──► completed / failed / cancelled
+```
+
+- `launch_background` 先做本会话 `scheduled|running` 计数闸门（`max_parallel_per_turn`），再 `TaskManager.spawn(category="subagent", owner=session_id)`，并登记 `task_id → (TaskManager, managed_task_id)`（`runtime/background.py`）。
+- 记录只由 `run()` 写：`scheduled → running` 在执行开始前落库，使闸门统计与真实执行一致；终态唯一出口 `_finalize`，正常/异常/取消三条路径统一写终态并触发投递。
+- `cancel_task` 经进程内映射调用 `TaskManager.cancel` 真实中止；映射未命中时返回明确错误，绝不沿用父任务的 `managed_task_id`（那等于终止整轮父会话）。
+- 父 run 中止时，`_background_main` 监听共享 `abort` Event 并取消内层 run，长工具调用无需等待循环检查点。
+- 投递：终态经 `subagent_terminal_sink` 写入会话队列并推送 `subagent_trace`（`sub_session_id="background:<task_id>"`），下一轮 note 携带 `task_id` 指针。running 阶段不推送，避免无 run 的孤立条目。
+- 自动开轮不做：`_run_chat` 以用户消息为可见内容，合成「后台完成」消息会污染会话树；完成信息由下一轮 note 呈现。
+
+部署约束：后台能力只在单副本、无网关分流时启用。注册工具时以 `settings.affinity.enabled` 推导 `allow_background`；开启即从 schema 移除 `dispatch_mode`，显式调用返回错误，不静默降级。
+
+能力边界：子代理 loop 为 `headless=True` 且未装配 `check_hitl`，后台子代理无法向用户请求审批。
+
+P1b（多副本）未实现，开放前必须先修复以下单进程假设：
+
+| 失效点 | 修法 |
+| --- | --- |
+| 后台 task 在进程内，崩溃即丢 | 独立 `run_id` claim ownership，心跳 + TTL；启动时扫描无主非终态记录，置 `failed` 或重放 |
+| 闸门「读-判-写」非原子 | Redis Lua 原子占位（检查 + 写入 running） |
+| `SessionQueue` 为进程内字典 | 唤醒经网关路由到归属 worker，或改由 Redis 队列投递 |
+| affinity TTL 短于任务时长 | 后台任务续期 affinity，或在任务运行期持有归属 |
 
 ### Follow-up 通知
 
@@ -276,7 +327,7 @@ def render_follow_up_status()       # 渲染状态文本
 def build_session_follow_up_note()  # 构建 session 注入笔记
 ```
 
-注意逻辑优先级：handoff > fork，追踪 failed/cancelled 任务。
+注意逻辑优先级：handoff > fork。note 只在存在活跃任务（scheduled/running），或任务记录出现在最后一条 assistant 消息之后时注入；已被回复覆盖的旧任务不重复提示。
 
 ### 系统提示组装
 
@@ -300,27 +351,49 @@ MAX_FILE_BYTES = 256_000
 
 ## Agent 职责边界与工具权限
 
-### 通用 Agent（4 个）
+### 内置 Agent（3 个）
 
-| Agent | 职责 | 独占工具 | Handoff 权限 |
-|-------|------|---------|-------------|
-| **architect** | 思考与规划——分析需求、设计方案、制定执行计划 | 无独占（仅 `read` + `request_handoff`） | → researcher, builder |
-| **researcher** | 信息检索——从本地和外部获取事实，不做分析决策 | `grep`, `glob`, `web-search-mcp:search` | 无（不能派发 handoff） |
-| **builder** | 执行——创建、修改、运行，将计划转化为实际产物 | `write`, `edit`, `bash` | 无（不能派发 handoff） |
-| **auditor** | 独立验证——确认计划是否被正确执行，验证失败时反馈 | 无独占（`read` + `bash` + `request_handoff`） | → architect |
+| Agent | 职责 | 工具 |
+|-------|------|------|
+| **explorer** | 只读核对事实与出处：位置、现状、原文 | `read`, `grep`, `glob`, `web-search-mcp:search` |
+| **executor** | 在划定范围内修改或生成内容，并自行验证生效 | `read`, `grep`, `glob`, `write`, `edit`, `bash`, `web-search-mcp:search` |
+| **reviewer** | 独立验收结论或产出，给出可复现依据 | `read`, `grep`, `glob`, `bash` |
 
-协作拓扑：architect 是唯一能派发 handoff 的通用 Agent（auditor 仅可回传 architect）。researcher/builder 是叶子节点，不能派发 handoff。
+协作拓扑：不再有固定的角色瀑布流或必经审查节点。主 Agent 负责规划、任务拆解、
+写入范围分工、冲突裁决、架构取舍与最终综合；子代理只承担边界清晰的能力单元。
+三个角色共用同一套生命周期和结果契约；默认 `context_mode="isolated"`，工具权限
+由 manifest 的 `allowed_tools` 显式限定。
 
-### 领域 Agent
+医疗、法律等垂直领域能力由插件提供（经 `subagent_search` 发现），系统不内置领域
+专家——插件侧已有专用数据源（FHIR、病历、法规库）和执业档案，内置角色无法替代，
+并列存在只会造成重复派发与命名冲突。
 
-领域 Agent 分布在插件子目录下，聚焦于特定业务域的监控/审查/分析。当前无 Handoff 能力，默认 `context_mode="isolated"`，工具权限默认不限制（除非 frontmatter 显式声明 `allowed_tools`）。
+### 生命周期与协作
 
-| 维度 | 通用 Agent | 领域 Agent |
+| 维度 | `one_shot` | `persistent` |
+|------|-----------|--------------|
+| 身份 | 一次调用一个 `agent_id` / `run_id` | 同一 `agent_id` 跨多个 `run_id` |
+| 后续交互 | 不支持 | `send` / `status` / `list` / `interrupt` / `resume` / `close` |
+| 后台执行 | 1–8 个并行或顺序任务 | 每次 spawn 只允许一个，依赖持久 lease |
+| 恢复 | 不恢复 | 未决工具副作用需 `confirm_recovery` 才能继续，且不重放原调用 |
+
+多 Agent 结果以独立 `results[]` 返回，保留各自的证据、结论与置信度；聚合器不自动
+去重、不合并结论、不计算全体最低置信度，综合由主 Agent 完成。
+
+### 插件领域 Agent
+
+插件子目录下的领域 Agent 聚焦特定业务域，当前无 Handoff 能力，默认
+`context_mode="isolated"`。内置 Agent 的工具权限全部由 manifest 显式限定；插件 Agent
+同样声明 `allowed_tools`，MCP 工具可用 `<server>:*` 前缀通配，运行时按注册表展开，
+避免在清单里枚举远端工具名。
+
+| 维度 | 内置 Agent | 插件领域 Agent |
 |------|-----------|-----------|
-| **定位** | 跨域通用能力（规划/检索/执行/验证） | 特定业务域的监控/审查/分析 |
-| **工具权限** | 严格隔离，每个 Agent 只拥有其角色所需工具 | 默认不限制（除非显式声明 `allowed_tools`） |
-| **Handoff** | architect 是派发中心，auditor 可回传 | 当前无 Handoff 能力 |
-| **安全性** | 工具级隔离 + Handoff 白名单 | 业务级安全约束（system_prompt 声明"此 Agent 不会做的事"） |
+| **定位** | 与领域无关的通用能力单元（查事实/做产出/验收） | 特定业务域的一次性工作流（监控/审查/分析） |
+| **工具权限** | 显式白名单，只读角色无写入能力 | 显式白名单：本地读写 + 指定 MCP server（`<server>:*`） |
+| **编排** | 主 Agent 直接派发，支持持久协作 | 通过 `subagent_search` 发现后派发 |
+| **调度** | 主 Agent 按需派发 | 同样按需派发；周期运行需主 Agent 经 `schedule` 工具触发，系统无 agent 级调度器 |
+| **安全性** | 工具级隔离 + 生命周期边界 | 工具级白名单 + 业务级约束（system_prompt 声明"此 Agent 不会做的事"） |
 
 ### 工具权限隔离机制
 
@@ -410,6 +483,30 @@ SubAgentTool._run_parallel_agents()
     → 综合评估 overall_confidence
 ```
 
+### 后台子代理执行流
+
+```
+SubAgentTool.execute(dispatch_mode="background")
+  → _run_single_agent(background=True)
+    → child_context 按引用回填 abort / task_manager / subagent_terminal_sink
+    → SubAgentExecutor.launch_background()
+      → 闸门（本会话 scheduled|running < max_parallel_per_turn）
+      → task_id = pt:xxxxxxxxxxxx
+      → TaskManager.spawn("subagent:<task_id>", _background_main, category="subagent")
+      → register_background_handle(task_id, manager, managed_task_id)
+      → 立即返回 task_id（不等待执行）
+  → _aggregate_background_results()  # 派发回执，无结果正文
+
+后台协程 _background_main()
+  → asyncio.wait(run_task, abort_watcher)
+  → SubAgentExecutor.run(background=True, task_id=...)
+    → 写入 scheduled → running
+    → LifecycleMixin.run()
+    → _finalize(status)  # completed / failed / cancelled
+      → 落库终态 → subagent_terminal_sink → subagent_trace 推送
+  → unregister_background_handle(task_id)
+```
+
 ### 证据自动收集流
 
 ```
@@ -425,7 +522,10 @@ _collect_evidence_from_messages()（模块级函数）
 
 | 接口 | 类型 | 说明 |
 |------|------|------|
-| `SubAgentTool` (name=`sub_agent`) | 工具 | LLM 调用子代理的入口，支持 sync/parallel |
+| `SubAgentTool` (name=`sub_agent`) | 工具 | LLM 调用子代理的入口，支持 sync/parallel/background |
+| `SubAgentExecutor.launch_background()` | 方法 | 后台派发：闸门 + TaskManager 登记，秒回 task_id |
+| `cancel_background_task()` | 函数 | 按 task_id 经进程内句柄映射真实取消 |
+| `check_subagent_task` / `list_subagent_tasks` / `cancel_task` | 工具 | 后台任务查询、列表与取消（main_only，不 skill_gated） |
 | `SubAgentRegistry.__init__()` | 方法 | 构造时自动扫描并注册所有子代理清单 |
 | `SubAgentRegistry.diagnose()` | 方法 | 3 类缺口诊断 |
 | `SubAgentExecutor.run()` | 方法 | 执行子代理的统一门面 |
@@ -469,3 +569,4 @@ _collect_evidence_from_messages()（模块级函数）
 | `AgentManifest.can_handoff_to` | `.md` frontmatter | 可交接代理列表 | `[]` |
 | `AgentManifest.model` | `.md` frontmatter | 指定模型 | — |
 | `AgentManifest.allowed_tools` | `.md` frontmatter | 允许的工具列表 | `None` (alias "tools") |
+| `SubAgentConfig.max_parallel_per_turn` | `schema/config/config.py` | 本会话同时执行的子代理上限（含后台闸门） | `5` |

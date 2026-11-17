@@ -41,6 +41,9 @@ class RecoveryState(BaseModel):
 class LoopState(BaseModel):
     steps_spent: int = 0
     tool_calls_spent: int = 0
+    # 工具预算耗尽后安排的那次纯文本收尾轮所在的 step 序号（-1 表示未安排）。
+    # 保证模型有机会交付已有结论，而不是在产出过程中被 prepare 直接掐断。
+    tool_wrapup_step: int = -1
     soft_at: float = 0.0
     hard_at: float = 0.0
 

@@ -1,8 +1,5 @@
 """插件发现引擎。
 
-对标参考实现 ``pluginLoader.ts`` L1900 ``loadPluginsFromMarketplaces`` +
-L3230 ``assemblePluginLoadResult``。
-
 配置驱动发现，文件系统扫描作为补充。
 """
 from __future__ import annotations
@@ -84,10 +81,7 @@ class PluginDirectorySource:
 
 
 class PluginDiscoveryEngine:
-    """配置驱动的插件发现，文件系统扫描作为补充。
-
-    对标参考实现 ``loadPluginsFromMarketplaces`` (L1900)。
-    """
+    """配置驱动的插件发现，文件系统扫描作为补充。"""
 
     def __init__(
         self,
@@ -117,8 +111,7 @@ class PluginDiscoveryEngine:
     def discover(self, *, workspace_trusted: bool = True) -> PluginDiscoveryResult:
         """发现需要激活/停用的插件。
 
-        ``workspace_trusted`` 是文件夹级信任开关（对标参考实现
-        ``performStartupChecks``）：未信任工作区时，UNTRUSTED 来源
+        ``workspace_trusted`` 是文件夹级信任开关：未信任工作区时，UNTRUSTED 来源
         （local/session）的插件被跳过。默认 ``True`` 保持既有行为。
         """
         result = PluginDiscoveryResult()
@@ -294,7 +287,7 @@ class PluginDiscoveryEngine:
     def resolve_install_path(self, plugin_id: PluginID) -> Path | None:
         """根据 ID 查找安装路径。
 
-        1. 查 installed_plugins.json 的 install_path (对标参考实现 installEntry.installPath)
+        1. 查 installed_plugins.json 的 install_path
         2. 市场级 plugin.json 声明的 source 相对路径
         3. Fallback 到目录扫描
         """
@@ -357,10 +350,7 @@ class PluginDiscoveryEngine:
 
 
 class PluginLoadOrchestrator:
-    """三源并行加载 + 合并。
-
-    对标参考实现 ``assemblePluginLoadResult`` (L3230)。
-    """
+    """三源并行加载 + 合并。"""
 
     def __init__(
         self,
@@ -383,7 +373,7 @@ class PluginLoadOrchestrator:
         cache_only: bool = False,
         workspace_trusted: bool = True,
     ) -> PluginLoadResult:
-        """三源并行加载 + 合并。参考实现 ``assemblePluginLoadResult`` (L3230)。
+        """三源并行加载 + 合并。
 
         流程：
         1. 发现引擎 → to_activate
@@ -398,7 +388,7 @@ class PluginLoadOrchestrator:
         for plugin_id in discovery_result.to_activate:
             groups.setdefault(plugin_id.source, []).append(plugin_id)
 
-        # 并行加载各源（对标参考实现 Promise.allSettled）
+        # 并行加载各源
         load_tasks = []
         for source, ids in groups.items():
             load_tasks.append(self._load_group(source, ids))
@@ -418,7 +408,7 @@ class PluginLoadOrchestrator:
             elif source == LOCAL_SOURCE:
                 local_batch = batch
 
-        # 三源合并（对标参考实现 mergePluginSources L3060）
+        # 三源合并
         merged = merge_plugin_sources(
             session=session_batch.plugins,
             marketplace=marketplace_batch.plugins,
@@ -427,7 +417,7 @@ class PluginLoadOrchestrator:
             managed_names=self._managed_names,
         )
 
-        # 依赖检查（对标参考实现 verifyAndDemote L3260）
+        # 依赖检查与降级
         dep_result = verify_and_demote(merged.plugins)
 
         enabled = [p for p in merged.plugins if p.enabled]
@@ -448,7 +438,7 @@ class PluginLoadOrchestrator:
     async def _load_group(
         self, source: str, plugin_ids: list[PluginID]
     ) -> PluginLoadBatch:
-        """并行加载一组插件。对标参考实现 ``Promise.allSettled``。"""
+        """并行加载一组插件，单个失败转为错误记录。"""
         tasks = [self._load_one(pid) for pid in plugin_ids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         batch = PluginLoadBatch()

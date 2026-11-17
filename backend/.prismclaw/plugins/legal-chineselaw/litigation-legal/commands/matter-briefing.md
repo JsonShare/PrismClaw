@@ -15,7 +15,7 @@ Licensed under Apache License 2.0
 
 # /matter-briefing
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准 + 相关利益相关者。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 风险校准 + 相关利益相关者。
 2. 遵循以下工作流和参考。
 3. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` + `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/history.md` + `_log.yaml` 中的日志行。
 4. 生成简报：当前姿态、自上次更新以来的变化、下一个截止日期、未决问题、风险重新评估检查（"`risk:` 字段是否仍然反映现实？"）。
@@ -34,7 +34,7 @@ Licensed under Apache License 2.0
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 结构化行
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` — 叙述性 intake
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/history.md` — 事件日志
-- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` — 风险校准（使 "risk: high" 具有特定含义，而非泛泛而谈）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` — 风险校准（使 "risk: high" 具有特定含义，而非泛泛而谈）
 
 **冲突门槛——不可绕过。** 在简报之前，检查 `_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
@@ -109,7 +109,7 @@ Slug（必需）。如果模糊或缺失，让用户从活跃事项列表中选�
 
 ## 以下一步决策树结束
 
-根据 PRISMCLAW.md `## Outputs` 以下一步决策树结束。根据此 skill 刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，不是锁定。树就是输出；律师选择。
+根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 

@@ -92,9 +92,10 @@ export function useConversationController({
         role: 'user',
         content: userContent,
         timestamp: Date.now(),
+        clientMessageId: msgId,
       })
       useChatStore.getState().initStreaming(convId)
-      wsSendChat(convId, text, attachments, extra)
+      wsSendChat(convId, text, attachments, { ...extra, client_message_id: msgId })
     },
     [wsSendChat],
   )

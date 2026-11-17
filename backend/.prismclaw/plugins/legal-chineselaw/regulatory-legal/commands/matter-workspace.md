@@ -30,19 +30,19 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` — 确认 `## 事项工作区` 部分已填充。如果 `已启用` 为 `✗`，告诉用户："事项工作区已关闭——你配置为只有一个客户的内部法务执业，因此插件自动从执业级上下文工作。如果你实际上处理多个客户，请重新运行 `/regulatory-legal:cold-start-interview --redo` 并选择私人执业设置。否则，你根本不需要 `/regulatory-matter-workspace`。"不要报错——禁用状态是内部法务用户的预期状态。
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` — 确认 `## 事项工作区` 部分已填充。如果 `已启用` 为 `✗`，告诉用户："事项工作区已关闭——你配置为只有一个客户的内部法务执业，因此插件自动从执业级上下文工作。如果你实际上处理多个客户，请重新运行 `/regulatory-legal:cold-start-interview --redo` 并选择私人执业设置。否则，你根本不需要 `/regulatory-matter-workspace`。"不要报错——禁用状态是内部法务用户的预期状态。
 2. 使用以下文件管理逻辑。
 3. 根据 `$ARGUMENTS` 的第一个令牌分派：
    - `new` → 运行访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<slug>/matter.md`，播种 `history.md` 和 `notes.md`。
    - `list` → 枚举 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/*/matter.md`，打印表格，标记活跃事项。
-   - `switch` → 更新执业级 PRISMCLAW.md 中的 `Active matter:` 行。
+   - `switch` → 更新执业级 PLUGIN.md 中的 `Active matter:` 行。
    - `close` → 将 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<slug>/` 移动到 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
    - `none` → 将 `Active matter:` 设置为 `none — practice-level context only`。
 4. 向用户显示更改内容并在写入前确认。
 
 ## 说明
 
-- 除非执业级 PRISMCLAW.md 中的 `跨事项上下文` 为 `on`，否则技能永远不会跨事项阅读。
+- 除非执业级 PLUGIN.md 中的 `跨事项上下文` 为 `on`，否则技能永远不会跨事项阅读。
 - 归档不是删除——已关闭的事项仍可阅读以用于保留/冲突目的。
 - Slugs 使用小写和连字符。如果 slug 在已归档和活跃项中重用，已归档的项保存在 `_archived/<slug>/` 下。
 
@@ -50,7 +50,7 @@ Licensed under Apache License 2.0
 
 多客户从业者（私人执业——独立律师、小律所、大律所）处理许多事项。一个事项的上下文不得泄露到另一个事项。此技能是使这成为可能的薄文件管理层。
 
-**默认状态为关闭。** 内部法务用户永远不会看到这个——他们仅在执业级工作。事项工作区在冷启动时为私人执业用户打开，或通过编辑执业级 PRISMCLAW.md 中的 `## 事项工作区` 打开。如果 `已启用` 为 `✗`，则此技能不运行；它解释禁用状态并建议实际需要事项隔离的用户运行 `/regulatory-legal:cold-start-interview --redo`。
+**默认状态为关闭。** 内部法务用户永远不会看到这个——他们仅在执业级工作。事项工作区在冷启动时为私人执业用户打开，或通过编辑执业级 PLUGIN.md 中的 `## 事项工作区` 打开。如果 `已启用` 为 `✗`，则此技能不运行；它解释禁用状态并建议实际需要事项隔离的用户运行 `/regulatory-legal:cold-start-interview --redo`。
 
 ## 存储布局
 
@@ -58,7 +58,7 @@ Licensed under Apache License 2.0
 
 ```
 ~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/
-├── PRISMCLAW.md                       # 执业级档案
+├── PLUGIN.md                       # 执业级档案
 └── matters/
     ├── <slug>/
     │   ├── matter.md               # 客户、对手方、事项类型、关键事实、覆盖
@@ -71,9 +71,9 @@ Licensed under Apache License 2.0
 
 Slugs 使用小写和连字符。示例：`acme-inspection-2026`、`fintech-nfra-review`、`data-compliance-cac`。
 
-## 活跃事项在执业 PRISMCLAW.md 中
+## 活跃事项在执业 PLUGIN.md 中
 
-执业级 PRISMCLAW.md 中 `## 事项工作区` 下的 `Active matter:` 行是单一真实来源。切换事项会编辑该行。没有单独的状态文件。
+执业级 PLUGIN.md 中 `## 事项工作区` 下的 `Active matter:` 行是单一真实来源。切换事项会编辑该行。没有单独的状态文件。
 
 ## 子命令逻辑
 
@@ -105,7 +105,7 @@ Slugs 使用小写和连字符。示例：`acme-inspection-2026`、`fintech-nfra
 ### `switch <slug>`
 
 1. 确认 `matters/<slug>/matter.md` 存在。如果不存在，提供 `/regulatory-legal:matter-workspace new <slug>`。
-2. 将执业级 PRISMCLAW.md 中的 `Active matter:` 行编辑为 `Active matter: <slug>`。
+2. 将执业级 PLUGIN.md 中的 `Active matter:` 行编辑为 `Active matter: <slug>`。
 3. 向用户显示 matter.md 摘要，以便他们确认自己在正确的事项上。
 
 ### `close <slug>`
@@ -117,12 +117,12 @@ Slugs 使用小写和连字符。示例：`acme-inspection-2026`、`fintech-nfra
 
 ### `none`
 
-将执业级 PRISMCLAW.md 中的 `Active matter:` 设置为 `none — practice-level context only`。向用户确认。
+将执业级 PLUGIN.md 中的 `Active matter:` 设置为 `none — practice-level context only`。向用户确认。
 
 ## `matter.md` 模板
 
 ```markdown
-[工作产品标题 — 按插件配置 ## 输出 — 因角色而异；参见 `## 谁在使用这个` 在执业级 PRISMCLAW.md 中]
+[工作产品标题 — 按插件配置 ## 输出 — 因角色而异；参见 `## 谁在使用这个` 在执业级 PLUGIN.md 中]
 
 # 事项：[客户] — [简短描述]
 
@@ -180,7 +180,7 @@ Slugs 使用小写和连字符。示例：`acme-inspection-2026`、`fintech-nfra
 
 ## 跨事项上下文
 
-执业级 PRISMCLAW.md 具有 `跨事项上下文:` 标志。当它为 `off`（默认值）时，在事项 A 中工作的技能**永远不会阅读**任何其他 B 的 `matters/B/` 中的文件。句号。这就是设置存在以提供的保密保证。
+执业级 PLUGIN.md 具有 `跨事项上下文:` 标志。当它为 `off`（默认值）时，在事项 A 中工作的技能**永远不会阅读**任何其他 B 的 `matters/B/` 中的文件。句号。这就是设置存在以提供的保密保证。
 
 当它为 `on` 时，技能只有在用户明确要求时才能跨事项文件夹阅读文件（例如，"比较我们在过去五个监管来函事项中的整改立场"）。即使为 `on`，默认情况下也只加载活跃事项，除非用户要求跨事项视图。
 

@@ -21,6 +21,24 @@ _MAX_ARCHIVE_PREVIEW_CHARS = 260
 # LLMClient.complete 无 timeout 参数，只能 wait_for 包装——取消后服务端
 # 请求可能继续执行、token 费用照计（已知代价，换取回合不被单点拖垮）。
 _SELECTOR_LIMIT_S = 8.0
+# 侧查询超时后进入冷却：provider 慢是持续状态，逐轮重试只会线性放大延迟。
+_SELECTOR_COOLDOWN_S = 300.0
+_selector_cooldown_until = 0.0
+
+
+def _selector_cooldown_active() -> bool:
+    return time.monotonic() < _selector_cooldown_until
+
+
+def _start_selector_cooldown() -> None:
+    global _selector_cooldown_until
+    _selector_cooldown_until = time.monotonic() + _SELECTOR_COOLDOWN_S
+
+
+def reset_selector_cooldown() -> None:
+    """测试用：清除全局冷却状态。"""
+    global _selector_cooldown_until
+    _selector_cooldown_until = 0.0
 
 # SDD B4 (§5.5) ranking v2 constants.
 # Decay lambdas per day, tiered by write-time temporal scoping: entries with
@@ -166,6 +184,12 @@ async def select_relevant_memories(
         )
         return selected_memories, selected_archives
 
+    if _selector_cooldown_active():
+        # 上次侧查询已超时：provider 当前就是慢的，继续每轮白等 8s 再回退
+        # 只会线性放大延迟（实测 19 轮 × 8s ≈ 150s）。冷却期内直接启发式。
+        emit("memory_selector_cooldown_skip", 1.0, kind="counter")
+        return await heuristic_fallback("heuristic_cooldown")
+
     try:
         response = await asyncio.wait_for(
             llm_client.complete(
@@ -181,6 +205,7 @@ async def select_relevant_memories(
         )
         payload = _parse_selector_output(response.text)
     except asyncio.TimeoutError:
+        _start_selector_cooldown()
         emit("memory_selector_budget_exceeded", 1.0, kind="counter")
         logger.warning(
             "memory selector budget exceeded (%.1fs, %d candidates); "

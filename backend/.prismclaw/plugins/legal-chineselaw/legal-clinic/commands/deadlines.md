@@ -18,7 +18,7 @@ Licensed under Apache License 2.0
 
 # /deadlines
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 司法管辖区、执业领域、警告天数节奏。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 司法管辖区、执业领域、警告天数节奏。
 2. 使用以下工作流。
 3. 按标记路由：
    - `--add`：捕获案件、类型、描述、到期日期、来源、负责人。写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/deadlines.yaml`。先检查重复。
@@ -40,10 +40,10 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 司法管辖区、执业领域、截止日期警告天数（默认 14/7/3/1）、督导律师
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 司法管辖区、执业领域、截止日期警告天数（默认 14/7/3/1）、督导律师
 - `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/deadlines.yaml` — 分类账
 
-**司法管辖区假设。** 截止日期计算和警告阈值假设 PRISMCLAW.md 中设置的司法管辖区。截止日期、 tolling 规则、时间计算规则和本地法院实践因司法管辖区和特定法院而有实质性差异。如果事项涉及不同的州、特定法院的本地规则，或联邦 vs. 州法院问题，在依赖截止日期之前根据适用规则与您的督导确认。
+**司法管辖区假设。** 截止日期计算和警告阈值假设 PLUGIN.md 中设置的司法管辖区。截止日期、 tolling 规则、时间计算规则和本地法院实践因司法管辖区和特定法院而有实质性差异。如果事项涉及不同的州、特定法院的本地规则，或联邦 vs. 州法院问题，在依赖截止日期之前根据适用规则与您的督导确认。
 
 ## 模式
 
@@ -68,7 +68,7 @@ skill 自动生成 `id` slug：`[case]-[short-desc]-[YYYY-MM]`。
 
 **合理性检查区间。** 学生输入到期日期后，不要计算或验证——但对提交类型的典型范围进行粗略合理性检查，如果日期远远超出范围则标记学生。这是捕获学生自己数学中严重错误的脚手架，不是根据规则计算的替代方案。
 
-**区间按司法管辖区索引。** 从 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/{state}.md` 加载此诊所司法管辖区的区间文件，其中 `{state}` 是 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 诊所司法管辖区的两位字母代码（联邦始终同时加载）。legal-clinic 插件附带 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/CA.md`（已完全填充）和 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/IL.md`（占位符结构）作为起点。
+**区间按司法管辖区索引。** 从 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/{state}.md` 加载此诊所司法管辖区的区间文件，其中 `{state}` 是 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 诊所司法管辖区的两位字母代码（联邦始终同时加载）。legal-clinic 插件附带 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/CA.md`（已完全填充）和 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/IL.md`（占位符结构）作为起点。
 
 **如果区间文件缺失则在冷启动时硬停止。** 如果此诊所司法管辖区的 `${PRISMCLAW_PLUGIN_ROOT}/references/plausibility-bands/{state}.md` 不存在，不要在没有合理性检查的情况下静默运行。在冷启动时告诉督导：
 
@@ -158,7 +158,7 @@ skill 自动生成 `id` slug：`[case]-[short-desc]-[YYYY-MM]`。
 
 ## 警告节奏
 
-按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 截止日期警告天数。默认 14、7、3、1。
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 截止日期警告天数。默认 14、7、3、1。
 
 警告不会自动展示——此插件没有计划/代理行为。但每当 `/deadlines` 被调用（或 `/status`，它会路由到此 skill 进行截止日期检查）时，报告会拉取触及警告阈值的任何内容。
 

@@ -6,9 +6,14 @@ from typing import Any
 from prismclaw.engine.subagent.runtime.parallel import (
     PARALLEL_TASK_RUNTIME_CUSTOM_TYPE,
     ParallelTaskRuntimeRecord,
+    _branch_entries,
     parallel_task_records_for_tree,
 )
-from prismclaw.schema.session.types import CustomEntry, HANDOFF_REQUEST_CUSTOM_TYPE, SessionTree
+from prismclaw.schema.agent.session import MessageEntry
+from prismclaw.schema.session.types import (
+    HANDOFF_REQUEST_CUSTOM_TYPE,
+    CustomEntry,
+)
 
 
 @dataclass(frozen=True)
@@ -30,13 +35,14 @@ class SessionFollowUpSnapshot:
 def session_follow_up_snapshot(session_tree: Any) -> SessionFollowUpSnapshot:
     summary = _build_parallel_task_summary(session_tree)
     attention = _build_parallel_task_attention(session_tree)
+    latest_handoff_request = _read_tree_dict(session_tree, "get_latest_handoff_request")
     return SessionFollowUpSnapshot(
-        latest_handoff_request=_read_tree_dict(session_tree, "get_latest_handoff_request"),
+        latest_handoff_request=latest_handoff_request,
         parallel_task_summary=summary,
         parallel_task_attention=attention,
         follow_up_attention=_build_follow_up_attention(
             session_tree,
-            latest_handoff_request=_read_tree_dict(session_tree, "get_latest_handoff_request"),
+            latest_handoff_request=latest_handoff_request,
             parallel_task_attention=attention,
         ),
     )
@@ -131,17 +137,18 @@ def format_follow_up_attention(attention: dict[str, Any]) -> str:
         if not handoff_parts:
             return "建议的会话后续动作：查看最近一次移交请求。"
         return "建议的会话后续动作：" + " | ".join(handoff_parts) + "。"
-    if kind == "fork":
+    if kind in {"fork", "subagent", "parallel"}:
         task_id = attention.get("recommended_task_id")
         reason = attention.get("recommended_reason")
-        fork_parts: list[str] = []
+        parallel_parts: list[str] = []
         if isinstance(task_id, str) and task_id:
-            fork_parts.append(f"task_id={task_id}")
+            parallel_parts.append(f"task_id={task_id}")
         if isinstance(reason, str) and reason:
-            fork_parts.append(f"reason={reason}")
-        if not fork_parts:
-            return "建议的会话后续动作：查看最近的 fork 结果。"
-        return "建议的会话后续动作：" + " | ".join(fork_parts) + "。"
+            parallel_parts.append(f"reason={reason}")
+        if not parallel_parts:
+            label = "后台子代理" if kind == "subagent" else "fork"
+            return f"建议的会话后续动作：查看最近的{label}结果。"
+        return "建议的会话后续动作：" + " | ".join(parallel_parts) + "。"
     return "建议的会话后续动作可用。"
 
 
@@ -200,40 +207,44 @@ def build_session_follow_up_note(
     if summary is None:
         return []
 
-    fork_details: list[str] = []
+    parallel_details: list[str] = []
     task_count = summary.get("task_count")
     if isinstance(task_count, int) and task_count > 0:
-        fork_details.append(f"tasks={task_count}")
+        parallel_details.append(f"tasks={task_count}")
     completed_count = summary.get("completed_count")
     if isinstance(completed_count, int) and completed_count > 0:
-        fork_details.append(f"completed={completed_count}")
+        parallel_details.append(f"completed={completed_count}")
     error_count = summary.get("error_count")
     if isinstance(error_count, int) and error_count > 0:
-        fork_details.append(f"errors={error_count}")
+        parallel_details.append(f"errors={error_count}")
     latest_task_id = summary.get("latest_task_id")
     if isinstance(latest_task_id, str) and latest_task_id:
-        fork_details.append(f"latest_task_id={latest_task_id}")
+        parallel_details.append(f"latest_task_id={latest_task_id}")
     latest_agent_name = summary.get("latest_agent_name")
     if isinstance(latest_agent_name, str) and latest_agent_name:
-        fork_details.append(f"latest_agent={latest_agent_name}")
+        parallel_details.append(f"latest_agent={latest_agent_name}")
     latest_status = summary.get("latest_status")
     if isinstance(latest_status, str) and latest_status:
-        fork_details.append(f"latest_status={latest_status}")
+        parallel_details.append(f"latest_status={latest_status}")
     attention_count = attention.get("attention_count")
     if isinstance(attention_count, int) and attention_count > 0:
-        fork_details.append(f"needs_attention={attention_count}")
+        parallel_details.append(f"needs_attention={attention_count}")
     recommended_task_id = attention.get("recommended_task_id")
     if isinstance(recommended_task_id, str) and recommended_task_id:
-        fork_details.append(f"recommended_task_id={recommended_task_id}")
+        parallel_details.append(f"recommended_task_id={recommended_task_id}")
     recommended_reason = attention.get("recommended_reason")
     if isinstance(recommended_reason, str) and recommended_reason:
-        fork_details.append(f"recommended_reason={recommended_reason}")
+        parallel_details.append(f"recommended_reason={recommended_reason}")
 
-    suffix = (
-        "在派生重复工作前，请先查看并行运行时状态。"
-    )
-    details_text = f"（{'，'.join(fork_details)}）" if fork_details else ""
-    return [f"本会话存在并行 fork 状态{details_text}。{suffix}"]
+    suffix = "在派生重复工作前，请先查看并行运行时状态。"
+    if kind == "subagent":
+        headline = "本会话存在后台并行子任务"
+    elif kind == "fork":
+        headline = "本会话存在并行 fork 状态"
+    else:
+        headline = "本会话存在并行任务"
+    details_text = f"（{'，'.join(parallel_details)}）" if parallel_details else ""
+    return [f"{headline}{details_text}。{suffix}"]
 
 
 def _runtime_parallel_records(session_tree: Any) -> list[ParallelTaskRuntimeRecord]:
@@ -269,6 +280,15 @@ def _build_parallel_task_attention(session_tree: Any) -> dict[str, Any] | None:
     records = _runtime_parallel_records(session_tree)
     if not records:
         return None
+    # 只提示「有新变化」的任务：活跃任务始终提示；已完成/失败/取消的任务
+    # 仅当记录出现在最后一条 assistant 消息之后才提示。否则每一轮都会
+    # 重复要求模型检查同一个旧任务，形成永久噪音。
+    has_active = any(
+        record.status in {"scheduled", "running"} for record in records
+    )
+    if not has_active and not _has_record_after_last_assistant(session_tree):
+        return None
+    kind = _parallel_kind(records)
     attention_records = [
         record for record in records if record.status in {"failed", "cancelled"}
     ]
@@ -276,6 +296,7 @@ def _build_parallel_task_attention(session_tree: Any) -> dict[str, Any] | None:
         ordered_task_ids = [record.task_id for record in reversed(attention_records)]
         latest = attention_records[-1]
         return {
+            "kind": kind,
             "attention_task_ids": ordered_task_ids,
             "attention_count": len(ordered_task_ids),
             "recommended_task_id": latest.task_id,
@@ -283,6 +304,7 @@ def _build_parallel_task_attention(session_tree: Any) -> dict[str, Any] | None:
         }
     latest = records[-1]
     return {
+        "kind": kind,
         "recommended_task_id": latest.task_id,
         "recommended_reason": (
             "latest_runtime" if latest.status in {"scheduled", "running"} else "latest_result"
@@ -290,29 +312,36 @@ def _build_parallel_task_attention(session_tree: Any) -> dict[str, Any] | None:
     }
 
 
+def _parallel_kind(records: list[ParallelTaskRuntimeRecord]) -> str:
+    kinds = {record.kind for record in records}
+    if len(kinds) == 1:
+        return kinds.pop()
+    return "parallel"
+
+
 def _latest_custom_entry_index(
     session_tree: Any,
     *,
-    custom_type: str | None = None,
-    custom_types: frozenset[str] | None = None,
-    predicate: Any = None,
+    custom_type: str,
 ) -> int | None:
-    if not isinstance(session_tree, SessionTree):
-        return None
-    if custom_type is None and custom_types is None:
-        return None
     latest_index: int | None = None
-    for index, entry in enumerate(session_tree.get_branch()):
-        if not isinstance(entry, CustomEntry):
-            continue
-        if custom_type is not None and entry.custom_type != custom_type:
-            continue
-        if custom_types is not None and entry.custom_type not in custom_types:
-            continue
-        if predicate is not None and not predicate(entry):
-            continue
-        latest_index = index
+    for index, entry in enumerate(_branch_entries(session_tree)):
+        if isinstance(entry, CustomEntry) and entry.custom_type == custom_type:
+            latest_index = index
     return latest_index
+
+
+def _has_record_after_last_assistant(session_tree: Any) -> bool:
+    """记录是否出现在最后一条 assistant 消息之后（含尚无 assistant 的情况）。"""
+    for entry in reversed(_branch_entries(session_tree)):
+        if (
+            isinstance(entry, CustomEntry)
+            and entry.custom_type == PARALLEL_TASK_RUNTIME_CUSTOM_TYPE
+        ):
+            return True
+        if isinstance(entry, MessageEntry) and entry.role == "assistant":
+            return False
+    return False
 
 
 def _build_follow_up_attention(
@@ -353,7 +382,7 @@ def _build_follow_up_attention(
 
     if parallel_task_attention is None:
         return None
-    return {"kind": "fork", **parallel_task_attention}
+    return dict(parallel_task_attention)
 
 
 def _read_tree_dict(tree: Any, method_name: str) -> dict[str, Any] | None:

@@ -18,11 +18,11 @@ category: 商事合同
 
 # /commercial-cold-start-interview
 
-运行冷启动访谈。首次运行写入 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`；后续使用 `--redo` 重新访谈并在覆盖前展示差异。
+运行冷启动访谈。首次运行写入 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`；后续使用 `--redo` 重新访谈并在覆盖前展示差异。
 
 ## 说明
 
-1. **检查当前状态：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`。如果包含 `[PLACEHOLDER]` 或 `[公司/律所名称]`，进行新访谈。如果已填充且未传入 `--redo`，询问："看起来你已经配置好了。要重新运行访谈吗？这将覆盖执业档案（我会先给你看差异）。"
+1. **检查当前状态：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`。如果包含 `[PLACEHOLDER]` 或 `[公司/律所名称]`，进行新访谈。如果已填充且未传入 `--redo`，询问："看起来你已经配置好了。要重新运行访谈吗？这将覆盖执业档案（我会先给你看差异）。"
 
 2. **按以下访谈脚本进行。**
 
@@ -30,9 +30,9 @@ category: 商事合同
 
 4. **读取种子文档**并提取实际剧本立场。注意陈述立场与已签内容之间的差异。
 
-5. **迁移：** 如果旧缓存路径中存在已填充的 PRISMCLAW.md（无 `[PLACEHOLDER]` 标记）但配置路径中没有，将其复制到配置路径并向用户说明迁移内容。
+5. **迁移：** 如果旧缓存路径中存在已填充的 PLUGIN.md（无 `[PLACEHOLDER]` 标记）但配置路径中没有，将其复制到配置路径并向用户说明迁移内容。
 
-6. **写入 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`**（必要时创建父目录），按以下结构进行。尽量使用律师/法务自己的用词。
+6. **写入 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`**（必要时创建父目录），按以下结构进行。尽量使用律师/法务自己的用词。
 
 7. **展示摘要并提出后续步骤：**
    - "这是我了解到的——执业档案已写入。哪里写得不对？"
@@ -79,7 +79,7 @@ category: 商事合同
 
 ## "冷启动"的含义
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 向用户打招呼并提议从该部分恢复。
 - **包含 `[PLACEHOLDER]` 或 `[公司/律所名称]` 标记但无暂停注释** → 模板从未完成；提议重新开始或从占位符开始处恢复。
@@ -360,7 +360,7 @@ category: 商事合同
 
 写入前，重新阅读第 2、3、4 部分中分享的所有文档——剧本、升级矩阵、模板和已签协议。不要依赖对话早期的记忆。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其作为章节脚手架。将完成的执业档案写入配置路径，必要时创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——将其作为章节脚手架。将完成的执业档案写入配置路径，必要时创建父目录。
 
 ## 写入执业档案后
 
@@ -395,7 +395,7 @@ category: 商事合同
 
 5. **结束时说明可更改性。**
 
-   > "完成了。你的执业档案在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`——这是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
+   > "完成了。你的执业档案在 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`——这是一个你可以直接读取和编辑的纯文本文件。你回答的任何内容都可以更改：
    >
    > - 直接编辑文件进行快速更改（新备用方案、修订的阈值、名称替换）
    > - 运行 `/commercial-legal:cold-start-interview --redo` 进行完整重新访谈

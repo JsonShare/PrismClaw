@@ -83,6 +83,7 @@ from prismclaw.schema.agent import (
     ToolClarifyRequest,
 )
 from prismclaw.schema.agent.types import AgentDeps, RunRequest
+from prismclaw.schema.content.streaming import SubagentProgressItem
 from prismclaw.schema.protocol.protocol_types import ProtocolErrorCode
 from prismclaw.schema.session.ids import build_web_session_key
 from prismclaw.schema.session.output_files_metadata import persist_output_files_metadata
@@ -360,6 +361,7 @@ async def _run_chat(
         # 正文原样落树（含内联卡片标记），刷新后的历史气泡仍按卡片渲染；
         # 模型上下文只拿 user_message（标记已还原成 @标题）。
         display_user_message=msg.content,
+        client_message_id=msg.client_message_id,
         confirmation_decision=msg.confirmation_decision,
         attachments=msg.attachments,
         mode_override=mode,
@@ -401,16 +403,58 @@ async def _run_chat(
         except Exception:
             logger.warning("web.subagent_progress.send_failed", exc_info=True)
 
+    async def _subagent_terminal_sink(record: Any) -> None:
+        # 后台任务在父 run 之外结束：终态已落库，用前端已有的 subagent_trace
+        # 契约推一条终态条目，避免任务面板永久停在「进行中」。
+        partial_status = {
+            "completed": "completed",
+            "failed": "failed",
+            "cancelled": "aborted",
+        }.get(getattr(record, "status", ""), "failed")
+        started = (
+            getattr(record, "started_at_epoch_ms", None)
+            or getattr(record, "created_at_epoch_ms", 0)
+            or 0
+        )
+        finished = getattr(record, "completed_at_epoch_ms", None) or started
+        batch = SubagentProgressBatch(
+            progress_batch_id=getattr(record, "run_id", None) or record.task_id,
+            batch_seq=1,
+            items=[
+                SubagentProgressItem(
+                    sub_session_id=f"background:{record.task_id}",
+                    subagent_name=record.agent_name or "subagent",
+                    turn=1,
+                    max_turns=1,
+                    partial_status=partial_status,
+                    duration_so_far=max(0.0, (finished - started) / 1000.0),
+                )
+            ],
+        )
+        session_queue.record_subagent_progress(msg.conversation_id, batch)
+        invalidate_tree_cache(session_id)
+        try:
+            await _push_task_runtime_event(
+                state,
+                deps=deps,
+                conversation_id=msg.conversation_id,
+                session_id=session_id,
+            )
+        except Exception:
+            logger.warning("web.subagent_terminal.send_failed", exc_info=True)
+
     if web_deps is not None:
         web_audit = getattr(web_deps, "audit_logger", None)
         deps = deps.with_request_context(
             audit_logger=web_audit,
             progress_sink=_subagent_progress_sink,
+            terminal_sink=_subagent_terminal_sink,
             channel="web",
         )
     else:
         deps = deps.with_request_context(
-            progress_sink=_subagent_progress_sink
+            progress_sink=_subagent_progress_sink,
+            terminal_sink=_subagent_terminal_sink,
         )
 
     workspace_base: Path = web_deps.workspace_base
@@ -463,6 +507,15 @@ async def _run_chat(
         nonlocal assistant_message_id, terminal_done_sent
         if terminal_done_sent:
             return
+        # done 发出即代表 run 结束。生命周期必须先于帧翻转：否则前端收到 done
+        # 立即 sync 时仍被判为 active，刚完成的正文被标 in_progress，要等
+        # 30s 看门狗才收尾（表现为"回答完成但一直转圈"）。
+        rc.active = False
+        _set_loading_active(
+            session_queue,
+            conversation_id=msg.conversation_id,
+            active=False,
+        )
         assistant_message_id = message_id or assistant_message_id
         # 指数退避重试：覆盖 WS 短暂断开（网络抖动/VPN 切换/缓冲区满）。
         # 总窗口 ~31.5s，远超大多数 WS 重连时间（通常 <10s）。
@@ -522,8 +575,30 @@ async def _run_chat(
         body = "\n\n".join(p for p in full_transcript_parts if p).strip()
 
         if error_code == "aborted":
+            # 用户主动中止：不发 error 帧、不追加系统说明，但**已流出的正文必须
+            # 落库**。done 只是"去服务端对账"的信号，正文一律来自展示投影——
+            # 不落库的话，中止后客户端 sync 到 idle 会把这段正文清掉（旧前端是
+            # 在 done 里本地合成 partial 消息保住的，新契约下该兜底已删除）。
+            if body or projector.has_content():
+                if assistant_message_id is None:
+                    assistant_message_id = await _persist_partial_assistant_message(
+                        deps,
+                        session_id=session_id,
+                        projector=projector,
+                        transcript_text=body,
+                    ) or assistant_message_id
+                if assistant_message_id and projector.has_content():
+                    await _persist_execution_timeline(
+                        deps,
+                        session_id=session_id,
+                        message_id=assistant_message_id,
+                        projector=projector,
+                    )
             await _emit_terminal_done(
-                final_message="", usage={}, aborted=True, message_id=None
+                final_message=body,
+                usage={},
+                aborted=True,
+                message_id=assistant_message_id,
             )
             return
 
@@ -537,6 +612,16 @@ async def _run_chat(
             )
 
         if not body and not projector.has_content():
+            # 软着陆的前提是「已流出的正文自成答案」。预算在 prepare 阶段耗尽
+            # （最后一轮还没调 LLM）时没有任何正文，静默 done 会让前端表现为
+            # 「任务直接断了」。此时必须把终止原因送到前端。
+            if soft_landing:
+                await send_event(
+                    state,
+                    SERVER_ERROR,
+                    msg.conversation_id,
+                    {"message": message or "任务已终止", "code": error_code},
+                )
             await _emit_terminal_done(
                 final_message="", usage={}, aborted=aborted, message_id=None
             )
@@ -550,6 +635,15 @@ async def _run_chat(
                 projector=projector,
                 transcript_text=content,
             ) or assistant_message_id
+        # 与正常收尾同契约：done 之前把执行过程挂到 partial 上，否则中止/超时
+        # 场景的 timeline 会错过客户端水位，只能靠手动刷新才看得到。
+        if assistant_message_id and projector.has_content():
+            await _persist_execution_timeline(
+                deps,
+                session_id=session_id,
+                message_id=assistant_message_id,
+                projector=projector,
+            )
         await _emit_terminal_done(
             final_message=content,
             usage={},
@@ -577,6 +671,10 @@ async def _run_chat(
 
     lifecycle_task: asyncio.Task[Any] | None = None
     run_projection_task: asyncio.Task[Any] | None = None
+    # 跨 worker 在场证明：owner 每 3s 刷新 Redis 键，收尾时删除。取消/异常时
+    # 靠 10s TTL 自动过期，不会留下"幽灵运行中"。
+    run_presence = getattr(web_deps, "run_presence", None)
+    presence_task: asyncio.Task[Any] | None = None
     # 正文累积状态在 try 之前初始化：except 崩溃路径引用它们构建 partial
     # 消息持久化（不变量 I3：final_message == 全量流式文本），必须保证
     # rc.active=True 之后的任何异常入口触达时均已绑定。
@@ -590,6 +688,11 @@ async def _run_chat(
     # 形成「幽灵运行中」。
     try:
         rc.active = True
+        if run_presence is not None:
+            await run_presence.touch(msg.conversation_id)
+            presence_task = asyncio.create_task(
+                run_presence.heartbeat(msg.conversation_id)
+            )
         _set_loading_active(
             session_queue,
             conversation_id=msg.conversation_id,
@@ -863,26 +966,20 @@ async def _run_chat(
                     if callable(set_usage):
                         set_usage(msg.conversation_id, event.usage)
 
-                # final_message 只保留**最后一轮迭代**的文本（最终答案）。
-                # full_transcript_parts 累积了所有迭代的 TextChunk（含中间草稿轮
-                # 的"让我先分析一下..."等自然语言思考过程），这些执行轨迹已由
-                # ExecutionTimeline（迭代边界 / 工具调用 / ReasoningChunk）独立
-                # 承载，正文不应重复。流式期间 chat.delta 仍会把所有轮次都推到
-                # 前端（单遍实时流式），但 Done 落库后最终消息 content 只保留
-                # 最终答案——用户刷新后看到干净的正文。
+                # final_message 只保留**最后一轮迭代**的文本，仅用于审计与非 Web
+                # 通道；Web 端的正文一律来自展示消息投影（_build_display_messages
+                # 的全轮拼接），二者不再共用同一个字段，避免"刷新前后两套正文"。
                 final_msg = (
                     full_transcript_parts[-1]
                     if full_transcript_parts
                     else ""
                 )
 
-                await _emit_terminal_done(
-                    final_message=final_msg,
-                    usage=event.usage,
-                    aborted=False,
-                    message_id=getattr(event, "assistant_message_id", None),
-                )
                 assistant_message_id = getattr(event, "assistant_message_id", None)
+                # 先把执行过程与交付物落库，再发 done。done 的契约是"本轮已完全
+                # 落库"：客户端收到后立即 sync 取定稿正文与元数据；若先发 done，
+                # 这些晚落库的 CustomEntry seq 高于客户端水位，而前端进入 idle 后
+                # 不再触发 sync，执行过程会缺失到手动刷新为止。
                 if projector.has_content():
                     session_queue.get_or_create_web_runtime_projection(
                         msg.conversation_id
@@ -954,6 +1051,12 @@ async def _run_chat(
                             message_id=assistant_message_id,
                             changes=file_changes,
                         )
+                await _emit_terminal_done(
+                    final_message=final_msg,
+                    usage=event.usage,
+                    aborted=False,
+                    message_id=assistant_message_id,
+                )
                 _spawn_background(
                     _push_reference_event(
                         state,
@@ -990,30 +1093,21 @@ async def _run_chat(
                     active=False,
                 )
                 # 异常退出：正文已实时推送到正文区，收尾统一走 _finalize_terminated_run。
+                # 中止不在这里短路：done 已不再携带正文，中止的 partial 必须由本
+                # 路径落库后再发 done，客户端才能在 idle 对账后仍看到已流出的内容。
                 aborted = event.error_code == "aborted"
-                if aborted and rc.chat_done_handled_externally:
-                    rc.chat_done_handled_externally = False
-                    terminal_done_sent = True
-                else:
-                    await _finalize_terminated_run(
-                        error_code=event.error_code,
-                        message=event.message,
-                        aborted=aborted,
-                    )
+                await _finalize_terminated_run(
+                    error_code=event.error_code,
+                    message=event.message,
+                    aborted=aborted,
+                )
                 if projector.has_content():
-                    # 执行过程挂靠在收尾落库的 partial 消息上；无挂靠点
-                    # （如用户中止且无落库）则跳过，避免 timeline 挂到无人引用的 id。
+                    # 只更新运行态快照供实时消费；落库已在 done 之前完成
+                    # （见 _finalize_terminated_run），此处不再重复写 CustomEntry。
                     err_snapshot_mid = assistant_message_id
                     session_queue.get_or_create_web_runtime_projection(
                         msg.conversation_id
                     ).timeline_snapshot = projector.build_snapshot_dict(err_snapshot_mid)
-                    if err_snapshot_mid:
-                        await _persist_execution_timeline(
-                            deps,
-                            session_id=session_id,
-                            message_id=err_snapshot_mid,
-                            projector=projector,
-                        )
                 await _push_task_runtime_event(
                     state,
                     deps=deps,
@@ -1034,12 +1128,12 @@ async def _run_chat(
                 "(conversation_id=%s)",
                 msg.conversation_id,
             )
-            # 流式在无 Done 情况下结束：正文文本已实时推送，这里直接收尾。
-            await _emit_terminal_done(
-                final_message="",
-                usage={},
+            # 流式在无 Done 情况下结束：已实时推送的正文同样必须落库再 done，
+            # 否则客户端对账到 idle 后这段正文会消失。复用唯一收尾路径。
+            await _finalize_terminated_run(
+                error_code="stream_truncated",
+                message="",
                 aborted=False,
-                message_id=None,
             )
     except Exception:
         logger.exception("error running chat for conversation %s", msg.conversation_id)
@@ -1107,3 +1201,13 @@ async def _run_chat(
                 exc_info=True,
             )
         session_queue.finish_web_runtime(msg.conversation_id)
+        # 在场证明最后清理：先同步取消心跳，再删键。此处若被取消，键也会在
+        # RUN_TTL_SECONDS 内自然过期，非 owner worker 最多短暂误判 active。
+        if presence_task is not None:
+            presence_task.cancel()
+            try:
+                await presence_task
+            except asyncio.CancelledError:
+                pass
+        if run_presence is not None:
+            await run_presence.clear(msg.conversation_id)

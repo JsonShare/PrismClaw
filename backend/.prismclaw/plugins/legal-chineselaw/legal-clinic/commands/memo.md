@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /memo
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、司法管辖区。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 执业领域、司法管辖区。
 2. 使用以下工作流。阅读接案摘要/案件笔记。
 3. 将问题构建为问题。为每个问题搭建 IRAC 脚手架——规则块是 RESEARCH NEEDED，应用是 STUDENT ANALYSIS 提示，结论留空。
 4. 优势/弱点/开放问题。研究差距摘要。
@@ -39,7 +39,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、司法管辖区、督导方式。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 执业领域、司法管辖区、督导方式。
 接案摘要和案件笔记用于事实。
 
 ## 教育学检查
@@ -203,7 +203,7 @@ Licensed under Apache License 2.0
 
 ## 以下一步决策树关闭
 
-按照 PRISMCLAW.md `## 输出` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+按照 PLUGIN.md `## 输出` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

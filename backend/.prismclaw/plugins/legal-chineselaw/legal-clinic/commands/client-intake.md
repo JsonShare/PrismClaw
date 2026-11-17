@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /client-intake
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、接案模板、督导方式、标记触发器。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 执业领域、接案模板、督导方式、标记触发器。
 2. 使用以下工作流。
 3. 路由到执业领域模板。始终监听跨领域问题。
 4. 冲突检查标记。分流分类。
@@ -40,7 +40,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 执业领域、接案模板（如果有多个则按执业领域）、督导方式、司法管辖区、标记触发器。
+`~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 执业领域、接案模板（如果有多个则按执业领域）、督导方式、司法管辖区、标记触发器。
 
 ## 读取督导指南
 
@@ -60,7 +60,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 2：执业领域特定接案
 
-每个执业领域问不同的问题。使用 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中此领域的模板。如果没有提供，使用以下默认值：
+每个执业领域问不同的问题。使用 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 中此领域的模板。如果没有提供，使用以下默认值：
 
 **移民：**
 - 当前身份和入境方式
@@ -107,7 +107,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 4：冲突检查标记
 
-按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 描述的任何冲突检查流程。至少：
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 描述的任何冲突检查流程。至少：
 
 - 对方当事人姓名——诊所是否代表或曾经代表他们？
 - 相关方——学生或诊所可能与之有冲突的其他人？
@@ -128,7 +128,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 6：督导标记检查
 
-按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 督导方式和标记触发器。如果启用了正式审查队列或可配置标记，且触发器存在（提到截止日期、DV 指标、移民身份争议等），记录标记。
+按照 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 督导方式和标记触发器。如果启用了正式审查队列或可配置标记，且触发器存在（提到截止日期、DV 指标、移民身份争议等），记录标记。
 
 ### 步骤 7：截止日期交接——必需交付物
 
@@ -176,7 +176,7 @@ Licensed under Apache License 2.0
 
 ## 识别的法律问题
 
-*本节中的每个法规、条例、监管、规则或案例引用都带有来源标签（参见插件 PRISMCLAW.md `## 共享护栏` 了解标签词汇表）。如果督导上传了文本则为 `[user provided]`，如果本会话中从官方来源获取则为 `[statute / regulator site]`，如果来自此对话中的工具结果则为研究连接器标签（`[CourtListener]` 等），否则为 `[model knowledge — verify]`。默认为 `[model knowledge — verify]`。无法根据连接器验证引用的督导律师需要看到标签以知道首先检查什么。*
+*本节中的每个法规、条例、监管、规则或案例引用都带有来源标签（参见插件 PLUGIN.md `## 共享护栏` 了解标签词汇表）。如果督导上传了文本则为 `[user provided]`，如果本会话中从官方来源获取则为 `[statute / regulator site]`，如果来自此对话中的工具结果则为研究连接器标签（`[CourtListener]` 等），否则为 `[model knowledge — verify]`。默认为 `[model knowledge — verify]`。无法根据连接器验证引用的督导律师需要看到标签以知道首先检查什么。*
 
 ### 主要（[执业领域]）
 - [问题 1]：[一行，附任何标签的引用，例如，"RLTO §5-12-080 `[model knowledge — verify]`"]
@@ -210,9 +210,9 @@ Licensed under Apache License 2.0
 
 ## 司法管辖区说明
 
-*本节中的每个法规、法令、规则或案例引用都带有来源标签——与 `## 识别的法律问题` 相同的词汇表。默认 `[model knowledge — verify]`。当本会话无法访问研究连接器时，在审阅者注释的 **来源：** 行中记录（参见插件 PRISMCLAW.md `## 输出`）——不要发出独立横幅。*
+*本节中的每个法规、法令、规则或案例引用都带有来源标签——与 `## 识别的法律问题` 相同的词汇表。默认 `[model knowledge — verify]`。当本会话无法访问研究连接器时，在审阅者注释的 **来源：** 行中记录（参见插件 PLUGIN.md `## 输出`）——不要发出独立横幅。*
 
-[特定于 PRISMCLAW.md 司法管辖区的此案件类型相关的州特定或本地规则特定问题，每个引用附标签]
+[特定于 PLUGIN.md 司法管辖区的此案件类型相关的州特定或本地规则特定问题，每个引用附标签]
 
 ## 督导标记
 
@@ -245,7 +245,7 @@ Licensed under Apache License 2.0
 
 ## 以下一步决策树关闭
 
-按照 PRISMCLAW.md `## 输出` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+按照 PLUGIN.md `## 输出` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

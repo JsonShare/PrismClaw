@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /build-guide
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 角色（必须是督导律师）、执业领域、司法管辖区。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 角色（必须是督导律师）、执业领域、司法管辖区。
 2. 使用以下工作流。
 3. 如果用户不是督导律师，停止并重定向（学生运行 `/legal-clinic:ramp`）。
 4. 逐步进行：执业领域 → 接案问题 → 教育学姿态 → 审查门控 → 跨插件检查 → 本地规则。
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
 
 ## 工作成果标头
 
-此 skill 的每个输出都是面向督导的配置产物，不是学生工作成果。不要在此 skill 的输出前面添加 `[AI-ASSISTED DRAFT — requires student analysis and attorney review]`——该标签用于学生输出。此 skill 写入的指南文件是督导配置文档；它位于插件配置目录中的 PRISMCLAW.md 旁边，不在事项工作区中。
+此 skill 的每个输出都是面向督导的配置产物，不是学生工作成果。不要在此 skill 的输出前面添加 `[AI-ASSISTED DRAFT — requires student analysis and attorney review]`——该标签用于学生输出。此 skill 写入的指南文件是督导配置文档；它位于插件配置目录中的 PLUGIN.md 旁边，不在事项工作区中。
 
 ## 指南应解决的关键事项
 
@@ -63,7 +63,7 @@ Licensed under Apache License 2.0
 
 ### 步骤 1：检查角色
 
-这是一个督导 skill。读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → `## 谁在使用这个` → 角色。如果角色不是"督导律师"，说：
+这是一个督导 skill。读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → `## 谁在使用这个` → 角色。如果角色不是"督导律师"，说：
 
 > 此 skill 面向督导——它配置面向学生 skills 的行为方式。如果您是督导，请确保您的执业档案角色在 `/legal-clinic:cold-start-interview` 中设置为"督导律师"。如果您是学生，这不是适合您的 skill——运行 `/legal-clinic:ramp` 进行入职，或请您的督导为诊所撰写指南。
 
@@ -75,7 +75,7 @@ Licensed under Apache License 2.0
 
 如果回答是"其他"，要求一个简短名称——该名称成为文件名（小写、连字符：`immigration-removal-defense.md`、`transactional-nonprofit.md` 等）。
 
-检查 `PRISMCLAW.md` → `## 诊所档案` → 执业领域中列出的执业领域。如果选择的执业领域未列在那里，注明："我会写这个指南，但您的执业档案没有将 [area] 列为诊所的执业领域之一。这没问题——您可以稍后用 `/legal-clinic:cold-start-interview --redo` 添加——但面向学生的 skills 在档案列出之前不会将接案路由到此领域。"
+检查 `PLUGIN.md` → `## 诊所档案` → 执业领域中列出的执业领域。如果选择的执业领域未列在那里，注明："我会写这个指南，但您的执业档案没有将 [area] 列为诊所的执业领域之一。这没问题——您可以稍后用 `/legal-clinic:cold-start-interview --redo` 添加——但面向学生的 skills 在档案列出之前不会将接案路由到此领域。"
 
 如果 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/guides/<practice-area>.md` 已有指南存在，提供："[area] 的指南已存在于 [path]。您想要 (a) 逐节修订，(b) 从头开始覆盖，还是 (c) 先看看里面有什么？"
 
@@ -141,7 +141,7 @@ Licensed under Apache License 2.0
 
 > 您的诊所在哪些法院执业？学生需要使用哪些本地规则或表单？
 
-检查 `PRISMCLAW.md` → `## 司法管辖区`——州和主要法院已在冷启动时设置。此步骤用于执业领域特定的本地规则和表单（例如，"住房法院关于简易程序答复的常规命令"、"当地外勤办公室的 USCIS 提交地址"、"家事法院自助中心表单以及在哪里找到它们"）。提供捕获学生面向 skills 在起草或建议时应使用的简短指针列表。
+检查 `PLUGIN.md` → `## 司法管辖区`——州和主要法院已在冷启动时设置。此步骤用于执业领域特定的本地规则和表单（例如，"住房法院关于简易程序答复的常规命令"、"当地外勤办公室的 USCIS 提交地址"、"家事法院自助中心表单以及在哪里找到它们"）。提供捕获学生面向 skills 在起草或建议时应使用的简短指针列表。
 
 ### 步骤 8：写入指南
 
@@ -153,7 +153,7 @@ Licensed under Apache License 2.0
 *由督导律师通过 `/legal-clinic:build-guide` 撰写。面向学生 skills 在产生输出之前阅读此指南。随时可直接编辑。*
 
 **最后更新：** [日期]
-**撰写者：** [来自 PRISMCLAW.md 的督导律师姓名]
+**撰写者：** [来自 PLUGIN.md 的督导律师姓名]
 
 ---
 
@@ -215,7 +215,7 @@ Licensed under Apache License 2.0
 
 ## 本地规则和司法管辖区
 
-**法院：** [来自 PRISMCLAW.md 或此执业领域的其他法院]
+**法院：** [来自 PLUGIN.md 或此执业领域的其他法院]
 **执业领域特定的本地规则和表单：**
 - [指针 1]
 - [指针 2]

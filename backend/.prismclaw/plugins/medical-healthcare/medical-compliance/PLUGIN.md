@@ -1,5 +1,5 @@
 <!--
-配置位置：~/.prismclaw/assets/plugins/medical-healthcare/medical-compliance/PRISMCLAW.md
+配置位置：~/.prismclaw/assets/plugins/medical-healthcare/medical-compliance/PLUGIN.md
 -->
 
 # 医疗合规执业档案

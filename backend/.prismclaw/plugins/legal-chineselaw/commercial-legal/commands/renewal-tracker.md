@@ -139,7 +139,7 @@ Licensed under Apache License 2.0
 - [ ] [Counterparty] ——定价未限制；在我们失去杠杆之前从替代方案获取报价
 ```
 
-如果登记册在窗口中有超过约 10 个续约，或任何时候用户询问：提供仪表板（请参阅 PRISMCLAW.md `## Outputs → Dashboard offer for data-heavy outputs`）。为此输出塑造提议——按紧急层级的计数（🔴 / 🟠 / 🟡）、取消时间线和带有对手方、续约日期、年度 $ 和所有者的可排序登记册。
+如果登记册在窗口中有超过约 10 个续约，或任何时候用户询问：提供仪表板（请参阅 PLUGIN.md `## Outputs → Dashboard offer for data-heavy outputs`）。为此输出塑造提议——按紧急层级的计数（🔴 / 🟠 / 🟡）、取消时间线和带有对手方、续约日期、年度 $ 和所有者的可排序登记册。
 
 ### 模式 3：扫描 [CLM]/电子签名工具以填充登记册
 
@@ -185,7 +185,7 @@ Licensed under Apache License 2.0
 
 ## 集成：renewal-watcher agent
 
-此 plugin 中的 renewal-watcher agent 按计划（默认每周）运行此 skill，并将"即将到来"报告发布到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` → `## House style` → `## House style` → 工产品去向的命名频道。模式 2 是代理的主要输出。
+此 plugin 中的 renewal-watcher agent 按计划（默认每周）运行此 skill，并将"即将到来"报告发布到 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md` → `## House style` → `## House style` → 工产品去向的命名频道。模式 2 是代理的主要输出。
 
 ## 此 skill 不做的事
 

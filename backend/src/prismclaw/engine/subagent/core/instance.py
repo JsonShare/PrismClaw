@@ -16,7 +16,6 @@ import logging
 from prismclaw.engine.subagent.core._lifecycle_mixin import LifecycleMixin
 from prismclaw.engine.subagent.core._context_mixin import ContextMixin
 from prismclaw.engine.subagent.core._loop_mixin import LoopMixin
-from prismclaw.engine.subagent.core._result_types import AgentRunResult  # re-export
 
 logger = logging.getLogger(__name__)
 

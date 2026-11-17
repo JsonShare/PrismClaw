@@ -75,6 +75,9 @@ class RunRequest:
     # 落树/回放用的正文（原样，可含内联卡片标记）；user_message 是给模型的
     # 可读文本。None 表示两者相同（非 web 客户端不区分）。
     display_user_message: str | None = None
+    # 客户端生成的消息标识：写入初始 user entry，供客户端把乐观气泡 re-key
+    # 到服务端 entry（web channel 才有；CLI/恢复运行/steering 为 None）。
+    client_message_id: str | None = None
     trajectory_audit_header: str | None = None
     approval_reason: str | None = None
     mfa_credential_id: str | None = None
@@ -108,6 +111,7 @@ class AgentDeps(Protocol):
         *,
         audit_logger: Any = None,
         progress_sink: Any = None,
+        terminal_sink: Any = None,
         channel: str | None = None,
     ) -> AgentDeps:
         """创建注入了请求级上下文的 deps 变体。

@@ -1,5 +1,5 @@
 # 法律元力（yuanli.ailaw.cn）skillpack 静态目录（离线/无 API 时兜底）
-# 在线优先：PRISMCLAW.md ## 法律元力 → base_url + 参考 yuanli-api.md
+# 在线优先：PLUGIN.md ## 法律元力 → base_url + 参考 yuanli-api.md
 #   GET {BASE}/api/toolkits/catalog | ?search= | {id}/download
 # 来源：yuanli.ailaw.cn 工具包目录（摘录）；安装见 skill-installer
 

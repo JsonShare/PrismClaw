@@ -1,7 +1,5 @@
 """三源合并 + managed 锁定。
 
-参考实现 ``pluginLoader.ts`` L3060 ``mergePluginSources``。
-
 优先级：session > marketplace > local > builtin
 managed 不可被 session 覆盖。
 """
@@ -30,8 +28,7 @@ def merge_plugin_sources(
 ) -> MergedResult:
     """按 session > marketplace > local > builtin 优先级合并。
 
-    参考实现 ``mergePluginSources`` (L3060)。
-    managed 不可被 session 覆盖（对标参考实现 managedPluginNames 逻辑）。
+    managed 不可被 session 覆盖。
     """
     errors: list[PluginError] = []
     managed = managed_names or set()

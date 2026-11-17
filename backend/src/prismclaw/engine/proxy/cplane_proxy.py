@@ -20,6 +20,7 @@ from aiohttp import web
 
 from prismclaw.engine.proxy.mcp_network_acl import McpNetworkAcl
 from prismclaw.engine.security.dlp.scanner import DlpScanner, DlpScanResult
+from prismclaw.infra.aiohttp_session import open_client_session
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +255,7 @@ class CPlaneProxy:
             if self._tcp_connector is None:
                 self._tcp_connector = aiohttp.TCPConnector(ssl=False)
 
-            async with aiohttp.ClientSession(connector=self._tcp_connector) as session:
+            async with open_client_session(connector=self._tcp_connector) as session:
                 async with session.request(
                     method=request.method,
                     url=target_url,

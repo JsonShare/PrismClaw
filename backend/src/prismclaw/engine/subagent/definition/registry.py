@@ -230,6 +230,8 @@ class SubAgentRegistry:
             if allowed is None:
                 continue  # None = inherit all parent tools, no gap possible
             for tool_name in allowed:
+                if tool_name.endswith(":*"):
+                    continue  # 前缀通配：由注册表在运行时展开，无法静态校验
                 if tool_name in registered:
                     continue  # 允许 allowed_tools 与子代理同名（非冲突场景），跳过
                 if registered_tool_names and tool_name in tool_names:

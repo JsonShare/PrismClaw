@@ -691,7 +691,7 @@ def assemble_runner_deps(
         descriptor_registry=ext_mgr._descriptor_registry if ext_mgr else None,
         skill_parser=parse_skill_file,
     )
-    # 同步插件级指令（PRISMCLAW.md）到 SkillRuntime
+    # 同步插件级指令（PLUGIN.md）到 SkillRuntime
     if ext_mgr is not None and hasattr(ext_mgr, "iter_plugin_descriptors"):
         for descriptor in ext_mgr.iter_plugin_descriptors():
             instr = getattr(descriptor, "plugin_instructions", None)
@@ -757,6 +757,15 @@ def assemble_runner_deps(
         external_tool_registrar(tools)
 
     handoff_supervisor: Any = None
+    from prismclaw.engine.subagent.runtime.collaboration import (
+        SubagentCollaborationService,
+    )
+
+    subagent_collaboration = SubagentCollaborationService(
+        session_store=session_store,
+        redis_client=redis_client,
+        task_manager=task_manager,
+    )
     register_subagent_tools(
         tools,
         settings=settings,
@@ -765,6 +774,7 @@ def assemble_runner_deps(
         llm_client=kernel_runtime.llm,
         memory_store=memory_store,
         skill_runtime=skill_runtime,
+        collaboration=subagent_collaboration,
     )
     if settings.subagent.enabled and capability_catalog.count_agent_entries() > 0:
         from prismclaw.engine.execution.handoff.store import PendingHandoffStore
@@ -805,6 +815,7 @@ def assemble_runner_deps(
         capability_catalog=capability_catalog,
         task_manager=task_manager,
         lock_manager=lock_manager,
+        subagent_collaboration=subagent_collaboration,
         handoff_supervisor=handoff_supervisor,
         task_profile_service=kernel_runtime.task_profile_service,
         dream=DreamBundle(

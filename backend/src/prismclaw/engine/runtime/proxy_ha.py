@@ -193,8 +193,10 @@ class ProxyCluster:
         """
         import aiohttp
 
+        from prismclaw.infra.aiohttp_session import open_client_session
+
         try:
-            async with aiohttp.ClientSession() as session:
+            async with open_client_session() as session:
                 async with session.get(
                     node.health_url,
                     timeout=aiohttp.ClientTimeout(total=self._failover_timeout),

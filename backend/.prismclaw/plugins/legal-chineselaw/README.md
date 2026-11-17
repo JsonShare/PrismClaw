@@ -28,7 +28,7 @@
 
 仓库内容：
 
-- **执业领域 plugin**：涵盖内部法务、律所及学术法律工作——每个 plugin 均围绕一个"冷启动访谈"构建，该访谈会学习您的工作方式，并写入一份供所有 skill 读取的 `PRISMCLAW.md` 执业档案。
+- **执业领域 plugin**：涵盖内部法务、律所及学术法律工作——每个 plugin 均围绕一个"冷启动访谈"构建，该访谈会学习您的工作方式，并写入一份供所有 skill 读取的 `PLUGIN.md` 执业档案。
 - **Managed agent cookbook**：用于定时执行、持续监测的工作流（续约监控、案件监控、监管动态监控、尽调网格、发布雷达）。
 - **MCP 连接器**：覆盖通用生产力工具（Slack、Google Drive、Box）及法律专用系统（Ironclad、DocuSign、iManage、Everlaw、CourtListener 等）。
 - **[命名 agent](#agents)**——端到端工作流 agent（供应商协议审阅者、DSAR 响应者、终止审阅者、权利要求图表构建者……），每个有对应名称和单条运行命令。
@@ -168,7 +168,7 @@ scripts/                  # deploy-managed-agent.sh · validate.py · orchestrat
 ```
 <plugin>/
   .plugin/plugin.json
-  PRISMCLAW.md               # 执业档案模板——由 /<子插件前缀>-cold-start-interview 填写
+  PLUGIN.md               # 执业档案模板——由 /<子插件前缀>-cold-start-interview 填写
   README.md
   skills/                 # skill——引用时用 /<plugin>:<skill>
   agents/                 # 定时 agent（如有）
@@ -186,7 +186,7 @@ scripts/                  # deploy-managed-agent.sh · validate.py · orchestrat
 cp -R <path-to-this-repo> ~/.prismclaw/assets/plugins/legal-chineselaw
 ```
 
-重启 PrismClaw 后，各子插件会出现在技能面板的专家分组里。再为每个要用的子插件运行一次设置，执业档案会写入该子插件目录下的 `PRISMCLAW.md`：
+重启 PrismClaw 后，各子插件会出现在技能面板的专家分组里。再为每个要用的子插件运行一次设置，执业档案会写入该子插件目录下的 `PLUGIN.md`：
 
 ```bash
 /commercial-legal:cold-start-interview
@@ -224,7 +224,7 @@ scripts/deploy-managed-agent.sh launch-radar
 | **Plugin** | 自包含的执业领域包——skill、agent、hook 和执业档案模板。按需安装。 | `<plugin>/` |
 | **Skill** | PrismClaw 在相关时机自动调用的领域专业知识、惯例和逐步方法——以及您明确触发的斜杠动作：`/commercial-legal:review`、`/privacy-legal:dsar-response`、`/litigation-legal:claim-chart`。 | `<plugin>/skills/<skill>/SKILL.md` |
 | **Agent** | 定时或事件驱动的工作流（续约监控、案件监控、监管变化监控）。在后台运行，发布至频道或写入文件。 | `<plugin>/agents/` |
-| **执业档案** | 描述您的 playbook、升级规则和内部风格的纯英文 `PRISMCLAW.md`。每个 skill 读取它。 | `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md` |
+| **执业档案** | 描述您的 playbook、升级规则和内部风格的纯英文 `PLUGIN.md`。每个 skill 读取它。 | `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PLUGIN.md` |
 | **连接器** | 将 PrismClaw 与您的数据连接的 [MCP 服务器](https://modelcontextprotocol.io/)——CLM、DMS、电子发现、研究平台、生产力工具。 | `.mcp.json`（每个 plugin） |
 | **Managed agent cookbook** | `agent.yaml` + 深度 1 子 agent + 无头部署的引导示例。 | `managed-agent-cookbooks/<slug>/` |
 
@@ -340,10 +340,10 @@ scripts/deploy-managed-agent.sh launch-radar
 这些是参考模板。当您根据团队的工作方式进行调整时，它们会变得更好——而自定义机制就是 plugin 本身，不是藏在仓库深处的配置文件。
 
 - **运行冷启动访谈。** 它**就是**自定义机制。它询问您的执业方式，读取您的种子文档，并写入您的执业档案。每个其他 skill 都从该档案读取。带上五份已签署的 MSA、您的 playbook 和升级矩阵运行 `/commercial-legal:cold-start-interview`，将使审阅 skill 明显更精准。
-- **编辑执业档案。** 您的档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PRISMCLAW.md`。直接编辑以进行小修正——错误的升级阈值、新的集成、政策更新。plugin 更新后仍然保留。
+- **编辑执业档案。** 您的档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PLUGIN.md`。直接编辑以进行小修正——错误的升级阈值、新的集成、政策更新。plugin 更新后仍然保留。
 - **重新运行设置。** 当您的执业方式发生重大变化时（新管辖区、新 CLM、新政策），再次运行 `/<plugin>:cold-start-interview` 进行完整重新访谈。
 - **更换连接器。** 将 `.mcp.json` 指向您的 CLM、DMS、电子发现平台、发布追踪器、HRIS。未配置连接器时 skill 会优雅降级——不会静默失败。
-- **引入您的 playbook 和模板。** 将您的术语、内部风格和品牌模板放入 plugin 的 `PRISMCLAW.md` 和 `references/`。skill 会读取它们。
+- **引入您的 playbook 和模板。** 将您的术语、内部风格和品牌模板放入 plugin 的 `PLUGIN.md` 和 `references/`。skill 会读取它们。
 - **Fork skill 以适应内部风格。** 每个 skill 都是 `skills/` 下的一个 Markdown 文件。编辑步骤、关卡、输出格式。
 - **添加定时 agent。** `<plugin>/agents/` 下的 agent 是带有 cron 式计划的 Markdown。为您团队需要的监控器添加自己的 agent。
 

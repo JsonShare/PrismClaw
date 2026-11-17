@@ -1,17 +1,17 @@
 ---
 name: clinical-cold-start-interview
-description: '临床冷启动访谈。识别哪些临床领域适用（临床评估、处方安全、生命体征），然后针对每个活跃模块询问有针对性的问题，并仅将相关章节写入 plugin 配置。在新安装时、当 PRISMCLAW.md 仍有 [PLACEHOLDER] 标记时，或重新检查集成时使用。'
+description: '临床冷启动访谈。识别哪些临床领域适用（临床评估、处方安全、生命体征），然后针对每个活跃模块询问有针对性的问题，并仅将相关章节写入 plugin 配置。在新安装时、当 PLUGIN.md 仍有 [PLACEHOLDER] 标记时，或重新检查集成时使用。'
 argument_hint: '[--redo | --check-integrations | --module [assessment | prescription | vitals]]'
 category: 临床诊疗
 ---
 
 # /clinical-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`。
+1. 检查 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PLUGIN.md`。
 2. 运行以下访谈（先进行第 0 部分——角色 + 集成——然后是模块）。
 3. 种子文档：处方审查样例、生命体征记录格式。
 4. 提取：审查框架、集成状态、输出偏好。
-5. 写入 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`。
+5. 写入 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PLUGIN.md`。
 
 ---
 
@@ -21,7 +21,7 @@ category: 临床诊疗
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/medical-healthcare/medical-clinical/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `[PLACEHOLDER]` 标记** → 模板从未完成；提供重新开始。
 - **已填充（无占位符）** → 已配置；跳过，除非使用 `--redo` 或 `--module [name]`。

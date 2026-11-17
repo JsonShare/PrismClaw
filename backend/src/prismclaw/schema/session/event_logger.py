@@ -66,6 +66,7 @@ def build_user_message_entry(data: dict[str, Any]) -> dict[str, Any]:
         "tool_calls": None,
         "tool_call_id": None,
         "partial": False,
+        "metadata": data.get("metadata"),
     }
 
 
@@ -87,6 +88,7 @@ def build_assistant_message_entry(data: dict[str, Any]) -> dict[str, Any]:
         "tool_calls": None,
         "tool_call_id": None,
         "partial": False,
+        "metadata": data.get("metadata"),
     }
 
 
@@ -108,6 +110,7 @@ def build_tool_result_entry(data: dict[str, Any]) -> dict[str, Any]:
         "tool_calls": None,
         "tool_call_id": data.get("tool_call_id"),
         "partial": False,
+        "metadata": data.get("metadata"),
     }
 
 
@@ -137,6 +140,8 @@ class SessionEventLogger:
         parent_id: str | None = None,
         enriched_content: object = None,
         timestamp: str | None = None,
+        client_message_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SessionEvent:
         data: dict[str, Any] = {
             "type": "user/message",
@@ -148,6 +153,10 @@ class SessionEventLogger:
             data["enriched_content"] = enriched_content
         if timestamp:
             data["timestamp"] = timestamp
+        if client_message_id:
+            data["client_message_id"] = client_message_id
+        if metadata is not None:
+            data["metadata"] = metadata
         return _mk(
             type=SessionEventType.USER_MESSAGE,
             session_id=session_id,
@@ -176,6 +185,7 @@ class SessionEventLogger:
         parent_id: str | None = None,
         enriched_content: object = None,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SessionEvent:
         """Build an ASSISTANT_MESSAGE event.
 
@@ -196,6 +206,8 @@ class SessionEventLogger:
             data["enriched_content"] = enriched_content
         if timestamp:
             data["timestamp"] = timestamp
+        if metadata is not None:
+            data["metadata"] = metadata
         return _mk(
             type=SessionEventType.ASSISTANT_MESSAGE,
             session_id=session_id,
@@ -217,6 +229,7 @@ class SessionEventLogger:
         is_error: bool = False,
         tool_name: str | None = None,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> SessionEvent:
         data: dict[str, Any] = {
             "type": "tool/result",
@@ -234,6 +247,8 @@ class SessionEventLogger:
             data["enriched_content"] = enriched_content
         if timestamp:
             data["timestamp"] = timestamp
+        if metadata is not None:
+            data["metadata"] = metadata
         return _mk(
             type=SessionEventType.TOOL_RESULT,
             session_id=session_id,
@@ -347,6 +362,8 @@ class SessionEventLogger:
                 parent_id=entry.parent_id,
                 enriched_content=entry.enriched_content,
                 timestamp=entry.timestamp,
+                metadata=entry.metadata,
+                client_message_id=entry.client_message_id,
             ))
 
         elif entry.role == "assistant":
@@ -358,6 +375,7 @@ class SessionEventLogger:
                 parent_id=entry.parent_id,
                 enriched_content=entry.enriched_content,
                 timestamp=entry.timestamp,
+                metadata=entry.metadata,
             ))
 
         elif entry.role == "tool":
@@ -371,6 +389,7 @@ class SessionEventLogger:
                 is_error=entry.is_error,
                 tool_name=entry.tool_name,
                 timestamp=entry.timestamp,
+                metadata=entry.metadata,
             ))
 
         return events

@@ -66,6 +66,7 @@ async def stream_llm(
         run_state=rt.run_state,
         effort_budget=rt.effort_budget,
         now=_now,
+        phase="stream",
     )
     _remaining_hard = rt.run_state.loop_state.hard_at - _now
     if _ctrl.is_last_turn:

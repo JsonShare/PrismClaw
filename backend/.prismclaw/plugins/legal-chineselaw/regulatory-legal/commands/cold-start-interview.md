@@ -20,10 +20,10 @@ Licensed under Apache License 2.0
 
 # /regulatory-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`。如果 `--check-integrations`，跳过访谈——仅重新运行第 0 部分"连接了什么"核查，并重写 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的 `## 可用集成` 表格。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md`。如果 `--check-integrations`，跳过访谈——仅重新运行第 0 部分"连接了什么"核查，并重写 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 中的 `## 可用集成` 表格。
 2. 使用以下访谈工作流。访谈（第 0 部分优先——角色 + 集成——然后关注清单）：哪些监管机构、政策所在位置、什么重要。
 3. 连接政策库目录，索引政策。
-4. 写 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`（根据需要创建父目录），含关注清单 + 重要性阈值。
+4. 写 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md`（根据需要创建父目录），含关注清单 + 重要性阈值。
 
 在探测集成时：仅当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪ 并附带单行如何确认。永远不要仅根据 `.mcp.json` 声明报告 ✓——这会误导用户认为某些东西已连接而实际没有。
 
@@ -35,13 +35,13 @@ Licensed under Apache License 2.0
 
 ## Cold-start 检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 欢迎用户并提供从该部分恢复。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供重新开始或从占位符开始的地方恢复。
 - **已填充（无占位符、无暂停注释）** → 已配置；除非 `--redo` 否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其用作部分支架。将完成的执业档案写入配置路径，根据需要创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——将其用作部分支架。将完成的执业档案写入配置路径，根据需要创建父目录。
 
 
 ## 检查共享公司档案
@@ -78,7 +78,7 @@ Licensed under Apache License 2.0
 一旦用户选择，向他们定向。用自己的声音覆盖：
 - **此插件维护什么：** 你的执业档案（关注清单、重要性阈值、信息源节奏）、内规差异台账、整改事项台账、政策对照归档和评议期日历。
 - **此设置做什么：** 了解你实际监视哪些监管机构、"重要"对你意味着什么以及你的政策所在位置，并将其写入插件每次读取的纯文本文件。所有回答的都可以稍后更改。完成后，插件的命令将按用户工作的方式工作，而不是按通用模板的方式。
-- **数据来源：** 设置仅根据用户的答案构建新的专业档案。它不读取用户的个人 PrismClaw 历史、其他对话或主目录 PRISMCLAW.md。如果与此对话早期出现相关内容（例如，用户提到监管机构或其行业），在使用前询问。除非用户键入或批准，否则不会将任何内容折叠到配置中。
+- **数据来源：** 设置仅根据用户的答案构建新的专业档案。它不读取用户的个人 PrismClaw 历史、其他对话或主目录 PLUGIN.md。如果与此对话早期出现相关内容（例如，用户提到监管机构或其行业），在使用前询问。除非用户键入或批准，否则不会将任何内容折叠到配置中。
 
 **为什么这很重要。** 每个摘要、政策对照、内规差异报告都从此访谈编写的配置读取。通用配置产生通用输出——默认关注清单、默认重要性阈值、以及将每个监管机构发声都当成执法行动的摘要。告诉插件用户实际监视哪些监管机构以及这里的"重要"意味着什么，这是"监管 AI 工具"和"发送信号而不是噪音的工具"之间的区别。答案越具体，摘要将越安静和有用。
 
@@ -92,9 +92,9 @@ Licensed under Apache License 2.0
 - **对于上传或路径指针（政策库目录、现有关注清单、信息源 URL）：** "粘贴内容、共享文件路径，或说'暂时跳过'。如果你跳过，我将在你的配置中标记缺口，以便你稍后填充。"然后实际等待。
 - **在编写执业档案之前：** 审查访谈。列出跳过或用占位符回答的每个问题。说："在编写你的配置之前，这里仍然开放：[列表]。想现在填充其中任何一个，还是将它们留作占位符？"在编写之前等待答案。
 - **永远不要**用静默缺口编写执业档案。每个占位符都应该是用户故意跳过的选择，而不是滚动过去未回答的问题。
-- **暂停和恢复。** 提前告诉用户："如果你需要停止，说'pause'（或'stop'、或'让我稍后回到这个'），我将保存你的进度。稍后再次运行 `/regulatory-legal:cold-start-interview`，我将在你离开的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /regulatory-legal:cold-start-interview to resume -->` 注释，未回答字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，欢迎用户："欢迎回来。你在 [section] 暂停。你之前的答案已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已回答的问题。
+- **暂停和恢复。** 提前告诉用户："如果你需要停止，说'pause'（或'stop'、或'让我稍后回到这个'），我将保存你的进度。稍后再次运行 `/regulatory-legal:cold-start-interview`，我将在你离开的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /regulatory-legal:cold-start-interview to resume -->` 注释，未回答字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，欢迎用户："欢迎回来。你在 [section] 暂停。你之前的答案已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已回答的问题。
 
-**在设置中验证用户陈述的法律事实。** 当用户使用具体规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是你可以自查的内容——在将其写入配置之前进行检查。如果他们所说的与你的理解或他们粘贴的内容冲突，说出来："`[前提已标——需核验]`"。写入 PRISMCLAW.md 的错误事实会传播到每个未来输出；在这里捕获是产品中最具影响力的时刻之一。
+**在设置中验证用户陈述的法律事实。** 当用户使用具体规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是你可以自查的内容——在将其写入配置之前进行检查。如果他们所说的与你的理解或他们粘贴的内容冲突，说出来："`[前提已标——需核验]`"。写入 PLUGIN.md 的错误事实会传播到每个未来输出；在这里捕获是产品中最具影响力的时刻之一。
 
 ## 访谈
 
@@ -351,7 +351,7 @@ Licensed under Apache License 2.0
 
 - 用可更改性注释关闭：
 
-  > "完成。你的配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` —— 你可以直接阅读和编辑的纯文本文件。你可以更改任何回答的内容：
+  > "完成。你的配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` —— 你可以直接阅读和编辑的纯文本文件。你可以更改任何回答的内容：
   >
   > - 直接编辑文件以快速更改
   > - 运行 `/regulatory-legal:cold-start-interview --redo` 进行完整重新访谈

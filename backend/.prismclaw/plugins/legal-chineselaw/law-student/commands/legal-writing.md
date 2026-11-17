@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /legal-writing
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 班级、写作技能水平、过去反馈模式。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 班级、写作技能水平、过去反馈模式。
 2. 应用以下框架。
 3. 从头到尾阅读完整草稿。识别结构类型（memo / brief / paper / essay）。
 4. 给出结构化反馈：首先是结构，然后是分析深度、清晰度和风格、前 3 个修复。在我不确定的任何实质性规则调用上标记 `[VERIFY]`。
@@ -47,7 +47,7 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → class, assignment type (if known), writing skill level, graded-essay feedback history
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → class, assignment type (if known), writing skill level, graded-essay feedback history
 - Student-provided draft
 - Optional: rubric or assignment prompt if the student shares one
 
@@ -163,7 +163,7 @@ Licensed under Apache License 2.0
 
 ## 以下一步决策树结束
 
-按照 PRISMCLAW.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚产生的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+按照 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚产生的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 

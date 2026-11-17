@@ -17,7 +17,7 @@ Licensed under Apache License 2.0
 
 # /exam-forecast
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → class、professor、exam format、syllabus。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → class、professor、exam format、syllabus。
 2. 应用以下工作流。
 3. 接收过去考试（PDF、粘贴或路径）。确认样本量。
 4. 分析每次过去考试：格式、学科覆盖、问题风格、事实模式密度、反复出现的陷阱。
@@ -42,7 +42,7 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、考试格式、教学大纲（如果捕获）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 当前课程、考试格式、教学大纲（如果捕获）
 - 用户提供的过去考试（PDF、粘贴文本、路径）
 - Optional：当前课程的教学大纲（用于"迄今为止涵盖的内容"）
 
@@ -160,7 +160,7 @@ STUDY NOTES — NOT LEGAL ADVICE
 
 ## Close with the next-steps decision tree
 
-按照 PRISMCLAW.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+按照 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## What this skill does not do
 

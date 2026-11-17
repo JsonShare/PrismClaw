@@ -1,7 +1,7 @@
 ---
 name: clinic-cold-start-interview
-description: '教授的一次性诊所设置——执业领域、司法管辖区、督导方式 （正式审查队列/可配置标记/更轻触）以及手册/规则上传。写入 PRISMCLAW.md
-  以便每个其他 skill 和每个运行 /ramp 的学生从相同的诊所上下文读取。 在全新安装时、当 PRISMCLAW.md 有占位符时、用 --redo 重新设置、
+description: '教授的一次性诊所设置——执业领域、司法管辖区、督导方式 （正式审查队列/可配置标记/更轻触）以及手册/规则上传。写入 PLUGIN.md
+  以便每个其他 skill 和每个运行 /ramp 的学生从相同的诊所上下文读取。 在全新安装时、当 PLUGIN.md 有占位符时、用 --redo 重新设置、
   或用 --check-integrations 重新检查集成时使用。
 
   '
@@ -18,18 +18,18 @@ Licensed under Apache License 2.0
 
 # /clinic-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`。如果已填充且没有 `--redo`，在覆盖前确认。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md`。如果已填充且没有 `--redo`，在覆盖前确认。
 2. 运行以下教授访谈，从第 0 部分开始（督导律师角色检查 → 伦理前提条件 → 集成可用性）。如果用户不是督导律师，停止并重定向。
 3. 种子文档：诊所手册、提交指南、本地法院规则、接案表单、一份脱敏的示例文件。
 4. 关键决定：督导方式（正式审查队列 / 标记 / 更轻触）。
-5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，包含 `## 谁在使用这个` 和 `## 可用集成`。展示督导选择和执业领域模板供确认。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md`，包含 `## 谁在使用这个` 和 `## 可用集成`。展示督导选择和执业领域模板供确认。
 6. 提供 `/legal-clinic:ramp` 预览。
 
 ```
 /legal-clinic:cold-start-interview
 ```
 
-**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查（Clio、文档存储）。更新 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` 中的 `## 可用集成`，不触碰角色、伦理前提条件、督导方式或执业领域模板。在添加或移除 MCP 连接器后使用。
+**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查（Clio、文档存储）。更新 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 中的 `## 可用集成`，不触碰角色、伦理前提条件、督导方式或执业领域模板。在添加或移除 MCP 连接器后使用。
 
 在探测时：仅在 MCP 工具调用实际成功时报告 ✓。已配置但未测试的连接器应标记为 ⚪，附一行确认方法。永不仅基于 `.mcp.json` 声明报告 ✓——那会误导用户认为某些东西已连接而实际上没有。
 
@@ -49,7 +49,7 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供从头开始或从占位符开始的地方恢复。
@@ -88,7 +88,7 @@ Licensed under Apache License 2.0
 
 - **此插件维护什么：** 您的诊所档案（执业领域、督导模式、内部模板）、每个案件的文件（接案、截止日期、沟通日志、交接备忘录）和督导审查队列。
 - **此设置做什么：** 支持法学院法律诊所——接案、案件备忘录、客户信函、状态更新、截止日期——跨您的执业领域，内置督导。学习诊所的执业领域、司法管辖区和督导模式，并将它们写入每个 skill 读取和每个学生 `/ramp` 入职读取的纯文本文件。一切都可以稍后更改。一旦完成，命令将按照诊所实际运作的方式工作，而不是按照通用模板的方式。
-- **数据来源：** 设置从督导律师的回答和访谈期间上传的文档（手册、提交指南、本地规则、接案表单、示例案件文件）构建新的诊所档案。它不读取个人 PrismClaw 历史、其他对话或主目录 PRISMCLAW.md。如果在此对话中早些时候出现了相关内容（例如，学校或执业领域），在纳入之前先询问。除非督导律师输入或批准，否则不会添加任何内容到配置中。
+- **数据来源：** 设置从督导律师的回答和访谈期间上传的文档（手册、提交指南、本地规则、接案表单、示例案件文件）构建新的诊所档案。它不读取个人 PrismClaw 历史、其他对话或主目录 PLUGIN.md。如果在此对话中早些时候出现了相关内容（例如，学校或执业领域），在纳入之前先询问。除非督导律师输入或批准，否则不会添加任何内容到配置中。
 - **接下来：** 第 0 部分——谁在运行设置和伦理前提条件。
 
 **为什么这很重要。** 每个 `/ramp` 入职、每个 `/client-intake`、每个 `/draft`、每个 `/client-letter`、每个 `/status` 都读取此访谈写入的配置。通用配置给学生通用输出——默认督导模型、默认提交格式、通用客户信函语气——学期的第一周花在纠正工具对诊所的假设上。告诉插件执业领域、督导方式和本地格式是"一个诊所 AI 工具"和"一个按照诊所方式运行的工具"之间的区别。回答越具体，新学生需要取消学习的就越少。
@@ -112,9 +112,9 @@ Licensed under Apache License 2.0
 - **在写入执业档案之前：** 审查访谈。列出每个被跳过或用占位符回答的问题——仍然开放的伦理前提条件、没有模板的执业领域、未设置的督导标记触发器、承诺但未上传的手册。说："在我写入您的执业档案之前，以下是仍然开放的内容：[列表]。想要现在填充这些吗，还是保留为占位符？" 然后等待。
 - **永不**在有静默间隙的情况下写入执业档案。每个占位符都应该是督导律师刻意选择跳过的——不是滑过去的问题。
 - **批量大小——计算子部分。** "每轮不超过 2-3 个问题"意味着 2-3 个*可回答的提示*，计算子部分。一个有 5 个子部分的问题是 5 个问题。测试标准：用户可以在不滚动的情况下回答吗？如果不能，就太多了。尽可能优先使用结构化的点击选择问题——它们不需要滚动或输入。
-- **暂停和恢复。** 预先告诉督导律师："如果您需要停止，说 'pause'（或 'stop'，或 '让我稍后再来'），我会保存您的进度。稍后再次运行 `/legal-clinic:cold-start-interview`，我会从您停下的地方继续。" 当督导律师暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`，顶部附有 `<!-- SETUP PAUSED AT: [section name] — run /legal-clinic:cold-start-interview to resume -->` 注释，未回答的字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，问候督导律师："欢迎回来。您在 [section] 暂停了。您之前的答案已保存。从我们停下的地方继续，还是重新开始？" 不要重新询问已回答的问题。
+- **暂停和恢复。** 预先告诉督导律师："如果您需要停止，说 'pause'（或 'stop'，或 '让我稍后再来'），我会保存您的进度。稍后再次运行 `/legal-clinic:cold-start-interview`，我会从您停下的地方继续。" 当督导律师暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md`，顶部附有 `<!-- SETUP PAUSED AT: [section name] — run /legal-clinic:cold-start-interview to resume -->` 注释，未回答的字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，问候督导律师："欢迎回来。您在 [section] 暂停了。您之前的答案已保存。从我们停下的地方继续，还是重新开始？" 不要重新询问已回答的问题。
 
-**在设置中验证用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是您可以合理性检查的内容——在写入配置之前进行验证。如果用户说的与您的理解或他们粘贴的内容冲突，提出来："您说阈值是 X；我的理解是 Y——您能确认哪个写入档案吗？`[premise flagged — verify]`" 写入 PRISMCLAW.md 的错误事实会传播到每个未来输出；在这里捕捉它是产品中最高杠杆的时刻之一。
+**在设置中验证用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是您可以合理性检查的内容——在写入配置之前进行验证。如果用户说的与您的理解或他们粘贴的内容冲突，提出来："您说阈值是 X；我的理解是 Y——您能确认哪个写入档案吗？`[premise flagged — verify]`" 写入 PLUGIN.md 的错误事实会传播到每个未来输出；在这里捕捉它是产品中最高杠杆的时刻之一。
 
 ## 访谈
 
@@ -212,7 +212,7 @@ Licensed under Apache License 2.0
 
 **更轻触：** 输出带有标准 AI 辅助标签和验证提示，但没有额外的审查门控。教授通过诊所的现有结构（案件讨论会、一对一）进行督导，而不是通过插件。（我不会添加队列或额外标记；我会依赖您现有的案件讨论会和报到。）
 
-> 没有正确答案——取决于您学生的经验水平、您的案件量，以及您已经如何运行督导。您可以稍后通过编辑 PRISMCLAW.md 来更改此设置。
+> 没有正确答案——取决于您学生的经验水平、您的案件量，以及您已经如何运行督导。您可以稍后通过编辑 PLUGIN.md 来更改此设置。
 
 捕获选择，如果是正式审查队列或可配置标记：什么应该触发标记？（法院提交文件始终？任何截止日期提及？DV、移民身份、刑事暴露等话题？）
 
@@ -275,7 +275,7 @@ Licensed under Apache License 2.0
 
 ## 写入执业档案
 
-按照 PRISMCLAW.md 模板。关键部分：
+按照 PLUGIN.md 模板。关键部分：
 
 - **诊所档案** — 名称、学校、执业领域、司法管辖区、学生人数
 - **督导方式** — 三种模型中的哪一种，以及标记触发器（如果适用）
@@ -284,7 +284,7 @@ Licensed under Apache License 2.0
 - **学期** — 学生何时轮换（以便 `/ramp` 知道何时需要它，`/semester-handoff` 知道何时触发）
 - **手册路径** — 已摄取手册的位置，供 `/ramp` 读取
 
-**LIMITED DATA 标记：** 如果在访谈中分享的材料少于 10 份，在 PRISMCLAW.md 顶部（在写入日期下）添加 `> LIMITED DATA` 注释，说明："此执业档案是从 [N] 份材料写入的。下游 skills 将运行但输出会更薄——`/ramp` 覆盖命令但没有诊所特定程序，`/draft` 使用州默认值而不是本地格式，`/client-letter` 使用通用模板。收集更多样本后重新运行 `/legal-clinic:cold-start-interview --redo` 以锐化校准。"
+**LIMITED DATA 标记：** 如果在访谈中分享的材料少于 10 份，在 PLUGIN.md 顶部（在写入日期下）添加 `> LIMITED DATA` 注释，说明："此执业档案是从 [N] 份材料写入的。下游 skills 将运行但输出会更薄——`/ramp` 覆盖命令但没有诊所特定程序，`/draft` 使用州默认值而不是本地格式，`/client-letter` 使用通用模板。收集更多样本后重新运行 `/legal-clinic:cold-start-interview --redo` 以锐化校准。"
 
 ## 内置保障框架
 
@@ -341,7 +341,7 @@ Licensed under Apache License 2.0
 
 7. **用"您可以稍后更改任何内容"的注释关闭：**
 
-> 完成。您的诊所配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md`——一个您可以直接读取和编辑的纯文本文件。您回答的任何内容都可以更改：
+> 完成。您的诊所配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md`——一个您可以直接读取和编辑的纯文本文件。您回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/legal-clinic:cold-start-interview --redo` 进行完整重新访谈

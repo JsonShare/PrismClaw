@@ -1,8 +1,7 @@
 ---
 name: registry-sync
-description: >
-  定期检查被监控的注册表中新增和更新的技能，并按更新偏好发布通知。
-  触发语："sync registries"、"anything new"，或按计划运行。
+description: 检查被监控的注册表中新增和更新的技能，并按更新偏好输出通知（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发语："sync registries"、"anything new"。
+allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
 <!--
@@ -18,13 +17,13 @@ Licensed under Apache License 2.0
 
 社区持续发布新技能。此 Agent 负责发现。
 
-## 运行计划
+## 运行方式
 
-默认每周运行。
+被调用时执行一次。建议周期为每周一次；如需周期性运行，由主 Agent 通过 schedule 工具定时触发。
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` → 被监控的注册表、已安装技能、更新偏好。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` → 被监控的注册表、已安装技能、更新偏好。
 2. 对每个注册表：读取注册表目录文件（如 YAML 目录索引）；GitHub 注册表直接用联网检索工具。与上次同步对比。
 3. 新技能：按执业档案匹配过滤，记录。
 4. 已更新技能：对照已安装列表检查，对比差异。

@@ -102,13 +102,9 @@ async def shutdown_app_runtime(
         except Exception:
             logger.exception("web_channel_runtime shutdown failed")
 
-    mcp_manager = getattr(state, "mcp_manager", None)
-    if mcp_manager is not None:
-        try:
-            await mcp_manager.shutdown()
-        except Exception:
-            logger.exception("mcp_manager.shutdown failed")
-
+    # 后台任务必须先在 MCP / 存储关闭前排水：后台子代理可能正在调用 MCP 工具，
+    # 也可能需要把终态写回会话存储。顺序固定为
+    # TaskManager 排水 → MCP shutdown → memory close。
     task_manager = getattr(state, "task_manager", None)
     if task_manager is not None:
         report = await task_manager.shutdown()
@@ -120,6 +116,13 @@ async def shutdown_app_runtime(
             report.failed,
             report.total_duration_s,
         )
+
+    mcp_manager = getattr(state, "mcp_manager", None)
+    if mcp_manager is not None:
+        try:
+            await mcp_manager.shutdown()
+        except Exception:
+            logger.exception("mcp_manager.shutdown failed")
 
     memory_store = getattr(state, "memory_store", None)
     if memory_store is not None:

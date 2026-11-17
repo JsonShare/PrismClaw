@@ -1,8 +1,7 @@
 ---
 name: appointment-watcher
-description: >
-  监控预约变更和病历完成状态。按计划运行，扫描预约系统的变更，提醒团队关注即将到期的病历完成任务和预约调整。
-  触发语："预约更新"、"病历状态"，或按计划运行。
+description: 扫描预约系统的变更与病历完成状态，提醒团队关注即将到期的病历完成任务和预约调整（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发语："预约更新"、"病历状态"。
+allowed_tools: [read, grep, glob, write, "his-integration:*"]
 ---
 
 # 预约监控 Agent
@@ -11,9 +10,9 @@ description: >
 
 持续监控预约变更和病历完成状态，确保运营流畅。
 
-## 运行计划
+## 运行方式
 
-每日运行。
+被调用时执行一次扫描；如需每日检查，由主 Agent 通过 schedule 工具定时触发。
 
 ## 执行步骤
 

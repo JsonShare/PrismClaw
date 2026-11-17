@@ -41,8 +41,8 @@ token_counting:
     cjk_tokens_per_char: 0.90
     # 非 CJK 字符平均每个 token 的字符数；3.4 为英文散文与 JSON/代码的中间值
     other_chars_per_token: 3.4
-    # 工具 JSON schema：UTF-8 字节数 ÷ 本值 = token；3.5 为 schema 实测中间值
-    wire_bytes_per_token: 3.5
+    # 工具 JSON schema：UTF-8 字节数 ÷ 本值 = token；5.0 为 schema 实测校准值
+    wire_bytes_per_token: 5.0
     # 通用请求 JSON（messages 等）：UTF-8 字节数 ÷ 本值 = token
     json_bytes_per_token: 3.0
     # 单条消息固定信封开销（role/content/JSON 括号）

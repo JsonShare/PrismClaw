@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`。
 
 2. 识别追踪器文件：`~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/expansion-[slug].yaml`。如果不存在，响应："未找到 [省市/国家] 的扩展追踪器。运行 `/employment-legal:expansion-kickoff [省市/国家]` 来启动一个。"
 

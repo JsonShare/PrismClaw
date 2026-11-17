@@ -18,7 +18,7 @@ Licensed under Apache License 2.0
 
 # /deposition-prep
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 案件理论、关键事实。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 案件理论、关键事实。
 2. 遵循以下工作流和参考。
 3. 从证据材料平台提取由证人撰写/提及的文件。
 4. 构建大纲：背景、关键文件、与理论相关的主题、质证材料。
@@ -57,7 +57,7 @@ Licensed under Apache License 2.0
 
 ## 目的地检查
 
-在生成输出之前，检查它要去哪里。如果用户命名了目的地（频道、分发列表、对方），询问它是否在职业保密圈内。公开频道、公司范围列表、对方/对方律师会放弃保护。当目的地看起来在圈外时，标记它并提供 (a) 仅供法律使用的特权版本、(b) 净化版本，或 (c) 两者。见此插件 PRISMCLAW.md 中的规范 `## 共享护栏 → 目的地检查`。
+在生成输出之前，检查它要去哪里。如果用户命名了目的地（频道、分发列表、对方），询问它是否在职业保密圈内。公开频道、公司范围列表、对方/对方律师会放弃保护。当目的地看起来在圈外时，标记它并提供 (a) 仅供法律使用的特权版本、(b) 净化版本，或 (c) 两者。见此插件 PLUGIN.md 中的规范 `## 共享护栏 → 目的地检查`。
 
 ## 目的
 
@@ -88,7 +88,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 案件理论（理论、转折事实、有利/不利的关键事实）、证据管理平台。
+`~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 案件理论（理论、转折事实、有利/不利的关键事实）、证据管理平台。
 
 **冲突门槛——不可绕过。** 在构建大纲之前，检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
@@ -141,7 +141,7 @@ Licensed under Apache License 2.0
 - 他们如何与关键人物互动
 
 **有利事实（在对抗之前锁定它们）：**
-- 来自 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 的对我们有利的关键事实，该证人能确立的
+- 来自 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 的对我们有利的关键事实，该证人能确立的
 - 支持我们理论的文件，由该证人撰写或收到的
 
 **不利事实（用文件对抗）：**

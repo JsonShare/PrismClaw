@@ -15,6 +15,16 @@ if str(SRC) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
+def reset_memory_selector_cooldown():
+    """memory_selector 的超时冷却带全局状态，逐用例复位，避免测试相互影响。"""
+    from prismclaw.engine.compression.memory_selector import reset_selector_cooldown
+
+    reset_selector_cooldown()
+    yield
+    reset_selector_cooldown()
+
+
+@pytest.fixture(autouse=True)
 def isolate_prismclaw_root(tmp_path_factory, monkeypatch):
     """每测试一个用例就新建独立 <tmp_root>/.prismclaw/, 防止串数据。"""
     tmp = tmp_path_factory.mktemp("pc_iso_")

@@ -4,8 +4,6 @@
 v5 渐进式披露：技能加载时只解析 frontmatter（body=""），
 content pipeline 参数暂存到 ``pipeline_context``，
 body 按 ``SkillRuntime._ensure_body_loaded()`` 按需加载。
-
-对标参考实现 ``createPluginFromPath`` (L1340) 的分离。
 """
 
 from __future__ import annotations
@@ -84,7 +82,6 @@ class PluginLoadStrategy(ABC):
 class DeclarativePluginLoadStrategy(PluginLoadStrategy):
     """加载声明式插件（plugin.json + markdown）。
 
-    对标参考实现 ``createPluginFromPath`` (L1340)。
     v4：直接构建 manifest_model + capability_graph，不通过 PluginBundleLoader。
     """
 

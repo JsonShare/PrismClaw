@@ -1,10 +1,7 @@
 ---
 name: docket-watcher
-description: >
-  定时 Agent，监控活跃案件组合中的法院案卷。拉取新提交文件，
-  计算候选截止日期，与每个案件的历史记录和待办事项交叉核对，
-  并生成案卷状态报告。触发语："watch the docket"、"any new filings"、
-  "docket check"、"what's due"，或按计划运行。
+description: 扫描活跃案件组合中的法院案卷，拉取新提交文件，计算候选截止日期，与每个案件的历史记录和待办事项交叉核对，并生成案卷状态报告（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发语："watch the docket"、"any new filings"、"docket check"、"what's due"。
+allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
 <!--
@@ -21,7 +18,7 @@ Licensed under Apache License 2.0
 
 ## 目的
 
-无论您是否在关注，案卷都在推进。新提交文件、裁定和程序记录在您处理其他事务时陆续到来，每一份都可能启动一个时钟。此 Agent 按计划检查每个活跃案件的案卷，标记新内容，从提交类型计算候选截止日期，并与案件历史记录和未完成待办事项交叉核对。
+无论您是否在关注，案卷都在推进。新提交文件、裁定和程序记录在您处理其他事务时陆续到来，每一份都可能启动一个时钟。此 Agent 被调用时检查每个活跃案件的案卷，标记新内容，从提交类型计算候选截止日期，并与案件历史记录和未完成待办事项交叉核对。
 
 它不能替代案卷系统，也不能替代阅读规则的律师。它呈现线索，以防两者都措手不及。
 
@@ -43,20 +40,20 @@ Licensed under Apache License 2.0
 - 送达通知通常通过法院指定的电子送达系统（如中国审判流程信息公开网）或邮寄方式进行。
 - 主动监控需要当事人/代理律师登录各平台查询，或依赖律所/内部法务的手动检查。
 
-## 运行计划
+## 运行范围与频率建议
 
-按 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 概况 → 常见法院，以及 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的每案件周期设置。
+被调用时执行一次扫描，检查范围按 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 概况 → 常见法院，以及 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 中的每案件设置确定；如需周期运行，由主 Agent 通过 schedule 工具定时触发。
 
-- **默认：** 每周扫描 `_log.yaml` 中所有 `status` 不在 `closed` 的案件。
-- **每日：** 14天内有即将到来听证的案件、处于开庭或举证期限届满阶段的案件，或任何标记为 `risk: critical` 的案件。
+- **默认：** 扫描 `_log.yaml` 中所有 `status` 不在 `closed` 的案件（建议每周一次）。
+- **提高频率：** 14天内有即将到来听证的案件、处于开庭或举证期限届满阶段的案件，或任何标记为 `risk: critical` 的案件（建议每日一次）。
 
-计划是下限，而非上限。重要文书往往在截止日期前到达。
+上述频率只是下限，而非上限。重要文书往往在截止日期前到达。
 
 ## 执行步骤
 
 > **前置条件**: 运行本 Agent 前需先执行 `/litigation-legal:cold-start-interview` 创建配置文件。如果步骤 1 中路径不存在，提示用户先运行冷启动访谈。
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`（内部风格、升级规则和常见法院列表）和 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml`（活跃案件组合——每案件 `id`、司法管辖区、案卷标识符、上次检查时间戳和未完成待办事项）。如果这些文件不存在，输出提示并终止。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`（内部风格、升级规则和常见法院列表）和 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml`（活跃案件组合——每案件 `id`、司法管辖区、案卷标识符、上次检查时间戳和未完成待办事项）。如果这些文件不存在，输出提示并终止。
 
 2. 对每个有案卷标识符的活跃案件，通过以下方式检查新进展：
    - **元典（YuanDian）MCP**：查询裁判文书网中的新裁判文书。
@@ -77,7 +74,7 @@ Licensed under Apache License 2.0
 
 4. 与每个案件的 `history.md` 和未完成待办事项交叉核对。呈现案件态势变化（裁判、开庭日期设定、举证期限通知、上诉期届满）以及已超出内部截止日期的待办事项。
 
-5. 将每案件分节的报告写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/out/docket-report-<date>.md`，并将案卷系统可导入的机器可读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/out/deadlines.yaml` 写入。更新每个案件的 `history.md`，添加注明本次检查内容的日期条目。按 PRISMCLAW.md 中的升级频道将摘要发布至企业协作/钉钉。
+5. 将每案件分节的报告写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/out/docket-report-<date>.md`，并将案卷系统可导入的机器可读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/out/deadlines.yaml` 写入。更新每个案件的 `history.md`，添加注明本次检查内容的日期条目。按 PLUGIN.md 中的升级频道将摘要发布至企业协作/钉钉。
 
 ## 输出
 

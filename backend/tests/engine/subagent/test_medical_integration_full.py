@@ -8,7 +8,7 @@
 6 个测试场景：
   1. 单 researcher 1 轮完成（read + 直接回答）—— 验证 evidence 收集链路
   2. 单 researcher 2 轮完成（read → 再 read → 回答）—— 验证多轮 evidence 累积
-  3. 并行 2 个 researcher + 1 个 architect —— 验证 _aggregate_results 合并
+  3. 并行 2 个 researcher + 1 个 architect —— 验证独立 results[] 投影
   4. researcher 超时退出 —— 验证非 success 时 evidence 不丢失
   5. 3 轮追问（Round 1 检索 → Round 2 追问 → Round 3 最终建议）—— 跨轮次 prior_evidence
   6. 混合场景：1 成功 + 1 超时 + 1 错误 —— 验证 evidence 只来自有效 subagent
@@ -16,9 +16,9 @@
 每个测试验证：
   - SubAgentTool.execute() 的输入/输出
   - AgentRunResult.outcome
-  - ToolResult.subagent_envelope.result_envelope 的 evidence 字段
+  - 单 Agent 的 result_envelope 与多 Agent 的独立 results[]
   - evidence 的 source_type / source_path / quoted_text / confidence
-  - confidence_assessment 的正确性
+  - 各 Agent 自身 confidence_assessment 的保留
   - 主 Agent 看到的 handover 文本包含 evidence + confidence
 """
 
@@ -121,6 +121,31 @@ class MockLLM:
         resp = self._responses[self._call_index]
         self._call_index += 1
         return resp
+
+
+class TaskRoutedMockLLM(MockLLM):
+    """并行执行时按首个任务文本选择独立响应队列。"""
+
+    def __init__(self, responses_by_task: dict[str, list[MockLLMResponse]]):
+        super().__init__([])
+        self._responses_by_task = {
+            task: list(responses) for task, responses in responses_by_task.items()
+        }
+
+    async def complete(self, *, request, model, tools, abort_event, **kw):
+        task_text = "\n".join(
+            str(message.get("content", ""))
+            for message in request.messages
+            if message.get("role") == "user"
+        )
+        task = next(
+            (candidate for candidate in self._responses_by_task if candidate in task_text),
+            None,
+        )
+        responses = self._responses_by_task.get(task, [])
+        if responses:
+            return responses.pop(0)
+        return MockLLMResponse(text='{"summary":"(no more responses)","findings":[]}')
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -503,52 +528,47 @@ async def test_integration_researcher_multi_tool_calls():
 
 @pytest.mark.asyncio
 async def test_integration_parallel_researchers_with_architect():
-    """并行 2 个 researcher + 1 个 architect，验证 _aggregate_results 合并。
+    """并行 2 个 researcher + 1 个 architect，保留三项独立结果。
 
-    输入：
-      - researcher-1: read → 回答 (evidence: 1 file, confidence: high)
-      - researcher-2: web_fetch → 回答 (evidence: 1 web, confidence: high)
-      - architect: 基于 findings 推理 (evidence: 0, confidence: medium)
-
-    预期输出：
-      - evidence 合并 = 2 条 (1 file + 1 web)
-      - confidence = medium (取最低)
-      - findings 合并去重
+    researcher 各自保留 file/web evidence 和 high confidence；architect
+    保留自己的 findings 和 medium confidence，聚合器不生成统一 envelope。
     """
     # 每个 subagent 需要独立的 LLM 实例
     file_contents = {"/data/drug_labels/metformin.txt": DRUG_LABEL_METFORMIN}
     web_contents = {"https://guidelines.diabetes.cn/t2dm-2024": GUIDELINE_T2DM}
 
-    # 我们需要 SubAgentTool 用同一个 LLM，但每次 _run_single_agent 会创建
-    # 新的 AgentInstance。LLM 需要按顺序服务 3 个 subagent 的请求。
-    llm = MockLLM(responses=[
-        # --- researcher-1 ---
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r1", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
-        }]),
-        MockLLMResponse(text=_make_envelope_json(
-            summary="药品说明书检索完成",
-            findings=["[HIGH] eGFR<30禁用", "[HIGH] 碘化造影前后48h暂停"],
-            confidence="high",
-        )),
-        # --- researcher-2 ---
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r2", "type": "function",
-            "function": {"name": "web_fetch", "arguments": json.dumps({"url": "https://guidelines.diabetes.cn/t2dm-2024"})},
-        }]),
-        MockLLMResponse(text=_make_envelope_json(
-            summary="指南检索完成",
-            findings=["[HIGH] eGFR 30-45减量", "[HIGH] 联合SGLT2i优先"],
-            confidence="high",
-        )),
-        # --- architect ---
-        MockLLMResponse(text=_make_envelope_json(
-            summary="基于检索结果推理药物交互",
-            findings=["[MEDIUM] 碘化造影剂存在严重交互需暂停", "[MEDIUM] eGFR 30-45建议减量至500mg bid"],
-            confidence="medium",
-        )),
-    ])
+    # 并行 Agent 共用一个 LLM，按任务文本路由到各自响应队列，避免调度顺序串扰。
+    llm = TaskRoutedMockLLM({
+        "检索药品说明书": [
+            MockLLMResponse(tool_calls=[{
+                "id": "tc_r1", "type": "function",
+                "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
+            }]),
+            MockLLMResponse(text=_make_envelope_json(
+                summary="药品说明书检索完成",
+                findings=["[HIGH] eGFR<30禁用", "[HIGH] 碘化造影前后48h暂停"],
+                confidence="high",
+            )),
+        ],
+        "检索临床指南": [
+            MockLLMResponse(tool_calls=[{
+                "id": "tc_r2", "type": "function",
+                "function": {"name": "web_fetch", "arguments": json.dumps({"url": "https://guidelines.diabetes.cn/t2dm-2024"})},
+            }]),
+            MockLLMResponse(text=_make_envelope_json(
+                summary="指南检索完成",
+                findings=["[HIGH] eGFR 30-45减量", "[HIGH] 联合SGLT2i优先"],
+                confidence="high",
+            )),
+        ],
+        "基于检索结果推理药物交互": [
+            MockLLMResponse(text=_make_envelope_json(
+                summary="基于检索结果推理药物交互",
+                findings=["[MEDIUM] 碘化造影剂存在严重交互需暂停", "[MEDIUM] eGFR 30-45建议减量至500mg bid"],
+                confidence="medium",
+            )),
+        ],
+    })
 
     manifests = [
         AgentManifest(name="researcher", description="检索", model="test-model",
@@ -578,30 +598,39 @@ async def test_integration_parallel_researchers_with_architect():
 
     # ---- 验证 ----
     assert not result.is_error
-    envelope = result.subagent_envelope.result_envelope
+    artifact = result.subagent_envelope
+    assert artifact is not None
+    assert artifact.result_envelope is None
+    items = artifact.results
+    assert len(items) == 3
 
-    # evidence 合并
-    assert len(envelope.evidence) >= 2, \
-        f"Expected >=2 evidence, got {len(envelope.evidence)}"
-    types = {e.source_type for e in envelope.evidence}
-    assert "file" in types
-    assert "web" in types
+    researchers = [item for item in items if item.name == "researcher"]
+    architects = [item for item in items if item.name == "architect"]
+    assert len(researchers) == 2
+    assert len(architects) == 1
+    assert [item.envelope.confidence_assessment for item in researchers] == [
+        "high",
+        "high",
+    ]
+    assert architects[0].envelope.confidence_assessment == "medium"
+    assert len(architects[0].envelope.findings) == 2
 
-    # confidence 取最低
-    assert envelope.confidence_assessment in ("medium", "low")
+    evidence = [
+        evidence
+        for item in researchers
+        for evidence in item.envelope.evidence
+    ]
+    assert {item.source_type for item in evidence} == {"file", "web"}
+    assert all(len(item.envelope.findings) == 2 for item in researchers)
 
-    # findings 合并
-    assert len(envelope.findings) >= 4, \
-        f"Expected >=4 findings, got {len(envelope.findings)}"
-
-    # handover
-    handover = render_result_envelope_handover(envelope)
+    handover = result.content[0].text
+    assert "--- researcher [success] ---" in handover
+    assert "--- architect [success] ---" in handover
     assert "evidence:" in handover
-    assert "confidence:" in handover
+    assert "confidence: high" in handover
+    assert "confidence: medium" in handover
 
-    print(f"✅ 场景3: evidence={len(envelope.evidence)}条, "
-          f"types={types}, confidence={envelope.confidence_assessment}, "
-          f"findings={len(envelope.findings)}")
+    print(f"✅ 场景3: 独立结果={len(items)}项, researcher evidence={len(evidence)}条")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -659,13 +688,14 @@ async def test_integration_researcher_timeout():
 
     # ---- 验证 ----
     # 单 subagent 时直接返回其 ToolResult（不经过 _aggregate_results）
-    # 非 success → is_error = True
-    assert result.is_error
+    # max_turns_exceeded 但有工具内容交付 → is_error = False（P1 修复）
+    assert not result.is_error, \
+        "max_turns_exceeded with tool results should NOT be marked as error"
 
     envelope = result.subagent_envelope
     assert envelope is not None
 
-    # outcome 非 success
+    # outcome 非 success（max_turns_exceeded）
     assert envelope.outcome != "success"
 
     result_envelope = envelope.result_envelope
@@ -679,8 +709,9 @@ async def test_integration_researcher_timeout():
     assert ev.source_type == "file"
     assert ev.source_path == "/data/drug_labels/metformin.txt"
 
-    # confidence 应为 low
-    assert result_envelope.confidence_assessment == "low"
+    # 有工具内容交付时不自动标记低置信度：空值表示"未评估"，
+    # 主 Agent 应结合执行状态判断，且不得据此改写其他 Agent 的置信度。
+    assert result_envelope.confidence_assessment == ""
 
     print(f"✅ 场景4: outcome={envelope.outcome}, "
           f"evidence={len(result_envelope.evidence)}条, "
@@ -863,8 +894,8 @@ async def test_integration_mixed_success_timeout_error():
       - researcher-3: 错误（LLM 抛异常）
 
     预期输出：
-      - _aggregate_results 合并 evidence 来自所有有效 subagent
-      - confidence = low（因为超时的 subagent confidence="low"）
+      - success / timeout / error 三项结果独立保留
+      - timeout 的 low 不改写 success 的 high
     """
     file_contents = {
         "/data/drug_labels/metformin.txt": DRUG_LABEL_METFORMIN,
@@ -965,21 +996,34 @@ async def test_integration_mixed_success_timeout_error():
     # ---- 验证 ----
     assert not aggregated.is_error  # 不是全部 error
 
-    envelope = aggregated.subagent_envelope.result_envelope
+    artifact = aggregated.subagent_envelope
+    assert artifact is not None
+    assert artifact.result_envelope is None
+    by_name = {item.name: item for item in artifact.results}
+    assert set(by_name) == {"researcher-1", "researcher-2", "researcher-3"}
 
-    # evidence 来自 researcher-1 + researcher-2（超时的也参与聚合）
-    assert len(envelope.evidence) >= 1, \
-        f"Expected >=1 evidence from timeout subagent, got {len(envelope.evidence)}"
+    success = by_name["researcher-1"]
+    timeout = by_name["researcher-2"]
+    error = by_name["researcher-3"]
+    assert success.status == "success"
+    assert success.envelope.confidence_assessment == "high"
+    assert len(success.envelope.evidence) == 1
+    assert timeout.status == "timeout"
+    assert timeout.envelope.confidence_assessment == "low"
+    assert len(timeout.envelope.evidence) == 1
+    assert error.status == "error"
+    assert error.envelope is None
+    assert error.error == "LLM API error"
 
-    # confidence = low（因为有 timeout 的 low 参与）
-    assert envelope.confidence_assessment == "low"
-
-    # handover
-    handover = render_result_envelope_handover(envelope)
+    handover = aggregated.content[0].text
+    assert "--- researcher-1 [success] ---" in handover
+    assert "--- researcher-2 [timeout] ---" in handover
+    assert "--- researcher-3 [error] ---" in handover
+    assert "confidence: high" in handover
     assert "confidence: low" in handover
+    assert "LLM API error" in handover
 
-    print(f"✅ 场景6: evidence={len(envelope.evidence)}条, "
-          f"confidence={envelope.confidence_assessment}")
+    print("✅ 场景6: success/timeout/error 三项结果独立保留")
 
 
 def _make_read_messages_for_collect(file_path: str, content: str) -> list[dict[str, Any]]:

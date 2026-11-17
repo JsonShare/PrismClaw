@@ -191,21 +191,26 @@ class QueryTurnPreparator:
         per_turn_inputs = replace(
             prompt_inputs,
             runtime_strategy_notes=tuple(
-                [
-                    *(
-                        runtime_notes_for(review_requirements)
-                        if review_requirements is not None
-                        else []
-                    ),
-                    *(
-                        deps.task_request_policy.runtime_strategy_notes(
-                            task_profile,
-                            request_mode=request_mode,
-                        )
-                        if task_profile is not None
-                        else []
-                    ),
-                ]
+                dict.fromkeys(
+                    (
+                        # 保留 context_preparation 写入的策略提示（含后续动作 note），
+                        # 再追加本轮基于 task_profile 的提示，重复项只保留一次。
+                        *prompt_inputs.runtime_strategy_notes,
+                        *(
+                            runtime_notes_for(review_requirements)
+                            if review_requirements is not None
+                            else []
+                        ),
+                        *(
+                            deps.task_request_policy.runtime_strategy_notes(
+                                task_profile,
+                                request_mode=request_mode,
+                            )
+                            if task_profile is not None
+                            else []
+                        ),
+                    )
+                )
             ),
         )
         # L1 记忆索引（SDD D3 方案 A）：per-turn 加载，走动态区——静态 shell

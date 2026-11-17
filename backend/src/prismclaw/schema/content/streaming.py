@@ -122,6 +122,10 @@ class SubagentProgressItem(BaseModel):
 
     sub_session_id: str
     subagent_name: str
+    agent_id: str | None = None
+    run_id: str | None = None
+    lifecycle: Literal["one_shot", "persistent"] | None = None
+    status: str | None = None
     turn: int = Field(ge=0)
     max_turns: int = Field(ge=1)
     partial_status: SubagentPartialStatus
@@ -131,6 +135,12 @@ class SubagentProgressItem(BaseModel):
     duration_so_far: float = Field(ge=0.0)
     handoff_chain_id: str | None = None
     from_subagent: str | None = None
+    # 当前工具的紧凑参数摘要（如 "file_path=src/app.ts"），由子代理循环在
+    # tool_running 边界写入；仅用于展示，不参与任何运行态判断。
+    current_tool_summary: str | None = None
+    # 有界动作序列（≤5 条）：由 SubagentProgressEmitter 在工具身份变化时派生追加，
+    # 让前端能回答「它刚才做了什么」而不必新增事件通道。
+    recent_activity: list[str] = Field(default_factory=list)
 
 
 class SubagentProgressBatch(BaseModel):

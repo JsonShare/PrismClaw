@@ -121,6 +121,9 @@ class SessionEntryBase(BaseModel):
     id: str
     parent_id: str | None
     timestamp: str = Field(default_factory=_now_iso)
+    # 最后一次触碰该 entry 的会话事件 seq；客户端靠它做增量对账。
+    # 0 表示本次改造前落库的历史数据（seq 未知，不参与增量过滤）。
+    seq: int = 0
 
 
 class MessageEntry(SessionEntryBase):
@@ -140,6 +143,10 @@ class MessageEntry(SessionEntryBase):
     tool_name: str | None = None
     # 任意业务标记（默认 None），供展示层/分析层按需识别。
     metadata: dict | None = None
+    # 客户端生成的消息标识（web channel 的 chat.send.client_message_id）。
+    # 服务端 user entry 与客户端乐观气泡据此对齐：客户端收到带该值的 user
+    # 消息时原地 re-key，而不是再追加一个重复气泡。
+    client_message_id: str | None = None
 
 
 class SessionEventType(str, Enum):

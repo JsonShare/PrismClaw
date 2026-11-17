@@ -45,6 +45,7 @@ _FAILED_PREFIXES = (
     "[子代理超时",
     "[子代理已被父级中止]",
     "[子代理已达最大轮次上限",
+    "[拒绝准入]",
 )
 
 
@@ -273,7 +274,19 @@ def _apply_first_success(
 
 
 def _is_error_text(text: str) -> bool:
-    return any(text.startswith(prefix) for prefix in _FAILED_PREFIXES)
+    stripped = text.lstrip()
+    if stripped.startswith(_FAILED_PREFIXES):
+        return True
+    # 全部失败时的聚合头：``[N sub-agents: M errors]``，仅 M>0 才算失败
+    first_line = stripped.split("\n", 1)[0]
+    marker = " sub-agents:"
+    suffix = " errors]"
+    if not first_line.startswith("[") or marker not in first_line:
+        return False
+    if not first_line.endswith(suffix):
+        return False
+    count_text = first_line.split(marker, 1)[1][: -len(suffix)].strip()
+    return count_text.isdigit() and int(count_text) > 0
 
 
 def _dedupe_many(groups: Any) -> list[str]:

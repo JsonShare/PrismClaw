@@ -71,7 +71,7 @@ class TokenCountingHeuristicSettings(BaseSettings):
     # 非 CJK 字符平均每个 token 的字符数；3.4 为英文散文与 JSON/代码的中间值
     other_chars_per_token: float = Field(3.4, gt=0)
     # 工具 JSON schema：UTF-8 字节数 ÷ 本值 = token（drift sentinel 校准）
-    wire_bytes_per_token: float = Field(3.5, gt=0)
+    wire_bytes_per_token: float = Field(5.0, gt=0)
     # 通用请求 JSON（messages 等）：UTF-8 字节数 ÷ 本值 = token
     json_bytes_per_token: float = Field(3.0, gt=0)
     # 单条消息固定信封开销（role/content/JSON 括号）

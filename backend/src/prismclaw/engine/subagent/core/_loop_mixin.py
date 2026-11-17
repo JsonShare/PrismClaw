@@ -5,6 +5,7 @@ run_loop 骨架）；本 Mixin 仅保留循环所需的工具分发与进度上�
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any
@@ -124,6 +125,39 @@ class LoopMixin:
         raw = fn.get("name") or ""
         return raw.replace("__", ":", 1) if "__" in raw else (raw or None)
 
+    # 摘要优先取这些参数（越靠前越有辨识度）；只取首个命中的字符串，不拼多值。
+    _SUMMARY_ARG_KEYS = (
+        "command",
+        "file_path",
+        "path",
+        "pattern",
+        "query",
+        "url",
+        "target",
+    )
+
+    @classmethod
+    def _summarize_tool_call(cls, tool_calls: list[dict[str, Any]]) -> str | None:
+        """给首个工具调用生成一行参数摘要（如 file_path=src/app.ts）。
+
+        纯展示用途：任何解析失败都返回 None，绝不打断进度上报。
+        """
+        if not tool_calls:
+            return None
+        fn = tool_calls[0].get("function") or {}
+        raw = fn.get("arguments")
+        try:
+            args = json.loads(raw) if isinstance(raw, str) else (raw or {})
+        except Exception:
+            return None
+        if not isinstance(args, dict):
+            return None
+        for key in cls._SUMMARY_ARG_KEYS:
+            value = args.get(key)
+            if isinstance(value, str) and value.strip():
+                return f"{key}={value.strip()[:60]}"
+        return None
+
     # -- internal: progress emitter -----------------------------------------------------------
 
     @staticmethod
@@ -144,6 +178,8 @@ class LoopMixin:
         partial_status: str,
         current_tool: str | None,
         started_at: float,
+        current_tool_summary: str | None = None,
+        status: str | None = None,
     ) -> None:
         if emitter is None:
             return
@@ -165,9 +201,14 @@ class LoopMixin:
                 if isinstance(raw_invoked_skill_names, list)
                 else []
             )
+            run_context = getattr(self, "_run_context", None)
             item = SubagentProgressItem(
                 sub_session_id=sub_ctx.session_id,
                 subagent_name=manifest.name,
+                agent_id=getattr(run_context, "agent_id", None),
+                run_id=getattr(self, "_run_id", None),
+                lifecycle=getattr(run_context, "lifecycle", None),
+                status=status,
                 turn=max(1, turn),
                 max_turns=max_turns,
                 partial_status=partial_status,
@@ -181,6 +222,7 @@ class LoopMixin:
                 duration_so_far=max(0.0, time.monotonic() - started_at),
                 handoff_chain_id=handoff_chain_id,
                 from_subagent=from_subagent,
+                current_tool_summary=current_tool_summary,
             )
             emitter.update(item)
         except Exception:
@@ -202,6 +244,11 @@ class LoopMixin:
         partial_status: str,
         started_at: float,
     ) -> None:
+        terminal_status = {
+            "completed": "succeeded",
+            "aborted": "interrupted",
+            "failed": "failed",
+        }.get(partial_status, partial_status)
         self._emit_progress(
             emitter,
             sub_ctx=sub_ctx,
@@ -211,6 +258,7 @@ class LoopMixin:
             partial_status=partial_status,
             current_tool=None,
             started_at=started_at,
+            status=terminal_status,
         )
 
     # -- internal: result helpers -----------------------------------------------------------

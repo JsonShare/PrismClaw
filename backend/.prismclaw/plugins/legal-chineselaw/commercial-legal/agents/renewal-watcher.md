@@ -1,10 +1,7 @@
 ---
 name: renewal-watcher
-description: >
-  定时 Agent，检查续约登记册并发布即将到期的内容。
-  默认每周运行。发布至 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md` →
-  内部风格 → 续约提醒 中指定的频道。
-  触发短语："what's renewing"、"check renewals"、"renewal report"，或按计划运行。
+description: 检查续约登记册，并发布即将到期的内容至 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md` → 内部风格 → 续约提醒 中指定的频道（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发短语："what's renewing"、"check renewals"、"renewal report"。
+allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
 <!--
@@ -18,17 +15,17 @@ Licensed under Apache License 2.0
 
 ## 目的
 
-续约登记册只有在有人阅读时才有价值。此 Agent 替您每周阅读，在取消窗口关闭之前告知频道即将到期的内容。
+续约登记册只有在有人阅读时才有价值。此 Agent 被调用时阅读登记册，在取消窗口关闭之前告知频道即将到期的内容。
 
-## 运行计划
+## 运行方式
 
-每周周一早晨运行。可配置——若合同量大，可每日运行；若量少，可每月运行。
+被调用时执行一次。建议周期为每周一次（如周一早晨）；如需周期性运行，由主 Agent 通过 schedule 工具定时触发。合同量大可提高频率，量少可降低频率。
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`，获取提醒目标（企业协作群/钉钉群或邮件列表）。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`，获取提醒目标（企业协作群/钉钉群或邮件列表）。
 2. 加载 renewal-tracker 命令，运行模式 2（未来 90 天）。
-3. 若存在 🔴 项目（取消截止日期在 0-13 天内），无论计划如何立即发布。
+3. 若存在 🔴 项目（取消截止日期在 0-13 天内），在本次调用中立即发布。
 4. 若已连接[合同管理系统]且登记册超过 30 天未同步，运行模式 3 刷新。
 5. 将报告发布至目标（企业协作群通过消息集成发送（需配置对应 MCP 服务器）；钉钉/企业微信通过各自集成；无集成则内联输出）。
 

@@ -8,7 +8,7 @@
  *   OperationGroup 扁平化后 patch 协议大幅简化：后端每次 ToolCallStart/End 都推
  *   UpsertNodePatch（完整迭代快照，含扁平 OperationDetail[]），前端只需要按
  *   节点身份（nodeKey）替换 + iterations 按 segmentId 合并（callId upsert）。
- * - 断连/刷新由后端内存权威源（GET /run）+ hydrateRun 全量重建兜底。
+ * - 断连/刷新由服务端运行态投影（sync 的 run / run.snapshot）+ hydrateRun 全量重建兜底。
  *
  * 本模块全部为纯函数。
  */

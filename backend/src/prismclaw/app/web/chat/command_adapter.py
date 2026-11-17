@@ -22,8 +22,13 @@ import re
 
 from prismclaw.app.web.connection import ConnectionState
 from prismclaw.app.web.protocol.messages import ChatSendMessage
+from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.session.ids import build_web_session_key
+from prismclaw.schema.session.types import generate_entry_id
 
 logger = logging.getLogger(__name__)
+
+_event_logger = SessionEventLogger()
 
 # Sentinel returned by try_handle_slash_command when a built-in command has
 # fully handled the message locally (reply already delivered over the WS).
@@ -110,6 +115,9 @@ async def try_handle_slash_command(
         confirmation_decision=msg.confirmation_decision,
         mode=msg.mode,
         trajectory=msg.trajectory,
+        # 命令改写只替换执行内容；客户端气泡身份必须保留，否则 plugin 命令
+        # 这一轮的 user 消息无法 re-key，刷新前后会出现两个提问气泡。
+        client_message_id=msg.client_message_id,
     )
     # Attach command identity as private attribute for _run_chat to pick up
     modified_msg._command_identity = command_identity  # type: ignore[attr-defined]
@@ -120,6 +128,59 @@ async def try_handle_slash_command(
         runtime.plugin_name,
     )
     return modified_msg
+
+
+async def _persist_command_turn(
+    state: ConnectionState,
+    msg: ChatSendMessage,
+    reply: str,
+) -> str | None:
+    """把内置命令的一问一答落树，返回 assistant entry id。
+
+    ``chat.done`` 不再携带正文（Web 端只把它当"去服务端对账"的信号），命令
+    回复若不落库，客户端 sync 到 idle 后这条回复就会消失。落库后 sync 的
+    展示投影自然包含它，刷新后也不丢。返回 None 表示无法落库（调用方仍发
+    done，至少不影响会话状态收敛）。
+    """
+    web_deps = getattr(state.ws.app.state, "web_deps", None)
+    runner_deps = getattr(web_deps, "runner_deps", None) if web_deps is not None else None
+    store = getattr(runner_deps, "session_store", None)
+    if store is None:
+        return None
+    from prismclaw.app.web.workspace_ids import clean_workspace_id
+
+    try:
+        session_key = build_web_session_key(
+            state.user_id, clean_workspace_id(getattr(msg, "workspace_id", None))
+        )
+    except Exception:
+        logger.warning("command.persist.invalid_workspace", exc_info=True)
+        return None
+    # 与 _run_chat 的会话 id 归一化保持一致：带 web: 前缀的是完整树 id。
+    session_id = (
+        msg.conversation_id
+        if msg.conversation_id.startswith("web:")
+        else f"{session_key}:{msg.conversation_id}"
+    )
+    try:
+        tree = await store.load(session_id)
+    except Exception:
+        logger.warning("command.persist.load_failed session=%s", session_id, exc_info=True)
+        return None
+    if tree is None:
+        logger.warning("command.persist.session_missing session=%s", session_id)
+        return None
+    user_entry_id = generate_entry_id(tree.all_entry_ids())
+    reply_entry_id = generate_entry_id(tree.all_entry_ids() | {user_entry_id})
+    try:
+        await store.commit_events([
+            _event_logger.user_message(session_id, msg.content, user_entry_id),
+            _event_logger.assistant_message(session_id, reply, reply_entry_id),
+        ])
+    except Exception:
+        logger.warning("command.persist.commit_failed session=%s", session_id, exc_info=True)
+        return None
+    return reply_entry_id
 
 
 async def _handle_builtin_mcp_command(
@@ -158,6 +219,9 @@ async def _handle_builtin_mcp_command(
         else:
             reply = "[mcp] Usage: /mcp list | /mcp restart <server>"
 
+    # 先落库再发 done：done 后客户端立即 sync，正文与 message_id 都必须已就绪。
+    message_id = await _persist_command_turn(state, msg, reply)
+
     try:
         from prismclaw.app.web.connection import send_event
         from prismclaw.app.web.protocol.protocol import SERVER_CHAT_DONE
@@ -167,10 +231,9 @@ async def _handle_builtin_mcp_command(
             SERVER_CHAT_DONE,
             msg.conversation_id,
             {
-                # Frontend contract: final_message is a plain string
-                # (useChatSocket renders it directly).
+                # 非 Web 通道仍消费 final_message；Web 端正文来自 sync 投影。
                 "final_message": reply,
-                "message_id": None,
+                "message_id": message_id,
                 "usage": None,
                 "aborted": False,
             },

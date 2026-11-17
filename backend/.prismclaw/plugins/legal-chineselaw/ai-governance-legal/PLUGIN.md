@@ -17,7 +17,7 @@
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PLUGIN.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径 READ 配置。不是从此文件。

@@ -29,19 +29,19 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PRISMCLAW.md`——确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告知用户："Matter workspaces are off — you're configured as an in-house practice with one client, so the plugin works from practice-level context automatically. If you actually work across multiple clients, re-run `/ai-governance-legal:cold-start-interview --redo` and select a private-practice setting. Otherwise, you don't need `/aig-matter-workspace` at all." 不要报错——禁用状态是内部用户的预期状态。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/PLUGIN.md`——确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告知用户："Matter workspaces are off — you're configured as an in-house practice with one client, so the plugin works from practice-level context automatically. If you actually work across multiple clients, re-run `/ai-governance-legal:cold-start-interview --redo` and select a private-practice setting. Otherwise, you don't need `/aig-matter-workspace` at all." 不要报错——禁用状态是内部用户的预期状态。
 2. 使用以下工作流。
 3. 根据 `$ARGUMENTS` 的第一个 token 进行分发：
    - `new` → 运行接案访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/<slug>/matter.md`，初始化 `history.md` 和 `notes.md`。
    - `list` → 枚举 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/*/matter.md`，打印表格，标记活跃事项。
-   - `switch` → 更新执业级 PRISMCLAW.md 中的 `Active matter:` 行。
+   - `switch` → 更新执业级 PLUGIN.md 中的 `Active matter:` 行。
    - `close` → 将 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/<slug>/` 移至 `~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
    - `none` → 将 `Active matter:` 设为 `none — practice-level context only`。
 4. 向用户展示变更内容并在写入前确认。
 
 ## 注意事项
 
-- 除非执业级 PRISMCLAW.md 中 `Cross-matter context` 为 `on`，否则 skill 绝不跨事项读取文件。
+- 除非执业级 PLUGIN.md 中 `Cross-matter context` 为 `on`，否则 skill 绝不跨事项读取文件。
 - 归档不是删除——已关闭事项仍可用于保留/冲突目的。
 - Slug 使用小写加连字符。若 slug 在归档和活跃事项中重复使用，归档的保留在 `_archived/<slug>/` 下。
 
@@ -49,7 +49,7 @@ Licensed under Apache License 2.0
 
 多客户执业律师（私人执业——独立、小律所、大律所）需要跨多个事项工作。来自一个事项的上下文绝不能泄漏到另一个。此 skill 是实现这一目标的轻量文件管理层。
 
-**默认状态为关闭。** 内部用户永远不会看到这个——他们仅在执业级别运行。事项工作区在私人执业用户的冷启动时开启，或通过编辑执业级 PRISMCLAW.md 中的 `## Matter workspaces` 开启。如果 `Enabled` 为 `✗`，此 skill 不运行；上方工作流说明了禁用状态，并为真正需要事项隔离的用户建议运行 `/ai-governance-legal:cold-start-interview --redo`。
+**默认状态为关闭。** 内部用户永远不会看到这个——他们仅在执业级别运行。事项工作区在私人执业用户的冷启动时开启，或通过编辑执业级 PLUGIN.md 中的 `## Matter workspaces` 开启。如果 `Enabled` 为 `✗`，此 skill 不运行；上方工作流说明了禁用状态，并为真正需要事项隔离的用户建议运行 `/ai-governance-legal:cold-start-interview --redo`。
 
 ## 存储布局
 
@@ -57,7 +57,7 @@ Licensed under Apache License 2.0
 
 ```
 ~/.prismclaw/assets/plugins/legal-chineselaw/ai-governance-legal/
-├── PRISMCLAW.md                       # 执业级执业档案
+├── PLUGIN.md                       # 执业级执业档案
 └── matters/
     ├── <slug>/
     │   ├── matter.md               # 客户、对手方、事项类型、关键事实、覆盖
@@ -70,9 +70,9 @@ Licensed under Apache License 2.0
 
 Slug 使用小写加连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vendor-xyz-nda`。
 
-## 活跃事项记录在执业 PRISMCLAW.md 中
+## 活跃事项记录在执业 PLUGIN.md 中
 
-执业级 PRISMCLAW.md 中 `## Matter workspaces` 下的 `Active matter:` 行是唯一真实来源。切换事项会编辑该行。无单独的状态文件。
+执业级 PLUGIN.md 中 `## Matter workspaces` 下的 `Active matter:` 行是唯一真实来源。切换事项会编辑该行。无单独的状态文件。
 
 ## 子命令逻辑
 
@@ -104,7 +104,7 @@ Slug 使用小写加连字符。示例：`acme-msa-2026`、`zenith-renewal`、`v
 ### `switch <slug>`
 
 1. 确认 `matters/<slug>/matter.md` 存在。若不存在，提供 `/ai-governance-legal:matter-workspace new <slug>`。
-2. 将执业级 PRISMCLAW.md 中的 `Active matter:` 行编辑为 `Active matter: <slug>`。
+2. 将执业级 PLUGIN.md 中的 `Active matter:` 行编辑为 `Active matter: <slug>`。
 3. 向用户展示 matter.md 摘要，让他们确认处于正确的事项。
 
 ### `close <slug>`
@@ -116,12 +116,12 @@ Slug 使用小写加连字符。示例：`acme-msa-2026`、`zenith-renewal`、`v
 
 ### `none`
 
-将执业级 PRISMCLAW.md 中的 `Active matter:` 设为 `none — practice-level context only`。与用户确认。
+将执业级 PLUGIN.md 中的 `Active matter:` 设为 `none — practice-level context only`。与用户确认。
 
 ## `matter.md` 模板
 
 ```markdown
-[工作产品标头——按 plugin 配置 ## 输出部分——因角色而异；见执业级 PRISMCLAW.md 中的 `## 谁在使用这个`]
+[工作产品标头——按 plugin 配置 ## 输出部分——因角色而异；见执业级 PLUGIN.md 中的 `## 谁在使用这个`]
 
 # 事项：[客户] — [简短描述]
 
@@ -179,7 +179,7 @@ Slug 使用小写加连字符。示例：`acme-msa-2026`、`zenith-renewal`、`v
 
 ## 跨事项上下文
 
-执业级 PRISMCLAW.md 有一个 `Cross-matter context:` 标志。当为 `off`（默认）时，在事项 A 中工作的 skill **绝不读取** `matters/B/` 中的文件，无一例外。这是该设置存在的保密保证。
+执业级 PLUGIN.md 有一个 `Cross-matter context:` 标志。当为 `off`（默认）时，在事项 A 中工作的 skill **绝不读取** `matters/B/` 中的文件，无一例外。这是该设置存在的保密保证。
 
 当为 `on` 时，skill 只有在用户明确要求时才可以跨事项文件夹读取文件（例如，"比较过去五个供应商事项中我们关于责任上限的立场"）。即使为 `on`，默认也只加载活跃事项，除非用户要求跨事项视图。
 

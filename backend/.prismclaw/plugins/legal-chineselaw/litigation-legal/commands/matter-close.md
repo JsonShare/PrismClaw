@@ -77,7 +77,7 @@ Slug（必需）。
 
 ## 写入
 
-**在关闭事项之前（重大行为——事项被归档且活跃跟踪终止）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是非律师：
+**在关闭事项之前（重大行为——事项被归档且活跃跟踪终止）：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是非律师：
 
 > 关闭事项有法律后果——它终止活跃跟踪，可能影响任何关联的法律保留（如适用，单独运行 `/legal-hold --release`），并建立公司依赖的最终记录。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >

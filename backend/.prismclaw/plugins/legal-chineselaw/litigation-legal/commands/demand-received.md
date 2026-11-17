@@ -22,7 +22,7 @@ Licensed under Apache License 2.0
 
 1. 从提供的路径阅读入站文档。
 2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` 进行组合交叉检查。
-3. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准、业务格局、催告函实践。
+3. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 风险校准、业务格局、催告函实践。
 4. 遵循以下工作流和参考。
 5. 提取字段；交叉检查组合；评估实体价值；提出附带建议的选项。
 6. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/triage.md`。复制或链接入站文档到 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/inbound/[slug]/incoming.[ext]`。
@@ -64,7 +64,7 @@ Licensed under Apache License 2.0
 
 - 入站文档（用户提供路径或放入会话中）
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 扫描相关事项（同一对方、通过实体关系重叠的对方、或事项类型 + 近期日期）
-- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（用于实体价值评估）、业务格局（发送者是否为常见对手方？）、催告函实践（内部语气和回应默认值）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 风险校准（用于实体价值评估）、业务格局（发送者是否为常见对手方？）、催告函实践（内部语气和回应默认值）
 
 ## 工作流
 
@@ -107,7 +107,7 @@ Licensed under Apache License 2.0
 - **对方实力** — 如果他们明天上法院/申请仲裁，他们的故事是什么？
 - **我方实力** — 我们可能的抗辩是什么？
 - **要求的损害赔偿 vs. 可能的** — 要求是否与他们赢得时法院/仲裁庭会判决的金额相称？
-- **杠杆和压力** — 他们可信地准备好起诉/申请仲裁了吗？他们有能力吗？根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 他们是否为重复诉讼对手方？
+- **杠杆和压力** — 他们可信地准备好起诉/申请仲裁了吗？他们有能力吗？根据 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 他们是否为重复诉讼对手方？
 
 输出分流评级：**具有实体价值 / 有争议 / 薄弱 / 无意义**。直说。用户在做分流，不是在写简报。
 
@@ -266,7 +266,7 @@ Licensed under Apache License 2.0
 
 ## 以下一步决策树结束
 
-根据 PRISMCLAW.md `## Outputs` 以下一步决策树结束。
+根据 PLUGIN.md `## Outputs` 以下一步决策树结束。
 
 ## 此 skill 不做什么
 

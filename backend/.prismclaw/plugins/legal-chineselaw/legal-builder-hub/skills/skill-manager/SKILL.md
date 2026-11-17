@@ -34,7 +34,7 @@ Licensed under Apache License 2.0
 
 ## 第一方插件（不要触碰）
 
-随 legal-chineselaw 附带的 12 个核心插件不受此命令约束。规范列表位于中心的 PRISMCLAW.md 中的"Built-in plugins"下。示例包括 `commercial-legal`、`corporate-legal`、`employment-legal`、`privacy-legal`、`product-legal`、`regulatory-legal`、`ai-governance-legal`、`litigation-legal`、`law-student`、`legal-clinic` 以及中心本身（`legal-builder-hub`）。如果调用者命名的 skill 解析到其中任何一个，拒绝。
+随 legal-chineselaw 附带的 12 个核心插件不受此命令约束。规范列表位于中心的 PLUGIN.md 中的"Built-in plugins"下。示例包括 `commercial-legal`、`corporate-legal`、`employment-legal`、`privacy-legal`、`product-legal`、`regulatory-legal`、`ai-governance-legal`、`litigation-legal`、`law-student`、`legal-clinic` 以及中心本身（`legal-builder-hub`）。如果调用者命名的 skill 解析到其中任何一个，拒绝。
 
 ## 工作流——卸载
 
@@ -59,7 +59,7 @@ Licensed under Apache License 2.0
 
 移除 skill 目录。
 
-### 步骤 5：记录并更新 PRISMCLAW.md
+### 步骤 5：记录并更新 PLUGIN.md
 
 追加到 `install-log.yaml`：
 
@@ -70,7 +70,7 @@ Licensed under Apache License 2.0
   path: <deleted path>
 ```
 
-从中心的 PRISMCLAW.md 中的已安装入门包表中移除 skill 的行。
+从中心的 PLUGIN.md 中的已安装入门包表中移除 skill 的行。
 
 ## 工作流——禁用
 

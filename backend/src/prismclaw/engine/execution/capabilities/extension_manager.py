@@ -75,10 +75,7 @@ class ExtensionManager:
         self._register_native_components(descriptor, loaded_plugin)
 
     def load_from_load_result(self, result: "PluginLoadResult") -> None:
-        """从 PluginLoadResult 批量注册插件。
-
-        对标设计方案 Phase 2：assemble_plugin_load_result 的注册阶段。
-        """
+        """从 PluginLoadResult 批量注册插件。"""
         for plugin in result.enabled:
             self.register_loaded_plugin(plugin)
 

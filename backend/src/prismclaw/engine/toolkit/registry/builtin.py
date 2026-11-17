@@ -10,7 +10,10 @@ from prismclaw.engine.toolkit.registry.discovery import SkillSearchTool, ToolSea
 from prismclaw.engine.toolkit.builtin.skill_activate import ActivateSkillTool
 from prismclaw.engine.toolkit.builtin.bash import BashTool
 from prismclaw.engine.toolkit.builtin.file_tools import ListDirectoryTool, ReadTool, WriteTool, EditTool
-from prismclaw.engine.toolkit.builtin.task_tools import CancelTaskTool, AskUserQuestionTool, DeclareBlockedTool
+from prismclaw.engine.toolkit.builtin.task_tools import (
+    AskUserQuestionTool,
+    DeclareBlockedTool,
+)
 from prismclaw.engine.toolkit.file.workspace import WorkspaceResolver
 from prismclaw.engine.toolkit.misc.todo_write import TodoWriteTool
 from prismclaw.engine.toolkit.memory.goal_tools import GoalTool
@@ -26,7 +29,6 @@ def register_builtin_tools(
     skill_runtime: SkillRuntime | None = None,
 ) -> None:
     registry.register(BashTool())
-    registry.register(CancelTaskTool())
     registry.register(ListDirectoryTool(resolver))
     registry.register(ReadTool(resolver))
     registry.register(WriteTool(resolver))

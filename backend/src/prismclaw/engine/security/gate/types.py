@@ -63,7 +63,6 @@ class ParallelTaskExtras:
     """
 
     task_runtime: TaskRuntimeContext = field(default_factory=TaskRuntimeContext)
-    progress_emitter: SubagentProgressSink | None = None
     parallel_task_store: Any = None
 
 

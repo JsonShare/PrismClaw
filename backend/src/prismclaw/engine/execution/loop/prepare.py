@@ -50,10 +50,11 @@ async def prepare_next_turn(
         run_state=rt.run_state,
         effort_budget=rt.effort_budget,
         now=_time.monotonic(),
+        phase="prepare",
     )
     if _ctrl.should_stop:
-        # should_stop 只在已用完最后一轮（turns_left<=0 / remaining_hard<=0）时触发。
-        # 此时不能再调 LLM——设 terminal_error 让 agent_loop 直接 yield + return。
+        # 停止条件：步数/墙钟用尽，或工具预算耗尽且收尾轮已经跑完。此时不能再
+        # 调 LLM——设 terminal_error 让 agent_loop 直接 yield + return。
         from prismclaw.engine.execution.control.kernel import TerminalReason
         from prismclaw.engine.execution.loop import terminal as _terminal
         await _terminal.terminate(

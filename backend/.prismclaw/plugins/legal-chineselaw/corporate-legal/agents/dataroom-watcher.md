@@ -1,9 +1,7 @@
 ---
 name: dataroom-watcher
-description: >
-  监控 VDR 中新上传的文件，并按计划发布关闭检查清单状态。
-  标记与高优先级类别匹配的新上传文件。
-  触发语："what's new in the data room"、"VDR updates"，或按计划运行。
+description: 扫描 VDR 中新上传的文件，标记与高优先级类别匹配的文件，并输出关闭检查清单状态（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发语："what's new in the data room"、"VDR updates"。
+allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
 <!--
@@ -17,11 +15,11 @@ Licensed under Apache License 2.0
 
 ## 目的
 
-VDR 往往在电话会议前一晚 11 点才更新。此 Agent 监控新上传内容并告知团队新增文件。同时按配置周期运行关闭检查清单状态。
+VDR 往往在电话会议前一晚 11 点才更新。此 Agent 在被调用时检查新上传内容并告知团队新增文件。同时按配置周期输出关闭检查清单状态。
 
-## 运行计划
+## 运行方式
 
-尽职调查活跃期间每日运行。检查清单状态按 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` → 交易团队简报周期执行。
+被调用时执行一次；尽职调查活跃期间建议每日检查，由主 Agent 通过 schedule 工具定时触发。检查清单状态的输出周期按 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md` → 交易团队简报周期确定。
 
 ## 集成说明
 

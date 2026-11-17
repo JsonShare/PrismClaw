@@ -14,7 +14,7 @@ Licensed under Apache License 2.0
 
 # /portfolio-status
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 风险校准（定义如何读取 `risk:` 字段）。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 风险校准（定义如何读取 `risk:` 字段）。
 2. 遵循以下工作流和参考。
 3. 解析 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml`。默认过滤关闭的事项（使用 `--all` 包含）。
 4. 生成汇总：风险分布、14/30/60 天内的截止日期、超过 30 天无更新的事项、重大性汇总、阶段分布。
@@ -31,7 +31,7 @@ Licensed under Apache License 2.0
 ## 加载上下文
 
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_log.yaml` — 事实来源
-- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` — 风险校准（正确解读 risk/materiality 字段）
+- `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` — 风险校准（正确解读 risk/materiality 字段）
 
 ## 标志和过滤器
 
@@ -123,9 +123,9 @@ Licensed under Apache License 2.0
 
 ## 以下一步决策树结束
 
-根据 PRISMCLAW.md `## Outputs` 以下一步决策树结束。根据此 skill 刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，不是锁定。树就是输出；律师选择。
+根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，不是锁定。树就是输出；律师选择。
 
-如果投资组合有超过约 10 个事项，或用户任何时候要求：提供仪表板（见 PRISMCLAW.md `## Outputs → 数据密集型输出的仪表板提议`）。为此输出定制提议——按风险层级计数、即将到来的截止日期时间线，以及带有状态、冲突检查和最后触碰日期的可排序事项分类账。
+如果投资组合有超过约 10 个事项，或用户任何时候要求：提供仪表板（见 PLUGIN.md `## Outputs → 数据密集型输出的仪表板提议`）。为此输出定制提议——按风险层级计数、即将到来的截止日期时间线，以及带有状态、冲突检查和最后触碰日期的可排序事项分类账。
 
 ## 此 skill 不做什么
 

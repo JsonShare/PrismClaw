@@ -1,6 +1,6 @@
 """启动时把项目内的 ``backend/.prismclaw`` 同步到 ``~/.prismclaw/assets``。
 
-这条链路存在的根因是：SKILL.md / PRISMCLAW.md / agent definition 里写的
+这条链路存在的根因是：SKILL.md / PLUGIN.md / agent definition 里写的
 全是 home-relative 路径（LLM 和人类写文档天然偏向 ``~`` 前缀），但 repo 里的
 权威文件放在 ``backend/.prismclaw/``（项目内、可随代码迭代）。两条路径
 体系并存，runtime / profile_loader / SKILL.md 各自读不同位置 → 永远对不上。
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,6 @@ _STATIC_TOP_LEVEL: tuple[str, ...] = (
 )
 
 _MIGRATION_MARKER = ".assets-migrated-v1"
-_WORKSPACE_CLEANUP_MARKER = ".prism-cleanup-done"
 
 # sync 时排除的运行时产物 —— dev 开发目录里可能混入 engine 运行痕迹，
 # 绝不该随静态能力同步到 ~/.prismclaw/assets。
@@ -70,8 +70,7 @@ def _resolve_backend_prismclaw(project_root: Path) -> Path:
 def _cleanup_legacy_top_level(home: Path) -> None:
     """清理 T0 前的旧结构：~/.prismclaw 根裸的 skills/plugins/agents/... 条目。
 
-    一次性。cleanup_stale_workspace_dirs 之外的独立清理职责。项目未上线，
-    零兼容负担——直接 rmtree，不留 marker 之外的痕迹。
+    一次性，项目未上线、零兼容负担——直接 rmtree，只留 marker。
     """
     marker = home / _MIGRATION_MARKER
     if marker.exists():
@@ -104,13 +103,68 @@ def _cleanup_legacy_top_level(home: Path) -> None:
         )
 
 
-def sync_prismclaw_home(project_root: Path) -> Path:
+@dataclass(slots=True)
+class SyncResult:
+    """同步结果 —— 让失败与漂移不再静默。"""
+
+    target: Path
+    synced: int = 0
+    failed: list[str] = field(default_factory=list)
+    drifted: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.failed and not self.drifted
+
+
+def _list_files(root: Path) -> dict[str, float]:
+    """相对路径 → mtime；排除与 _RUNTIME_IGNORE 一致的运行时产物。"""
+    if not root.is_dir():
+        return {}
+    return {
+        str(p.relative_to(root)): p.stat().st_mtime
+        for p in root.rglob("*")
+        if p.is_file()
+        and "__pycache__" not in p.parts
+        and p.suffix != ".pyc"
+        and p.name != ".bash_state"
+    }
+
+
+def _verify_synced(source: Path, target: Path, names: tuple[str, ...]) -> list[str]:
+    """比对源与目标的文件集合与 mtime，返回漂移项（空表示完全一致）。"""
+    drifted: list[str] = []
+    for name in names:
+        src = source / name
+        if not src.exists():
+            continue
+        dst = target / name
+        if src.is_file():
+            if not dst.is_file() or src.stat().st_size != dst.stat().st_size:
+                drifted.append(name)
+            continue
+        src_files = _list_files(src)
+        dst_files = _list_files(dst)
+        for rel in sorted(set(src_files) - set(dst_files)):
+            drifted.append(f"{name}/{rel} 缺失")
+        for rel in sorted(set(dst_files) - set(src_files)):
+            drifted.append(f"{name}/{rel} 多余")
+        for rel in sorted(set(src_files) & set(dst_files)):
+            if abs(src_files[rel] - dst_files[rel]) > 1.0:
+                drifted.append(f"{name}/{rel} mtime 未同步")
+    return drifted
+
+
+def sync_prismclaw_home(project_root: Path) -> SyncResult:
     """把 backend/.prismclaw 里的静态能力目录同步到 ~/.prismclaw/assets。
 
     每启动调用一次。删除目标子树然后重拷——因为这些目录完全由 repo 管控，
     没有运行时写入，重拷是幂等且正确的。
 
-    返回目标目录 Path（``~/.prismclaw/assets``）。
+    返回 :class:`SyncResult`：``failed`` 记录拷贝失败项，``drifted`` 记录
+    拷贝后源/目标仍不一致的文件。两者任一非空即说明**运行时不使用 repo
+    的最新内容**，调用方必须记 ERROR（旧实现只写 debug 日志，导致改动
+    静默失效）。
     """
     source = _resolve_backend_prismclaw(project_root)
     home = Path.home() / ".prismclaw"
@@ -126,11 +180,11 @@ def sync_prismclaw_home(project_root: Path) -> Path:
             source,
         )
         target.mkdir(parents=True, exist_ok=True)
-        return target
+        return SyncResult(target=target)
 
     target.mkdir(parents=True, exist_ok=True)
 
-    synced = 0
+    result = SyncResult(target=target)
     for name in _STATIC_TOP_LEVEL:
         src_entry = source / name
         if not src_entry.exists():
@@ -144,20 +198,23 @@ def sync_prismclaw_home(project_root: Path) -> Path:
                 try:
                     shutil.rmtree(dst_entry)
                 except Exception:
-                    logger.debug("sync: 删旧目录失败 %s", dst_entry, exc_info=True)
+                    logger.error("sync: 删旧目录失败 %s", dst_entry, exc_info=True)
+                    result.failed.append(name)
                     continue
             try:
                 shutil.copytree(src_entry, dst_entry, symlinks=False, ignore=_RUNTIME_IGNORE)
-                synced += 1
+                result.synced += 1
             except Exception:
-                logger.exception("sync: 拷目录失败 %s → %s", src_entry, dst_entry)
+                logger.error("sync: 拷目录失败 %s → %s", src_entry, dst_entry, exc_info=True)
+                result.failed.append(name)
         else:
             # 单文件：直接覆盖
             try:
                 shutil.copy2(src_entry, dst_entry)
-                synced += 1
+                result.synced += 1
             except Exception:
-                logger.exception("sync: 拷文件失败 %s → %s", src_entry, dst_entry)
+                logger.error("sync: 拷文件失败 %s → %s", src_entry, dst_entry, exc_info=True)
+                result.failed.append(name)
 
     for name in ("IDENTITY.md", "PREFERENCES.md"):
         if not (target / name).is_file():
@@ -166,97 +223,34 @@ def sync_prismclaw_home(project_root: Path) -> Path:
                 target / name,
             )
 
+    # 拷贝完成后比对源/目标：拷贝"没报错"不等于"内容一致"。
+    result.drifted = _verify_synced(source, target, _STATIC_TOP_LEVEL)
+
     logger.info(
-        "sync_prismclaw_home: source=%s → target=%s, entries_synced=%d",
-        source, target, synced,
+        "sync_prismclaw_home: source=%s → target=%s, entries_synced=%d, "
+        "failed=%d, drifted=%d",
+        source, target, result.synced, len(result.failed), len(result.drifted),
     )
-    return target
+    if result.failed:
+        logger.error(
+            "sync_prismclaw_home: 拷贝失败 %s —— 运行时不会使用 repo 最新内容",
+            result.failed,
+        )
+    if result.drifted:
+        logger.error(
+            "sync_prismclaw_home: 同步后仍不一致 %s",
+            result.drifted[:10],
+        )
+    return result
 
 
-# workspace 根的旧目录名（已迁入 sessions/<sid>/ 或 inputs/，删除以保持干净）
-# T2 后：这些都是通用名，用户合法项目目录也可能叫这些名字——T2 里 cleanup 加
-# 结构指纹守卫，这里保留作 T2 前的基线逻辑。
-_STALE_WORKSPACE_ROOT_DIRS: frozenset[str] = frozenset({
-    "uploads",
-    "outputs",
-    "context_blocks",
-    "tool_results",
-    "tmp",
-})
+if __name__ == "__main__":  # pragma: no cover - 手动同步入口
+    import sys
 
-# web_<uid>/ 用户根下错建的 7 个系统目录（openai_compat 旧实现把它们建在
-# 用户根而非 workspace 根）。这些名字是保留名，不可作为 workspace id。
-_STALE_USER_ROOT_DIRS: tuple[str, ...] = (
-    ".envs",
-    "node_modules",
-    "skills",
-    "sandbox",
-    "tmp",
-    "cache",
-)
-
-# 具名残留：精确路径、用户已确认可删（不做通用名匹配）。
-_NAMED_LEGACY_PATHS: tuple[str, ...] = (
-    "web_admin/default/rust_inhibitor_mining",
-)
-
-
-def cleanup_stale_workspace_dirs() -> None:
-    """启动时一次性清理旧布局残留。
-
-    三条机制避免误删用户合法项目目录：
-      1. 具名残留按精确路径删除（``web_admin/default/rust_inhibitor_mining``）；
-      2. 通用名清理加结构指纹守卫：只有已建 ``.work/`` 新结构的 workspace 才检查；
-         ``web_<uid>/`` 用户根下的保留名目录（不可能作为 workspace id）直接清理；
-      3. 一次性 marker（``workspaces/.prism-cleanup-done``）：清理完成后写入，
-         后续启动直接跳过——``outputs/`` / ``tmp/`` 在 T2 后是合法用户目录名，
-         不能每次启动都扫一遍。
-    """
-    ws_root = Path.home() / ".prismclaw" / "workspaces"
-    if not ws_root.is_dir():
-        return
-    marker = ws_root / _WORKSPACE_CLEANUP_MARKER
-    if marker.exists():
-        return
-
-    removed = 0
-
-    def _rm(target: Path) -> None:
-        nonlocal removed
-        try:
-            shutil.rmtree(target)
-            removed += 1
-        except Exception:
-            logger.warning("cleanup_stale: 删 %s 失败", target, exc_info=True)
-
-    # 具名残留（精确路径，用户已确认）
-    for rel in _NAMED_LEGACY_PATHS:
-        target = ws_root / rel
-        if target.is_dir():
-            _rm(target)
-
-    for user_root in ws_root.glob("web_*"):
-        if not user_root.is_dir():
-            continue
-        # 用户根下错建的系统目录（旧 openai_compat 路径）
-        for stale in _STALE_USER_ROOT_DIRS:
-            target = user_root / stale
-            if target.is_dir():
-                _rm(target)
-        for ws_dir in user_root.iterdir():
-            if not ws_dir.is_dir():
-                continue
-            # 指纹守卫：只有已建 .work/ 新结构的 workspace 才清理
-            if not (ws_dir / ".work").is_dir():
-                continue
-            for stale in _STALE_WORKSPACE_ROOT_DIRS:
-                target = ws_dir / stale
-                if target.is_dir():
-                    _rm(target)
-
-    if removed:
-        logger.info("cleanup_stale_workspace_dirs: 删除旧目录 %d 个", removed)
-    try:
-        marker.touch()
-    except Exception:
-        logger.debug("cleanup_stale: 写 marker 失败", exc_info=True)
+    _root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
+    _res = sync_prismclaw_home(_root)
+    print(
+        f"target={_res.target}\n"
+        f"synced={_res.synced} failed={_res.failed} drifted={_res.drifted}"
+    )
+    raise SystemExit(0 if _res.ok else 1)

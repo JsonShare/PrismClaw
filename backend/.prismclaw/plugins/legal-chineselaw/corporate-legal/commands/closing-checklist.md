@@ -24,7 +24,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段的其余内容——skills 使用执业级上下文，事项机制是不可见的。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `跨事项上下文` 为 `on`，否则永远不要读取其他事项的文件。
+**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段的其余内容——skills 使用执业级上下文，事项机制是不可见的。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/corporate-legal:matter-workspace switch <slug>` 或说 `practice-level`。" 加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/matters/<matter-slug>/`。除非 `跨事项上下文` 为 `on`，否则永远不要读取其他事项的文件。
 
 ---
 
@@ -109,7 +109,7 @@ handoff:
   category: "[第三方同意 | 股东/董事会行动 | 监管申报 | 解除/终止 | 托管/留存 | 交割交付物]"
   source: "[合同名称 / 法定章节 / VDR 路径 + Bates]"
   blocking: true  # 除非协议有重要性限定
-  severity: "[🔴 / 🟠 / 🟡 / 🟢 — 从上游延续，见 PRISMCLAW.md 中的严重性底限规则]"
+  severity: "[🔴 / 🟠 / 🟡 / 🟢 — 从上游延续，见 PLUGIN.md 中的严重性底限规则]"
 
   # 同意/第三方行动字段
   counterparty: "[例如，Dunmore Holdings LLC]"
@@ -127,7 +127,7 @@ handoff:
   must_occur_before: "[例如，交割 | 签署 | 暂停期结束]"
 ```
 
-保留上游 skill 填充的每个字段。"需要 Dunmore 同意，附带替代担保条件和 30 天通知"应在检查清单上呈现所有三个要素（同意、担保人、通知），而不是折叠为"Dunmore 对控制权变更的同意"。当上游 skill 提供严重性时，延续它——见 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的跨 skill 严重性底限规则。
+保留上游 skill 填充的每个字段。"需要 Dunmore 同意，附带替代担保条件和 30 天通知"应在检查清单上呈现所有三个要素（同意、担保人、通知），而不是折叠为"Dunmore 对控制权变更的同意"。当上游 skill 提供严重性时，延续它——见 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md` 中的跨 skill 严重性底限规则。
 
 追加到检查清单。按（对手方 + 行动类型）去重，而不是按自由格式的项目名称——Dunmore 同意和 Dunmore 解除是不同的项目，即使两者都提到了 Dunmore。去重时，合并字段而非覆盖：如果一个交接填充了 `guarantor`，而后来的交接填充了 `notice_deadline`，检查清单行同时携带两者。
 
@@ -181,7 +181,7 @@ CP-002：Acme 已回复，同意表格已附上，需要对方签署
 
 对于每个阻塞项目，估计完成时间。`（到期日 - 今天） < 估计时间` 的项目处于风险中。这些排在每个状态报告的顶部。
 
-如果检查清单有超过约 10 个项目，或用户随时要求：提供仪表板（见 PRISMCLAW.md `## 输出 → 数据密集型输出的仪表板提议`）。为此输出定制提议——按状态计数（已完成 / 进行中 / 尚未开始 / 有风险）、按工作流分组的关键路径视图，以及带项目、负责人、到期日和剩余天数的可排序表格。
+如果检查清单有超过约 10 个项目，或用户随时要求：提供仪表板（见 PLUGIN.md `## 输出 → 数据密集型输出的仪表板提议`）。为此输出定制提议——按状态计数（已完成 / 进行中 / 尚未开始 / 有风险）、按工作流分组的关键路径视图，以及带项目、负责人、到期日和剩余天数的可排序表格。
 
 ## 集成：dataroom-watcher agent
 
@@ -189,7 +189,7 @@ CP-002：Acme 已回复，同意表格已附上，需要对方签署
 
 ## 重要行动门控（认证交割）
 
-**在生成"准备交割/所有先决条件均已满足"认证或交割备忘录之前：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是**非律师**：
+**在生成"准备交割/所有先决条件均已满足"认证或交割备忘录之前：** 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是**非律师**：
 
 > 认证交割条件已满足（或出具声明此事的交割备忘录）具有法律后果——这是驱动资金流动和交割后义务的信号。你是否已与律师审查过这个？如果是，继续。如果否，以下是带给他们的简报：
 >

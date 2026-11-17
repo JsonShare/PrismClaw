@@ -17,13 +17,13 @@ Licensed under Apache License 2.0
 
 # /builder-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md`。
 2. 运行第 0 部分（角色 + 集成检查），然后是五个问题（执业类型、行业、团队、工具使用习惯），按照以下工作流。
 3. 将档案匹配到注册表 skills。推荐入门包。
 4. 展示每个推荐 skill 的 SKILL.md 摘要。用户选择。
-5. 安装选定的 skills。写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`（按需创建父目录），包含 `## 谁在使用这个`、`## 可用集成`、档案 + 已安装列表。
+5. 安装选定的 skills。写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md`（按需创建父目录），包含 `## 谁在使用这个`、`## 可用集成`、档案 + 已安装列表。
 
-**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查。更新 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 中的 `## 可用集成` 表格，不触碰角色或执业档案。在添加或移除 MCP 连接器后使用。
+**`--check-integrations`：** 仅重新运行第 0 部分的集成可用性检查。更新 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` 中的 `## 可用集成` 表格，不触碰角色或执业档案。在添加或移除 MCP 连接器后使用。
 
 在探测时：仅在 MCP 工具调用实际成功时报告 ✓。已配置但未测试的连接器应标记为 ⚪，附一行确认方法。永不仅基于 `.mcp.json` 声明报告 ✓——那会误导用户认为某些东西已连接而实际上没有。
 
@@ -31,13 +31,13 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供从头开始或从占位符开始的地方恢复。
 - **已填充（无占位符，无暂停注释）** → 已配置；除非 `--redo`，否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其用作章节脚手架。将完成的执业档案写入配置路径，按需创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——将其用作章节脚手架。将完成的执业档案写入配置路径，按需创建父目录。
 
 ## 检查共享公司档案
 
@@ -78,7 +78,7 @@ Licensed under Apache License 2.0
 
 - **此插件维护什么：** 您的执业档案（可信来源、更新偏好、部署上下文）、一个控制安装的 `allowlist.yaml`，以及一个安装日志。
 - **此设置做什么：** 帮助用户发现、安装和评估社区法律 skills——一个执业档案驱动的入门包加上一个设计质量检查，然后才接触他们的工作流。学习执业档案和更新偏好并将它们写入一个纯文本文件，插件每次都会读取。一切都可以稍后更改。
-- **数据来源：** 设置仅从用户的回答构建新的执业档案。它不读取个人 PrismClaw 历史、其他对话或主目录 PRISMCLAW.md。如果在此对话中早些时候出现了相关内容（例如，用户提到了他们的律所或团队），在纳入之前先询问。除非用户输入或批准，否则不会添加任何内容到配置中。
+- **数据来源：** 设置仅从用户的回答构建新的执业档案。它不读取个人 PrismClaw 历史、其他对话或主目录 PLUGIN.md。如果在此对话中早些时候出现了相关内容（例如，用户提到了他们的律所或团队），在纳入之前先询问。除非用户输入或批准，否则不会添加任何内容到配置中。
 
 **为什么这很重要。** 中心的入门包推荐和自动更新程序的过滤都读取此访谈写入的档案。通用档案获得通用入门包——合理有用但与用户实际执业不匹配的 skills。告诉中心用户是哪种律师以及他们最常做什么是"这里有其他律师构建的所有 skills"和"这是与您的工作匹配的集合"之间的区别。回答越具体，推荐就越感觉像用户自己的。
 
@@ -101,9 +101,9 @@ Licensed under Apache License 2.0
 - **在写入档案和推荐入门包之前：** 如果任何答案被跳过或保留为占位符，列出它们并询问："想要现在填充这些吗，还是保留为占位符？您的入门包推荐仅与档案一样好。" 然后等待。
 - **永不**在有静默间隙的情况下写入档案——每个占位符都应该是用户确认的刻意跳过。
 - **批量大小——计算子部分。** "每轮不超过 2-3 个问题"意味着 2-3 个*可回答的提示*，计算子部分。一个有 5 个子部分的问题是 5 个问题。测试标准：用户可以在不滚动的情况下回答吗？如果不能，就太多了。尽可能优先使用结构化的点击选择问题——它们不需要滚动或输入。
-- **暂停和恢复。** 预先告诉用户："如果您需要停止，说 'pause'（或 'stop'，或 '让我稍后再来'），我会保存您的进度。稍后再次运行 `/legal-builder-hub:cold-start-interview`，我会从您停下的地方继续。" 当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`，顶部附有 `<!-- SETUP PAUSED AT: [section name] — run /legal-builder-hub:cold-start-interview to resume -->` 注释，未回答的字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，问候用户："欢迎回来。您在 [section] 暂停了。您之前的答案已保存。从我们停下的地方继续，还是重新开始？" 不要重新询问已回答的问题。
+- **暂停和恢复。** 预先告诉用户："如果您需要停止，说 'pause'（或 'stop'，或 '让我稍后再来'），我会保存您的进度。稍后再次运行 `/legal-builder-hub:cold-start-interview`，我会从您停下的地方继续。" 当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md`，顶部附有 `<!-- SETUP PAUSED AT: [section name] — run /legal-builder-hub:cold-start-interview to resume -->` 注释，未回答的字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，问候用户："欢迎回来。您在 [section] 暂停了。您之前的答案已保存。从我们停下的地方继续，还是重新开始？" 不要重新询问已回答的问题。
 
-**在设置中验证用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是您可以合理性检查的内容——在写入配置之前进行验证。如果用户说的与您的理解或他们粘贴的内容冲突，提出来："您说阈值是 X；我的理解是 Y——您能确认哪个写入档案吗？`[premise flagged — verify]`" 写入 PRISMCLAW.md 的错误事实会传播到每个未来输出；在这里捕捉它是产品中最高杠杆的时刻之一。
+**在设置中验证用户陈述的法律事实。** 当用户用特定的规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是您可以合理性检查的内容——在写入配置之前进行验证。如果用户说的与您的理解或他们粘贴的内容冲突，提出来："您说阈值是 X；我的理解是 Y——您能确认哪个写入档案吗？`[premise flagged — verify]`" 写入 PLUGIN.md 的错误事实会传播到每个未来输出；在这里捕捉它是产品中最高杠杆的时刻之一。
 
 ## 访谈
 
@@ -161,7 +161,7 @@ Licensed under Apache License 2.0
 
 在档案的 `## 我信任的来源` 中记录答案为 `Deployment context: [personal | firm-internal | product-embedding]`。以下 allowlist 的 `licenses:` 播种读取它。
 
-**将 allowlist 写入 `allowlist.yaml`，而不仅是档案。** 安装器的门槛读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml`，而不是 PRISMCLAW.md。如果您仅在档案中记录答案，安装器看到空 allowlist 并回退到宽松模式，无论用户说了什么——静默击败了标题结构防御。在此问题之后：
+**将 allowlist 写入 `allowlist.yaml`，而不仅是档案。** 安装器的门槛读取 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/allowlist.yaml`，而不是 PLUGIN.md。如果您仅在档案中记录答案，安装器看到空 allowlist 并回退到宽松模式，无论用户说了什么——静默击败了标题结构防御。在此问题之后：
 
 1. 在配置路径写入 `allowlist.yaml`，遵循 `${PRISMCLAW_PLUGIN_ROOT}/references/skill-installer/allowlist.md` 中的 schema：
    - `mode:` — 模板默认为 `restrictive`（失败关闭）。为个人/小团队提供 `permissive`（他们没有 IT 策划的发布者列表，所以限制模式会拒绝一切）。中型/大型律所、内部或政府保持 `restrictive`（他们有需要严格门槛的安全策略）。始终确认："我正在将 allowlist 设置为 [mode]。Restrictive 拒绝未知来源直到您添加它们——最安全，但您需要批准每个新发布者。Permissive 标记未知来源并在安装前询问您——更方便，不那么严格。您想要哪个？" 永不在没有明确用户同意的情况下写入 permissive。
@@ -243,7 +243,7 @@ Licensed under Apache License 2.0
 
 ## 写入执业档案
 
-简短。档案 + 已安装列表 + 注册表偏好。按照 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md` 的模板。
+简短。档案 + 已安装列表 + 注册表偏好。按照 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md` 的模板。
 
 ## 写入后
 
@@ -275,7 +275,7 @@ Licensed under Apache License 2.0
 
 然后用"您可以稍后更改任何内容"的注释关闭：
 
-> 完成。您的配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`——一个您可以直接读取和编辑的纯文本文件。您回答的任何内容都可以更改：
+> 完成。您的配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md`——一个您可以直接读取和编辑的纯文本文件。您回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/legal-builder-hub:cold-start-interview --redo` 进行完整重新访谈

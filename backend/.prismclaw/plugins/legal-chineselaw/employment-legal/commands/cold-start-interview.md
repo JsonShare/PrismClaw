@@ -1,7 +1,7 @@
 ---
 name: employment-cold-start-interview
 description: '冷启动设置——从你的员工手册/规章制度和解除备忘录了解你的省市司法管辖区足迹和升级规则。询问哪些省市和国家有员工，读取种子文档，构建一个了解哪些规则在哪里适用的升级表。在全新安装时、当
-  PRISMCLAW.md 仍有 [PLACEHOLDER] 标记时，或当使用 --redo 或 --check-integrations 重新运行时使用。
+  PLUGIN.md 仍有 [PLACEHOLDER] 标记时，或当使用 --redo 或 --check-integrations 重新运行时使用。
 
   '
 argument_hint: '[--redo | --check-integrations]'
@@ -18,11 +18,11 @@ Licensed under Apache License 2.0
 
 # /employment-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分`连接了什么？`检查并重写该配置路径下的 `## Available integrations` 表。探测时：只有当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪，附带一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——那会误导用户以为某些东西已连接而实际没有。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`。如果是 `--check-integrations`，跳过访谈——仅重新运行第 0 部分`连接了什么？`检查并重写该配置路径下的 `## Available integrations` 表。探测时：只有当 MCP 工具调用实际成功时才报告 ✓。已配置但未测试的连接器应标记 ⚪，附带一行确认方法。永远不要仅基于 `.mcp.json` 声明报告 ✓——那会误导用户以为某些东西已连接而实际没有。
 2. 运行以下访谈（先是第 0 部分——角色 + 集成——然后是足迹）：省市/国家、招聘/解除审查触发器、经济补偿金做法。
 3. 种子文档：员工手册/规章制度 + 3 份解除备忘录。
 4. 构建省市特定的升级表。
-5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，根据需要创建父目录。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`，根据需要创建父目录。
 
 ---
 
@@ -34,13 +34,13 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 问候用户并提供从该部分恢复的选项。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供从头开始或从占位符开始处恢复的选项。
 - **已填充（无占位符，无暂停注释）** → 已配置；除非 `--redo` 否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——使用它作为章节脚手架。将完成的执业档案写入配置路径，根据需要创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——使用它作为章节脚手架。将完成的执业档案写入配置路径，根据需要创建父目录。
 
 ## 检查共享公司档案
 
@@ -96,7 +96,7 @@ Licensed under Apache License 2.0
 
 **暂停和恢复。** 提前告诉用户："如果你需要停止，说'暂停'，我会保存你的进度。" 当用户暂停时，将部分配置写入顶部带有 `<!-- SETUP PAUSED AT: [部分名称] -->` 注释和未回答字段上的 `[PENDING]` 标记的配置文件。
 
-**在设置中验证用户陈述的法律事实。** 当用户用具体规则引用、法律条文编号、截止日期、阈值、司法管辖区回答访谈问题时——在写入配置之前进行检查。写入 PRISMCLAW.md 的错误事实会传播到每个未来输出。
+**在设置中验证用户陈述的法律事实。** 当用户用具体规则引用、法律条文编号、截止日期、阈值、司法管辖区回答访谈问题时——在写入配置之前进行检查。写入 PLUGIN.md 的错误事实会传播到每个未来输出。
 
 ## 访谈
 
@@ -153,9 +153,9 @@ Licensed under Apache License 2.0
 > - ⚪ [集成] — 已配置但未验证。打开你的 MCP 设置确认。
 > - ✗ [集成] — 未找到。[功能] 将回退到 [手动替代]。
 
-#### 写入配置 PRISMCLAW.md
+#### 写入配置 PLUGIN.md
 
-在第 0 部分之后立即将 `## Who's using this`、`## Available integrations` 和 `## Outputs` 部分写入配置路径 PRISMCLAW.md。
+在第 0 部分之后立即将 `## Who's using this`、`## Available integrations` 和 `## Outputs` 部分写入配置路径 PLUGIN.md。
 
 ### 第 1 部分：足迹（2-3 分钟）
 
@@ -239,7 +239,7 @@ Licensed under Apache License 2.0
 
 ## 写入执业档案
 
-按照 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md` 中的模板结构。将完成的执业档案写入插件配置，根据需要创建父目录。关键部分：省市足迹、招聘/解除审查触发器、高风险标志、省市特定的升级表。
+按照 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md` 中的模板结构。将完成的执业档案写入插件配置，根据需要创建父目录。关键部分：省市足迹、招聘/解除审查触发器、高风险标志、省市特定的升级表。
 
 ## 写入之后
 
@@ -271,7 +271,7 @@ Licensed under Apache License 2.0
 
 写入配置后，说：
 
-> "完成。你的配置在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`——一个你可以直接阅读和编辑的纯文本文件。你回答的任何内容都可以更改：
+> "完成。你的配置在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`——一个你可以直接阅读和编辑的纯文本文件。你回答的任何内容都可以更改：
 >
 > - 直接编辑文件进行快速更改
 > - 运行 `/employment-legal:cold-start-interview --redo` 进行完整重新访谈

@@ -391,6 +391,23 @@ class SessionQueue:
         rc = self._run_controls.get(conversation_id)
         return rc is not None and rc.is_active()
 
+    def is_turn_running(self, conversation_id: str) -> bool:
+        """本轮是否仍在产出（turn 级判活）。
+
+        与 :meth:`is_conversation_running` 的区别：后者把后台子代理、运行中
+        工具等"会话仍在活动"的痕迹也算作运行中，用于运行列表/水合；而消息面
+        的 ``in_progress`` 只关心**当前这一轮是否还会继续写这条 assistant
+        消息**。done 之后后台子代理仍可能活跃，若沿用前者，本轮会被永久标
+        in_progress，客户端只能等子代理结束才收尾。
+
+        这里读 ``rc.active`` 而不是 ``is_active()``：后者在 abort_event 置位后
+        立即返回 False，但中止的 run 还要把已流出的正文落库、再发 done。
+        那段时间若判为 idle，客户端对账会先清掉叠加层正文（表现为"点停止后
+        答案先消失、落库后又出现"）。``rc.active`` 恰好在 done 之前翻转。
+        """
+        rc = self._run_controls.get(conversation_id)
+        return rc is not None and rc.active
+
     def list_running_conversations(self) -> list[str]:
         return [
             conversation_id

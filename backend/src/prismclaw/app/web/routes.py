@@ -230,6 +230,220 @@ async def _load_and_verify(session_id: str, user_id: str) -> SessionTree:
     return tree
 
 
+def _resolve_conversation_identity(
+    *, user_id: str, workspace_id: str, session_id: str
+) -> tuple[str, list[str]]:
+    """归一化会话 id 并给出判活候选（/run 与 /sync 共用同一口径）。
+
+    裸 id 拼成 ``web:{uid}:{workspace}:{sid}``；完整 id 原样使用。候选额外
+    补 ``s:`` 变体——SessionRouter 生成的树 id 带随机段，前端可能拿裸 id 查询。
+    """
+    base_session_key = build_web_session_key(user_id, _clean_workspace_id(workspace_id))
+    if not session_id.startswith("web:"):
+        resolved_session_id = f"{base_session_key}:{session_id}"
+    else:
+        resolved_session_id = session_id
+
+    candidates = [resolved_session_id]
+    if not resolved_session_id.startswith(f"{base_session_key}:s:"):
+        candidates.append(
+            resolved_session_id.replace(
+                f"{base_session_key}:", f"{base_session_key}:s:", 1,
+            )
+        )
+    return resolved_session_id, candidates
+
+
+def _get_session_queue(request: Request) -> Any | None:
+    web_deps = getattr(getattr(request, "app", None), "state", None)
+    web_deps = getattr(web_deps, "web_deps", None)
+    return getattr(web_deps, "session_queue", None)
+
+
+def _get_run_presence(request: Request) -> Any | None:
+    web_deps = getattr(getattr(request, "app", None), "state", None)
+    web_deps = getattr(web_deps, "web_deps", None)
+    return getattr(web_deps, "run_presence", None)
+
+
+async def _resolve_run_state(
+    request: Request, candidates: list[str], *, turn_only: bool = False
+) -> tuple[str, str | None]:
+    """判定候选会话的运行态：active / idle / unknown。
+
+    先查本进程（权威、零延迟）；本地没有这条 run 时用 Redis presence 兜底——
+    sync 落到非 owner worker 也能得到确定答案，不再把进行中的一轮误判成
+    idle。只有 Redis 不可读时才返回 unknown（保守，客户端不 seal）。
+
+    ``turn_only``：消息面用。只看本轮是否仍在产出（RunControl.active），
+    不把"done 之后仍在跑的后台子代理/工具痕迹"算作本轮未完成，否则这条
+    assistant 消息会一直被标 in_progress，直到子代理结束才收尾。
+    """
+    session_queue = _get_session_queue(request)
+    if session_queue is None:
+        return "unknown", None
+    is_running = (
+        session_queue.is_turn_running if turn_only else session_queue.is_conversation_running
+    )
+    for candidate in candidates:
+        if is_running(candidate):
+            return "active", candidate
+    presence = _get_run_presence(request)
+    if presence is not None:
+        unknown = False
+        for candidate in candidates:
+            state = await presence.read(candidate)
+            if state == "active":
+                return "active", candidate
+            if state == "unknown":
+                unknown = True
+        if unknown:
+            return "unknown", None
+    return "idle", None
+
+
+def _mark_in_progress(messages: list[dict[str, Any]], run_state: str) -> None:
+    """把运行中的最后一轮 assistant 消息标记为 in_progress。
+
+    这一轮是分步落库的，当作定稿会在流式气泡之外再长出一个半成品气泡；
+    同时客户端不得推进水位越过它，否则该轮后续更新会被自己的 after_seq 跳过。
+
+    只认"最后一条 user 消息之后"的 assistant：用户刚发出新一轮、assistant
+    尚未落库时，上一条已定稿答案不能被误标为进行中（那会把历史答案藏掉）。
+
+    unknown（无法确认运行态）保守标记，避免提前 seal。
+    """
+    target: dict[str, Any] | None = None
+    if run_state in ("active", "unknown"):
+        # 用 seq 而不是列表下标定位"最后一条 user 之后"：展示列表里可能混入
+        # 正文为空、但被 retain 的时间线回合，位置不可靠。
+        last_user_seq = max(
+            (int(item.get("seq") or 0) for item in messages if item.get("role") == "user"),
+            default=0,
+        )
+        candidates = [
+            item
+            for item in messages
+            if item.get("role") == "assistant"
+            and int(item.get("seq") or 0) > last_user_seq
+        ]
+        if candidates:
+            target = max(candidates, key=lambda item: int(item.get("seq") or 0))
+    for item in messages:
+        item["in_progress"] = item is target
+
+
+def _timeline_retain_ids(tree: SessionTree) -> set[str]:
+    """挂着执行时间线的 message_id 集合。
+
+    /sessions/{id} 的 message_count 与 /messages 的返回必须同源，否则分页
+    切片会把"正文为空但有时间线"的回合裁掉（其 seq 已被水位越过，增量也
+    补不回来）。
+    """
+    retain: set[str] = set()
+    for entry in tree.entries.values():
+        if not isinstance(entry, CustomEntry):
+            continue
+        if entry.custom_type != EXECUTION_TIMELINE_CUSTOM_TYPE:
+            continue
+        data = entry.data or {}
+        mid = data.get("message_id")
+        if isinstance(mid, str) and data.get("nodes"):
+            retain.add(mid)
+    return retain
+
+
+def _build_conversation_messages(
+    request: Request, tree: SessionTree, *, user_id: str
+) -> list[dict[str, Any]]:
+    """装配展示消息及其元数据（/messages 与 /sync 唯一实现，避免口径漂移）。"""
+    deps = get_web_deps(request)
+    # 工作区根目录解析带创建副作用，且与归属校验同源：这里必须用调用方的
+    # 已认证 user_id，不能从 session_key 反解（用户名可能含分隔符）。
+    workspace_root = _resolve_workspace_root(
+        request=request,
+        user_id=user_id,
+        workspace_id=tree.header.workspace_id,
+    )
+    review_state = None
+    review_registry_fn = getattr(deps, "review_registry_fn", None)
+    if review_registry_fn is not None:
+        try:
+            review_state = review_registry_fn(workspace_root).get_or_open(tree.header.id)
+        except OSError:
+            logger.warning(
+                "review registry unavailable for session=%s; skipping review state",
+                tree.header.id,
+            )
+
+    feedback_by_message: dict[str, str] = {}
+    output_files_by_message: dict[str, list[str]] = {}
+    file_changes_by_message: dict[str, list[dict]] = {}
+    execution_timeline_by_message: dict[str, list[dict]] = {}
+    # 单条消息可能挂着多条 CustomEntry（反馈、交付物、时间线各自独立落库）；
+    # 取挂靠条目的最大 seq，才保证"后到的交付物/时间线"不被增量同步跳过。
+    meta_seq_by_message: dict[str, int] = {}
+    # 注意：按 entries 全集扫描而非 tree.order——order 仅由消息类事件
+    # （user/assistant/tool）重建，CustomEntry 走 entry_updated 落库
+    # （不进 order）。按 order 扫描会让 execution_timeline 等元数据
+    # 在历史回放中永远不可见。
+    for entry in tree.entries.values():
+        if not isinstance(entry, CustomEntry):
+            continue
+        data = entry.data or {}
+        mid = data.get("message_id")
+        if entry.custom_type == FEEDBACK_CUSTOM_TYPE:
+            vote = data.get("vote")
+            if isinstance(mid, str) and isinstance(vote, str) and vote in ("up", "down", "none"):
+                feedback_by_message[mid] = vote
+        elif entry.custom_type == OUTPUT_FILES_CUSTOM_TYPE:
+            files = data.get("files")
+            if isinstance(mid, str) and isinstance(files, list):
+                cleaned = [f.strip() for f in files if isinstance(f, str) and f.strip()]
+                if cleaned:
+                    output_files_by_message[mid] = cleaned
+        elif entry.custom_type == FILE_CHANGES_CUSTOM_TYPE:
+            changes = data.get("changes")
+            if isinstance(mid, str) and isinstance(changes, list):
+                cleaned = [c for c in changes if isinstance(c, dict)]
+                if cleaned:
+                    file_changes_by_message[mid] = cleaned
+        elif entry.custom_type == EXECUTION_TIMELINE_CUSTOM_TYPE:
+            nodes = data.get("nodes")
+            if isinstance(mid, str) and isinstance(nodes, list):
+                execution_timeline_by_message[mid] = nodes
+        else:
+            continue
+        if isinstance(mid, str):
+            meta_seq_by_message[mid] = max(meta_seq_by_message.get(mid, 0), entry.seq)
+
+    # 正文为空、但挂着执行时间线的回合（纯推理 / 仅交付物 / 空答案）必须保留：
+    # 时间线指向它的 entry id，丢掉就等于刷新后执行过程永久消失。保留在
+    # _build_display_messages 内部完成，保证消息顺序与 message_count 同源。
+    display = _build_display_messages(
+        tree,
+        review_utils=deps.review_utils,
+        retain_ids=_timeline_retain_ids(tree),
+    )
+    for item in display:
+        mid = item.get("id")
+        if not isinstance(mid, str):
+            continue
+        item["feedback"] = feedback_by_message.get(mid)
+        item["output_files"] = output_files_by_message.get(mid, [])
+        changes = file_changes_by_message.get(mid, [])
+        for change in changes:
+            path = change.get("path")
+            change["message_id"] = mid
+            if isinstance(path, str) and review_state is not None:
+                change["reviewed"] = review_state.decision.get(path)
+        item["file_changes"] = changes
+        # 执行时间线终态 nodes 附着（与 output_files 同构），供前端历史回放（StepTimeline）。
+        item["timeline"] = execution_timeline_by_message.get(mid, [])
+        item["seq"] = max(int(item.get("seq") or 0), meta_seq_by_message.get(mid, 0))
+    return display
+
+
 @web_router.get("/conversations/{session_id}/run")
 async def get_conversation_run(
     request: Request,
@@ -253,30 +467,15 @@ async def get_conversation_run(
       端点数据源；陈旧 active 条目不得复活为「第二段执行过程」。
     """
     # Step 0: 归一化 session_id（与 trajectory 等兄弟端点同逻辑）。
-    base_session_key = build_web_session_key(user_id, _clean_workspace_id(workspace_id))
-    if not session_id.startswith("web:"):
-        resolved_session_id = f"{base_session_key}:{session_id}"
-    else:
-        resolved_session_id = session_id
+    resolved_session_id, candidates = _resolve_conversation_identity(
+        user_id=user_id, workspace_id=workspace_id, session_id=session_id,
+    )
 
     # Step 1: 内存判活（含 "s:" 前缀回退候选）——非运行中直接 null。
-    web_deps = getattr(request.app.state, "web_deps", None)
-    session_queue = getattr(web_deps, "session_queue", None) if web_deps is not None else None
-    running_id: str | None = None
-    if session_queue is not None:
-        candidates = [resolved_session_id]
-        if not resolved_session_id.startswith(f"{base_session_key}:s:"):
-            candidates.append(
-                resolved_session_id.replace(
-                    f"{base_session_key}:", f"{base_session_key}:s:", 1,
-                )
-            )
-        running_id = next(
-            (c for c in candidates if session_queue.is_conversation_running(c)),
-            None,
-        )
-    if running_id is None:
+    run_state, running_id = await _resolve_run_state(request, candidates)
+    if run_state != "active" or running_id is None:
         return {"run": None}
+    session_queue = _get_session_queue(request)
     resolved_session_id = running_id
 
     # Step 2: 运行中——归属校验 + 树加载（task_runtime 构建需要），内存
@@ -296,8 +495,10 @@ async def get_running_conversations(
     """返回当前用户仍处于活跃执行态的 conversation 列表（用户级，跨工作区）。
 
     权威源是 app 级 SessionQueue 的内存判活（is_conversation_running：投影
-    细分态 OR RunControl 生命周期信号，与 WS 层同一对象）。前端刷新/重连后
-    据此逐会话拉取 GET /run 重放运行态。
+    细分态 OR RunControl 生命周期信号，与 WS 层同一对象）；其他 worker 上
+    运行的会话由 Redis presence 补齐。Web 端刷新/重连后把它并入 `/sync` 的
+    候选集合（运行态与正文都来自 sync 的同一份服务端投影）；`/run` 仍保留
+    给移动端。
 
     此前实现按 ``workspace_id`` 过滤会话历史并逐树扫描 TaskRuntimeState 判活，
     有两个缺陷：
@@ -309,15 +510,18 @@ async def get_running_conversations(
        且每会话一次全树加载开销大。
     """
     session_queue = getattr(request.app.state.web_deps, "session_queue", None)
-    if session_queue is None:
-        return {"conversations": []}
     prefix = f"web:{user_id}:"
-    running = [
-        cid
-        for cid in session_queue.list_running_conversations()
-        if cid.startswith(prefix)
-    ]
-    return {"conversations": running}
+    running: set[str] = set()
+    if session_queue is not None:
+        running.update(
+            cid for cid in session_queue.list_running_conversations() if cid.startswith(prefix)
+        )
+    # 其他 worker 上运行的会话由 Redis presence 补齐，否则本 worker 只看到自己
+    # 内存里的 run，前端重连后不会去 sync 这些会话。
+    presence = _get_run_presence(request)
+    if presence is not None:
+        running.update(await presence.list_active(prefix))
+    return {"conversations": sorted(running)}
 
 
 @web_router.get("/sessions")
@@ -411,7 +615,11 @@ async def get_session(
 ) -> dict:
     tree = await _load_and_verify(session_id, user_id)
     h = tree.header
-    msg_count = len(_build_display_messages(tree))
+    # 与 /messages 的列表同源：正文为空但有时间线的回合也计入，否则分页
+    # 取最后一页时会被裁掉。
+    msg_count = len(
+        _build_display_messages(tree, retain_ids=_timeline_retain_ids(tree))
+    )
     return {
         "id": h.id,
         "workspace_id": h.workspace_id,
@@ -520,77 +728,110 @@ async def get_messages(
 ) -> list[dict]:
     try:
         tree = await _load_and_verify(session_id, user_id)
-        workspace_root = _resolve_workspace_root(
-            request=request,
+        messages = _build_conversation_messages(request, tree, user_id=user_id)
+        # 打开一个正在运行的会话时，历史里的半成品消息必须与 run 叠加层同口径
+        # 标记，否则会出现「定稿气泡 + 流式气泡」两份正文。
+        _, candidates = _resolve_conversation_identity(
             user_id=user_id,
             workspace_id=tree.header.workspace_id,
+            session_id=session_id,
         )
-        try:
-            review_registry_fn = request.app.state.web_deps.review_registry_fn
-            review_state = review_registry_fn(workspace_root).get_or_open(session_id) if review_registry_fn else None
-        except OSError:
-            logger.warning("review registry unavailable for session=%s; skipping review state", session_id)
-            review_state = None
-        feedback_by_message: dict[str, str] = {}
-        output_files_by_message: dict[str, list[str]] = {}
-        file_changes_by_message: dict[str, list[dict]] = {}
-        execution_timeline_by_message: dict[str, list[dict]] = {}
-        # 注意：按 entries 全集扫描而非 tree.order——order 仅由消息类事件
-        # （user/assistant/tool）重建，CustomEntry 走 entry_updated 落库
-        # （不进 order）。按 order 扫描会让 execution_timeline 等元数据
-        # 在历史回放中永远不可见。
-        for entry in tree.entries.values():
-            if not isinstance(entry, CustomEntry):
-                continue
-            data = entry.data or {}
-            if entry.custom_type == FEEDBACK_CUSTOM_TYPE:
-                mid = data.get("message_id")
-                vote = data.get("vote")
-                if isinstance(mid, str) and isinstance(vote, str) and vote in ("up", "down", "none"):
-                    feedback_by_message[mid] = vote
-                continue
-            if entry.custom_type == OUTPUT_FILES_CUSTOM_TYPE:
-                mid = data.get("message_id")
-                files = data.get("files")
-                if isinstance(mid, str) and isinstance(files, list):
-                    cleaned = [f.strip() for f in files if isinstance(f, str) and f.strip()]
-                    if cleaned:
-                        output_files_by_message[mid] = cleaned
-                continue
-            if entry.custom_type == FILE_CHANGES_CUSTOM_TYPE:
-                mid = data.get("message_id")
-                changes = data.get("changes")
-                if isinstance(mid, str) and isinstance(changes, list):
-                    cleaned = [c for c in changes if isinstance(c, dict)]
-                    if cleaned:
-                        file_changes_by_message[mid] = cleaned
-                continue
-            if entry.custom_type == EXECUTION_TIMELINE_CUSTOM_TYPE:
-                mid = data.get("message_id")
-                nodes = data.get("nodes")
-                if isinstance(mid, str) and isinstance(nodes, list):
-                    execution_timeline_by_message[mid] = nodes
-                continue
-        display = _build_display_messages(tree, review_utils=get_web_deps(request).review_utils)
-        page = display[offset : offset + limit]
-        for item in page:
-            mid = item.get("id")
-            if isinstance(mid, str):
-                item["feedback"] = feedback_by_message.get(mid)
-                item["output_files"] = output_files_by_message.get(mid, [])
-                changes = file_changes_by_message.get(mid, [])
-                for change in changes:
-                    path = change.get("path")
-                    change["message_id"] = mid
-                    if isinstance(path, str) and review_state is not None:
-                        change["reviewed"] = review_state.decision.get(path)
-                item["file_changes"] = changes
-                # 执行时间线终态 nodes 附着（与 output_files 同构），供前端历史回放（StepTimeline）。
-                item["timeline"] = execution_timeline_by_message.get(mid, [])
-        return page
+        run_state, _ = await _resolve_run_state(request, candidates, turn_only=True)
+        _mark_in_progress(messages, run_state)
+        return messages[offset : offset + limit]
     except Exception:
         logger.exception("get_messages failed for session=%s user=%s", session_id, user_id)
         raise
+
+
+def _settled_watermark(messages: list[dict[str, Any]], after_seq: int) -> int:
+    """本次响应可推进到的客户端水位。
+
+    有 in_progress 消息时，水位必须停在它之前——否则客户端下次不会再取回
+    这一轮，而它恰恰是唯一还没定稿、最需要更新的那条。运行中追加的 steering
+    user 消息（排在 in_progress 之后）照常返回，但不抬高水位。
+    """
+    in_progress_seq = next(
+        (int(m.get("seq") or 0) for m in messages if m.get("in_progress")),
+        None,
+    )
+    if in_progress_seq is None:
+        return max((int(m.get("seq") or 0) for m in messages), default=after_seq)
+    return max(
+        (
+            int(m.get("seq") or 0)
+            for m in messages
+            if not m.get("in_progress") and int(m.get("seq") or 0) < in_progress_seq
+        ),
+        default=after_seq,
+    )
+
+
+@web_router.get("/conversations/{session_id}/sync")
+async def sync_conversation(
+    request: Request,
+    session_id: str,
+    workspace_id: str = "default",
+    after_seq: int = 0,
+    user_id: str = Depends(get_current_user),
+) -> dict[str, Any]:
+    """补差 + 运行态的单一入口，替代 /conversations/running + /run 的 N+1 组合。
+
+    - 只读、幂等：任意时刻调用结果一致（除 seq 推进）。
+    - 只交付 ``seq > after_seq`` 的展示消息；user 与 assistant 同处 seq 体系，
+      客户端按 seq 排序，user 消息自带 ``client_message_id`` 供本地乐观气泡
+      re-key。``seq=0`` 是改造前的历史 entry，只经 /messages 提供。
+      ``after_seq > watermark`` 说明客户端本地水位已失效（服务端会话被清理后
+      同名复用），返回 history_reset 让客户端清零重拉。
+    - 单页上限 100 条，超出置 has_more；settled_seq 只按本次返回的消息计算，
+      否则客户端会把没拿到正文的 seq 当成已定稿而永久跳过。
+    """
+    resolved_session_id, candidates = _resolve_conversation_identity(
+        user_id=user_id, workspace_id=workspace_id, session_id=session_id,
+    )
+    run_state, running_id = await _resolve_run_state(request, candidates, turn_only=True)
+    # 判活命中的可能是 "s:" 回退候选，以它为准加载，保证运行态与树同源。
+    if running_id is not None:
+        resolved_session_id = running_id
+
+    tree = await _load_and_verify(resolved_session_id, user_id)
+    messages = _build_conversation_messages(request, tree, user_id=user_id)
+    watermark = max((entry.seq for entry in tree.entries.values()), default=0)
+    history_reset = after_seq > watermark
+
+    _mark_in_progress(messages, run_state)
+    # 只交付 seq 严格大于水位的消息。``seq=0`` 是改造前的历史 entry（没有 seq
+    # 字段），它们只经 /messages 提供：若允许它们在 after_seq=0 时进入同步，
+    # 超过 100 条的老会话首页会全是 seq=0，settled_seq 永远停在 0，之后的新回答
+    # 永远取不到。因此 after_seq=0 也不做"兼容 seq=0"的放行。
+    messages = [m for m in messages if int(m.get("seq") or 0) > after_seq]
+    messages.sort(key=lambda m: int(m.get("seq") or 0))
+
+    has_more = len(messages) > 100
+    if has_more:
+        messages = messages[:100]
+
+    settled_seq = _settled_watermark(messages, after_seq)
+
+    run: dict[str, Any] | None = None
+    if run_state == "active":
+        payload = _build_run_projection_payload(
+            tree, _get_session_queue(request), resolved_session_id,
+        )
+        if payload is not None:
+            run = payload.model_dump(mode="json")
+
+    return {
+        "conversation_id": resolved_session_id,
+        "after_seq": after_seq,
+        "settled_seq": settled_seq,
+        "watermark": watermark,
+        "run_state": run_state,
+        "run": run,
+        "messages": messages,
+        "has_more": has_more,
+        "history_reset": history_reset,
+    }
 
 
 class FeedbackRequest(BaseModel):

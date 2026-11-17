@@ -32,6 +32,10 @@ SubagentProgressSink = Callable[[SubagentProgressBatch], Awaitable[None]]
 
 _DEFAULT_FLUSH_INTERVAL_S = 0.25
 
+# 每个子代理保留的最近动作条数上限。它只是「还活着」的证据，不是执行日志——
+# 再多就超出运行态展示的用途，应该去看完整轨迹了。
+_MAX_RECENT_ACTIVITY = 5
+
 
 class SubagentProgressEmitter:
     def __init__(
@@ -52,7 +56,23 @@ class SubagentProgressEmitter:
     def update(self, item: SubagentProgressItem) -> None:
         if self._closed:
             return
-        self._states[item.sub_session_id] = item
+        prev = self._states.get(item.sub_session_id)
+        activity = list(prev.recent_activity) if prev is not None else []
+        # 只在「工具身份变化」时追一条：同工具同轮次的重复 update 是高频噪声，
+        # 同工具跨轮次（prev.turn 不同）才是新动作。
+        if item.current_tool and (
+            prev is None
+            or prev.current_tool != item.current_tool
+            or prev.turn != item.turn
+        ):
+            label = f"{item.current_tool} {item.current_tool_summary or ''}".strip()
+            if not activity or activity[-1] != label:
+                activity.append(label)
+        if len(activity) > _MAX_RECENT_ACTIVITY:
+            activity = activity[-_MAX_RECENT_ACTIVITY:]
+        self._states[item.sub_session_id] = item.model_copy(
+            update={"recent_activity": activity}
+        )
         self._dirty = True
 
     async def _flush_loop(self) -> None:

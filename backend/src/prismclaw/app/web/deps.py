@@ -28,6 +28,8 @@ class WebDeps:
 
     redis_client: Any = None
     memory_store: Any = None
+    # 跨 worker 运行态在场证明（Redis 心跳 + 中止 Pub/Sub）；无 Redis 时为 None。
+    run_presence: Any = None
     task_manager: Any = None
     evolution_settings: Any = None
     nudge_hook: Any = None

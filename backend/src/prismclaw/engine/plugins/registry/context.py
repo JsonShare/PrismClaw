@@ -1,6 +1,5 @@
 """插件上下文：draft transform API。
 
-借鉴 opencode-dev ``plugin/host.ts`` L40 ``PluginHost``。
 插件通过 transform 方法修改运行时注册表，而非直接操作 ExtensionManager 内部状态。
 """
 from __future__ import annotations
@@ -9,7 +8,7 @@ from typing import Any, Callable, Protocol
 
 
 class AgentDraft(Protocol):
-    """Agent 注册表 draft。对标 opencode-dev ``agent.transform`` draft。"""
+    """Agent 注册表 draft。"""
 
     def list(self) -> list[Any]: ...
     def get(self, agent_id: str) -> Any | None: ...
@@ -36,7 +35,7 @@ class CommandDraft(Protocol):
 
 
 class PluginContext:
-    """插件上下文。借鉴 opencode-dev ``PluginHost`` (host.ts L40)。
+    """插件上下文。
 
     插件通过 transform 方法修改运行时注册表。
     每个 transform 回调在一个 draft 上下文中执行，支持原子修改。
@@ -58,7 +57,7 @@ class PluginContext:
         self._mcp_manager = mcp_manager
 
     def agent_transform(self, callback: Callable[[AgentDraft], None]) -> None:
-        """修改 agent 注册表。对标 opencode-dev ``agent.transform``。"""
+        """修改 agent 注册表。"""
         if self._agent_registry is None:
             return
         draft = _RegistryDraft(self._agent_registry)

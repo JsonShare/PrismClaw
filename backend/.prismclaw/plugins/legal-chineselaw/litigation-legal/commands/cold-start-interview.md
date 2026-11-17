@@ -1,7 +1,7 @@
 ---
 name: litigation-cold-start-interview
 description: 诉讼 plugin 的冷启动——按角色（内部法务、律所律师、独立执业）和立场（原告、被告、两者兼有）分支，捕获风险校准、业务格局和内部风格，并写入执业档案
-  PRISMCLAW.md。在全新安装时、用户需要设置或重置执业档案时、或重新检查可用集成时使用。
+  PLUGIN.md。在全新安装时、用户需要设置或重置执业档案时、或重新检查可用集成时使用。
 argument_hint: '[--redo | --check-integrations]'
 category: 争议诉讼
 ---
@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /litigation-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`。如果已填充且未传入 `--redo`，在覆盖前询问用户。
+1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`。如果已填充且未传入 `--redo`，在覆盖前询问用户。
 2. 遵循以下工作流和参考。
 3. 运行第 0 部分（角色、立场、集成检查）。访谈按角色和立场分支。
    - **角色** 决定执业档案结构：**内部法务**（事项组合、外部律师监督、储备金方法、管理层/董事会汇报）、**律所律师**（案件工作——事项背景、案件理论与核心事实、种子简报的内部风格、证据审查设置），或**独立执业**（案件量 + 风险代理或委托经济性 + 客户预期 + 诉讼时效追踪，然后是适用于任何起草工作的案件理论和简报风格部分）。
@@ -24,13 +24,13 @@ Licensed under Apache License 2.0
 
    完成第 0 部分后，走与所选角色匹配的章节。不要对独立执业用户运行内部法务路径——储备金和董事会备忘录框架不适合独立执业。提供默认值；捕获自由格式覆盖。在每个章节询问种子文档（非强迫性；说明分享可以提升下游所有 skill 的质量）。
 4. 呈现差距。如果用户没有明确的风险框架或汇报阈值，指出并提议现在讨论，或留 `[PLACEHOLDER]` 待后续填写。
-5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`。在页脚注明日期。
+5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`。在页脚注明日期。
 6. 最终确定前与用户确认："这是我捕获的内容——有什么错误吗？"
 
 ## 标志
 
-- `--redo` — 重新运行完整访谈并覆盖 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`。
-- `--check-integrations` — 重新扫描可用的 MCP 连接器，并刷新 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 中的 `## 可用集成` 表，而不重新运行完整访谈。在设置新连接器（DMS、文档存储、企业协作/钉钉、CLM）后使用。
+- `--redo` — 重新运行完整访谈并覆盖 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`。
+- `--check-integrations` — 重新扫描可用的 MCP 连接器，并刷新 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 中的 `## 可用集成` 表，而不重新运行完整访谈。在设置新连接器（DMS、文档存储、企业协作/钉钉、CLM）后使用。
 
 在探测时：只有在 MCP 工具调用实际成功时才报告 ✓。已配置但未经测试的连接器应标记为 ⚪，并附一行确认方式说明。永远不要仅凭 `.mcp.json` 声明就报告 ✓——这会误导用户以为某项功能已接入，而实际上并没有。
 
@@ -50,13 +50,13 @@ plugin 服务于三类不同的诉讼角色——内部法律顾问管理事项�
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 向用户问候并提议从该章节继续。
 - **包含 `[PLACEHOLDER]` 标记但无暂停注释** → 模板从未完成；提议重新开始或从占位符开始处继续。
 - **已填充（无占位符，无暂停注释）** → 已配置；除非 `--redo` 否则跳过。
 
-模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md`——将其作为章节脚手架使用。将完成的执业档案写入配置路径，根据需要创建父目录。
+模板结构位于 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md`——将其作为章节脚手架使用。将完成的执业档案写入配置路径，根据需要创建父目录。
 
 ## 检查共享公司简介
 
@@ -97,7 +97,7 @@ plugin 服务于三类不同的诉讼角色——内部法律顾问管理事项�
 
 然后是全新档案说明：
 
-> "设置从您的回答构建全新的专业档案。它不读取您的个人 PrismClaw 历史、其他对话或您的主目录 PRISMCLAW.md。如果我在对话上下文中注意到相关信息——例如，您之前提到了您的公司或事项——我会在使用前询问。除非您输入或批准，否则不会将任何个人内容纳入您的执业配置。"
+> "设置从您的回答构建全新的专业档案。它不读取您的个人 PrismClaw 历史、其他对话或您的主目录 PLUGIN.md。如果我在对话上下文中注意到相关信息——例如，您之前提到了您的公司或事项——我会在使用前询问。除非您输入或批准，否则不会将任何个人内容纳入您的执业配置。"
 
 然后："准备好了吗？先几个简短问题。"
 
@@ -392,7 +392,7 @@ plugin 服务于三类不同的诉讼角色——内部法律顾问管理事项�
 
 ## 写入执业档案
 
-将完成的执业档案写入 plugin 配置，使用 `${PRISMCLAW_PLUGIN_ROOT}/PRISMCLAW.md` 中的模板作为章节脚手架。填写所有已捕获的章节；对用户跳过的章节留 `[PLACEHOLDER]`。在页脚注明日期。
+将完成的执业档案写入 plugin 配置，使用 `${PRISMCLAW_PLUGIN_ROOT}/PLUGIN.md` 中的模板作为章节脚手架。填写所有已捕获的章节；对用户跳过的章节留 `[PLACEHOLDER]`。在页脚注明日期。
 
 **按角色控制章节：**
 
@@ -439,7 +439,7 @@ plugin 服务于三类不同的诉讼角色——内部法律顾问管理事项�
 
 ### 以"您可以随时修改"说明结束
 
-> "您的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`——一份您可以直接阅读和编辑的纯文本文件。您的任何回答都可以更改：
+> "您的执业档案位于 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`——一份您可以直接阅读和编辑的纯文本文件。您的任何回答都可以更改：
 >
 > - 直接编辑文件以进行快速更改
 > - 运行 `/litigation-legal:cold-start-interview --redo` 进行完整重新访谈

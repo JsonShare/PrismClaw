@@ -49,6 +49,8 @@
 ```
 
 要点：正文单 pass 实时推送，不做二次缓冲；客户端刷新后可按事件重建会话（Event Sourcing）。
+投递链路（`seq` 对账、`/sync` 契约、客户端两层状态机）见
+[会话投递：单一事实源 + 可恢复流](conversation-delivery.md)。
 
 ---
 
@@ -127,7 +129,7 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 | 6 | Dreaming | 三阶段记忆整理与治理 | [06](modules/06-dream-engine.md) |
 | 7 | 上下文压缩 | 预算编排、历史压缩、保真校验 | [07](modules/07-context-compression.md) |
 | 8 | MCP 集成 | 外部工具协议适配与网络 ACL | [08](modules/08-mcp-integration.md) |
-| 9 | 子代理 | 定义、并行执行、结果回收 | [09](modules/09-subagent.md) |
+| 9 | 子代理 | 定义、同步/并行执行、后台派发、结果回收 | [09](modules/09-subagent.md) |
 | 10 | 工具集 | 内置 bash/文件/搜索工具 | [10](modules/10-toolkit.md) |
 | 11 | LLM 服务 | 多 Provider 适配、流式、回退 | [11](modules/11-llm-service.md) |
 | 12 | Web 层 | HTTP/WS、认证、路由、会话 | [12](modules/12-web-layer.md) |
@@ -137,6 +139,8 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 | 16 | 调度器 | 定时任务调度与执行 | [16](modules/16-scheduler.md) |
 
 领域设计：医疗 → [medical-domain-design.md](biz_domain/medical/medical-domain-design.md)、法律 → [legal-domain-design.md](biz_domain/legal/legal-domain-design.md)、领域包机制 → [domain-bundle-design.md](biz_domain/_shared/domain-bundle-design.md)
+
+子代理后台执行（P1a：`dispatch_mode=background`、状态机、取消与终态投递）的设计细节见 [09-subagent.md](modules/09-subagent.md) 的「后台执行」一节。
 
 ---
 
@@ -151,3 +155,4 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 | **事件即真相** | 会话状态由事件流投影重建，前端与后端逐字节一致 |
 | **单一事实源** | 业务数据只落 PostgreSQL；缓存与队列仅做协调 |
 | **写侧受控词表** | 记忆类型、置信度、来源阶段在写入时归一，查询侧不做猜测 |
+| **能力与部署形态绑定** | 依赖单进程的增强能力（如子代理后台执行）只在单副本启用；多副本时从工具契约移除并显式拒绝，不静默降级 |

@@ -22,7 +22,7 @@ Licensed under Apache License 2.0
 /legal-builder-hub:cold-start-interview
 ```
 
-你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md`，在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md`，在 plugin 更新后保留。
 
 ## 安全态势
 
@@ -40,7 +40,7 @@ Licensed under Apache License 2.0
 ## 先决条件
 
 - registry-sync agent 的 Slack 通知需要在你的环境中配置 Slack MCP 服务器。没有它，agent 将其摘要写入文件。
-- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 中的默认注册中心列表除了 `lpm-skills` 外都是空的。通过 `/legal-builder-hub:registry-browser` 或编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 添加你信任的注册中心。
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` 中的默认注册中心列表除了 `lpm-skills` 外都是空的。通过 `/legal-builder-hub:registry-browser` 或编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` 添加你信任的注册中心。
 
 ## Commands
 
@@ -88,7 +88,7 @@ Licensed under Apache License 2.0
 
 ## 它如何学习
 
-你在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Hub 在每次 `/legal-builder-hub:registry-browser` 和 `/legal-builder-hub:related-skills-surfacer` 时重新读取它，因此调整你的执业类型、行业或观察的注册中心会改进未来的推荐。当你的工作变动时，直接编辑文件或重新运行 `/legal-builder-hub:cold-start-interview --redo`。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Hub 在每次 `/legal-builder-hub:registry-browser` 和 `/legal-builder-hub:related-skills-surfacer` 时重新读取它，因此调整你的执业类型、行业或观察的注册中心会改进未来的推荐。当你的工作变动时，直接编辑文件或重新运行 `/legal-builder-hub:cold-start-interview --redo`。
 
 ## 注意事项
 

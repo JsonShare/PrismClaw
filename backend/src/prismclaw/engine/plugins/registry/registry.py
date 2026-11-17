@@ -69,7 +69,7 @@ class DescriptorRegistry:
     def by_name(self, name: str) -> PluginDescriptor | None:
         """按插件名查找，返回最高优先级匹配。
 
-        对标设计方案：session > marketplace > local > builtin。
+        优先级：session > marketplace > local > builtin。
         """
         candidates = [
             desc for desc in self.plugins.values()
@@ -83,7 +83,7 @@ class DescriptorRegistry:
         return self.commands.get(command_name.lower())
 
     def by_state(self, state: "PluginLifecycleState") -> list[PluginDescriptor]:
-        """按生命周期状态过滤插件。对标设计方案 Phase 3。"""
+        """按生命周期状态过滤插件。"""
         return [
             desc for desc in self.plugins.values() if desc.lifecycle_state == state
         ]

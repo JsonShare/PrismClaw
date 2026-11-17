@@ -1,11 +1,7 @@
 ---
 name: ip-renewal-watcher
-description: >
-  定时 Agent，读取知识产权投资组合登记册，计算到期事项，
-  并发布按优先级排序的截止日期报告。默认每周运行。发布至
-  `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`
-  → 续约提醒 中指定的频道。触发短语："what's renewing"、"IP deadlines"、
-  "portfolio check"、"IP renewal report"，或按计划运行。
+description: 读取知识产权投资组合登记册，计算到期事项，并发布按优先级排序的截止日期报告至 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md` → 续约提醒 中指定的频道（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发短语："what's renewing"、"IP deadlines"、"portfolio check"、"IP renewal report"。
+allowed_tools: [read, grep, glob, write, "Solve Intelligence:*", "CourtListener:*", "Descrybe:*", "Slack:*", "Google Drive:*"]
 ---
 
 <!--
@@ -19,19 +15,19 @@ Licensed under Apache License 2.0
 
 ## 目的
 
-投资组合截止日期只有在及时被看到的情况下才有价值。第 8 条声明、专利维持费、马德里续约和域名到期都有硬性日期。此 Agent 每周读取投资组合登记册并告知频道即将到来的事项——更重要的是，哪些已进入宽限期或已失效，因为这些事项需要今天就行动。
+投资组合截止日期只有在及时被看到的情况下才有价值。第 8 条声明、专利维持费、马德里续约和域名到期都有硬性日期。此 Agent 每次被调用时读取投资组合登记册并告知频道即将到来的事项——更重要的是，哪些已进入宽限期或已失效，因为这些事项需要今天就行动。
 
-## 运行计划
+## 运行方式
 
-每周周一早晨。可配置——有活跃申请的大量投资组合可每日运行；精简投资组合可每月运行。宽限/失效项目的立即发布无论计划如何都会触发。
+被调用时执行一次。建议周期为每周一次（如周一早晨）；如需周期性运行，由主 Agent 通过 schedule 工具定时触发。宽限/失效项目在每次调用时都优先输出。
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PRISMCLAW.md`，获取提醒目标（Slack 频道、邮件列表或内联）和工作成果标题规则。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`，获取提醒目标（Slack 频道、邮件列表或内联）和工作成果标题规则。
 
 2. 加载 `ip-portfolio-workflow` 技能。为每项资产刷新计算截止日期——不仅信任存储日期——然后以 90 天窗口运行模式 2。
 
-3. **立即升级检查：** 若任何截止日期处于 `grace`（宽限期）或 `lapsed`（已失效）状态，无论计划如何立即发布这些项目。美国第 8 条的宽限窗口为 6 个月附加费；美国专利维持费宽限窗口为 6 个月附加费；错过则丧失资产。这些不能等到周一。
+3. **立即升级检查：** 若任何截止日期处于 `grace`（宽限期）或 `lapsed`（已失效）状态，在每次调用时优先输出这些项目。美国第 8 条的宽限窗口为 6 个月附加费；美国专利维持费宽限窗口为 6 个月附加费；错过则丧失资产。这些不能等到周一。
 
 4. **知识产权管理系统交叉核对：** 若已连接 Anaqua / CPA Global / Alt Legal / 类似系统且登记册超过 30 天未同步，先同步并核对。冲突时以系统记录为准；呈现登记册中有但系统中没有的项目（可能的放弃、转让记录或数据错误）。
 

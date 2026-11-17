@@ -84,7 +84,7 @@ class SkillExecutionStrategy(BaseModel):
     # Step 1-9: 执业档案 / plugin 传播字段
     # 本 skill 属于哪个 plugin(仅当 source=='plugin' 时非空,取自 loaded_from)
     plugin_name: str | None = None
-    # 执业档案原始文本( <plugins>/<plugin>/prismclaw.md ),
+    # 执业档案原始文本( <plugins>/<plugin>/PLUGIN.md ),
     # 读入后已存入 append_messages 的一条消息中,这里保留副本方便 audit/debug。
     plugin_profile_text: str | None = None
     # preload body 注入使用的字符预算上限(默认 30K, 硬截断)

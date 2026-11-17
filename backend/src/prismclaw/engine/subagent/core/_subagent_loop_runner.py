@@ -36,6 +36,7 @@ from prismclaw.engine.execution.output.tool_result_rendering import (
     tool_result_to_llm_content,
 )
 from prismclaw.engine.subagent.core._result_types import SettledSubagentToolSurface
+from prismclaw.engine.subagent.core.run_context import SubagentRunInterruptedError
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.streaming import ErrorEvent
 from prismclaw.schema.llm.request import PackedLLMRequest
@@ -80,6 +81,7 @@ async def run_subagent_turn_loop(
     返回 (outcome, turns, usage_acc)；outcome 字符串与旧 _loop 完全一致。
     """
     emitter = instance._resolve_progress_emitter(sub_ctx, manifest)
+    run_context = getattr(instance, "_run_context", None)
     loop_started_at = time.monotonic()
     # timeout_s <= 0 表示「无墙钟上限」（fork 子代理沿用主流程哲学）：
     # deadline 置 None，整个循环不检查时间。fork 场景通常 max_turns 也为 0，
@@ -90,13 +92,10 @@ async def run_subagent_turn_loop(
 
     state = RunLoopState(tool_ctx=sub_ctx)
 
-    async def prepare_next_turn(_s: RunLoopState) -> None:
-        """Prepare 端口空实现：子代理无上下文重装配。
-
-        上下文由调用方 ``messages`` 列表持有（本函数每次 LLM 往返直接
-        append），不存在 prepare 阶段。
-        """
-        return None
+    async def prepare_next_turn(s: RunLoopState) -> None:
+        if run_context is None:
+            return
+        s.pending_messages.extend(await run_context.collect_pending_messages())
 
     async def stream_llm(s: RunLoopState) -> AsyncIterator[None]:
         # 轮顶终局检查（对齐现实现 L50-62：abort / 墙钟，均在 LLM 调用之前）
@@ -124,6 +123,20 @@ async def run_subagent_turn_loop(
             )
             return
             yield  # pragma: no cover
+
+        if run_context is not None:
+            try:
+                await run_context.ensure_active()
+            except SubagentRunInterruptedError as exc:
+                end["cause"], end["turns"] = "aborted", s.iteration
+                s.llm_outcome = LLMStreamError(
+                    error_event=ErrorEvent(
+                        error_code="interrupted",
+                        message=str(exc),
+                    ),
+                )
+                return
+                yield  # pragma: no cover
 
         # D1 advisory 预留通道（当前恒空；启用后 advisory 经此进下一轮上下文）
         if s.pending_messages:
@@ -201,6 +214,8 @@ async def run_subagent_turn_loop(
         assistant_msg: dict[str, Any] = {"role": "assistant", "content": assistant_text}
         if tool_calls:
             assistant_msg["tool_calls"] = tool_calls
+        if run_context is not None:
+            await run_context.persist_assistant(assistant_text, tool_calls)
         messages.append(assistant_msg)
 
         turn_no = s.iteration + 1
@@ -234,6 +249,7 @@ async def run_subagent_turn_loop(
             max_turns=max_turns,
             partial_status="tool_running",
             current_tool=instance._first_tool_name(tool_calls),
+            current_tool_summary=instance._summarize_tool_call(tool_calls),
             started_at=loop_started_at,
         )
         # dispatch 前墙钟门（对齐现实现 L168-174：不打工具，assistant tool_calls
@@ -246,6 +262,19 @@ async def run_subagent_turn_loop(
             end["cause"], end["turns"] = "timeout", turn_no
             return
             yield  # pragma: no cover
+        if run_context is not None:
+            try:
+                await run_context.before_tool_dispatch(tool_calls, instance._tools)
+            except SubagentRunInterruptedError as exc:
+                end["cause"], end["turns"] = "aborted", turn_no
+                s.llm_outcome = LLMStreamError(
+                    error_event=ErrorEvent(
+                        error_code="interrupted",
+                        message=str(exc),
+                    ),
+                )
+                return
+                yield  # pragma: no cover
         tool_results = await instance._dispatch_tool_calls(
             tool_calls,
             sub_ctx=sub_ctx,
@@ -262,6 +291,8 @@ async def run_subagent_turn_loop(
             current_tool=None,
             started_at=loop_started_at,
         )
+        if run_context is not None:
+            await run_context.persist_tool_results(tool_calls, tool_results)
         for call, result in zip(tool_calls, tool_results, strict=False):
             messages.append(
                 {

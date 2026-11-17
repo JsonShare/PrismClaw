@@ -37,7 +37,7 @@ def _load_declared_commands(
 ) -> list[dict[str, Any]]:
     """加载命令定义。
 
-    v4：合并两个来源（对标参考实现 manifest.commands + commands/ 目录）：
+    v4：合并两个来源（manifest.commands + commands/ 目录）：
     1. manifest.commands 字典声明
     2. commands/ 目录下的 markdown 文件
     """
@@ -287,8 +287,8 @@ def _substitute_mcp_server_configs(
     return substituted
 
 
-# 单次技能激活注入 PRISMCLAW.md 的 token 上限。域包（法律/医疗等）的
-# PRISMCLAW.md 动辄上万 token，全量注入会挤占上下文并淹没当前任务。
+# 单次技能激活注入 PLUGIN.md 的 token 上限。域包（法律/医疗等）的
+# PLUGIN.md 动辄上万 token，全量注入会挤占上下文并淹没当前任务。
 _PLUGIN_INSTRUCTIONS_TOKEN_BUDGET = 2000
 
 # 超限时优先保留的章节：安全红线、输出规范与护栏类的行为约束。
@@ -345,7 +345,7 @@ def _cap_plugin_instructions(
 
     安全/输出类章节整体超预算时，小章节整段保留、大章节按体量比例分剩余
     额度，避免先到先得导致后面的护栏章节被整段挤掉。被舍弃的章节以一行
-    说明替代，让模型知道完整规范在插件目录的 PRISMCLAW.md 里，而不是
+    说明替代，让模型知道完整规范在插件目录的 PLUGIN.md 里，而不是
     无声丢失。未超限时原样返回。
     """
     if estimate_tokens(text) <= token_budget:
@@ -403,18 +403,18 @@ def _cap_plugin_instructions(
     if omitted:
         parts.append(
             f"> 受注入长度限制，已省略 {omitted} 个章节。"
-            "需要完整规范时请读取插件目录下的 PRISMCLAW.md。"
+            "需要完整规范时请读取插件目录下的 PLUGIN.md。"
         )
     return "\n\n".join(parts)
 
 
 def _load_plugin_instructions(install_path: Path) -> str | None:
-    """加载 PRISMCLAW.md 作为插件指令。
+    """加载 PLUGIN.md 作为插件指令。
 
-    PRISMCLAW.md 包含安全规则、输出规范、方法论、护栏等关键行为定义。
+    PLUGIN.md 包含安全规则、输出规范、方法论、护栏等关键行为定义。
     加载逻辑：
-    1. 优先加载子插件级 PRISMCLAW.md（最高优先级，可覆盖 marketplace 级）
-    2. 向上查找 marketplace 级 PRISMCLAW.md 作为继承指令（低优先级）
+    1. 优先加载子插件级 PLUGIN.md（最高优先级，可覆盖 marketplace 级）
+    2. 向上查找 marketplace 级 PLUGIN.md 作为继承指令（低优先级）
     3. 合并两级指令，明确标注层级关系
     4. 对内容调用 substitute_variables 解析 ${PRISMCLAW_PLUGIN_ROOT} 等变量
     5. 按章节做 token 限额（见 ``_cap_plugin_instructions``）
@@ -423,7 +423,7 @@ def _load_plugin_instructions(install_path: Path) -> str | None:
     插件模板里用 ``<!-- ... -->`` comment 块写了"停止检查"等 prose 指令——这些
     是写给人类维护者的，不是写给模型的。LLM 对 prose 指令特别敏感，会无视
     comment 格式把它当有效指令执行，导致首次激活就拦用户。加载时剥离 comment
-    块，让 PRISMCLAW.md 回归纯指令/规范文本。
+    块，让 PLUGIN.md 回归纯指令/规范文本。
     """
     from prismclaw.engine.plugins.manifest.substitution import (
         build_plugin_variables,
@@ -463,7 +463,7 @@ def _load_plugin_instructions(install_path: Path) -> str | None:
                     f"{substituted.strip()}"
                 )
         except OSError as exc:
-            logger.debug("Failed to read marketplace PRISMCLAW.md at %s: %s", marketplace_readme, exc)
+            logger.debug("Failed to read marketplace PLUGIN.md at %s: %s", marketplace_readme, exc)
 
     if parts:
         return _cap_plugin_instructions("\n\n---\n\n".join(parts))

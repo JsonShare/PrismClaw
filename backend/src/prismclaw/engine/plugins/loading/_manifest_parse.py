@@ -71,8 +71,7 @@ def _parse_user_config_schema(manifest: PluginManifest) -> dict[str, UserConfigO
 def _sensitive_user_config_keys(manifest: PluginManifest) -> frozenset[str]:
     """返回 schema 中标记为 sensitive 的 user_config key 集合。
 
-    对标参考实现 ``pluginOptionsStorage`` 的 sensitive 分支：敏感值不得进入
-    模型上下文或任何被缓存/渲染的产物，正文替换时以占位符代之。
+    敏感值不得进入模型上下文或任何被缓存/渲染的产物，正文替换时以占位符代之。
     """
     return frozenset(
         key for key, spec in _parse_user_config_schema(manifest).items() if spec.sensitive is True
@@ -82,7 +81,7 @@ def _sensitive_user_config_keys(manifest: PluginManifest) -> frozenset[str]:
 def _resolve_user_config(
     manifest: PluginManifest, plugin_options: dict[str, Any]
 ) -> dict[str, Any]:
-    """解析 user_config，应用默认值。对标参考实现 ``resolveUserConfig``。"""
+    """解析 user_config，应用默认值。"""
     properties = _parse_user_config_schema(manifest)
     resolved: dict[str, Any] = {}
     # 先填充 schema 中声明的 key（保留 schema 顺序）

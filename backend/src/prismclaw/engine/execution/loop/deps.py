@@ -21,6 +21,9 @@ if TYPE_CHECKING:
     from prismclaw.engine.security.audit.store import AuditStore
     from prismclaw.engine.security.gate import SafetyGate
     from prismclaw.engine.security.gate.types import SubagentProgressSink
+    from prismclaw.engine.subagent.runtime.collaboration import (
+        SubagentCollaborationService,
+    )
     from prismclaw.engine.task_profile.interfaces import (
         TaskRequestPolicyProvider,
         TaskRuntimePolicyProvider,
@@ -336,6 +339,7 @@ class AgentRunnerDeps:
     plugin: PluginBundle = field(default_factory=PluginBundle)
     static_shell_cache: StaticTurnShellCache = field(default_factory=_lazy_static_shell)
     parallel_task_store: SessionParallelTaskStore | None = field(default=None)
+    subagent_collaboration: SubagentCollaborationService | None = field(default=None)
     persistence: PersistenceContextProtocol = field(default_factory=PersistenceBundle)
     worker_id: str | None = field(default=None)
     # Web 渠道的会话队列，用于 AskUserQuestion 等人机交互的「执行中途暂停-续跑」。
@@ -375,7 +379,7 @@ class AgentRunnerDeps:
 
     def __post_init__(self) -> None:
         if self.parallel_task_store is None and self.session_store is not None:
-            self.parallel_task_store = SessionParallelTaskStore(self.session_store, self.lock_manager)
+            self.parallel_task_store = SessionParallelTaskStore(self.session_store)
         self.context_engine.set_result_compaction_config(self.config.context.compaction)
         self.context_engine.set_session_store(self.session_store)
         # 构造 compression 层依赖反转 ports。
@@ -431,6 +435,7 @@ class AgentRunnerDeps:
         *,
         audit_logger: AuditLogger | None = None,
         progress_sink: SubagentProgressSink | None = None,
+        terminal_sink: Any = None,
         channel: str | None = None,
     ) -> AgentDeps:
         """创建注入了请求级上下文的 deps 变体。
@@ -443,9 +448,13 @@ class AgentRunnerDeps:
         overrides: dict[str, Any] = {}
         if audit_logger is not None:
             overrides["audit_logger"] = audit_logger
-        if progress_sink is not None:
+        if progress_sink is not None or terminal_sink is not None:
             base = self.callbacks if self.callbacks is not None else AgentCallbacks()
-            overrides["callbacks"] = dataclasses.replace(base, on_subagent_progress=progress_sink)
+            overrides["callbacks"] = dataclasses.replace(
+                base,
+                on_subagent_progress=progress_sink or base.on_subagent_progress,
+                on_subagent_terminal=terminal_sink or base.on_subagent_terminal,
+            )
         if channel is not None:
             overrides["channel"] = channel
         return dataclasses.replace(self, **overrides)

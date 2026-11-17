@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
 ## 加载上下文
 
 - `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/client-comms/[case-id]/log.md`（如果存在）— 追加目标
-- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PRISMCLAW.md` → 不大量阅读；此 skill 是案件范围的
+- `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` → 不大量阅读；此 skill 是案件范围的
 
 ## 模式
 

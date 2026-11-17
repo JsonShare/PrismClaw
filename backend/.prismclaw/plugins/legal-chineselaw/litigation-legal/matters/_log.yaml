@@ -37,7 +37,7 @@
 #       by:              string | null        # 谁授权了绕过
 #       date:            YYYY-MM-DD | null
 #       rationale:       string | null        # 永久记录；不自动过期
-#   risk:              critical | high | medium | low   （依据 PRISMCLAW.md 风险矩阵）
+#   risk:              critical | high | medium | low   （依据 PLUGIN.md 风险矩阵）
 #   materiality:       reserved | disclosed | monitored | none
 #   exposure_range:    string — 如 "$2M–$5M" 或 "<$250K"
 #   internal_owners:

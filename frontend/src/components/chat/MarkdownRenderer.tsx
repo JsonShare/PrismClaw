@@ -22,7 +22,7 @@ import sqlLanguage from '@shikijs/langs/sql';
 import tsxLanguage from '@shikijs/langs/tsx';
 import typescriptLanguage from '@shikijs/langs/typescript';
 import yamlLanguage from '@shikijs/langs/yaml';
-import { hasUnclosedMarkdownFence, markStreamRevealTail, normalizeDataSpec, normalizeMarkdownTables, normalizePreviewSpec, remarkCjkStrong, splitStreamingMarkdown } from '../../lib/chat/markdown-utils';
+import { hasUnclosedMarkdownFence, markStreamRevealTail, normalizeDataSpec, normalizeMarkdownTables, normalizePreviewSpec, rehypeTableLabels, remarkCjkStrong, splitStreamingMarkdown } from '../../lib/chat/markdown-utils';
 // @ts-ignore
 import { STREAM_REVEAL_ANIMATION_MS } from '../../stream-reveal.mjs';
 import 'katex/dist/katex.min.css';
@@ -629,11 +629,58 @@ function PendingRichBlock({ language }: { language: string }) {
   return <RichFrame title={REPAIRABLE_DIAGRAM_LANGUAGES.has(language) || language === 'mermaid' ? '正在生成图表' : '正在生成内容'} className="rich-pending-frame"><p className="rich-loading">内容完成后将自动呈现。</p></RichFrame>;
 }
 
+function tableColumnCount(node: any): number {
+  const sections: any[] = node?.children ?? [];
+  const row = sections.find((section) => section.tagName === 'thead')?.children?.find((child: any) => child.tagName === 'tr')
+    ?? sections.find((section) => section.tagName === 'tbody')?.children?.find((child: any) => child.tagName === 'tr');
+  return (row?.children ?? []).filter((cell: any) => cell.tagName === 'th' || cell.tagName === 'td').length;
+}
+
+// 表格包装：列数写进 CSS 变量（窄容器下横向滚动而不是把每列压成两三个字），
+// 并跟踪左右滚动位置，用于边缘渐隐提示和键盘可聚焦的滚动区域。
+const MarkdownTable = memo(function MarkdownTable({ children, node }: { children?: React.ReactNode; node?: any }) {
+  const columns = tableColumnCount(node);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [edge, setEdge] = useState<'none' | 'left' | 'right' | 'both'>('none');
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const update = () => {
+      const max = element.scrollWidth - element.clientWidth;
+      if (max <= 1) setEdge('none');
+      else if (element.scrollLeft <= 1) setEdge('right');
+      else if (element.scrollLeft >= max - 1) setEdge('left');
+      else setEdge('both');
+    };
+    update();
+    element.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    return () => {
+      element.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, []);
+  const scrollable = edge !== 'none';
+  return <div className="markdown-table-wrap" data-cols={columns || undefined} data-scroll={edge}>
+    <div
+      className="markdown-table-scroll"
+      ref={scrollRef}
+      tabIndex={scrollable ? 0 : undefined}
+      role={scrollable ? 'region' : undefined}
+      aria-label={scrollable ? '表格，可横向滚动' : undefined}
+    >
+      <table style={columns ? ({ '--md-table-cols': columns } as React.CSSProperties) : undefined}>{children}</table>
+    </div>
+  </div>;
+});
+
 const MarkdownChunk = memo(function MarkdownChunk({ content, context, depth, streaming, streamReveal }: { content: string; context: PreviewContext; depth: number; streaming: boolean; streamReveal?: StreamRevealMeta }) {
   const incompleteFence = streaming && hasUnclosedMarkdownFence(content);
   const rehypePlugins = streamReveal?.appendedGraphemes
-    ? [rehypeKatex, [rehypeStreamRevealTail, streamReveal]]
-    : [rehypeKatex];
+    ? [rehypeKatex, [rehypeStreamRevealTail, streamReveal], rehypeTableLabels]
+    : [rehypeKatex, rehypeTableLabels];
   return <ReactMarkdown
     // remark-gfm 默认 singleTilde: true，会把 "1~2 袋，一日 1~2 次" 里的
     // 两个单波浪号配对当删除线，中间大段文字被划掉。关闭 singleTilde 后
@@ -654,7 +701,7 @@ const MarkdownChunk = memo(function MarkdownChunk({ content, context, depth, str
         }
         return <>{children}</>
       },
-      table: ({ children }) => <div className="markdown-table-scroll"><table>{children}</table></div>,
+      table: MarkdownTable,
       a: ({ href, children, ...props }) => {
         const safe = typeof href === 'string' && /^(https?:|mailto:)/i.test(href);
         return safe ? <a href={href} target="_blank" rel="noreferrer" onClick={(event) => { event.preventDefault(); openSafeMarkdownLink(href); }} {...props}>{children}</a> : <span>{children}</span>;

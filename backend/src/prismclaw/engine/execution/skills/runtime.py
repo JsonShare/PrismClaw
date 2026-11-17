@@ -37,7 +37,7 @@ def _extract_plugin_name(manifest: Any) -> str | None:
     搜索策略：
     1. 非 plugin source → 返回 None
     2. loaded_from 不含路径分隔符 → 直接作为插件名
-    3. loaded_from 为路径 → 向上遍历目录层级，通过检测 PRISMCLAW.md 或 .plugin
+    3. loaded_from 为路径 → 向上遍历目录层级，通过检测 PLUGIN.md 或 .plugin
        子目录定位插件根目录，返回其名称。
     """
     if getattr(manifest, "source", None) != "plugin":
@@ -153,7 +153,7 @@ class SkillRuntime:
         self._plugin_instructions_map: dict[str, str] = {}
 
     def register_plugin_instructions(self, plugin_name: str, instructions: str | None) -> None:
-        """注册插件级指令（来自 PRISMCLAW.md）。
+        """注册插件级指令（来自 PLUGIN.md）。
 
         当该插件的技能被激活时，指令会被前置到技能指令文本中，
         确保安全规则、输出规范等约束在 LLM 执行前生效。
@@ -427,7 +427,7 @@ class SkillRuntime:
         allowed_tools = _coerce_allowed_tools(manifest.allowed_tools)
         description = manifest.description or ""
         instructions = self._resolve_instructions(manifest, invocation)
-        # 注入插件级指令：前置 PRISMCLAW.md 定义的安全规则/输出规范
+        # 注入插件级指令：前置 PLUGIN.md 定义的安全规则/输出规范
         # loaded_from 可能是文件路径(如 ".../medical-clinical/skills/...")
         # 或直接是 plugin 名(如 "medical-clinical")，需正确解析
         plugin_name = _extract_plugin_name(manifest)

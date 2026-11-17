@@ -28,19 +28,19 @@ Licensed under Apache License 2.0
 
 ## 指令
 
-1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md`——确认 `## 事项工作区` 部分已填充。如果 `Enabled` 为 `✗`，告诉用户："事项工作区已关闭——您配置为内部法务执业，只有一个客户，因此插件自动从执业级上下文工作。如果您实际跨多个客户工作，重新运行 `/litigation-legal:cold-start-interview --redo` 并选择私人执业设置。否则，您根本不需要 `/litigation-matter-workspace`。" 不要报错——禁用状态是内部用户的预期状态。
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md`——确认 `## 事项工作区` 部分已填充。如果 `Enabled` 为 `✗`，告诉用户："事项工作区已关闭——您配置为内部法务执业，只有一个客户，因此插件自动从执业级上下文工作。如果您实际跨多个客户工作，重新运行 `/litigation-legal:cold-start-interview --redo` 并选择私人执业设置。否则，您根本不需要 `/litigation-matter-workspace`。" 不要报错——禁用状态是内部用户的预期状态。
 2. 遵循以下工作流和参考。
 3. 根据 `$ARGUMENTS` 的第一个标记分派：
    - `new` → 运行 intake 访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/<slug>/matter.md`，种子化 `history.md` 和 `notes.md`。
    - `list` → 枚举 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/*/matter.md`，打印表格，标记活跃事项。
-   - `switch` → 更新执业级 PRISMCLAW.md 中的 `活跃事项：` 行。
+   - `switch` → 更新执业级 PLUGIN.md 中的 `活跃事项：` 行。
    - `close` → 将 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/<slug>/` 移至 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
    - `none` → 设置 `活跃事项：` 为 `none — 仅执业级上下文`。
 4. 向用户展示变更并在写入前确认。
 
 ## 注意事项
 
-- skill 永远不跨事项读取，除非执业级 PRISMCLAW.md 中 `Cross-matter context` 为 `on`。
+- skill 永远不跨事项读取，除非执业级 PLUGIN.md 中 `Cross-matter context` 为 `on`。
 - 归档不是删除——关闭的事项仍可读取以用于保留/冲突目的。
 - Slug 为小写带连字符。如果 slug 在已归档和活跃之间重复，已归档的保留在 `_archived/<slug>/`。
 
@@ -50,7 +50,7 @@ Licensed under Apache License 2.0
 
 多客户从业者（私人执业——独立、小律所、大律所）跨许多事项工作。一个事项的上下文不能泄漏到另一个。此 skill 是使这一点的薄文件管理层。
 
-**默认状态为关闭。** 内部用户永远不会看到这个——他们仅在执业级运行。事项工作区在冷启动时为私人执业用户开启，或通过编辑执业级 PRISMCLAW.md 中的 `## 事项工作区` 开启。如果 `Enabled` 为 `✗`，此 skill 不运行；`/litigation-matter-workspace` skill 解释禁用状态并为实际需要事项隔离的用户建议 `/litigation-cold-start-interview --redo`。
+**默认状态为关闭。** 内部用户永远不会看到这个——他们仅在执业级运行。事项工作区在冷启动时为私人执业用户开启，或通过编辑执业级 PLUGIN.md 中的 `## 事项工作区` 开启。如果 `Enabled` 为 `✗`，此 skill 不运行；`/litigation-matter-workspace` skill 解释禁用状态并为实际需要事项隔离的用户建议 `/litigation-cold-start-interview --redo`。
 
 ## 存储布局
 
@@ -58,7 +58,7 @@ Licensed under Apache License 2.0
 
 ```
 ~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/
-├── PRISMCLAW.md                       # 执业级执业档案
+├── PLUGIN.md                       # 执业级执业档案
 └── matters/
     ├── <slug>/
     │   ├── matter.md               # 客户、对方、事项类型、关键事实、覆盖
@@ -71,9 +71,9 @@ Licensed under Apache License 2.0
 
 Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vendor-xyz-nda`。
 
-## 活跃事项在执业 PRISMCLAW.md 中
+## 活跃事项在执业 PLUGIN.md 中
 
-执业级 PRISMCLAW.md 中 `## 事项工作区` 下的 `活跃事项：` 行是唯一的真相来源。切换事项编辑该行。没有单独的状态文件。
+执业级 PLUGIN.md 中 `## 事项工作区` 下的 `活跃事项：` 行是唯一的真相来源。切换事项编辑该行。没有单独的状态文件。
 
 ## 子命令逻辑
 
@@ -105,7 +105,7 @@ Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vend
 ### `switch <slug>`
 
 1. 确认 `matters/<slug>/matter.md` 存在。如果不存在，提供 `/litigation-legal:matter-workspace new <slug>`。
-2. 编辑执业级 PRISMCLAW.md 中的 `活跃事项：` 行为 `活跃事项： <slug>`。
+2. 编辑执业级 PLUGIN.md 中的 `活跃事项：` 行为 `活跃事项： <slug>`。
 3. 向用户展示 matter.md 摘要以便确认他们在正确的事项上。
 
 ### `close <slug>`
@@ -117,12 +117,12 @@ Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vend
 
 ### `none`
 
-设置执业级 PRISMCLAW.md 中的 `活跃事项：` 为 `none — 仅执业级上下文`。与用户确认。
+设置执业级 PLUGIN.md 中的 `活跃事项：` 为 `none — 仅执业级上下文`。与用户确认。
 
 ## `matter.md` 模板
 
 ```markdown
-[工作产品标题——根据插件配置 ## Outputs——因角色而异；见执业级 PRISMCLAW.md 中的 `## 谁在使用这个`]
+[工作产品标题——根据插件配置 ## Outputs——因角色而异；见执业级 PLUGIN.md 中的 `## 谁在使用这个`]
 
 # 事项：[客户] — [简要描述]
 
@@ -180,7 +180,7 @@ Intake 完成。Slug：`[slug]`。状态：active。
 
 ## 跨事项上下文
 
-执业级 PRISMCLAW.md 有一个 `Cross-matter context:` 标志。当它为 `off`（默认）时，在事项 A 中工作的 skill **永远不会读取** 任何其他 `B` 的 `matters/B/` 文件。这是该设置存在的保密性保证。
+执业级 PLUGIN.md 有一个 `Cross-matter context:` 标志。当它为 `off`（默认）时，在事项 A 中工作的 skill **永远不会读取** 任何其他 `B` 的 `matters/B/` 文件。这是该设置存在的保密性保证。
 
 当它为 `on` 时，skill 仅在用户明确要求时才能跨事项文件夹读取文件（例如，"比较我们在最近五个供应商事项中的责任上限立场"）。即使 `on`，默认也只加载活跃事项，除非用户要求跨事项视图。
 

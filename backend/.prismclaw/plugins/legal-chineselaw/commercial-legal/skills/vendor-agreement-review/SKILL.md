@@ -2,7 +2,7 @@
 name: vendor-agreement-review
 name_zh: 供应商协议审查
 description: >
-  参考：依据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PRISMCLAW.md`
+  参考：依据 `~/.prismclaw/assets/plugins/legal-chineselaw/commercial-legal/PLUGIN.md`
   中的团队剧本，运用三观四步法审查供应商协议。先做宏观（交易结构：合同类型/主体/标的/程序）
   和中观（合同形式），再做微观（三点一线：首部→交易条款→配套条款）逐条审查，
   生成具体红线语言并路由审批人。当 /commercial-legal:review 检测到供应商主服务协议、
@@ -25,7 +25,7 @@ category: 商事合同
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 是 ✗（内部法务用户的默认设置），跳过此段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/commercial-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md`。将输出写入事项文件夹。除非 `跨事项上下文` 是 on，否则永远不要阅读另一个事项的文件。
+**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 是 ✗（内部法务用户的默认设置），跳过此段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `/commercial-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md`。将输出写入事项文件夹。除非 `跨事项上下文` 是 on，否则永远不要阅读另一个事项的文件。
 
 ---
 

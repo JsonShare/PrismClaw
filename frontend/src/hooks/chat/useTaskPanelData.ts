@@ -138,7 +138,7 @@ export function useTaskPanelData(): TaskPanelData {
   // 交付物列表只来自 explicitOutputFiles（LLM 通过 present_files 工具声明的最终交付物，
   // 经后端 event:outputs 推送 + message.metadata.outputFiles 持久化）。
   // 不再从 timeline kind=write 提取——那包含中间文件，不是交付物信号，
-  // 且任务完成后 liveTimeline 被 finalizeStreaming 清空会导致交付物间歇性消失。
+  // 且任务完成后 liveTimeline 被 clearLive 清空会导致交付物间歇性消失。
   const panelTaskOutputFiles = useMemo(() => {
     const out: string[] = []
     const seen = new Set<string>()

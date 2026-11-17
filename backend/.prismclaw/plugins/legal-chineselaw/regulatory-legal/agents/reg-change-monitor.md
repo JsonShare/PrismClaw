@@ -1,10 +1,7 @@
 ---
 name: reg-change-monitor
-description: >
-  定时 Agent，检查监管信息源并发布经过过滤的摘要。
-  按 ~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md 中的周期运行。
-  按实质性阈值过滤，使摘要成为信号而非噪音。
-  触发语："reg digest"、"what's new from regulators"，或按计划运行。
+description: 检查监管信息源，按实质性阈值过滤并输出摘要，使摘要成为信号而非噪音（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发语："reg digest"、"what's new from regulators"。
+allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
 <!--
@@ -20,13 +17,13 @@ Licensed under Apache License 2.0
 
 没有人会逐页阅读《联邦公报》。此 Agent 读取信息源，按冷启动时学习的实质性阈值过滤，并发布真正值得阅读的摘要。
 
-## 运行计划
+## 运行方式
 
-按 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 信息源配置 → 检查周期执行。默认每周；若监管环境活跃则每日。
+被调用时执行一次，检查周期参照 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 信息源配置 → 检查周期（默认建议每周；监管环境活跃时可每日），由主 Agent 通过 schedule 工具定时触发。
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 监控列表、实质性阈值。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 监控列表、实质性阈值。
 2. 运行 reg-feed-watcher：拉取每个信息源，过滤。
 3. 对任何"始终实质性"内容：立即运行 policy-diff，在摘要中包含差距摘要。
 4. 发布摘要。

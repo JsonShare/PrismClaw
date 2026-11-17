@@ -6,7 +6,7 @@
 等执行器从未被实例化——插件 hook 零触发。本模块在**加载期**（上下文最完整处）
 把配置转换为 handler 实例，下游只做注册与分发。
 
-对标参考实现 hooks.json 结构::
+hooks.json 结构::
 
     {
       "hooks": {
@@ -53,12 +53,12 @@ __all__ = [
 def normalize_hooks_config(raw: Any) -> dict[str, list[Any]]:
     """把 hooks.json 原始内容归一化为 ``{event_name: [group, ...]}``。
 
-    解开参考实现的顶层 ``{"hooks": {...}}`` 包装；已是扁平事件映射（键值为 list）
+    解开顶层 ``{"hooks": {...}}`` 包装；已是扁平事件映射（键值为 list）
     则原样保留。非 dict / 非 list 值等非法结构被丢弃，返回干净的事件映射。
     """
     if not isinstance(raw, dict):
         return {}
-    # 解开 {"hooks": {...}} 包装（参考实现格式）。"hooks" 键存在即权威：值非 dict
+    # 解开 {"hooks": {...}} 包装。"hooks" 键存在即权威：值非 dict
     # 视为非法配置 → 空映射（不回退把 raw 当事件映射，否则会误建名为 "hooks" 的事件）。
     # 无 "hooks" 键时才把 raw 当作已解开的扁平事件映射。
     if "hooks" in raw:

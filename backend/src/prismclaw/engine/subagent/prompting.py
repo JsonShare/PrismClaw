@@ -20,6 +20,25 @@ def coerce_allowed_tool_names(raw: Any) -> set[str] | None:
     return names or set()
 
 
+def expand_allowed_tool_names(raw: Any, available: set[str]) -> set[str] | None:
+    """把 ``<prefix>:*`` 展开成注册表中匹配的具体工具名。
+
+    MCP 工具注册名为 ``{server_name}:{tool_name}``，插件清单无法预先枚举远端工具，
+    因此允许按 server 前缀声明。无通配符时原样返回。
+    """
+    names = coerce_allowed_tool_names(raw)
+    if not names:
+        return names
+    wildcards = {name for name in names if name.endswith(":*")}
+    if not wildcards:
+        return names
+    expanded = names - wildcards
+    for wildcard in wildcards:
+        prefix = wildcard[:-1]
+        expanded.update(name for name in available if name.startswith(prefix))
+    return expanded
+
+
 def coerce_preloaded_skill_manifest(raw: Any, *, skill_name: str) -> SkillManifest:
     if isinstance(raw, SkillManifest):
         return raw
@@ -115,9 +134,9 @@ def resolve_preloaded_skill_context(
     manifest: Any,
     skill_runtime: Any,
 ) -> PreloadedSkillContext:
-    # 方案 §0.1 #2: preload_skills(LLM 注入用) 与 declared_invoke_sequence(审计埋点用)
-    # 值同步,但语义分工不同。这里从 declared_invoke_sequence 读即可(与 preload_skills 同源)。
-    declared = getattr(manifest, "declared_invoke_sequence", None)
+    # AgentManifest 的运行时预加载字段是 preload_skills；
+    # declared_invoke_sequence 仅用于 SkillManifest 的工作流遵从度审计。
+    declared = getattr(manifest, "preload_skills", None)
     names: list[str] = []
     for raw_name in declared or []:
         if isinstance(raw_name, str):
@@ -132,10 +151,10 @@ def resolve_preloaded_skill_context(
             allowed_tools_limit=None,
         )
     if skill_runtime is None:
-        raise RuntimeError("skill_runtime is required when declared_invoke_sequence requests preloads")
+        raise RuntimeError("skill_runtime is required when preload_skills requests preloads")
     resolve_skill = getattr(skill_runtime, "resolve_skill", None)
     if not callable(resolve_skill):
-        raise RuntimeError("skill_runtime does not expose resolve_skill() for declared_invoke_sequence")
+        raise RuntimeError("skill_runtime does not expose resolve_skill() for preload_skills")
     workspace_path = Path(parent_ctx.workspace_path)
     resolved_manifests: list[SkillManifest] = []
     for skill_name in names:

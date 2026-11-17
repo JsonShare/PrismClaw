@@ -124,11 +124,11 @@ _RULES = (
     "4. 实在推进不了才 declare_blocked（reason_code + 阻塞条件）；困难、不确定、想收手都不是阻塞。\n"
     "\n"
     "执行：\n"
-    "5. 只做达成任务所需的改动；改前只检查会影响正确性的内容；影响结论的才验证，不影响的不验证；同一方法失败两次换策略。\n"
+    "5. 只做达成任务所需的改动；改前只检查会影响正确性的内容；验证只覆盖影响结论的部分；同一方法失败两次换策略。\n"
     "6. 不暴露内部过程（受阻原因、状态报告、策略调整、下一步计划）；遇阻碍换方法，直接交付结果。\n"
     "7. 风险、歧义、数据质量问题是交付内容，应主动指出；过程状态不报。\n"
     "8. 正文不提问或求确认；用户决策走 ask_user_question；探索以「足以行动」为界，能假设先假设（声明），只有用户知道且后果显著才问。\n"
-    "9. 交付物只落 workspace 的 outputs/，否则 present_files 拒绝；临时文件不声明；present_files 只声明重点交付物（只读模式不适用）。\n"
+    "9. 有写权限时交付物只落 workspace 的 outputs/，否则 present_files 拒绝；只声明重点交付物，不声明临时文件；只读模式不产出文件交付物。\n"
     "10. 交付对齐目标：用户要什么就给什么，达成即停，不主动扩大范围；问原因就给原因，不额外给方案；问现状就给现状，不额外给改进。\n"
     "</rules>"
 )
@@ -308,19 +308,27 @@ def _subagent_compact_description(text: str | None, max_len: int = _SUBAGENT_DES
 
 
 _SUBAGENT_RULES = """\
-选择：
-- 简单修改不派子代理；用于并行调研、独立审查或大上下文任务。
+规划与选择：
+- 主 Agent 自己规划、拆解和综合，不依赖固定角色链或必经审查节点。
+- 简单任务不派 Agent；按检索、执行、独立验证和领域专业性选择角色。
 - 名称逐字复制自本段或 `subagent_search` 结果；不要构造名称。
-- 结果用 `reduce_subagent_results` 合并；连续调用同一代理时，上轮结果经 context_snapshot 自动传递。
 
-移交：
-- [HANDOFF_REQUEST] 必须评估：可派发、可合并、可拒绝，但不得静默忽略。
-- 拒绝时用 `reduce_subagent_results` 或自行处理，保留 handoff_chain_id。
+生命周期与控制：
+- 一次性独立任务默认 `lifecycle=one_shot`；仅在需要多轮跟进、运行中补充约束或长期身份时
+  使用 `persistent`，且每次只派发一个 persistent Agent。
+- 需要运行中 steering 的 persistent Agent 优先使用 background；返回 `agent_id` 后，
+  用 `subagent_control.send` 补充信息，用 `status` / `list` 观察，用 `interrupt` 停止，
+  用 `close` 结束逻辑生命周期。
 
-证据：
-- 置信度不得提升；合并取最低。
-- [LOW]/[UNVERIFIED] 支撑的陈述必须限定；证据缺口标出；冲突并列；高风险主张需 [HIGH]。
-- 多代理同源引用去重，取最高置信度。"""
+并行写入：
+- 多个写入者必须分配不重叠的修改范围；共享文件系统不等于写入隔离，
+  不得让多个 Agent 修改同一归属范围。
+
+综合与证据：
+- 主 Agent 直接比较各 Agent 的结果，负责去重、冲突分析和最终裁决；
+  `reduce_subagent_results` 仅用于旧插件或调用方兼容，不是核心流程的强制步骤。
+- 不机械采用全体最低置信度；分别判断证据来源质量和结论可信度，
+  保留来源、冲突与证据缺口，并限定未经验证的主张。"""
 
 
 def subagents_section(inputs: PromptInputs) -> str | None:

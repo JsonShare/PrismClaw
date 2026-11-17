@@ -395,7 +395,7 @@ class RedisSessionStore:
             etype = event.type
 
             if etype == SessionEventType.USER_MESSAGE:
-                entry = _event_to_message_entry(data, role="user")
+                entry = _event_to_message_entry(data, role="user", seq=event.seq)
                 if entry:
                     entries_to_add.append((entry.id, entry.model_dump_json()))
                     order_ids.append(entry.id)
@@ -403,7 +403,7 @@ class RedisSessionStore:
                     msg_count_incr += 1
 
             elif etype == SessionEventType.ASSISTANT_MESSAGE:
-                entry = _event_to_message_entry(data, role="assistant")
+                entry = _event_to_message_entry(data, role="assistant", seq=event.seq)
                 if entry:
                     entries_to_add.append((entry.id, entry.model_dump_json()))
                     order_ids.append(entry.id)
@@ -411,7 +411,7 @@ class RedisSessionStore:
                     msg_count_incr += 1
 
             elif etype == SessionEventType.TOOL_RESULT:
-                entry = _event_to_message_entry(data, role="tool")
+                entry = _event_to_message_entry(data, role="tool", seq=event.seq)
                 if entry:
                     entries_to_add.append((entry.id, entry.model_dump_json()))
                     order_ids.append(entry.id)
@@ -424,9 +424,12 @@ class RedisSessionStore:
                 if entry_id:
                     typed_entry = _parse_entry_dict(entry_data)
                     if typed_entry:
+                        typed_entry.seq = event.seq
                         entries_to_update.append((entry_id, typed_entry.model_dump_json()))
                     else:
-                        entries_to_update.append((entry_id, json.dumps(entry_data)))
+                        # 不能就地改调用方的 dict：事件对象可能被复用/序列化。
+                        patched_entry = {**entry_data, "seq": event.seq}
+                        entries_to_update.append((entry_id, json.dumps(patched_entry)))
                 if "leaf_id" in data:
                     leaf_id = data["leaf_id"]
 

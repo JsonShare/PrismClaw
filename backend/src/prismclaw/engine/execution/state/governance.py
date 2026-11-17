@@ -369,7 +369,7 @@ async def _persist_review_record(
     if not applied:
         raise RuntimeError(f"completion review mutation rejected: {reason}")
     # NOTE: ctx._tool_ctx.task_runtime 是 ParallelTaskExtras（引擎级运行时容器，
-    # 持有 progress_emitter / parallel_task_store），不得覆写为 TaskRuntimeState。
+    # 持有 parallel_task_store），不得覆写为 TaskRuntimeState。
     ctx.task_runtime = task_runtime
     return task_runtime, list(review_record.evidence_ids)
 

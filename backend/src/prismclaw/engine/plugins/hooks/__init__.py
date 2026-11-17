@@ -1,7 +1,4 @@
-"""Hook 系统模块。
-
-对齐参考实现 ``hooks.ts`` 的 HookInput/HookOutput 结构。
-"""
+"""Hook 系统模块。"""
 from __future__ import annotations
 
 from .schema import HookContext, HookDecision, HookOutcome, HookResult, PermissionDecision

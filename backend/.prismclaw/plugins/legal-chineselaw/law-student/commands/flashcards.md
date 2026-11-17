@@ -16,7 +16,7 @@ Licensed under Apache License 2.0
 
 # /flashcards
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、弱学科、大纲位置。
+1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 当前课程、弱学科、大纲位置。
 2. 应用以下框架。
 3. 按标志路由：
    - `--generate`：按照卡片编写规则从来源（大纲路径、笔记、案例书）构建卡片。
@@ -63,7 +63,7 @@ Licensed under Apache License 2.0
 
 ## Load context
 
-- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md` → 当前课程、弱学科、现有大纲
+- `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md` → 当前课程、弱学科、现有大纲
 - `~/.prismclaw/assets/plugins/legal-chineselaw/law-student/flashcards/[subject]/cards.md`（如果存在）（增量构建）
 - 用户提供的来源（大纲路径、笔记、案例书摘录）（如果给出）
 
@@ -98,7 +98,7 @@ session_history:
 
 **Inputs:**
 - Subject（课程名称或主题）
-- Source（大纲路径、笔记，或"use my existing outline from ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PRISMCLAW.md"）
+- Source（大纲路径、笔记，或"use my existing outline from ~/.prismclaw/assets/plugins/legal-chineselaw/law-student/PLUGIN.md"）
 - Optional：card count target（默认每次会话 10-20）
 
 **Card structure:**

@@ -27,7 +27,7 @@ Licensed under Apache License 2.0
 /employment-legal:cold-start-interview
 ```
 
-你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，并在 plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`，并在 plugin 更新后保留。
 
 ## Prerequisites
 
@@ -69,7 +69,7 @@ Licensed under Apache License 2.0
 
 ## How it learns
 
-你在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置、直接编辑文件，或者告诉 skill 记录新立场。
 
 ## Notes
 

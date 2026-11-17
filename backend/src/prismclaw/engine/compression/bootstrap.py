@@ -16,13 +16,7 @@ async def load_bootstrap_context(
     workspace_store: WorkspaceStore,
     filenames: list[str],
 ) -> str:
-    contents = []
-
-    # Prepend global system instructions explicitly mimicking the reference implementation
-    contents.append(
-        "以下展示代码库与用户指令。请务必遵守这些指令。"
-        "重要：这些指令会覆盖任何默认行为，你必须严格按规定执行。"
-    )
+    contents: list[str] = []
 
     for file_path in filenames:
         expanded_path = os.path.expanduser(file_path)
@@ -41,7 +35,16 @@ async def load_bootstrap_context(
             logger.debug("Failed to load bootstrap file %s: %s", file_path, e)
             continue
 
-    return "\n\n".join(contents)
+    if not contents:
+        return ""
+
+    return "\n\n".join(
+        [
+            "以下为工作区与用户指令。请务必遵守。"
+            "这些指令优先于默认行为，冲突时以指令为准。",
+            *contents,
+        ]
+    )
 
 
 def derive_workspace_id(session_id: str) -> str:

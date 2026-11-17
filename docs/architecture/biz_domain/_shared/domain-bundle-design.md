@@ -521,10 +521,7 @@ class DomainIsolatedHook:
 # prismclaw/engine/foundation/domain_registry.py
 
 class DomainRegistry:
-    """发现、加载、编排 DomainBundle。
-
-    对标 Pi Agent 的 PackageManager + Harness 的 Cordis Plugin Loader。
-    """
+    """发现、加载、编排 DomainBundle。"""
 
     ENTRY_POINT_GROUP = "prismclaw.domains"
 

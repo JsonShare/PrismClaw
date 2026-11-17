@@ -71,6 +71,43 @@ async def test_selector_timeout_falls_back_to_heuristic(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
+async def test_selector_skips_llm_during_timeout_cooldown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """一次超时后，冷却期内不再白等预算，直接走启发式。"""
+    monkeypatch.setattr(memory_selector, "_SELECTOR_LIMIT_S", 0.05)
+    first: dict[str, Any] = {}
+    await select_relevant_memories(
+        llm_client=_SlowLLM(),
+        retrieval_query="第一次",
+        task_profile=_TaskProfile(),
+        memory_candidates=_candidates(),
+        archive_candidates=[],
+        max_memory=5,
+        max_archives=2,
+        selector_metrics=first,
+    )
+    assert first["strategy"] == "heuristic_timeout"
+
+    second: dict[str, Any] = {}
+    started = time.monotonic()
+    memories, _ = await select_relevant_memories(
+        llm_client=_SlowLLM(),
+        retrieval_query="第二次",
+        task_profile=_TaskProfile(),
+        memory_candidates=_candidates(),
+        archive_candidates=[],
+        max_memory=5,
+        max_archives=2,
+        selector_metrics=second,
+    )
+    elapsed = time.monotonic() - started
+    assert memories
+    assert second["strategy"] == "heuristic_cooldown"
+    assert elapsed < 0.05, "冷却期内不能再次等待 LLM 预算"
+
+
+@pytest.mark.asyncio
 async def test_selector_success_path_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(memory_selector, "_SELECTOR_LIMIT_S", 5.0)
     metrics: dict[str, Any] = {}

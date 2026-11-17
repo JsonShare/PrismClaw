@@ -212,26 +212,52 @@ def evaluate_loop_control(
     run_state: "RunState",
     effort_budget: EffortBudget,
     now: float,
+    phase: str,
 ) -> ControlDecision:
     """loop 控制的单一评估点。
 
     收尾判定不落库、不做状态机：
     wrapping  = turns_left <= 2 or remaining_soft <= 0 or tools_left <= converge_tools
-    last_turn = turns_left <= 1 or remaining_hard <= reserve_s
-    should_stop = turns_left <= 0 or remaining_hard <= 0 or tools_left <= 0
+    last_turn = turns_left <= 1 or remaining_hard <= reserve_s or 工具预算收尾轮
+    should_stop = turns_left <= 0 or remaining_hard <= 0
+                  or (tools_left <= 0 且收尾轮已结束)
+
+    工具预算耗尽时先安排一次纯文本收尾轮：模型通常正处在「拿到最后一批工具
+    结果、还没输出结论」的时刻，直接终止会让整轮内容凭空消失。收尾轮的
+    step 序号记录在 loop_state.tool_wrapup_step，prepare 阶段安排、stream
+    阶段消费，下一轮 prepare 才真正停止。
     """
     ls = run_state.loop_state
     turns_left = effort_budget.steps - ls.steps_spent
     tools_left = effort_budget.tool_calls - ls.tool_calls_spent
     remaining_soft = ls.soft_at - now
     remaining_hard = ls.hard_at - now
+    _wrapup_target = ls.steps_spent + 1 if phase == "prepare" else ls.steps_spent
+    if (
+        tools_left <= 0
+        and turns_left > 0
+        and remaining_hard > effort_budget.reserve_s
+    ):
+        if phase == "prepare" and ls.tool_wrapup_step < 0:
+            ls.tool_wrapup_step = _wrapup_target
+        wrapup_turn = ls.tool_wrapup_step == _wrapup_target
+    else:
+        wrapup_turn = False
     wrapping = (
         turns_left <= 2
         or remaining_soft <= 0
         or tools_left <= effort_budget.converge_tools
     )
-    last_turn = turns_left <= 1 or remaining_hard <= effort_budget.reserve_s
-    should_stop = turns_left <= 0 or remaining_hard <= 0 or tools_left <= 0
+    last_turn = (
+        turns_left <= 1
+        or remaining_hard <= effort_budget.reserve_s
+        or wrapup_turn
+    )
+    should_stop = (
+        turns_left <= 0
+        or remaining_hard <= 0
+        or (tools_left <= 0 and not wrapup_turn)
+    )
     return ControlDecision(
         should_stop=should_stop,
         freeze_tools=wrapping or last_turn,

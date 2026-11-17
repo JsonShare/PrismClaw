@@ -21,7 +21,7 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` → 省市表和系统部分。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md` → 省市表和系统部分。
 
 2. 在单个提示中询问以下所有内容——不要逐个询问：
 
@@ -44,7 +44,7 @@ Licensed under Apache License 2.0
    > - 休假审批文件是否已归档？如果是，何时？
    > - 是否需要医疗证明？如果是，是否已提交？
 
-3. 使用 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的省市表，查找此休假类型在此省市的适用休假权益。对于医疗期，需要员工在本单位工龄（影响医疗期时长）：
+3. 使用 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md` 中的省市表，查找此休假类型在此省市的适用休假权益。对于医疗期，需要员工在本单位工龄（影响医疗期时长）：
    - 工龄不满10年：在本单位工作年限不满5年的，医疗期3个月；5年以上的，6个月
    - 工龄10年以上：在本单位工作年限不满5年，医疗期6个月；5-10年，9个月；10-15年，12个月；15-20年，18个月；20年以上，24个月
 

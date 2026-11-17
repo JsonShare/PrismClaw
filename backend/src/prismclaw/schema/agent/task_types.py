@@ -30,7 +30,16 @@ class TaskSpec(BaseModel):
 
 
 TaskCategory = Literal[
-    "heartbeat", "consumer", "archive", "nudge", "evolution", "curator", "mcp", "dream", "generic"
+    "heartbeat",
+    "consumer",
+    "archive",
+    "nudge",
+    "evolution",
+    "curator",
+    "mcp",
+    "dream",
+    "generic",
+    "subagent",
 ]
 TaskState = Literal["running", "done", "cancelled", "failed"]
 

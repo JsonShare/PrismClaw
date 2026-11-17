@@ -1,7 +1,5 @@
 """插件依赖解析。
 
-对标参考实现 ``pluginLoader.ts`` ``verifyAndDemote`` (L3260)，并增强：
-
 1. 依赖缺失 → 降级（原有行为，保留）
 2. 跨 marketplace 依赖阻断：显式限定 marketplace 的依赖（``foo@mkt``）
    若限定名 ≠ 本插件的 source，直接阻断并降级
@@ -37,7 +35,7 @@ class DependencyCheckResult:
 
 
 def parse_dependency_ref(ref: str) -> tuple[str, str | None]:
-    """解析依赖引用。对标参考实现 ``DependencyRefSchema`` (L1400)。
+    """解析依赖引用。
 
     3 种格式：
     - 裸名: ``"plugin"`` → ("plugin", None)

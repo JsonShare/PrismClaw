@@ -1,7 +1,6 @@
 """业务域模块接入平台的统一协议。
 
-DomainBundle 是业务域（医疗/法律/Office）接入 PrismClaw 的标准协议。
-对标 Pi Agent 的 PiManifest + Harness 的 Cordis Plugin —
+DomainBundle 是业务域（医疗/法律/Office）接入 PrismClaw 的标准协议：
 一个域模块通过实现此协议，向平台注册工具、钩子、治理规则、持久化存储和路由。
 
 依赖方向：engine/assembly → schema（Protocol 定义在 schema，实现在 engine/assembly）

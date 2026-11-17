@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
+from prismclaw.engine.subagent.runtime.background import cancel_background_task
 from prismclaw.engine.subagent.runtime.follow_up import (
     SessionFollowUpSnapshot,
     format_parallel_task_attention,
@@ -9,32 +10,13 @@ from prismclaw.engine.subagent.runtime.follow_up import (
     session_follow_up_snapshot,
 )
 from prismclaw.engine.subagent.runtime.parallel import (
+    PARALLEL_TASK_TERMINAL_STATUSES,
     ParallelTaskRuntimeRecord,
     latest_parallel_task_for_tree,
 )
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
-from prismclaw.schema.agent.task_types import TaskInfo
-
 
 # ─── Task helper functions ────────────────────────────────────────────
-
-def _task_info_to_metadata(task: TaskInfo) -> dict[str, Any]:
-    metadata: dict[str, Any] = {
-        "task_id": task.task_id,
-        "name": task.name,
-        "category": task.category,
-        "state": task.state,
-        "created_at_monotonic": round(task.created_at, 6),
-        "duration_seconds": round(task.duration_s, 3),
-    }
-    if task.owner is not None:
-        metadata["owner"] = task.owner
-    if task.exception is not None:
-        metadata["exception"] = task.exception
-    if task.result_payload is not None:
-        metadata["result_payload"] = task.result_payload
-    return metadata
-
 
 def _task_projection_for_context(
     context: ToolContext,
@@ -69,7 +51,6 @@ def _parallel_task_to_metadata(record: ParallelTaskRuntimeRecord) -> dict[str, A
         "category": record.kind,
         "state": record.status,
         "owner": record.owner_session_id,
-        "notification_state": record.notification_state,
         "projected_to_session": False,
     }
     if record.result_summary is not None:
@@ -78,23 +59,7 @@ def _parallel_task_to_metadata(record: ParallelTaskRuntimeRecord) -> dict[str, A
         metadata["error_summary"] = record.error_summary
     if record.projection_payload:
         metadata["projection_payload"] = dict(record.projection_payload)
-    if record.managed_task_id is not None:
-        metadata["managed_task_id"] = record.managed_task_id
     return metadata
-
-
-def _managed_task_for_context(
-    context: ToolContext,
-    *,
-    task_id: str,
-) -> TaskInfo | None:
-    task_manager = context.task_manager
-    list_tasks = getattr(task_manager, "list_tasks", None) if task_manager is not None else None
-    if not callable(list_tasks):
-        return None
-    owner = context.session_id
-    tasks = cast(list[TaskInfo], list_tasks(owner=owner, include_done=True))
-    return next((task for task in tasks if task.task_id == task_id), None)
 
 
 def _session_follow_up_snapshot_for_context(
@@ -106,17 +71,6 @@ def _session_follow_up_snapshot_for_context(
     return session_follow_up_snapshot(session_tree)
 
 
-def _task_metadata_with_projection(task: TaskInfo, context: ToolContext) -> dict[str, Any]:
-    metadata = _task_info_to_metadata(task)
-    projection = _task_projection_for_context(context, task_id=task.task_id)
-    if projection is not None:
-        metadata["fork_task_projection"] = projection
-        metadata["projected_to_session"] = True
-    else:
-        metadata["projected_to_session"] = False
-    return metadata
-
-
 def _parallel_task_metadata_with_projection(
     record: ParallelTaskRuntimeRecord,
     context: ToolContext,
@@ -126,26 +80,7 @@ def _parallel_task_metadata_with_projection(
     if projection is not None:
         metadata["fork_task_projection"] = projection
         metadata["projected_to_session"] = True
-    managed_task_id = record.managed_task_id
-    if isinstance(managed_task_id, str) and managed_task_id:
-        managed_task = _managed_task_for_context(context, task_id=managed_task_id)
-        if managed_task is not None:
-            metadata["managed_task"] = _task_info_to_metadata(managed_task)
     return metadata
-
-
-def _format_task_summary(task: TaskInfo, *, projection: dict[str, Any] | None = None) -> str:
-    summary = (
-        f"Task {task.task_id}: {task.name} | category={task.category} | state={task.state}"
-        f" | duration={task.duration_s:.3f}s"
-    )
-    if task.exception:
-        summary += f"\nException: {task.exception}"
-    if task.result_payload is not None:
-        summary += "\nResult payload available."
-    if projection is not None:
-        summary += "\nSession projection available."
-    return summary
 
 
 def _format_parallel_task_summary(
@@ -156,15 +91,137 @@ def _format_parallel_task_summary(
     summary = (
         f"Task {record.task_id}: {record.agent_name or record.kind}"
         f" | category={record.kind} | state={record.status}"
-        f" | notification={record.notification_state}"
     )
     if record.error_summary:
         summary += f"\nError: {record.error_summary}"
     if record.result_summary:
-        summary += "\nResult summary available."
+        summary += f"\nResult:\n{record.result_summary}"
     if projection is not None:
         summary += "\nSession projection available."
     return summary
+
+
+# ─── CheckSubagentTaskTool ────────────────────────────────────────────
+
+class CheckSubagentTaskTool:
+    name = "check_subagent_task"
+    description = (
+        "查询子代理并行任务的状态与结果。传入 sub_agent 派发时返回的完整 task_id"
+        "（不得截断）。历史状态会过期，需要时重新查询；仅在需要结果或确认进度时"
+        "调用一次，不要循环轮询。任务未完成时结果字段为空，不得据此综合结论。"
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "task_id": {
+                "type": "string",
+                "description": "子代理任务 ID，形如 pt:xxxxxxxxxxxx。",
+            },
+        },
+        "required": ["task_id"],
+        "additionalProperties": False,
+    }
+    side_effect = False
+    is_concurrency_safe = True
+    tool_class = "read"
+    effect_class = "read"
+    skill_gated = False  # 派发回执直接引用本工具；不可 skill_gated，否则后台任务无法查询
+    visibility_scope = "main_only"
+
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+        call_id = args.get("_call_id", "")
+        raw_task_id = args.get("task_id")
+        task_id = raw_task_id.strip() if isinstance(raw_task_id, str) else ""
+        if not task_id:
+            return error_result(call_id, "check_subagent_task：缺少必需参数 'task_id'。")
+
+        parallel_task_store = context.task_runtime.parallel_task_store
+        if parallel_task_store is None:
+            return error_result(
+                call_id,
+                "check_subagent_task：当前会话中并行任务运行时不可用。",
+            )
+
+        record = await parallel_task_store.get(
+            session_id=context.session_id,
+            task_id=task_id,
+        )
+        if record is None:
+            return error_result(
+                call_id,
+                f"check_subagent_task：当前会话中未找到并行任务 {task_id!r}。",
+            )
+
+        projection = _task_projection_for_context(context, task_id=task_id)
+        metadata = {"task": _parallel_task_metadata_with_projection(record, context)}
+        return text_result(
+            call_id,
+            _format_parallel_task_summary(record, projection=projection),
+            metadata=metadata,
+        )
+
+
+# ─── ListSubagentTasksTool ────────────────────────────────────────────
+
+class ListSubagentTasksTool:
+    name = "list_subagent_tasks"
+    description = (
+        "列出当前会话的子代理并行任务及状态，用于确认哪些任务仍在运行或已结束。"
+    )
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+    side_effect = False
+    is_concurrency_safe = True
+    tool_class = "read"
+    effect_class = "read"
+    skill_gated = False
+    visibility_scope = "main_only"
+
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+        call_id = args.get("_call_id", "")
+
+        parallel_task_store = context.task_runtime.parallel_task_store
+        if parallel_task_store is None:
+            return error_result(
+                call_id,
+                "list_subagent_tasks：当前会话中并行任务运行时不可用。",
+            )
+
+        records = await parallel_task_store.list_for_session(
+            session_id=context.session_id,
+            include_terminal=True,
+        )
+        if not records:
+            return text_result(
+                call_id,
+                "当前会话没有子代理任务。",
+                metadata={"tasks": []},
+            )
+
+        lines = [f"共 {len(records)} 个子代理任务："]
+        for record in records:
+            lines.append(
+                f"- {record.task_id} | {record.agent_name or record.kind}"
+                f" | state={record.status}"
+            )
+        metadata: dict[str, Any] = {
+            "tasks": [
+                _parallel_task_metadata_with_projection(record, context)
+                for record in records
+            ],
+        }
+        snapshot = _session_follow_up_snapshot_for_context(context)
+        text = "\n".join(lines)
+        if snapshot.parallel_task_summary is not None:
+            text += "\n" + format_parallel_task_summary(snapshot.parallel_task_summary)
+            metadata["parallel_task_summary"] = snapshot.parallel_task_summary
+        if snapshot.parallel_task_attention is not None:
+            text += "\n" + format_parallel_task_attention(snapshot.parallel_task_attention)
+            metadata["parallel_task_attention"] = snapshot.parallel_task_attention
+        return text_result(call_id, text, metadata=metadata)
 
 
 # ─── CancelTaskTool ───────────────────────────────────────────────────
@@ -172,8 +229,8 @@ def _format_parallel_task_summary(
 class CancelTaskTool:
     name = "cancel_task"
     description = (
-        "取消由 bash 或 python 工具启动的后台任务。"
-        "请提供启动该任务的工具响应中返回的 task_id。"
+        "停止正在运行的后台子代理任务。请提供派发时返回的完整 task_id（不得截断）。"
+        "同步执行的子代理无法中止，会在本轮结束时返回结果。"
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -190,19 +247,20 @@ class CancelTaskTool:
     is_concurrency_safe = False  # cancels running tasks, mutation
     tool_class = "write"
     effect_class = "local_mutation"
-    skill_gated = True  # 任务取消已改为需任务管理 Skill 激活时可见
+    # 取消任务不修改用户文件，只控制运行时；read-only 模式下必须能停止
+    # 由 read_only_allowed 的 sub_agent 派生的后台任务。
+    read_only_allowed = True
+    skill_gated = False  # 与 check/list 同域可见：后台任务必须可被停止
+    visibility_scope = "main_only"
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
-
         call_id = args.get("_call_id", "")
         raw_task_id = args.get("task_id")
         task_id = raw_task_id.strip() if isinstance(raw_task_id, str) else ""
         if not task_id:
             return error_result(call_id, "cancel_task：缺少必需参数 'task_id'。")
 
-        parallel_task_store = (
-            context.parallel_task_store
-        )
+        parallel_task_store = context.task_runtime.parallel_task_store
         if parallel_task_store is None:
             return error_result(
                 call_id,
@@ -219,40 +277,37 @@ class CancelTaskTool:
                 f"cancel_task：当前会话中未找到并行任务 {task_id!r}。",
             )
 
-        managed_task_id = record.managed_task_id
-        task_manager = context.task_manager
-        cancel_managed = getattr(task_manager, "cancel", None) if task_manager is not None else None
-        if isinstance(managed_task_id, str) and managed_task_id and callable(cancel_managed):
-            await cancel_managed(managed_task_id)
-
-        cancelled = await parallel_task_store.cancel(
-            session_id=context.session_id,
-            task_id=task_id,
-            error_summary="cancelled_by_user",
-        )
-        if cancelled is None:
+        if record.status in PARALLEL_TASK_TERMINAL_STATUSES:
             return error_result(
                 call_id,
-                f"cancel_task：并行任务 {task_id!r} 无法取消。",
+                f"cancel_task：并行任务 {task_id!r} 已结束（state={record.status}）。",
             )
 
-        projection = _task_projection_for_context(context, task_id=task_id)
-        follow_up_snapshot = _session_follow_up_snapshot_for_context(context)
-        background_summary = follow_up_snapshot.parallel_task_summary
-        background_attention = follow_up_snapshot.parallel_task_attention
-        metadata: dict[str, Any] = {
-            "task": _parallel_task_metadata_with_projection(cancelled, context),
-        }
-        if background_summary is not None:
-            metadata["parallel_task_summary"] = background_summary
-        if background_attention is not None:
-            metadata["parallel_task_attention"] = background_attention
-        text = _format_parallel_task_summary(cancelled, projection=projection)
-        if background_summary is not None:
-            text += "\n" + format_parallel_task_summary(background_summary)
-        if background_attention is not None:
-            text += "\n" + format_parallel_task_attention(background_attention)
-        return text_result(call_id, text, metadata=metadata)
+        # 只有后台派发的任务在本进程有真实句柄；同步任务在父级工具调用栈内，
+        # 不能用父级 managed_task_id 取消（那会终止整轮父会话）。
+        cancelled = await cancel_background_task(task_id)
+        latest = await parallel_task_store.get(
+            session_id=context.session_id,
+            task_id=task_id,
+        )
+        if not cancelled:
+            if latest is not None and latest.status in PARALLEL_TASK_TERMINAL_STATUSES:
+                return error_result(
+                    call_id,
+                    f"cancel_task：并行任务 {task_id!r} 已结束（state={latest.status}）。",
+                )
+            return error_result(
+                call_id,
+                f"cancel_task：并行任务 {task_id!r} 不是本进程可取消的后台任务"
+                "（同步执行的子代理无法中止，会在本轮结束时返回结果）。",
+            )
+
+        state = latest.status if latest is not None else "cancelled"
+        return text_result(
+            call_id,
+            f"已取消后台任务 {task_id!r}（state={state}）。",
+            metadata={"task_id": task_id, "state": state},
+        )
 
 
 # ─── DeclareBlockedTool ───────────────────────────────────────────────

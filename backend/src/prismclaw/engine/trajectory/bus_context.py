@@ -81,7 +81,8 @@ class LLMMetricsSnapshot:
         读数；epoch 时刻由当前 wall-clock 反推。
         """
         now_ms = int(time.time() * 1000)
-        total_ms = (llm_end - llm_start) * 1000.0
+        # monotonic 差值理论非负；夹紧防止时钟源异常把 started 推到 completed 之后。
+        total_ms = max(0.0, (llm_end - llm_start) * 1000.0)
         ttft_ms = (
             (first_token_at - llm_start) * 1000.0
             if first_token_at is not None

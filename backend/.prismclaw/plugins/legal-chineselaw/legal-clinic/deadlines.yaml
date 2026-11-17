@@ -45,7 +45,7 @@
 #   timezone:       string（可选；默认 Asia/Shanghai）
 #   source:         string — 截止日期来源（法院通知、仲裁委通知、法规规定、当事人文件等）
 #   owner_student:  string — 负责此截止日期的学生
-#   owner_attorney: string — 督导律师（通常来自 PRISMCLAW.md）
+#   owner_attorney: string — 督导律师（通常来自 PLUGIN.md）
 #   status:         upcoming | today | overdue | completed | closed
 #   completed_date: YYYY-MM-DD | null
 #   notes:          string | null

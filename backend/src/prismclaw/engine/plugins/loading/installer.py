@@ -1,15 +1,13 @@
 """插件远程安装。
 
-对标参考实现 ``pluginInstallationHelpers.ts`` / ``installPluginFromMarketplace``。
-
 支持来源：
   - ``github:owner/repo`` 或 ``owner/repo`` 或 ``https://github.com/owner/repo``
   - ``git+https://...`` / ``git:https://...``（任意 git 仓库）
   - ``url:https://.../archive.zip``（zip 归档）
 
 流程：解析 spec → 安全门控（源策略 + 文件夹信任）→ 拉取到 versioned 缓存目录
-（对齐参考实现 ``copyPluginToVersionedCache``）→ 校验 ``plugin.json``
-（``PluginManifest`` pydantic）→ 写入 ``InstalledPluginsStore``（source=local）。
+→ 校验 ``plugin.json``（``PluginManifest`` pydantic）→ 写入
+``InstalledPluginsStore``（source=local）。
 落盘后由既有 ``PluginDiscoveryEngine.resolve_install_path`` 接入发现流程，无需
 改动 discovery 内部结构。
 

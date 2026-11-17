@@ -18,9 +18,9 @@ Licensed under Apache License 2.0
 # /chronology
 
 1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` → 理论、枢纽事实、关键事实。
-2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` → 文档存储来源、默认事项文件夹模式。
+2. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` → 文档存储来源、默认事项文件夹模式。
 3. 遵循以下工作流和参考。
-4. 按顺序识别来源：本次会话中用户提供的路径、默认事项文件夹、从 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PRISMCLAW.md` 声明的来源。
+4. 按顺序识别来源：本次会话中用户提供的路径、默认事项文件夹、从 `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/PLUGIN.md` 声明的来源。
 5. 对于可读来源：提取日期事件。对于无法访问的来源：在差距中注明。
 6. 去重，根据事件与来源列表合并。
 7. 根据事项理论标记重要性 (🔴/🟡/⚪)。
@@ -73,9 +73,9 @@ Licensed under Apache License 2.0
 
 ## 模式
 
-此 skill 服务于两种执业设置。从插件配置 PRISMCLAW.md 中用户的 `## Role` 中选择默认值；用户可以使用标志每次运行时覆盖。
+此 skill 服务于两种执业设置。从插件配置 PLUGIN.md 中用户的 `## Role` 中选择默认值；用户可以使用标志每次运行时覆盖。
 
-- **`--matter` 模式（内部诉讼律师的默认）。** 以事项历史为中心。从 `matter.md` 阅读事项的案件理论和关键事实，从声明的文档存储来源（企业协作云盘、钉钉文档、本地文件系统、iManage——无论 PRISMCLAW.md 的 `## Landscape` 部分声明什么）提取，并将 `history.md` 视为运行内部日志（决定、保全、保全备忘录——有意不在时间线中）。输出以事项为中心：跨争议发生的事情，标记用于倡导使用。
+- **`--matter` 模式（内部诉讼律师的默认）。** 以事项历史为中心。从 `matter.md` 阅读事项的案件理论和关键事实，从声明的文档存储来源（企业协作云盘、钉钉文档、本地文件系统、iManage——无论 PLUGIN.md 的 `## Landscape` 部分声明什么）提取，并将 `history.md` 视为运行内部日志（决定、保全、保全备忘录——有意不在时间线中）。输出以事项为中心：跨争议发生的事情，标记用于倡导使用。
 - **`--documents` 模式（律所律师助理或律师的默认）。** 以证据材料为中心。从配置中读取案件理论，然后从证据清单、当事人文件集或编号的证据材料中提取。输出以证据为中心：材料显示什么，带有证据编号引用，根据案件理论标记。
 
 两种模式汇聚于相同的输出结构（时间线、🔴/🟡/⚪ 重要性标签、差距、SoF 变体）。区别在于来源概况和重要性框架。
@@ -95,13 +95,13 @@ Licensed under Apache License 2.0
 ## 加载上下文
 
 通用：
-- 插件配置 PRISMCLAW.md → 案件理论上下文（内部法务：`## Landscape` 用于文档来源；律所律师：`## Case theory` 和 `## Document review` 用于平台 + 当事人）、`## Outputs` 用于工作产品标题、`## Decision posture` 用于特权标记规则。
+- 插件配置 PLUGIN.md → 案件理论上下文（内部法务：`## Landscape` 用于文档来源；律所律师：`## Case theory` 和 `## Document review` 用于平台 + 当事人）、`## Outputs` 用于工作产品标题、`## Decision posture` 用于特权标记规则。
 - 此事项的先前 `chronology.md`（如存在）。
 - 用户上传的任何文件或会话中提供的路径。
 
 `--matter` 模式还读取：
 - `~/.prismclaw/assets/plugins/legal-chineselaw/litigation-legal/matters/[slug]/matter.md` → 案件理论、关键事实、转折事实（用于重要性标记）、关键日期。
-- PRISMCLAW.md 中的默认事项文件夹模式 → 此 slug 的文档存放位置。
+- PLUGIN.md 中的默认事项文件夹模式 → 此 slug 的文档存放位置。
 
 `--documents` 模式还读取：
 - 证据管理平台元数据（如果有可用的连接器）——按当事人 + 日期范围。
@@ -136,8 +136,8 @@ skill 在用户选择保密姿态之前不会提取：
 **`--matter` 模式：**
 
 1. **用户提供的路径** — 本次会话中放入的任何内容（文件路径、企业协作云盘链接、钉钉文档导出）。
-2. **默认事项文件夹** — 来自 PRISMCLAW.md 的文档存储模式，为此 slug 展开。
-3. **声明的来源** — PRISMCLAW.md 中的 `Document storage` 表，筛选为此事项可能涉及的（例如，发件方通信的企业协作邮件归档、企业协作云盘法务文件夹）。
+2. **默认事项文件夹** — 来自 PLUGIN.md 的文档存储模式，为此 slug 展开。
+3. **声明的来源** — PLUGIN.md 中的 `Document storage` 表，筛选为此事项可能涉及的（例如，发件方通信的企业协作邮件归档、企业协作云盘法务文件夹）。
 4. **询问** — 如果来源看起来很薄，提示："我可以从我有的内容构建，但时间线将不完整。还有其他要指向我的吗？关键电子邮件/微信记录、合同、内部备忘录、往来函件？"
 
 **`--documents` 模式：**
@@ -257,7 +257,7 @@ skill 在用户选择保密姿态之前不会提取：
 [我们预期看到但没有记录的事件——例如，"2024年6月至2025年3月之间的合同补充协议——未在证据材料中"]
 
 **无法读取的来源：**
-[在 PRISMCLAW.md 中声明但此次运行无法访问的来源——例如，"企业协作云盘法务文件夹——无 MCP 连接器；需要导出"]
+[在 PLUGIN.md 中声明但此次运行无法访问的来源——例如，"企业协作云盘法务文件夹——无 MCP 连接器；需要导出"]
 
 ---
 

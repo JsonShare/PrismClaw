@@ -75,6 +75,7 @@ from prismclaw.schema.agent.session import SystemReminderProjection
 from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState
 
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+from prismclaw.engine.security.gate.types import ParallelTaskExtras
 from prismclaw.engine.execution.loop.entry_runtime import (
     EntryRuntimeBootstrapError,
     _bootstrap_entry_runtime,
@@ -368,6 +369,7 @@ class RunPreparer:
                 role="user",
                 content=user_entry_content,
                 enriched_content=user_llm_content if user_llm_content != user_entry_content else None,
+                client_message_id=request.client_message_id,
             )
             await _append(deps, tree, user_entry)
 
@@ -539,9 +541,14 @@ class RunPreparer:
             _tls = snapshot.run_state.tool_loop_state
             if _tls:
                 _tls["convergence_advisory_sent"] = False
+                # 冻结集合属于「本轮预算收尾」状态，随本轮预算一起归零。
+                # 否则上一轮收尾时冻结的搜索工具会在新用户轮次继续隐藏，
+                # 新问题看起来像「搜索工具不可用」。
+                _tls["frozen_tools"] = []
 
             run_state.loop_state.steps_spent = 0
             run_state.loop_state.tool_calls_spent = 0
+            run_state.loop_state.tool_wrapup_step = -1
             run_state.loop_state.soft_at = 0.0
             run_state.loop_state.hard_at = 0.0
         snapshot.worker_id = getattr(deps, "worker_id", None)
@@ -1026,13 +1033,14 @@ class RunPreparer:
             request_id=request.request_id,
             task_id=initial_task_spec.task_id,
             task_spec=initial_task_spec,
-            task_runtime=task_runtime,
+            task_runtime=ParallelTaskExtras(
+                parallel_task_store=deps.parallel_task_store,
+            ),
             review_requirements=request.review_requirements,
             hook_registry=deps.hooks if deps.hooks is not None else None,
             hook_dispatcher=getattr(deps, "hook_dispatcher", None),
             capability_catalog=deps.capability_catalog if deps.capability_catalog is not None else None,
             task_manager=deps.task_manager,
-            parallel_task_store=deps.parallel_task_store,
             session_store=deps.session_store,
             session_tree=tree,
             mcp_death_handler=deps.callbacks.on_mcp_death if deps.callbacks is not None else None,
@@ -1061,6 +1069,11 @@ class RunPreparer:
         _progress_sink = deps.callbacks.on_subagent_progress if deps.callbacks is not None else None
         if _progress_sink is not None:
             tool_ctx.subagent_progress_sink = _progress_sink
+        _terminal_sink = (
+            deps.callbacks.on_subagent_terminal if deps.callbacks is not None else None
+        )
+        if _terminal_sink is not None:
+            tool_ctx.subagent_terminal_sink = _terminal_sink
 
         for key, value in request.tool_context_extras.items():
             if hasattr(tool_ctx, key):

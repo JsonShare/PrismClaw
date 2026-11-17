@@ -73,7 +73,7 @@ class LoopRuntime:
 
 # 终态码 → 用户可见文案（terminate 的唯一文案源）
 TERMINAL_MESSAGES: dict[str, str] = {
-    "budget_iterations": "任务已用尽迭代预算（硬边界）。",
+    "budget_iterations": "任务已用尽本轮预算（步数或工具调用上限）。",
     "budget_seconds": "任务已超出运行时上限（硬边界）。",
     "blocked_no_progress": "完成要求未满足且修复额度已用尽，任务终止。",
     "blocked_tools_denied": "工具调用被策略整体拒绝且重规划机会已用尽，任务终止。",

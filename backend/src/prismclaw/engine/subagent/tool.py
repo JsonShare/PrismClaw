@@ -37,6 +37,11 @@ from prismclaw.engine.subagent.core.contract import (
 )
 from prismclaw.engine.subagent.core.executor import SubAgentExecutor
 from prismclaw.engine.subagent.definition.registry import SubAgentRegistry, _closest_match
+from prismclaw.engine.subagent.runtime.collaboration import (
+    SubagentCollaborationService,
+    SubagentRunLaunch,
+    SubagentSpawnOutcome,
+)
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 from prismclaw.schema.config.config import SubAgentConfig
 from prismclaw.schema.content.content_types import TextBlock, ToolResult
@@ -62,6 +67,18 @@ _AGENT_ITEM_SCHEMA: dict[str, Any] = {
         "task": {
             "type": "string",
             "description": "给该子代理的独立自洽任务描述。",
+        },
+        "lifecycle": {
+            "type": "string",
+            "enum": ["one_shot", "persistent"],
+            "description": (
+                "生命周期：'one_shot' = 完成后关闭；'persistent' = 保留身份与子会话，"
+                "可通过 subagent_control 继续发送消息。默认：'one_shot'。"
+            ),
+        },
+        "request_id": {
+            "type": "string",
+            "description": "可选的幂等请求标识；重试同一请求时保持不变。",
         },
         "model": {
             "type": "string",
@@ -108,7 +125,16 @@ _PARAMETERS_TEMPLATE: dict[str, Any] = {
             "description": (
                 "'sync' = 顺序执行各代理，逐个等待完成；"
                 "'parallel' = 并发执行全部代理，等待全部完成。"
-                "默认：'parallel'。"
+                "默认：'parallel'。仅在 dispatch_mode='now' 时生效。"
+            ),
+        },
+        "dispatch_mode": {
+            "type": "string",
+            "enum": ["now", "background"],
+            "description": (
+                "'now' = 立即执行并等待全部结果；"
+                "'background' = 立即返回 task_id，子代理在后台继续执行，"
+                "完成状态会自动更新。默认：'now'。"
             ),
         },
     },
@@ -117,63 +143,14 @@ _PARAMETERS_TEMPLATE: dict[str, Any] = {
 }
 
 
-def _first_text_block_text(result: ToolResult) -> str:
+def _first_text_block_text(result: ToolResult | None) -> str:
+    if result is None:
+        return ""
     for block in result.content:
         text = getattr(block, "text", None)
         if isinstance(text, str) and text:
             return text
     return ""
-
-
-def _dedupe_merge_strings(values) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for v in values:
-        s = str(v).strip()
-        if s and s not in seen:
-            seen.add(s)
-            result.append(s)
-    return result
-
-
-def _dedupe_merge_lists(groups) -> list[str]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for group in groups:
-        for item in group:
-            s = str(item).strip()
-            if s and s not in seen:
-                seen.add(s)
-                result.append(s)
-    return result
-
-
-def _dedupe_evidence(items: list) -> list:
-    """去重 evidence 列表，按 source_path + source_location + quoted_text 判重"""
-    seen: set[str] = set()
-    result: list = []
-    for e in items:
-        key = f"{e.source_path}:{e.source_location}:{e.quoted_text}"
-        if key not in seen:
-            seen.add(key)
-            result.append(e)
-    return result
-
-
-def _assess_overall_confidence(envelopes: list) -> str:
-    """评估整体置信度——取最低（空字符串视为缺失，不参与降级）"""
-    if not envelopes:
-        return "low"
-    levels = {"high": 3, "medium": 2, "low": 1}
-    valid_levels = [
-        levels.get(getattr(e, "confidence_assessment", ""), 0)
-        for e in envelopes
-        if getattr(e, "confidence_assessment", "")
-    ]
-    if not valid_levels:
-        return ""  # 全部缺失时不强制降级
-    min_level = min(valid_levels)
-    return {3: "high", 2: "medium", 1: "low"}.get(min_level, "low")
 
 
 class SubAgentTool:
@@ -192,15 +169,26 @@ class SubAgentTool:
         settings: SubAgentConfig,
         capability_catalog: CapabilityCatalogService,
         audit_logger: logging.Logger | None = None,
+        allow_background: bool = True,
+        collaboration: SubagentCollaborationService | None = None,
+        allow_persistent_background: bool = True,
     ) -> None:
         self._executor = executor
         self._registry = registry
         self._settings = settings
         self._capability_catalog = capability_catalog
         self._audit = audit_logger or logging.getLogger(_AUDIT_LOGGER_NAME)
+        self._allow_background = allow_background
+        self._collaboration = collaboration
+        self._allow_persistent_background = allow_persistent_background
         # 静态 schema：插件子代理名不再注入 enum —— 发现面是 subagent_search，
         # 未知名由 execute 的校验给出最近邻提示，避免每轮请求携带全量名单。
         self.parameters = copy.deepcopy(_PARAMETERS_TEMPLATE)
+        if not allow_background and not (
+            collaboration is not None and allow_persistent_background
+        ):
+            # 没有可跨 worker 恢复的 persistent 路径时，多副本不暴露进程内后台任务。
+            self.parameters["properties"].pop("dispatch_mode", None)
         self.description = self._render_description()
 
     @property
@@ -263,6 +251,13 @@ class SubAgentTool:
                 "只能是 'sync' 或 'parallel'。",
             )
 
+        dispatch_mode = args.get("dispatch_mode", "now")
+        if dispatch_mode not in ("now", "background"):
+            return error_result(
+                call_id,
+                f"sub_agent：dispatch_mode '{dispatch_mode}' 无效，"
+                "只能是 'now' 或 'background'。",
+            )
         # Resolve and validate all agent configs
         catalog = self.capability_catalog
         resolved_configs = []
@@ -279,6 +274,16 @@ class SubAgentTool:
             if not task:
                 errors.append(f"agents[{i}]：缺少 'task'")
                 continue
+            lifecycle = agent_cfg.get("lifecycle", "one_shot")
+            if lifecycle not in ("one_shot", "persistent"):
+                errors.append(
+                    f"agents[{i}]：lifecycle '{lifecycle}' 无效，"
+                    "只能是 'one_shot' 或 'persistent'"
+                )
+                continue
+            if lifecycle == "persistent" and self._collaboration is None:
+                errors.append(f"agents[{i}]：persistent 生命周期需要协作运行时")
+                continue
             entry = catalog.get_agent_entry(agent_name)
             if entry is None:
                 all_entries = catalog.list_agent_entries()
@@ -293,7 +298,23 @@ class SubAgentTool:
                 "index": i,
                 "agent_cfg": agent_cfg,
                 "manifest_entry": entry,
+                "execution_mode": execution_mode,
             })
+
+        lifecycles = {
+            cfg["agent_cfg"].get("lifecycle", "one_shot")
+            for cfg in resolved_configs
+        }
+        if "persistent" in lifecycles and len(agents_config) != 1:
+            errors.append("persistent 每次 spawn 只能包含一个 Agent")
+        if dispatch_mode == "background":
+            if "one_shot" in lifecycles and not self._allow_background:
+                errors.append(
+                    "one_shot 后台派发在当前多副本部署下不可用；"
+                    "请使用 dispatch_mode='now' 或 lifecycle='persistent'"
+                )
+            if "persistent" in lifecycles and not self._allow_persistent_background:
+                errors.append("persistent 后台派发在当前部署下不可用")
 
         if errors:
             return error_result(
@@ -302,6 +323,19 @@ class SubAgentTool:
             )
 
         context.subagent_catalog = catalog
+
+        # 后台派发：全部代理各自排队，立即返回 task_id（不阻塞等待）。
+        if dispatch_mode == "background":
+            background_results = []
+            for cfg in resolved_configs:
+                background_results.append(
+                    await self._run_single_agent(
+                        cfg, context, call_id, background=True
+                    )
+                )
+            return self._aggregate_background_results(
+                background_results, call_id
+            )
 
         # Execute agents
         if execution_mode == "parallel" and len(resolved_configs) > 1:
@@ -323,43 +357,39 @@ class SubAgentTool:
         cfg: dict[str, Any],
         context: ToolContext,
         call_id: str,
+        *,
+        background: bool = False,
     ) -> dict[str, Any]:
         agent_cfg = cfg["agent_cfg"]
         entry = cfg["manifest_entry"]
         manifest = entry.manifest
         agent_name = agent_cfg["agent_name"]
         task = agent_cfg["task"]
+        execution_mode = str(cfg.get("execution_mode", "sync"))
 
         # ToolContext.__deepcopy__ 已自动排除所有 Any 类型的 runtime 字段
         # （含 Future/Lock/Task 等不可 pickle 对象），无需在此手动 whack-a-mole。
-        # 仅需处理 ParallelTaskExtras 里 progress_emitter / parallel_task_store
-        # 这两个非 Any 字段——它们是回调通道，子 agent 不继承。
-        _saved_task_runtime = context.task_runtime
-        _saved_progress_emitter = None
-        _saved_parallel_task_store = None
-        if context.task_runtime is not None:
-            _saved_progress_emitter = getattr(context.task_runtime, "progress_emitter", None)
-            _saved_parallel_task_store = getattr(context.task_runtime, "parallel_task_store", None)
-            inner_ctx = getattr(context.task_runtime, "task_runtime", None)
-            context.task_runtime = ParallelTaskExtras(
-                task_runtime=inner_ctx,
-            )
-
+        # parallel_task_store 是运行时回调通道，deepcopy 前先换成干净容器，
+        # 避免把父级运行时引用复制给子 agent（子 agent 自己的记录由 run() 写入）。
+        parent_extras = context.task_runtime
+        context.task_runtime = ParallelTaskExtras(task_runtime=parent_extras.task_runtime)
         try:
             child_context = copy.deepcopy(context)
         finally:
-            context.task_runtime = _saved_task_runtime
+            context.task_runtime = parent_extras
 
         # hook_dispatcher 是运行时引用（Any 字段，deepcopy 自动排除），
         # 按引用回填——子代理内部的 MCP 工具调用也要经过插件 PostToolUse 钩子
         # （POST_TOOL 派发点已下沉到 execute_tool_calls 公共汇聚层）。
-        child_context.hook_dispatcher = getattr(context, "hook_dispatcher", None)
+        child_context.hook_dispatcher = context.hook_dispatcher
 
-        if child_context.task_runtime is not None:
-            if hasattr(child_context.task_runtime, "progress_emitter"):
-                child_context.task_runtime.progress_emitter = _saved_progress_emitter
-            if hasattr(child_context.task_runtime, "parallel_task_store"):
-                child_context.task_runtime.parallel_task_store = _saved_parallel_task_store
+        if background:
+            # 后台任务不在父 run 的调用栈内：共享父级 abort，使用户中止整轮时
+            # 子代理在下一个检查点退出并落 cancelled 终态；task_manager 与终态
+            # 投递 sink 都是运行时引用，deepcopy 后被清空，需要按引用回填。
+            child_context.abort = context.abort
+            child_context.task_manager = context.task_manager
+            child_context.subagent_terminal_sink = context.subagent_terminal_sink
 
         # Build a strong-typed task runtime context for the child.
         parent_ctx = context
@@ -379,14 +409,9 @@ class SubAgentTool:
             source_preload_skills=parent_task_ctx.source_preload_skills,
             merged_from_chains=parent_task_ctx.merged_from_chains,
         )
-        # 用 getattr 从 parent_ctx.task_runtime 安全读取 extras（父容器此时可能已被
-        # 我们在 L381-387 包成干净的 ParallelTaskExtras，即使没有 progress_emitter 也 None 兜底）
-        _parent_emitter = getattr(parent_ctx.task_runtime, "progress_emitter", None)
-        _parent_store = getattr(parent_ctx.task_runtime, "parallel_task_store", None)
         child_context.task_runtime = ParallelTaskExtras(
             task_runtime=child_task_ctx,
-            progress_emitter=_parent_emitter,
-            parallel_task_store=_parent_store,
+            parallel_task_store=parent_extras.parallel_task_store,
         )
 
         # Build context snapshot
@@ -416,6 +441,58 @@ class SubAgentTool:
         if overrides:
             manifest = manifest.model_copy(update=overrides)
 
+        if self._collaboration is not None:
+            request_id = str(agent_cfg.get("request_id") or "").strip()
+            if not request_id:
+                request_id = (
+                    f"{call_id or 'sub_agent'}:{cfg.get('index', 0)}:{agent_name}"
+                )
+            return await self._run_collaboration_agent(
+                agent_name=agent_name,
+                task=task,
+                manifest=manifest,
+                child_context=child_context,
+                call_id=call_id,
+                context_snapshot=context_snapshot,
+                execution_mode=execution_mode,
+                lifecycle=agent_cfg.get("lifecycle", "one_shot"),
+                request_id=request_id,
+                overrides=overrides,
+                background=background,
+            )
+
+        if background:
+            try:
+                task_id, launch_error = await self._executor.launch_background(
+                    manifest,
+                    task,
+                    child_context,
+                    call_id=call_id,
+                    context_snapshot=context_snapshot,
+                )
+            except Exception as exc:
+                logger.exception("subagent.background.launch_failed name=%s", agent_name)
+                task_id, launch_error = None, f"{type(exc).__name__}: {exc}"
+            self._emit_spawn_audit(
+                context=child_context,
+                manifest=manifest,
+                outcome="background" if task_id is not None else "error",
+                turns=0,
+                tokens_input=0,
+                tokens_output=0,
+                duration_seconds=0.0,
+                model_used=manifest.model or "",
+                execution_mode=execution_mode,
+                error_message=launch_error,
+            )
+            return {
+                "agent_name": agent_name,
+                "outcome": "background" if task_id is not None else "error",
+                "task_id": task_id,
+                "error_message": launch_error,
+                "tool_result": None,
+            }
+
         try:
             result = await self._executor.run(
                 manifest,
@@ -433,6 +510,7 @@ class SubAgentTool:
                 tokens_output=result.tokens_output,
                 duration_seconds=result.duration_seconds,
                 model_used=result.model_used,
+                execution_mode=execution_mode,
             )
             return {
                 "agent_name": agent_name,
@@ -452,6 +530,7 @@ class SubAgentTool:
                 tokens_output=0,
                 duration_seconds=0.0,
                 model_used=manifest.model or "",
+                execution_mode=execution_mode,
                 error_message="cancelled",
             )
             return {
@@ -470,6 +549,7 @@ class SubAgentTool:
                 tokens_output=0,
                 duration_seconds=0.0,
                 model_used=manifest.model or "",
+                execution_mode=execution_mode,
                 error_message=f"{type(exc).__name__}: {exc}",
             )
             return {
@@ -479,9 +559,207 @@ class SubAgentTool:
                 "error_message": f"{type(exc).__name__}: {exc}",
                 "tool_result": error_result(
                     call_id,
-                    f"子代理 '{agent_name}' 执行失败：{type(exc).__name__}: {exc}",
+                    f"[子代理执行失败：{agent_name} | {type(exc).__name__}: {exc}]",
                 ),
             }
+
+    async def _run_collaboration_agent(
+        self,
+        *,
+        agent_name: str,
+        task: str,
+        manifest: Any,
+        child_context: ToolContext,
+        call_id: str,
+        context_snapshot: Any,
+        execution_mode: str,
+        lifecycle: str,
+        request_id: str,
+        overrides: dict[str, Any],
+        background: bool,
+    ) -> dict[str, Any]:
+        try:
+            tool_registry = self.capability_catalog.tool_registry
+            if tool_registry is None:
+                raise RuntimeError("当前能力目录没有工具注册表")
+            launch = SubagentRunLaunch(
+                manifest=manifest,
+                executor=self._executor,
+                parent_ctx=child_context,
+                tool_registry=tool_registry,
+                context_snapshot=context_snapshot,
+                call_id=call_id,
+                agent_source=str(getattr(manifest, "source", "user") or "user"),
+                overrides=overrides,
+            )
+            outcome = await self._collaboration.spawn(
+                launch,
+                task=task,
+                lifecycle=lifecycle,
+                request_id=request_id,
+                background=background,
+            )
+            if outcome.run is None:
+                raise RuntimeError("协作运行时没有创建 Run")
+            identity = {
+                "agent_id": outcome.agent.agent_id,
+                "run_id": outcome.run.run_id,
+                "child_session_id": outcome.agent.child_session_id,
+                "lifecycle": lifecycle,
+                "task_id": outcome.run.task_id,
+            }
+            if background:
+                self._emit_spawn_audit(
+                    context=child_context,
+                    manifest=manifest,
+                    outcome="background",
+                    turns=0,
+                    tokens_input=0,
+                    tokens_output=0,
+                    duration_seconds=0.0,
+                    model_used=manifest.model or "",
+                    execution_mode=execution_mode,
+                )
+                return {
+                    "agent_name": agent_name,
+                    "outcome": "background",
+                    **identity,
+                    "collaboration_managed": True,
+                    "error_message": None,
+                    "tool_result": None,
+                }
+
+            tool_result, resolved_outcome = self._collaboration_tool_result(
+                outcome,
+                call_id,
+            )
+            artifact = tool_result.subagent_envelope
+            if artifact is not None:
+                tool_result.subagent_envelope = artifact.model_copy(update=identity)
+            result = outcome.result
+            self._emit_spawn_audit(
+                context=child_context,
+                manifest=manifest,
+                outcome=resolved_outcome,
+                turns=result.turns if result else (artifact.turns if artifact else 0) or 0,
+                tokens_input=(
+                    result.tokens_input
+                    if result
+                    else (artifact.tokens_input if artifact else 0) or 0
+                ),
+                tokens_output=(
+                    result.tokens_output
+                    if result
+                    else (artifact.tokens_output if artifact else 0) or 0
+                ),
+                duration_seconds=(
+                    result.duration_seconds
+                    if result
+                    else (artifact.duration_seconds if artifact else 0.0) or 0.0
+                ),
+                model_used=(
+                    result.model_used
+                    if result
+                    else (artifact.model_used if artifact else None)
+                    or outcome.agent.definition_snapshot.get("model", "")
+                ),
+                execution_mode=execution_mode,
+                error_message=outcome.run.error_summary,
+            )
+            return {
+                "agent_name": agent_name,
+                **identity,
+                "model_used": result.model_used if result else manifest.model or "",
+                "outcome": resolved_outcome,
+                "turns": result.turns if result else 0,
+                "duration_seconds": result.duration_seconds if result else 0.0,
+                "error_message": outcome.run.error_summary,
+                "tool_result": tool_result,
+            }
+        except asyncio.CancelledError:
+            self._emit_spawn_audit(
+                context=child_context,
+                manifest=manifest,
+                outcome="aborted",
+                turns=0,
+                tokens_input=0,
+                tokens_output=0,
+                duration_seconds=0.0,
+                model_used=manifest.model or "",
+                execution_mode=execution_mode,
+                error_message="cancelled",
+            )
+            return {
+                "agent_name": agent_name,
+                "outcome": "aborted",
+                "tool_result": error_result(call_id, f"子代理 '{agent_name}' 已被取消"),
+            }
+        except Exception as exc:
+            logger.exception("subagent.collaboration_failed name=%s", agent_name)
+            self._emit_spawn_audit(
+                context=child_context,
+                manifest=manifest,
+                outcome="error",
+                turns=0,
+                tokens_input=0,
+                tokens_output=0,
+                duration_seconds=0.0,
+                model_used=manifest.model or "",
+                execution_mode=execution_mode,
+                error_message=f"{type(exc).__name__}: {exc}",
+            )
+            return {
+                "agent_name": agent_name,
+                "model_used": manifest.model or "",
+                "outcome": "error",
+                "error_message": f"{type(exc).__name__}: {exc}",
+                "tool_result": error_result(
+                    call_id,
+                    f"[子代理执行失败：{agent_name} | {type(exc).__name__}: {exc}]",
+                ),
+            }
+
+    @staticmethod
+    def _collaboration_tool_result(
+        outcome: SubagentSpawnOutcome,
+        call_id: str,
+    ) -> tuple[ToolResult, str]:
+        from prismclaw.schema.content.content_types import SubagentEnvelopeArtifact
+
+        if outcome.result is not None:
+            return outcome.result.tool_result, outcome.result.outcome
+        if outcome.run is None:
+            return error_result(call_id, "子代理没有可用的 Run 记录"), "error"
+        artifact = SubagentEnvelopeArtifact.model_validate(
+            outcome.run.result_envelope or {}
+        )
+        resolved_outcome = artifact.outcome or {
+            "succeeded": "success",
+            "cancelled": "aborted",
+            "interrupted": "aborted",
+        }.get(outcome.run.status, "error")
+        envelope = artifact.result_envelope
+        if envelope is not None:
+            text = (
+                envelope.model_dump_json()
+                if resolved_outcome == "success"
+                else envelope.summary
+            )
+        else:
+            text = (
+                artifact.final_text
+                or outcome.run.error_summary
+                or f"子代理 Run 已结束：{outcome.run.status}"
+            )
+        return (
+            ToolResult(
+                tool_call_id=call_id,
+                content=[TextBlock(text=text)],
+                is_error=resolved_outcome != "success" and envelope is None,
+                subagent_envelope=artifact,
+            ),
+            resolved_outcome,
+        )
 
     async def _run_parallel_agents(
         self,
@@ -496,7 +774,7 @@ class SubAgentTool:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         normalized = []
-        for cfg, result in zip(configs, results):
+        for cfg, result in zip(configs, results, strict=True):
             if isinstance(result, Exception):
                 agent_name = cfg["agent_cfg"]["agent_name"]
                 normalized.append({
@@ -505,151 +783,148 @@ class SubAgentTool:
                     "error_message": str(result),
                     "tool_result": error_result(
                         call_id,
-                        f"子代理 '{agent_name}' 执行失败：{result}",
+                        f"[子代理执行失败：{agent_name} | {result}]",
                     ),
                 })
             else:
                 normalized.append(result)
         return normalized
 
+    def _aggregate_background_results(
+        self,
+        results: list[dict[str, Any]],
+        call_id: str,
+    ) -> ToolResult:
+        """把「派发回执」聚合成一条不含任何结果正文的秒回消息。"""
+        launched = [r for r in results if r.get("task_id")]
+        failed = [r for r in results if not r.get("task_id")]
+
+        lines: list[str] = []
+        if launched:
+            lines.append(f"已派出 {len(launched)} 个后台子任务：")
+            for r in launched:
+                identity = ""
+                if r.get("agent_id"):
+                    identity = (
+                        f" | agent_id={r['agent_id']} | run_id={r.get('run_id') or ''}"
+                        f" | lifecycle={r.get('lifecycle') or 'one_shot'}"
+                    )
+                lines.append(
+                    f"- {r['task_id']} {r['agent_name']}（进行中）{identity}"
+                )
+            if any(r.get("collaboration_managed") for r in launched):
+                lines.append(
+                    "完成状态会自动更新；运行结果用 check_subagent_task 获取。"
+                    "状态查询、追加消息、中断、恢复和关闭统一使用 subagent_control。"
+                )
+            else:
+                lines.append(
+                    "完成状态会自动更新；结果用 check_subagent_task 获取，停止用 cancel_task。"
+                )
+        if failed:
+            lines.append("未派出：")
+            for r in failed:
+                lines.append(
+                    f"- {r['agent_name']}：{r.get('error_message') or '未知原因'}"
+                )
+
+        return ToolResult(
+            tool_call_id=call_id,
+            content=[TextBlock(text="\n".join(lines))],
+            is_error=not launched,
+        )
+
+    @staticmethod
+    def _result_item(raw: dict[str, Any]) -> Any:
+        from prismclaw.engine.subagent.core.contract import parse_subagent_result_envelope
+        from prismclaw.schema.content.content_types import SubagentResultItem
+        from prismclaw.schema.content.subagent import SubagentResultEnvelope
+
+        tool_result: ToolResult | None = raw.get("tool_result")
+        artifact = tool_result.subagent_envelope if tool_result is not None else None
+        envelope = artifact.result_envelope if artifact is not None else None
+        text = _first_text_block_text(tool_result) if tool_result is not None else ""
+        if envelope is None and text:
+            envelope = parse_subagent_result_envelope(text) or SubagentResultEnvelope(
+                summary=text
+            )
+        status = str(raw.get("outcome", "unknown"))
+
+        def identity(key: str) -> str | None:
+            value = raw.get(key)
+            if value is None and artifact is not None:
+                value = getattr(artifact, key, None)
+            return str(value) if value else None
+
+        return SubagentResultItem(
+            name=str(raw["agent_name"]),
+            agent_id=identity("agent_id"),
+            run_id=identity("run_id"),
+            child_session_id=identity("child_session_id"),
+            status=status,
+            envelope=envelope,
+            error=raw.get("error_message") or (None if status == "success" else status),
+        )
+
     def _aggregate_results(
         self,
         results: list[dict[str, Any]],
         call_id: str,
     ) -> ToolResult:
-        """Aggregate results from multiple sub-agents into a single ToolResult.
-
-        Merges structured ``SubagentResultEnvelope`` objects when available
-        so that findings / open_questions survive the aggregation boundary and
-        can be extracted by ``extract_state_update`` downstream.
-        """
-        if len(results) == 1:
-            return results[0]["tool_result"]
-
-        from prismclaw.engine.subagent.core.contract import (
-            parse_subagent_result_envelope,
-            render_result_envelope_handover,
-        )
+        """Return independent per-agent results without merging conclusions."""
+        from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
         from prismclaw.schema.content.content_types import SubagentEnvelopeArtifact
-        from prismclaw.schema.content.subagent import SubagentResultEnvelope
 
-        envelopes: list[SubagentResultEnvelope] = []
-        agent_summaries: list[str] = []
-        success_count = 0
-        error_count = 0
-        merged_handoff = None
-        task_id = None
+        items = [SubAgentTool._result_item(raw) for raw in results]
+        result_payloads = [item.model_dump(mode="python", exclude_none=True) for item in items]
 
-        for r in results:
-            agent_name = r["agent_name"]
-            outcome = r.get("outcome", "unknown")
-            tool_result: ToolResult | None = r.get("tool_result")
+        if len(results) == 1:
+            tool_result = results[0].get("tool_result")
+            if tool_result is None:
+                return error_result(call_id, items[0].error or "子代理未返回结果")
+            item = items[0]
+            artifact = tool_result.subagent_envelope or SubagentEnvelopeArtifact()
+            identity = {
+                key: value
+                for key, value in {
+                    "agent_name": item.name,
+                    "agent_id": item.agent_id,
+                    "run_id": item.run_id,
+                    "child_session_id": item.child_session_id,
+                    "lifecycle": results[0].get("lifecycle"),
+                    "task_id": results[0].get("task_id"),
+                }.items()
+                if value is not None
+            }
+            tool_result.subagent_envelope = artifact.model_copy(update=identity)
+            metadata = dict(tool_result.metadata or {})
+            metadata["results"] = result_payloads
+            tool_result.metadata = metadata
+            return tool_result
 
-            if outcome != "success":
-                error_count += 1
-                error_msg = r.get("error_message", "unknown error")
-                agent_summaries.append(f"[{agent_name}] error: {error_msg}")
-                # 非 success subagent 仍可能携带 evidence（超时/部分完成时
-                # _lifecycle_mixin 会自动收集已执行工具调用的 evidence），
-                # 不应直接丢弃——提取其 envelope 参与聚合
-                if tool_result is not None and tool_result.subagent_envelope is not None:
-                    envelope = tool_result.subagent_envelope.result_envelope
-                    if envelope is not None:
-                        envelopes.append(envelope)
-                continue
-
-            success_count += 1
-            envelope: SubagentResultEnvelope | None = None
-            if tool_result is not None and tool_result.subagent_envelope is not None:
-                envelope = tool_result.subagent_envelope.result_envelope
-                if task_id is None and tool_result.subagent_envelope.task_id:
-                    task_id = tool_result.subagent_envelope.task_id
-                if merged_handoff is None and tool_result.subagent_envelope.handoff_request:
-                    merged_handoff = tool_result.subagent_envelope.handoff_request
-
-            if envelope is not None:
-                envelopes.append(envelope)
+        success_count = sum(item.status == "success" for item in items)
+        error_count = len(items) - success_count
+        readable_parts = [
+            f"[{len(items)} sub-agent results: {success_count} succeeded, "
+            f"{error_count} failed]"
+        ]
+        for item, raw in zip(items, results, strict=True):
+            readable_parts.append(f"\n--- {item.name} [{item.status}] ---")
+            if item.envelope is not None:
+                readable_parts.append(render_result_envelope_handover(item.envelope))
             else:
-                text = _first_text_block_text(tool_result) if tool_result else ""
-                if text:
-                    parsed = parse_subagent_result_envelope(text)
-                    if parsed is not None:
-                        envelopes.append(parsed)
-                    else:
-                        envelopes.append(
-                            SubagentResultEnvelope(summary=f"[{agent_name}] {text}")
-                        )
+                text = _first_text_block_text(raw.get("tool_result"))
+                readable_parts.append(text or item.error or "无结果")
 
-        if envelopes:
-            # 合并 evidence——按 source_path + quoted_text 去重
-            all_evidence: list = []
-            for e in envelopes:
-                all_evidence.extend(e.evidence)
-            merged_evidence = _dedupe_evidence(all_evidence)
-
-            # 评估整体置信度——取最低
-            confidence_assessment = _assess_overall_confidence(envelopes)
-
-            merged = SubagentResultEnvelope(
-                summary="\n".join(
-                    _dedupe_merge_strings(e.summary for e in envelopes if e.summary.strip())
-                ),
-                findings=_dedupe_merge_lists(e.findings for e in envelopes),
-                evidence=merged_evidence,
-                decisions=_dedupe_merge_lists(e.decisions for e in envelopes),
-                open_questions=_dedupe_merge_lists(e.open_questions for e in envelopes),
-                artifact_refs=_dedupe_merge_lists(e.artifact_refs for e in envelopes),
-                recommended_next_actions=_dedupe_merge_lists(
-                    e.recommended_next_actions for e in envelopes
-                ),
-                confidence_assessment=confidence_assessment,
-            )
-            readable_parts = [f"[{success_count} sub-agents completed]"]
-            for i, envelope_item in enumerate(envelopes):
-                readable_parts.append(f"\n--- Agent {i + 1} ---")
-                readable_parts.append(render_result_envelope_handover(envelope_item))
-            readable_parts.append("\n--- Merged ---")
-            readable_parts.append(render_result_envelope_handover(merged))
-            readable_text = "\n".join(readable_parts)
-        else:
-            readable_text = (
-                f"[{len(results)} sub-agents: {error_count} errors]\n"
-                + "\n".join(agent_summaries)
-            )
-
-        is_error = error_count > 0 and success_count == 0
-
-        # 全部子代理失败 → 主因是外部数据源不可用（NSSD 404/patentsview
-        # DNS/OpenAlex 失败/CNKI 门禁，logs/mcp_server_* 实证），归
-        # external：失败归因分流不得把科研检索失败当模型空转。
-        result = ToolResult(
+        is_error = success_count == 0
+        return ToolResult(
             tool_call_id=call_id,
-            content=[TextBlock(text=readable_text)],
+            content=[TextBlock(text="\n".join(readable_parts))],
             is_error=is_error,
             error_origin="external" if is_error else None,
+            subagent_envelope=SubagentEnvelopeArtifact(results=items),
+            metadata={"results": result_payloads},
         )
-        if envelopes:
-            result.subagent_envelope = SubagentEnvelopeArtifact(
-                result_envelope=merged,
-                task_id=task_id,
-                handoff_request=merged_handoff,
-            )
-        return result
-
-    @staticmethod
-    def _build_audit_manifest_stub(*, name: str, source: str) -> Any:
-        return type(
-            "_AuditManifestStub",
-            (),
-            {
-                "name": name,
-                "source": source,
-                "execution_mode": "sync",
-                "context_mode": "isolated",
-                "skill_origin": None,
-                "declared_invoke_sequence": [],
-            },
-        )()
 
     def _render_description(self) -> str:
         if self.capability_catalog.count_agent_entries() <= 0:
@@ -657,10 +932,27 @@ class SubAgentTool:
                 "派生一个专门的子代理角色来委派独立自洽的任务。"
                 "（当前未安装任何角色；无清单存在时，该工具会对模型隐藏。）"
             )
+        background_hint = (
+            "``dispatch_mode='background'`` 时立即返回 task_id，子代理在后台继续"
+            "执行：派发后立即交还控制权，不要自行等待；完成状态会自动更新，"
+            "任务未完成时不得综合其结果。"
+            if self._allow_background
+            or (self._collaboration is not None and self._allow_persistent_background)
+            else ""
+        )
+        lifecycle_hint = (
+            "默认 lifecycle='one_shot'，完成后关闭；lifecycle='persistent' 时保留"
+            "稳定 agent_id 和独立子会话，通过 subagent_control 查询、追加消息、"
+            "中断、恢复或关闭。persistent 每次只能派生一个 Agent。"
+            if self._collaboration is not None
+            else ""
+        )
         return (
             "派生一个专门的子代理角色来委派独立自洽的任务。"
             "子代理在与父级相同的权限层级和沙箱中、以隔离上下文运行。"
             "可用的代理由运行时能力增量面单独投影。"
+            + lifecycle_hint
+            + background_hint
         )
 
     def _emit_spawn_audit(
@@ -674,6 +966,7 @@ class SubAgentTool:
         tokens_output: int,
         duration_seconds: float,
         model_used: str,
+        execution_mode: str,
         error_message: str | None = None,
     ) -> None:
         try:
@@ -683,7 +976,7 @@ class SubAgentTool:
                 "ts": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
                 "subagent_name": manifest.name,
                 "subagent_source": getattr(manifest, "source", "user"),
-                "execution_mode": manifest.execution_mode,
+                "execution_mode": execution_mode,
                 "context_mode": manifest.context_mode,
                 "parent_session_id": context.session_id,
                 "subagent_depth": context.subagent_depth + 1,
@@ -697,11 +990,10 @@ class SubAgentTool:
             skill_origin = getattr(manifest, "skill_origin", None)
             if isinstance(skill_origin, str) and skill_origin:
                 payload["skill_origin"] = skill_origin
-            # preload_skills 弃用,audit 埋点值统一从 declared_invoke_sequence 取
-            declared = getattr(manifest, "declared_invoke_sequence", None)
-            if isinstance(declared, list) and declared:
-                payload["declared_invoke_sequence"] = [
-                    item for item in declared if isinstance(item, str) and item
+            preload_skills = getattr(manifest, "preload_skills", None)
+            if isinstance(preload_skills, list) and preload_skills:
+                payload["preload_skills"] = [
+                    item for item in preload_skills if isinstance(item, str) and item
                 ]
             tier = context.mode
             if tier is not None:

@@ -27,10 +27,10 @@ def _load_plugin_profile(
     *,
     project_root_hint: _Path | None = None,
 ) -> str | None:
-    """读插件下的 PRISMCLAW.md（回退 README.md）。
+    """读插件下的 PLUGIN.md（回退 README.md）。
 
     启动时 sync_prismclaw_home 已把 backend/.prismclaw 同步到
-    ``~/.prismclaw/assets``，默认插件根 ``~/.prismclaw/assets/plugins/<plugin>/PRISMCLAW.md``
+    ``~/.prismclaw/assets``，默认插件根 ``~/.prismclaw/assets/plugins/<plugin>/PLUGIN.md``
     直接命中；project_root 只作为部署期兜底。
     """
     if not plugin_name:

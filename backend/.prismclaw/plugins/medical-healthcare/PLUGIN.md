@@ -2,7 +2,7 @@
 本文件是医疗健康插件的工作指南。
 -->
 
-# PRISMCLAW.md
+# PLUGIN.md
 
 本仓库的工作指南。`medical-healthcare` 是一个 PrismClaw 插件市场——包含六个第一方医疗插件，以及两个本地 MCP 服务器（documents、fhir）。此处的工作主要是编辑提示词内容（skills、agents、hooks）、插件元数据或 MCP 配置，而非应用代码。
 
@@ -13,7 +13,7 @@
 <plugin>/                           # 6 个第一方插件
   .plugin/plugin.json               # 插件清单（name、version、description、author）
   mcp.json                          # 插件连接的 MCP 服务器
-  PRISMCLAW.md                      # 执业档案模板（详见下方"插件 PRISMCLAW.md"）
+  PLUGIN.md                      # 执业档案模板（详见下方"插件 PLUGIN.md"）
   README.md                         # 各插件文档
   skills/<name>/SKILL.md            # 每个目录对应一个 skill
   agents/<name>.md                  # 子 Agent 定义
@@ -82,9 +82,9 @@ python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json'
 
 市场根目录与各子插件都使用 `.plugin/plugin.json`，靠是否声明 `plugins` 数组区分：声明了的是市场清单，否则是插件清单。对于第一方插件，市场清单中的 `name`、`description` 和 `author` 应与子插件自身 `.plugin/plugin.json` 的对应字段保持一致。
 
-### 插件 PRISMCLAW.md 是模板，不是项目上下文
+### 插件 PLUGIN.md 是模板，不是项目上下文
 
-每个 `<plugin>/PRISMCLAW.md` 是一个执业档案模板，由该子插件的冷启动命令（`<前缀>-cold-start-interview`）复制到用户机器上的配置路径。安装插件时，它不会作为项目上下文加载。
+每个 `<plugin>/PLUGIN.md` 是一个执业档案模板，由该子插件的冷启动命令（`<前缀>-cold-start-interview`）复制到用户机器上的配置路径。安装插件时，它不会作为项目上下文加载。
 
 ### 格式规范
 

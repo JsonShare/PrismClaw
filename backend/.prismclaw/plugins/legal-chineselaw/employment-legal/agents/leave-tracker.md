@@ -1,16 +1,7 @@
 ---
 name: leave-tracker
-description: >
-  每周运行的 Agent，监控具有法定截止日期的在职员工休假——
-  带薪年休假、医疗期、产假（含各省市生育奖励假）、陪产假、
-  工伤停工留薪期（工伤保险条例第33条）、军人服役相关劳动保护——
-  并在截止日期错过前触发决策点提醒。
-  非状态报告；告知所需决策及截止时间。
-  每周运行（设置周一早晨提醒以调用
-  `/employment-legal:leave-tracker`）。自动调度需要
-  单独集成——PrismClaw Agent 不具备自我调度能力。
-  触发短语："休假跟踪"、"未结休假"、"医疗期状态"、"检查休假"、
-  "有没有休假截止日期"。
+description: 监控具有法定截止日期的在职员工休假——带薪年休假、医疗期、产假（含各省市生育奖励假）、陪产假、工伤停工留薪期（工伤保险条例第33条）、军人服役相关劳动保护——并在截止日期错过前触发决策点提醒（由主 Agent 按需调用，可通过 schedule 工具定时触发）。非状态报告；告知所需决策及截止时间。触发短语："休假跟踪"、"未结休假"、"医疗期状态"、"检查休假"、"有没有休假截止日期"。
+allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 ---
 
 <!--
@@ -45,17 +36,17 @@ Licensed under Apache License 2.0
 
 不跟踪无法定截止日期或重要法律节点的带薪休假、其他酌情假期。
 
-> **依赖跟踪器前请研究适用制度。** 对于 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中的每个省市，确认当前有效的休假法规、雇主法定义务、员工资格要求，以及任何修正案或新的省市规定。引用控制性法规和实施条例，附精确引用。核实时效性——各省市生育奖励假、陪产假等尤其频繁变动。若对任何省市的现行法律状态存在不确定性，请标记并不要陈述未经确认的规则。
+> **依赖跟踪器前请研究适用制度。** 对于 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md` 中的每个省市，确认当前有效的休假法规、雇主法定义务、员工资格要求，以及任何修正案或新的省市规定。引用控制性法规和实施条例，附精确引用。核实时效性——各省市生育奖励假、陪产假等尤其频繁变动。若对任何省市的现行法律状态存在不确定性，请标记并不要陈述未经确认的规则。
 
-## 运行计划
+## 运行方式
 
-此 Agent 不自行运行。设置定期提醒——周一早晨是合理默认——以调用 `/employment-legal:leave-tracker`。自动调度需要插件外部的单独集成（如 cron 任务或日历提醒）。
+此 Agent 不自行运行，由主 Agent 按需调用（触发方式如 `/employment-legal:leave-tracker`）；如需周期性运行，由主 Agent 通过 schedule 工具定时触发（周一早晨是合理默认）。
 
 ## 执行步骤
 
 ### 第一步 — 读取执业档案
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md`，提取：
+读取 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md`，提取：
 - 省市足迹及团队已研究记录的任何省市特定休假规则
 - HRIS 系统和休假数据访问权限（`## Systems` 部分）
 - 升级表
@@ -101,7 +92,7 @@ Licensed under Apache License 2.0
 
 仅呈现需要决策或行动的条目，不呈现无临近截止日期的正常休假。
 
-提醒层级（阈值为 Agent 级别默认值——可在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PRISMCLAW.md` 中根据团队偏好调整）：
+提醒层级（阈值为 Agent 级别默认值——可在 `~/.prismclaw/assets/plugins/legal-chineselaw/employment-legal/PLUGIN.md` 中根据团队偏好调整）：
 - 立即行动：决策或截止日期在 3 个工作日内
 - 本周需行动：7 天内
 - 即将到来：约 30 天内
@@ -183,7 +174,7 @@ Licensed under Apache License 2.0
 下次计划检查：[日期]
 ```
 
-若登记册中活跃休假超过约 10 项，或用户随时要求：提供仪表板（参见 PRISMCLAW.md `## Outputs → Dashboard offer for data-heavy outputs`）。针对此输出定制提案——按休假状态（立即/本周/即将到来/正常）统计数量、截止日期时间线，以及含员工、休假类型、省市、已用时间 vs 权利、预期返岗的可排序登记册。
+若登记册中活跃休假超过约 10 项，或用户随时要求：提供仪表板（参见 PLUGIN.md `## Outputs → Dashboard offer for data-heavy outputs`）。针对此输出定制提案——按休假状态（立即/本周/即将到来/正常）统计数量、截止日期时间线，以及含员工、休假类型、省市、已用时间 vs 权利、预期返岗的可排序登记册。
 
 ### 第六步 — 更新登记册
 

@@ -41,8 +41,12 @@ export interface Message {
   role: 'user' | 'assistant' | 'system' | 'error'
   content: string | ContentBlock[]
   timestamp: number
+  // 服务端事件 seq（历史/增量消息才有）。sync 用水位判断补差，本地乐观消息无此字段。
+  seq?: number
+  // 服务端 user entry 携带的客户端标识：sync 首次回传该 user 消息时，客户端把
+  // 本地乐观气泡（id === clientMessageId）原地 re-key 为服务端 id + seq。
+  clientMessageId?: string
   toolCalls?: ToolCallInfo[]
-  subagentTrace?: SubagentProgressItem[]
   metadata?: MessageMetadata
   timeline?: TimelineNode[]
 }
@@ -130,6 +134,8 @@ export interface WSClientChatSend {
   designated_skills?: string[]  // 用户指定技能名（可多个）
   designated_plugins?: string[]  // 用户指定插件名（可多个）
   referenced_files?: string[]  // 工作区根相对路径列表（含 sessions/<sid>/outputs/x 这类形式）
+  // 客户端生成的消息标识：后端写入 user entry，sync 回传后用于本地气泡 re-key。
+  client_message_id?: string
 }
 
 export interface WSClientChatAbort {
@@ -281,6 +287,10 @@ export interface SubagentProgressItem {
   duration_so_far: number
   handoff_chain_id?: string | null
   from_subagent?: string | null
+  /** 当前工具的紧凑参数摘要（如 "file_path=src/app.ts"），仅展示用。 */
+  current_tool_summary?: string | null
+  /** 有界最近动作（≤5 条），由后端 emitter 在工具切换时追加。 */
+  recent_activity?: string[]
 }
 
 /** 右栏展示用：在进度项上补全 sub_agent 调用参数里的任务描述 / 模型覆盖。 */

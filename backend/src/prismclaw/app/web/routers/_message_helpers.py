@@ -283,7 +283,17 @@ def _coerce_tool_arguments(args: Any) -> dict[str, Any]:
     return {}
 
 
-def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> list[dict[str, Any]]:
+def _build_display_messages(
+    tree: SessionTree,
+    *,
+    review_utils: Any = None,
+    retain_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """把会话树投影为展示消息。
+
+    ``retain_ids``：正文为空、无 tool_calls 也必须保留的 assistant entry
+    （挂着 execution_timeline 等元数据）。不传则维持"不可见即丢弃"。
+    """
     # 附件 URL 需要 workspace_id 才能拼出后端 /api/files/raw 地址；从 tree.header
     # 直接取（缺省 None 时不附加 file_url，向后兼容无 header 的测试桩）。
     workspace_id = getattr(getattr(tree, "header", None), "workspace_id", None)
@@ -312,16 +322,21 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
     # execution_timeline 的挂靠点存在。聚合丢弃它会让刷新后执行过程永久
     # 丢失（timeline 挂在无人引用的 id 上）。
     pending_assistant_partial: bool = False
+    # 展示消息聚合了多条 entry，增量对账需要"这组里最新的那次触碰"，
+    # 因此与 tool_calls 同生命周期地追踪组内最大 seq，flush 时一并落盘。
+    pending_assistant_seq: int = 0
     # 追踪上一条 user 消息的 epoch ms，供 flush_assistant 回填 durationMs
     # （与前端 useChatSocket 实时口径一致：assistant_ts − last_user_ts）。
     last_user_ts_ms: int | None = None
 
     def flush_assistant() -> None:
-        nonlocal pending_tool_calls, pending_assistant_text_parts, pending_assistant_last_raw_final, pending_assistant_id, pending_assistant_ts, pending_assistant_partial
+        nonlocal pending_tool_calls, pending_assistant_text_parts, pending_assistant_last_raw_final, pending_assistant_id, pending_assistant_ts, pending_assistant_partial, pending_assistant_seq
         if (
             not pending_assistant_text_parts
             and not pending_tool_calls
             and not pending_assistant_partial
+            # 正文为空但挂着元数据（时间线/交付物）的回合必须出条，作为挂靠点。
+            and not (retain_ids is not None and pending_assistant_id in retain_ids)
         ):
             pending_tool_calls = []
             pending_assistant_text_parts = []
@@ -329,6 +344,7 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
             pending_assistant_id = None
             pending_assistant_ts = None
             pending_assistant_partial = False
+            pending_assistant_seq = 0
             return
         # 正文 = 完整转录：聚合所有迭代的自然语言过程说明，
         # 以 "\n\n" 连接，与实时流式提交的最终消息保持一致（invariant I3）。
@@ -348,6 +364,7 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
             "role": "assistant",
             "content": content,
             "timestamp": pending_assistant_ts,
+            "seq": pending_assistant_seq,
         }
         # 回填执行时长：assistant 消息时间戳 − 触发它的 user 消息时间戳。
         # 与 useChatSocket.chat.done 口径一致；实时场景 metadata 由前端写入，
@@ -398,11 +415,13 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
         pending_assistant_id = None
         pending_assistant_ts = None
         pending_assistant_partial = False
+        pending_assistant_seq = 0
 
     for entry in ordered:
         if not isinstance(entry, MessageEntry):
             continue
         if entry.role == "tool":
+            pending_assistant_seq = max(pending_assistant_seq, entry.seq)
             # AskUserQuestion 是执行边界：提问气泡必须在工具结果处收束，
             # 否则用户作答后的续执行文本会被并入提问气泡（HITL 答案本身
             # 只作为该工具结果存在，不再额外落 user entry）。
@@ -427,7 +446,8 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
         # 会让刷新后执行过程永久丢失（timeline 挂在无人引用的 id 上）。
         has_tool_calls = entry.role == "assistant" and bool(entry.tool_calls)
         is_partial_assistant = entry.role == "assistant" and entry.partial
-        if not has_visible_content and not has_tool_calls and not is_partial_assistant:
+        is_retained = entry.role == "assistant" and retain_ids is not None and entry.id in retain_ids
+        if not has_visible_content and not has_tool_calls and not is_partial_assistant and not is_retained:
             continue
 
         if entry.role == "user":
@@ -446,6 +466,10 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
                     "role": entry.role,
                     "content": sanitized_content,
                     "timestamp": entry.timestamp,
+                    "seq": entry.seq,
+                    # 客户端乐观气泡的标识：客户端据此把本地消息 re-key 为
+                    # 服务端 entry（id + seq），避免同一提问出现两个气泡。
+                    "client_message_id": entry.client_message_id,
                 }
             )
             continue
@@ -456,6 +480,7 @@ def _build_display_messages(tree: SessionTree, *, review_utils: Any = None) -> l
             pending_assistant_ts = entry.timestamp
             # 异常终止兜底 partial 标记（正文/工具均空时仍保住聚合输出）
             pending_assistant_partial = pending_assistant_partial or bool(entry.partial)
+            pending_assistant_seq = max(pending_assistant_seq, entry.seq)
             # 正文 = 完整转录（含中间迭代的自然语言过程说明）；
             # 思考/reasoning 与工具调用由前端分别渲染。
             # 每一轮 assistant entry 的文字均计入正文，不再区分是否最终答案。

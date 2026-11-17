@@ -41,7 +41,7 @@ Licensed under Apache License 2.0
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PRISMCLAW.md 中的 `## 事项工作区`。如果 `已启用` 是 `✗`（内部法务用户默认），跳过此段的其余部分——技能使用执业级上下文，事项机制不可见。如果启用且没有活动事项，询问："这是哪个事项？运行 `/regulatory-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活动事项的 `matter.md` 以获取事项特定的上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/`。除非 `跨事项上下文` 是 `on`，否则绝不读取另一个事项的文件。
+**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 是 `✗`（内部法务用户默认），跳过此段的其余部分——技能使用执业级上下文，事项机制不可见。如果启用且没有活动事项，询问："这是哪个事项？运行 `/regulatory-legal:matter-workspace switch <slug>` 或说 `practice-level`。"加载活动事项的 `matter.md` 以获取事项特定的上下文和覆盖。将输出写入事项文件夹 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/`。除非 `跨事项上下文` 是 `on`，否则绝不读取另一个事项的文件。
 
 ---
 
@@ -172,11 +172,11 @@ gaps:
 
 ## 配置依赖的后备方案
 
-此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 读取差异响应所有者和升级路径。当它需要的值为空或仍然是 `[PLACEHOLDER]` 时：
+此技能从 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 读取差异响应所有者和升级路径。当它需要的值为空或仍然是 `[PLACEHOLDER]` 时：
 
-- **缺少差异响应分流者：** 将分配保留开放并附加到输出："`## 内规差异响应流程` 中未设置分流者。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 分配一个，以便新差异得到路由。"
+- **缺少差异响应分流者：** 将分配保留开放并附加到输出："`## 内规差异响应流程` 中未设置分流者。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 分配一个，以便新差异得到路由。"
 - **新摄取差异的所有者未知（政策库中没有所有者）：** 使用 `owner: [unassigned]` 记录差异并附加："[N] 个差异在没有所有者的情况下被摄取，因为政策库没有为受影响的政策命名一个。填写政策库中的所有者列以路由它们。"
-- **过期重大差异缺少升级路径：** 仍将其报告为过期，并附加："未为重大过期差异设置升级路径。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 配置它。"
+- **过期重大差异缺少升级路径：** 仍将其报告为过期，并附加："未为重大过期差异设置升级路径。使用 `/regulatory-legal:cold-start-interview --redo` 或通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 配置它。"
 
 当值已填充时，不说明配置。
 
@@ -195,7 +195,7 @@ gaps:
 
 ### 后果行动关卡（证明合规）
 
-**在将差异关闭为已解决或产生任何证明符合监管要求的输出（内部证明、董事会报告、审计回应、监管机构回应）之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` 中的 `## 谁在使用这个`。如果角色是 **非律师**：
+**在将差异关闭为已解决或产生任何证明符合监管要求的输出（内部证明、董事会报告、审计回应、监管机构回应）之前：** 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是 **非律师**：
 
 > 证明合规——或将差异关闭为已解决——具有法律后果。如果后来证明是错误的，证明可以被用来对抗公司，过早的关闭会使风险未得到解决。你是否与律师审查过此内容？如果是，继续。如果否，以下是带给他们的简报：
 >
@@ -237,9 +237,9 @@ gaps:
 
 ## 用下一步决策树结束
 
-根据 PRISMCLAW.md `## 输出` 以下一步决策树结束。根据此技能刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+根据 PLUGIN.md `## 输出` 以下一步决策树结束。根据此技能刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
-如果台账呈现超过约 10 个开放差异，或者任何时候用户询问：提供仪表板（参见 PRISMCLAW.md `## 输出 → 数据密集型输出的仪表板提议`）。为此输出塑造提供——按严重性的计数、按截止日期的差异时间线，以及带有所有者、状态和最后接触日期的可排序网格。
+如果台账呈现超过约 10 个开放差异，或者任何时候用户询问：提供仪表板（参见 PLUGIN.md `## 输出 → 数据密集型输出的仪表板提议`）。为此输出塑造提供——按严重性的计数、按截止日期的差异时间线，以及带有所有者、状态和最后接触日期的可排序网格。
 
 ## 此技能不做什么
 

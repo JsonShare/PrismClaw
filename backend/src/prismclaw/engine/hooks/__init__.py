@@ -202,7 +202,7 @@ class HookRegistry:
 
 
 class HookEvent(str, Enum):
-    """Hook 事件枚举。对标参考实现 30+ 种 HookEvent。"""
+    """Hook 事件枚举。"""
 
     # 会话生命周期
     SESSION_START = "session_start"
@@ -297,7 +297,7 @@ class HookDispatcher:
     ) -> HookResult:
         """分发事件，返回聚合 HookResult。
 
-        对标参考实现 hook decision/updatedInput/additionalContext。
+        聚合 decision / updated_input / additional_context 等字段，
         第一个 blocking 结果即停止后续 handler 执行。
         """
         if event not in self._hooks or not self._hooks[event]:
@@ -404,6 +404,7 @@ def _coerce_context(context: Any) -> HookContext:
             tool_name=context.get("tool_name"),
             tool_input=context.get("tool_input"),
             skill_name=context.get("skill_name"),
+            user_message=context.get("user_message"),
         )
     # 从对象属性构建
     return HookContext(
@@ -413,11 +414,12 @@ def _coerce_context(context: Any) -> HookContext:
         tool_name=getattr(context, "tool_name", None),
         tool_input=getattr(context, "tool_input", None),
         skill_name=getattr(context, "skill_name", None),
+        user_message=getattr(context, "user_message", None),
     )
 
 
 def _normalize_hook_event_name(event_name: str) -> HookEvent | None:
-    """规范化 hook 事件名。对标参考实现 ``normalizeHookEventName``。"""
+    """规范化 hook 事件名。"""
     normalized = re.sub(r"[^a-z0-9]+", "", event_name.strip().lower())
     mapping = {
         # 会话生命周期
@@ -476,7 +478,7 @@ async def _dispatch_pre_tool_hooks(
 ) -> dict[str, str]:
     """逐调用分发 PRE_TOOL hook，收集插件拒绝决策。
 
-    对标参考实现 PreToolUse：每个工具调用单独分发，携带 tool_name/tool_input，
+    PreToolUse 语义：每个工具调用单独分发，携带 tool_name/tool_input，
     使插件 hook 的 matcher 过滤与按工具拒绝生效。返回 ``{call_id: reason}``，
     由调用方并入 ``denied_ids``——被拒调用经骨架 before_tool_call 拦截，
     结果与 assistant 消息一起落树（persist_denied_turn / execute_tools Step 0）。

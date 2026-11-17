@@ -1,8 +1,5 @@
 """插件信任层级。
 
-借鉴参考实现 ``hooks.ts`` L180 ``shouldSkipHookDueToTrust`` +
-``pluginLoader.ts`` L2000 ``isSourceAllowedByPolicy``。
-
 两层门控：
   1. 文件夹级信任（``resolve_workspace_trusted``）——由 Settings 驱动，
      ``untrusted_workspaces`` 列出的路径视为不受信任，其余默认受信任。
@@ -43,7 +40,7 @@ def is_source_allowed_by_policy(
     strict_known: set[str] | None = None,
     blocked: set[str] | None = None,
 ) -> bool:
-    """来源策略校验。参考实现 ``isSourceAllowedByPolicy``。
+    """来源策略校验。
 
     - ``blocked`` 黑名单优先
     - ``strict_known`` 白名单（非空时只允许白名单内的来源）
@@ -101,9 +98,9 @@ def is_source_trusted_for_load(
 ) -> bool:
     """插件是否可在当前工作区信任态下被加载。
 
-    对标参考实现 的两层门控：文件夹级信任（``workspace_trusted``）是
-    真正的开关，``performStartupChecks`` 在用户信任文件夹后才装/载插件；
-    ``isSourceAllowedByPolicy`` 只是企业策略层的显式拦截。
+    两层门控：文件夹级信任（``workspace_trusted``）是真正的开关，
+    用户信任文件夹后才安装/加载插件；``is_source_allowed_by_policy``
+    只是企业策略层的显式拦截。
 
     规则：TRUSTED/VERIFIED 来源（builtin/marketplace）始终可加载；UNTRUSTED
     来源（local/session）需要工作区已被信任，否则拒绝。

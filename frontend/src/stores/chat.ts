@@ -22,8 +22,11 @@ const UNREAD_STORAGE_KEY = 'prismclaw:unread'
 // ── 单 conv 的完整状态（合并消息 + 流式 + outbox）──
 export interface ConvState {
   messages: Message[]
+  // 权威层水位：messages 已对齐到的服务端事件 seq。sync 以此作为 after_seq 补差，
+  // 只由 setMessages（首次历史）/ applySettledMessages（增量）推进，流式态不得触碰。
+  settledSeq: number
   lastAccessAt: number
-  // 流式状态（运行时，任务完成后由 finalizeStreaming 清空）
+  // 流式状态（运行时，服务端确认 idle 后由 clearLive 清空）
   streamingText: string
   // 当前 streamingText 属于哪个迭代段（segmentId）。chat.delta payload 带 segmentId —
   // 当收到的 segmentId 变了（进入新迭代轮次），先清 streamingText 再追加，让正文区
@@ -37,7 +40,7 @@ export interface ConvState {
   // 节点发出（elapsedS 是帧到达时的基线值），「已执行 Xs」的秒表由前端按该时刻推进
   // （usePhaseClock）。与 phase 同生命周期：phase 置空处同步置空。
   phaseAt: number | null
-  // 本轮执行开始时刻（initStreaming 记下，finalizeStreaming 清空）。执行秒表的计时
+  // 本轮执行开始时刻（initStreaming 记下，clearLive 清空）。执行秒表的计时
   // 纪元——心跳帧到达前界面就应计数，若以 phaseAt 为纪元则该窗口内秒表恒为 0。
   runStartedAt: number | null
   // ════ HITL 人机交互状态 —— 单一真相源 ════
@@ -88,12 +91,12 @@ export interface ConvState {
   // （loadingHistoryFor），与 messages（store）分离成两个真相源——组件只能
   // 猜测历史是否稳定，是置顶被吞 bug 的温床。唯一写入方是 loadMessagesFor。
   historyStatus: 'idle' | 'loading' | 'loaded'
-  // 最近一次回合定稿时刻（chat.done → finalizeStreaming 记下）。用于识别
-  // 收尾竞态中迟到的 run.snapshot 旧帧：快照在 finalize 前生成、入队后在
+  // 最近一次叠加层清空时刻（sync 确认 idle → clearLive 记下）。用于识别
+  // 收尾竞态中迟到的 run.snapshot 旧帧：快照在收尾前生成、入队后在
   // done 之后被处理，若无守卫会把已定稿的会话重新拉回流式态（执行过程
   // timeline 复活到已定稿 assistant 消息下方——层次错乱）。仅前端本地时钟，
   // 不做跨端时钟比较；窗口短（见 hydrateRun 守卫），误拦由后端周期快照自愈。
-  lastFinalizedAt: number | null
+  lastSettledAt: number | null
 }
 
 // ── 从 localStorage 恢复未读状态 ──
@@ -142,6 +145,7 @@ function evictLeastRecentlyAccessed(
 function ensureConv(convStates: Record<string, ConvState>, convId: string): ConvState {
   return convStates[convId] ?? {
     messages: [],
+    settledSeq: 0,
     lastAccessAt: Date.now(),
     streamingText: '',
     currentStreamingSegmentId: 0,
@@ -162,7 +166,7 @@ function ensureConv(convStates: Record<string, ConvState>, convId: string): Conv
     outbox: [],
     pinRequest: null,
     historyStatus: 'idle',
-    lastFinalizedAt: null,
+    lastSettledAt: null,
   }
 }
 
@@ -178,7 +182,11 @@ interface ChatState {
 
 interface ChatActions {
   // ── 消息操作（convId 第一参数）──
-  setMessages: (convId: string, messages: Message[]) => void
+  // opts.settledSeq 仅用于首次历史加载：把权威水位对齐到服务端已返回的最大 seq。
+  setMessages: (convId: string, messages: Message[], opts?: { settledSeq?: number }) => void
+  // 增量补差：user 消息按 clientMessageId 原地 re-key；合并后全表按 seq 排序
+  // （无 seq 的本地消息在尾部），推进水位，绝不触碰流式叠加层。
+  applySettledMessages: (convId: string, messages: Message[], settledSeq: number) => void
   setHistoryStatus: (convId: string, status: ConvState['historyStatus']) => void
   appendMessage: (convId: string, message: Message) => void
   // 按 id 归一：同 id 已存在则原地替换，否则追加。用于让权威消息（chat.done
@@ -190,7 +198,8 @@ interface ChatActions {
 
   // ── 流式操作（convId 第一参数）──
   initStreaming: (convId: string) => void
-  // 幂等全量重建：用后端 GET /run 的 RunProjection 覆盖 streaming 运行态，
+  // 幂等全量重建：用服务端 RunProjection（sync 的 run 字段或 run.snapshot 帧）
+  // 覆盖 streaming 运行态，
   // 刷新/重连后的唯一重放入口（取代旧 restoreRunning 的「仅重挂内存中会话」）。
   // 整体替换而非 merge；ConvState.streaming* 自此被视为纯缓存，可随时丢弃重建。
   hydrateRun: (convId: string, run: RunProjection) => void
@@ -210,7 +219,9 @@ interface ChatActions {
   ) => void
   // 应用一帧 task.timeline（快照整体替换 / patch best-effort 合并），由纯函数 nextTimelineState 承担。
   applyTimelineFrame: (convId: string, frame: TimelineFrame) => void
-  finalizeStreaming: (convId: string) => { text: string; timeline: TimelineNode[] }
+  // 清空流式叠加层。唯一触发条件是 sync 返回 run_state="idle"（或会话已删除），
+  // 不再由本地看门狗/chat.done 直接判决收尾。
+  clearLive: (convId: string) => void
 
   // ── outbox（convId 第一参数）──
   enqueueOutbox: (convId: string, item: OutboxItem) => number
@@ -241,10 +252,85 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   // ── 消息操作 ──
 
-  setMessages: (convId, messages) =>
+  setMessages: (convId, messages, opts) =>
     set((state) => {
       const conv = ensureConv(state.convStates, convId)
-      const nextConv: ConvState = { ...conv, messages, lastAccessAt: Date.now(), historyStatus: 'loaded' }
+      const nextConv: ConvState = {
+        ...conv,
+        messages,
+        // opts 存在才写水位：历史回填之外的调用（如 history_reset 清空）自行传 0。
+        ...(opts?.settledSeq !== undefined ? { settledSeq: opts.settledSeq } : {}),
+        lastAccessAt: Date.now(),
+        historyStatus: 'loaded',
+      }
+      const nextStates = { ...state.convStates, [convId]: nextConv }
+      return {
+        convStates: evictLeastRecentlyAccessed(nextStates, convId),
+      }
+    }),
+
+  applySettledMessages: (convId, messages, settledSeq) =>
+    set((state) => {
+      const conv = ensureConv(state.convStates, convId)
+      const indexById = new Map(conv.messages.map((m, i) => [m.id, i]))
+      // 本地乐观提问按 clientMessageId 建索引：服务端 user 消息首次出现时原地
+      // re-key（换成服务端 id + seq），避免同一提问在列表里出现两个气泡。
+      const indexByClientId = new Map<string, number>()
+      conv.messages.forEach((m, i) => {
+        if (m.clientMessageId) indexByClientId.set(m.clientMessageId, i)
+      })
+      const nextMessages = [...conv.messages]
+      for (const message of messages) {
+        const localIdx = message.clientMessageId
+          ? indexByClientId.get(message.clientMessageId)
+          : undefined
+        if (localIdx !== undefined && nextMessages[localIdx].id !== message.id) {
+          const prev = nextMessages[localIdx]
+          nextMessages[localIdx] = {
+            ...message,
+            metadata:
+              prev.metadata || message.metadata
+                ? { ...(prev.metadata ?? {}), ...(message.metadata ?? {}) }
+                : undefined,
+          }
+          indexById.set(message.id, localIdx)
+          continue
+        }
+        const idx = indexById.get(message.id)
+        if (idx === undefined) {
+          indexById.set(message.id, nextMessages.length)
+          nextMessages.push(message)
+        } else {
+          // 服务端消息已存在：正文/时间线/服务端元数据以本次为准，但客户端
+          // 旁路元数据（referenceSources / followupQuestions 等不落树、只经
+          // WS 帧下发）必须保留——反馈等操作会给同一条消息抬高 seq，导致它
+          // 被再次返回；整体替换会把这类本地元数据冲掉。
+          const prev = nextMessages[idx]
+          nextMessages[idx] = {
+            ...message,
+            metadata:
+              prev.metadata || message.metadata
+                ? { ...(prev.metadata ?? {}), ...(message.metadata ?? {}) }
+                : undefined,
+          }
+        }
+      }
+      // 顺序唯一真相 = seq；没有 seq 的本地消息（乐观提问/错误提示）固定在尾部。
+      const ordered = nextMessages
+        .map((m, i) => ({ m, i }))
+        .sort((a, b) => {
+          const sa = a.m.seq ?? Number.POSITIVE_INFINITY
+          const sb = b.m.seq ?? Number.POSITIVE_INFINITY
+          return sa === sb ? a.i - b.i : sa - sb
+        })
+        .map(({ m }) => m)
+      const nextConv: ConvState = {
+        ...conv,
+        messages: ordered,
+        // 水位只增不减：乱序/重复响应不得让客户端回退。
+        settledSeq: Math.max(conv.settledSeq, settledSeq),
+        lastAccessAt: Date.now(),
+      }
       const nextStates = { ...state.convStates, [convId]: nextConv }
       return {
         convStates: evictLeastRecentlyAccessed(nextStates, convId),
@@ -454,7 +540,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 只重置文本流式状态，保留 activeTaskRuntime 和 timeline。
       // 后端在 LLM 输出文本前会先发送 task.runtime 和 task.timeline
       // （推理、工具调用），如果在 chat.delta 时清空它们会导致执行过程丢失。
-      // 这些字段在 finalizeStreaming（chat.done）时统一清理。
+      // 这些字段在 clearLive（sync 确认 idle）时统一清理。
       // runGate 切换：进入 executing/generating 期 → HITL gate 必然已解除
       // （AskUserQuestion 续跑后 chat.start 不重发，续跑事件流的第一个 delta
       // 就应该触发 initStreaming，此时 runGate 仍可能卡在 await_clarification——
@@ -491,7 +577,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   hydrateRun: (convId, run) =>
     set((state) => {
       const base = ensureConv(state.convStates, convId)
-      // 防复活守卫：run.snapshot 帧在 finalize 前生成，可能在 chat.done 之后
+      // 防复活守卫：run.snapshot 帧在收尾前生成，可能在 chat.done 之后
       // 才被处理（WS 队列/在途）。若无此守卫，迟到的旧快照会把已定稿的会话
       // 重新拉回流式态——执行过程 timeline 作为独立流式块复活到已定稿
       // assistant 消息下方（执行过程与文字层次错乱的直接来源）。仅拦「定稿
@@ -499,8 +585,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // 周期快照下一帧即自愈。
       if (
         !base.isStreaming &&
-        base.lastFinalizedAt !== null &&
-        Date.now() - base.lastFinalizedAt < 1500
+        base.lastSettledAt !== null &&
+        Date.now() - base.lastSettledAt < 1500
       ) {
         return {}
       }
@@ -594,8 +680,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             isStreaming: true,
             isQueued: false,
             queuePosition: 0,
-            // 新回合启动：解除 finalize 防复活窗口，放行本回合的快照帧
-            lastFinalizedAt: null,
+            // 新回合启动：解除收尾防复活窗口，放行本回合的快照帧
+            lastSettledAt: null,
           },
         },
       }
@@ -750,25 +836,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }),
 
-  finalizeStreaming: (convId) => {
-    const state = get()
-    const conv = state.convStates[convId]
-    if (!conv) return { text: '', timeline: [] }
-
-    const result = {
-      text: conv.streamingText,
-      timeline: [...conv.timeline],
-    }
-
-    // 清空流式状态，保留消息/outbox/lastAccessAt
-    set((s) => {
-      const c = s.convStates[convId]
-      if (!c) return s
+  clearLive: (convId) =>
+    set((state) => {
+      const conv = state.convStates[convId]
+      if (!conv) return state
+      // 只清叠加层，保留 messages / settledSeq / outbox —— 定稿内容已在权威层。
       return {
         convStates: {
-          ...s.convStates,
+          ...state.convStates,
           [convId]: {
-            ...c,
+            ...conv,
             streamingText: '',
             currentStreamingSegmentId: 0,
             phase: null,
@@ -784,14 +861,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             activeTaskRuntimeEventSeq: 0,
             activeTaskRuntimeIdempotencyKey: null,
             timeline: [],
-            lastFinalizedAt: Date.now(),
+            lastSettledAt: Date.now(),
           },
         },
       }
-    })
-
-    return result
-  },
+    }),
 
   // ── 未读状态 ──
 

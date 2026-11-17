@@ -60,6 +60,9 @@ EXECUTION_TIMELINE_CUSTOM_TYPE = "execution_timeline"
 DECISION_LEDGER_EVENT_CUSTOM_TYPE = "decision_ledger_event"
 TRANSIENT_RETRY_NOTICE_CUSTOM_TYPE = "transient_retry_notice"
 RUN_PROJECTION_CUSTOM_TYPE = "run_projection"
+SUBAGENT_SESSION_CUSTOM_TYPE = "subagent_session"
+SUBAGENT_RUN_CUSTOM_TYPE = "subagent_run"
+SUBAGENT_TOOL_EFFECT_CUSTOM_TYPE = "subagent_tool_effect"
 
 # Typed payload models for CustomEntry.data (discriminated union)
 
@@ -204,8 +207,50 @@ class _CustomPayloadRunProjection(BaseModel):
     data: RunProjectionPayload
 
 
+# 透传型快照：data 是各自运行时模块写入的原始结构，schema 层不重复建模。
+class _CustomPayloadCacheStrategy(BaseModel):
+    custom_type: Literal["cache_strategy_snapshot"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadParallelTaskRuntime(BaseModel):
+    custom_type: Literal["parallel_task_runtime"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadRunTakeoverState(BaseModel):
+    custom_type: Literal["run_takeover_state"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadContextCompactionReference(BaseModel):
+    custom_type: Literal["context_compaction_reference"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadRunSnapshot(BaseModel):
+    custom_type: Literal["run_snapshot"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadSubagentSession(BaseModel):
+    custom_type: Literal["subagent_session"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadSubagentRun(BaseModel):
+    custom_type: Literal["subagent_run"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadSubagentToolEffect(BaseModel):
+    custom_type: Literal["subagent_tool_effect"]
+    data: dict[str, Any]
+
+
 CustomPayload = Annotated[
     Union[
+        _CustomPayloadCacheStrategy,
         _CustomPayloadTurnMetrics,
         _CustomPayloadTaskRuntime,
         _CustomPayloadTaskSpec,
@@ -214,6 +259,7 @@ CustomPayload = Annotated[
         _CustomPayloadReviewDecision,
         _CustomPayloadTaskMutation,
         _CustomPayloadForkTask,
+        _CustomPayloadParallelTaskRuntime,
         _CustomPayloadHandoff,
         _CustomPayloadSearch,
         _CustomPayloadExtract,
@@ -221,6 +267,12 @@ CustomPayload = Annotated[
         _CustomPayloadSessionState,
         _CustomPayloadReplacementDecision,
         _CustomPayloadRunProjection,
+        _CustomPayloadRunTakeoverState,
+        _CustomPayloadContextCompactionReference,
+        _CustomPayloadRunSnapshot,
+        _CustomPayloadSubagentSession,
+        _CustomPayloadSubagentRun,
+        _CustomPayloadSubagentToolEffect,
         _CustomPayloadFeedback,
         _CustomPayloadOutputFiles,
         _CustomPayloadFileChanges,
@@ -245,6 +297,7 @@ CustomType = Literal[
     "review_decision_record",
     "task_mutation",
     "fork_task_projection",
+    "parallel_task_runtime",
     "handoff_request",
     "search_evidence",
     "extract_evidence",
@@ -261,7 +314,11 @@ CustomType = Literal[
     "decision_ledger_event",
     "transient_retry_notice",
     "run_snapshot",
+    "run_takeover_state",
     "fact_sheet",
+    "subagent_session",
+    "subagent_run",
+    "subagent_tool_effect",
 ]
 
 
@@ -345,6 +402,7 @@ def _event_to_message_entry(
     data: dict[str, Any],
     *,
     role: Literal["user", "assistant", "tool"],
+    seq: int = 0,
 ) -> MessageEntry | None:
     """Build a typed MessageEntry from an event's data payload.
 
@@ -364,6 +422,7 @@ def _event_to_message_entry(
             id=entry_id,
             parent_id=data.get("parent_id"),
             timestamp=timestamp,
+            seq=seq,
             role="tool",
             content=data.get("content", ""),
             enriched_content=data.get("enriched_content"),
@@ -372,6 +431,7 @@ def _event_to_message_entry(
             partial=False,
             is_error=bool(data.get("is_error") or False),
             tool_name=data.get("tool_name"),
+            metadata=data.get("metadata"),
         )
 
     # assistant role: reconstruct tool_calls from inline event data so
@@ -384,12 +444,15 @@ def _event_to_message_entry(
         id=entry_id,
         parent_id=data.get("parent_id"),
         timestamp=timestamp,
+        seq=seq,
         role=role,
         content=data.get("content", ""),
         enriched_content=data.get("enriched_content"),
         tool_calls=raw_tool_calls,
         tool_call_id=None,
         partial=False,
+        client_message_id=data.get("client_message_id"),
+        metadata=data.get("metadata"),
     )
 
 
@@ -507,19 +570,19 @@ class SessionTree(BaseModel):
                     # before any SESSION_CREATED must not crash the replay —
                     # the caller falls back to the stored header key.
             elif etype == SessionEventType.USER_MESSAGE:
-                entry = _event_to_message_entry(data, role="user")
+                entry = _event_to_message_entry(data, role="user", seq=event.seq)
                 if entry:
                     entries[entry.id] = entry
                     order.append(entry.id)
                     leaf_id = entry.id
             elif etype == SessionEventType.ASSISTANT_MESSAGE:
-                entry = _event_to_message_entry(data, role="assistant")
+                entry = _event_to_message_entry(data, role="assistant", seq=event.seq)
                 if entry:
                     entries[entry.id] = entry
                     order.append(entry.id)
                     leaf_id = entry.id
             elif etype == SessionEventType.TOOL_RESULT:
-                entry = _event_to_message_entry(data, role="tool")
+                entry = _event_to_message_entry(data, role="tool", seq=event.seq)
                 if entry:
                     entries[entry.id] = entry
                     order.append(entry.id)
@@ -528,6 +591,7 @@ class SessionTree(BaseModel):
                 if "entry" in data:
                     entry = _parse_entry(data["entry"])
                     if entry:
+                        entry.seq = event.seq
                         entries[entry.id] = entry
                     if "leaf_id" in data:
                         leaf_id = data["leaf_id"]

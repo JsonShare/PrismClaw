@@ -340,7 +340,183 @@ code, pre {
 .rich-markdown input[type='checkbox'] { accent-color: var(--rich-accent); }
 .rich-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 3px 0; }
 
-.markdown-message .markdown-table-scroll,
+/* ── Markdown 表格（聊天消息内）：列宽随内容自适应 + 横向滚动 ──
+   原来的 table-layout: fixed 会让所有列等宽，长文本列被压成窄条、
+   行高翻倍，非常难读；改为 auto 后由内容决定列宽，列太挤时横向滚动。 */
+.markdown-table-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+/* 可横向滚动时在左右边缘渐隐，提示后面还有内容 */
+.markdown-table-wrap::before,
+.markdown-table-wrap::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  z-index: 1;
+  width: 28px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.markdown-table-wrap::before {
+  left: 1px;
+  background: linear-gradient(to right, var(--rich-surface) 15%, transparent);
+}
+.markdown-table-wrap::after {
+  right: 1px;
+  background: linear-gradient(to left, var(--rich-surface) 15%, transparent);
+}
+.markdown-table-wrap[data-scroll='left']::before,
+.markdown-table-wrap[data-scroll='both']::before,
+.markdown-table-wrap[data-scroll='right']::after,
+.markdown-table-wrap[data-scroll='both']::after {
+  opacity: 1;
+}
+
+.markdown-message .markdown-table-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  border: 1px solid var(--rich-border);
+  border-radius: 8px;
+  background: var(--rich-surface);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--c-border) 55%, transparent) transparent;
+}
+.markdown-message .markdown-table-scroll:hover {
+  scrollbar-color: var(--c-border) transparent;
+}
+.markdown-message .markdown-table-scroll::-webkit-scrollbar { height: 6px; }
+.markdown-message .markdown-table-scroll::-webkit-scrollbar-track { background: transparent; }
+.markdown-message .markdown-table-scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--c-border) 55%, transparent);
+}
+.markdown-message .markdown-table-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--c-border);
+}
+
+.markdown-message .markdown-table-scroll table {
+  display: table;
+  width: 100%;
+  /* 列数由渲染器写到 --md-table-cols 上：容器偏窄时整表横向滚动，
+     而不是每列被压成两三个字宽。8em 随字号缩放，不是魔法像素值。 */
+  min-width: calc(var(--md-table-cols, 1) * 8em);
+  table-layout: auto;
+  border: 0;
+  border-collapse: collapse;
+  border-radius: 0;
+  background: transparent;
+  /* 数字等宽：日期、金额列上下对齐，扫读更快 */
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-message .markdown-table-scroll:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--c-accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.markdown-message .markdown-table-scroll th,
+.markdown-message .markdown-table-scroll td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--c-border);
+  line-height: 1.6;
+  vertical-align: top;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* 表头不折行：否则窄列里「重要性」会竖排成一字一行 */
+.markdown-message .markdown-table-scroll th {
+  white-space: nowrap;
+}
+
+.markdown-message .markdown-table-scroll thead th {
+  background: var(--rich-raised);
+  font-weight: 650;
+}
+
+/* 让 GFM 的 :---: / ---: 对齐重新生效（基础样式默认左对齐） */
+.markdown-message .markdown-table-scroll th[align='center'],
+.markdown-message .markdown-table-scroll td[align='center'] { text-align: center; }
+.markdown-message .markdown-table-scroll th[align='right'],
+.markdown-message .markdown-table-scroll td[align='right'] { text-align: right; }
+
+/* 斑马纹 + 行悬停：长表格里更容易跟住一行 */
+.markdown-message .markdown-table-scroll tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--c-surface-2) 55%, transparent);
+}
+.markdown-message .markdown-table-scroll tbody tr:hover {
+  background: color-mix(in srgb, var(--c-accent) 7%, transparent);
+}
+
+/* 单元格里的图片统一收敛，避免小图撑出很高的行 */
+.markdown-message .markdown-table-scroll td img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 112px;
+  max-height: 72px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+/* ── 窄屏（移动端）：3 列以上的表格转成卡片，单元格变成“字段名 + 值” ──
+   data-cols 由渲染器写入；单元格的 data-label 由 rehypeTableLabels 注入。 */
+@media (max-width: 720px) {
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) .markdown-table-scroll {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2'])::before,
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2'])::after {
+    display: none;
+  }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) thead { display: none; }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) tbody { display: grid; gap: 10px; }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) tbody tr {
+    display: grid;
+    gap: 7px;
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--rich-surface);
+  }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) tbody td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) tbody td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 1px;
+    color: var(--c-text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.6;
+  }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) tbody td:empty { display: none; }
+  .markdown-table-wrap[data-cols]:not([data-cols='1']):not([data-cols='2']) td img {
+    max-width: 100%;
+    max-height: 180px;
+  }
+}
+
 .rich-table-scroll {
   width: 100%;
   min-width: 0;
@@ -350,7 +526,6 @@ code, pre {
   background: var(--rich-surface);
 }
 
-.markdown-message .markdown-table-scroll table,
 .rich-table-scroll table {
   display: table;
   width: 100%;

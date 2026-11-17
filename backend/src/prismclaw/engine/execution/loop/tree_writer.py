@@ -247,6 +247,10 @@ def _build_conversation_node(
         _started_ms = _now_ms
         _completed_ms = _now_ms
 
+    # wall-clock 回拨（NTP 校时）会让 started > completed，导致整条审计
+    # 记录被 schema 拒收；时长归一到 0，而不是丢节点。
+    _completed_ms = max(_completed_ms, _started_ms)
+
     # content_preview (up to 500 chars) + full *_detail fields
     _content_preview: str | None = None
     _full_text: str | None = None

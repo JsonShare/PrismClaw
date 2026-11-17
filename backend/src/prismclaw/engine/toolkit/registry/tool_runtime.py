@@ -3,19 +3,27 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 from prismclaw.engine.hooks import HookRegistry
-from prismclaw.schema.services.env_types import ExecutionEnv
-from prismclaw.schema.agent.capability import EffectClass
-from prismclaw.schema.content.workspace import SandboxTier, WorkspaceMode
-from prismclaw.schema.agent.data_types import TextBlock
-from prismclaw.schema.agent.task_runtime import ReviewRequirements, TaskRuntimeState
-from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.schema.content.content_types import PersistenceArtifact, ReferenceArtifact, RuntimeControlArtifact, StateDeltaArtifact, SubagentEnvelopeArtifact, ToolResult, UiArtifact
-from prismclaw.engine.security.sandbox.policy import SandboxPolicy
-
 from prismclaw.engine.security.gate.types import ParallelTaskExtras, TaskRuntimeContext
+from prismclaw.engine.security.sandbox.policy import SandboxPolicy
+from prismclaw.schema.agent.capability import EffectClass
+from prismclaw.schema.agent.data_types import TextBlock
+from prismclaw.schema.agent.task_runtime import ReviewRequirements
+from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.content.content_types import (
+    PersistenceArtifact,
+    ReferenceArtifact,
+    RuntimeControlArtifact,
+    StateDeltaArtifact,
+    SubagentEnvelopeArtifact,
+    ToolResult,
+    UiArtifact,
+)
+from prismclaw.schema.content.workspace import SandboxTier
+from prismclaw.schema.agent.types import WorkspaceMode
+from prismclaw.schema.services.env_types import ExecutionEnv
 
 ToolClass = Literal["read", "memory-write-safe", "write"]
 """Permission classification consumed by the runner under ``read-only`` tier.
@@ -51,12 +59,11 @@ class ToolContext:
     user_id: str | None = None
     user_profile: Any = None
     subagent_depth: int = 0
-    task_runtime: ParallelTaskExtras | None = None
+    task_runtime: ParallelTaskExtras = field(default_factory=ParallelTaskExtras)
 
     request_id: str = ""
     task_id: str = ""
     task_spec: TaskSpec | None = None
-    task_runtime_state: TaskRuntimeState | None = None
     review_requirements: ReviewRequirements | None = None
     system_prompt_sections: Any = None
     invoked_skill_state: Any = None
@@ -84,7 +91,6 @@ class ToolContext:
     mcp_death_handler: Any = None
     mcp_runtime_manager: Any = None
     session_tree: Any = None
-    parallel_task_store: Any = None
     approval_execution_audit_contexts: Any = None
     decision_audit_logger: Any = None
     scheduler_store: Any = None
@@ -108,6 +114,9 @@ class ToolContext:
     subagent_timed_out: bool = False
     session_store: Any = None
     subagent_progress_sink: Any = None
+    # 后台子代理终态投递（web/IM 通道装配；headless 为 None）。
+    # Any 字段默认被 __deepcopy__ 排除，后台派发时由 sub_agent 按引用回填。
+    subagent_terminal_sink: Any = None
     channel: str = "web"
 
     # ── deepcopy 门控 ──
@@ -140,13 +149,13 @@ class ToolContext:
         "goal_block_intent",
     })
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo: dict[int, Any]) -> ToolContext:
         import copy as _copy
         from typing import get_type_hints
 
         # 先把 dataclass 自身排除（避免递归）
         if id(self) in memo:
-            return memo[id(self)]
+            return cast(ToolContext, memo[id(self)])
 
         # 收集所有要排除的字段名
         exclude = set(self._DEEPCOPY_EXCLUDE)
@@ -186,18 +195,9 @@ class ToolContext:
         memo[id(self)] = new_ctx
         return new_ctx
 
-    def __post_init__(self):
-        if self.task_runtime is None:
-            self.task_runtime = ParallelTaskExtras()
-
     @property
     def task_runtime_ctx(self) -> TaskRuntimeContext:
-        # getattr 兜底：task_runtime 可能被错换为 TaskRuntimeState（schema
-        # 持久化快照，无 .task_runtime 嵌套字段）。此时返回默认 TaskRuntimeContext。
-        inner = getattr(self.task_runtime, "task_runtime", None)
-        if isinstance(inner, TaskRuntimeContext):
-            return inner
-        return TaskRuntimeContext()
+        return self.task_runtime.task_runtime
 
 
 @runtime_checkable
@@ -240,7 +240,7 @@ def wrap_tool_with_abort(tool: Tool) -> Tool:
         async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
             return await check_abort_or_run(tool, args, context)
 
-    return _AbortWrapped()  # type: ignore[return-value]
+    return _AbortWrapped()
 
 
 def resolve_tool_effect_class(tool: Tool) -> EffectClass:

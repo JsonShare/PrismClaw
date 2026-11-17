@@ -188,7 +188,7 @@ export interface TaskRuntimeProjection {
  */
 export interface RunProjection {
   conversation_id: string
-  /** 恒 "active"：非运行中会话 GET /run 直接返回 null（不进入本类型） */
+  /** 恒 "active"：非运行中会话不返回该投影（sync.run 为 null） */
   state: string
   streaming_text: string
   timeline_nodes: TimelineNode[]

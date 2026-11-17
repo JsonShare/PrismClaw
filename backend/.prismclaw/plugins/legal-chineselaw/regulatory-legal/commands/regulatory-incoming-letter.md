@@ -18,7 +18,7 @@ category: 监管合规
 
 # /regulatory-incoming-letter
 
-1. 读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PRISMCLAW.md` → 公司画像、escalation_path、归口部门联系人
+1. 读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 公司画像、escalation_path、归口部门联系人
 2. 用下面的 7 阶段工作流
 3. 录入（OCR + 字段抽取）→ 自动归类（6 分法）→ 按类处置 → 任务派发 → 进度跟踪 → 上报材料汇总 → 闭环
 4. 关键截止日自动锁到监管要求回复期前的内部缓冲日期（默认 5 个工作日）
@@ -27,7 +27,7 @@ category: 监管合规
 
 ## 事项上下文
 
-**事项上下文**：核查实务层级 `PRISMCLAW.md` 中 `## 事项工作区`。如果 `已启用` 是 `✗`（企业内部法务用户默认），跳过本段——技能用实务层级上下文，事项机制不可见。如果启用且没有当前事项，问："这是哪个事项？跑 `regulatory-matter-workspace switch <slug>` 或说切到实务层级。"
+**事项上下文**：核查实务层级 `PLUGIN.md` 中 `## 事项工作区`。如果 `已启用` 是 `✗`（企业内部法务用户默认），跳过本段——技能用实务层级上下文，事项机制不可见。如果启用且没有当前事项，问："这是哪个事项？跑 `regulatory-matter-workspace switch <slug>` 或说切到实务层级。"
 
 对监管下发函的特殊处理：**每一份独立的监管函件都可以视作一个独立事项**（特别是涉及处罚/约谈类高风险函件）。建议在私人执业场景下为重要函件单独建事项，企业内部法务场景下走实务层级 + 内规差异台账（`gap-tracker.yaml`）跟踪。
 

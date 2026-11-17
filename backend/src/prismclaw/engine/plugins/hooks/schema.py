@@ -1,10 +1,6 @@
 """Hook 输入/输出 Schema。
 
-对齐参考实现 ``hooks.ts`` 的 HookInput/HookOutput 结构。
-
-参考实现：
-- ``createBaseHookInput`` (L220) → HookContext
-- ``HookResult`` (L260) + ``processHookJSONOutput`` (L500) → HookResult
+``HookContext`` 描述一次 hook 事件的输入，``HookResult`` 承载 hook 的执行结果。
 """
 from __future__ import annotations
 
@@ -14,7 +10,7 @@ from typing import Any
 
 
 class HookOutcome(str, Enum):
-    """Hook 执行结果。对齐参考实现 outcome。"""
+    """Hook 执行结果。"""
 
     SUCCESS = "success"
     BLOCKING = "blocking"
@@ -23,7 +19,7 @@ class HookOutcome(str, Enum):
 
 
 class PermissionDecision(str, Enum):
-    """PreToolUse 权限决策。对齐参考实现 ``permissionDecision``。"""
+    """PreToolUse 权限决策。"""
 
     ALLOW = "allow"
     DENY = "deny"
@@ -31,7 +27,7 @@ class PermissionDecision(str, Enum):
 
 
 class HookDecision(str, Enum):
-    """通用决策。对齐参考实现 ``decision``。"""
+    """通用决策。"""
 
     APPROVE = "approve"
     BLOCK = "block"
@@ -39,7 +35,7 @@ class HookDecision(str, Enum):
 
 @dataclass(slots=True)
 class HookContext:
-    """Hook 输入。对齐参考实现 ``createBaseHookInput`` (L220)。"""
+    """Hook 输入。"""
 
     event: str
     session_id: str
@@ -54,6 +50,8 @@ class HookContext:
     skill_name: str | None = None
     plugin_id: str | None = None
     plugin_root: str | None = None
+    # USER_PROMPT_SUBMIT：本轮用户输入原文，供 hook 按任务内容决定是否注入。
+    user_message: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为 JSON 可传输的字典（用于 shell command hook stdin）。"""
@@ -80,6 +78,8 @@ class HookContext:
             result["skill_name"] = self.skill_name
         if self.plugin_id:
             result["plugin_id"] = self.plugin_id
+        if self.user_message:
+            result["user_message"] = self.user_message
         return result
 
 
@@ -87,18 +87,15 @@ class HookContext:
 class HookResult:
     """Hook 输出。
 
-    对齐参考实现 ``hooks.ts`` ``HookResult`` (L260) +
-    ``processHookJSONOutput`` (L500)。
-
-    关键字段对标参考实现 ``hookJSONOutputSchema``：
-    - outcome: 对标 outcome
-    - decision: 对标 decision ('approve'|'block')
-    - permission_decision: 对标 hookSpecificOutput.permissionDecision
-    - updated_input: 对标 hookSpecificOutput.updatedInput (PreToolUse 修改工具参数)
-    - additional_context: 对标 hookSpecificOutput.additionalContext
-    - system_message: 对标 systemMessage
-    - stop_reason: 对标 stopReason
-    - watch_paths: 对标 hookSpecificOutput.watchPaths (SessionStart)
+    关键字段：
+    - outcome: 执行结果
+    - decision: 通用决策 ('approve'|'block')
+    - permission_decision: PreToolUse 权限决策
+    - updated_input: PreToolUse 修改后的工具参数
+    - additional_context: 追加到上下文的文本
+    - system_message: 呈现给用户的系统消息
+    - stop_reason: 停止原因
+    - watch_paths: SessionStart 监听的文件路径
     """
 
     outcome: HookOutcome = HookOutcome.SUCCESS
@@ -132,10 +129,7 @@ class HookResult:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "HookResult":
-        """从 JSON 字典解析 HookResult。
-
-        对标参考实现 ``processHookJSONOutput`` (L500)。
-        """
+        """从 JSON 字典解析 HookResult。"""
         outcome_raw = raw.get("outcome", "success")
         try:
             outcome = HookOutcome(outcome_raw)
@@ -151,7 +145,7 @@ class HookResult:
         if decision == HookDecision.BLOCK:
             continue_execution = False
 
-        # hookSpecificOutput 对标参考实现 L500+
+        # hookSpecificOutput 中的字段优先于顶层同名字段
         specific = raw.get("hookSpecificOutput", {})
         if not isinstance(specific, dict):
             specific = {}

@@ -17,7 +17,7 @@
 配置文件位置
 
 此 plugin 的用户特定配置位于独立于版本的路径：
-  ~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md
+  ~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PLUGIN.md
 
 规则：
 1. 从该路径 READ 配置。不是从此文件。

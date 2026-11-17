@@ -1,11 +1,10 @@
 """Hook 执行处理器。
 
-对标参考实现 ``hooks.ts``：
-- ``execCommandHook`` (L600) → ShellCommandHookHandler
-- ``execHttpHook`` → HttpHookHandler
-- Callback hook → CallbackHookHandler（PrismClaw 已有）
+- ``ShellCommandHookHandler`` → Shell 子进程执行
+- ``HttpHookHandler`` → HTTP POST 请求
+- ``CallbackHookHandler`` → Python callable
 
-关键细节参考实现 ``execCommandHook``：
+Shell hook 细节：
 - stdin 注入 HookContext JSON
 - stdout 读取 HookResult JSON
 - 环境变量注入 PRISMCLAW_PLUGIN_ROOT / PRISMCLAW_PLUGIN_OPTION_*
@@ -28,7 +27,7 @@ from prismclaw.engine.plugins.hooks.schema import HookContext, HookResult
 
 logger = logging.getLogger(__name__)
 
-# 默认超时 30s（设计方案：比参考实现 10 分钟短，PrismClaw hook 主要是轻量级检查）
+# 默认超时 30s（PrismClaw hook 主要是轻量级检查）
 DEFAULT_HOOK_TIMEOUT = 30.0
 
 # user_config 占位符（值需 shlex.quote，故保留 hook 本地；plugin root/data 替换
@@ -76,7 +75,7 @@ class CallbackHookHandler(HookHandler):
 class MatcherFilteredHandler(HookHandler):
     """带 matcher 过滤的 hook 处理器装饰器。
 
-    对标参考实现 hooks.json 的 matcher 组：``matcher`` 是对工具名（``tool_name``）
+    hooks.json 的 matcher 组：``matcher`` 是对工具名（``tool_name``）
     的正则过滤，仅工具类事件（PreToolUse/PostToolUse）有意义。命中才委托内层
     handler，未命中直接返回 ``HookResult.success()``（no-op，不阻断、不注入）。
 
@@ -118,7 +117,7 @@ class MatcherFilteredHandler(HookHandler):
 class ShellCommandHookHandler(HookHandler):
     """Shell 子进程执行 hook。
 
-    参考实现 ``execCommandHook`` (hooks.ts L600)：
+    行为：
     - 通过 stdin 注入 HookContext JSON
     - 从 stdout 读取 HookResult JSON
     - 环境变量注入 PRISMCLAW_PLUGIN_ROOT / PRISMCLAW_PLUGIN_OPTION_*
@@ -189,7 +188,7 @@ class ShellCommandHookHandler(HookHandler):
             return HookResult(outcome="non_blocking_error", system_message=str(exc))
 
     def _substitute_variables(self, command: str) -> str:
-        """变量替换。对标参考实现 ``substituteUserConfigVariables`` (L700)。
+        """变量替换。
 
         先替换 plugin 变量（root/data，走共享替换器），再替换 user_config
         （值经 shlex.quote 以适配 shell 上下文），防止二次解析。
@@ -218,7 +217,7 @@ class ShellCommandHookHandler(HookHandler):
         return _USER_CONFIG_RE.sub(_replace_user_config, result)
 
     def _build_env(self) -> dict[str, str]:
-        """构建子进程环境变量。对标参考实现 ``subprocessEnv`` (L760)。"""
+        """构建子进程环境变量。"""
         env = dict(os.environ)
         if self._plugin_root is not None:
             env["PRISMCLAW_PLUGIN_ROOT"] = self._plugin_root
@@ -234,10 +233,7 @@ class ShellCommandHookHandler(HookHandler):
 
 
 class HttpHookHandler(HookHandler):
-    """HTTP POST 请求 hook。
-
-    参考实现 ``execHttpHook``。
-    """
+    """HTTP POST 请求 hook。"""
 
     def __init__(
         self,
@@ -257,8 +253,10 @@ class HttpHookHandler(HookHandler):
             logger.error("aiohttp not available for HTTP hook")
             return HookResult(outcome="non_blocking_error", system_message="aiohttp not installed")
 
+        from prismclaw.infra.aiohttp_session import open_client_session
+
         try:
-            async with aiohttp.ClientSession() as session:
+            async with open_client_session() as session:
                 async with session.post(
                     self._url,
                     json=context.to_dict(),
@@ -291,17 +289,14 @@ class HttpHookHandler(HookHandler):
 
 
 def _default_shell() -> str:
-    """默认 shell。对标参考实现 ``DEFAULT_HOOK_SHELL``。"""
+    """默认 shell。"""
     if sys.platform == "win32":
         return "bash"
     return os.environ.get("SHELL", "bash")
 
 
 def _parse_hook_output(stdout: str) -> HookResult:
-    """解析 hook stdout。
-
-    对标参考实现 ``parseHookOutput`` + ``processHookJSONOutput`` (L500)。
-    """
+    """解析 hook stdout。"""
     stripped = stdout.strip()
     if not stripped:
         return HookResult.success()

@@ -29,19 +29,19 @@ Licensed under Apache License 2.0
 
 ## 说明
 
-1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md` — 确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告诉用户："事项工作空间已关闭——你配置为单个客户的内部执业，因此插件自动从执业级上下文工作。如果你实际处理多个客户，重新运行 `/privacy-legal:cold-start-interview --redo` 并选择私人执业设置。否则，你根本不需要 `/privacy-matter-workspace`。"不要报错——禁用状态是内部用户的预期状态。
+1. 阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PLUGIN.md` — 确认 `## Matter workspaces` 部分已填充。如果 `Enabled` 为 `✗`，告诉用户："事项工作空间已关闭——你配置为单个客户的内部执业，因此插件自动从执业级上下文工作。如果你实际处理多个客户，重新运行 `/privacy-legal:cold-start-interview --redo` 并选择私人执业设置。否则，你根本不需要 `/privacy-matter-workspace`。"不要报错——禁用状态是内部用户的预期状态。
 2. 使用下面的子命令逻辑。
 3. 根据 `$ARGUMENTS` 的第一个令牌分派：
    - `new` → 运行接收访谈，写入 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/matters/<slug>/matter.md`，种子 `history.md` 和 `notes.md`。
    - `list` → 枚举 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/matters/*/matter.md`，打印表格，标记活动事项。
-   - `switch` → 更新执业级 PRISMCLAW.md 中的 `Active matter:` 行。
+   - `switch` → 更新执业级 PLUGIN.md 中的 `Active matter:` 行。
    - `close` → 将 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/matters/<slug>/` 移动到 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/matters/_archived/<slug>/`，在 `history.md` 中记录关闭日期。
    - `none` → 设置 `Active matter:` 为 `none — practice-level context only`。
 4. 向用户显示更改内容并在写入前确认。
 
 ## 说明
 
-- 此 skill 永不跨事项读取，除非执业级 PRISMCLAW.md 中的 `Cross-matter context` 为 `on`。
+- 此 skill 永不跨事项读取，除非执业级 PLUGIN.md 中的 `Cross-matter context` 为 `on`。
 - 归档不是删除——关闭的事项仍然可读以用于保留/冲突目的。
 - Slug 为小写带连字符。如果 slug 在已归档和活动中重用，已归档的保留在 `_archived/<slug>/` 下。
 
@@ -51,7 +51,7 @@ Licensed under Apache License 2.0
 
 多客户从业者（私人执业——单人、小所、大所）处理许多事项。一个事项的上下文绝不能泄漏到另一个。此 skill 是使这成为可能的薄文件管理层。
 
-**默认状态为关闭。** 内部用户永远不会看到此——他们仅在执业级工作。事项工作空间在冷启动时为私人执业用户打开，或通过编辑执业级 PRISMCLAW.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`，此 skill 不运行；上述工作流解释禁用状态并建议实际需要事项隔离的用户使用 `/privacy-legal:cold-start-interview --redo`。
+**默认状态为关闭。** 内部用户永远不会看到此——他们仅在执业级工作。事项工作空间在冷启动时为私人执业用户打开，或通过编辑执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`，此 skill 不运行；上述工作流解释禁用状态并建议实际需要事项隔离的用户使用 `/privacy-legal:cold-start-interview --redo`。
 
 ## 存储布局
 
@@ -59,7 +59,7 @@ Licensed under Apache License 2.0
 
 ```
 ~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/
-├── PRISMCLAW.md                       # 执业级执业档案
+├── PLUGIN.md                       # 执业级执业档案
 └── matters/
     ├── <slug>/
     │   ├── matter.md               # 客户、交易对手、事项类型、关键事实、覆盖
@@ -72,9 +72,9 @@ Licensed under Apache License 2.0
 
 Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vendor-xyz-nda`。
 
-## 活动事项在执业 PRISMCLAW.md 中
+## 活动事项在执业 PLUGIN.md 中
 
-执业级 PRISMCLAW.md 中 `## Matter workspaces` 下的 `Active matter:` 行是单一真实来源。切换事项编辑该行。没有单独的状态文件。
+执业级 PLUGIN.md 中 `## Matter workspaces` 下的 `Active matter:` 行是单一真实来源。切换事项编辑该行。没有单独的状态文件。
 
 ## 子命令逻辑
 
@@ -106,7 +106,7 @@ Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vend
 ### `switch <slug>`
 
 1. 确认 `matters/<slug>/matter.md` 存在。如果不存在，提供 `/privacy-legal:matter-workspace new <slug>`。
-2. 将执业级 PRISMCLAW.md 中的 `Active matter:` 行编辑为 `Active matter: <slug>`。
+2. 将执业级 PLUGIN.md 中的 `Active matter:` 行编辑为 `Active matter: <slug>`。
 3. 向用户显示 matter.md 摘要，以便他们确认自己在正确的事项上。
 
 ### `close <slug>`
@@ -118,12 +118,12 @@ Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vend
 
 ### `none`
 
-将执业级 PRISMCLAW.md 中的 `Active matter:` 设置为 `none — practice-level context only`。与用户确认。
+将执业级 PLUGIN.md 中的 `Active matter:` 设置为 `none — practice-level context only`。与用户确认。
 
 ## `matter.md` 模板
 
 ```markdown
-[WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this` in the practice-level PRISMCLAW.md]
+[WORK-PRODUCT HEADER — per plugin config ## Outputs — differs by role; see `## Who's using this` in the practice-level PLUGIN.md]
 
 # 事项：[客户] — [简短描述]
 
@@ -181,7 +181,7 @@ Slug 为小写带连字符。示例：`acme-msa-2026`、`zenith-renewal`、`vend
 
 ## 跨事项上下文
 
-执业级 PRISMCLAW.md 有一个 `Cross-matter context:` 标志。当它为 `off`（默认）时，在事项 A 中工作的 skill **永不读取** `matters/B/` 中任何其他 `B` 的文件。就是这样。这是设置存在的保密保证。
+执业级 PLUGIN.md 有一个 `Cross-matter context:` 标志。当它为 `off`（默认）时，在事项 A 中工作的 skill **永不读取** `matters/B/` 中任何其他 `B` 的文件。就是这样。这是设置存在的保密保证。
 
 当它为 `on` 时，skill 可能仅在用户明确要求时跨事项文件夹读取文件（例如，"比较过去五个供应商事项中我们在责任上限上的立场"）。即使为 `on`，默认也仅加载活动事项，除非用户要求跨事项视图。
 

@@ -23,7 +23,7 @@ Licensed under Apache License 2.0
 
 Plugin 访谈你以了解：你是控制者还是处理者，哪些法规实际适用，你在 DPA 中会同意什么、不会同意什么。然后它阅读三个种子文档——你的隐私政策、你的 DPA 模板、一个你满意的 PIA——并学习你的实际立场和内部风格。
 
-你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md` 并在 Plugin 更新后保留。
+你的配置存储在 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PLUGIN.md` 并在 Plugin 更新后保留。
 
 ```
 /privacy-legal:cold-start-interview
@@ -46,7 +46,7 @@ Plugin 访谈你以了解：你是控制者还是处理者，哪些法规实际�
 
 | Skill | 目的 |
 |---|---|
-| **cold-start-interview** | 从访谈 + 种子文档写入 PRISMCLAW.md |
+| **cold-start-interview** | 从访谈 + 种子文档写入 PLUGIN.md |
 | **use-case-triage** | 这需要 PIA / DPIA / 可以继续吗？政策冲突检查 + 交接 |
 | **dpa-review** | 双向（处理者/控制者）DPA 逐条款审查 |
 | **dsar-response** | 身份验证 → 系统检查 → 豁免 → 响应草稿 |
@@ -87,7 +87,7 @@ Plugin 访谈你以了解：你是控制者还是处理者，哪些法规实际�
 /privacy-legal:dsar-response
 ```
 
-引导你完成：分类 → 验证 → 定位 → 豁免 → 草稿。使用配置的 PRISMCLAW.md 中的系统列表。
+引导你完成：分类 → 验证 → 定位 → 豁免 → 草稿。使用配置的 PLUGIN.md 中的系统列表。
 
 ### 5. 为新功能制作 PIA
 
@@ -99,7 +99,7 @@ Plugin 访谈你以了解：你是控制者还是处理者，哪些法规实际�
 
 ## 如何学习
 
-你在 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PRISMCLAW.md 中的执业档案不是静态的——它随着你使用 Plugin 而改进。Skills 告诉你输出何时使用了你应该调整的默认值。`policy-monitor` skill 监视你的政策与你的实践之间的漂移，并提议更新。你可以重新运行设置、直接编辑文件，或告诉 skill 记录新立场。
+你在 `~/.prismclaw/assets/plugins/legal-chineselaw/privacy-legal/PLUGIN.md 中的执业档案不是静态的——它随着你使用 Plugin 而改进。Skills 告诉你输出何时使用了你应该调整的默认值。`policy-monitor` skill 监视你的政策与你的实践之间的漂移，并提议更新。你可以重新运行设置、直接编辑文件，或告诉 skill 记录新立场。
 
 ## 文件结构
 
@@ -107,7 +107,7 @@ Plugin 访谈你以了解：你是控制者还是处理者，哪些法规实际�
 privacy-legal/
 ├── .plugin/plugin.json
 ├── .mcp.json
-├── PRISMCLAW.md
+├── PLUGIN.md
 ├── README.md
 ├── skills/
 │   ├── cold-start-interview/

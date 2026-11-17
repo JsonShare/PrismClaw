@@ -15,7 +15,7 @@ comments:
     comment_deadline: "2026-05-15"
     detected: "2026-03-20"
     decision: "undecided"  # undecided（未决定）| filing（提交）| not-filing（不提交）| filed（已提交）| waived（放弃）
-    owner: "[来自 PRISMCLAW.md 的默认评论决策负责人]"
+    owner: "[来自 PLUGIN.md 的默认评论决策负责人]"
     owner_slack: "[Slack 用户 ID 或 handle]"
     notified: false
     rationale: ""  # 做出决定时填写

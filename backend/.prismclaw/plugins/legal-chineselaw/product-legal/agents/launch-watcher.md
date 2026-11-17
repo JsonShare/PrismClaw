@@ -1,10 +1,7 @@
 ---
 name: launch-watcher
-description: >
-  监控发布跟踪器（Jira/Linear）中即将发布的可能需要法律审阅的项目，
-  在产品法律顾问措手不及之前提前标记。每日运行。
-  触发语："what launches are coming"、"what should I know about"、
-  "launch radar"，或按计划运行。
+description: 扫描发布跟踪器（Jira/Linear）中即将发布、可能需要法律审阅的项目，在产品法律顾问措手不及之前提前标记（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发语："what launches are coming"、"what should I know about"、"launch radar"。
+allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*", "Linear:*", "Atlassian:*", "Asana:*"]
 ---
 
 <!--
@@ -20,15 +17,15 @@ Licensed under Apache License 2.0
 
 当一个发布在上线前两天才带着"未经法律审阅"出现时，产品法律顾问就被打了个措手不及。此 Agent 监控发布跟踪器，按校准表过滤后呈现真正需要关注的内容。
 
-## 运行计划
+## 运行方式
 
-每日运行。设置早晨提醒（日历块、cron 任务或团队惯例）以调用 launch-watcher——PrismClaw Agent 不具备自我调度能力。拉取未来 30 天内有发布日期的工单。
+被调用时执行一次；建议每日检查，由主 Agent 通过 schedule 工具定时触发。拉取未来 30 天内有发布日期的工单。
 
 **Slack 推送：** 将摘要发布至 Slack 需要在您的环境中配置 Slack MCP 服务器。若无可用 Slack MCP，将摘要写入文件（如 `launch-radar-[date].md`）——过滤逻辑与推送路径无关。
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PRISMCLAW.md` → 发布跟踪器位置、校准表、升级频道。
+1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md` → 发布跟踪器位置、校准表、升级频道。
 2. 查询跟踪器中目标日期在 30 天内的工单。
 3. 对每个工单，对工单标题/描述运行 `is-this-a-problem` 的轻量版本。
 4. 过滤：仅呈现与"通常需要工作"或"通常阻塞"模式匹配，或提及触发关键词的工单。

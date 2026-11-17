@@ -415,6 +415,9 @@ def log_turn_token_usage(
     # +16 / −61 tokens (0.1% / 0.5%), i.e. the block is now accounted to the
     # measurement noise level. Do NOT widen the 15% threshold to suppress
     # noise — the threshold is the invariant; fix the estimate instead.
+    # Above the threshold the severity follows the direction: real > accounted
+    # is ERROR (un-accounted component, overflow risk), real < accounted is
+    # WARNING (conservative estimate, no overflow risk).
     #
     # ``frozen_tokens`` is the WHOLE static zone, so ``bootstrap_tokens`` and
     # ``l1_tokens`` are sub-blocks of it (same static zone, filtered by
@@ -433,8 +436,9 @@ def log_turn_token_usage(
         drift = input_tokens - accounted
         _USAGE_MISSING_STREAK = 0
         drift_label = str(drift)
-        if abs(drift) / input_tokens > 0.15:
-            # 组件分解：哪个 accounted 分量偏得最多，直接在错误行里给出。
+        _drift_ratio = drift / input_tokens
+        if abs(_drift_ratio) > 0.15:
+            # 组件分解：哪个 accounted 分量偏得最多，直接给在日志行里。
             _components = [
                 ("frozen", telemetry.frozen_tokens),
                 ("per_turn", telemetry.per_turn_tokens),
@@ -444,14 +448,24 @@ def log_turn_token_usage(
                 ("tools", tools_tokens),
             ]
             _breakdown = " ".join(f"{n}={v}" for n, v in _components)
-            logger_.error(
-                "token_usage drift: real input %d vs accounted %d (drift %d, %.0f%%) — "
-                "components [%s] — compare with a mock capture "
-                "(scripts/eval + /tmp/mock_openai_capture.py recipe) before it overflows "
-                "the window.",
-                input_tokens, accounted, drift, abs(drift) / input_tokens * 100,
-                _breakdown,
-            )
+            if _drift_ratio > 0:
+                # 危险方向：真实输入大于账本，说明有未计入的组件，可能撑爆窗口。
+                logger_.error(
+                    "token_usage under-accounted: real input %d vs accounted %d "
+                    "(drift +%d, %.0f%%) — components [%s] — compare with a mock "
+                    "capture (scripts/eval + /tmp/mock_openai_capture.py recipe) "
+                    "before it overflows the window.",
+                    input_tokens, accounted, drift, _drift_ratio * 100, _breakdown,
+                )
+            else:
+                # 安全方向：估算偏保守，不会撑爆窗口，属于已知偏差而非故障。
+                # 逐轮 WARNING 会把 error.log 刷满（实测 18%~34%），降为 INFO
+                # 保留校准数据，error.log 只留真正有溢出风险的方向。
+                logger_.info(
+                    "token_usage over-accounted: real input %d vs accounted %d "
+                    "(drift %d, %.0f%%) — components [%s] — conservative estimate.",
+                    input_tokens, accounted, drift, abs(_drift_ratio) * 100, _breakdown,
+                )
     else:
         # Degraded mode: no usage from the backend — sentinel cannot run.
         _USAGE_MISSING_STREAK += 1

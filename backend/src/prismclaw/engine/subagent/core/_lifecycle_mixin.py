@@ -1,13 +1,13 @@
 """Auto-extracted Mixin from instance.py — DO NOT edit method signatures."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import Any
 
 from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
 from prismclaw.engine.subagent.core._subagent_loop_runner import run_subagent_turn_loop
+from prismclaw.engine.subagent.core.run_context import SubagentRunContext
 from prismclaw.engine.subagent.core.contract import (
     normalize_result_envelope_text,
     parse_subagent_result_envelope,
@@ -27,11 +27,18 @@ from prismclaw.schema.content.subagent import EvidenceRef, SubagentContextSnapsh
 from prismclaw.engine.subagent.core.evidence_inference import infer_domain_fields
 from prismclaw.engine.subagent.core._result_types import (
     AgentRunResult,
-    _render_terminal_result_text,
 )
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 
 logger = logging.getLogger(__name__)
+
+# 非正常终止时合成的工具结果摘要总字符上限，防止并行多 agent 场景下
+# 单条任务记录与父上下文膨胀。
+_SYNTHESIZED_RESULT_BUDGET = 6000
+
+# 预算内为截断标注预留的空间
+_RESULT_TAIL_RESERVE = 40
+
 
 class LifecycleMixin:
     def __init__(
@@ -54,6 +61,7 @@ class LifecycleMixin:
         is_fork: bool = False,
         # 单工具时限：由 SubAgentExecutor 从 agent 配置 timeouts.tool_seconds 透传
         tool_timeout_s: float = 120.0,
+        run_context: SubagentRunContext | None = None,
     ) -> None:
         self._run_id = run_id
         self._manifest = manifest
@@ -70,17 +78,13 @@ class LifecycleMixin:
         self._skill_runtime = skill_runtime
         self._is_fork = is_fork
         self._tool_timeout_s = tool_timeout_s
+        self._run_context = run_context
 
         # -- state --
         self._status: str = "created"
         self._mcp_servers: list[Any] = []
         self._registered_hooks: list[Any] = []
         self._task: str | None = None  # Current task description
-
-        # -- completion tracking --
-        self._completed: bool = False
-        self._run_result: AgentRunResult | None = None
-        self._on_complete_callbacks: list[Any] = []
 
         # -- execution state --
         self._start_time: float | None = None
@@ -104,46 +108,6 @@ class LifecycleMixin:
     @property
     def manifest(self) -> Any:
         return self._manifest
-
-    # -- completion callback -----------------------------------------------
-
-    def on_complete(self, callback: Any) -> None:
-        """
-        Register a callback to be called when this instance completes.
-
-        The callback will be called with the AgentRunResult as argument.
-        If the instance has already completed, the callback is called immediately.
-
-        Args:
-            callback: Callable that takes (AgentRunResult) -> None
-        """
-        if self._completed and self._run_result is not None:
-            # Already completed, call immediately
-            asyncio.create_task(self._call_callback(callback))
-        else:
-            self._on_complete_callbacks.append(callback)
-
-    async def _call_callback(self, callback: Any) -> None:
-        """Call a single callback."""
-        try:
-            if asyncio.iscoroutinefunction(callback):
-                await callback(self._run_result)
-            else:
-                callback(self._run_result)
-        except Exception as e:
-            logger.error(
-                "Error in on_complete callback: run_id=%s, error=%s",
-                self._run_id,
-                e,
-                exc_info=True,
-            )
-
-    async def _execute_callbacks(self) -> None:
-        """Execute all registered callbacks."""
-        self._completed = True
-        for callback in self._on_complete_callbacks:
-            await self._call_callback(callback)
-        self._on_complete_callbacks.clear()
 
     # -- core -----------------------------------------------------------
 
@@ -207,7 +171,7 @@ class LifecycleMixin:
             )
         except Exception as exc:
             logger.warning(
-                "subagent.declared_invoke_sequence_resolution_failed name=%s",
+                "subagent.preload_skills_resolution_failed name=%s",
                 self._manifest.name,
                 exc_info=True,
             )
@@ -215,7 +179,7 @@ class LifecycleMixin:
             return AgentRunResult(
                 tool_result=error_result(
                     call_id,
-                    f"子代理 preload_skills 解析失败：{exc}",
+                    f"[子代理执行失败：preload_skills 解析失败 | {exc}]",
                 ),
                 outcome="error",
                 turns=0,
@@ -240,6 +204,7 @@ class LifecycleMixin:
         allowed_tools = self._resolve_allowed_tools(
             manifest=self._manifest,
             preload_ctx=preload_ctx,
+            available=self._tools.names(),
         )
         permission_tier = str(
             self._parent_ctx.mode or "work"
@@ -262,9 +227,15 @@ class LifecycleMixin:
             memory_block=memory_block,
         )
 
-        # Build context based on context_mode
-        messages = await self._build_context(task, context_snapshot)
+        # 协作内运行的 run（one_shot 与 persistent）都从子 SessionTree 重建上下文；
+        # 只有绕过 collaboration 的直连调用走原有的一次性上下文构造。
+        if self._run_context is not None:
+            messages = self._run_context.build_messages()
+        else:
+            messages = await self._build_context(task, context_snapshot)
 
+        if self._run_context is not None:
+            self._run_context.start_heartbeat()
         try:
             outcome, turns, usage = await run_subagent_turn_loop(
                 self,
@@ -286,6 +257,8 @@ class LifecycleMixin:
             usage = {}
             self._status = "failed"
         finally:
+            if self._run_context is not None:
+                await self._run_context.stop_heartbeat()
             await self._cleanup_light()
 
         duration = time.monotonic() - started_at
@@ -311,25 +284,47 @@ class LifecycleMixin:
                     evidence=auto_evidence,
                 )
         else:
-            normalized_result_text = _render_terminal_result_text(
-                outcome=outcome,
-                turns=turns,
-                timeout_s=timeout_s,
-                final_text=final_text,
-            )
+            synthesized = _synthesize_tool_results(messages)
+            detail = final_text.strip()
+            has_substance = bool(detail or synthesized)
+
+            if outcome == "max_turns_exceeded":
+                reason = f"已达最大轮次上限（{turns} 轮）"
+                failure_prefix = f"[子代理{reason}]"
+            elif outcome == "timeout":
+                reason = f"超时：{timeout_s:g}s 后共执行 {turns} 轮"
+                failure_prefix = f"[子代理{reason}]"
+            elif outcome == "aborted":
+                reason = "已被父级中止"
+                failure_prefix = "[子代理已被父级中止]"
+            else:
+                reason = f"执行失败：outcome={outcome}"
+                failure_prefix = f"[子代理{reason}]"
+
+            # 有内容交付时使用非失败前缀：结果可被父级与 reduce 工具正常采用，
+            # 避免部分完成的产出被 first_success 当作错误丢弃。
+            prefix = f"[子代理部分完成：{reason}]" if has_substance else failure_prefix
+
+            parts = [prefix]
+            if detail:
+                parts.append(detail)
+            if synthesized:
+                parts.append(synthesized)
+            normalized_result_text = "\n\n".join(parts)
+
+            # 证据只走结构化字段，不在纯文本中重复索引。
             envelope = None
-            # 非 success 但有 evidence 时，包装为 envelope 携带证据
-            if auto_evidence:
+            if auto_evidence or has_substance:
                 envelope = SubagentResultEnvelope(
                     summary=normalized_result_text,
                     evidence=auto_evidence,
-                    confidence_assessment="low",
                 )
 
         tool_result = ToolResult(
             tool_call_id=call_id,
             content=[TextBlock(text=normalized_result_text)],
-            is_error=outcome != "success",
+            # 非 success 但有内容交付时 envelope 存在 → is_error=False
+            is_error=(outcome != "success") and (envelope is None),
             persistence_artifact=(
                 None
                 if pending_handoff is None
@@ -340,6 +335,21 @@ class LifecycleMixin:
                 )
             ),
             subagent_envelope=SubagentEnvelopeArtifact(
+                agent_name=self._manifest.name,
+                agent_source=getattr(self._manifest, "source", None),
+                agent_id=(
+                    self._run_context.agent_id if self._run_context is not None else None
+                ),
+                run_id=self._run_id,
+                child_session_id=(
+                    self._run_context.child_session_id
+                    if self._run_context is not None
+                    else None
+                ),
+                lifecycle=(
+                    self._run_context.lifecycle if self._run_context is not None else None
+                ),
+                outcome=outcome,
                 final_text=final_text or None,
                 result_envelope=(
                     envelope if isinstance(envelope, SubagentResultEnvelope) else None
@@ -363,10 +373,6 @@ class LifecycleMixin:
             duration_seconds=duration,
             model_used=effective_model,
         )
-
-        # Store result and execute callbacks
-        self._run_result = result
-        await self._execute_callbacks()
 
         return result
 
@@ -457,36 +463,127 @@ def _evidence_spec(tool_name: str) -> tuple[str, str] | None:
     return None
 
 
+def _build_tool_result_map(
+    messages: list[dict[str, Any]],
+) -> dict[str, tuple[str, str]]:
+    """构建 tool_call_id → (tool_name, content_text) 映射。
+
+    公共基础设施：被 _collect_evidence_from_messages 和
+    _synthesize_tool_results 共用，避免重复遍历 messages + 重复
+    content 形态归一化（list[TextBlock] vs str）。
+    """
+    # 先从 assistant tool_calls 提取 tc_id → tool_name
+    tc_id_to_name: dict[str, str] = {}
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        for tc in msg.get("tool_calls") or []:
+            if not isinstance(tc, dict):
+                continue
+            tc_id = tc.get("id", "")
+            fn = tc.get("function", {})
+            if isinstance(fn, dict):
+                tc_id_to_name[tc_id] = fn.get("name", "unknown")
+
+    # 再从 tool 消息收集 content，合并 tool_name
+    result_map: dict[str, tuple[str, str]] = {}
+    for msg in messages:
+        if msg.get("role") != "tool":
+            continue
+        tc_id = msg.get("tool_call_id", "")
+        if not tc_id:
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            parts: list[str] = []
+            for item in content:
+                if isinstance(item, dict):
+                    parts.append(item.get("text", "") or "")
+                else:
+                    parts.append(str(item))
+            content = "\n".join(parts)
+        tool_name = tc_id_to_name.get(tc_id, "unknown")
+        # 保留原始 content（不 strip）——evidence 需要精确引用原始内容，
+        # synthesize 自行 strip 后判断空内容
+        result_map[tc_id] = (tool_name, str(content))
+
+    return result_map
+
+
+def _synthesize_tool_results(
+    messages: list[dict[str, Any]],
+) -> str:
+    """从已执行的 tool result 合成可读文本摘要。
+
+    覆盖所有工具类型（不限 search-intent），供 sub-agent
+    非自然终止（max_turns/timeout/abort）时交付已收集内容。
+    输出按工具首次调用顺序排列，总量受 ``_SYNTHESIZED_RESULT_BUDGET`` 约束。
+
+    与 _collect_evidence_from_messages 互补：
+      - evidence：只收录 search-intent 工具，生成结构化 EvidenceRef
+      - synthesize：覆盖所有工具，生成纯文本可读摘要
+
+    无 tool 消息时返回空字符串（turns==0 场景）。
+    """
+    from collections import defaultdict
+
+    result_map = _build_tool_result_map(messages)
+    if not result_map:
+        return ""
+
+    by_tool: dict[str, list[str]] = defaultdict(list)
+    for tool_name, raw_content in result_map.values():
+        content = raw_content.strip()
+        if not content:
+            continue
+        MAX_HEAD = 600
+        MAX_TAIL = 300
+        OVERLAP = 20
+        total = len(content)
+        if total <= MAX_HEAD + MAX_TAIL + OVERLAP:
+            snippet = content
+        else:
+            snippet = content[:MAX_HEAD] + "\n...[截断]...\n" + content[-MAX_TAIL:]
+        by_tool[tool_name].append(snippet)
+
+    total_items = sum(len(items) for items in by_tool.values())
+    parts: list[str] = []
+    used = 0
+    emitted = 0
+    truncated = False
+
+    for tool_name, snippets in by_tool.items():
+        for index, snippet in enumerate(snippets, 1):
+            chunk = f"[工具: {tool_name}, 第{index}次]\n{snippet}"
+            separator = 2 if parts else 0
+            if used + separator + len(chunk) + _RESULT_TAIL_RESERVE > _SYNTHESIZED_RESULT_BUDGET:
+                truncated = True
+                break
+            parts.append(chunk)
+            used += separator + len(chunk)
+            emitted += 1
+        if truncated:
+            break
+
+    text = "\n\n".join(parts)
+    if truncated:
+        text += f"\n\n[已省略 {total_items - emitted} 条工具结果]"
+    return text
+
+
 def _collect_evidence_from_messages(
     messages: list[dict[str, Any]],
 ) -> list:
     """从 subagent 的对话历史中自动提取证据引用。
 
     扫描 messages 中的 assistant tool_use + tool result 对，
-    为每次工具调用生成一条 EvidenceRef。
+    为每次 search-intent 工具调用生成一条 EvidenceRef。
     """
 
     evidence: list[EvidenceRef] = []
+    result_map = _build_tool_result_map(messages)
 
-    # 构建 tool_call_id → result_text 索引
-    result_map: dict[str, str] = {}
-    for msg in messages:
-        if msg.get("role") != "tool":
-            continue
-        tc_id = msg.get("tool_call_id", "")
-        content = msg.get("content", "")
-        if isinstance(content, list):
-            parts: list[str] = []
-            for item in content:
-                if isinstance(item, dict) and "text" in item:
-                    parts.append(item["text"])
-                elif isinstance(item, str):
-                    parts.append(item)
-            content = "\n".join(parts)
-        if tc_id:
-            result_map[tc_id] = str(content)
-
-    # 扫描 assistant 消息中的 tool_calls
+    # 扫描 assistant 消息中的 tool_calls（解析 arguments 用于 source_path）
     for msg in messages:
         if msg.get("role") != "assistant":
             continue
@@ -514,16 +611,19 @@ def _collect_evidence_from_messages(
                     raw_args = {}
             tool_input = raw_args if isinstance(raw_args, dict) else {}
 
-            # 查找对应的 tool result
+            # 从公共 map 查找 tool result
             tc_id = tc.get("id", "")
-            result_text = result_map.get(tc_id, "")
+            entry = result_map.get(tc_id)
+            if entry is None:
+                continue
+            _, result_text = entry
             if not result_text:
                 continue
 
             source_type, path_key = evidence_spec
             source_path = str(tool_input.get(path_key, ""))
 
-            # 截取 quoted_text：最多 2000 字符，保留原始证据（精确引用保留更多原文）
+            # 截取 quoted_text：最多 2000 字符（精确引用保留更多原文）
             quoted_text = result_text[:2000] if len(result_text) > 2000 else result_text
 
             # read 工具可以提取行号信息

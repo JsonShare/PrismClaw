@@ -168,7 +168,6 @@ def build_invoked_skill_attachment(
 ) -> str | None:
     """从 invoked_skill_state 构建技能附件文本，用于压缩后重新注入。
 
-    对标参考实现 createSkillAttachmentIfNeeded:
     将所有已调用技能的 rendered_prompt_fragment 拼接为一个 attachment。
     仅包含 clear_after_terminal_result=False 的持久记录。
     总量受 subcaps.skill_attachment 约束（CJK 感知 token 估算）。

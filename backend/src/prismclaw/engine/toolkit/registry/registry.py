@@ -143,7 +143,7 @@ class ToolRegistry:
         overestimated tool schemas by ~1.8× (11,840 est. vs. ~6,450 actual for
         31 tools), which made the drift sentinel report a permanent false
         alarm (~40% of input). The unit is now serialized UTF-8 bytes ÷
-        ``token_counting.heuristic.wire_bytes_per_token`` (default 3.5),
+        ``token_counting.heuristic.wire_bytes_per_token`` (default 5.0),
         calibrated against the provider's reported ``input_tokens`` on two
         real runs:
 

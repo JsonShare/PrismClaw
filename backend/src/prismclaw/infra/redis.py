@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import redis.asyncio as aioredis
-from redis.retry import Retry
 from redis.backoff import ExponentialBackoff
+from redis.retry import Retry
 
 from prismclaw.infra.settings import RedisSettings
 
@@ -45,6 +46,10 @@ async def close_client(client: aioredis.Redis | None) -> None:
         return
     try:
         await client.aclose()
+    except asyncio.CancelledError:
+        # 停机期取消是预期行为：连接池已停止服务，不能被回收前再抛出
+        # CancelledError（否则 uvicorn 会把整个 lifespan 退出记成 ERROR）。
+        logger.warning("Redis client close interrupted by shutdown cancellation")
     except Exception:
         logger.exception("error closing Redis client")
 

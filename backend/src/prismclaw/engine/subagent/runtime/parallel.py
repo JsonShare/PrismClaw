@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from prismclaw.schema.session.event_logger import SessionEventLogger
 from prismclaw.schema.session.types import CustomEntry, generate_entry_id, now_iso
 from prismclaw.schema.storage.storage_types import SessionStore
-from prismclaw.schema.session.event_logger import SessionEventLogger
 
 _event_logger = SessionEventLogger()
+logger = logging.getLogger(__name__)
 
-CURRENT_PARALLEL_TASK_SCHEMA_VERSION = "parallel_task.v2"
+CURRENT_PARALLEL_TASK_SCHEMA_VERSION: Literal["parallel_task.v2"] = "parallel_task.v2"
 PARALLEL_TASK_RUNTIME_CUSTOM_TYPE = "parallel_task_runtime"
 
 ParallelTaskKind = Literal["subagent", "fork"]
@@ -23,7 +25,6 @@ ParallelTaskStatus = Literal[
     "failed",
     "cancelled",
 ]
-NotificationState = Literal["pending", "emitted", "suppressed"]
 PARALLEL_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 
 
@@ -41,8 +42,6 @@ class ParallelTaskRuntimeRecord(BaseModel):
     completed_at_epoch_ms: int | None = None
     result_summary: str | None = None
     error_summary: str | None = None
-    notification_state: NotificationState = "pending"
-    managed_task_id: str | None = None
     run_id: str | None = None
     agent_name: str | None = None
     agent_source: str | None = None
@@ -85,35 +84,17 @@ def parse_parallel_task_record(data: Any) -> ParallelTaskRuntimeRecord | None:
         return data
     if not isinstance(data, dict):
         return None
-    kind_raw = data.get("kind")
-    if kind_raw == "background_subagent":
-        data = {**data, "kind": "subagent"}
-    elif kind_raw == "fork":
-        pass
     try:
         return ParallelTaskRuntimeRecord.model_validate(data)
-    except Exception:
+    except Exception as exc:
+        logger.warning("parallel task record parse failed: %s", exc)
         return None
 
 
 def _branch_entries(tree: Any) -> list[Any]:
     if tree is None:
         return []
-    get_branch = getattr(tree, "get_branch", None)
-    if callable(get_branch):
-        try:
-            branch = get_branch()
-        except Exception:
-            branch = None
-        if isinstance(branch, list):
-            return branch
-        if branch is not None:
-            return list(branch)
-    entries = getattr(tree, "entries", None)
-    order = getattr(tree, "order", None)
-    if not isinstance(entries, dict) or not isinstance(order, list):
-        return []
-    return [entries[entry_id] for entry_id in order if entry_id in entries]
+    return list(tree.get_branch())
 
 
 def parallel_task_records_for_tree(
@@ -160,36 +141,17 @@ def latest_parallel_task_for_tree(
 
 
 class SessionParallelTaskStore:
-    def __init__(
-        self,
-        session_store: SessionStore,
-        lock_manager: Any = None,
-        *,
-        lock_key_prefix: str = "session-lock:",
-    ) -> None:
-        self._session_store = session_store
-        self._lock = lock_manager
-        self._lock_key_prefix = lock_key_prefix
+    """session-store-backed 实现。
 
-    def _lock_key(self, session_id: str) -> str:
-        return f"{self._lock_key_prefix}{{{session_id}}}"
+    并发控制由 ``session_store.commit_events`` 内部的会话锁负责；
+    本层不再单独加锁，避免与 commit_events 争用同一把不可重入锁。
+    """
+
+    def __init__(self, session_store: SessionStore) -> None:
+        self._session_store = session_store
 
     async def append(self, record: ParallelTaskRuntimeRecord) -> None:
         session_id = record.owner_session_id
-        lock_key = self._lock_key(session_id)
-
-        if self._lock is not None:
-            token = await self._lock.acquire(lock_key, ttl_ms=30_000)
-            try:
-                await self._append_locked(record, session_id)
-            finally:
-                await self._lock.release(lock_key, token)
-        else:
-            await self._append_locked(record, session_id)
-
-    async def _append_locked(
-        self, record: ParallelTaskRuntimeRecord, session_id: str
-    ) -> None:
         tree = await self._session_store.load(session_id)
         if tree is None:
             raise ValueError(
