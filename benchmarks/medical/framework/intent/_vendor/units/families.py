@@ -1,0 +1,600 @@
+"""Canonical UCUM unit → LOINC PROPERTY family.
+
+LOINC's PROPERTY axis is the dimensional family of a measurement
+(``MCnc`` = mass concentration, ``SCnc`` = substance/molar concentration,
+``NCnc`` = number concentration, ...). For a given analyte every
+PROPERTY family selects a fixed set of units: glucose in plasma is
+``MCnc`` ⇒ mg/dL and ``SCnc`` ⇒ mmol/L, never the other way around. So
+once we know a measurement's unit, we know its PROPERTY family, and we
+can use that to filter / boost LOINC candidates whose PROPERTY column
+matches.
+
+Two tables:
+
+* :data:`UCUM_FAMILY`: unique unit → primary PROPERTY family. For
+  units that pin down a single family (mg/dL → MCnc, mmol/L → SCnc),
+  this lookup is exact.
+
+* :data:`AMBIGUOUS_UNITS`: units that legitimately span multiple
+  PROPERTYs (the worst offender is ``%``, which appears under nearly
+  every fraction-like PROPERTY in LOINC). The entry value is the full
+  ``frozenset`` of possible families. :func:`unit_family` returns the
+  primary one from :data:`UCUM_FAMILY`; callers that want all
+  candidates use :func:`unit_families`.
+
+LOINC has 231 distinct PROPERTY values; only ~30-40 carry real
+(non-annotation) units. Measured against the ``loinc_units.tsv`` the
+2.83 bundle ships (36,325 codes with an EXAMPLE_UCUM_UNITS): of the
+28,880 whose primary unit is dimensional, **99.0%** have their
+unit→family entry here. The rest are not units: 4,473 are a bare UCUM
+annotation (``{titer}``, ``{Ct_value}``, a label with no dimension) and
+2,972 an annotated ratio (``mg/g{creat}``, ``mL/min/{1.73_m2}``), which
+need the LOINC source for exact lookup and are intentionally not
+enumerated. Counting those as misses is where the "79.8% of all rows"
+number comes from, and it is the wrong denominator.
+
+UCUM keys are case-sensitive. Bracketed units (``[IU]``, ``[U]``,
+``[diop]``, ``[pH]``, ``[degF]``) use the formal UCUM syntax: see
+ucum.org for the full spec.
+"""
+
+from __future__ import annotations
+
+
+UCUM_FAMILY: dict[str, str] = {
+    # ── Mass concentration (MCnc) ─────────────────────────────────────
+    "g/L":      "MCnc",
+    "g/dL":     "MCnc",
+    "g/mL":     "MCnc",
+    "mg/L":     "MCnc",
+    "mg/dL":    "MCnc",
+    "mg/mL":    "MCnc",
+    "ug/L":     "MCnc",
+    "ug/dL":    "MCnc",
+    "ug/mL":    "MCnc",
+    "ug/uL":    "MCnc",
+    "ng/L":     "MCnc",
+    "ng/mL":    "MCnc",
+    "ng/dL":    "MCnc",
+    "pg/mL":    "MCnc",
+    "pg/L":     "MCnc",
+    "fg/mL":    "MCnc",
+
+    # ── Substance/molar concentration (SCnc) ──────────────────────────
+    "mol/L":    "SCnc",
+    "mol/dL":   "SCnc",
+    "mmol/L":   "SCnc",
+    "umol/L":   "SCnc",
+    "nmol/L":   "SCnc",
+    "pmol/L":   "SCnc",
+    "fmol/L":   "SCnc",
+    "meq/L":    "SCnc",   # milliequivalents: treated as SCnc family
+    "mmol/dL":  "SCnc",
+    "umol/dL":  "SCnc",
+    "nmol/mL":  "SCnc",
+    "umol/mL":  "SCnc",
+    "pmol/mL":  "SCnc",
+
+    # ── Substance ratio (SRto) ────────────────────────────────────────
+    "mmol/mol": "SRto",   # analyte/creatinine ratios; HbA1c (IFCC) is SFr
+
+    # ── Substance rate (SRat): 24h excretion etc. ────────────────────
+    "mmol/d":         "SRat",
+    "umol/d":         "SRat",
+    "mmol/(24.h)":    "SRat",
+    "umol/(24.h)":    "SRat",
+    "nmol/(24.h)":    "SRat",
+    "pmol/(24.h)":    "SRat",
+    "mmol/(12.h)":    "SRat",
+    "mmol/(8.h)":     "SRat",
+    "mmol/(6.h)":     "SRat",
+    "umol/(12.h)":    "SRat",
+    "umol/(8.h)":     "SRat",
+    "meq/(24.h)":     "SRat",
+
+    # ── Mass rate (MRat): 24h urinary excretion, drug dosing ─────────
+    "mg/d":         "MRat",
+    "ug/d":         "MRat",
+    "g/d":          "MRat",
+    "mg/(24.h)":    "MRat",
+    "ug/(24.h)":    "MRat",
+    "g/(24.h)":     "MRat",
+    "ng/(24.h)":    "MRat",
+    "g/(6.h)":      "MRat",         # 6/8/10/12-hour urine collection windows
+    "g/(8.h)":      "MRat",
+    "g/(10.h)":     "MRat",
+    "g/(12.h)":     "MRat",
+    "mg/(6.h)":     "MRat",
+    "mg/(8.h)":     "MRat",
+    "mg/(12.h)":    "MRat",
+    "mg/(18.h)":    "MRat",
+    "g/h":          "MRat",
+    "mg/h":         "MRat",
+    "mg/min":       "MRat",
+    "ug/min":       "MRat",
+    "mg/kg/d":      "MRat",
+    "mmol/(5.h)":   "SRat",
+    "g/(5.h)":      "MRat",
+    "umol/min/g":   "CCnt",
+
+    # ── Mass ratio (MRto): albumin/creatinine etc. ───────────────────
+    # ``mg/g`` / ``ng/mg`` / ``ug/mg`` etc. are also legitimate Mass
+    # content (MCnt) when bare (no creatinine annotation). The flip
+    # depends on the analyte; see AMBIGUOUS_UNITS.
+    "mg/g":         "MRto",
+    "ug/g":         "MRto",
+    "ng/mg":        "MRto",
+    "ug/mg":        "MRto",
+    "g/g":          "MRto",
+    "nmol/mg":      "MRto",
+    "pmol/mg":      "MRto",
+    "mg/mmol":      "MRto",
+    "ug/mmol":      "MRto",
+    "umol/mmol":    "SRto",
+    "umol/mol":     "SRto",
+    "nmol/mol":     "SRto",
+    "nmol/mmol":    "SRto",
+    "pmol/mmol":    "SRto",
+    "umol/umol":    "SRto",
+    "mmol/mmol":    "SRto",
+    "d/(7.d)":      "NRat",         # days per 7-day week
+    "d/(30.d)":     "NRat",         # days per 30-day month
+
+    # ── Catalytic content (CCnt): enzyme activity per mass ───────────
+    "nmol/h/mg":    "CCnt",
+    "nmol/min/mg":  "CCnt",
+    "umol/h/mg":    "CCnt",
+    "umol/min/mg":  "CCnt",
+    "nmol/h/mL":    "CCnc",         # catalytic concentration (not per mass)
+    "U/g":          "CCnt",
+    "umol/10*6":    "EntSub",       # per million cells (RBCs etc.)
+
+    # ── Length ratio (LenRto): vision acuity etc. ────────────────────
+    "[ft_us]/[ft_us]": "LenRto",
+
+    # ── Sound intensity ───────────────────────────────────────────────
+    "dB":           "RelSoundInt",
+
+    # ── Frequency (Freq): auditory thresholds, EEG ───────────────────
+    "Hz":           "Freq",
+    "kHz":          "Freq",
+    "MHz":          "Freq",
+
+    # ── Electric resistance (Resis): skin / bioimpedance ─────────────
+    "Ohm":          "Resis",
+    "kOhm":         "Resis",
+
+    # ── Radioactivity (Acty): nuclear medicine ───────────────────────
+    "mCi":          "Acty",
+    "uCi":          "Acty",
+    "Bq":           "Acty",
+    "kBq":          "Acty",
+    "MBq":          "Acty",
+    "GBq":          "Acty",
+
+    # ── Energy (Engy): caloric intake, exercise expenditure ──────────
+    "kcal":         "Engy",
+    "cal":          "Engy",     # the small calorie; a food Calorie is kcal
+    "J":            "Engy",
+    "kJ":           "Engy",
+    "MJ":           "Engy",
+
+    # ── Energy difference (EngDiff): biochemistry ────────────────────
+    "kJ/mol":       "EngDiff",
+    "J/mol":        "EngDiff",
+    "kcal/mol":     "EngDiff",
+
+    # ── Energy rate (EngRat): caloric intake / expenditure ───────────
+    "kcal/h":       "EngRat",
+    "kcal/d":       "EngRat",
+    "kcal/(24.h)":  "EngRat",
+    "kcal/min":     "EngRat",
+    "kJ/d":         "EngRat",
+    "kJ/(24.h)":    "EngRat",
+    "kJ/min":       "EngRat",
+    "kcal/kg/d":    "EngRat",
+
+    # ── Power (Pwr): exercise power output, treadmill watts ──────────
+    "W":            "Pwr",
+    "mW":           "Pwr",
+    "kW":           "Pwr",
+    "W/kg":         "Pwr",      # relative power (cycling FTP)
+
+    # ── Viscosity ─────────────────────────────────────────────────────
+    "cP":           "Visc",         # centipoise
+    "mPa.s":        "Visc",
+
+    # ── Bethesda units (coagulation inhibitor titers) ─────────────────
+    "[beth'U]":     "Arb",
+    "[beth'U]/mL":  "ACnc",
+
+    # ── Catalytic concentration rate (CCncRat) ────────────────────────
+    "umol/L/h":     "CCncRat",
+    "nmol/L/h":     "CCncRat",
+
+    # ── MET: metabolic equivalents (exercise dose) ───────────────────
+    "[MET]":        "ARat",
+
+    # ── Catalytic concentration variants ──────────────────────────────
+    "umol/h/L":     "CCnc",
+    "umol/min/L":   "CCnc",
+
+    # ── Mass content (MCnt): per tissue / dry weight ─────────────────
+    "mg/kg":        "MCnt",
+    "ug/kg":        "MCnt",
+    "ng/kg":        "MCnt",
+    "g/kg":         "MCnt",
+    "pg/mg":        "MCnt",
+    "ng/g":         "MCnt",
+
+    # ── Substance content (SCnt) ──────────────────────────────────────
+    "mmol/kg":      "SCnt",
+    "umol/kg":      "SCnt",
+    "nmol/g":       "SCnt",
+    "umol/g":       "SCnt",
+    "mmol/g":       "SCnt",
+    "meq/kg":       "SCnt",
+
+    # ── Arbitrary concentration (ACnc): IU = "international units" ───
+    "[IU]/L":     "ACnc",
+    "[IU]/mL":    "ACnc",
+    "[IU]/dL":    "ACnc",
+    "m[IU]/L":    "ACnc",
+    "m[IU]/mL":   "ACnc",
+    "k[IU]/L":    "ACnc",
+    "k[IU]/mL":   "ACnc",
+    "u[IU]/mL":   "ACnc",   # micro-IU per mL: uncommon but in LOINC
+    "u[IU]/L":    "ACnc",
+    "[arb'U]/mL":  "ACnc",  # arbitrary units per mL: allergen IgE assays
+    "[arb'U]/L":   "ACnc",
+    # Not valid UCUM ([arb'U] takes no prefix), but LOINC's own example units
+    # print it on 23 codes, and matching LOINC is what this table is for.
+    "k[arb'U]/L":  "ACnc",
+    "[arb'U]":     "Arb",   # bare arbitrary unit
+
+    # ── Catalytic concentration (CCnc): enzyme activity ──────────────
+    "U/L":      "CCnc",
+    "U/mL":     "CCnc",
+    "mU/L":     "CCnc",
+    "mU/mL":    "CCnc",
+    "kU/L":     "CCnc",
+    "kat/L":    "CCnc",   # katal per litre (SI enzyme unit)
+    "ukat/L":   "CCnc",
+    "nkat/L":   "CCnc",
+
+    # ── Number concentration (NCnc) ───────────────────────────────────
+    "10*2/uL":  "NCnc",
+    "10*3/uL":  "NCnc",
+    "10*4/uL":  "NCnc",
+    "10*6/uL":  "NCnc",
+    "10*6/mL":  "NCnc",
+    "10*6/L":   "NCnc",
+    "10*9/L":   "NCnc",
+    "10*12/L":  "NCnc",
+    "/uL":      "NCnc",
+    "/mL":      "NCnc",
+    "/L":       "NCnc",
+    "/dL":      "NCnc",
+    "/g":       "NCnt",         # count per gram: bacterial counts
+    "/kg":      "NCnt",
+
+    # ── Erythrocyte sedimentation rate ────────────────────────────────
+    # Not `Vel`. LOINC gives ESR the literal PROPERTY string
+    # "Sedimentation Rate" (4537-7, 30341-2, checked against the shipped
+    # axis table), and this value is matched against that column directly,
+    # so a dimensionally-reasonable `Vel` here would match no ESR row at all
+    # and would boost Doppler and nerve-conduction codes instead.
+    "mm/h":     "Sedimentation Rate",
+
+    # ── Bare counts (Num) ─────────────────────────────────────────────
+    "10*6":     "Num",
+    "10*9":     "Num",
+    "10*12":    "Num",
+    "{#}":      "Num",      # generic count
+    "{steps}":  "Num",      # pedometer step count
+    "{floors}": "Num",      # floors climbed
+    "{breaths}": "Num",     # respiratory cycles (when context is total, not rate)
+    "{beats}":  "Num",      # heartbeats (total)
+
+    # ── Score (Score): sleep / recovery / risk scores ────────────────
+    "{score}":  "Score",
+
+    # ── Number areic (Naric): per visual field, microscopy ───────────
+    "/[HPF]":   "Naric",   # UCUM's bracketed form; `/HPF` is a printed spelling of it
+    "/[LPF]":   "Naric",
+
+    # ── Fractions ─────────────────────────────────────────────────────
+    # ``%`` is ambiguous (MFr/NFr/AFr/VFr/SFr/CFr): primary is MFr
+    # (most common in LOINC); see AMBIGUOUS_UNITS for the full set.
+    "%":        "MFr",
+    "[ppm]":    "VFr",
+    "[ppb]":    "VFr",
+    "[ppth]":   "VFr",
+    "mL/dL":    "VFr",
+    "mL/L":     "VFr",
+    "L/L":      "VFr",     # SI hematocrit: 0.45 L/L is 45 %
+
+    # ── Ratios / dimensionless ────────────────────────────────────────
+    "1":        "Ratio",   # INR, indices
+
+    # ── Volume (Vol): sample volume, urine output ────────────────────
+    "L":        "Vol",
+    "dL":       "Vol",
+    "cL":       "Vol",
+    "mL":       "Vol",
+    "uL":       "Vol",
+    "nL":       "Vol",
+    "cm3":      "Vol",
+    "mm3":      "Vol",
+    "[foz_us]":   "Vol",    # fluid ounce
+    "[cup_us]":   "Vol",    # cup
+    "[pt_us]":    "Vol",    # pint
+    "[qt_us]":    "Vol",    # quart
+    "[gal_us]":   "Vol",    # gallon
+    "[tbs_us]":   "Vol",    # tablespoon
+    "[tsp_us]":   "Vol",    # teaspoon
+
+    # ── Volume rate (VRat): urine output, flow ───────────────────────
+    "L/min":         "VRat",
+    "mL/min":        "VRat",
+    "mL/h":          "VRat",
+    "L/h":           "VRat",
+    "mL/(24.h)":     "VRat",
+    "L/(24.h)":      "VRat",
+    "mL/min/{1.73_m2}": "ArVRat",   # eGFR: areic volume rate
+    "L/min/m2":      "ArVRat",      # cardiac index: areic flow
+    "mL/min/m2":     "ArVRat",
+    "mL/(8.h)":      "VRat",        # urinary output windows
+    "mL/(10.h)":     "VRat",
+    "mL/(12.h)":     "VRat",
+    "mL/(6.h)":      "VRat",
+    "mL/h/kg":       "ArVRat",
+    "L/s":           "VRat",        # spirometry peak flow
+    "mL/s":          "VRat",
+    "ng/mL/h":       "CCnc",         # plasma renin activity
+    "nmol/mL/h":     "CCnc",
+    "mL/m2":         "ArVol",        # stroke volume index
+    "mL/min/kg":     "ArVRat",       # VO2 max: per body weight
+                                     # paren form mL/(min.kg) is in tokens.py aliases
+
+    # ── Time durations ────────────────────────────────────────────────
+    "s":        "Time",
+    "ms":       "Time",
+    "min":      "Time",
+    "h":        "Time",
+    "d":        "Time",
+    "wk":       "Time",
+    "mo":       "Time",
+    "a":        "Time",   # annum (year)
+
+    # ── Number rate (NRat): heart rate, respiratory rate ─────────────
+    "/min":     "NRat",
+    "/h":       "NRat",
+    "/s":       "NRat",
+    "/d":       "NRat",
+    "/wk":      "NRat",
+    "/mo":      "NRat",
+    "/a":       "NRat",   # per annum
+    "min/d":    "NRat",   # minutes per day: sleep, exercise duration
+    "h/d":      "NRat",
+    "d/wk":     "NRat",
+    "h/wk":     "NRat",
+    "min/wk":   "NRat",
+    "[MET].min/wk": "ARat",     # metabolic equivalents: exercise dose
+    "[MET].h/wk":   "ARat",
+
+    # ── Anthropometric / vital signs ──────────────────────────────────
+    "kg":       "Mass",
+    "g":        "Mass",
+    "mg":       "Mass",
+    "ug":       "Mass",
+    "ng":       "Mass",
+    "fg":       "Mass",     # ``pg`` is in the Hematology section below as EntMass
+    "[lb_av]":  "Mass",     # pound (avoirdupois)
+    "[oz_av]":  "Mass",     # ounce (avoirdupois)
+    "cm":       "Len",
+    "m":        "Len",
+    "mm":       "Len",
+    "um":       "Len",
+    # LOINC prints particle sizes in nanometres and, on one lipoprotein code,
+    # in angstrom. Neither mapped to anything, so those readings could not
+    # pick a variant by unit at all.
+    "nm":       "Len",
+    "Ao":       "Len",
+    "km":       "Len",
+    "[in_us]":  "Len",      # inch (US survey: what the aliases resolve to)
+    "[ft_us]":  "Len",      # foot (US survey)
+    "[in_i]":   "Len",      # inch (international, exactly 0.0254 m)
+    "[ft_i]":   "Len",
+    "[mi_us]":  "Len",      # mile
+    "[yd_us]":  "Len",      # yard
+
+    # ── Compound / derived ────────────────────────────────────────────
+    "kg/m2":    "MCnc",   # BMI itself is filed as Ratio: see AMBIGUOUS_UNITS
+    "g/m2":     "MCnc",
+
+    # ── Pressure (Pres) ───────────────────────────────────────────────
+    # ``mm[Hg]`` is also used for partial pressure (PPres) in blood
+    # gases (pO2, pCO2): see AMBIGUOUS_UNITS.
+    "mm[Hg]":   "Pres",
+    "cm[H2O]":  "Pres",
+    "kPa":      "Pres",
+    "Pa":       "Pres",
+    "mbar":     "Pres",
+    "bar":      "Pres",
+    "[psi]":    "Pres",
+
+    # ── Electric potential (Elpot): EKG, EEG, EMG ────────────────────
+    "mV":       "Elpot",
+    "uV":       "Elpot",
+    "V":        "Elpot",
+    "mV/s":     "ElpotRat",     # rate of potential change (EEG)
+    "uV.ms":    "TmElpot",      # time-integrated potential
+    "uV.s":     "TmElpot",
+
+    # ── Velocity (Vel): echo Doppler, conduction velocity ────────────
+    "cm/s":     "Vel",
+    "m/s":      "Vel",
+    "mm/s":     "Vel",
+    "km/h":     "Vel",
+
+    # ── Area ──────────────────────────────────────────────────────────
+    "cm2":      "Area",
+    "mm2":      "Area",
+    "m2":       "Area",
+
+    # ── Areic mass (ArMass): bone densitometry, body composition ─────
+    "g/cm2":    "ArMass",
+    "mg/cm2":   "ArMass",
+    "kg/cm2":   "ArMass",
+
+    # ── Areic length (ArLen): body morphometrics ─────────────────────
+    "cm/m2":    "ArLen",
+    "mm/m2":    "ArLen",
+
+    # ── Temperature (Temp) ────────────────────────────────────────────
+    "Cel":      "Temp",
+    "[degF]":   "Temp",
+    "K":        "Temp",
+
+    # ── Angle ─────────────────────────────────────────────────────────
+    "deg":      "Angle",
+    "rad":      "Angle",
+
+    # ── Inverse length (InvLen): refractive optics ───────────────────
+    "[diop]":   "InvLen",
+    "[p'diop]": "InvLen",
+
+    # ── pH ────────────────────────────────────────────────────────────
+    "[pH]":     "LsCnc",
+
+    # ── Hematology indices ────────────────────────────────────────────
+    "fL":       "EntVol",
+    "pg":       "EntMass",
+
+    # ── Osmolality (Osmol) ────────────────────────────────────────────
+    "mosm/kg":  "Osmol",
+    "mosm/L":   "Osmolarity",
+
+    # ── Bare atomic units (substance amount / arbitrary / catalytic) ──
+    # Standalone clinical use is rare, these are here so the morpheme
+    # tokenizer can recognize them mid-string. Without ``mmol`` in this
+    # table the scanner falls back to ``mm`` (length) when it sees
+    # ``mmol/Tag``.
+    "mmol":     "Sub",
+    "umol":     "Sub",
+    "nmol":     "Sub",
+    "pmol":     "Sub",
+    "fmol":     "Sub",
+    "mol":      "Sub",
+    "meq":      "Sub",
+    "mosm":     "Sub",
+    "osm":      "Sub",
+    "[IU]":     "Arb",
+    "m[IU]":    "Arb",
+    "k[IU]":    "Arb",
+    "U":        "CCnt",
+    "mU":       "CCnt",
+    "kU":       "CCnt",
+}
+
+
+# Units that map to multiple PROPERTYs depending on context. The primary
+# entry in :data:`UCUM_FAMILY` is the most common one; this table
+# enumerates every family a unit can legitimately belong to. Callers
+# that want to soft-rank candidates from any of the listed families use
+# :func:`unit_families`.
+AMBIGUOUS_UNITS: dict[str, frozenset[str]] = {
+    # `Ratio` and `DistWidth` are here for the red cell distribution width
+    # printed as a coefficient of variation (RDW-CV, 788-0 and 30385-9):
+    # LOINC has filed it under both, and a CBC prints it as `%`. Three
+    # properties that declare `%` stay out. `VRto` (FEV1/FVC) and `RelVol`
+    # (FEV1 measured/predicted) wait for the spirometry aliases: `FEV1` and
+    # `FEV1/FVC` resolve to 19925-7, the PREDICTED ratio, which `%` would code.
+    # `RelTime` (PT actual/normal, 5894-1) shares PT's component with the INR
+    # codes, so `PT 62 %` would switch to INR 6301-6.
+    "%": frozenset({
+        "MFr", "NFr", "AFr", "VFr", "SFr", "CFr",
+        "LenFr", "RelACnc", "RelRto", "Ratio", "DistWidth",
+    }),
+    "mm[Hg]": frozenset({"Pres", "PPres"}),    # BP vs blood-gas pO2/pCO2
+    # A report prints `U/mL` for tumour markers and antibodies (CA 19-9, CA
+    # 125, anti-TPO) whose LOINC property is ACnc with `[arb'U]/mL`, the same
+    # letters as an enzyme's catalytic units. The name decides which analyte;
+    # the unit must admit both properties or every marker conflicts.
+    "U/L":   frozenset({"CCnc", "ACnc"}),
+    "U/mL":  frozenset({"CCnc", "ACnc"}),
+    "mU/L":  frozenset({"CCnc", "ACnc"}),
+    "mU/mL": frozenset({"CCnc", "ACnc"}),
+    "kU/L":  frozenset({"CCnc", "ACnc"}),
+    # The reverse case: a report prints enzyme activity as `IU/L`, the old name
+    # for the same µmol/min unit, and LOINC files every enzyme under CCnc. A
+    # chemistry panel's ALT, AST, ALP, GGT, LDH and CK were all refused.
+    "[IU]/L": frozenset({"ACnc", "CCnc"}),
+    # MCV and MPV are `EntMeanVol` since LOINC 2.7x; RDW-SD stays `EntVol`.
+    "fL":    frozenset({"EntVol", "EntMeanVol"}),
+    # MCHC is a mass concentration that LOINC files under `EntMCnc`, per red
+    # cell rather than per volume of blood. All four EntMCnc codes in the cut
+    # are MCHC and every one declares g/dL or g/L in EXAMPLE_UCUM_UNITS, so
+    # refusing those units contradicts LOINC's own table: `平均血红蛋白浓度
+    # 349 g/L` came back refused on a real report while the name alone
+    # answered 786-4.
+    "g/dL":  frozenset({"MCnc", "EntMCnc"}),
+    "g/L":   frozenset({"MCnc", "EntMCnc"}),
+    # A volume can be per-entity outside the CBC too: `Size [Entitic volume]
+    # of Stone` (9802-0) declares mm3. The name still picks the analyte; this
+    # only stops the unit gate refusing the code's own declared unit.
+    "mm3":   frozenset({"Vol", "EntVol"}),
+    # eGFR printed without its body-surface normaliser is still ArVRat.
+    "mL/min": frozenset({"VRat", "ArVRat"}),
+    "cm[H2O]": frozenset({"Pres", "PPres"}),
+    "[ppm]":  frozenset({"VFr", "MFr", "SFr"}),
+    "deg":    frozenset({"Angle", "Temp"}),    # Temp uses [degF]/Cel canonically
+    "1":      frozenset({"Ratio", "NRto", "SRto", "MRto", "VRto", "CRto", "ARto"}),
+    # Mass-ratio / mass-content collisions: bare form is dimensionally
+    # ambiguous between "analyte/creatinine ratio" (MRto) and "analyte
+    # per tissue mass" (MCnt). LOINC uses ``{creat}`` annotation to pin
+    # MRto; we strip the annotation in _clean so the bare form is what
+    # the resolver sees.
+    "mg/g":   frozenset({"MRto", "MCnt"}),
+    "ug/g":   frozenset({"MRto", "MCnt"}),
+    "ng/g":   frozenset({"MCnt", "MRto"}),
+    "ng/mg":  frozenset({"MRto", "MCnt"}),
+    "ug/mg":  frozenset({"MRto", "MCnt"}),
+    # The same units on codes LOINC files as a dimensionless `Ratio`: BMI
+    # (39156-5) declares kg/m2, and urine analyte/creatinine ratios declare
+    # mg/mmol (32294-1), umol/g, mmol/g and nmol/mg. The gate must admit a
+    # code's own declared unit.
+    "kg/m2":   frozenset({"MCnc", "Ratio"}),
+    "mg/mmol": frozenset({"MRto", "Ratio"}),
+    "umol/g":  frozenset({"SCnt", "Ratio"}),
+    "mmol/g":  frozenset({"SCnt", "Ratio"}),
+    "nmol/mg": frozenset({"MRto", "Ratio", "SCnt"}),
+}
+
+
+def unit_family(ucum: str | None) -> str | None:
+    """Return the primary LOINC PROPERTY family for a canonical UCUM string.
+
+    For units that appear under multiple PROPERTYs (see
+    :data:`AMBIGUOUS_UNITS`), the most common family is returned. Use
+    :func:`unit_families` when you need the full candidate set.
+    """
+    if not ucum:
+        return None
+    return UCUM_FAMILY.get(ucum)
+
+
+def unit_families(ucum: str | None) -> frozenset[str]:
+    """Return every LOINC PROPERTY family compatible with a UCUM string.
+
+    Returns an empty frozenset for unknown units. Single-family units
+    yield a 1-element set; ambiguous units (``%``, ``mm[Hg]``, ...)
+    yield their full set from :data:`AMBIGUOUS_UNITS`.
+    """
+    if not ucum:
+        return frozenset()
+    if ucum in AMBIGUOUS_UNITS:
+        return AMBIGUOUS_UNITS[ucum]
+    fam = UCUM_FAMILY.get(ucum)
+    return frozenset({fam}) if fam else frozenset()

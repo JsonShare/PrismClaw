@@ -1,0 +1,84 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Length 2669 >>
+stream
+BT /F2 9 Tf 1 0 0 1 48 794 Tm (SYNTHETIC SAMPLE - GENERATED DATA, NOT A REAL PATIENT RECORD) Tj ET
+BT /F2 18 Tf 1 0 0 1 48 770 Tm (Annual Checkup) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 747.5 Tm (Subject:   you@mirobody.ai / 41y) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 732.5 Tm (Collected: 2026-05-06) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 717.5 Tm (Exam:      annual physical \(clinic\)) Tj ET
+BT /F2 10 Tf 1 0 0 1 48 690.5 Tm (Analyte) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 690.5 Tm (Result) Tj ET
+BT /F2 10 Tf 1 0 0 1 368 690.5 Tm (Unit) Tj ET
+BT /F2 10 Tf 1 0 0 1 438 690.5 Tm (Reference) Tj ET
+BT /F2 10 Tf 1 0 0 1 528 690.5 Tm (Flag) Tj ET
+0.5 w 48 684.5 m 547 684.5 l S
+BT /F1 10 Tf 1 0 0 1 48 669.5 Tm (Glycated Hemoglobin-HbA1c) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 669.5 Tm (5.2) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 669.5 Tm (%) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 669.5 Tm (4.0-5.6) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 654.5 Tm (Fasting Blood Glucose-FBG) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 654.5 Tm (4.9) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 654.5 Tm (mmol/L) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 654.5 Tm (3.9-6.1) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 639.5 Tm (Total Cholesterol-TC) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 639.5 Tm (4.45) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 639.5 Tm (mmol/L) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 639.5 Tm (3.0-5.18) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 624.5 Tm (Low-Density Lipoprotein-LDL) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 624.5 Tm (2.48) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 624.5 Tm (mmol/L) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 624.5 Tm (<3.4) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 609.5 Tm (High-Density Lipoprotein-HDL) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 609.5 Tm (1.50) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 609.5 Tm (mmol/L) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 609.5 Tm (>1.0) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 594.5 Tm (Triglycerides-TG) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 594.5 Tm (0.95) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 594.5 Tm (mmol/L) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 594.5 Tm (0.4-1.7) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 579.5 Tm (Systolic Blood Pressure) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 579.5 Tm (116) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 579.5 Tm (mmHg) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 579.5 Tm (<120) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 564.5 Tm (Diastolic Blood Pressure) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 564.5 Tm (75) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 564.5 Tm (mmHg) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 564.5 Tm (<80) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 549.5 Tm (Resting Heart Rate) Tj ET
+BT /F2 10 Tf 1 0 0 1 298 549.5 Tm (57) Tj ET
+BT /F1 10 Tf 1 0 0 1 368 549.5 Tm (bpm) Tj ET
+BT /F1 10 Tf 1 0 0 1 438 549.5 Tm (60-100) Tj ET
+BT /F1 10 Tf 1 0 0 1 528 549.5 Tm (L) Tj ET
+BT /F1 10 Tf 1 0 0 1 48 519.5 Tm (Note: No findings. Continue current activity level; recheck in 12 months.) Tj ET
+endstream
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000348 00000 n 
+0000000450 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info << /Title (Annual Checkup) /Producer (mirobody demo) >> >>
+startxref
+3170
+%%EOF

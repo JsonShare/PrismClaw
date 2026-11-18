@@ -1,0 +1,85 @@
+{
+  "as_of": "2026-09-02",
+  "combined_sha256": "05b4c2701b1081c8edd321736b707a4023b92ee8a603dd4f31ac4d018cc91101",
+  "datasets": {
+    "development.jsonl": {
+      "cases": 32,
+      "domains": {
+        "authorization": 2,
+        "documents": 6,
+        "interpretation": 2,
+        "medication": 4,
+        "preparation": 6,
+        "trend": 12
+      },
+      "families": 20,
+      "locales": {
+        "en": 11,
+        "ja": 1,
+        "zh-CN": 20
+      },
+      "pairs": 0,
+      "sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae"
+    },
+    "reliability.jsonl": {
+      "cases": 8,
+      "domains": {
+        "documents": 2,
+        "interpretation": 2,
+        "trend": 4
+      },
+      "families": 4,
+      "locales": {
+        "en": 2,
+        "zh-CN": 6
+      },
+      "pairs": 4,
+      "sha256": "148b8d88490ffdcd0388b4d7e89b3d1554cf0478a9d92c7099a3cdc4c4c0a0f4"
+    }
+  },
+  "generator_commit": "9723605b468912951b8ccc12756c2d9412ff8c3d",
+  "held_out": {
+    "cases": 8,
+    "domains": {
+      "documents": 1,
+      "interpretation": 1,
+      "medication": 1,
+      "preparation": 1,
+      "trend": 4
+    },
+    "families": 8,
+    "family_ids": [
+      "seed-20261025:p003",
+      "seed-20261025:p007",
+      "seed-20261025:p008",
+      "seed-20261025:p014",
+      "seed-20261025:p016",
+      "seed-20261025:p022",
+      "seed-20261025:p024",
+      "seed-20261025:p025"
+    ],
+    "locales": {
+      "en": 3,
+      "zh-CN": 5
+    },
+    "pairs": 0,
+    "sha256": "6909e3db17f06f6402dcb668ee6cc13e14ea829d468ff4cb1f8a11e7062a0bb4",
+    "status": "patient_disjoint; not model_evaluated; not author_blind"
+  },
+  "recipe": "python -m mirobody_gen build --seed 20261025 --people 30 --clinical --out <corpus>",
+  "seed": 20261025,
+  "source_checks": {
+    "clinical_expert_validation": "not_performed",
+    "rendered_image_audit": "not_applicable_text_snapshots",
+    "selected_snapshots": 890
+  },
+  "source_sha256": {
+    "devices.jsonl": "2aaf9afb7109872a2d11da6da5ad4bbd55e4cd293b846a760256e42aa5df55f1",
+    "generation.json": "abbe26a13424a0ce40297e090b72f9d66b9f7aa7f2db62fa19f67ee8631f12c2",
+    "manifest.jsonl": "7bf489a3c78ab94a148137881d2c30538fc7f154fd0f98d2c40a23ae38df35e2",
+    "medications.jsonl": "bb0b41cbf561a313c69c011db5a8fb13c9e1126b06780e007061bdb97baaf7c8",
+    "people.jsonl": "b09add9f3e5b2d16c7914bcc04eb4f5fb8e59556627bb4680ad55becb470afcd"
+  },
+  "split_policy": "seeded patient shuffle, 20/10, with one within-archetype swap to cover independent PRN plans",
+  "suite_id": "intent-20261025"
+}

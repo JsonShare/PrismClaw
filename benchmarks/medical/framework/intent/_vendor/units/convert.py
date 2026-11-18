@@ -1,0 +1,496 @@
+"""UCUM unit conversion, so one indicator can be one series in one unit.
+
+Three tiers, degrading in order:
+
+    T1  same dimension    :func:`scale` parses UCUM prefix × base unit into a
+                          (dimension signature, factor). Zero domain knowledge:
+                          cm↔m, kg↔[lb_av], mg/dL↔g/L, U/L↔[IU]/L (1:1),
+                          10*9/L↔/uL, kcal↔kJ, mm[Hg]↔kPa all live here.
+    T2  mass ↔ substance  Off by a molar mass. :data:`MOLAR_MASS` is keyed by
+                          LOINC code (see the three conventions in its comment).
+                          Not in the table ⇒ no conversion, degrade to T3.
+    T3  genuinely not     `%` (a fraction) vs `10*9/L` (an absolute count) needs
+                          that draw's own WBC total: a DERIVED calculation, not
+                          a unit conversion. Callers keep those as two series.
+
+**Do not use** :func:`~.families.unit_family` **to decide convertibility.** It
+is a LOINC PROPERTY classifier, not a dimension table, and it is wrong in both
+directions for this purpose: measured, not supposed:
+
+    kg/m2 (BMI)  -> MCnc      mg/dL -> MCnc      same family, NOT convertible
+    U/L          -> CCnc      [IU]/L -> ACnc     different families, 1:1 IDENTICAL
+
+"Same family ⇒ convertible" therefore turns a BMI of 24 into a mass
+concentration, and refuses a conversion that is the identity. A dimension
+signature rejects the first and accepts the second by construction.
+
+`None` from :func:`scale` is **not an error**, it means "atomic unit": equal
+only to a unit spelled exactly the same way. `个/HP` and `meq/L` take that
+path, and so does `%`, with one exception: it converts to `L/L`, the other
+spelling of a fraction of a whole (:data:`_PERCENT`). Better to decline than
+to guess.
+
+Temperature is the one scale with an offset, so no factor converts it:
+:func:`convert_value` and :func:`convertible` cross between `Cel`, `[degF]`
+and `K`, while :func:`scale`, :func:`conversion_factor` and
+:func:`canonicalize` keep each of them atomic.
+
+Original values are never rewritten. Provenance, right-to-be-forgotten and FHIR
+fidelity all depend on the reading as recorded; conversion is for the caller
+that is about to compare or chart, and it hands back a number rather than
+editing one.
+
+The tier split and the conventions below come from a design worked out and
+validated against real unit-conversion cases, not invented for this module.
+
+**Not to be confused with** :func:`mirobody.standardize.canonical_units.convert_to_standard`.
+That one takes a ``StandardIndicator`` and converts to the unit that indicator
+declares, one target per indicator, and it builds on this module: it normalizes
+both spellings and converts with :func:`convert_value`, rather than carrying
+its own numbers, which it used to and they had drifted.
+
+This module takes two arbitrary UCUM strings and asks whether they are
+interconvertible at all, with no target in mind. Use that one to canonicalize a
+device sample; use this one to compare two readings.
+
+Both stay where they are. This one is the LIBRARY layer, named in four
+import-linter contracts, because `pip install mirobody` with nothing but numpy
+has to resolve a name and pick a code by unit. `mirobody.standardize` is not that
+layer: `standardize.aggregate.service` reaches aiohttp and a database.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from collections.abc import Callable, Iterable
+from typing import NamedTuple
+
+from .families import UCUM_FAMILY
+
+__all__ = [
+    "DimScale",
+    "scale",
+    "canonical_unit",
+    "canonicalize",
+    "CanonicalQuantity",
+    "convertible",
+    "conversion_factor",
+    "convert_value",
+    "partition_units",
+    "pick_display_unit",
+    "MOLAR_MASS",
+]
+
+#: SI prefix → power of ten. `da` must be tried before `d`; `_atom` sorts by
+#: length descending to guarantee longest-match.
+_PREFIX: dict[str, float] = {
+    "y": 1e-24, "z": 1e-21, "a": 1e-18, "f": 1e-15, "p": 1e-12, "n": 1e-9,
+    "u": 1e-6, "m": 1e-3, "c": 1e-2, "d": 1e-1, "da": 1e1, "h": 1e2,
+    "k": 1e3, "M": 1e6, "G": 1e9, "T": 1e12,
+}
+
+#: Base unit → (dimension tag, relative factor). The tags are private notation
+#: whose only job is deciding whether two units can convert:
+#:   M mass · V volume · N amount of substance · L length · T time · A activity
+#:   E energy · P pressure
+#: `1` is dimensionless (counts); its factor folds into the scalar and stays OUT
+#: of the signature: otherwise `10*9/L` and `/L` would read as different
+#: dimensions.
+_BASE: dict[str, tuple[str, float]] = {
+    "g": ("M", 1.0),
+    "L": ("V", 1.0),
+    "l": ("V", 1.0),
+    "mol": ("N", 1.0),
+    # `eq` (equivalents) is deliberately ABSENT: mEq↔mmol differs by valence
+    # (1 mmol Ca2+ = 2 mEq), so a 1:1 conversion is silently off by a factor of
+    # two. `meq/L` therefore parses as None: equal only to itself.
+    "m": ("L", 1.0),
+    "s": ("T", 1.0),
+    "min": ("T", 60.0),
+    "h": ("T", 3600.0),
+    "d": ("T", 86400.0),
+    "U": ("A", 1.0),
+    "[IU]": ("A", 1.0),   # in LOINC usage U/L ≡ [IU]/L
+    "[lb_av]": ("M", 453.59237),
+    "[oz_av]": ("M", 28.349523125),
+    "[in_i]": ("L", 0.0254),
+    "[ft_i]": ("L", 0.3048),
+    # The US survey foot, exactly 1200/3937 m, is what `ft` and `in`
+    # normalize to; it is 2 ppm longer than the international foot.
+    "[ft_us]": ("L", 1200 / 3937),
+    "[in_us]": ("L", 100 / 3937),
+    # US customary volumes in litres, exact: the gallon is 231 cubic inches.
+    "[gal_us]": ("V", 3.785411784),
+    "[qt_us]": ("V", 0.946352946),
+    "[pt_us]": ("V", 0.473176473),
+    "[cup_us]": ("V", 0.2365882365),
+    "[foz_us]": ("V", 0.0295735295625),
+    "[tbs_us]": ("V", 0.01478676478125),
+    "[tsp_us]": ("V", 0.00492892159375),
+    # Energy in joules and pressure in pascals, as UCUM defines them: `cal` is
+    # the thermochemical calorie, `[psi]` a pound-force per square inch. The
+    # prefixed forms (`kcal`, `kPa`, `mm[Hg]`, `cm[H2O]`, `mbar`) compose.
+    "J": ("E", 1.0),
+    "cal": ("E", 4.184),
+    "Pa": ("P", 1.0),
+    "bar": ("P", 100000.0),
+    "m[Hg]": ("P", 133322.0),
+    "m[H2O]": ("P", 9806.65),
+    "[psi]": ("P", 6894.757293168361),
+    "1": ("1", 1.0),
+}
+
+_DIMENSIONLESS = "1"
+
+#: A fraction in percent: `L/L` is 100 %. In `_BASE`, `%` would join the
+#: dimensionless class `scale` builds, which holds `mmol/mol` (HbA1c 6.5 %
+#: NGSP is 48 mmol/mol IFCC, not 65), counts, `mg/kg` and `h/d`. A percent is
+#: a hundredth of whichever whole its analyte names, so it converts only to
+#: the other spelling reports print it in: hematocrit is `45 %` or `0.45 L/L`.
+#: Both fold to `%`, the pair every stored percent already carries: `recode`
+#: skips a row whose coding is unchanged, so a new pair for `%` would never
+#: reach the readings already stored.
+_PERCENT: dict[str, float] = {"%": 1.0, "L/L": 100.0}
+
+#: Temperature scales, as (to Celsius, from Celsius). Kept out of `_BASE`: a
+#: scale with an offset has no conversion factor, so only `convert_value`,
+#: which has the number, crosses between them.
+_TEMPERATURE: dict[str, tuple[Callable[[float], float], Callable[[float], float]]] = {
+    "Cel": (lambda v: v, lambda c: c),
+    "K": (lambda v: v - 273.15, lambda c: c + 273.15),
+    "[degF]": (lambda v: (v - 32) * 5 / 9, lambda c: c * 9 / 5 + 32),
+}
+
+#: (dimension signature, factor to that dimension's own base). Equal signatures
+#: convert directly (T1).
+DimScale = tuple[tuple[tuple[str, int], ...], float]
+
+
+def _atom(token: str) -> tuple[str, float] | None:
+    """One UCUM atom → (dimension tag, factor); None when unrecognized."""
+    if not token:
+        return None
+    if token in _BASE:
+        return _BASE[token]
+    if token.startswith("10*"):          # count scales: 10*9, 10*12, 10*3
+        try:
+            return (_DIMENSIONLESS, 10.0 ** int(token[3:]))
+        except ValueError:
+            return None
+    # Longest prefix first: `da` before `d`, and `m` (milli) must not eat
+    # `min` / `mol`: both already matched in _BASE above.
+    for prefix in sorted(_PREFIX, key=len, reverse=True):
+        if token.startswith(prefix):
+            rest = token[len(prefix):]
+            if rest in _BASE:
+                dim, factor = _BASE[rest]
+                if dim == _DIMENSIONLESS:
+                    return None          # nonsense combinations like `m1`
+                return (dim, factor * _PREFIX[prefix])
+    return None
+
+
+def scale(ucum: str | None) -> DimScale | None:
+    """UCUM string → (dimension signature, factor), or None when unparseable.
+
+    Only units :data:`~.families.UCUM_FAMILY` already knows are parsed, so noise
+    like `mgL` cannot be composed into a plausible-looking factor. That is the
+    same guard :func:`~.normalize.normalize_unit` applies. A percent and
+    `L/L` are None too: they convert to each other only (:data:`_PERCENT`).
+    """
+    if not ucum or ucum not in UCUM_FAMILY or ucum in _PERCENT:
+        return None
+    numerator, _, denominator = ucum.partition("/")
+    dims: dict[str, int] = defaultdict(int)
+    factor = 1.0
+    for part, sign in ((numerator, 1), (denominator, -1)):
+        if not part:
+            continue
+        for token in part.split("."):
+            exponent = 1
+            # Trailing power: `m2` → m^2. The digits in `10*9` are a scale, not
+            # a power, so that form is excluded.
+            if len(token) > 1 and token[-1].isdigit() and not token.startswith("10*"):
+                token, exponent = token[:-1], int(token[-1])
+            atom = _atom(token)
+            if atom is None:
+                return None
+            dim, atom_factor = atom
+            if dim != _DIMENSIONLESS:
+                dims[dim] += sign * exponent
+            factor *= atom_factor ** (sign * exponent)
+    signature = tuple(sorted((d, e) for d, e in dims.items() if e))
+    return (signature, factor)
+
+
+#: Mass concentration (M/V) to substance concentration (N/V), bridged by molar
+#: mass: LOINC code -> (g_per_mol, basis, note). Keyed by code, never by
+#: indicator name. Three conventions that get got wrong otherwise: triglyceride
+#: uses a conventional average molar mass (triolein ~885.4), so 88.57 is
+#: industry convention and not computed; BUN is reported as NITROGEN and urea
+#: as the whole molecule, ~2.14 apart, so they get a row each and never share;
+#: conversion happens only WITHIN one code (mass or moles), across analytes
+#: being concept mapping, which this table does not do.
+MOLAR_MASS: dict[str, tuple[float, str, str]] = {
+    # Glucose metabolism
+    "1558-6": (180.16, "C6H12O6", "Fasting glucose; 1 mmol/L = 18.016 mg/dL"),
+    "2345-7": (180.16, "C6H12O6", "Glucose, serum/plasma"),
+    "2339-0": (180.16, "C6H12O6", "Glucose, blood"),
+    # Lipids. The cholesterol family shares 386.65; triglyceride is convention.
+    "2093-3": (386.65, "C27H46O", "Total cholesterol; 1 mmol/L = 38.67 mg/dL"),
+    "2089-1": (386.65, "C27H46O", "LDL-C"),
+    "13457-7": (386.65, "C27H46O", "LDL-C (calculated)"),
+    "2085-9": (386.65, "C27H46O", "HDL-C"),
+    "2571-8": (885.40, "conventional average", "Triglyceride; factor 88.57 is convention, not composition"),
+    # Renal / metabolites
+    "2160-0": (113.12, "C4H7N3O", "Creatinine; 1 mg/dL = 88.4 umol/L"),
+    "3084-1": (168.11, "C5H4N4O3", "Urate; 1 mg/dL = 59.48 umol/L"),
+    "3094-0": (28.02, "2xN", "BUN — reported as NITROGEN; 2.14x from urea (3091-6), never shared"),
+    # 6299-2 is urea NITROGEN in blood, and carried the whole molecule's mass.
+    "6299-2": (28.02, "2xN", "BUN in blood — reported as NITROGEN"),
+    "3091-6": (60.06, "CH4N2O", "Urea — reported as the whole molecule"),
+    # Bilirubin
+    "1975-2": (584.66, "C33H36N4O6", "Total bilirubin; 1 mg/dL = 17.10 umol/L"),
+    "1968-7": (584.66, "C33H36N4O6", "Direct (conjugated) bilirubin"),
+    "1971-1": (584.66, "C33H36N4O6", "Indirect (unconjugated) bilirubin"),
+    # Electrolytes / minerals
+    "17861-6": (40.08, "Ca", "Calcium; 1 mg/dL = 0.2495 mmol/L"),
+    "2777-1": (30.97, "P", "Inorganic phosphate — as the phosphorus atom, not phosphate"),
+    "19123-9": (24.305, "Mg", "Magnesium"),
+    "2498-4": (55.845, "Fe", "Iron"),
+    "2823-3": (39.098, "K", "Potassium"),
+    "2951-2": (22.990, "Na", "Sodium"),
+    # The moles code of each analyte above (`OfflineResolver.unit_variants`):
+    # `standardize_reading` answers a mmol/L reading with it, and converting
+    # that reading to mg/dL returned nothing.
+    "14771-0": (180.16, "C6H12O6", "Fasting glucose [Moles/volume]"),
+    "14749-6": (180.16, "C6H12O6", "Glucose [Moles/volume], serum/plasma"),
+    "15074-8": (180.16, "C6H12O6", "Glucose [Moles/volume], blood"),
+    "14647-2": (386.65, "C27H46O", "Total cholesterol [Moles/volume]"),
+    "22748-8": (386.65, "C27H46O", "LDL-C [Moles/volume]"),
+    "39469-2": (386.65, "C27H46O", "LDL-C (calculated) [Moles/volume]"),
+    "14646-4": (386.65, "C27H46O", "HDL-C [Moles/volume]"),
+    "14927-8": (885.40, "conventional average", "Triglyceride [Moles/volume]"),
+    "14682-9": (113.12, "C4H7N3O", "Creatinine [Moles/volume]"),
+    "14933-6": (168.11, "C5H4N4O3", "Urate [Moles/volume]"),
+    "14937-7": (28.02, "2xN", "BUN [Moles/volume]"),
+    "59570-2": (28.02, "2xN", "BUN in blood [Moles/volume]"),
+    "22664-7": (60.06, "CH4N2O", "Urea [Moles/volume]"),
+    "14631-6": (584.66, "C33H36N4O6", "Total bilirubin [Moles/volume]"),
+    "14629-0": (584.66, "C33H36N4O6", "Direct bilirubin [Moles/volume]"),
+    "14630-8": (584.66, "C33H36N4O6", "Indirect bilirubin [Moles/volume]"),
+    "2000-8": (40.08, "Ca", "Calcium [Moles/volume]"),
+    "14879-1": (30.97, "P", "Phosphate [Moles/volume], as the phosphorus atom"),
+    "2601-3": (24.305, "Mg", "Magnesium [Moles/volume]"),
+    "14798-3": (55.845, "Fe", "Iron [Moles/volume]"),
+}
+
+_MASS_PER_VOLUME = (("M", 1), ("V", -1))
+_SUBSTANCE_PER_VOLUME = (("N", 1), ("V", -1))
+
+
+def conversion_factor(from_unit: str, to_unit: str, *, loinc_code: str = "") -> float | None:
+    """`value_in_to_unit = value_in_from_unit * factor`; None when no factor
+    converts them.
+
+    T1 compares factors within one dimension; T2 crosses M/V ↔ N/V when
+    `loinc_code` has a molar mass. A percent converts to `L/L` and to
+    nothing else (:data:`_PERCENT`). Two temperature scales have no factor
+    either (an offset is not one); :func:`convert_value` converts them.
+    """
+    if from_unit == to_unit:
+        return 1.0
+    if from_unit in _PERCENT or to_unit in _PERCENT:
+        if from_unit in _PERCENT and to_unit in _PERCENT:
+            return _PERCENT[from_unit] / _PERCENT[to_unit]
+        return None
+    src, dst = scale(from_unit), scale(to_unit)
+    if src is None or dst is None:
+        return None
+    (src_sig, src_factor), (dst_sig, dst_factor) = src, dst
+    if src_sig == dst_sig:                                   # T1
+        return src_factor / dst_factor
+    molar = MOLAR_MASS.get(loinc_code or "")
+    if molar is None:                                        # no bridge: T3
+        return None
+    grams_per_mol = molar[0]
+    # Base dimensions are g/L and mol/L: g/L → mol/L divides by g/mol.
+    if src_sig == _MASS_PER_VOLUME and dst_sig == _SUBSTANCE_PER_VOLUME:
+        return (src_factor / grams_per_mol) / dst_factor
+    if src_sig == _SUBSTANCE_PER_VOLUME and dst_sig == _MASS_PER_VOLUME:
+        return (src_factor * grams_per_mol) / dst_factor
+    return None
+
+
+def needs_molar_mass(from_unit: str, to_unit: str) -> bool:
+    """Whether the two units are mass and substance concentration (`mg/dL`
+    and `mmol/L`): convertible by an analyte's molar mass, and only by it.
+
+    Lets a refusal say which input was missing. Asked to convert 212 mg/dL to
+    mmol/L without a code, `convert_unit` used to answer "not interconvertible,
+    report the readings separately", and a small model told the person three
+    times that their two cholesterol results could not be compared (#271).
+    """
+    src, dst = scale(from_unit), scale(to_unit)
+    if src is None or dst is None:
+        return False
+    return {src[0], dst[0]} == {_MASS_PER_VOLUME, _SUBSTANCE_PER_VOLUME}
+
+
+def convertible(from_unit: str, to_unit: str, *, loinc_code: str = "") -> bool:
+    """Whether :func:`convert_value` converts between the two units: T1, T2, or
+    two temperature scales."""
+    if from_unit in _TEMPERATURE and to_unit in _TEMPERATURE:
+        return True
+    return conversion_factor(from_unit, to_unit, loinc_code=loinc_code) is not None
+
+
+def convert_value(value: float, from_unit: str, to_unit: str, *, loinc_code: str = "") -> float | None:
+    """Convert one number; None when not convertible.
+
+    **Nothing is rounded.** Full precision is kept; format at the output layer,
+    where the display unit's usual precision is known. A None must not be
+    treated as zero, it means these readings belong to separate series.
+    """
+    if from_unit != to_unit and from_unit in _TEMPERATURE and to_unit in _TEMPERATURE:
+        to_celsius, from_celsius = _TEMPERATURE[from_unit][0], _TEMPERATURE[to_unit][1]
+        return from_celsius(to_celsius(value))
+    factor = conversion_factor(from_unit, to_unit, loinc_code=loinc_code)
+    return None if factor is None else value * factor
+
+
+#: Dimension tag → the base unit :func:`scale`'s factor actually lands in. The
+#: table is not a preference: `scale` normalizes every parseable unit to exactly
+#: this composition, so rendering a signature with these symbols names the unit
+#: whose value is `raw * factor`.
+_CANONICAL_BASE: dict[str, str] = {
+    "M": "g", "V": "L", "N": "mol", "L": "m", "T": "s", "A": "U", "E": "J", "P": "Pa",
+}
+
+
+class CanonicalQuantity(NamedTuple):
+    """A value folded to base units, and the unit it landed in.
+
+    A tuple so it unpacks, named so a stored pair cannot be transposed:
+    ``(0.0056, "mol/L")``, never ``("mol/L", 0.0056)``.
+    """
+
+    value: float
+    unit: str
+
+
+def _render(signature: tuple[tuple[str, int], ...]) -> str:
+    """Dimension signature → its UCUM spelling (`g/L`, `mol/L`, `/s`, `g/m2`)."""
+    def part(dim: str, exponent: int) -> str:
+        symbol = _CANONICAL_BASE[dim]
+        return symbol if exponent == 1 else f"{symbol}{exponent}"
+
+    numerator = ".".join(part(d, e) for d, e in signature if e > 0)
+    denominator = ".".join(part(d, -e) for d, e in signature if e < 0)
+    if not denominator:
+        return numerator or "1"
+    return f"{numerator}/{denominator}"
+
+
+def _canonical(ucum: str | None, loinc_code: str) -> tuple[str, float] | None:
+    """(base unit, factor to it) after the molar bridge is applied; None if unparseable."""
+    if ucum in _PERCENT:
+        return ("%", _PERCENT[ucum])
+    parsed = scale(ucum)
+    if parsed is None:
+        return None
+    signature, factor = parsed
+    if signature == _MASS_PER_VOLUME:
+        molar = MOLAR_MASS.get(loinc_code or "")
+        if molar is not None:
+            return (_render(_SUBSTANCE_PER_VOLUME), factor / molar[0])
+    return (_render(signature), factor)
+
+
+def canonical_unit(ucum: str | None, *, loinc_code: str = "") -> str | None:
+    """The base unit `ucum` folds to, or None when it does not fold at all.
+
+    `mg/dL` and `g/L` both answer `g/L`; with a `loinc_code` that
+    :data:`MOLAR_MASS` bridges, both answer `mol/L` instead. `%` and `L/L`
+    answer `%`. None means atomic (`meq/L`, a temperature): see :func:`scale`.
+    """
+    got = _canonical(ucum, loinc_code)
+    return None if got is None else got[0]
+
+
+def canonicalize(value: float, unit: str | None, *, loinc_code: str = "") -> CanonicalQuantity:
+    """A reading folded to base units: the COMPARISON KEY, not a replacement.
+
+    Store it in a second column beside the value as recorded, and two readings
+    are comparable when their canonical PAIRS agree: a `SELECT ... GROUP BY`
+    rather than a conversion pass per query. The original is never touched;
+    provenance and FHIR fidelity depend on the reading as written down, and
+    :func:`convert_value` remains the way to answer "in THIS unit, what is it".
+
+    The unit comes back with the number because the canonical basis is not a
+    property of the input alone. Without a code, `mg/dL` folds to `g/L`; with
+    `2345-7` it folds to `mol/L`, where the mmol/L half of the world's glucose
+    readings already is. That is the whole point (a Chinese report's 5.6 mmol/L
+    and a US report's 100 mg/dL are one series only across the molar bridge) 
+    but it means a bare canonical number is ambiguous. Comparing the pairs is
+    not, and the two bases stay distinguishable rather than silently mixing.
+
+        canonicalize(100, "mg/dL", loinc_code="2345-7")   # ≈ (0.005551, 'mol/L')
+        canonicalize(5.6, "mmol/L", loinc_code="2345-7")  #   (0.0056,   'mol/L')
+
+    An unparseable unit is returned unchanged rather than raising: a reading
+    whose unit this module cannot fold is still a reading, and `meq/L` or
+    `Cel` is already its own canonical form: equal only to itself, which is
+    exactly what an unchanged pair means to a caller comparing pairs. `%` is
+    its own canonical form too, and `L/L` folds into it: `0.45 L/L` is
+    `(45.0, '%')`.
+    """
+    got = _canonical(unit, loinc_code)
+    if got is None:
+        return CanonicalQuantity(value, unit or "")
+    base, factor = got
+    return CanonicalQuantity(value * factor, base)
+
+
+def partition_units(units: Iterable[str], *, loinc_code: str = "") -> list[list[str]]:
+    """Split a set of units into mutually-convertible classes.
+
+    Membership propagates (a↔b and b↔c ⇒ one class), so `mg/dL` and `umol/L`
+    join `mmol/L` and `mg/L` in one class when a molar-mass bridge exists. Input
+    order is preserved inside each class.
+    """
+    classes: list[list[str]] = []
+    for unit in units:
+        if not unit:
+            continue
+        for members in classes:
+            if convertible(members[0], unit, loinc_code=loinc_code):
+                members.append(unit)
+                break
+        else:
+            classes.append([unit])
+    return classes
+
+
+def pick_display_unit(stats: Iterable[tuple[str, int, object]]) -> str:
+    """Display unit = the most frequent one; ties go to the latest measurement.
+
+    One indicator must render as one series in one unit, so the caller
+    converts every reading in a convertible class to the unit this picks.
+    `stats` rows are ``(unit, reading_count, latest_measured_at)`` triples;
+    the timestamp may be None (sorts oldest).
+    """
+    best: tuple[str, int, object] | None = None
+    for unit, count, latest in stats:
+        if not unit:
+            continue
+        if best is None:
+            best = (unit, count, latest)
+            continue
+        if count > best[1]:
+            best = (unit, count, latest)
+        elif count == best[1]:
+            # Same frequency: prefer the most recent measurement; None is oldest.
+            if latest is not None and (best[2] is None or latest > best[2]):
+                best = (unit, count, latest)
+    return best[0] if best else ""

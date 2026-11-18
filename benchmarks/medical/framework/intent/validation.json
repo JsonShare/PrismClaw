@@ -1,0 +1,3257 @@
+{
+  "date": "2026-10-25",
+  "suite_id": "intent-20261025",
+  "status": "primary_independent_review_complete; historical_cross_self_reviews_partial",
+  "scope": "Clinician assistance and personal health record management. Synthetic visible-evidence calibration; no production harness, OCR, authorization enforcement or native compaction score.",
+  "dataset": {
+    "development": {
+      "cases": 32,
+      "domains": {
+        "authorization": 2,
+        "documents": 6,
+        "interpretation": 2,
+        "medication": 4,
+        "preparation": 6,
+        "trend": 12
+      },
+      "families": 20,
+      "locales": {
+        "en": 11,
+        "ja": 1,
+        "zh-CN": 20
+      },
+      "pairs": 0,
+      "sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae"
+    },
+    "reliability": {
+      "cases": 8,
+      "domains": {
+        "documents": 2,
+        "interpretation": 2,
+        "trend": 4
+      },
+      "families": 4,
+      "locales": {
+        "en": 2,
+        "zh-CN": 6
+      },
+      "pairs": 4,
+      "sha256": "148b8d88490ffdcd0388b4d7e89b3d1554cf0478a9d92c7099a3cdc4c4c0a0f4"
+    },
+    "held_out": {
+      "cases": 8,
+      "domains": {
+        "documents": 1,
+        "interpretation": 1,
+        "medication": 1,
+        "preparation": 1,
+        "trend": 4
+      },
+      "families": 8,
+      "family_ids": [
+        "seed-20261025:p003",
+        "seed-20261025:p007",
+        "seed-20261025:p008",
+        "seed-20261025:p014",
+        "seed-20261025:p016",
+        "seed-20261025:p022",
+        "seed-20261025:p024",
+        "seed-20261025:p025"
+      ],
+      "locales": {
+        "en": 3,
+        "zh-CN": 5
+      },
+      "pairs": 0,
+      "sha256": "6909e3db17f06f6402dcb668ee6cc13e14ea829d468ff4cb1f8a11e7062a0bb4",
+      "status": "patient_disjoint; not model_evaluated; not author_blind"
+    },
+    "combined_sha256": "05b4c2701b1081c8edd321736b707a4023b92ee8a603dd4f31ac4d018cc91101",
+    "role_counts": {
+      "regression": 8,
+      "capability": 24
+    }
+  },
+  "provenance": {
+    "generator_commit": "9723605b468912951b8ccc12756c2d9412ff8c3d",
+    "seed": 20261025,
+    "recipe": "python -m mirobody_gen build --seed 20261025 --people 30 --clinical --out <corpus>",
+    "source_checks": {
+      "clinical_expert_validation": "not_performed",
+      "rendered_image_audit": "not_applicable_text_snapshots",
+      "selected_snapshots": 890
+    },
+    "source_sha256": {
+      "devices.jsonl": "2aaf9afb7109872a2d11da6da5ad4bbd55e4cd293b846a760256e42aa5df55f1",
+      "generation.json": "abbe26a13424a0ce40297e090b72f9d66b9f7aa7f2db62fa19f67ee8631f12c2",
+      "manifest.jsonl": "7bf489a3c78ab94a148137881d2c30538fc7f154fd0f98d2c40a23ae38df35e2",
+      "medications.jsonl": "bb0b41cbf561a313c69c011db5a8fb13c9e1126b06780e007061bdb97baaf7c8",
+      "people.jsonl": "b09add9f3e5b2d16c7914bcc04eb4f5fb8e59556627bb4680ad55becb470afcd"
+    }
+  },
+  "protocol": {
+    "evaluator_version": "intent-evaluator-9",
+    "answer_tools": "none; same visible packets and system prompt",
+    "judge_fact_gold": "withheld from extraction; executable oracle comparisons only",
+    "held_out_model_calls": 0,
+    "selected_denominator": "32 fixed; 24 capability and 8 regression; failed or stale review remains unresolved",
+    "self_review": "Earlier OpenRouter self/cross reviews remain historical diagnostics. The independently completed DeepSeek common judge is primary; coding-agent source adjudications are reported separately.",
+    "answer_reuse": "All 32 current visible packets are byte-equivalent to the preceding frozen release packets. Identical model/settings/answer reused with explicit source-case/request hashes. Earlier phases regenerated changed packets only. No best-of selection.",
+    "revalidation": "Saved OpenRouter verdicts were rechecked under evaluator8; raw verdicts are retained. Four changed medication reviewer packets invalidate their old OpenRouter reviews. The additional DeepSeek judge uses corrected reviewer packets for all 32 tasks. Its raw version8 reviews are all revalidated under version9, which handles section-heading table units and date/quantity comma separators. Four invalid/incomplete evaluations alone are retried; original records remain immutable.",
+    "provider_change": "Earlier OpenRouter Claude/Luna reviews remain incomplete after allowance exhaustion. User explicitly authorized Nebula DeepSeek V4 Pro as a separate additional judge. The original Claude/Luna answers are unchanged, and all previous partial reviews remain separate.",
+    "primary_judge": {
+      "provider": "nebula",
+      "requested_model": "deepseek-v4-pro",
+      "reasoning_effort": "high",
+      "thinking": "enabled",
+      "max_output_tokens": 8192,
+      "timeout_seconds": 180,
+      "actual_models": {
+        "deepseek-v4-pro": 32
+      },
+      "selection": "full fixed 32-task development set; both existing answer sets; user-authorized additional judge",
+      "retry_policy": {
+        "only_invalid_or_incomplete_evaluations": true,
+        "retry_count": 4,
+        "max_output_tokens": 16384,
+        "timeout_seconds": 300,
+        "answer_regenerations": 0
+      }
+    },
+    "answer_generation": {
+      "provider": "openrouter",
+      "requested_models": [
+        "anthropic/claude-opus-5.5",
+        "openai/gpt-6-luna"
+      ],
+      "reasoning_effort": "medium",
+      "max_output_tokens": 8192,
+      "timeout_seconds": 180,
+      "temperature": "omitted for reasoning requests"
+    }
+  },
+  "quality_audits": {
+    "opus55": {
+      "summary": {
+        "operation": "audit",
+        "evaluator_version": "intent-evaluator-8",
+        "selected": 32,
+        "statuses": {
+          "ok": 28,
+          "evaluator_failure": 4
+        },
+        "actual_models": {
+          "anthropic/claude-opus-5.5": 32
+        },
+        "usage": {
+          "completion_tokens": 28806,
+          "prompt_tokens": 91811,
+          "total_tokens": 120617
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "issue_cases": 0,
+        "not_assessable_cases": 0
+      },
+      "records_sha256": "b3ff6f1e8c10438a70daf56f63a751fdc76337029e38a77d32bef3a590e472e0",
+      "unresolved": [
+        {
+          "id": "intent-development-medication-01",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        },
+        {
+          "id": "intent-development-medication-02",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        },
+        {
+          "id": "intent-development-medication-03",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        },
+        {
+          "id": "intent-development-medication-04",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        }
+      ]
+    },
+    "luna6": {
+      "summary": {
+        "operation": "audit",
+        "evaluator_version": "intent-evaluator-8",
+        "selected": 32,
+        "statuses": {
+          "ok": 28,
+          "evaluator_failure": 4
+        },
+        "actual_models": {
+          "openai/gpt-6-luna": 32
+        },
+        "usage": {
+          "completion_tokens": 19485,
+          "prompt_tokens": 72081,
+          "total_tokens": 91566
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "issue_cases": 0,
+        "not_assessable_cases": 0
+      },
+      "records_sha256": "b32019d5194879195d32a8655255df5dc5fe8c110ff49b1d800d411ee0ed0515",
+      "unresolved": [
+        {
+          "id": "intent-development-medication-01",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        },
+        {
+          "id": "intent-development-medication-02",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        },
+        {
+          "id": "intent-development-medication-03",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        },
+        {
+          "id": "intent-development-medication-04",
+          "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+        }
+      ]
+    },
+    "deepseek_v4_pro": {
+      "summary": {
+        "operation": "audit",
+        "evaluator_version": "intent-evaluator-9",
+        "selected": 32,
+        "statuses": {
+          "ok": 32
+        },
+        "actual_models": {
+          "deepseek-v4-pro": 32
+        },
+        "usage": {
+          "completion_tokens": 89067,
+          "prompt_tokens": 71992,
+          "total_tokens": 161059
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "issue_cases": 2,
+        "not_assessable_cases": 1
+      },
+      "records_sha256": "d3976ed3db7477ec97ec4833614e6b75aa92370d659719553d94745211d75e49",
+      "unresolved": []
+    }
+  },
+  "calibration": {
+    "opus55": {
+      "answers": {
+        "operation": "baseline",
+        "evaluator_version": "intent-evaluator-8",
+        "selected": 32,
+        "statuses": {
+          "ok": 32
+        },
+        "actual_models": {
+          "anthropic/claude-opus-5.5": 32
+        },
+        "usage": {
+          "completion_tokens": 42312,
+          "prompt_tokens": 51792,
+          "total_tokens": 94104
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "identical_visible_answers_reused": 32
+      },
+      "answer_file_sha256": "cb550f42d6198c371e92f119d4b4e39985b425643e3a27509384af1d034668cb",
+      "reviews": {
+        "opus55": {
+          "independence": "same family diagnostic",
+          "summary": {
+            "operation": "score",
+            "evaluator_version": "intent-evaluator-8",
+            "selected": 32,
+            "statuses": {
+              "ok": 16,
+              "evaluator_failure": 16
+            },
+            "actual_models": {
+              "anthropic/claude-opus-5.5": 21,
+              "unavailable": 11
+            },
+            "usage": {
+              "completion_tokens": 26161,
+              "prompt_tokens": 85779,
+              "total_tokens": 111940
+            },
+            "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+            "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+            "evidence_conditioned_pass": 15,
+            "execution_not_exercised": 0,
+            "roles": {
+              "capability": {
+                "selected": 24,
+                "pass": 12,
+                "valid_reviews": 12
+              },
+              "regression": {
+                "selected": 8,
+                "pass": 3,
+                "valid_reviews": 4
+              }
+            }
+          },
+          "records_sha256": "ebb37dc387755c80d4227a1dc10f32390d97c979700212a66d18ace65b555866",
+          "unresolved": [
+            {
+              "id": "intent-development-trend-08",
+              "reason": "Extracted unit is not adjacent or in its actual table/section heading"
+            },
+            {
+              "id": "intent-development-medication-01",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-02",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-03",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-04",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-documents-04",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-documents-05",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-documents-06",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-02",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-03",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-04",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-05",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-06",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-02",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            }
+          ]
+        },
+        "luna6": {
+          "independence": "cross family",
+          "summary": {
+            "operation": "score",
+            "evaluator_version": "intent-evaluator-8",
+            "selected": 32,
+            "statuses": {
+              "ok": 22,
+              "evaluator_failure": 10
+            },
+            "actual_models": {
+              "openai/gpt-6-luna": 26,
+              "unavailable": 6
+            },
+            "usage": {
+              "completion_tokens": 32559,
+              "prompt_tokens": 76373,
+              "total_tokens": 108932
+            },
+            "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+            "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+            "evidence_conditioned_pass": 17,
+            "execution_not_exercised": 0,
+            "roles": {
+              "capability": {
+                "selected": 24,
+                "pass": 14,
+                "valid_reviews": 18
+              },
+              "regression": {
+                "selected": 8,
+                "pass": 3,
+                "valid_reviews": 4
+              }
+            }
+          },
+          "records_sha256": "afd581fdba1049b3e60321b85d01f431c108529cebef97799ce5d5134eeb8b28",
+          "unresolved": [
+            {
+              "id": "intent-development-medication-01",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-02",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-03",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-04",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-preparation-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-04",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-05",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-06",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-02",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            }
+          ]
+        },
+        "deepseek_v4_pro": {
+          "independence": "third family common judge; original answers unchanged",
+          "summary": {
+            "operation": "score",
+            "evaluator_version": "intent-evaluator-9",
+            "selected": 32,
+            "statuses": {
+              "ok": 32
+            },
+            "actual_models": {
+              "deepseek-v4-pro": 32
+            },
+            "usage": {
+              "completion_tokens": 82995,
+              "prompt_tokens": 85826,
+              "total_tokens": 168821
+            },
+            "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+            "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+            "evidence_conditioned_pass": 32,
+            "execution_not_exercised": 0,
+            "roles": {
+              "capability": {
+                "selected": 24,
+                "pass": 24,
+                "valid_reviews": 24
+              },
+              "regression": {
+                "selected": 8,
+                "pass": 8,
+                "valid_reviews": 8
+              }
+            }
+          },
+          "records_sha256": "e8ee256c7b9ec974454f74176cb70373139349e845949f62fbed4305d91b84ee",
+          "unresolved": []
+        }
+      }
+    },
+    "luna6": {
+      "answers": {
+        "operation": "baseline",
+        "evaluator_version": "intent-evaluator-8",
+        "selected": 32,
+        "statuses": {
+          "ok": 32
+        },
+        "actual_models": {
+          "openai/gpt-6-luna": 32
+        },
+        "usage": {
+          "completion_tokens": 19033,
+          "prompt_tokens": 41937,
+          "total_tokens": 60970
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "identical_visible_answers_reused": 32
+      },
+      "answer_file_sha256": "7297779c7aa687a8fd36c9f16575181f087d2347329017bbe2e92bc1393331fb",
+      "reviews": {
+        "opus55": {
+          "independence": "cross family",
+          "summary": {
+            "operation": "score",
+            "evaluator_version": "intent-evaluator-8",
+            "selected": 32,
+            "statuses": {
+              "ok": 21,
+              "evaluator_failure": 11
+            },
+            "actual_models": {
+              "anthropic/claude-opus-5.5": 25,
+              "unavailable": 7
+            },
+            "usage": {
+              "completion_tokens": 25135,
+              "prompt_tokens": 79311,
+              "total_tokens": 104446
+            },
+            "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+            "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+            "evidence_conditioned_pass": 18,
+            "execution_not_exercised": 0,
+            "roles": {
+              "capability": {
+                "selected": 24,
+                "pass": 15,
+                "valid_reviews": 17
+              },
+              "regression": {
+                "selected": 8,
+                "pass": 3,
+                "valid_reviews": 4
+              }
+            }
+          },
+          "records_sha256": "568ecc55bd246f51c96adb13fb69337c8fb33bb8c491122da427d97b6c111a3b",
+          "unresolved": [
+            {
+              "id": "intent-development-medication-01",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-02",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-03",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-04",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-preparation-02",
+              "reason": "Model endpoint returned HTTP 402; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-03",
+              "reason": "Model endpoint returned HTTP 402; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-04",
+              "reason": "Model endpoint returned HTTP 402; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-05",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-06",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-02",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            }
+          ]
+        },
+        "luna6": {
+          "independence": "same family diagnostic",
+          "summary": {
+            "operation": "score",
+            "evaluator_version": "intent-evaluator-8",
+            "selected": 32,
+            "statuses": {
+              "ok": 18,
+              "evaluator_failure": 14
+            },
+            "actual_models": {
+              "openai/gpt-6-luna": 22,
+              "unavailable": 10
+            },
+            "usage": {
+              "completion_tokens": 22403,
+              "prompt_tokens": 54327,
+              "total_tokens": 76730
+            },
+            "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+            "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+            "evidence_conditioned_pass": 14,
+            "execution_not_exercised": 0,
+            "roles": {
+              "capability": {
+                "selected": 24,
+                "pass": 11,
+                "valid_reviews": 14
+              },
+              "regression": {
+                "selected": 8,
+                "pass": 3,
+                "valid_reviews": 4
+              }
+            }
+          },
+          "records_sha256": "df68878f877838868f1701b7af12d32045714c0c5b99f79911d32ac343422983",
+          "unresolved": [
+            {
+              "id": "intent-development-trend-03",
+              "reason": "Model transport or response schema failed"
+            },
+            {
+              "id": "intent-development-medication-01",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-02",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-03",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-medication-04",
+              "reason": "Medication strength/dose descriptors and rubric corrected; requires a new model review"
+            },
+            {
+              "id": "intent-development-documents-06",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-02",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-03",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-04",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-05",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-preparation-06",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-01",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            },
+            {
+              "id": "intent-development-authorization-02",
+              "reason": "Model endpoint returned HTTP 403; body omitted"
+            }
+          ]
+        },
+        "deepseek_v4_pro": {
+          "independence": "third family common judge; original answers unchanged",
+          "summary": {
+            "operation": "score",
+            "evaluator_version": "intent-evaluator-9",
+            "selected": 32,
+            "statuses": {
+              "ok": 32
+            },
+            "actual_models": {
+              "deepseek-v4-pro": 32
+            },
+            "usage": {
+              "completion_tokens": 79752,
+              "prompt_tokens": 71186,
+              "total_tokens": 150938
+            },
+            "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+            "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+            "evidence_conditioned_pass": 29,
+            "execution_not_exercised": 0,
+            "roles": {
+              "capability": {
+                "selected": 24,
+                "pass": 21,
+                "valid_reviews": 24
+              },
+              "regression": {
+                "selected": 8,
+                "pass": 8,
+                "valid_reviews": 8
+              }
+            }
+          },
+          "records_sha256": "49f2022d52cf1bbcc6a303ef8c3071d6d26d2b735bf3764309836f3ef3adf435",
+          "unresolved": []
+        }
+      }
+    }
+  },
+  "common_judge_comparisons": {
+    "opus55": {
+      "left": "opus55",
+      "right": "luna6",
+      "groups": {
+        "capability": {
+          "selected": 24,
+          "joint_valid": 12,
+          "left_only_pass": [
+            "intent-development-trend-01",
+            "intent-development-trend-06"
+          ],
+          "right_only_pass": [],
+          "left_only_facts_pass": [
+            "intent-development-trend-01",
+            "intent-development-trend-06"
+          ],
+          "right_only_facts_pass": [],
+          "left": {
+            "confirmed_pass": 12,
+            "valid_reviews": 12,
+            "unresolved": 12
+          },
+          "right": {
+            "confirmed_pass": 15,
+            "valid_reviews": 17,
+            "unresolved": 7
+          }
+        },
+        "regression": {
+          "selected": 8,
+          "joint_valid": 4,
+          "left_only_pass": [
+            "intent-development-interpretation-02"
+          ],
+          "right_only_pass": [
+            "intent-development-documents-03"
+          ],
+          "left_only_facts_pass": [],
+          "right_only_facts_pass": [],
+          "left": {
+            "confirmed_pass": 3,
+            "valid_reviews": 4,
+            "unresolved": 4
+          },
+          "right": {
+            "confirmed_pass": 3,
+            "valid_reviews": 4,
+            "unresolved": 4
+          }
+        }
+      },
+      "items": [
+        {
+          "id": "intent-development-interpretation-01",
+          "role": "regression",
+          "domain": "interpretation",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-interpretation-02",
+          "role": "regression",
+          "domain": "interpretation",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.6666666666666666
+          }
+        },
+        {
+          "id": "intent-development-trend-01",
+          "role": "capability",
+          "domain": "trend",
+          "task": "conditional_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": false,
+            "fact_fraction": 0.5,
+            "criterion_fraction": 0.5
+          }
+        },
+        {
+          "id": "intent-development-trend-02",
+          "role": "capability",
+          "domain": "trend",
+          "task": "lagged_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-03",
+          "role": "capability",
+          "domain": "trend",
+          "task": "paired_coverage",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-04",
+          "role": "capability",
+          "domain": "trend",
+          "task": "correlation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-05",
+          "role": "capability",
+          "domain": "trend",
+          "task": "trimmed_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-06",
+          "role": "capability",
+          "domain": "trend",
+          "task": "longest_streak",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": false,
+            "fact_fraction": 0.3333333333333333,
+            "criterion_fraction": 0.5
+          }
+        },
+        {
+          "id": "intent-development-trend-07",
+          "role": "capability",
+          "domain": "trend",
+          "task": "observed_weighted_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-08",
+          "role": "capability",
+          "domain": "trend",
+          "task": "personal_baseline",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-09",
+          "role": "capability",
+          "domain": "trend",
+          "task": "conditional_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-10",
+          "role": "capability",
+          "domain": "trend",
+          "task": "lagged_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-11",
+          "role": "capability",
+          "domain": "trend",
+          "task": "paired_coverage",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-12",
+          "role": "capability",
+          "domain": "trend",
+          "task": "correlation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-medication-01",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-medication-02",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-medication-03",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-medication-04",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-documents-01",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-02",
+          "role": "regression",
+          "domain": "documents",
+          "task": "clarify_missing_image",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-03",
+          "role": "regression",
+          "domain": "documents",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-04",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-05",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-06",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-01",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-02",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-03",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-04",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-05",
+          "role": "regression",
+          "domain": "preparation",
+          "task": "appointment_summary",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-06",
+          "role": "regression",
+          "domain": "preparation",
+          "task": "appointment_summary",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-authorization-01",
+          "role": "regression",
+          "domain": "authorization",
+          "task": "resolve_authorization_or_subject",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-authorization-02",
+          "role": "regression",
+          "domain": "authorization",
+          "task": "resolve_authorization_or_subject",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        }
+      ]
+    },
+    "luna6": {
+      "left": "opus55",
+      "right": "luna6",
+      "groups": {
+        "capability": {
+          "selected": 24,
+          "joint_valid": 14,
+          "left_only_pass": [
+            "intent-development-trend-01",
+            "intent-development-trend-04",
+            "intent-development-trend-06"
+          ],
+          "right_only_pass": [
+            "intent-development-trend-07",
+            "intent-development-trend-08",
+            "intent-development-trend-10",
+            "intent-development-trend-12"
+          ],
+          "left_only_facts_pass": [
+            "intent-development-trend-01",
+            "intent-development-trend-06"
+          ],
+          "right_only_facts_pass": [],
+          "left": {
+            "confirmed_pass": 14,
+            "valid_reviews": 18,
+            "unresolved": 6
+          },
+          "right": {
+            "confirmed_pass": 11,
+            "valid_reviews": 14,
+            "unresolved": 10
+          }
+        },
+        "regression": {
+          "selected": 8,
+          "joint_valid": 4,
+          "left_only_pass": [
+            "intent-development-interpretation-02"
+          ],
+          "right_only_pass": [
+            "intent-development-documents-03"
+          ],
+          "left_only_facts_pass": [],
+          "right_only_facts_pass": [],
+          "left": {
+            "confirmed_pass": 3,
+            "valid_reviews": 4,
+            "unresolved": 4
+          },
+          "right": {
+            "confirmed_pass": 3,
+            "valid_reviews": 4,
+            "unresolved": 4
+          }
+        }
+      },
+      "items": [
+        {
+          "id": "intent-development-interpretation-01",
+          "role": "regression",
+          "domain": "interpretation",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-interpretation-02",
+          "role": "regression",
+          "domain": "interpretation",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.6666666666666666
+          }
+        },
+        {
+          "id": "intent-development-trend-01",
+          "role": "capability",
+          "domain": "trend",
+          "task": "conditional_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": false,
+            "fact_fraction": 0.5,
+            "criterion_fraction": 0.5
+          }
+        },
+        {
+          "id": "intent-development-trend-02",
+          "role": "capability",
+          "domain": "trend",
+          "task": "lagged_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-03",
+          "role": "capability",
+          "domain": "trend",
+          "task": "paired_coverage",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-trend-04",
+          "role": "capability",
+          "domain": "trend",
+          "task": "correlation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.5
+          }
+        },
+        {
+          "id": "intent-development-trend-05",
+          "role": "capability",
+          "domain": "trend",
+          "task": "trimmed_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-06",
+          "role": "capability",
+          "domain": "trend",
+          "task": "longest_streak",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": false,
+            "fact_fraction": 0.3333333333333333,
+            "criterion_fraction": 0.5
+          }
+        },
+        {
+          "id": "intent-development-trend-07",
+          "role": "capability",
+          "domain": "trend",
+          "task": "observed_weighted_mean",
+          "left": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.5
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-08",
+          "role": "capability",
+          "domain": "trend",
+          "task": "personal_baseline",
+          "left": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.5
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-09",
+          "role": "capability",
+          "domain": "trend",
+          "task": "conditional_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-10",
+          "role": "capability",
+          "domain": "trend",
+          "task": "lagged_comparison",
+          "left": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.5
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-11",
+          "role": "capability",
+          "domain": "trend",
+          "task": "paired_coverage",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-12",
+          "role": "capability",
+          "domain": "trend",
+          "task": "correlation",
+          "left": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.5
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-medication-01",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-medication-02",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-medication-03",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-medication-04",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-documents-01",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-02",
+          "role": "regression",
+          "domain": "documents",
+          "task": "clarify_missing_image",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-03",
+          "role": "regression",
+          "domain": "documents",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.5
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-04",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-05",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-06",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-01",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-02",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-03",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-04",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-05",
+          "role": "regression",
+          "domain": "preparation",
+          "task": "appointment_summary",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-preparation-06",
+          "role": "regression",
+          "domain": "preparation",
+          "task": "appointment_summary",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-authorization-01",
+          "role": "regression",
+          "domain": "authorization",
+          "task": "resolve_authorization_or_subject",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        },
+        {
+          "id": "intent-development-authorization-02",
+          "role": "regression",
+          "domain": "authorization",
+          "task": "resolve_authorization_or_subject",
+          "left": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          },
+          "right": {
+            "status": "evaluator_failure",
+            "pass": null,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": null
+          }
+        }
+      ]
+    },
+    "deepseek_v4_pro": {
+      "left": "opus55",
+      "right": "luna6",
+      "groups": {
+        "capability": {
+          "selected": 24,
+          "joint_valid": 24,
+          "left_only_pass": [
+            "intent-development-trend-01",
+            "intent-development-trend-05",
+            "intent-development-trend-06"
+          ],
+          "right_only_pass": [],
+          "left_only_facts_pass": [
+            "intent-development-trend-01",
+            "intent-development-trend-06"
+          ],
+          "right_only_facts_pass": [],
+          "left": {
+            "confirmed_pass": 24,
+            "valid_reviews": 24,
+            "unresolved": 0
+          },
+          "right": {
+            "confirmed_pass": 21,
+            "valid_reviews": 24,
+            "unresolved": 0
+          }
+        },
+        "regression": {
+          "selected": 8,
+          "joint_valid": 8,
+          "left_only_pass": [],
+          "right_only_pass": [],
+          "left_only_facts_pass": [],
+          "right_only_facts_pass": [],
+          "left": {
+            "confirmed_pass": 8,
+            "valid_reviews": 8,
+            "unresolved": 0
+          },
+          "right": {
+            "confirmed_pass": 8,
+            "valid_reviews": 8,
+            "unresolved": 0
+          }
+        }
+      },
+      "items": [
+        {
+          "id": "intent-development-interpretation-01",
+          "role": "regression",
+          "domain": "interpretation",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-interpretation-02",
+          "role": "regression",
+          "domain": "interpretation",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-01",
+          "role": "capability",
+          "domain": "trend",
+          "task": "conditional_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": false,
+            "fact_fraction": 0.5,
+            "criterion_fraction": 0.0
+          }
+        },
+        {
+          "id": "intent-development-trend-02",
+          "role": "capability",
+          "domain": "trend",
+          "task": "lagged_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-03",
+          "role": "capability",
+          "domain": "trend",
+          "task": "paired_coverage",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-04",
+          "role": "capability",
+          "domain": "trend",
+          "task": "correlation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-05",
+          "role": "capability",
+          "domain": "trend",
+          "task": "trimmed_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 0.0
+          }
+        },
+        {
+          "id": "intent-development-trend-06",
+          "role": "capability",
+          "domain": "trend",
+          "task": "longest_streak",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": false,
+            "facts_pass": false,
+            "fact_fraction": 0.3333333333333333,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-07",
+          "role": "capability",
+          "domain": "trend",
+          "task": "observed_weighted_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-08",
+          "role": "capability",
+          "domain": "trend",
+          "task": "personal_baseline",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-09",
+          "role": "capability",
+          "domain": "trend",
+          "task": "conditional_mean",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-10",
+          "role": "capability",
+          "domain": "trend",
+          "task": "lagged_comparison",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-11",
+          "role": "capability",
+          "domain": "trend",
+          "task": "paired_coverage",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-trend-12",
+          "role": "capability",
+          "domain": "trend",
+          "task": "correlation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-medication-01",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-medication-02",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-medication-03",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-medication-04",
+          "role": "capability",
+          "domain": "medication",
+          "task": "reconstruct_medication_record",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-01",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-02",
+          "role": "regression",
+          "domain": "documents",
+          "task": "clarify_missing_image",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-03",
+          "role": "regression",
+          "domain": "documents",
+          "task": "bounded_explanation",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-04",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-05",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-documents-06",
+          "role": "capability",
+          "domain": "documents",
+          "task": "reconcile_longitudinal_documents",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-01",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-02",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-03",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-04",
+          "role": "capability",
+          "domain": "preparation",
+          "task": "source_traceable_clinician_handoff",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-05",
+          "role": "regression",
+          "domain": "preparation",
+          "task": "appointment_summary",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-preparation-06",
+          "role": "regression",
+          "domain": "preparation",
+          "task": "appointment_summary",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": true,
+            "fact_fraction": 1.0,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-authorization-01",
+          "role": "regression",
+          "domain": "authorization",
+          "task": "resolve_authorization_or_subject",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          }
+        },
+        {
+          "id": "intent-development-authorization-02",
+          "role": "regression",
+          "domain": "authorization",
+          "task": "resolve_authorization_or_subject",
+          "left": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          },
+          "right": {
+            "status": "ok",
+            "pass": true,
+            "facts_pass": null,
+            "fact_fraction": null,
+            "criterion_fraction": 1.0
+          }
+        }
+      ]
+    }
+  },
+  "independent_verification": {
+    "source_snapshots_checked": 890,
+    "byte_identical_rebuild": true,
+    "patient_packet_overlap": false,
+    "trend_tasks_recomputed_without_production_compute": 16,
+    "trend_facts_checked": 50,
+    "library_layer_new_modules": 0,
+    "clinical_expert_validation": "not performed",
+    "additional_judge_record_identities_checked": 96,
+    "additional_judge_api_attempts": 100,
+    "targeted_tests": 55,
+    "full_source_suite": {
+      "passed": 915,
+      "skipped": 110,
+      "xfailed": 12
+    }
+  },
+  "manual_adjudication": [
+    {
+      "id": "intent-development-trend-01",
+      "classification": "verified answer difference",
+      "expected": "8 qualifying same-local-day pairs, 58.875 bpm",
+      "opus55": "8 pairs; 58.875 bpm",
+      "luna6": "7 pairs; 58.9 bpm; omitted Aug7 and mispaired Aug11",
+      "consequence": "A near-identical rounded mean must not conceal wrong membership or denominator."
+    },
+    {
+      "id": "intent-development-trend-06",
+      "classification": "verified answer difference",
+      "expected": "4 days, 2026-08-14 through 2026-08-17, earliest tied interval",
+      "opus55": "correct interval",
+      "luna6": "2026-08-13 through 2026-08-16 while claiming Shanghai local dates",
+      "consequence": "Correct duration alone does not satisfy date binding."
+    },
+    {
+      "id": "intent-development-trend-05",
+      "classification": "false difference removed",
+      "finding": "Both answers give the correct two excluded dates in different orders. The question imposes no listing order. Evaluator 8 compares an unordered pair with multiplicity; no duplicate date can replace the other."
+    },
+    {
+      "id": "intent-development-medication-03/04",
+      "classification": "rubric defect fixed; corrected packets independently reviewed by DeepSeek",
+      "finding": "Source strength does not by itself establish a per-dose amount. Opus correctly distinguishes these. Facts now explicitly extract recorded strength, and the rubric prohibits inferring a per-dose amount from it. Old verdicts for all four medication cases are excluded from current scores."
+    },
+    {
+      "id": "intent-development-trend-08",
+      "classification": "unresolved evaluator extraction, not an answer error",
+      "finding": "One Opus review extracts 59.29 bpm from a parenthesized calculation, but the directly bound displayed result is 59.3 bpm. Strict unit validation rejects that extraction. A future review can extract the supported rounded quantity; no raw response is edited."
+    }
+  ],
+  "history": {
+    "previous_report_commit": "12a420e6c3fa389dd1574c58f8651bbd4719fb15",
+    "previous_report_url": "https://github.com/saltyfishtree/mirobody/blob/12a420e6c3fa389dd1574c58f8651bbd4719fb15/benchmarks/intent/validation.json",
+    "preceding_release_cases_sha256": "c133736681f19fb554e3512a77392f6bd4845fe30aff475ae2c452c99b0e191e",
+    "preceding_release_audits": "Both modern models originally reviewed 32/32 with no reported issue, but subsequent source inspection found strength/dose ambiguity. Their agreement is not clinical truth. Their corrected medication audits remain unavailable; the later DeepSeek run reviewed all corrected packets.",
+    "artifacts": "All earlier packets, raw responses, failures and source requests are retained privately in separate immutable phase directories; their scores are not mixed into current totals."
+  },
+  "limitations": [
+    "Development set is small and author-visible; this is not an independent leaderboard or population ranking.",
+    "Patient-disjoint held-out tasks are neither author-blind nor template-disjoint and remain uncalled.",
+    "No independent clinical expert or rendered-image audit was performed.",
+    "Text snapshots and supplied histories do not exercise product tools, real permissions or native compaction.",
+    "Some semantic judgments disagree; the report retains both common judges and raw review provenance.",
+    "Earlier OpenRouter cross/self reviews remain incomplete and are not combined with the separate primary DeepSeek common judge. Model disagreement is exploratory and needs item-level adjudication."
+  ],
+  "additional_judge_audit_issues": [
+    {
+      "id": "intent-development-trend-05",
+      "assessments": [
+        {
+          "evidence_ids": [
+            "e16",
+            "e18"
+          ],
+          "id": "rubric_alignment",
+          "reason": "Rubric demands the two highest‑step dates, but expected excluded dates (08‑20, 08‑22) do not match the data (08‑19 and 08‑21 are highest).",
+          "status": "issue"
+        }
+      ]
+    },
+    {
+      "id": "intent-development-trend-11",
+      "assessments": [
+        {
+          "evidence_ids": [
+            "e3",
+            "e4",
+            "e14",
+            "e15"
+          ],
+          "id": "rubric_alignment",
+          "reason": "Expected fact f3 (paired_day_mean_steps) is 9538.5, but the only complete‑pair days are 2026‑08‑06 (4469 steps) and 2026‑08‑16 (4654 steps); their mean is 4561.5. The supplied oracle value does not match the evidence, creating an inconsistency in the expected response.",
+          "status": "issue"
+        }
+      ]
+    },
+    {
+      "id": "intent-development-preparation-05",
+      "assessments": [
+        {
+          "evidence_ids": [],
+          "id": "naturalness",
+          "reason": "Assistant response is missing, so natural wording cannot be assessed.",
+          "status": "not_assessable"
+        },
+        {
+          "evidence_ids": [],
+          "id": "answerability",
+          "reason": "No assistant response to evaluate for answerability.",
+          "status": "not_assessable"
+        },
+        {
+          "evidence_ids": [],
+          "id": "rubric_alignment",
+          "reason": "Without the assistant's summary and questions, rubric alignment cannot be checked.",
+          "status": "not_assessable"
+        },
+        {
+          "evidence_ids": [],
+          "id": "source_sufficiency",
+          "reason": "Source sufficiency requires comparing the assistant's output to the evidence, but the response is absent.",
+          "status": "not_assessable"
+        }
+      ]
+    }
+  ],
+  "additional_judge_adjudication": [
+    {
+      "id": "intent-development-trend-05",
+      "targets": [
+        "audit",
+        "score-luna6:r1",
+        "score-luna6:r2"
+      ],
+      "finding": "false_positive_timezone_conversion",
+      "resolution": "Gold and both answers use the explicitly declared Asia/Shanghai day correctly. The audit and Luna score incorrectly use the UTC calendar dates. Raw model verdicts remain unchanged.",
+      "evidence": [
+        {
+          "evidence_id": "e18",
+          "value": 11298,
+          "utc": "2026-08-21T23:59:00+00:00",
+          "local": "2026-08-22"
+        },
+        {
+          "evidence_id": "e16",
+          "value": 10786,
+          "utc": "2026-08-19T23:59:00+00:00",
+          "local": "2026-08-20"
+        }
+      ],
+      "independent_calculation": {
+        "first_sum": 63317,
+        "first_count": 14,
+        "first_mean": 4522.642857142857,
+        "second_sum": 81191,
+        "second_count": 12,
+        "second_mean": 6765.916666666667
+      },
+      "adjudicated_luna_pass": true,
+      "adjudicator": "coding-agent inspection of supplied synthetic timestamps and arithmetic; no clinical expertise claim"
+    },
+    {
+      "id": "intent-development-trend-11",
+      "targets": [
+        "audit"
+      ],
+      "finding": "false_positive_calendar_day_join",
+      "resolution": "The audit joins UTC calendar dates rather than the declared Asia/Shanghai local days. Independent grouping of visible timestamps confirms the supplied oracle. Raw audit retained.",
+      "independent_calculation": {
+        "timezone": "Asia/Shanghai",
+        "pairs": [
+          {
+            "local_date": "2026-08-06",
+            "steps": 16222,
+            "step_evidence": [
+              "e2"
+            ],
+            "weight_evidence": [
+              "e3"
+            ]
+          },
+          {
+            "local_date": "2026-08-16",
+            "steps": 2855,
+            "step_evidence": [
+              "e13"
+            ],
+            "weight_evidence": [
+              "e14"
+            ]
+          }
+        ],
+        "paired_mean": 9538.5,
+        "paired_count": 2,
+        "unpaired_count": 26,
+        "gold": {
+          "complete_pair_days": 2.0,
+          "calendar_days_without_a_pair": 26.0,
+          "paired_day_mean_steps": 9538.5
+        }
+      },
+      "adjudicator": "coding-agent timestamp and arithmetic verification; no clinical expertise claim"
+    },
+    {
+      "id": "intent-development-medication-02",
+      "targets": [
+        "score-opus55:r1",
+        "score-luna6:r1"
+      ],
+      "finding": "false_negative_unsupported_per_dose_amount",
+      "resolution": "Both answers infer a per-dose amount from strength despite the explicit rubric prohibition. The initial record has no per-dose instruction or tablet count; the later dose instruction is future-dated and cannot establish the earlier plan. Keep the raw model passes, but adjudicate r1 not_met for both.",
+      "independent_calculation": {
+        "as_of": "2023-01-27",
+        "initial_record": {
+          "strength": "500 mg",
+          "frequency": "bid",
+          "start": "2022-09-09"
+        },
+        "later_change": {
+          "date": "2023-01-28",
+          "dose_text_en": "500 mg three times daily with meals",
+          "dose_text_zh": "每日3次，每次500mg，随餐服用",
+          "frequency": "tid",
+          "strength": "500 mg"
+        },
+        "rule": "Reconstructs each requested version's recorded strength, frequency and effective date. Keeps any explicit dose instructions separate from strength; does not infer a per-dose amount from strength alone."
+      },
+      "answer_excerpts": {
+        "opus55": "规格/单次剂量 | 500 mg; 单次剂量按“规格 500 mg、每次1片”来理解，记录里没有单独写每次的片数。",
+        "luna6": "剂量：每次500 mg"
+      },
+      "adjudicated_pass": {
+        "opus55": false,
+        "luna6": false
+      },
+      "adjudicator": "coding-agent source-contract inspection; no clinical treatment judgment"
+    },
+    {
+      "id": "intent-development-trend-06",
+      "targets": [
+        "score-luna6:r1"
+      ],
+      "finding": "false_negative_semantic_date_check_caught_by_executable_facts",
+      "resolution": "The LLM criterion says the UTC interval is correct, but source timestamps in Asia/Shanghai require Aug14–17. Extracted answer dates Aug13–16 fail executable fact checks, so the raw overall failure remains correct. No score change.",
+      "adjudicator": "coding-agent visible timestamp verification"
+    },
+    {
+      "id": "intent-development-preparation-05",
+      "targets": [
+        "audit"
+      ],
+      "finding": "audit_task_confusion",
+      "resolution": "The reviewer marked all audit dimensions not_assessable because no assistant answer was supplied. This operation audits the question/evidence/rubric before answering, so an assistant answer is not an input. Inspection confirms a task question, three visible results and matching rubric. Preserve the raw abstention; it does not establish a fixture defect or medical validation.",
+      "visible_evidence_count": 3,
+      "question": "明日受診します。この検査結果を医師に見せる短いメモと、聞いておくとよい質問2つにまとめてください。診断は決めつけないでください。",
+      "adjudicator": "coding-agent task-contract inspection"
+    },
+    {
+      "id": "intent-development-medication-04",
+      "targets": [
+        "score-luna6:r1"
+      ],
+      "finding": "terminology_boundary_not_counted_as_discrimination",
+      "resolution": "The answer labels a recorded strength as planned dose without explicitly saying per administration. The question itself uses dose wording. This is less explicit than medication02; keep it as a terminology concern and do not manufacture an extra confirmed model difference.",
+      "adjudicator": "coding-agent conservative evidence adjudication"
+    }
+  ],
+  "source_adjudicated_comparison": {
+    "left": "opus55",
+    "right": "luna6",
+    "scope": "Coding-agent source-contract adjudication over the raw DeepSeek common judge. Raw verdicts remain unchanged and separately reported; not clinical expert validation.",
+    "groups": {
+      "capability": {
+        "selected": 24,
+        "joint_valid": 24,
+        "left_only_pass": [
+          "intent-development-trend-01",
+          "intent-development-trend-06"
+        ],
+        "right_only_pass": [],
+        "left_only_facts_pass": [
+          "intent-development-trend-01",
+          "intent-development-trend-06"
+        ],
+        "right_only_facts_pass": [],
+        "left": {
+          "confirmed_pass": 23,
+          "valid_reviews": 24,
+          "unresolved": 0
+        },
+        "right": {
+          "confirmed_pass": 21,
+          "valid_reviews": 24,
+          "unresolved": 0
+        }
+      },
+      "regression": {
+        "selected": 8,
+        "joint_valid": 8,
+        "left_only_pass": [],
+        "right_only_pass": [],
+        "left_only_facts_pass": [],
+        "right_only_facts_pass": [],
+        "left": {
+          "confirmed_pass": 8,
+          "valid_reviews": 8,
+          "unresolved": 0
+        },
+        "right": {
+          "confirmed_pass": 8,
+          "valid_reviews": 8,
+          "unresolved": 0
+        }
+      }
+    },
+    "changes": [
+      {
+        "answer_model": "opus55",
+        "id": "intent-development-medication-02",
+        "raw_pass": true,
+        "adjudicated_pass": false,
+        "adjustments": [
+          {
+            "criterion": "r1",
+            "before": "met",
+            "after": "not_met",
+            "proof": "adjudication.json: medication-02",
+            "basis": "source contract; no clinical treatment judgment"
+          }
+        ]
+      },
+      {
+        "answer_model": "luna6",
+        "id": "intent-development-trend-05",
+        "raw_pass": false,
+        "adjudicated_pass": true,
+        "adjustments": [
+          {
+            "criterion": "r1/r2",
+            "before": "not_met",
+            "after": "met",
+            "proof": "adjudication.json: trend-05",
+            "basis": "visible timestamps and arithmetic"
+          }
+        ]
+      },
+      {
+        "answer_model": "luna6",
+        "id": "intent-development-medication-02",
+        "raw_pass": true,
+        "adjudicated_pass": false,
+        "adjustments": [
+          {
+            "criterion": "r1",
+            "before": "met",
+            "after": "not_met",
+            "proof": "adjudication.json: medication-02",
+            "basis": "source contract; no clinical treatment judgment"
+          }
+        ]
+      }
+    ],
+    "summaries": {
+      "opus55": {
+        "operation": "score",
+        "evaluator_version": "intent-evaluator-9",
+        "selected": 32,
+        "statuses": {
+          "ok": 32
+        },
+        "actual_models": {
+          "deepseek-v4-pro": 32
+        },
+        "usage": {
+          "completion_tokens": 82995,
+          "prompt_tokens": 85826,
+          "total_tokens": 168821
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "evidence_conditioned_pass": 31,
+        "execution_not_exercised": 0,
+        "roles": {
+          "capability": {
+            "selected": 24,
+            "pass": 23,
+            "valid_reviews": 24
+          },
+          "regression": {
+            "selected": 8,
+            "pass": 8,
+            "valid_reviews": 8
+          }
+        }
+      },
+      "luna6": {
+        "operation": "score",
+        "evaluator_version": "intent-evaluator-9",
+        "selected": 32,
+        "statuses": {
+          "ok": 32
+        },
+        "actual_models": {
+          "deepseek-v4-pro": 32
+        },
+        "usage": {
+          "completion_tokens": 79752,
+          "prompt_tokens": 71186,
+          "total_tokens": 150938
+        },
+        "scope": "evidence-conditioned; no product-harness, OCR, authorization or native compaction claim",
+        "cases_sha256": "a0e9128cb366f5eb5e4f447a0272fca427b1cd51e9e59f871a29b00246653cae",
+        "evidence_conditioned_pass": 29,
+        "execution_not_exercised": 0,
+        "roles": {
+          "capability": {
+            "selected": 24,
+            "pass": 21,
+            "valid_reviews": 24
+          },
+          "regression": {
+            "selected": 8,
+            "pass": 8,
+            "valid_reviews": 8
+          }
+        }
+      }
+    }
+  },
+  "discrimination_assessment": {
+    "confirmed_capability_differences": [
+      "intent-development-trend-01",
+      "intent-development-trend-06"
+    ],
+    "shared_source_contract_failure": "intent-development-medication-02",
+    "conclusion": "Near ceiling for Opus: 23/24 capability after source adjudication. Only two confirmed differences, both in date alignment. Keep as regression foundation; not sufficient alone to measure frontier-model harness improvements.",
+    "next_iteration": "Keep the 32-task size. Predeclare six challenge replacements within the 24 capability quota, centered on corrected documents/date roles, overlapping device uploads/local-day changes, dose-strength/version/intake separation, sparse cross-signal joins, constrained source-traceable handoffs and actual native context-summary retention. Validate independent executable keys before model calls; do not silently drop items based on winners.",
+    "current_data_unchanged": true
+  }
+}
