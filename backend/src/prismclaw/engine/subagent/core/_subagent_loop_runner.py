@@ -145,7 +145,7 @@ async def run_subagent_turn_loop(
 
         await asyncio.sleep(0)
         logger.info(
-            "llm_request_start session_id=%s subagent=%s turn=%d model=%s tools=%d",
+            "llm_request_start session_id=%s subagent=%s turn=%d model=%s tool_count=%d",
             sub_ctx.session_id,
             manifest.name,
             s.iteration + 1,

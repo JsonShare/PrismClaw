@@ -8,7 +8,6 @@ from prismclaw.engine.state.turn_state import (
     CanonicalDecisionState,
     ForkPolicyDecision,
     MemoryHintPolicy,
-    PermissionDecision,
     ProviderCapabilityProfile,
     ReplacementState,
     RequestAssemblyManifest,
@@ -149,23 +148,6 @@ def _migrate_legacy_canonical_decision_state(payload: dict[str, Any]) -> dict[st
         legacy_key="tool_visibility_decision",
     )
 
-    permission_defaults = PermissionDecision().model_dump(mode="json")
-    permission_payload = payload.get("permission_decision")
-    if isinstance(permission_payload, dict):
-        permission_decision = _merge_defaults(permission_defaults, permission_payload)
-    else:
-        permission_decision = {
-            **permission_defaults,
-            "permission_tier": _coerce_string(
-                payload.get("permission_tier"),
-                default=permission_defaults["permission_tier"],
-            ),
-            "source": _coerce_string(
-                payload.get("permission_source"),
-                default=permission_defaults["source"],
-            ),
-        }
-
     sandbox_defaults = SandboxPolicyDecision().model_dump(mode="json")
     sandbox_payload = payload.get("sandbox_policy_decision")
     if isinstance(sandbox_payload, dict):
@@ -183,7 +165,6 @@ def _migrate_legacy_canonical_decision_state(payload: dict[str, Any]) -> dict[st
         ),
         "provider_capability_profile": provider_profile,
         "tool_governance_state": tool_governance,
-        "permission_decision": permission_decision,
         "sandbox_policy_decision": sandbox_policy_decision,
         "policy_latches": payload.get("policy_latches")
         if isinstance(payload.get("policy_latches"), dict)
@@ -476,7 +457,6 @@ def _migrate_or_build_capability_decision_bundle(
     default_bundle = CapabilityDecisionBundle.from_contract(
         provider_capability_profile=canonical.provider_capability_profile,
         tool_governance=canonical.tool_governance_state,
-        permission=canonical.permission_decision,
         sandbox_policy=canonical.sandbox_policy_decision,
         memory_hint_policy=MemoryHintPolicy.from_manifest(manifest),
         fork_policy=ForkPolicyDecision.from_manifest(manifest),

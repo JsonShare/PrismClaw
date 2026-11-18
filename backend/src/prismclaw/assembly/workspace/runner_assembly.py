@@ -207,7 +207,7 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
             "timeouts": settings.agent.timeouts.model_dump(),
             "retry": settings.agent.retry.model_dump(),
             "run_loop": settings.agent.run_loop.model_dump(),
-            "effort": settings.agent.effort.model_dump(),
+            "budget": settings.agent.budget.model_dump(),
             "vision": {
                 "model": settings.vision.model,
                 "api_key": settings.vision.api_key,

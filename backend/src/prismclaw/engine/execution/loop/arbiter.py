@@ -125,7 +125,6 @@ class RunContext:
     tree: Any = None
     request: Any = None
     snapshot: Any = None
-    audit_store: Any = None
     abort_event: Any = None
     hotpath: Any = None
     terminated_by: TerminalReason | None = None

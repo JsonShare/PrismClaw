@@ -224,9 +224,6 @@ class HookEvent(str, Enum):
     # 环境
     FILE_CHANGED = "file_changed"
     CWD_CHANGED = "cwd_changed"
-    # 权限
-    PERMISSION_REQUEST = "permission_request"
-    PERMISSION_DENIED = "permission_denied"
 
 
 # ── HookDispatcher ───────────────────────────────────────────────────────────
@@ -445,9 +442,6 @@ def _normalize_hook_event_name(event_name: str) -> HookEvent | None:
         # 环境
         "filechanged": HookEvent.FILE_CHANGED,
         "cwdchanged": HookEvent.CWD_CHANGED,
-        # 权限
-        "permissionrequest": HookEvent.PERMISSION_REQUEST,
-        "permissiondenied": HookEvent.PERMISSION_DENIED,
     }
     return mapping.get(normalized)
 
@@ -486,7 +480,7 @@ async def _dispatch_pre_tool_hooks(
     最小闭环语义：
     - ``permission_decision == DENY`` 或通用 ``decision == BLOCK`` → 拒绝该调用；
     - ``ALLOW`` 不覆盖审批门禁（只追加拒绝，从不移除）；
-    - ``ASK`` 暂不路由，留给既有 tool_approval_hook 通道（阶段二处理）。
+    - ``ASK`` 暂不路由（无审批通道），仅记录。
     """
     denied: dict[str, str] = {}
     for parsed in parsed_calls:

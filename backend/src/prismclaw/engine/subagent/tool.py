@@ -10,11 +10,9 @@ The parent's classifier cannot reliably know what the sub-agent will do, so we
 pessimistically classify the spawn itself as write-class.
 
 Why ``read_only_allowed = True``:
-Sub-agent spawning is allowed in read-only (Chat) mode because the spawned
-sub-agent inherits the parent's ``permission_tier`` and its own
-``ReadOnlyPermissionReducer`` blocks all write tools before the LLM sees them.
-This provides a double-guarantee: spawn is allowed, but the sub-agent cannot
-actually mutate files in read-only mode.
+Spawning a sub-agent is not itself a write. The spawned sub-agent inherits the
+parent's permission traits and is governed by the same reducers, including
+``ServerReadOnlyReducer`` for MCP servers configured as read-only.
 """
 
 from __future__ import annotations
@@ -60,8 +58,8 @@ _AGENT_ITEM_SCHEMA: dict[str, Any] = {
         "agent_name": {
             "type": "string",
             "description": (
-                "子代理角色名。核心子代理见 `<subagents>`，插件子代理由 "
-                "`subagent_search` 检索得到；名称必须逐字一致，区分大小写。"
+                "子代理角色名，须与 `<subagents>` 或 `subagent_search` 返回的名称"
+                "逐字一致（区分大小写）。"
             ),
         },
         "task": {
@@ -72,27 +70,26 @@ _AGENT_ITEM_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["one_shot", "persistent"],
             "description": (
-                "生命周期：'one_shot' = 完成后关闭；'persistent' = 保留身份与子会话，"
-                "可通过 subagent_control 继续发送消息。默认：'one_shot'。"
+                "'one_shot' 完成后关闭（默认）；'persistent' 保留身份与子会话，"
+                "可用 subagent_control 继续发送消息。"
             ),
         },
         "request_id": {
             "type": "string",
-            "description": "可选的幂等请求标识；重试同一请求时保持不变。",
+            "description": "可选幂等标识；重试同一请求时保持不变。",
         },
         "model": {
             "type": "string",
             "description": (
-                "可选的、针对该子代理的模型覆盖。若省略，则使用代理清单中的默认模型。"
-                "在并行执行时，可用此项为不同子代理分配不同模型。"
+                "可选：覆盖该子代理使用的模型；省略则用代理清单默认模型，"
+                "并行时可分别为各子代理指定不同模型。"
             ),
         },
         "context_mode": {
             "type": "string",
             "enum": ["inherit", "isolated"],
             "description": (
-                "上下文模式：'inherit' = 继承父级上下文；"
-                "'isolated' = 不携带任何上下文。默认：'isolated'。"
+                "'inherit' 继承父级上下文；'isolated' 不携带上下文（默认）。"
             ),
         },
         "context_snapshot": {
@@ -115,26 +112,23 @@ _PARAMETERS_TEMPLATE: dict[str, Any] = {
             "minItems": 1,
             "maxItems": 8,
             "description": (
-                "要派生的子代理列表。每个代理各自执行一项独立任务。"
-                "可使用多个代理，在不同模型或不同上下文之间并行推进工作。"
+                "要派生的子代理列表（1–8 个，每个执行一项独立任务）。"
             ),
         },
         "execution_mode": {
             "type": "string",
             "enum": ["sync", "parallel"],
             "description": (
-                "'sync' = 顺序执行各代理，逐个等待完成；"
-                "'parallel' = 并发执行全部代理，等待全部完成。"
-                "默认：'parallel'。仅在 dispatch_mode='now' 时生效。"
+                "'sync' 顺序执行并逐个等待；'parallel' 并发执行并等待全部（默认）。"
+                "仅在 dispatch_mode='now' 时生效。"
             ),
         },
         "dispatch_mode": {
             "type": "string",
             "enum": ["now", "background"],
             "description": (
-                "'now' = 立即执行并等待全部结果；"
-                "'background' = 立即返回 task_id，子代理在后台继续执行，"
-                "完成状态会自动更新。默认：'now'。"
+                "'now' 立即执行并等待全部结果（默认）；"
+                "'background' 立即返回 task_id，子代理在后台继续。"
             ),
         },
     },
@@ -463,7 +457,7 @@ class SubAgentTool:
 
         if background:
             try:
-                task_id, launch_error = await self._executor.launch_background(
+                task_id, agent_id, launch_error = await self._executor.launch_background(
                     manifest,
                     task,
                     child_context,
@@ -472,7 +466,7 @@ class SubAgentTool:
                 )
             except Exception as exc:
                 logger.exception("subagent.background.launch_failed name=%s", agent_name)
-                task_id, launch_error = None, f"{type(exc).__name__}: {exc}"
+                task_id, agent_id, launch_error = None, None, f"{type(exc).__name__}: {exc}"
             self._emit_spawn_audit(
                 context=child_context,
                 manifest=manifest,
@@ -489,6 +483,7 @@ class SubAgentTool:
                 "agent_name": agent_name,
                 "outcome": "background" if task_id is not None else "error",
                 "task_id": task_id,
+                "agent_id": agent_id,
                 "error_message": launch_error,
                 "tool_result": None,
             }
@@ -803,23 +798,20 @@ class SubAgentTool:
         if launched:
             lines.append(f"已派出 {len(launched)} 个后台子任务：")
             for r in launched:
-                identity = ""
-                if r.get("agent_id"):
-                    identity = (
-                        f" | agent_id={r['agent_id']} | run_id={r.get('run_id') or ''}"
-                        f" | lifecycle={r.get('lifecycle') or 'one_shot'}"
-                    )
                 lines.append(
-                    f"- {r['task_id']} {r['agent_name']}（进行中）{identity}"
+                    f"- {r['task_id']} {r['agent_name']}（进行中）"
+                    f" | agent_id={r.get('agent_id') or ''}"
+                    f" | run_id={r.get('run_id') or ''}"
+                    f" | lifecycle={r.get('lifecycle') or 'one_shot'}"
                 )
             if any(r.get("collaboration_managed") for r in launched):
                 lines.append(
-                    "完成状态会自动更新；运行结果用 check_subagent_task 获取。"
-                    "状态查询、追加消息、中断、恢复和关闭统一使用 subagent_control。"
+                    "完成状态会自动更新；状态查询、追加消息、中断、恢复和关闭统一使用"
+                    " subagent_control，并同时提供 agent_id 与 task_id 作为组合寻址键。"
                 )
             else:
                 lines.append(
-                    "完成状态会自动更新；结果用 check_subagent_task 获取，停止用 cancel_task。"
+                    "完成状态会自动更新；结果会在任务结束后回到本会话。"
                 )
         if failed:
             lines.append("未派出：")
@@ -933,9 +925,8 @@ class SubAgentTool:
                 "（当前未安装任何角色；无清单存在时，该工具会对模型隐藏。）"
             )
         background_hint = (
-            "``dispatch_mode='background'`` 时立即返回 task_id，子代理在后台继续"
-            "执行：派发后立即交还控制权，不要自行等待；完成状态会自动更新，"
-            "任务未完成时不得综合其结果。"
+            "``dispatch_mode='background'`` 时立即返回 task_id，"
+            "派发后不要等待，完成前不得综合其结果。"
             if self._allow_background
             or (self._collaboration is not None and self._allow_persistent_background)
             else ""
@@ -949,8 +940,6 @@ class SubAgentTool:
         )
         return (
             "派生一个专门的子代理角色来委派独立自洽的任务。"
-            "子代理在与父级相同的权限层级和沙箱中、以隔离上下文运行。"
-            "可用的代理由运行时能力增量面单独投影。"
             + lifecycle_hint
             + background_hint
         )
@@ -995,9 +984,6 @@ class SubAgentTool:
                 payload["preload_skills"] = [
                     item for item in preload_skills if isinstance(item, str) and item
                 ]
-            tier = context.mode
-            if tier is not None:
-                payload["tier_inherited"] = tier
             batch_id = context.progress_batch_id
             if batch_id is not None:
                 payload["progress_batch_id"] = batch_id

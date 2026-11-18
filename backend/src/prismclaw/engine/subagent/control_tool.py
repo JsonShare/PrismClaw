@@ -26,10 +26,10 @@ logger = logging.getLogger(__name__)
 class SubagentControlTool:
     name = "subagent_control"
     description = (
-        "管理当前主会话拥有的子代理。send 向 persistent Agent 追加消息；"
-        "status/list 查询持久状态；interrupt 在安全边界中断；"
-        "resume 从中断或恢复阻断状态创建新 attempt；close 永久关闭。"
-        "confirm_recovery=true 仅表示接受未决工具副作用的不确定性，不表示副作用已回滚。"
+        "管理当前主会话拥有的子代理。"
+        "寻址使用 (agent_id, task_id) 组合，除 list 外两个键都必须提供；"
+        "list 只按 agent_id 过滤，不接受 task_id。"
+        "confirm_recovery=true 表示接受未决副作用的不确定性，不代表已回滚。"
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -40,7 +40,17 @@ class SubagentControlTool:
             },
             "agent_id": {
                 "type": "string",
-                "description": "sub_agent 返回的完整 ag: 标识；list 不需要。",
+                "description": (
+                    "sub_agent 返回的完整 ag: 标识；除 list 外必须与 task_id 同时提供。"
+                    "list 时作为可选的单代理过滤条件。"
+                ),
+            },
+            "task_id": {
+                "type": "string",
+                "description": (
+                    "sub_agent 后台派发返回的 pt: 任务标识；除 list 外必须与 agent_id "
+                    "同时提供，二者组合定位一个 Run。list 不接受该参数。"
+                ),
             },
             "content": {
                 "type": "string",
@@ -93,23 +103,33 @@ class SubagentControlTool:
         action = args.get("action")
         if action not in {"send", "status", "list", "interrupt", "resume", "close"}:
             return error_result(call_id, f"subagent_control：无效 action {action!r}")
-        agent_id = str(args.get("agent_id") or "").strip()
-        if action != "list" and not agent_id:
-            return error_result(call_id, "subagent_control：缺少必填参数 'agent_id'")
+        agent_id = ""
 
         try:
             if action == "list":
+                if str(args.get("task_id") or "").strip():
+                    return error_result(
+                        call_id,
+                        "subagent_control：action='list' 不接受 'task_id'",
+                    )
+                filter_agent_id = str(args.get("agent_id") or "").strip()
                 agents = await self._collaboration.list(
                     session_id=context.session_id,
                     lifecycle=args.get("lifecycle"),
                     status=args.get("status"),
                 )
+                if filter_agent_id:
+                    agents = [
+                        agent for agent in agents
+                        if agent.agent_id == filter_agent_id
+                    ]
                 payload = [agent.model_dump(mode="json") for agent in agents]
                 return text_result(
                     call_id,
                     f"当前会话共有 {len(agents)} 个符合条件的子代理。",
                     metadata={"agents": payload},
                 )
+            agent_id, _ = await self._resolve_composite(args, context)
             if action == "status":
                 payload = await self._collaboration.status(
                     session_id=context.session_id,
@@ -182,6 +202,51 @@ class SubagentControlTool:
                 call_id,
                 f"subagent_control：{type(exc).__name__}: {exc}",
             )
+
+    async def _resolve_composite(
+        self,
+        args: dict[str, Any],
+        context: ToolContext,
+    ) -> tuple[str, str]:
+        """校验并返回 ``(agent_id, task_id)`` 组合。
+
+        ``(agent_id, task_id)`` 组合唯一标识一个 Run：agent 可以有多个 task，
+        但一个 task 只属于一个 agent。非 list 动作必须同时提供两个键，
+        并能在当前会话的并行任务记录中找到该组合。
+        """
+        agent_id = str(args.get("agent_id") or "").strip()
+        task_id = str(args.get("task_id") or "").strip()
+        if not agent_id or not task_id:
+            missing = "agent_id" if not agent_id else "task_id"
+            raise SubagentCollaborationError(
+                f"action={args.get('action')!r} 需要同时提供 'agent_id' 与 "
+                f"'task_id'（缺少 {missing}）"
+            )
+
+        store = context.task_runtime.parallel_task_store
+        if store is None:
+            raise SubagentCollaborationError(
+                "当前会话缺少并行任务存储，无法按组合键定位子代理任务"
+            )
+        record = await store.get(
+            session_id=context.session_id,
+            agent_id=agent_id,
+            task_id=task_id,
+        )
+        if record is not None:
+            return agent_id, task_id
+
+        records = await store.list_for_session(session_id=context.session_id)
+        owner = next((item for item in records if item.task_id == task_id), None)
+        if owner is not None:
+            raise SubagentCollaborationError(
+                f"task_id {task_id!r} 属于 agent {owner.agent_id!r}，"
+                f"与提供的 agent_id {agent_id!r} 不匹配"
+            )
+        raise SubagentCollaborationError(
+            f"当前会话中未找到 (agent_id={agent_id!r}, task_id={task_id!r}) "
+            "对应的子代理任务"
+        )
 
     async def _owned_agent(self, session_id: str, agent_id: str) -> AgentSessionRecord:
         agent = await self._collaboration.records.get_session(

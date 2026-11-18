@@ -92,12 +92,6 @@ export interface PreflightProbeResult {
   workspace_root?: string | null
   mentioned_paths: string[]
   existing_paths: string[]
-  recovery_targets: string[]
-  touched_roots: string[]
-  workspace_file_count: number
-  workspace_dir_count: number
-  code_file_count: number
-  git_dirty_paths: string[]
   critical_workspace_paths: string[]
   baseline_risk: 'normal' | 'high'
   signals: ProbeSignal[]
@@ -107,7 +101,7 @@ export interface PreflightProbeResult {
 export interface RecoveryProbeResult {
   probe_id: string
   workspace_root?: string | null
-  baseline_source: 'preflight_probe' | 'none'
+  baseline_source: 'preflight_probe' | 'task_spec_text' | 'none'
   status: 'ready' | 'degraded' | 'blocked'
   checked_paths: string[]
   missing_paths: string[]
@@ -148,7 +142,6 @@ export interface TaskRuntimeStateRecord {
   workspace_id?: string | null
   state:
     | 'intaking'
-    | 'clarifying'
     | 'awaiting_confirmation'
     | 'awaiting_risk_confirmation'
     | 'executing'
@@ -156,11 +149,8 @@ export interface TaskRuntimeStateRecord {
     | 'resuming'
     | 'completed'
     | 'blocked'
-    | 'cancelled'
   state_version: number
   latest_review_decision_id?: string | null
-  risk_level?: string | null
-  confirmation_required: boolean
   pending_confirmation_reason?: string | null
   checkpoint_cursor?: string | null
   last_mutation_id?: string | null

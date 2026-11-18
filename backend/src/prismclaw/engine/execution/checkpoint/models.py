@@ -32,6 +32,8 @@ class ResumeDisposition(str, Enum):
 class RetryState(BaseModel):
     reasoning: int = 0
     empty: int = 0
+    # 文本化工具调用（DSML 标记落进 content）的重试计数，与 empty 同族。
+    tool_markup: int = 0
 
 
 class RecoveryState(BaseModel):

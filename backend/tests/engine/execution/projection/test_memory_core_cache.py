@@ -28,38 +28,38 @@ class TestContentKey:
 
 class TestMemoryCoreCacheKey:
     def test_key_is_run_scoped_stable_inputs_only(self):
-        # Step 2 归位：键只含 Run 级稳定输入（session/task/prompt/mode/压缩产物），
+        # Step 2 归位：键只含 Run 级稳定输入（session/task/prompt/request_mode/压缩产物），
         # 逐轮消息增量与逐轮 history_budget 均不参与。
         base = memory_core_cache_key(
             session_id="s",
             task_id="t",
             prompt="p",
-            request_mode="work",
+            request_mode="follow_up",
             history_artifact_id=None,
         )
         same = memory_core_cache_key(
             session_id="s",
             task_id="t",
             prompt="p",
-            request_mode="work",
+            request_mode="follow_up",
             history_artifact_id=None,
         )
         assert base == same
 
     def test_sensitive_to_run_level_inputs_and_artifact(self):
-        def key(*, prompt="p", artifact=None, task_id="t", mode="work"):
+        def key(*, prompt="p", artifact=None, task_id="t", request_mode="follow_up"):
             return memory_core_cache_key(
                 session_id="s",
                 task_id=task_id,
                 prompt=prompt,
-                request_mode=mode,
+                request_mode=request_mode,
                 history_artifact_id=artifact,
             )
 
         base = key()
         assert base != key(prompt="p2")  # 任务变化 → 重算
         assert base != key(task_id="t2")  # 任务标识变化 → 重算
-        assert base != key(mode="chat")  # 模式变化 → 重算
+        assert base != key(request_mode="fast_path")  # 请求模式变化 → 重算
         assert base != key(artifact="art-1")  # 历史压缩产物变化（唯一失效事件）→ 重算
 
 

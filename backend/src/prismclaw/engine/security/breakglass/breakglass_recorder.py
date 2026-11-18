@@ -1,16 +1,15 @@
-"""P4-SEC-01：BreakGlass 录屏 — MediaRecorder 分片 + WORM 哈希链绑定。
+"""P4-SEC-01：BreakGlass 录屏 — MediaRecorder 分片 + 哈希链绑定。
 
 当 Break-Glass 触发时，自动开启录屏记录操作过程。
 
 核心机制：
   1. 分片录制：每 N 秒切割一个分片，避免单文件过大
-  2. WORM 哈希链：每个分片包含前一分片的 SHA256，与审计日志同构
+  2. 哈希链：每个分片包含前一分片的 SHA256，与审计日志同构
   3. 分片索引：记录所有分片的 hash + 偏移，用于完整性校验
   4. 24h 完整性验证：回放后验证分片哈希链 100% 连续
 
 存储目标：
-  - S3 Object Lock（Compliance Mode）：分片 + 索引不可删
-  - 本地缓冲：S3 不可用时降级本地存储
+  - 本地存储（默认 LocalRecordingStorage）：分片 + 索引落盘
 """
 from __future__ import annotations
 
@@ -38,7 +37,7 @@ class RecordingChunk:
     size_bytes: int             # 分片大小
     content_hash: str           # 分片内容 SHA256
     prev_chunk_hash: str        # 前一分片 hash（哈希链）
-    storage_path: str = ""      # S3 / 本地路径
+    storage_path: str = ""      # 本地路径
 
 
 @dataclass
@@ -135,7 +134,7 @@ class LocalRecordingStorage:
 class BreakGlassRecorder:
     """BreakGlass 录屏记录器。
 
-    分片录制 + WORM 哈希链绑定 + 分片索引。
+    分片录制 + 分片索引。
     验收：24h 后分片哈希链 100% 连续。
     """
 
@@ -144,11 +143,9 @@ class BreakGlassRecorder:
         *,
         storage: RecordingStorage | None = None,
         chunk_interval_seconds: int = 60,  # 每 60 秒切割一个分片
-        worm_audit: Any = None,
     ) -> None:
         self._storage = storage or LocalRecordingStorage()
         self._chunk_interval = chunk_interval_seconds
-        self._worm_audit = worm_audit
         # 活跃录制会话：breakglass_token → RecordingIndex
         self._active_sessions: dict[str, RecordingIndex] = {}
         # 分片缓冲：breakglass_token → list[bytes]
@@ -167,13 +164,6 @@ class BreakGlassRecorder:
         )
         self._active_sessions[breakglass_token] = index
         self._chunk_buffers[breakglass_token] = []
-
-        if self._worm_audit is not None:
-            self._worm_audit.log(
-                session_id,
-                "recording_started",
-                {"breakglass_token": breakglass_token, "session_id": session_id},
-            )
 
         logger.info("BreakGlassRecorder: started recording for token %s", breakglass_token)
         return index
@@ -337,18 +327,6 @@ class BreakGlassRecorder:
 
         # 上传索引
         await self._storage.upload_index(index)
-
-        if self._worm_audit is not None:
-            self._worm_audit.log(
-                index.session_id,
-                "recording_stopped",
-                {
-                    "breakglass_token": breakglass_token,
-                    "total_chunks": index.total_chunks,
-                    "total_bytes": index.total_bytes,
-                    "index_hash": index.index_hash,
-                },
-            )
 
         logger.info(
             "BreakGlassRecorder: stopped recording for token %s (%d chunks, %d bytes)",

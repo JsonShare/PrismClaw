@@ -72,13 +72,12 @@ def _route(
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize(
-    ("unit", "must_contain", "forbidden"),
+    ("unit", "must_contain"),
     [
-        (attachments_mod.AttachmentUnit(path="u/a.png", kind="image", image_index=2), ("u/a.png", "read 工具"), ()),
+        (attachments_mod.AttachmentUnit(path="u/a.png", kind="image", image_index=2), ("u/a.png", "read 工具")),
         (
             attachments_mod.AttachmentUnit(path="u/a.png", kind="image", image_index=2, chars=120),
             ("u/a.png", "read 工具", "120"),
-            (),
         ),
         (
             attachments_mod.AttachmentUnit(
@@ -88,13 +87,12 @@ def _route(
                 content_blocks=[TextBlock(type="text", text="x" * 900)],
             ),
             ("u/spec.docx", "read"),
-            ("read_image",),
         ),
-        (attachments_mod.AttachmentUnit(path="u/blob.bin", kind="file"), ("u/blob.bin", "read"), ("read_image",)),
+        (attachments_mod.AttachmentUnit(path="u/blob.bin", kind="file"), ("u/blob.bin", "read")),
     ],
 )
 def test_reference_carries_path_tool_and_no_completeness_claim(
-    unit: attachments_mod.AttachmentUnit, must_contain: tuple[str, ...], forbidden: tuple[str, ...]
+    unit: attachments_mod.AttachmentUnit, must_contain: tuple[str, ...]
 ) -> None:
     notes = attachments_mod._reference_lines(
         unit, image_total=2, include_self=True, ocr_inlined=False
@@ -103,8 +101,6 @@ def test_reference_carries_path_tool_and_no_completeness_claim(
     note = notes[0]
     for fragment in must_contain:
         assert fragment in note
-    for fragment in forbidden:
-        assert fragment not in note
     _assert_no_completeness_claim(note)
 
 
@@ -153,7 +149,6 @@ def test_display_channel_has_no_policy_text(monkeypatch: pytest.MonkeyPatch, tmp
 
     display = _flat(decision.display_content)
     assert "Attachment Handling" not in display
-    assert "read_image" not in display
     # 无文字说明 → display 只含附件块本身，不再附加「已上传附件」冗余占位文字
     # （缩略图/文件卡即为可视指示）；占位文字本身也不得含任何指令。
     assert "已上传附件" not in display
@@ -214,7 +209,6 @@ def test_inlined_ocr_images_need_no_tool_reference(monkeypatch: pytest.MonkeyPat
 
     llm = _flat(decision.llm_content)
     assert "柱状图" in llm and "折线图" in llm
-    assert "read_image" not in llm
     assert decision.downgraded_image_count == 0
 
 

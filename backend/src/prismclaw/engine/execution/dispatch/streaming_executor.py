@@ -46,16 +46,6 @@ _METRIC_TOOL_SCHEDULED = "streaming.tool.scheduled"
 _METRIC_TOOL_FIRST_COMPLETION_MS = "streaming.tool.first_completion_ms"
 _METRIC_TOOL_QUEUE_WAIT_MS = "streaming.tool.queue_wait_ms"
 
-# Legacy name-based fallback for read-only tools that have not declared
-# ``is_concurrency_safe``. All current builtin read tools declare the
-# attribute on the class; this set only remains as the fallback contract
-# for unmigrated/external tools. New tools MUST declare
-# ``is_concurrency_safe`` on the class instead of being added here.
-CONCURRENCY_SAFE_TOOLS = frozenset({
-    "read", "grep", "glob", "ls",
-})
-
-
 def _lane_label(is_concurrency_safe: bool) -> str:
     """Render the lane name for a tool call, used as a metric label.
 
@@ -99,23 +89,20 @@ class TrackedTool:
         return fn.get("name", "")
 
 
-def _resolve_is_concurrency_safe(tool: Any, tool_name: str) -> bool:
-    """Prefer tool-declared ``is_concurrency_safe``.
+def _resolve_is_concurrency_safe(tool: Any) -> bool:
+    """Resolve concurrency safety from the tool's own declaration.
 
     Resolution order:
     1. Explicit class attribute ``is_concurrency_safe`` (bool) — authoritative.
-    2. Legacy ``CONCURRENCY_SAFE_TOOLS`` static set — name-based fallback.
-    3. ``side_effect`` attribute — ``False`` ⇒ assume safe (backward
+    2. ``side_effect`` attribute — ``False`` ⇒ assume safe (backward
        compat for tools that haven't been migrated yet; tools that
        are *not* actually safe despite ``side_effect=False`` MUST
        declare ``is_concurrency_safe = False``).
-    4. Default to ``False`` (unsafe).
+    3. Default to ``False`` (unsafe).
     """
     declared = getattr(tool, "is_concurrency_safe", None)
     if isinstance(declared, bool):
         return declared
-    if tool_name and tool_name in CONCURRENCY_SAFE_TOOLS:
-        return True
     # Backward compatibility: tools with side_effect=False
     # were previously treated as parallel-safe. Preserve that
     # behaviour unless the tool has explicitly opted out.
@@ -184,7 +171,7 @@ class StreamingExecutor:
         tool_name = fn.get("name", "")
 
         tool = self._tools.get(tool_name) if hasattr(self._tools, "get") else None
-        is_safe = _resolve_is_concurrency_safe(tool, tool_name)
+        is_safe = _resolve_is_concurrency_safe(tool)
 
         tracked = TrackedTool(
             id=tool_call_id,
@@ -379,6 +366,7 @@ class StreamingExecutor:
             session_id=self._tool_ctx.session_id,
             name=tool_name or "<unknown>",
             call_id=tool_call_id,
+            depth=self._tool_ctx.subagent_depth,
         )
 
         # Record the per-call execution start (epoch ms) for the
@@ -508,6 +496,7 @@ class StreamingExecutor:
                 status=_end_status,
                 duration_ms=int((time.monotonic() - _t0) * 1000),
                 detail=_end_detail,
+                depth=self._tool_ctx.subagent_depth,
             )
             if tracked.is_concurrency_safe and self._safe_semaphore is not None:
                 self._safe_semaphore.release()

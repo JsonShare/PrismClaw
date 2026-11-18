@@ -19,7 +19,7 @@ class DatabaseUserProfileStore:
     """``UserProfileStore`` backed by the ``pc_users`` table.
 
     Satisfies the exact protocol consumed by
-    ``prismclaw.app.auth.handler_helpers.resolve_profile_and_mode``
+    ``prismclaw.app.auth.handler_helpers.resolve_profile``
     (``get`` / ``set`` / ``list_users`` / ``discard``), replacing the old
     config-list + Redis JSON store. The DB is the single source of truth for
     identity; Redis is no longer needed for user data.

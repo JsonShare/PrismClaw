@@ -32,8 +32,6 @@ logger = logging.getLogger(__name__)
 _CONTEXT_PAYLOAD_ROLE_TEXT = (
     "结构化运行时上下文载荷。请将其视为权威的机器生成上下文元数据，而不是用户散文。\n"
 )
-_CONTEXT_PAYLOAD_EXTENSION_KEY = "prism_context_payload"
-_CONTEXT_PAYLOAD_TRANSPORT_KEY = "prism_context_transport"
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +41,6 @@ _CONTEXT_PAYLOAD_TRANSPORT_KEY = "prism_context_transport"
 @dataclass(frozen=True)
 class ProviderPreparedRequest:
     messages: list[dict[str, Any]]
-    extensions: dict[str, Any]
 
 
 def _model_entry(
@@ -78,21 +75,6 @@ def _should_disable_thinking(
     return bool(entry is not None and entry.disable_thinking)
 
 
-def _declared_reasoning_effort_levels(
-    model: str,
-    providers: Mapping[str, ProviderConfig],
-) -> tuple[str, ...]:
-    """取模型在配置中声明的合法推理强度档位（未声明则返回空）。
-
-    交由 litellm 自身按 ``model_info.reasoning_effort_levels`` 做就近取整，
-    避免为每个端点手写取值兼容逻辑。
-    """
-    entry = _model_entry(model, providers)
-    if entry is None or not entry.reasoning_effort_levels:
-        return ()
-    return tuple(entry.reasoning_effort_levels)
-
-
 # llm_request_start 的输入规模估算：中英混合文本约 1 token / 3 字节
 # （工具 schema 亦计入——tools 是每轮固定开销的大头，需要可见）。
 # 字节→token 的系数由 token_counting 插件统一提供，调用方不再持有魔法数。
@@ -118,68 +100,23 @@ class ProviderRequestAdapter:
         llm_provider: str | None,
         prompt_cache_runtime: Any | None,
     ) -> ProviderPreparedRequest:
-        transport_mode = self._select_transport_mode(
-            request=request,
-            llm_provider=llm_provider,
-        )
-        if transport_mode == "none":
-            prepared_messages = _prepend_system(
-                request.messages,
-                request.system,
-                provider_name=llm_provider,
-            )
-            return ProviderPreparedRequest(
-                messages=prepared_messages,
-                extensions={},
-            )
-
-        context_payload = request.context_payload
-        assert context_payload is not None
-
-        if transport_mode == "structured_extension":
-            block_count = len(context_payload.get("blocks") or [])
-            prepared_messages = _prepend_system(
-                request.messages,
-                request.system,
-                provider_name=llm_provider,
-            )
-            return ProviderPreparedRequest(
-                messages=prepared_messages,
-                extensions={
-                    "extra_body": {
-                        _CONTEXT_PAYLOAD_EXTENSION_KEY: context_payload,
-                    },
-                    "metadata": {
-                        _CONTEXT_PAYLOAD_TRANSPORT_KEY: "extra_body",
-                        "prism_context_schema": str(context_payload.get("schema_version") or ""),
-                        "prism_context_block_count": block_count,
-                    },
-                },
-            )
-
-        prepared_messages = self._adapt_with_legacy_context_bridge(
-            request=request,
-            llm_provider=llm_provider,
-            prompt_cache_runtime=prompt_cache_runtime,
-        )
-        return ProviderPreparedRequest(
-            messages=prepared_messages,
-            extensions={},
-        )
-
-    def _select_transport_mode(
-        self,
-        *,
-        request: Any,
-        llm_provider: str | None,
-    ) -> Literal["none", "structured_extension", "legacy_bridge"]:
         if not request.context_payload:
-            return "none"
-        if _provider_supports_structured_context_extension(llm_provider):
-            return "structured_extension"
-        return "legacy_bridge"
+            return ProviderPreparedRequest(
+                messages=_prepend_system(
+                    request.messages,
+                    request.system,
+                    provider_name=llm_provider,
+                )
+            )
+        return ProviderPreparedRequest(
+            messages=self._adapt_with_context_bridge(
+                request=request,
+                llm_provider=llm_provider,
+                prompt_cache_runtime=prompt_cache_runtime,
+            )
+        )
 
-    def _adapt_with_legacy_context_bridge(
+    def _adapt_with_context_bridge(
         self,
         *,
         request: Any,
@@ -259,18 +196,6 @@ def _normalize_system_content_for_provider(
     if isinstance(system, list):
         return list(system)
     return [{"type": "text", "text": system}]
-
-
-def _provider_supports_structured_context_extension(provider_name: str | None) -> bool:
-    import os
-
-    mode = str(os.environ.get("PRISMCLAW_LLM_CONTEXT_TRANSPORT", "legacy")).strip().lower()
-    if mode in {"structured", "extension", "structured_extension"}:
-        return True
-    if mode in {"legacy", "bridge", "text"}:
-        return False
-    normalized = str(provider_name or "").strip().lower()
-    return mode == "auto" and normalized in {"openai", "anthropic"}
 
 
 def _provider_prefers_block_system_messages(provider_name: str | None) -> bool:
@@ -553,7 +478,6 @@ class LiteLLMClient:
             self._fallback_base = _normalize_base_url(api_base) if api_base else None
         self._default_provider = default_provider
         self._unknown_prefix_policy: Literal["fail", "default"] = unknown_prefix_policy
-        # 无 providers 配置的直连场景（如视觉端点）可显式声明是否关思考。
         self._disable_thinking = disable_thinking
 
     async def stream(
@@ -566,7 +490,6 @@ class LiteLLMClient:
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
-        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMStreamChunk]:
         from litellm import acompletion
 
@@ -588,7 +511,6 @@ class LiteLLMClient:
             llm_provider=llm_provider,
         )
         payload_messages = prepared_request.messages
-        request_extensions = prepared_request.extensions
 
         # We assume messages are clean by the time they reach LiteLLMClient.
         # RequestPackager is responsible for stripping internal metadata.
@@ -621,7 +543,6 @@ class LiteLLMClient:
             extra["custom_llm_provider"] = llm_provider
         if temperature is not None:
             extra["temperature"] = temperature
-        extra.update(request_extensions)
         _thinking_disabled = _should_disable_thinking(
             model=effective_model,
             providers=self._providers,
@@ -629,7 +550,6 @@ class LiteLLMClient:
             override=self._disable_thinking,
         )
         if _thinking_disabled:
-            # litellm 自动将非白名单参数透传至 extra_body，无需手动嵌套合并
             extra["chat_template_kwargs"] = {"enable_thinking": False}
             logger.info(
                 "thinking_disable model=%s provider=%s api_base=%s — "
@@ -639,16 +559,6 @@ class LiteLLMClient:
                 llm_provider or "",
                 api_base or "",
             )
-        # effort → 推理强度：litellm 统一参数 reasoning_effort（low/medium/high）。
-        # 与强制关思考互斥——关思考时下发会与 enable_thinking=False 冲突，故跳过。
-        # 模型若在配置中声明了 reasoning_effort_levels，则通过 model_info 交给
-        # litellm 做就近取整（如 DeepSeek V4.1 无 medium 档，会取到 high）。
-        if reasoning_effort and not _thinking_disabled:
-            extra["reasoning_effort"] = reasoning_effort
-            _effort_levels = _declared_reasoning_effort_levels(effective_model, self._providers)
-            if _effort_levels:
-                extra["model_info"] = {"reasoning_effort_levels": list(_effort_levels)}
-
         # max_tokens 硬上限：按模型配置下发，并钳制到「窗口 − 估算输入 − 余量」。
         # max_output_tokens 可能等于整窗，prompt 较大时直接下发会越窗，触发
         # 服务端校验失败或 KV 预留排队。
@@ -764,7 +674,7 @@ class LiteLLMClient:
                         last_user_kind = "none"
                         last_user_chars = 0
                     logger.info(
-                        "llm_request_start request_id=%s model=%s provider=%s messages=%d tools=%d est_in_tok=%d request_timeout_s=%.1f roles=%s last_role=%s any_user=%s last_user_kind=%s last_user_size=%d prefix_digest=%s/%s",
+                        "llm_request_start request_id=%s model=%s provider=%s messages=%d tool_count=%d est_in_tok=%d request_timeout_s=%.1f roles=%s last_role=%s any_user=%s last_user_kind=%s last_user_size=%d prefix_digest=%s/%s session=%s",
                         request_id,
                         effective_model,
                         llm_provider or "",
@@ -779,6 +689,7 @@ class LiteLLMClient:
                         last_user_chars,
                         _tools_digest,
                         _system_digest,
+                        _session_id or "none",
                     )
                 # WP-3.1 — race against abort_event so an in-flight
                 # cancel is honoured before ``request_timeout_s``.
@@ -1008,7 +919,6 @@ class LiteLLMClient:
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
-        reasoning_effort: str | None = None,
     ) -> LLMResponse:
         from prismclaw.schema.llm.tool_call_types import ToolCallBuffer
 
@@ -1026,7 +936,6 @@ class LiteLLMClient:
             idle_seconds=idle_seconds,
             abort_event=abort_event,
             temperature=temperature,
-            reasoning_effort=reasoning_effort,
         ):
             if chunk.reasoning_delta:
                 reasoning_parts.append(chunk.reasoning_delta)

@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from prismclaw.engine.execution.request.system_prompt import (
     AvailableSubagentEntry,
     MarketplaceSummary,
@@ -23,7 +25,6 @@ def _inputs() -> PromptInputs:
         session_id="sess-123",
         workspace_id="ws-456",
         agent_id="agent-1",
-        model="m",
         identity="你是 PrismClaw。",
         preferences="<preferences>\n- 语言：跟随用户\n</preferences>",
         tools=[
@@ -32,6 +33,7 @@ def _inputs() -> PromptInputs:
             ("subagent_search", "d"),
             ("sub_agent", "d"),
             ("read", "d"),
+            ("todo_write", "d"),
         ],
         project_skill_names=("code_review",),
         marketplace_summaries=(MarketplaceSummary("legal", "法律能力包", 4),),
@@ -45,35 +47,72 @@ def _inputs() -> PromptInputs:
             ),
         ),
         workspace_path="/tmp/ws",
-        workspace_mode="work",
         subagent_registry_size=2,
         handoff_enabled=True,
         max_handoff_chain_length=5,
     )
 
 
+_LEGACY_MARKERS = (
+    "[System Time]",
+    "[Active Skill]",
+    "[Active Command]",
+    "[Skill Status]",
+    "[Allowed Tools Override]",
+    "[TaskSpec]",
+    "[Task Goal]",
+    "[Task Pre-flight]",
+    "[Task Constraints]",
+    "[Task Strategy]",
+)
+
+
+def test_runtime_context_uses_xml_tags() -> None:
+    """运行时上下文统一为 XML 子标签，不再使用 [X] 前缀。"""
+    import inspect
+
+    from prismclaw.engine.execution.request.system_prompt import runtime_context_section
+
+    text = runtime_context_section(_inputs())
+    assert text.startswith("<runtime_context>")
+    assert "<system_time>" in text
+    assert "<time_rule>" in text
+
+    source = inspect.getsource(runtime_context_section)
+    for marker in _LEGACY_MARKERS:
+        assert marker not in source
+
+
+def test_soft_landing_prompt_is_xml_and_unnumbered() -> None:
+    """软着陆指令用 XML 包裹，且不占用编号（避免与工作循环的编号冲突）。"""
+    from prismclaw.engine.execution.loop.stream import _SOFT_LANDING_PROMPT
+
+    body = _SOFT_LANDING_PROMPT.strip()
+    assert body.startswith('<system_directive scope="final_turn">')
+    assert body.endswith("</system_directive>")
+    assert "\n1." not in _SOFT_LANDING_PROMPT
+
+
 def test_frozen_section_order_and_stability():
     sections = build_frozen_prompt_sections(_inputs())
     names = [s.name for s in sections]
     assert names == [
-        "mode",
         "role",
-        "rules",
-        "preferences",
+        "principles",
         "tools",
+        "delegation",
         "workspace",
-        "packages",
-        "skills",
-        "subagents",
+        "data_safety",
+        "catalogs",
     ]
     stabilities = [s.stability for s in sections]
-    assert stabilities[: len(stabilities) - 3] == ["stable"] * (len(stabilities) - 3)
-    assert stabilities[-3:] == ["semi_stable"] * 3
+    assert stabilities[:-1] == ["stable"] * (len(stabilities) - 1)
+    assert stabilities[-1] == "semi_stable"
 
 
 def test_frozen_contains_no_request_state():
     text = "\n".join(s.text for s in build_frozen_prompt_sections(_inputs()))
-    for marker in ("sess-123", "ws-456", "refreshed_at", "active_skill", "当前时间"):
+    for marker in ("sess-123", "ws-456", "refreshed_at", "active_skill", "当前时间", "当前模式"):
         assert marker not in text
 
 
@@ -86,6 +125,12 @@ def test_plugin_capability_names_not_in_frozen_prompt():
     assert "`legal`" in text
 
 
+def test_workflow_section_requires_todo_write():
+    inputs = replace(_inputs(), tools=[("read", "d")])
+    names = [s.name for s in build_frozen_prompt_sections(inputs)]
+    assert "workflow" not in names
+
+
 def test_subagent_search_is_governed_universal_and_core_visible():
     from prismclaw.engine.toolkit.registry.governance import (
         _CORE_VISIBLE_TOOLS,
@@ -94,6 +139,8 @@ def test_subagent_search_is_governed_universal_and_core_visible():
 
     assert "subagent_search" in _UNIVERSAL_TOOLS
     assert "subagent_search" in _CORE_VISIBLE_TOOLS
+    assert "todo_write" in _UNIVERSAL_TOOLS
+    assert "todo_write" in _CORE_VISIBLE_TOOLS
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +196,6 @@ def test_register_subagent_tools_installs_discovery(monkeypatch):
     names = _register(monkeypatch, enabled=True)
     assert {
         "sub_agent",
-        "reduce_subagent_results",
         "request_handoff",
         "subagent_search",
     } <= names
@@ -159,7 +205,6 @@ def test_register_subagent_tools_clears_when_disabled(monkeypatch):
     names = _register(monkeypatch, enabled=False)
     assert not names & {
         "sub_agent",
-        "reduce_subagent_results",
         "request_handoff",
         "subagent_search",
     }
@@ -243,7 +288,6 @@ def test_build_shell_snapshot_does_not_pass_removed_fields_to_prompt_inputs():
         session_id="sess-1",
         workspace_id="ws-1",
         agent_id="agent-1",
-        workspace_tag=None,
     )
 
     budget_cfg = SimpleNamespace(
@@ -284,7 +328,6 @@ def test_build_shell_snapshot_does_not_pass_removed_fields_to_prompt_inputs():
             tool_workspace_path="/tmp/ws",
             effective_model="test-model",
             request_mode="standard",
-            mode="work",
             is_fast_path=False,
             skill_invocation=None,
             discovered_tools=None,
@@ -305,3 +348,12 @@ def test_build_shell_snapshot_does_not_pass_removed_fields_to_prompt_inputs():
     assert snapshot.frozen_result.text
     # 冻结 prompt 不含 request_mode 字面量
     assert "request_mode" not in snapshot.frozen_result.text
+
+
+def test_behavior_boundaries_are_present() -> None:
+    """派发后不重复在 delegation 段；澄清门槛由 ask_user_question 描述唯一承担。"""
+    from prismclaw.engine.execution.request.system_prompt import delegation_section
+
+    delegation_text = delegation_section(_inputs())
+    assert delegation_text is not None
+    assert "已派发的任务不由主 Agent 重做" in delegation_text

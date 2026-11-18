@@ -14,7 +14,7 @@ from prismclaw.schema.storage.storage_types import SessionStore
 _event_logger = SessionEventLogger()
 logger = logging.getLogger(__name__)
 
-CURRENT_PARALLEL_TASK_SCHEMA_VERSION: Literal["parallel_task.v2"] = "parallel_task.v2"
+CURRENT_PARALLEL_TASK_SCHEMA_VERSION: Literal["parallel_task.v3"] = "parallel_task.v3"
 PARALLEL_TASK_RUNTIME_CUSTOM_TYPE = "parallel_task_runtime"
 
 ParallelTaskKind = Literal["subagent", "fork"]
@@ -31,8 +31,11 @@ PARALLEL_TASK_TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"}
 class ParallelTaskRuntimeRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["parallel_task.v2"] = CURRENT_PARALLEL_TASK_SCHEMA_VERSION
+    schema_version: Literal["parallel_task.v3"] = CURRENT_PARALLEL_TASK_SCHEMA_VERSION
     task_id: str
+    # ``(agent_id, task_id)`` 组合唯一：同一 task 只属于一个 agent，
+    # 但同一 agent 可以有多个 task（每次 Run 一个）。
+    agent_id: str
     owner_session_id: str
     source_call_id: str | None = None
     kind: ParallelTaskKind
@@ -55,6 +58,7 @@ class ParallelTaskStore(Protocol):
         self,
         *,
         session_id: str,
+        agent_id: str,
         task_id: str,
     ) -> ParallelTaskRuntimeRecord | None: ...
 
@@ -65,14 +69,6 @@ class ParallelTaskStore(Protocol):
         include_terminal: bool = True,
         kinds: set[ParallelTaskKind] | None = None,
     ) -> list[ParallelTaskRuntimeRecord]: ...
-
-    async def cancel(
-        self,
-        *,
-        session_id: str,
-        task_id: str,
-        error_summary: str | None = None,
-    ) -> ParallelTaskRuntimeRecord | None: ...
 
 
 def new_parallel_task_id() -> str:
@@ -105,26 +101,30 @@ def parallel_task_records_for_tree(
 ) -> list[ParallelTaskRuntimeRecord]:
     if tree is None:
         return []
-    latest: dict[str, ParallelTaskRuntimeRecord] = {}
+    latest: dict[tuple[str, str], ParallelTaskRuntimeRecord] = {}
     for entry in reversed(_branch_entries(tree)):
         if not isinstance(entry, CustomEntry):
             continue
         if entry.custom_type != PARALLEL_TASK_RUNTIME_CUSTOM_TYPE:
             continue
         record = parse_parallel_task_record(entry.data)
-        if record is None or record.task_id in latest:
+        if record is None:
+            continue
+        key = (record.agent_id, record.task_id)
+        if key in latest:
             continue
         if kinds is not None and record.kind not in kinds:
             continue
         if not include_terminal and record.status in PARALLEL_TASK_TERMINAL_STATUSES:
             continue
-        latest[record.task_id] = record
+        latest[key] = record
     return list(reversed(list(latest.values())))
 
 
 def latest_parallel_task_for_tree(
     tree: Any | None,
     *,
+    agent_id: str,
     task_id: str,
 ) -> ParallelTaskRuntimeRecord | None:
     if tree is None:
@@ -135,8 +135,31 @@ def latest_parallel_task_for_tree(
         if entry.custom_type != PARALLEL_TASK_RUNTIME_CUSTOM_TYPE:
             continue
         record = parse_parallel_task_record(entry.data)
-        if record is not None and record.task_id == task_id:
+        if (
+            record is not None
+            and record.agent_id == agent_id
+            and record.task_id == task_id
+        ):
             return record
+    return None
+
+
+def task_owner_agent_id(
+    tree: Any | None,
+    *,
+    task_id: str,
+) -> str | None:
+    """返回已登记该 task_id 的 agent_id；用于识别组合唯一被违反。"""
+    if tree is None:
+        return None
+    for entry in reversed(_branch_entries(tree)):
+        if not isinstance(entry, CustomEntry):
+            continue
+        if entry.custom_type != PARALLEL_TASK_RUNTIME_CUSTOM_TYPE:
+            continue
+        record = parse_parallel_task_record(entry.data)
+        if record is not None and record.task_id == task_id:
+            return record.agent_id
     return None
 
 
@@ -151,11 +174,22 @@ class SessionParallelTaskStore:
         self._session_store = session_store
 
     async def append(self, record: ParallelTaskRuntimeRecord) -> None:
+        """按 ``(owner_session_id, agent_id, task_id)`` 组合键 upsert。
+
+        同键重复写入覆盖（追加新条目即成为最新投影）；同 ``task_id`` 但
+        ``agent_id`` 不同则违反组合唯一，直接拒绝。
+        """
         session_id = record.owner_session_id
         tree = await self._session_store.load(session_id)
         if tree is None:
             raise ValueError(
                 f"parallel task session {session_id!r} was not found"
+            )
+        owner_agent_id = task_owner_agent_id(tree, task_id=record.task_id)
+        if owner_agent_id is not None and owner_agent_id != record.agent_id:
+            raise ValueError(
+                f"parallel task {record.task_id!r} already belongs to agent "
+                f"{owner_agent_id!r}, cannot be reassigned to {record.agent_id!r}"
             )
         entry = CustomEntry(
             id=generate_entry_id(set(tree.entries.keys())),
@@ -171,10 +205,15 @@ class SessionParallelTaskStore:
         self,
         *,
         session_id: str,
+        agent_id: str,
         task_id: str,
     ) -> ParallelTaskRuntimeRecord | None:
         tree = await self._session_store.load(session_id)
-        return latest_parallel_task_for_tree(tree, task_id=task_id)
+        return latest_parallel_task_for_tree(
+            tree,
+            agent_id=agent_id,
+            task_id=task_id,
+        )
 
     async def list_for_session(
         self,
@@ -189,26 +228,6 @@ class SessionParallelTaskStore:
             include_terminal=include_terminal,
             kinds=kinds,
         )
-
-    async def cancel(
-        self,
-        *,
-        session_id: str,
-        task_id: str,
-        error_summary: str | None = None,
-    ) -> ParallelTaskRuntimeRecord | None:
-        current = await self.get(session_id=session_id, task_id=task_id)
-        if current is None:
-            return None
-        if current.status in PARALLEL_TASK_TERMINAL_STATUSES:
-            return current
-        cancelled = build_parallel_task_terminal_record(
-            current,
-            status="cancelled",
-            error_summary=error_summary or "cancelled_by_user",
-        )
-        await self.append(cancelled)
-        return cancelled
 
 
 def build_parallel_task_terminal_record(

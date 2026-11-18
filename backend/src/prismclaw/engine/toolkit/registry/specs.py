@@ -25,7 +25,7 @@ class ToolPermissionTraits(BaseModel):
     approval_eligible: bool = True
     read_only_allowed: bool = False
     parent_only: bool = False
-    forced_chat_only: bool = False
+    server_read_only: bool = False
     # 工具只有在「存在能实时应答的人类用户」时才有意义（如 AskUserQuestion 要暂停等回答）。
     # 无头执行（CLI / 测试）与子代理都无法暂停问人，此类工具会被 HeadlessModeReducer 摘除。
     # 定时任务复用 Web 主链路、持有队列，不属无头执行。

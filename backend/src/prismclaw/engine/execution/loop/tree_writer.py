@@ -16,11 +16,10 @@ from prismclaw.engine.execution.loop._bootstrap_helpers import (
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.toolkit.builtin.tool_helpers import _entry_to_llm_dict
 from prismclaw.schema.agent.session import MessageEntry, SessionHeader, TurnRuntimeMetricsSnapshot
-from prismclaw.schema.agent.task_runtime import ReviewRequirements, TaskRuntimeState
+from prismclaw.schema.agent.task_runtime import TaskRuntimeState
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.session.event_logger import SessionEventLogger
 from prismclaw.schema.session.types import (
-    REVIEW_REQUIREMENTS_CUSTOM_TYPE,
     SESSION_MEMORY_CUSTOM_TYPE,
     TASK_RUNTIME_CUSTOM_TYPE,
     TASK_SPEC_CUSTOM_TYPE,
@@ -426,7 +425,7 @@ async def _persist_turn_runtime_metrics(
     deps: AgentRunnerDeps,
     tree: SessionTree,
     *,
-    request_mode: str | None,
+    request_mode: str | None = None,
     dynamic_payload: int,
     input_tokens: int,
     cache_read_tokens: int,
@@ -496,19 +495,4 @@ async def _persist_task_spec_snapshot(
         custom_type=TASK_SPEC_CUSTOM_TYPE,
         data=task_spec.model_dump(mode="json"),
         current=_dump_model(tree.get_latest_task_spec()),
-    )
-
-
-async def _persist_review_requirements_snapshot(
-    deps: AgentRunnerDeps,
-    tree: SessionTree,
-    *,
-    review_requirements: ReviewRequirements,
-) -> None:
-    await _persist_custom_snapshot(
-        deps,
-        tree,
-        custom_type=REVIEW_REQUIREMENTS_CUSTOM_TYPE,
-        data=review_requirements.model_dump(mode="json"),
-        current=_dump_model(tree.get_latest_review_requirements()),
     )

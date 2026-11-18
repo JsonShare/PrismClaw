@@ -5,7 +5,7 @@
 >
 > v1.1 调整：取消底部导航栏；默认首页改为「新对话」；任务列表收敛到左上角侧边抽屉；人机交互 / 待办 / 通知进入具体任务页面处理，不再设独立入口。
 >
-> v1.2 调整：首页采用 Chat / Work 双模式（新建会话继承当前模式）；明确移动端**直连后端服务器**，不存在连接 PC、选择电脑的配对与中继链路。
+> v1.2 调整：首页不再区分 Chat / Work 模式；明确移动端**直连后端服务器**，不存在连接 PC、选择电脑的配对与中继链路。
 >
 > v1.3 调整：移动端技术栈整体切换为 **Taro 4.x + React 18 + TypeScript + Sass**；状态管理改为 Zustand、路由改为 `app.config.ts`、App 端改为 Taro 构建 H5 产物 + Capacitor 套壳。业务范围、接口清单、WS 协议（`protocol_version=1`）与导航结构保持不变。
 >
@@ -219,7 +219,7 @@ App/小程序               后端
 | type | 关键字段 | 用途 |
 | --- | --- | --- |
 | `identify` | token, protocol_version | 建连鉴权 |
-| `chat.send` | conversation_id, workspace_id, content, client_message_id, mode(`chat`/`work`), attachments | 发送消息 |
+| `chat.send` | conversation_id, workspace_id, content, client_message_id, attachments | 发送消息 |
 | `chat.steer` | conversation_id, content, client_message_id | 运行中追加指令 |
 | `chat.cancel` | conversation_id | 取消排队 |
 | `chat.abort` | conversation_id | 中止执行 |
@@ -450,23 +450,17 @@ function scheduleReconnect() {
 
 ## 8. 页面与功能映射（移动端直连服务器）
 
-**双模式：Chat / Work**
+**统一会话行为**
 
-| 模式 | 定位 | 首页文案 | 发起示例 | 会话行为 |
-| --- | --- | --- | --- | --- |
-| Chat | 轻量对话：问答、解释、总结、对比 | 随时聊聊，从这里开始 | 解读检验报告 / 核对用药禁忌 | 单轮或多轮对话，结果直接在消息流返回 |
-| Work | 任务执行：多步处理、产出文件、定时调度 | 把任务交给我，在云端执行 | 整理门诊病历质控 / 汇总随访名单 | 展示工具时间线、产出物、人机交互卡，可转定时任务 |
-
-- 模式在**输入框下方**切换，与「工作区」选择并排；新建会话继承当前模式；已有会话按自身的 `mode` 在详情页顶部标注。
-- 任务一旦开始执行（进入会话 / 正在流式输出），首页的 Chat / Work 与工作区切换即隐藏，避免执行中改意图。
-- 模式只是同一后端上的会话意图，**不改变连接方式**：移动端始终直连 PrismClaw 服务器，没有「连接哪台 PC」「选择项目」的配对步骤。
-- 模式切换不写路由、不重连 WebSocket；仅影响首页引导语、输入框占位与新建会话的初始意图。
+- 不再区分 Chat / Work：所有会话按用户意图直接回答或产出交付物，由后端统一决定。
+- 任务一旦开始执行（进入会话 / 正在流式输出），工作区切换即隐藏，避免执行中改上下文。
+- 移动端始终直连 PrismClaw 服务器，没有「连接哪台 PC」「选择项目」的配对步骤。
 
 **导航结构（冻结）**
 
 | 位置 | 内容 |
 | --- | --- |
-| 默认首页 | 「新对话」页面（☰ + 问候与两行引导语 + 底部输入坞；输入框下方是 Chat / Work 与工作目录下拉按钮） |
+| 默认首页 | 「新对话」页面（☰ + 问候与两行引导语 + 底部输入坞；输入框下方是工作目录下拉按钮） |
 | 左上角 ☰ | 跳转到全屏「全部任务」页：按空间分组的任务列表（会话 + 定时任务），当前空间默认展开 |
 | 右上角头像 | 进入「我的」页（资料、统计、待办与通知） |
 | 任务详情 | 会话与定时任务各自一个页面，返回即回首页 |
@@ -474,7 +468,7 @@ function scheduleReconnect() {
 
 | PC 端已有功能（`frontend/src`） | 移动端落点 | 主接口 | 交互差异 |
 | --- | --- | --- | --- |
-| 新建任务 | `pages/home`（默认首页） | `/api/sessions` | 发送即建会话并原地进入详情，新建时带上当前 Chat / Work 模式 |
+| 新建任务 | `pages/home`（默认首页） | `/api/sessions` | 发送即建会话并原地进入详情 |
 | 会话列表 | `pages/tasks`（☰ 进入的全屏页） | `/api/sessions`、`/api/scheduled-tasks` | 会话与定时任务混排，带待回复/状态角标 |
 | 聊天 / 轨迹 / 澄清 | `pages/chat` | `/api/ws`、`/messages` | 语音输入、附件、停止生成；澄清以人机交互提问卡内嵌在消息流 |
 | 定时任务 | `pages/scheduled`（从全部任务页进入） | `/api/scheduled-tasks` | 启停、立即运行、运行记录；待办与通知同页展示 |
@@ -519,7 +513,7 @@ export function downloadFile(url: string, name: string) {
 }
 ```
 
-**样式规范**：使用 `rpx` 做等比缩放，但字体、圆角、边框用 `px`（避免大屏字体过大）；设计令牌与 PC 端保持一致——画布 `#EBEEF2`、卡片 `#FDFBF7`、次级面 `#F2F5FA`、悬停面 `#EAEEF5`、边框 `#D7DDE6`、发丝线 `#E2E6EE`、正文 `#1F232B`、次级文字 `#575B62`、三级文字 `#838C9E`、品牌蓝 `#2C59BC`；仅使用系统字体（PingFang SC / HarmonyOS Sans SC），不使用衬线或等宽体做装饰；间距以 4/8px 为基准，圆角为 6（控件）/8/10/12（卡片）/16/999（胶囊），阴影仅保留 1px 卡片描边与极轻投影，交互反馈只做背景色变化（150ms），不使用渐变、发光、缩放或纹理。
+**样式规范**：使用 `rpx` 做等比缩放，但字体、圆角、边框用 `px`（避免大屏字体过大）；设计令牌与 PC 端保持一致——画布 `#EBEEF2`、卡片 `#FCFCFC`、次级面 `#F2F5FA`、悬停面 `#EAEEF5`、边框 `#D7DDE6`、发丝线 `#E2E6EE`、正文 `#1F232B`、次级文字 `#575B62`、三级文字 `#838C9E`、品牌蓝 `#2C59BC`；仅使用系统字体（PingFang SC / HarmonyOS Sans SC），不使用衬线或等宽体做装饰；间距以 4/8px 为基准，圆角为 6（控件）/8/10/12（卡片）/16/999（胶囊），阴影仅保留 1px 卡片描边与极轻投影，交互反馈只做背景色变化（150ms），不使用渐变、发光、缩放或纹理。
 
 ---
 
@@ -595,7 +589,7 @@ export function downloadFile(url: string, name: string) {
 - 页面共 9 个：新对话（首页）、全部任务、任务详情 · 会话、任务详情 · 定时、我的、我的文件、自动化、设置、登录。
 - 数据全部来自真实后端：REST 由 `services/request.ts` 统一附带 Bearer token，登录后建立 `/api/ws` 接收流式事件；仅 `401/403` 清理登录态回登录页，网络异常保留登录态由页面重试。
 - 首页与「任务详情 · 会话」共用 `components/ConversationPane`：首页发送后原地展开对话（不跳页），返回回到首页输入态。
-- 输入区统一为 `components/Composer`：＋菜单支持添加文件、引用文件、专家、技能；语音为真实流式识别（H5 走 AudioWorklet → `/api/speech/stream`，小程序走 RecorderManager）；Chat / Work 切换位于输入框工具栏。
+- 输入区统一为 `components/Composer`：＋菜单支持添加文件、引用文件、专家、技能；语音为真实流式识别（H5 走 AudioWorklet → `/api/speech/stream`，小程序走 RecorderManager）；工作目录选择位于输入框下方。
 - 已选技能/专家/引用文件序列化为 `<|kind|value|>` 标记随正文发送，由后端 `extract_mentions` 解析；历史消息展示时还原为 `@标题`。
 - 附件在选择后随消息上传（`/api/files/upload`）：图片内联 base64，其他走文件块；草稿、卡片、附件等输入态按会话隔离。
 - 停止生成后该轮消息标记「已中断」；后端 replay 对 partial 消息补同样标记，刷新后仍可见。

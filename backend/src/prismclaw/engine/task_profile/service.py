@@ -16,6 +16,9 @@ class TaskResponsePolicy:
     empty_retry_limit: int
     tool_first: bool = False
     strict_verification: bool = False
+    # 文本化工具调用（DSML 标记落进 content）的重试上限。与 empty 同族：
+    # 本轮没有真正执行工具、也没有可见答复，属于响应质量问题。
+    tool_markup_retry_limit: int = 1
 
 
 @dataclass(frozen=True)
@@ -37,9 +40,12 @@ class TaskProfileService:
         self,
         *,
         tree: "SessionTree",
-        run_seconds: int = 300,
+        complexity: str | None = None,
     ) -> RequestMode | None:
-        if run_seconds < 30:
+        # 减法：仅当任务客观复杂度为 simple 时才走 fast_path，
+        # 跳过技能/子代理/marketplace 枚举与 L1 记忆加载。
+        # 不用 run_seconds 单独判定：用户显式选 quick 的复杂写任务仍需完整上下文。
+        if complexity == "simple":
             return "fast_path"
             
         prior_entries = []
@@ -169,6 +175,7 @@ class TaskProfileService:
             empty_retry_limit=empty_limit,
             tool_first=tool_first,
             strict_verification=strict_verification,
+            tool_markup_retry_limit=empty_limit,
         )
 
     def compaction_policy(

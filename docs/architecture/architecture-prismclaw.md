@@ -42,7 +42,7 @@
 ```
 浏览器 ──WSS──▶ /api/ws ─▶ ChatRunner ─▶ ChatService ─▶ Agent Loop
                                                       ├─ LLM 流式输出
-                                                      ├─ 工具调用 → SafetyGate 门控 → 沙箱执行
+                                                      ├─ 工具调用 → RuleGate / pre-tool hooks → 沙箱执行
                                                       └─ 技能调度 / 子代理 / MCP 外部工具
         ◀── chat.delta 逐字上屏 ────────────────────────┘
         ◀── chat.done 归档（与流式内容逐字节一致）

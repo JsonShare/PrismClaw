@@ -63,17 +63,6 @@ def validate_security_settings() -> list[str]:
     if env == "production" and (not alice_pwd or alice_pwd == "changeme"):
         errors.append("PRISMCLAW_USER_ALICE_PWD must be set to a strong value in production (not 'changeme')")
 
-    # 8. MFA provider 配置（HARD_MFA 生产就绪性）
-    #     ConfirmGateway 运行期已 fail-closed（未就绪则拒绝 IRREVERSIBLE 操作），
-    #     此处仅作启动期 warning，提示运维补齐 MFA 验证端点配置。
-    mfa_url = os.getenv("PRISMCLAW_MFA_VERIFY_URL", "")
-    mfa_secret = os.getenv("PRISMCLAW_MFA_SHARED_SECRET", "")
-    if env == "production" and (not mfa_url or not mfa_secret):
-        logger.warning(
-            "PRISMCLAW_MFA_VERIFY_URL / PRISMCLAW_MFA_SHARED_SECRET not set in production; "
-            "HARD_MFA (IRREVERSIBLE) operations will be fail-closed rejected until configured"
-        )
-
     return errors
 
 

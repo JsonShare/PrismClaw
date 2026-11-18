@@ -6,7 +6,7 @@ import dataclasses
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from prismclaw.schema.agent.types import WorkspaceMode
+from prismclaw.schema.agent.task_runtime import ConfirmationDecision
 from prismclaw.schema.protocol.protocol_types import PROTOCOL_VERSION
 
 
@@ -24,16 +24,9 @@ class ChatSendMessage:
     workspace_id: str | None = None
     content: str = ""
     # 风险确认决策：由前端风险确认按钮设置，任务恢复执行时由 preparer 消费。
-    confirmation_decision: Literal["approve", "deny"] | None = None
+    confirmation_decision: ConfirmationDecision | None = None
     attachments: list[Any] = field(default_factory=list)
-    mode: WorkspaceMode | None = None
-    # 执行档位：quick/standard/deep，决定 steps / tool_calls / 墙钟预算。
-    # None → 后端默认 standard（见 RunRequest.effort）。
-    effort: Literal["quick", "standard", "deep"] | None = None
     trajectory: str | None = None  # "full", "dry", or None (use env default)
-    designated_skills: list[str] = field(default_factory=list)  # 用户指定技能名（可多个）
-    designated_plugins: list[str] = field(default_factory=list)  # 用户指定插件名（可多个）
-    referenced_files: list[str] = field(default_factory=list)  # 引用文件路径（工作区根相对）
     # 前端生成的消息唯一标识：排队期间可被 chat.steer（提升为 steering 注入
     # 当前 run）与 chat.cancel（取消排队）按 id 引用。None 时不可操作（兼容
     # 不带 id 的调用方）。
@@ -123,15 +116,12 @@ _CLIENT_MESSAGE_MAP: dict[str, type[ClientMessage]] = {
     "tool.clarify": ToolClarifyMessage,
 }
 
-_VALID_MODES = frozenset(("chat", "work"))
-
-
 def parse_client_message(data: dict[str, Any]) -> ClientMessage | None:
     """Route a raw JSON dict to the appropriate client message dataclass.
 
-    Returns ``None`` if ``type`` is missing, unrecognised, or if a known
-    field carries an invalid enum value (e.g. ``mode`` outside
-    :data:`_VALID_MODES`).
+    Returns ``None`` if ``type`` is missing or unrecognised. Unknown fields
+    (including fields from older clients) are filtered out by
+    :func:`dataclasses.fields`.
     """
     msg_type = data.get("type")
     if msg_type is None:
@@ -139,10 +129,6 @@ def parse_client_message(data: dict[str, Any]) -> ClientMessage | None:
     cls = _CLIENT_MESSAGE_MAP.get(msg_type)
     if cls is None:
         return None
-    if cls is ChatSendMessage:
-        mode_value = data.get("mode")
-        if mode_value is not None and mode_value not in _VALID_MODES:
-            return None
     known = {f.name for f in dataclasses.fields(cls)}
     kwargs = {k: v for k, v in data.items() if k in known}
     return cls(**kwargs)

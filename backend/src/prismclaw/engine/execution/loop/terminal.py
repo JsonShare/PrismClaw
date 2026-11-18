@@ -108,7 +108,7 @@ async def persist_turn(
     from prismclaw.engine.execution.dispatch.response_handling import (
         append_assistant_response,
     )
-    from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
+    from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
     from prismclaw.engine.execution.loop.tree_writer import _append
 
     try:
@@ -116,7 +116,7 @@ async def persist_turn(
             deps=rt.deps,
             tree=rt.tree,
             append_entry=_append,
-            text=strip_thinking(response.text or ""),
+            text=strip_noise(response.text or ""),
             tool_calls=response.tool_calls,
         )
 

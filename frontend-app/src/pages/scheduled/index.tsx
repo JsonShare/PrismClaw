@@ -69,7 +69,7 @@ export default function Scheduled() {
         <AppHeader
           variant='scheduled'
           title='自动化任务'
-          sub='Work · 服务器调度'
+          sub='服务器调度'
           onBack={() => goBack('/pages/automations/index')}
         />
         <View className='app-body'>
@@ -113,7 +113,7 @@ export default function Scheduled() {
       <AppHeader
         variant='scheduled'
         title={task.name}
-        sub='Work · 服务器调度'
+        sub='服务器调度'
         onBack={() => goBack('/pages/automations/index')}
       />
 
@@ -260,7 +260,7 @@ export default function Scheduled() {
             <EmptyState title='暂无运行记录' desc='任务触发后会在这里生成结果' />
           )}
 
-          <Text className='detail-note'>该任务由服务器端调度执行，与 Chat 会话共用同一份任务定义。</Text>
+          <Text className='detail-note'>该任务由服务器端调度执行，与普通会话共用同一份任务定义。</Text>
         </View>
       </ScrollView>
 

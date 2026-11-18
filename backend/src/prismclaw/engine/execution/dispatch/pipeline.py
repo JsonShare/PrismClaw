@@ -38,7 +38,7 @@ from prismclaw.engine.execution.loop.arbiter import RunContext
 from prismclaw.engine.trajectory.bus_context import LLMMetricsSnapshot, trajectory_runtime
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.content.streaming import ErrorEvent, HeartbeatEvent, ReasoningChunk, TextChunk
-from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
+from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
 from prismclaw.schema.session.types import generate_entry_id, now_iso
 
 logger = logging.getLogger(__name__)
@@ -109,9 +109,8 @@ class PipelineParams:
     iteration_pre_advance: int  # _iter (pre-advance) for audit events
     abort_event: Any
     max_idle_retries: int = 1
-    cap_s: float = 0.0  # 单请求墙钟硬上限（effort 派生），0 表示不设
+    cap_s: float = 0.0  # 单请求墙钟硬上限（预算派生），0 表示不设
     is_last_turn: bool = False  # cap_s 超时后非最后一轮重试一次，最后一轮交付部分内容
-    reasoning_effort: str | None = None  # effort 派生的推理强度（low/medium/high），None=模型默认
 
 
 # ---------------------------------------------------------------------------
@@ -198,9 +197,8 @@ async def call_llm_stream_with_outcome(
                 prompt_cache_runtime=snapshot.prompt_cache_runtime,
                 idle_seconds=deps.config.timeouts.idle_seconds,
                 abort_event=abort_event,
-                reasoning_effort=params.reasoning_effort,
             )
-            # 单请求墙钟硬上限 cap_s（effort 派生）；cap_s 未设时回退到剩余 run 时间。
+            # 单请求墙钟硬上限 cap_s（预算派生）；cap_s 未设时回退到剩余 run 时间。
             _request_deadline = (
                 params.cap_s if params.cap_s and params.cap_s > 0
                 else (params.remaining_run or 0.0)
@@ -340,7 +338,7 @@ async def call_llm_stream_with_outcome(
                 turn_counter=params.traj_turn_counter,
                 iteration=params.iteration_pre_advance,
                 metrics=_metrics_snap,
-                assistant_text=strip_thinking(response.text or ""),
+                assistant_text=strip_noise(response.text or ""),
                 tool_calls=response.tool_calls,
             )
             _outcome.outcome = LLMStreamResult(

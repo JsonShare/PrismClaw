@@ -200,21 +200,20 @@ class _FakePorts:
 
 
 def _frozen_zone_blocks() -> list[ContextBlock]:
-    """复刻 SDD D3 之后的真实冻结区：l1_snapshot 已移出，不再出现于此区。"""
+    """复刻真实冻结区：l1_snapshot 已移出，catalogs 为技能/子代理的唯一索引块。"""
     return [
         _make_block("role", "role", "你是 PrismClaw。" * 5, estimated_tokens=35, priority="critical"),
         _make_block("bootstrap", "bootstrap", "b" * 4000, estimated_tokens=1000, priority="high"),
         _make_block("tools", "tools", "t" * 3180, estimated_tokens=796, priority="high"),
-        _make_block("skills", "skills", "s" * 1050, estimated_tokens=263, priority="high"),
-        _make_block("subagents", "subagents", "a" * 9190, estimated_tokens=2298, priority="high"),
+        _make_block("catalogs", "catalogs", "c" * 10240, estimated_tokens=2561, priority="high"),
         _make_block("workspace", "workspace", "w" * 214, estimated_tokens=54, priority="high"),
     ]
 
 
 def test_system_zone_over_budget_keeps_discovery_surface():
-    """冻结区超预算：先撤可重建的 bootstrap，tools/skills 发现面必须保留。
+    """冻结区超预算：先撤可重建的 bootstrap，tools/catalogs 发现面必须保留。
 
-    回归背景（同源事故）：<memory_index> 曾占满冻结区导致 tools/skills 被裁、
+    回归背景（同源事故）：<memory_index> 曾占满冻结区导致发现面被裁、
     插件生态对模型不可见。SDD D3 后记忆索引移入动态区；本测试锁定
     "发现面永远最后撤"的不变量。
     """
@@ -226,12 +225,56 @@ def test_system_zone_over_budget_keeps_discovery_surface():
         result_budget=0,
     )
     surviving = {block.source for block in result.context_layout.static_blocks}
-    assert {"tools", "skills", "subagents", "workspace"}.issubset(surviving)
+    assert {"tools", "catalogs", "workspace"}.issubset(surviving)
     persisted = {
         block.source: block.metadata.get("persisted")
         for block in result.context_layout.static_blocks
     }
     assert persisted.get("bootstrap") is True
+
+
+def test_truncation_priority_matches_real_sections():
+    """裁剪顺序表必须与真实冻结段名双向一致。
+
+    回归背景：段合并把 subagents/packages/skills 合成 catalogs 后，旧名字全部
+    失效而新名字未登记。未登记的名字不报错，会落进兜底名次（列表长度）——
+    升序排序中即最大值，被排到"最不该撤"的末位。实测后果是 catalogs 被过度保护，
+    workspace（路径契约）与 tools（工具面）反先被撤。本测试同时拦截
+    "表内有多余名"与"可裁剪段有遗漏"。
+    """
+    from prismclaw.engine.compression.budget_orchestrator import (
+        SYSTEM_TRUNCATION_PRIORITY,
+    )
+    from prismclaw.engine.execution.request.system_prompt import (
+        AvailableSubagentEntry,
+        MarketplaceSummary,
+        PromptInputs,
+        build_frozen_prompt_sections,
+    )
+
+    inputs = PromptInputs(
+        session_id="s",
+        workspace_id="w",
+        agent_id="a",
+        tools=[
+            ("read", "d"),
+            ("tool_search", "d"),
+            ("skill_search", "d"),
+            ("subagent_search", "d"),
+            ("sub_agent", "d"),
+        ],
+        project_skill_names=("demo",),
+        marketplace_summaries=(MarketplaceSummary("pkg", "测试包", 1),),
+        available_subagents=(AvailableSubagentEntry("core", "核心子代理"),),
+        workspace_path="/tmp/ws",
+    )
+    sections = build_frozen_prompt_sections(inputs, bootstrap="<bootstrap>x</bootstrap>")
+
+    unknown = set(SYSTEM_TRUNCATION_PRIORITY) - {s.name for s in sections}
+    assert not unknown, f"裁剪顺序表含不存在的段名: {unknown}"
+
+    missing = {s.name for s in sections if s.truncatable} - set(SYSTEM_TRUNCATION_PRIORITY)
+    assert not missing, f"可裁剪段未登记裁剪顺序: {missing}"
 
 
 def test_dynamic_zone_drops_l1_snapshot_first():

@@ -1,8 +1,6 @@
 export * from './chat'
 export * from './trajectory'
 
-export type Mode = 'chat' | 'work'
-
 export type DialogKind = 'alert' | 'confirm' | 'danger' | 'form' | 'sheet'
 
 export interface DialogField {

@@ -32,14 +32,6 @@ class ModelEntry(BaseModel):
             "context_window to derive the effective window."
         ),
     )
-    reasoning_effort_levels: list[str] | None = Field(
-        default=None,
-        description=(
-            "该模型端点接受的推理强度档位（minimal/low/medium/high/xhigh/max）。"
-            "声明后由 litellm 对超出档位的取值做就近取整（向上），"
-            "用于只接受部分档位的端点（如 DeepSeek V4.1 无 medium）。"
-        ),
-    )
     disable_thinking: bool = Field(
         default=False,
         description=(
@@ -50,23 +42,6 @@ class ModelEntry(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
-
-    @field_validator("reasoning_effort_levels", mode="after")
-    @classmethod
-    def _normalize_reasoning_effort_levels(cls, value):
-        if value is None:
-            return None
-        known = {"minimal", "low", "medium", "high", "xhigh", "max"}
-        levels: list[str] = []
-        for item in value:
-            level = str(item).strip().lower()
-            if level not in known:
-                raise ValueError(
-                    f"unknown reasoning effort level {item!r}; expected one of {sorted(known)}"
-                )
-            if level not in levels:
-                levels.append(level)
-        return levels or None
 
 
 class ProviderConfig(BaseModel):

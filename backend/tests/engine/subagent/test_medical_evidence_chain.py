@@ -798,7 +798,6 @@ def test_m14_dynamic_findings_limit_medical():
 
     class MockCtx:
         task_spec = MockTaskSpec()
-        review_requirements = None
         session_state = state
         system_prompt_sections = {}
         invoked_skill_state = None
@@ -986,7 +985,6 @@ def test_m18_full_medical_e2e():
 
     class MockCtx:
         task_spec = MockTaskSpec()
-        review_requirements = None
         session_state = state
         system_prompt_sections = {}
         invoked_skill_state = None
@@ -1062,15 +1060,14 @@ def test_m18_full_medical_e2e():
 # ═══════════════════════════════════════════════════════════════
 
 def test_m19_medical_advisory_evidence_rules():
-    """证据规则归属固定段 <subagents>（唯一 owner）。"""
+    """证据规则归属固定段 <delegation>（唯一 owner）。"""
     from prismclaw.engine.execution.request._prompt_types import PromptInputs
-    from prismclaw.engine.execution.request.system_prompt import subagents_section
+    from prismclaw.engine.execution.request.system_prompt import delegation_section
 
-    text = subagents_section(PromptInputs(
+    text = delegation_section(PromptInputs(
         session_id="s",
         workspace_id="w",
         agent_id="a",
-        model="m",
         tools=[("sub_agent", "delegate")],
     ))
     assert text is not None

@@ -17,7 +17,6 @@ from prismclaw.engine.execution.request.system_prompt import (
     MarketplaceSummary,
     SystemPromptResult,
 )
-from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.content.replacement_state import ReplacementDecisionState
 from prismclaw.schema.services.skills import SkillInvocationState
 from prismclaw.schema.session.projection import SessionProjectionEngine
@@ -177,7 +176,6 @@ def _shell_cache_key(
     tool_workspace_path: str | None,
     effective_model: str,
     request_mode: str | None,
-    mode: WorkspaceMode,
     deps: Any,
     skill_invocation: SkillInvocationState | None,
     discovered_tools: set[str] | None,
@@ -197,7 +195,6 @@ def _shell_cache_key(
         _plugin_generation(deps),
         subagent_depth,
         request_mode or "",
-        str(mode),
         (active_skill_name or "", *allowed_tools),
         discovered_names,
         skill_catalog_fingerprint,

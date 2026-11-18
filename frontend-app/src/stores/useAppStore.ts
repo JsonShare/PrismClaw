@@ -4,7 +4,7 @@ import { create } from 'zustand'
 import { getToken } from '../services/request'
 import { listWorkspaces } from '../services/workspaces'
 import type { Workspace } from '../services/workspaces'
-import type { DialogSpec, Mode } from '../types'
+import type { DialogSpec } from '../types'
 import {
   applyThemeToDOM,
   readStoredTheme,
@@ -15,7 +15,6 @@ import {
 import type { ResolvedTheme, Theme } from '../utils/theme'
 
 interface AppStore {
-  mode: Mode
   workspaceId: string
   dialog: DialogSpec | null
   theme: Theme
@@ -25,7 +24,6 @@ interface AppStore {
   /** 工作区同步失败原因；成功同步后清空，用于页面展示「重试」而非一直「同步中」 */
   workspacesError: string
 
-  setMode: (mode: Mode) => void
   setWorkspaceId: (id: string) => void
   openDialog: (spec: DialogSpec) => void
   closeDialog: () => void
@@ -49,7 +47,6 @@ function readStoredWorkspace(): string {
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
-  mode: 'chat',
   workspaceId: readStoredWorkspace(),
   dialog: null,
   theme: initialTheme,
@@ -58,7 +55,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
   workspacesLoaded: false,
   workspacesError: '',
 
-  setMode: (mode) => set({ mode }),
   setWorkspaceId: (workspaceId) => {
     Taro.setStorageSync(WORKSPACE_KEY, workspaceId)
     set({ workspaceId })

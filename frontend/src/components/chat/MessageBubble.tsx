@@ -1141,12 +1141,12 @@ export default function MessageBubble({
                               if (!clickable) return
                               if (e.key === 'Enter' || e.key === ' ') handlePreview()
                             }}
-                            className={`col-span-2 w-full min-w-0 rounded-[var(--radius-card)] border border-[var(--c-divider)] bg-[var(--c-surface-2)]
-                                       px-3.5 py-3.5 shadow-sm flex items-center gap-3 text-left group/attach
+                            className={`col-span-2 w-full min-w-0 rounded-[var(--radius-card)] border border-[var(--c-border)] bg-[var(--c-surface)]
+                                       px-4 py-4 flex items-center gap-3.5 text-left group/attach
                                        ${clickable ? 'hover:border-[var(--c-border-strong)] cursor-pointer transition-colors' : 'cursor-default'}`}
                             title={name}
                           >
-                            <FileIcon filename={name} size={28} className="shrink-0" />
+                            <FileIcon filename={name} size={32} className="shrink-0" />
                             <div className="min-w-0 flex-1">
                               <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)] truncate leading-tight">{name}</div>
                               {ext && <div className="mt-0.5 text-[length:var(--fs-sm)] leading-none text-[var(--c-text-secondary)]">{ext}</div>}
@@ -1177,8 +1177,8 @@ export default function MessageBubble({
                             if (!clickable) return
                             if (e.key === 'Enter' || e.key === ' ') handlePreview()
                           }}
-                          className={`col-span-2 w-full min-w-0 rounded-[var(--radius-card)] border border-[var(--c-divider)] bg-[var(--c-surface-2)]
-                                     px-3.5 py-3.5 shadow-sm flex items-center gap-3 text-left group/attach
+                          className={`col-span-2 w-full min-w-0 rounded-[var(--radius-card)] border border-[var(--c-border)] bg-[var(--c-surface)]
+                                     px-4 py-4 flex items-center gap-3.5 text-left group/attach
                                      ${clickable ? 'hover:border-[var(--c-border-strong)] cursor-pointer transition-colors' : 'cursor-default'}`}
                           title={name}
                         >

@@ -10,13 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from prismclaw.app.auth import resolve_profile_and_mode
-from prismclaw.app.session_router import SessionRouter
+from prismclaw.app.auth import resolve_profile
 from prismclaw.app.auth.auth import get_current_user
-from prismclaw.schema.agent.types import RunRequest
-from prismclaw.schema.services.chat_service import ChatService
+from prismclaw.app.session_router import SessionRouter
+from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
 from prismclaw.infra.settings import WebSettings
+from prismclaw.schema.agent.types import RunRequest
 from prismclaw.schema.content.streaming import Done, ReasoningChunk, TextChunk
+from prismclaw.schema.services.chat_service import ChatService
+from prismclaw.schema.shared.tool_markup import MarkupStreamFilter
 
 openai_router = APIRouter(prefix="/api/v1", tags=["openai"])
 
@@ -86,14 +88,11 @@ async def chat_completions(
     session_id, _tree = await _session_router.resolve_or_create(session_key, "default")
 
     user_profile = None
-    mode_override_value = None
     if _web_settings is not None:
-        user_profile, mode_override_value = await resolve_profile_and_mode(
+        user_profile = await resolve_profile(
             channel="web",
             user_id=user_id,
             redis_client=_redis_client,
-            message_mode=None,
-            deployment_default=_web_settings.default_mode,
         )
 
     request = RunRequest(
@@ -101,7 +100,6 @@ async def chat_completions(
         workspace_id="default",
         agent_id="default",
         user_message=last_msg,
-        mode_override=mode_override_value,
         user_id=user_id,
         user_profile=user_profile,
         sandbox_policy=_sandbox_policy,
@@ -145,8 +143,15 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
     }
     yield f"data: {json.dumps(first_chunk)}\n\n"
 
+    # 流式通道必须用有状态过滤器：标记可能被 token 切分跨两个 chunk，
+    # 逐片 strip_tool_markup 无法识别半截标记，会把残留漏给调用方。
+    markup_filter = MarkupStreamFilter()
+
     async for event in _chat_service.start_conversation(request, tool_workspace_path=tool_workspace):
         if isinstance(event, TextChunk):
+            text = markup_filter.feed(event.text or "")
+            if not text:
+                continue
             chunk = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
@@ -155,7 +160,7 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
                 "choices": [
                     {
                         "index": 0,
-                        "delta": {"content": event.text},
+                        "delta": {"content": text},
                         "finish_reason": None,
                     }
                 ],
@@ -181,6 +186,24 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
             }
             yield f"data: {json.dumps(chunk)}\n\n"
         elif isinstance(event, Done):
+            # 吐回过滤器滞留的尾巴：不推等于正文缺结尾（正文可能以路径字符
+            # 或半截标记结束，被 holdback 扣住了）。
+            tail = markup_filter.flush()
+            if tail:
+                tail_chunk = {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": tail},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+                yield f"data: {json.dumps(tail_chunk)}\n\n"
             final: dict[str, Any] = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
@@ -216,7 +239,9 @@ async def _complete_response(request: RunRequest, model: str, user_id: str) -> d
 
     message: dict[str, Any] = {
         "role": "assistant",
-        "content": "".join(collected_text),
+        # 与 Web 实时链路同源清洗：端点缺 tool-call parser 时模型会把原生工具
+        # 调用标记（<|DSML|calls>…）当正文吐出来，这条通道也必须剥掉。
+        "content": strip_noise("".join(collected_text)),
     }
     # Reasoning passthrough (non-stream path). Only attached when present so
     # non-reasoning models get the standard shape unchanged.

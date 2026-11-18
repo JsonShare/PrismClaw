@@ -229,8 +229,8 @@ async def _drive_virtual_socket(monkeypatch, peers_before, peers_after=None):
     captured: dict = {}
     sent: list[bool] = []
 
-    async def fake_run_chat(state, msg, settings) -> None:
-        captured.update(state=state, msg=msg, settings=settings)
+    async def fake_run_chat(state, msg) -> None:
+        captured.update(state=state, msg=msg)
         for i in range(2):
             _seq, ok = await send_event(
                 state, "chat.delta", msg.conversation_id, {"i": i}
@@ -257,7 +257,6 @@ async def _drive_virtual_socket(monkeypatch, peers_before, peers_after=None):
         state=SimpleNamespace(
             web_deps=SimpleNamespace(
                 connection_registry=registry,
-                web_settings=SimpleNamespace(default_mode="work"),
             )
         )
     )
@@ -283,7 +282,6 @@ async def test_virtual_socket_is_silent_but_never_fails_when_ui_closed(monkeypat
     assert state.ws_dead is False
     assert captured["msg"].content == _INSTRUCTION
     assert captured["msg"].conversation_id == _CONV_ID
-    assert captured["settings"] is not None
 
 
 async def test_virtual_socket_fanouts_every_frame_when_ui_open(monkeypatch):

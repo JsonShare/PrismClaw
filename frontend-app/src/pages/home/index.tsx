@@ -9,7 +9,6 @@ import Composer from '../../components/Composer'
 import type { ComposerPayload } from '../../components/Composer'
 import ConversationPane from '../../components/ConversationPane'
 import Icon from '../../components/Icon'
-import ModePicker from '../../components/ModePicker'
 import WorkspacePicker from '../../components/WorkspacePicker'
 import { composeContent } from '../../lib/chat/markers'
 import { useThemeClass } from '../../hooks/useThemeClass'
@@ -19,7 +18,6 @@ import { uploadAttachments } from '../../services/uploads'
 import { useAppStore } from '../../stores/useAppStore'
 import { useChatStore } from '../../stores/useChatStore'
 import { HOME_COMPOSER_KEY, useComposerStore } from '../../stores/useComposerStore'
-import type { Mode } from '../../types'
 import { svgDataUri } from '../../utils/svg'
 
 type CardKind = 'medical' | 'legal' | 'office'
@@ -28,11 +26,6 @@ interface TaskCardItem {
   kind: CardKind
   title: string
   desc: string
-}
-
-const MODE_META: Record<Mode, { placeholder: string }> = {
-  chat: { placeholder: '描述任务或按住说话' },
-  work: { placeholder: '描述任务或按住说话' },
 }
 
 const svg = (body: string) =>
@@ -144,7 +137,6 @@ function pickCards(): TaskCardItem[] {
 }
 
 export default function Home() {
-  const mode = useAppStore((s) => s.mode)
   const workspaceId = useAppStore((s) => s.workspaceId)
   const setWorkspaceId = useAppStore((s) => s.setWorkspaceId)
   const workspaces = useAppStore((s) => s.workspaces)
@@ -162,7 +154,6 @@ export default function Home() {
   const [focused, setFocused] = useState(false)
   const [cards, setCards] = useState<TaskCardItem[]>(pickCards)
 
-  const meta = MODE_META[mode]
   // 聚焦或已有输入时收起推荐卡片（对齐设计稿的键盘展开态）
   const showRecs = !focused && !homeDraft.trim()
 
@@ -193,7 +184,6 @@ export default function Home() {
     setInlineTitle((text || fallbackTitle).slice(0, 24))
     sendMessage(res.session_id, composeContent(text, chips), {
       workspaceId: targetWorkspaceId,
-      mode,
       attachments,
     })
     setInlineSessionId(res.session_id)
@@ -217,7 +207,7 @@ export default function Home() {
         />
         <ConversationPane
           sessionId={inlineSessionId}
-          placeholder={meta.placeholder}
+          placeholder='描述任务或按住说话'
         />
       </View>
     )
@@ -275,8 +265,7 @@ export default function Home() {
             onFocusChange={setFocused}
             onSend={handleSend}
             footer={
-              <View className='mode-dock'>
-                <ModePicker />
+              <View className='dock-tools'>
                 <WorkspacePicker />
               </View>
             }

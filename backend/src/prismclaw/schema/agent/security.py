@@ -1,33 +1,12 @@
 """Security subsystem contracts.
 
-Protocols for safety gate evaluation, consent management,
-and policy / runtime-mode / signer data models.
+Protocols for consent management, and policy / runtime-mode / signer data models.
 """
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
-
-
-class SecurityGateProtocol(Protocol):
-    """Protocol for safety gate evaluation — duck-typing compatible with security/gate.SafetyGate."""
-
-    async def evaluate(
-        self,
-        *,
-        tool_name: str,
-        arguments: dict[str, Any],
-        mode: str = "work",
-        workspace_tag: Any | None = None,
-        workspace_root: str | None = None,
-        llm_risk_hint: str | None = None,
-        session_id: str = "",
-        user_id: str = "",
-        tenant_id: str = "",
-    ) -> Any:
-        """Evaluate a tool call against security policies, returning a decision."""
-        ...
 
 
 class ConsentProtocol(Protocol):

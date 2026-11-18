@@ -7,7 +7,7 @@
   - requester_id != approver_id（硬性校验，同一人不能自我批准）
   - 同部门 → 告警 + 要求在场验证
   - Token 有时间窗口（默认 30min，最长 2h）
-  - 所有 Break-Glass 使用必须写入 WORM 审计日志
+  - 所有 Break-Glass 使用由 BreakGlassRecorder 录屏并留存哈希链索引
   - IAM 独立角色（breakglass_approver）才能批准
 """
 from __future__ import annotations
@@ -132,21 +132,18 @@ class BreakGlassManager:
       1. requester_id != approver_id（硬性校验）
       2. 同部门 → 告警
       3. Token 有时间窗口
-      4. 所有操作写入 WORM 审计
-      5. P4-SEC-01：BreakGlassRecorder 录屏 — token 创建即 start_recording，
-         revoke/过期前 stop_recording，分片写入 WORM 存储（哈希链 + 24h 完整性校验）
+      4. P4-SEC-01：BreakGlassRecorder 录屏 — token 创建即 start_recording，
+         revoke/过期前 stop_recording，分片写入本地存储（哈希链 + 24h 完整性校验）
     """
 
     def __init__(
         self,
         store: BreakGlassStoreProtocol | None = None,
         *,
-        worm_audit: Any = None,
         max_duration_seconds: int = 7200,  # 最长 2h
         recorder: BreakGlassRecorder | None = None,
     ) -> None:
         self._store = store or InMemoryBreakGlassStore()
-        self._worm_audit = worm_audit
         self._max_duration = max_duration_seconds
         # P4-SEC-01：BreakGlassRecorder（可选，默认创建本地存储实例）
         self._recorder = recorder if recorder is not None else BreakGlassRecorder()
@@ -207,20 +204,6 @@ class BreakGlassManager:
 
         # 调度过期自动 stop_recording（复用或新建事件循环）
         self._schedule_auto_stop(token_str, duration)
-
-        # WORM 审计
-        if self._worm_audit is not None:
-            self._worm_audit.log(
-                req.session_id,
-                "breakglass_created",
-                {
-                    "token": token_str,
-                    "requester_id": req.requester_id,
-                    "approver_id": approver_id,
-                    "reason": req.reason,
-                    "duration_seconds": duration,
-                },
-            )
 
         # 同部门告警
         warning = ""
@@ -307,20 +290,9 @@ class BreakGlassManager:
 
     def revoke(self, token: str) -> None:
         """撤销 Break-Glass token（同时停止录屏 + 上传索引）。"""
-        # 先取 session_id（revoke 后 validate_token 返回 None）
-        info = self._store.validate_token(token) or {}
-        session_id = info.get("session_id", "")
-
         self._store.revoke_token(token)
         self._cancel_auto_stop(token)
         self._run_async(self._safe_stop_recording(token))
-
-        if self._worm_audit is not None:
-            self._worm_audit.log(
-                session_id,
-                "breakglass_revoked",
-                {"token": token},
-            )
 
     # ── P4-SEC-01 录屏辅助 ──────────────────────────────────────────
 

@@ -22,10 +22,7 @@ async def stream_llm(
     state: RunLoopState,
 ) -> AsyncIterator[Any]:
     """LLM 流式调用。保留已有模块 call_llm_stream_with_outcome()。"""
-    from prismclaw.engine.execution.control.kernel import (
-        evaluate_loop_control,
-        reasoning_effort_for,
-    )
+    from prismclaw.engine.execution.control.kernel import evaluate_loop_control
     from prismclaw.engine.execution.dispatch.pipeline import (
         LLMStreamError,
         LLMStreamResult,
@@ -64,25 +61,28 @@ async def stream_llm(
     _now = _time.monotonic()
     _ctrl = evaluate_loop_control(
         run_state=rt.run_state,
-        effort_budget=rt.effort_budget,
+        run_budget=rt.run_budget,
         now=_now,
         phase="stream",
     )
     _remaining_hard = rt.run_state.loop_state.hard_at - _now
     if _ctrl.is_last_turn:
-        _cap_s = min(rt.effort_budget.cap_s, max(0.0, _remaining_hard))
+        _cap_s = min(rt.run_budget.cap_s, max(0.0, _remaining_hard))
     else:
-        _cap_s = min(rt.effort_budget.cap_s, max(0.0, _remaining_hard - rt.effort_budget.reserve_s))
+        _cap_s = min(rt.run_budget.cap_s, max(0.0, _remaining_hard - rt.run_budget.reserve_s))
 
-    # ── 软着陆引导：最后一轮时在 system message 注入自然收尾指令 ──
+    # ── 软着陆引导：最后一轮时在 system 注入自然收尾指令 ──
     # 触发条件：is_last_turn=True（剩余时间 <= reserve_s 或只剩 1 次迭代机会）
-    # 注入位置：packed_request.system（string 末尾追加；list 末尾 append 一条）
     # 去重：rt.time_budget_warned 控制（独立于 iteration_budget_warned / token_budget_warned）
     # 注意：overflow recovery 会重建 prepared_turn，重试时如仍 is_last_turn
     # 会再注入一次——这是正确行为（新 request 需要新警告）
     if _ctrl.is_last_turn and not rt.time_budget_warned:
-        _inject_soft_landing_prompt(state, _remaining_hard)
-        rt.time_budget_warned = True
+        rt.time_budget_warned = _append_system_directive(
+            state,
+            _SOFT_LANDING_PROMPT,
+            reason="soft_landing",
+            remaining_hard_s=f"{max(0.0, _remaining_hard):.1f}",
+        )
 
     # ── Token/上下文预算警告：ratio ≥ warning_ratio 时注入收敛指令 ──
     # 与时间/迭代 warn 独立——三个 flag 互不吞警告。
@@ -109,10 +109,12 @@ async def stream_llm(
                             soft_budget=_sb_cfg,
                         )
                         if _verdict.should_warn:
-                            _inject_token_budget_warning(
-                                state, _verdict, soft_budget=_sb_cfg,
+                            rt.token_budget_warned = _append_system_directive(
+                                state,
+                                render_budget_warning(_verdict, soft_budget=_sb_cfg),
+                                reason="token_budget_warning",
+                                ratio=f"{_verdict.ratio:.3f}",
                             )
-                            rt.token_budget_warned = True
                 except Exception as exc:
                     logger.debug("token_budget_warning.skipped err=%s", exc)
 
@@ -128,7 +130,6 @@ async def stream_llm(
         max_idle_retries=1,
         cap_s=_cap_s,
         is_last_turn=_ctrl.is_last_turn,
-        reasoning_effort=reasoning_effort_for(rt.effort_level),
     )
     holder = _OutcomeHolder()
     async for event in call_llm_stream_with_outcome(state.ctx, _pipeline_params, _outcome=holder):
@@ -249,99 +250,58 @@ async def _try_overflow_recovery(
 
 
 # ---------------------------------------------------------------------------
-# 软着陆 prompt 注入
+# 运行时指令注入（软着陆 / token 预算警告）
 # ---------------------------------------------------------------------------
 
 _SOFT_LANDING_PROMPT = """
-[系统指令：这是本轮执行的最后一轮，你必须在本轮完成最终回答。]
-
-执行要求——本轮只输出综合回答，禁止任何工具调用：
-1. 立即停止一切工具调用行为——你无法再调用任何工具（工具已全部冻结）。
-2. 回顾整个会话上下文，汇总你已获取的全部信息、发现和产物。
-3. 直接回答用户最初提出的问题，给出完整的最终答案。
-4. 如果某些方面尚未覆盖，诚实点明即可，不要找借口或说"我应该去..."。
-5. 不要提及任何预算、超时、最后一轮、工具冻结等内部状态。
+<system_directive scope="final_turn">
+本轮是最后一轮，必须给出最终回答，不再调用任何工具。
+汇总已获取的信息与产物，直接回答用户最初的问题；未覆盖的部分如实说明。
+不要提及预算、超时、轮次或工具冻结等内部状态。
+</system_directive>
 """
 
 
-def _inject_soft_landing_prompt(state: RunLoopState, remaining_s: float) -> None:
-    """在 packed_request.system 里注入软着陆引导文案。
+def _append_system_directive(
+    state: RunLoopState,
+    text: str,
+    *,
+    reason: str,
+    **fields: Any,
+) -> bool:
+    """把运行时指令追加到打包后的 system，返回是否写入。
 
-    两种 system 形态都处理：
-    - str：末尾追加 "\n\n" + 提示
-    - list[dict]：末尾 append {"role": "system", "content": 提示}
+    system 恒为"单条消息的 content"，因此只有两种形态：
+    - str：末尾追加段落
+    - list[dict]：追加一个文本块 ``{"type": "text", ...}``（不是消息形状）
 
-    防御：preflight / packed_request / system 任一缺失时静默跳过。
+    注入发生在 packer 之后，故不重算 PackerFinalDone 的 sha1——那是打包层输出；
+    实际发送字节的真值由 ``llm_request_start ... prefix_digest`` 提供。
+
     不抛异常、不修改 messages（保持 tool_use/tool_result 配对不变量）。
     """
     _pt = state.prepared_turn
-    if _pt is None or _pt.preflight is None:
-        return
-    _pr = _pt.preflight.packed_request
-    if _pr is None:
-        return
+    _pr = _pt.preflight.packed_request if _pt is not None and _pt.preflight is not None else None
+    _body = text.strip()
+    if _pr is None or not _body:
+        return False
     _sys = getattr(_pr, "system", None)
-    if _sys is None:
-        return
-
     if isinstance(_sys, str):
-        _pr.system = _sys.rstrip() + "\n\n" + _SOFT_LANDING_PROMPT.strip()
+        _pr.system = _sys.rstrip() + "\n\n" + _body
     elif isinstance(_sys, list):
-        _pr.system = list(_sys) + [{"role": "system", "content": _SOFT_LANDING_PROMPT.strip()}]
+        _pr.system = [*_sys, {"type": "text", "text": _body}]
     else:
-        logger.warning(
-            "soft_landing: packed_request.system has unexpected type %s, skip",
+        logger.info(
+            "system_directive_skipped reason=%s system_type=%s",
+            reason,
             type(_sys).__name__,
         )
-        return
-
-    logger.warning(
-        "soft_landing.prompt_injected remaining_hard_s=%.1f",
-        max(0.0, remaining_s),
+        return False
+    _extra = " ".join(f"{k}={v}" for k, v in fields.items())
+    logger.info(
+        "system_directive_applied reason=%s chars=%d%s",
+        reason,
+        len(_body),
+        f" {_extra}" if _extra else "",
     )
-
-
-def _inject_token_budget_warning(
-    state: RunLoopState,
-    verdict: Any,
-    *,
-    soft_budget: Any | None,
-) -> None:
-    """在 packed_request.system 里注入 token 预算警告文案。
-
-    复用 _inject_soft_landing_prompt 的两种 system 形态处理：
-    - str：末尾追加 warning_text
-    - list[dict]：末尾 append {"role": "system", "content": warning_text}
-
-    防御：preflight / packed_request / system 任一缺失时静默跳过。
-    警告文案由 render_budget_warning 生成（模板解析 + ratio 填充）。
-    """
-    from prismclaw.engine.compression._soft_budget import render_budget_warning
-
-    _pt = state.prepared_turn
-    if _pt is None or _pt.preflight is None:
-        return
-    _pr = _pt.preflight.packed_request
-    if _pr is None:
-        return
-    _sys = getattr(_pr, "system", None)
-    if _sys is None:
-        return
-
-    warning_text = render_budget_warning(verdict, soft_budget=soft_budget)
-
-    if isinstance(_sys, str):
-        _pr.system = _sys.rstrip() + "\n\n" + warning_text.strip()
-    elif isinstance(_sys, list):
-        _pr.system = list(_sys) + [{"role": "system", "content": warning_text.strip()}]
-    else:
-        logger.warning(
-            "token_budget_warning: packed_request.system has unexpected type %s, skip",
-            type(_sys).__name__,
-        )
-        return
-
-    logger.warning(
-        "soft_landing.token_budget_prompt_injected ratio=%.3f",
-        verdict.ratio,
-    )
+    return True

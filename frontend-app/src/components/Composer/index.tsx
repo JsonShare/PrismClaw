@@ -35,7 +35,7 @@ interface ComposerProps {
   expandedPlaceholder?: string
   streaming?: boolean
   disabled?: boolean
-  /** 输入卡下方的一行（模式切换、工作区等），与输入区共用遮罩与安全区内边距 */
+  /** 输入卡下方的一行（工作区等工具），与输入区共用遮罩与安全区内边距 */
   footer?: ReactNode
   /** 聚焦 / 展开状态变化（首页据此隐藏推荐卡片与 chips） */
   onFocusChange?: (focused: boolean) => void
@@ -531,7 +531,7 @@ export default function Composer({
     }, 180)
   }
 
-  // 发送中或流式输出时收起下方模式切换；选择模式或发出首条消息后由 started 控制永久隐藏
+  // 发送中或流式输出时收起下方工具行；发出首条消息后由 started 控制永久隐藏
   const footerHidden = sending || streaming
 
   const handleSend = async () => {

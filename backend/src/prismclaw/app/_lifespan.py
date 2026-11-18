@@ -687,7 +687,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         workspace_id=workspace_id,
                         content=content,
                     )
-                    await _run_chat(state, msg, app.state.web_deps.web_settings)
+                    await _run_chat(state, msg)
 
                 executor = ScheduledRunExecutor(
                     app=app,

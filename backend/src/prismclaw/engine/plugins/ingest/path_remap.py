@@ -64,14 +64,13 @@ class PathRemapRule:
 # declaration — the loader prepends it automatically. See module docstring for
 # rationale.
 #
-# T0 迁 assets/ 后，静态能力目录从 home 根裸位置收进 ~/.prismclaw/assets/。
-# 追加三条 assets 专用长前缀规则，靠 apply_path_remap 的长度优先排序
-# 自动先命中；通配规则覆盖 runtime / memory / workspaces / server.yaml /
-# plugins-data 等**仍然留在 home 根**的运行时路径，不需改。
+# 只做一件事：把插件正文里的 ``~/.prismclaw/`` 换成可移植占位符
+# ``${PRISMCLAW_USER_HOME}/``，避免模型自行展开 ``~``（常被展开成
+# ``/home/user/prismclaw`` 而非 ``/home/user/.prismclaw``）。静态能力目录
+# 在正文中已直接写 ``~/.prismclaw/assets/...``，无需再单独写 assets 专用规则；
+# 模型遗漏 ``assets`` 段的路径纠正属于路径解析器职责（见
+# ``toolkit/file/workspace.py::canonicalize_fs_path``）。
 DEFAULT_REMAP_RULES: tuple[PathRemapRule, ...] = (
-    PathRemapRule("~/.prismclaw/skills/", "${PRISMCLAW_USER_HOME}/assets/skills/"),
-    PathRemapRule("~/.prismclaw/plugins/", "${PRISMCLAW_USER_HOME}/assets/plugins/"),
-    PathRemapRule("~/.prismclaw/agents/", "${PRISMCLAW_USER_HOME}/assets/agents/"),
     PathRemapRule("~/.prismclaw/", "${PRISMCLAW_USER_HOME}/"),
 )
 

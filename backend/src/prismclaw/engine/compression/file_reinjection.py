@@ -19,7 +19,7 @@ from prismclaw.schema.session.types import CompactionEntry
 
 logger = logging.getLogger(__name__)
 
-_READ_TOOL_NAMES = {"read", "builtin.read", "Read", "read_office", "read_image"}
+_READ_TOOL_NAMES = {"read"}
 
 
 def _resolve_reinject_budgets() -> tuple[int, int]:

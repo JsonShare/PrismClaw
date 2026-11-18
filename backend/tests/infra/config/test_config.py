@@ -253,7 +253,7 @@ class TestGetEffectiveConfig:
         defaults_path.parent.mkdir(parents=True, exist_ok=True)
         defaults_path.write_text(json.dumps(defaults), encoding="utf-8")
 
-        override_path = tmp_path / "ws" / ".prismclaw" / "configs" / "science.json"
+        override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
         override_path.parent.mkdir(parents=True, exist_ok=True)
         override_path.write_text(json.dumps(override_data), encoding="utf-8")
 
@@ -285,7 +285,7 @@ class TestGetEffectiveConfig:
         defaults_path.parent.mkdir(parents=True, exist_ok=True)
         defaults_path.write_text(json.dumps(defaults), encoding="utf-8")
 
-        override_path = tmp_path / "ws" / ".prismclaw" / "configs" / "science.json"
+        override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
         override_path.parent.mkdir(parents=True, exist_ok=True)
         override_path.write_text(json.dumps(override_data), encoding="utf-8")
 
@@ -309,7 +309,7 @@ class TestSaveOverride:
         defaults_path.parent.mkdir(parents=True, exist_ok=True)
         defaults_path.write_text(json.dumps(defaults), encoding="utf-8")
 
-        override_path = tmp_path / "ws" / ".prismclaw" / "configs" / "science.json"
+        override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
 
         from prismclaw.infra.config import resolver
         monkeypatch.setattr(resolver, "_defaults_config_path", lambda d: defaults_path)
@@ -328,7 +328,7 @@ class TestResetOverride:
 
     def test_removes_file(self, monkeypatch, tmp_path):
         """重置时删除覆盖文件。"""
-        override_path = tmp_path / "ws" / ".prismclaw" / "configs" / "science.json"
+        override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
         override_path.parent.mkdir(parents=True, exist_ok=True)
         override_path.write_text('{"schema_version": "1.0"}', encoding="utf-8")
 
@@ -345,7 +345,7 @@ class TestResetOverrideKey:
 
     def test_deletes_single_key(self, monkeypatch, tmp_path):
         """删除单个键后文件仍保留其他键。"""
-        override_path = tmp_path / "ws" / ".prismclaw" / "configs" / "science.json"
+        override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
         override_path.parent.mkdir(parents=True, exist_ok=True)
         override_data = {
             "schema_version": "1.0",
@@ -364,7 +364,7 @@ class TestResetOverrideKey:
 
     def test_removes_file_when_only_schema_left(self, monkeypatch, tmp_path):
         """删除键后只剩 schema_version → 删除整个文件。"""
-        override_path = tmp_path / "ws" / ".prismclaw" / "configs" / "science.json"
+        override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
         override_path.parent.mkdir(parents=True, exist_ok=True)
         override_data = {
             "schema_version": "1.0",

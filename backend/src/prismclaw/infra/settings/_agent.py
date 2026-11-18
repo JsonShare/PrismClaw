@@ -8,8 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from prismclaw.schema.config.config import (
     CompletionControlConfig,
     ContextConfig,
-    EffortConfig,
     RetryConfig,
+    RunBudgetConfig,
     RunLoopTuningConfig,
     TimeoutConfig,
 )
@@ -32,9 +32,8 @@ class AgentSettings(BaseSettings):
     timeouts: TimeoutConfig = Field(default_factory=TimeoutConfig)
     retry: RetryConfig = Field(default_factory=RetryConfig)
     run_loop: RunLoopTuningConfig = Field(default_factory=RunLoopTuningConfig)
-    # effort 档位（quick/standard/deep）；RunRequest.effort 选择档位，
-    # long_running 在此基础上放大 steps/hard_s。
-    effort: EffortConfig = Field(default_factory=EffortConfig)
+    # 单次 run 的资源上限（steps / tool_calls / soft_s / hard_s）。
+    budget: RunBudgetConfig = Field(default_factory=RunBudgetConfig)
 
     model_config = SettingsConfigDict(
         env_prefix="PRISMCLAW_AGENT_", extra="ignore", populate_by_name=True

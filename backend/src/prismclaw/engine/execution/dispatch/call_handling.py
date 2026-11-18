@@ -363,13 +363,12 @@ async def prepare_call(
     tool_call: dict[str, Any],
     context: ToolContext,
     registry: ToolRegistry | None = None,
-    safety_gate: Any | None = None,
 ) -> Any:
-    """Prepare phase — validate, safety-check, resolve tool.
+    """Prepare phase — validate and resolve tool.
 
     Aligned with Pi's prepareToolCall: the prepare phase determines
     whether the call should proceed, and if so, resolves the tool
-    and its arguments. Interception is possible here (safety gate).
+    and its arguments.
 
     Returns PreparedCall (ready to execute) or ImmediateResult (intercepted).
     """
@@ -389,26 +388,6 @@ async def prepare_call(
             ),
             is_error=True,
         )
-
-    # Safety gate interception
-    if safety_gate is not None:
-        try:
-            decision = await safety_gate.evaluate(tool_call, tool, context)
-            if getattr(decision, "blocked", False):
-                return ImmediateResult(
-                    tool_call=tool_call,
-                    result=ToolResult(
-                        tool_call_id=tool_call.get("id", ""),
-                        content=[getattr(decision, "reason", "已被安全门禁阻止")],
-                        is_error=True,
-                    ),
-                    is_error=True,
-                )
-            return PreparedCall(tool_call=tool_call, tool=tool,
-                                    args=tool_call.get("function", {}).get("arguments", {}),
-                                    safety_decision=decision)
-        except Exception:
-            pass  # Safety gate failure -> proceed
 
     args_str = (tool_call.get("function") or {}).get("arguments", "{}")
     try:

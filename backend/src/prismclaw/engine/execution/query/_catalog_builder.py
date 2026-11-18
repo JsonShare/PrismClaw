@@ -15,7 +15,6 @@ from prismclaw.engine.subagent.runtime.follow_up import (
     build_session_follow_up_note,
     session_follow_up_snapshot,
 )
-from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.skills import SkillInvocationState
 
 logger = logging.getLogger(__name__)
@@ -32,7 +31,6 @@ def _tool_prompt_summaries(
     capability_catalog: CapabilityCatalogService,
     skill_invocation: SkillInvocationState | None,
     discovered_tools: set[str] | None,
-    mode: WorkspaceMode,
     subagent_depth: int,
     headless: bool = False,
 ) -> list[tuple[str, str]]:
@@ -41,7 +39,6 @@ def _tool_prompt_summaries(
         for entry in capability_catalog.list_visible_tool_entries(
             skill_invocation=skill_invocation,
             discovered_tools=discovered_tools,
-            mode=mode,
             subagent_depth=subagent_depth,
             headless=headless,
         )

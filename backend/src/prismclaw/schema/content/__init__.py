@@ -5,8 +5,6 @@ from __future__ import annotations
 def __getattr__(name):
     """Lazy re-export to avoid circular imports."""
     _lazy = {
-        # Re-exports from other packages (not defined in content/)
-        "WorkspaceMode": ("prismclaw.schema.agent.types", "WorkspaceMode"),
         # Content-defined types
         "AgentEvent": ("prismclaw.schema.content.streaming", "AgentEvent"),
         "AssembleResult": ("prismclaw.schema.content.compaction", "AssembleResult"),
@@ -18,7 +16,6 @@ def __getattr__(name):
         "CompactionPreservedSegment": ("prismclaw.schema.content.compaction", "CompactionPreservedSegment"),
         "CompactionReasonCode": ("prismclaw.schema.content.compaction", "CompactionReasonCode"),
         "CompressionValidationResult": ("prismclaw.schema.content.compaction", "CompressionValidationResult"),
-        "ConfirmationKind": ("prismclaw.schema.content.workspace", "ConfirmationKind"),
         "ContextBlock": ("prismclaw.schema.content.context", "ContextBlock"),
         "ContextGraph": ("prismclaw.schema.content.evidence", "ContextGraph"),
         "ContextGraphEdge": ("prismclaw.schema.content.evidence", "ContextGraphEdge"),
@@ -35,7 +32,6 @@ def __getattr__(name):
         "EvidenceStrategy": ("prismclaw.schema.content.evidence", "EvidenceStrategy"),
         "EvidenceTemporalMode": ("prismclaw.schema.content.evidence", "EvidenceTemporalMode"),
         "FileChangeEntry": ("prismclaw.schema.content.content_types", "FileChangeEntry"),
-        "GateApprovalDecision": ("prismclaw.schema.content.workspace", "GateApprovalDecision"),
         "HandoffRequestPayload": ("prismclaw.schema.content.content_types", "HandoffRequestPayload"),
         "HeartbeatDetail": ("prismclaw.schema.content.streaming", "HeartbeatDetail"),
         "HeartbeatEvent": ("prismclaw.schema.content.streaming", "HeartbeatEvent"),

@@ -113,7 +113,6 @@ async def try_handle_slash_command(
         content=invocation_prompt,
         attachments=msg.attachments,
         confirmation_decision=msg.confirmation_decision,
-        mode=msg.mode,
         trajectory=msg.trajectory,
         # 命令改写只替换执行内容；客户端气泡身份必须保留，否则 plugin 命令
         # 这一轮的 user 消息无法 re-key，刷新前后会出现两个提问气泡。

@@ -10,9 +10,9 @@ from prismclaw.engine.subagent.runtime.follow_up import (
     session_follow_up_snapshot,
 )
 from prismclaw.engine.subagent.runtime.parallel import (
+    CURRENT_PARALLEL_TASK_SCHEMA_VERSION,
     PARALLEL_TASK_RUNTIME_CUSTOM_TYPE,
 )
-from prismclaw.engine.toolkit.subagent.reduce_subagent_results import _is_error_text
 from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.session.types import CustomEntry
 
@@ -40,20 +40,6 @@ def _tool_messages(count: int, size: int) -> list[dict]:
             }
         )
     return messages
-
-
-def test_partial_completion_prefix_is_not_failure() -> None:
-    assert _is_error_text("[子代理部分完成：已达最大轮次上限（5 轮）]\n\n结果") is False
-
-
-def test_failure_prefix_is_failure() -> None:
-    assert _is_error_text("[子代理超时：60s 后共执行 3 轮]") is True
-    assert _is_error_text("  \n[子代理执行失败：boom]") is True
-
-
-def test_aggregate_header_requires_positive_error_count() -> None:
-    assert _is_error_text("[2 sub-agents: 0 errors]\n...") is False
-    assert _is_error_text("[2 sub-agents: 2 errors]\n...") is True
 
 
 def test_synthesized_text_never_exceeds_budget() -> None:
@@ -114,8 +100,9 @@ def _record_entry(*, status: str, entry_id: str = "r1") -> CustomEntry:
         parent_id=None,
         custom_type=PARALLEL_TASK_RUNTIME_CUSTOM_TYPE,
         data={
-            "schema_version": "parallel_task.v2",
+            "schema_version": CURRENT_PARALLEL_TASK_SCHEMA_VERSION,
             "task_id": "pt:1",
+            "agent_id": "ag:1",
             "owner_session_id": "sess-1",
             "kind": "subagent",
             "status": status,

@@ -42,7 +42,6 @@ from prismclaw.schema.session import (
     HANDOFF_REQUEST_CUSTOM_TYPE,
     MessageEntry,
     REVIEW_DECISION_CUSTOM_TYPE,
-    REVIEW_REQUIREMENTS_CUSTOM_TYPE,
     SEARCH_EVIDENCE_CUSTOM_TYPE,
     SESSION_MEMORY_CUSTOM_TYPE,
     SESSION_STATE_CUSTOM_TYPE,
@@ -62,7 +61,6 @@ from prismclaw.schema.session import (
 from prismclaw.schema.agent.task_runtime import (
     EvidenceRecord,
     ReviewDecisionRecord,
-    ReviewRequirements,
     TaskMutation,
     TaskRuntimeState,
 )
@@ -150,9 +148,6 @@ class TaskProjection:
 
     def get_latest_task_spec(self) -> TaskSpec | None:
         return _find_latest_custom_model(self._tree.get_branch(), TASK_SPEC_CUSTOM_TYPE, TaskSpec)
-
-    def get_latest_review_requirements(self) -> ReviewRequirements | None:
-        return _find_latest_custom_model(self._tree.get_branch(), REVIEW_REQUIREMENTS_CUSTOM_TYPE, ReviewRequirements)
 
     def get_evidence_ledger(self) -> list[EvidenceRecord]:
         return _collect_custom_models(self._tree.get_branch(), EVIDENCE_LEDGER_CUSTOM_TYPE, EvidenceRecord)

@@ -23,8 +23,6 @@ interface ServerWorkspaceManagerProps {
   onCreateWorkspace?: (name: string) => Promise<void>
   onUploadFiles?: (files: File[]) => Promise<void>
   onRemoveWorkspace?: (id: string) => Promise<void>
-  /** 只读模式（Chat 咨询）：操作按钮可见但禁用，弹层底部给出切换提示，而非静默隐藏 */
-  readOnly?: boolean
 }
 
 /** Read a dropped file/folder tree into a flat File[] list, attaching the
@@ -82,7 +80,6 @@ function WorkspaceMenuItem({
   onSync,
   onDelete,
   title,
-  disabled = false,
 }: {
   name: string
   icon: ReactNode
@@ -93,10 +90,7 @@ function WorkspaceMenuItem({
   onSync?: () => void
   onDelete?: () => void
   title?: string
-  /** 只读模式：操作按钮渲染但禁用（可见性不随模式变化，避免功能"凭空消失"） */
-  disabled?: boolean
 }) {
-  const disabledHint = '咨询模式只读，切换到 Work 协作后可操作'
   return (
     <div
       className={`group relative flex items-center gap-2.5 rounded-[var(--radius-md)] pl-3 pr-1.5 py-1.5 transition-colors ${
@@ -132,8 +126,7 @@ function WorkspaceMenuItem({
           <button
             type="button"
             onClick={onSync}
-            disabled={disabled}
-            title={disabled ? disabledHint : '上传文件或文件夹'}
+            title="上传文件或文件夹"
             aria-label="上传文件或文件夹"
             className="btn btn-icon btn-ghost"
           >
@@ -144,8 +137,7 @@ function WorkspaceMenuItem({
           <button
             type="button"
             onClick={onDelete}
-            disabled={disabled}
-            title={disabled ? disabledHint : '删除目录'}
+            title="删除目录"
             aria-label="删除目录"
             className="btn btn-icon btn-ghost"
           >
@@ -165,7 +157,6 @@ export default function ServerWorkspaceManager({
   onCreateWorkspace,
   onUploadFiles,
   onRemoveWorkspace,
-  readOnly = false,
 }: ServerWorkspaceManagerProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'menu' | 'create' | 'upload'>('menu')
@@ -315,7 +306,6 @@ export default function ServerWorkspaceManager({
                   icon={<Folder size={16} strokeWidth={1.8} className="text-[var(--c-text-secondary)]/70" />}
                   isActive={workspaceId === 'default'}
                   showSync={!!onUploadFiles}
-                  disabled={readOnly}
                   onSelect={() => handleSelect('default')}
                   onSync={() => handleSync('default')}
                 />
@@ -337,7 +327,6 @@ export default function ServerWorkspaceManager({
                     isActive={w.id === workspaceId}
                     showSync={!!onUploadFiles}
                     showDelete={!!onRemoveWorkspace}
-                    disabled={readOnly}
                     onSelect={() => handleSelect(w.id)}
                     onSync={() => handleSync(w.id)}
                     onDelete={() => handleRemove(w.id)}
@@ -358,27 +347,14 @@ export default function ServerWorkspaceManager({
                 </div>
               )}
 
-              {/* 只读模式提示：解释操作按钮为何禁用，而不是让功能静默消失 */}
-              {readOnly && (
-                <div className="mt-1.5 px-3 py-1.5 flex items-center gap-2 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]/70">
-                  <ShieldOff size={12} className="shrink-0" />
-                  <span>咨询模式只读 — 切换到 Work 协作后可上传 / 删除</span>
-                </div>
-              )}
-
-              {/* 新建工作目录（仅读写模式） */}
+              {/* 新建工作目录 */}
               {onCreateWorkspace && (
                 <>
                   <HairlineDivider className="mx-1 my-1.5" />
                   <button
                     type="button"
                     onClick={() => setMode('create')}
-                    disabled={readOnly}
-                    className={`flex w-full items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-[length:var(--fs-sm)] transition-colors ${
-                      readOnly
-                        ? 'text-[var(--c-text-secondary)]/50 cursor-not-allowed'
-                        : 'text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-2)]/40 hover:text-[var(--c-text)] cursor-pointer'
-                    }`}
+                    className="flex w-full items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] transition-colors hover:bg-[var(--c-surface-2)]/40 hover:text-[var(--c-text)] cursor-pointer"
                   >
                     <Plus size={15} strokeWidth={1.8} />
                     <span>新建工作目录</span>

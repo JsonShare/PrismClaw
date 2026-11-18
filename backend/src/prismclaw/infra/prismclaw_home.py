@@ -40,8 +40,6 @@ _STATIC_TOP_LEVEL: tuple[str, ...] = (
     ".gitignore",
 )
 
-_MIGRATION_MARKER = ".assets-migrated-v1"
-
 # sync 时排除的运行时产物 —— dev 开发目录里可能混入 engine 运行痕迹，
 # 绝不该随静态能力同步到 ~/.prismclaw/assets。
 #   .bash_state            bash 持久会话恢复钩子（含 dev 绝对路径）
@@ -65,42 +63,6 @@ def _resolve_backend_prismclaw(project_root: Path) -> Path:
     if fallback.is_dir():
         return fallback
     return candidate
-
-
-def _cleanup_legacy_top_level(home: Path) -> None:
-    """清理 T0 前的旧结构：~/.prismclaw 根裸的 skills/plugins/agents/... 条目。
-
-    一次性，项目未上线、零兼容负担——直接 rmtree，只留 marker。
-    """
-    marker = home / _MIGRATION_MARKER
-    if marker.exists():
-        return
-
-    removed: list[str] = []
-    for name in _STATIC_TOP_LEVEL:
-        entry = home / name
-        if entry.exists():
-            try:
-                if entry.is_dir():
-                    shutil.rmtree(entry)
-                else:
-                    entry.unlink()
-                removed.append(name)
-            except Exception:
-                logger.warning(
-                    "cleanup_legacy: 删 %s 失败", entry, exc_info=True,
-                )
-
-    # 写 marker，幂等
-    try:
-        marker.touch()
-    except Exception:
-        logger.debug("cleanup_legacy: 写 marker 失败", exc_info=True)
-
-    if removed:
-        logger.info(
-            "cleanup_legacy_top_level: 删除旧位置条目 %s（首次迁移）", removed
-        )
 
 
 @dataclass(slots=True)
@@ -168,9 +130,6 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
     """
     source = _resolve_backend_prismclaw(project_root)
     home = Path.home() / ".prismclaw"
-
-    # 首次迁移：删 home 根旧位置
-    _cleanup_legacy_top_level(home)
 
     target = home / "assets"
 

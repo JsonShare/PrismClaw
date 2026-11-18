@@ -9,9 +9,7 @@ from prismclaw.engine.execution.checkpoint import (
     SystemPromptSectionRecord,
     SystemPromptSectionState,
 )
-from prismclaw.schema.agent.task_runtime import ReviewRequirements
 from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.engine.security.gate.policies import WorkspaceTag
 from prismclaw.schema.content.context import ContextBlock
 
 
@@ -59,7 +57,6 @@ class PromptInputs:
     session_id: str
     workspace_id: str
     agent_id: str
-    model: str
     tools: Sequence[tuple[str, str]] = ()
     # 仅项目级技能名（用户主动安装、数量有界）；插件技能走 skill_search。
     project_skill_names: tuple[str, ...] = ()
@@ -74,18 +71,15 @@ class PromptInputs:
     handoff_enabled: bool = False
     any_manifest_has_can_handoff_to: bool = False
     max_handoff_chain_length: int = 5
-    workspace_mode: str = "work"
     runtime_strategy_notes: Sequence[str] = ()
     task_spec: TaskSpec | None = None
-    review_requirements: ReviewRequirements | None = None
     active_skill_name: str | None = None
     allowed_tools_override: Sequence[str] = ()
     skill_is_active: bool = False
     # 区分调用来源: "skill" 或 "command"。命令 dispatch 时设为 "command",
-    # 系统提示词据此显示 [Active Command] 而非 [Active Skill]。
+    # 系统提示词据此输出 <active_skill source="command"> 而非 source="skill"。
     invocation_context: str = "skill"
     invoked_skill_attachments: str | None = None  # 压缩后重新注入的已调用技能片段
-    workspace_tag: WorkspaceTag | None = None  # 工作区安全标签，用于领域安全指令注入
 
 
 @dataclass(frozen=True, slots=True)

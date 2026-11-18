@@ -34,12 +34,3 @@ class SessionRouterProtocol(Protocol):
     async def update_last_interaction(self, session_id: str) -> None:
         """Update the last interaction timestamp for a session."""
         ...
-
-    async def check_idle_reset(
-        self,
-        session_key: str,
-        session_id: str,
-        idle_minutes: int,
-    ) -> bool:
-        """Check if a session should be reset due to inactivity."""
-        ...

@@ -58,19 +58,10 @@ class ScheduledTaskTool:
         "管理自动化定时任务：创建、查询、修改、删除、手动触发、启用、禁用。\n"
         "\n"
         "关键规则：\n"
-        "- instruction 是任务触发时 AI 收到的唯一输入，没有对话历史，必须完全自包含。\n"
-        "- 用户指令模糊时（如\"整理新闻\"），先帮助细化为具体可执行步骤，再调用本工具。\n"
+        "- instruction 无对话历史，必须完全自包含；指令模糊时（如\"整理新闻\"）先细化再创建。\n"
         "- 用户未指定执行时间时，先询问偏好再创建。\n"
         "- 修改/删除/触发前先用 list 确认目标 task_id。\n"
-        "\n"
-        "instruction 写法：\n"
-        "  反例：\"按之前说的格式发报告\"（依赖对话上下文，执行时无法理解）\n"
-        "  正例：\"搜索过去24小时AI新闻，按领域分类，标注重要性，以表格输出\"\n"
-        "\n"
-        "schedule 字段按 type 取值：\n"
-        "  minute → everyMinutes(1-59)；hour → minute；day → hour,minute；\n"
-        "  week → weekday(mon-sun),hour,minute；month → day(1-31),hour,minute。\n"
-        "  仅当结构化字段无法表达（如\"工作日9点和15点\"）时才用 cron_expr。"
+        "- 结构化字段无法表达时（如工作日 9 点与 15 点）才用 cron_expr。"
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -111,7 +102,7 @@ class ScheduledTaskTool:
             },
             "enabled": {
                 "type": "boolean",
-                "description": "仅 create 时有效：创建后是否立即启用，默认 true。已有任务的启停请用 enable/disable action",
+                "description": "仅 create 时有效：创建后是否立即启用，默认 true；已有任务用 enable/disable",
             },
         },
         "required": ["action"],

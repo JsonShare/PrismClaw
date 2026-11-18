@@ -195,6 +195,13 @@ class WorkspaceResolver:
         """
         stripped_raw = relative.strip()
 
+        if is_remote_url(stripped_raw):
+            raise WorkspaceBoundaryError(
+                f"{relative!r} 是远程 URL，不是本地文件路径。"
+                "文件工具只接受本地路径；如需网页内容，请先将资源下载到工作区"
+                "（如 `outputs/`）再读取。"
+            )
+
         # 文件工具参数是字面量字符串，不做 shell 变量展开。技能文档里
         # `$PRISMCLAW_OUTPUT_DIR/<rel>` 只适用于 bash 通道；模型照抄到文件工具
         # 会生成名为 `$PRISMCLAW_OUTPUT_DIR` 的字面目录（验收 1 明令阻断）。
@@ -216,7 +223,9 @@ class WorkspaceResolver:
             pre = Path(stripped_raw).expanduser()
             if pre.is_absolute():
                 resolved = pre.resolve() if pre.exists() else _lexical_resolve(pre)
-                return resolved
+                # 别名纠正只服务读路径：静态能力目录（assets/）是只读区，
+                # 写操作若也被改写就会把旧前缀的误写搬进只读目录。
+                return resolved if for_write else canonicalize_fs_path(resolved)
 
         cleaned = clean_rel_path(relative)
         if cleaned is None:
@@ -341,6 +350,64 @@ _FS_ROOT_SEGMENTS = frozenset({
     "mnt",
     "srv",
 })
+
+
+# ── 能力目录别名纠正 ────────────────────────────────────────────────────────
+#
+# T0 目录迁移后，静态能力目录收在 ``~/.prismclaw/assets/{plugins,skills,agents}``。
+# 模型读到这些路径后倾向于复述成省略内部段的 ``~/.prismclaw/plugins/...``，
+# 该路径已不存在，ls/read 只会得到 not found。这里把省略 ``assets`` 的能力
+# 目录收敛回真实位置——只对读路径生效，且仅当原路径不存在时才改写，不覆盖
+# 用户真实创建的目录。
+_PRISMCLAW_HOME_DIRNAME = ".prismclaw"
+_CAPABILITY_SEGMENTS = frozenset({"plugins", "skills", "agents"})
+
+# 远程 URL 不是文件路径。模型常把网页链接直接传给 read/ls，pathlib 会把它当
+# 相对路径折叠成 ``outputs/https:/host/...``，报错信息毫无指向性。在解析入口
+# 直接拒绝，并给出可操作的下一步。
+_REMOTE_URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
+
+
+def is_remote_url(raw: str) -> bool:
+    """是否形如 ``scheme://...`` 的远程 URL（而非本地文件路径）。"""
+    return bool(_REMOTE_URL_RE.match(raw.strip()))
+
+
+def canonicalize_fs_path(path: Path) -> Path:
+    """把 ``~/.prismclaw/{plugins,skills,agents}/...`` 纠正为 ``.../assets/...``。
+
+    路径已存在、不属于该前缀、或已带 ``assets`` 段时原样返回。
+    """
+    if path.exists():
+        return path
+    try:
+        rel = path.relative_to(Path.home() / _PRISMCLAW_HOME_DIRNAME)
+    except ValueError:
+        return path
+    parts = rel.parts
+    if not parts or parts[0] not in _CAPABILITY_SEGMENTS:
+        return path
+    return Path.home() / _PRISMCLAW_HOME_DIRNAME / "assets" / Path(*parts)
+
+
+def resolve_capability_command(path: Path) -> Path | None:
+    """``<plugin>/skills/<name>/SKILL.md`` 不存在时，回退到 ``<plugin>/commands/<name>.md``。
+
+    插件正文常用 ``/plugin:cmd`` 引用命令，模型据此误以为每项能力都是技能目录
+    （``skills/<cmd>/SKILL.md``）。command 与 skills 在插件根下同级，正文落在
+    ``commands/<cmd>.md``，没有 ``SKILL.md``。仅在 SKILL.md 形状的路径上生效，
+    其余路径原样返回 None。
+    """
+    parts = path.parts
+    if len(parts) < 3 or parts[-1] != "SKILL.md" or parts[-3] != "skills":
+        return None
+    # 只在能力目录内回退，避免把用户工作区里同形的 skills/ 误判成插件技能
+    try:
+        path.relative_to(Path.home() / _PRISMCLAW_HOME_DIRNAME)
+    except ValueError:
+        return None
+    candidate = Path(*parts[:-3]) / "commands" / f"{parts[-2]}.md"
+    return candidate if candidate.is_file() else None
 
 
 def _looks_like_fs_root_path(path: str) -> bool:

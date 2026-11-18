@@ -1,0 +1,119 @@
+"""能力目录路径解析的回归测试。
+
+覆盖两处收敛后的单一真源：
+- ``canonicalize_fs_path``：模型省略 ``assets`` 段时的纠正
+- ``resolve_capability_command``：command 被误当技能目录时的回退
+- ``_normalize_extracted_blocks``：二进制文档抽取文本的排版字符归一
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from prismclaw.engine.toolkit.file.workspace import (
+    WorkspaceBoundaryError,
+    WorkspaceResolver,
+    canonicalize_fs_path,
+    is_remote_url,
+    resolve_capability_command,
+)
+from prismclaw.engine.toolkit.office.document_image_extract import (
+    _normalize_extracted_blocks,
+)
+from prismclaw.schema.agent.data_types import TextBlock
+
+
+@pytest.fixture()
+def prismclaw_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """把 ``Path.home()`` 指到临时目录，隔离真实 ~/.prismclaw。"""
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    return tmp_path / ".prismclaw"
+
+
+def test_canonicalize_restores_missing_assets(prismclaw_home: Path) -> None:
+    actual = prismclaw_home / "assets" / "plugins" / "p" / "s"
+    actual.mkdir(parents=True)
+
+    got = canonicalize_fs_path(prismclaw_home / "plugins" / "p" / "s")
+
+    assert got == actual
+
+
+def test_canonicalize_leaves_existing_and_unrelated_paths(prismclaw_home: Path) -> None:
+    existing = prismclaw_home / "plugins" / "p"
+    existing.mkdir(parents=True)
+
+    assert canonicalize_fs_path(existing) == existing
+    unrelated = prismclaw_home / "plugins-data" / "x"
+    assert canonicalize_fs_path(unrelated) == unrelated
+    assert canonicalize_fs_path(Path("/tmp/elsewhere")) == Path("/tmp/elsewhere")
+
+
+def test_resolve_within_canonicalizes_reads_but_not_writes(prismclaw_home: Path) -> None:
+    """别名纠正只服务读路径；写路径必须保持原样，不能搬进只读的 assets。"""
+    workspace = prismclaw_home / "ws"
+    workspace.mkdir(parents=True)
+    old = str(prismclaw_home / "plugins" / "p" / "x")
+
+    assert WorkspaceResolver(None).resolve_within(workspace, old) == (
+        prismclaw_home / "assets" / "plugins" / "p" / "x"
+    )
+    assert WorkspaceResolver(None).resolve_within(workspace, old, for_write=True) == Path(old)
+
+
+def test_resolve_capability_command_falls_back_to_command(prismclaw_home: Path) -> None:
+    plugin = prismclaw_home / "assets" / "plugins" / "p"
+    (plugin / "commands").mkdir(parents=True)
+    command = plugin / "commands" / "ai-inventory.md"
+    command.write_text("# ai-inventory", encoding="utf-8")
+
+    assert resolve_capability_command(plugin / "skills" / "ai-inventory" / "SKILL.md") == command
+
+
+def test_resolve_capability_command_ignores_other_shapes(prismclaw_home: Path) -> None:
+    plugin = prismclaw_home / "assets" / "plugins" / "p"
+    (plugin / "commands").mkdir(parents=True)
+    (plugin / "commands" / "x.md").write_text("x", encoding="utf-8")
+
+    # 非 SKILL.md 形状、已存在的真实技能、无对应 command 均不触发回退
+    assert resolve_capability_command(plugin / "skills" / "x" / "README.md") is None
+    assert resolve_capability_command(plugin / "commands" / "x.md") is None
+    assert resolve_capability_command(plugin / "skills" / "missing" / "SKILL.md") is None
+
+
+def test_resolve_capability_command_ignores_workspace_shapes(tmp_path: Path) -> None:
+    """能力目录之外的同形路径不得回退（避免误读用户项目文件）。"""
+    plugin = tmp_path / "plugin"
+    (plugin / "commands").mkdir(parents=True)
+    (plugin / "commands" / "x.md").write_text("x", encoding="utf-8")
+
+    assert resolve_capability_command(plugin / "skills" / "x" / "SKILL.md") is None
+
+
+def test_normalize_extracted_blocks_folds_dashes_but_keeps_em_dash() -> None:
+    src = "5\u2010year range 45%\u2013100% \u2014\u2014 \u4e2d\u6587 A\u00a0B\u200bC"
+    out = _normalize_extracted_blocks([TextBlock(type="text", text=src)])[0].text
+
+    assert out.startswith("5-year range 45%-100% ")
+    assert "\u2014\u2014" in out  # 中文破折号保留
+    assert "A BC" in out  # NBSP 归一 + 零宽清除
+
+
+def test_is_remote_url_distinguishes_urls_from_paths() -> None:
+    assert is_remote_url("https://pmc.ncbi.nlm.nih.gov/articles/PMC11023754")
+    assert is_remote_url("file:///tmp/a")
+    assert is_remote_url("git+ssh://host/repo")
+    assert not is_remote_url("C:/Users/x")
+    assert not is_remote_url("outputs/a.md")
+    assert not is_remote_url("/tmp/a")
+
+
+def test_resolve_within_rejects_remote_url(prismclaw_home: Path) -> None:
+    workspace = prismclaw_home / "ws"
+    workspace.mkdir(parents=True)
+
+    with pytest.raises(WorkspaceBoundaryError, match="是远程 URL"):
+        WorkspaceResolver(None).resolve_within(
+            workspace, "https://www.mdpi.com/2072-6694/17/13/2191"
+        )

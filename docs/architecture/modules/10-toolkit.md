@@ -123,15 +123,16 @@ class ListDirectoryTool:
     # 执行: runtime.fs_list()
 ```
 
-### CancelTaskTool
+### SubagentControlTool
 
 ```python
-# builtin/task_tools.py
-class CancelTaskTool:
-    name = "cancel_task"
+# engine/subagent/control_tool.py
+class SubagentControlTool:
+    name = "subagent_control"
     tool_class = "write"
-    skill_gated = True
-    # 通过 ParallelTaskStore 取消任务
+    skill_gated = False
+    # status / list / interrupt / send / resume / close
+    # 除 list 外必须同时提供 (agent_id, task_id)
 ```
 
 ### AskUserQuestionTool
@@ -302,7 +303,7 @@ ReadTool 检测图片/PDF → 重定向到专用工具
 | `ListDirectoryTool` (name=`ls`) | 工具 | read | 目录列表 |
 | `GlobTool` (name=`glob`) | 工具 | read | 文件模式搜索 |
 | `GrepTool` (name=`grep`) | 工具 | read | 文件内容搜索 |
-| `CancelTaskTool` (name=`cancel_task`) | 工具 | write | 取消并行任务（skill-gated） |
+| `SubagentControlTool` (name=`subagent_control`) | 工具 | write | 子代理状态查询、中断与协作（main_only） |
 | `AskUserQuestionTool` (name=`AskUserQuestion`) | 工具 | read | 用户问答交互 |
 | `FileObserver` | 基础设施 | — | SHA-256 文件版本跟踪 |
 | `with_file_mutation_queue()` | 基础设施 | — | 并发写入串行化 |
@@ -315,7 +316,7 @@ ReadTool 检测图片/PDF → 重定向到专用工具
   ├── engine.security.sandbox  — 沙箱策略与路径校验
   ├── engine.services.review   — review registry（WriteTool/EditTool 集成）
   ├── schema.agent             — ToolContext, ToolResult
-  ├── engine.subagent.runtime  — ParallelTaskStore（CancelTaskTool）
+  ├── engine.security.gate     — ParallelTaskExtras / TaskRuntimeContext（ToolContext）
   ├── persistence.session      — session 存储（OCR 缓存路径）
   └── infra.settings           — 配置
 ```

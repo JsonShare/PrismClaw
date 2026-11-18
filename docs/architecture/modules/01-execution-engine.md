@@ -115,7 +115,7 @@ prepare_next_turn
 | 上下文准备 | `prepare_next_turn` | PreRequestPipeline 9 步管道 + 压缩重启；`state.pending_messages`（预算警告、工具循环指导等）在此合并进 override 的 appended_messages |
 | LLM 流式 | `stream_llm` | 流式调用 LLM，收集 usage |
 | 预检 | `should_continue` (pre) | 预算 / abort / max_iterations 检查 |
-| 工具执行前 | `before_tool_call` | 冻结工具签名 + SafetyGate 拦截（PRE_TOOL hooks 在 dispatch 层逐调用派发） |
+| 工具执行前 | `before_tool_call` | 冻结工具签名 + pre-tool hooks 拦截（PRE_TOOL hooks 在 dispatch 层逐调用派发） |
 | 工具执行 | `execute_tools` | Handoff dispatch + 工具执行 + Skill dispatch |
 | 工具执行后 | `after_tool_call` | 完成契约机械核验；无缺口时注入一次收尾提示（POST_TOOL hooks 在 dispatch 层逐调用派发） |
 | 轮次后检 | `should_continue` (post) | 工具循环 / 所有工具被拒 / abort 检查；终态交由 `CompletionKernel` 唯一裁决 |
@@ -138,7 +138,7 @@ class AgentCallbacks:
 
 约束：所有回调均可为 `None`（循环引擎调用前必须检查）；回调中不得抛出未处理异常；异步回调应有超时保护。
 
-**端口绑定**：`wiring.build_loop_config()` 是唯一知道子系统存在的地方。`run_loop()` 不直接 import Arbiter、SafetyGate、HookDispatcher，所有行为通过 `LoopConfig` 的端口注入，确保循环骨架纯化、子系统可独立替换、测试友好。`LoopRuntime` 把原先闭包隐式捕获的变量（deps、request、recovery、state_machine、completion_kernel、budget_guard 等）显式化为 dataclass 字段，无运行期行为。
+**端口绑定**：`wiring.build_loop_config()` 是唯一知道子系统存在的地方。`run_loop()` 不直接 import Arbiter、HookDispatcher，所有行为通过 `LoopConfig` 的端口注入，确保循环骨架纯化、子系统可独立替换、测试友好。`LoopRuntime` 把原先闭包隐式捕获的变量（deps、request、recovery、state_machine、completion_kernel、budget_guard 等）显式化为 dataclass 字段，无运行期行为。
 
 ### 2. Runner 入口 (`loop/runner.py`)
 
@@ -201,9 +201,8 @@ plan_handoff_dispatch()
 
 并发安全性判断优先级（`_resolve_is_concurrency_safe()`）：
 1. `tool.is_concurrency_safe` 显式声明
-2. `CONCURRENCY_SAFE_TOOLS` 集合查找
-3. `side_effect=False` 推断
-4. 默认 `False`（安全优先）
+2. `side_effect=False` 推断
+3. 默认 `False`（安全优先）
 
 ### 6. Arbiter 仲裁 (`loop/arbiter.py`)
 
@@ -378,7 +377,7 @@ class AgentHook(Protocol):
 
 约束：`before_prompt_build` 返回 `None` 等同于不注入；`HookRegistry.collect_prompt_additions` 聚合所有 hook 的 prepend/append 用 `"\n\n"` 连接；单个 hook 异常不阻塞其他 hook。
 
-**HookDispatcher** 提供更细粒度的事件分发，支持 12 种 `HookEvent`：
+**HookDispatcher** 提供更细粒度的事件分发，支持 14 种 `HookEvent`：
 
 | 事件类别 | 事件 |
 |---------|------|
@@ -388,7 +387,6 @@ class AgentHook(Protocol):
 | 压缩 | `PRE_COMPACT`, `POST_COMPACT` |
 | Subagent | `SUBAGENT_START`, `SUBAGENT_STOP` |
 | 环境 | `FILE_CHANGED`, `CWD_CHANGED` |
-| 权限 | `PERMISSION_REQUEST`, `PERMISSION_DENIED` |
 
 调度语义：每个 handler 返回 `HookResult`，第一个 `blocking` 结果停止后续执行；`DENY`/`BLOCK` 拒绝工具调用；`ALLOW` 不覆盖审批门禁（只追加拒绝，从不移除）；默认超时 30 秒。
 
@@ -405,7 +403,7 @@ run_loop() 循环：
     prepare_next_turn() → 准备轮次上下文（合并 pending_messages）
     stream_llm() → LLM 流式响应
     should_continue(preflight) → Arbiter 前置判断
-    before_tool_call() → SafetyGate + Hook 拦截
+    before_tool_call() → doom-loop 冻结 + Hook 拦截
     execute_tools() → StreamingExecutor 并发执行
     after_tool_call() → Hook 后处理 + 技能上下文修改
     should_continue(post-turn) → Arbiter 后置判断
@@ -467,7 +465,7 @@ execution/
 ```
 
 **外部依赖（通过 callback 注入，非直接 import）：**
-- `engine/security/gate/` — SafetyGate（通过 `before_tool_call` callback）
+- `engine/security/gate/` — RuleGate / pre-tool hooks（通过 `before_tool_call` callback）
 - `engine/plugins/hooks/` — HookDispatcher（通过 `after_tool_call` callback）
 - `engine/execution/skills/` — SkillRuntime（通过工具结果后处理）
 
@@ -494,7 +492,7 @@ execution/
 
 | 配置项 | 位置 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `CONCURRENCY_SAFE_TOOLS` | `streaming_executor.py` | — | 安全工具集合 |
+| `_resolve_is_concurrency_safe` | `streaming_executor.py` | — | 并发安全判定 |
 | Semaphore 并发数 | `StreamingExecutor` | 10 | safe_tools 最大并发 |
 | `max_handoff_chain_length` | `HandoffSupervisor` | 5 | Sub-agent 调度链深度上限 |
 | Error fatigue 阈值 | `call_handling.py` | 3 | 连续相同错误注入 advisory |

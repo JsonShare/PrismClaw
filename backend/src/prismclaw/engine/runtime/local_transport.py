@@ -9,7 +9,7 @@
 
 安全差异：
   - 容器隔离失效（本地执行）
-  - RuleGate + SafetyGate 仍然生效（这是开发模式的安全底线）
+  - RuleGate 仍然生效（这是开发模式的安全底线）
 """
 from __future__ import annotations
 

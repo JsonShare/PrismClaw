@@ -18,13 +18,13 @@ from prismclaw.engine.subagent.core._result_types import AgentRunResult
 from prismclaw.engine.subagent.core.instance import AgentInstance
 from prismclaw.engine.subagent.core.run_context import SubagentRunContext
 from prismclaw.engine.subagent.definition.manifest import AgentManifest
-from prismclaw.engine.subagent.runtime import background as background_tasks
 from prismclaw.engine.subagent.runtime.parallel import (
     PARALLEL_TASK_TERMINAL_STATUSES,
     ParallelTaskRuntimeRecord,
     build_parallel_task_terminal_record,
     new_parallel_task_id,
 )
+from prismclaw.engine.subagent.runtime.records import new_agent_id
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.config.config import SubAgentConfig
@@ -57,7 +57,6 @@ class SubAgentExecutor:
         session_store: Any = None,
         audit_logger: logging.Logger | None = None,
         default_model: str | None = None,
-        decision_audit_logger: Any = None,
         channel: str = "web",
         skill_runtime: Any = None,
         # 子代理内部工具调用的单工具时限，应继承 agent 配置的
@@ -74,7 +73,6 @@ class SubAgentExecutor:
             llm_client, "default_model", None
         )
         self._audit = audit_logger or logging.getLogger(_AUDIT_LOGGER_NAME)
-        self._decision_audit = decision_audit_logger
         self._channel = channel
         self._skill_runtime = skill_runtime
         self._tool_timeout_s = tool_timeout_s
@@ -89,8 +87,12 @@ class SubAgentExecutor:
         *,
         call_id: str = "",
         context_snapshot: SubagentContextSnapshot | dict[str, Any] | None = None,
-    ) -> tuple[str | None, str | None]:
-        """派发后台子代理，立即返回 ``(task_id, error)``。
+    ) -> tuple[str | None, str | None, str | None]:
+        """派发后台子代理，立即返回 ``(task_id, agent_id, error)``。
+
+        ``agent_id`` 在派发时就确定并随回执返回，与 ``task_id`` 并列为可寻址
+        的唯一键；它随 :meth:`run` 注入子代理信封，供后续 ``subagent_control``
+        使用。
 
         闸门与登记点都在这里：记录仍由 :meth:`run` 单点写入（scheduled →
         running → 终态），本方法只负责排队。任务以 ``TaskManager.spawn``
@@ -98,10 +100,10 @@ class SubAgentExecutor:
         """
         store = parent_ctx.task_runtime.parallel_task_store
         if store is None:
-            return None, "后台派发需要并行任务存储，当前会话不可用。"
+            return None, None, "后台派发需要并行任务存储，当前会话不可用。"
         task_manager = getattr(parent_ctx, "task_manager", None)
         if task_manager is None:
-            return None, "后台派发需要任务管理器，当前运行环境不可用。"
+            return None, None, "后台派发需要任务管理器，当前运行环境不可用。"
 
         running = await store.list_for_session(
             session_id=parent_ctx.session_id,
@@ -111,21 +113,24 @@ class SubAgentExecutor:
         if len(running) >= limit:
             return (
                 None,
+                None,
                 f"本会话正在执行的子代理任务已达上限（{limit}）。"
-                "请等待任务完成，或先用 cancel_task 停止。",
+                "请等待已有任务完成后再派发。",
             )
 
         task_id = new_parallel_task_id()
+        agent_id = new_agent_id()
         coro = self._background_main(
             manifest,
             task,
             parent_ctx,
             task_id=task_id,
+            agent_id=agent_id,
             call_id=call_id,
             context_snapshot=context_snapshot,
         )
         try:
-            managed_task_id = task_manager.spawn(
+            task_manager.spawn(
                 f"subagent:{task_id}",
                 coro,
                 category="subagent",
@@ -134,12 +139,7 @@ class SubAgentExecutor:
         except Exception:
             coro.close()
             raise
-        background_tasks.register_background_handle(
-            task_id,
-            task_manager=task_manager,
-            managed_task_id=managed_task_id,
-        )
-        return task_id, None
+        return task_id, agent_id, None
 
     async def _background_main(
         self,
@@ -148,6 +148,7 @@ class SubAgentExecutor:
         parent_ctx: ToolContext,
         *,
         task_id: str,
+        agent_id: str,
         call_id: str,
         context_snapshot: SubagentContextSnapshot | dict[str, Any] | None,
     ) -> None:
@@ -163,6 +164,7 @@ class SubAgentExecutor:
                 context_snapshot=context_snapshot,
                 background=True,
                 task_id=task_id,
+                agent_id=agent_id,
             )
         )
         abort = parent_ctx.abort
@@ -191,7 +193,6 @@ class SubAgentExecutor:
                 run_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await run_task
-            background_tasks.unregister_background_handle(task_id)
 
     # ── 执行 ─────────────────────────────────────────────────────────
 
@@ -205,6 +206,7 @@ class SubAgentExecutor:
         context_snapshot: SubagentContextSnapshot | dict[str, Any] | None = None,
         background: bool = False,
         task_id: str | None = None,
+        agent_id: str | None = None,
         run_context: SubagentRunContext | None = None,
     ) -> AgentRunResult:
         """Execute a sub-agent task.
@@ -215,8 +217,18 @@ class SubAgentExecutor:
 
         ``background=True`` 只影响两点：记录在任务开始时就翻到 ``running``
         （闸门依赖该状态），以及终态写库后触发一次投递。执行控制流不变。
+
+        ``agent_id`` 是派发时确定的身份；协作运行时以 ``run_context.agent_id``
+        为准（两者是同一标识），非协作的进程内后台派发则用调用方注入的值。
         """
         run_id = run_context.run_id if run_context is not None else f"run:{uuid.uuid4().hex[:12]}"
+        # 每条 Runtime 记录都必须携带 agent_id（与 task_id 组成唯一键）；
+        # 进程内同步派发没有外部注入身份时，就地生成一个。
+        resolved_agent_id = (
+            run_context.agent_id
+            if run_context is not None
+            else (agent_id or new_agent_id())
+        )
         store = parent_ctx.task_runtime.parallel_task_store
 
         current_task_ctx = parent_ctx.task_runtime_ctx
@@ -236,6 +248,7 @@ class SubAgentExecutor:
         if store is not None and resolved_task_id is not None:
             scheduled = ParallelTaskRuntimeRecord(
                 task_id=resolved_task_id,
+                agent_id=resolved_agent_id,
                 owner_session_id=parent_ctx.session_id,
                 source_call_id=call_id or None,
                 kind=kind,
@@ -269,7 +282,6 @@ class SubAgentExecutor:
             session_store=self._session_store,
             audit_logger=self._audit,
             default_model=self._default_model,
-            decision_audit_logger=self._decision_audit,
             channel=self._channel,
             skill_runtime=self._skill_runtime,
             is_fork=is_fork,
@@ -291,6 +303,7 @@ class SubAgentExecutor:
                     store,
                     parent_ctx,
                     resolved_task_id,
+                    agent_id=resolved_agent_id,
                     status="cancelled",
                     error_summary="cancelled",
                     background=background,
@@ -309,6 +322,7 @@ class SubAgentExecutor:
                     store,
                     parent_ctx,
                     resolved_task_id,
+                    agent_id=resolved_agent_id,
                     status="failed",
                     error_summary=f"{type(exc).__name__}: {exc}",
                     background=background,
@@ -323,10 +337,11 @@ class SubAgentExecutor:
         envelope_updates: dict[str, Any] = {}
         if resolved_task_id is not None:
             envelope_updates["task_id"] = resolved_task_id
+        if resolved_agent_id is not None:
+            envelope_updates["agent_id"] = resolved_agent_id
         if run_context is not None:
             envelope_updates.update(
                 {
-                    "agent_id": run_context.agent_id,
                     "run_id": run_context.run_id,
                     "child_session_id": run_context.child_session_id,
                     "lifecycle": run_context.lifecycle,
@@ -366,6 +381,7 @@ class SubAgentExecutor:
             store,
             parent_ctx,
             resolved_task_id,
+            agent_id=resolved_agent_id,
             status=terminal_status,
             result_text=_result_text(result) or None,
             error_summary=None if terminal_status == "completed" else outcome,
@@ -380,6 +396,7 @@ class SubAgentExecutor:
         parent_ctx: ToolContext,
         task_id: str | None,
         *,
+        agent_id: str,
         status: _TerminalStatus,
         result_text: str | None = None,
         error_summary: str | None = None,
@@ -395,6 +412,7 @@ class SubAgentExecutor:
         if store is not None and task_id is not None:
             current = await store.get(
                 session_id=parent_ctx.session_id,
+                agent_id=agent_id,
                 task_id=task_id,
             )
             if current is not None and current.status not in PARALLEL_TASK_TERMINAL_STATUSES:

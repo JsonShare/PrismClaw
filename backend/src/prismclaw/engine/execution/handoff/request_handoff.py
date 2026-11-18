@@ -24,8 +24,7 @@ _PARAMETERS_SCHEMA: dict[str, Any] = {
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]*$",
             "description": (
-                "接续本次任务的下一子代理名称。仅限小写字母与连字符，且以字母开头。"
-                "运行时会对注册表以及你所在清单的 can_handoff_to 白名单（如已设置）进行校验。"
+                "接续本次任务的下一子代理名称，须在 can_handoff_to 白名单内（如已设置）。"
             ),
         },
         "task": {
@@ -33,15 +32,14 @@ _PARAMETERS_SCHEMA: dict[str, Any] = {
             "minLength": _TASK_MIN_CHARS,
             "maxLength": _TASK_MAX_CHARS,
             "description": (
-                "交给下一子代理的任务描述（8–8192 个字符）。请尽量具体；下一代理会将其作为初始用户消息接收。"
+                "交给下一子代理的任务描述，请尽量具体；将作为其初始用户消息。"
             ),
         },
         "context_hint": {
             "type": "string",
             "maxLength": _CONTEXT_HINT_MAX_CHARS,
             "description": (
-                "可选的补充上下文（≤16384 个字符），用于帮助下一代理"
-                "（例如需要重点关注的路径、此前的决策）。会与任务描述一同传递。"
+                "可选补充上下文（如关键路径、此前决策），与任务描述一同传递。"
             ),
         },
     },
@@ -50,10 +48,8 @@ _PARAMETERS_SCHEMA: dict[str, Any] = {
 }
 
 _DESCRIPTION = (
-    "声明结构化的移交意图：当本子代理已完成主要任务、而下一步应归属另一个子代理时，"
-    "调用 request_handoff(target=<name>, task=<description>, context_hint=<optional>)。"
-    "调用成功后子代理循环会在此结束，由监督者决定是否把任务派发给建议的目标。"
-    "仅限子代理使用；调用会去重（首次尝试生效，无论成功或失败）。"
+    "声明结构化的移交意图：当本子代理已完成主要任务、而下一步应归属另一个子代理时使用。"
+    "调用后本代理结束，由监督者决定是否移交；仅限子代理，重复调用只首次生效。"
 )
 
 

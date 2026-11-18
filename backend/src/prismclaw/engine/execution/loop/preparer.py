@@ -18,28 +18,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.execution.request.attachments import route_attachments_for_turn
-from prismclaw.engine.security.gate.governance import (
-    build_review_requirements,
-    build_task_context_contract,
-    build_turn_semantics,
-    make_ledger_event,
-)
-from prismclaw.engine.security.gate.probes import run_recovery_probe
-from prismclaw.engine.execution.dispatch.response_handling import (
-    complete_no_tool_turn,
-)
 from prismclaw.engine.compression.preservation import (
     project_active_skill_invocation,
     project_preservation_runtime,
 )
-from prismclaw.engine.execution.loop.arbiter import (
-    RunContext,
-    persist_snapshot_fn,
-    mark_task_blocked,
-)
-from prismclaw.engine.execution.control.kernel import RecoveryPolicy, TerminalReason
-from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.engine.execution.checkpoint import (
     ResumeBoundary,
     RunSnapshot,
@@ -49,77 +31,87 @@ from prismclaw.engine.execution.checkpoint import (
     load_run_snapshot_for_tree,
     recovery_probe_required,
 )
-from prismclaw.engine.toolkit.registry.tool_runtime import (
-    ToolContext,
+from prismclaw.engine.execution.control.kernel import RecoveryPolicy, TerminalReason
+from prismclaw.engine.execution.dispatch.response_handling import (
+    complete_no_tool_turn,
 )
-from prismclaw.engine.toolkit.file.workspace import (
-    WorkspaceBoundaryError,
-    WorkspaceResolver,
+from prismclaw.engine.execution.loop._bootstrap_helpers import (
+    _build_preflight_probe_evidence,
+    _build_recovery_probe_evidence,
+    _build_task_runtime_from_spec,
+    _build_workspace_state_evidence,
 )
-from prismclaw.infra.workspace_paths import session_dir_in
-from prismclaw.schema.config.config import WorkspaceConfig
-from prismclaw.engine.foundation.telemetry import HotPathTelemetry, TurnProfiler
-from prismclaw.engine.hooks import (
-    HookEvent,
-    _log_hook_outcome,
+from prismclaw.engine.execution.loop.arbiter import (
+    RunContext,
+    mark_task_blocked,
+    persist_snapshot_fn,
 )
-from prismclaw.schema.content.workspace import SandboxTier
-from prismclaw.engine.plugins.hooks.schema import (
-    HookDecision,
-)
-from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.agent.task_runtime import ConfirmationDecision
-from prismclaw.schema.content.streaming import ErrorEvent
-from prismclaw.schema.session.types import SessionTree, generate_entry_id, now_iso
-from prismclaw.schema.agent.session import SystemReminderProjection
-from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState
-
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
-from prismclaw.engine.security.gate.types import ParallelTaskExtras
 from prismclaw.engine.execution.loop.entry_runtime import (
     EntryRuntimeBootstrapError,
     _bootstrap_entry_runtime,
 )
+from prismclaw.engine.execution.loop.ownership import (
+    _claim_run_ownership,
+    _restore_task_spec_from_snapshot,
+    _RunOwnershipLease,
+    _takeover_run_ownership,
+)
+from prismclaw.engine.execution.loop.pending_queue import PendingMessageQueue
+from prismclaw.engine.execution.loop.trajectory_scope import (
+    TrajectoryScope,
+    setup_trajectory_early,
+)
 from prismclaw.engine.execution.loop.tree_writer import (
-    ensure_session,
     _append,
-    _persist_task_spec_snapshot,
     _persist_task_runtime_snapshot,
-    _persist_review_requirements_snapshot,
+    _persist_task_spec_snapshot,
+    ensure_session,
+)
+from prismclaw.engine.execution.request.attachments import route_attachments_for_turn
+from prismclaw.engine.execution.state.streaming import (
+    _apply_fresh_governance_fields,
 )
 from prismclaw.engine.execution.state.task_persistence import (
     _append_decision_tail,
     _build_runtime_mutation_patch,
-    _build_task_terminal_mutation,
     _evaluate_and_apply_task_mutation,
     _new_task_mutation,
     _persist_decision_ledger_event,
     _persist_execution_evidence,
     _set_resume_boundary,
 )
-from prismclaw.engine.execution.state.streaming import (
-    _apply_fresh_governance_fields,
+from prismclaw.engine.foundation.telemetry import HotPathTelemetry, TurnProfiler
+from prismclaw.engine.hooks import (
+    HookEvent,
+    _log_hook_outcome,
 )
-from prismclaw.engine.execution.loop._bootstrap_helpers import (
-    _build_manual_confirmation_evidence,
-    _build_preflight_probe_evidence,
-    _build_recovery_probe_evidence,
-    _build_task_runtime_from_spec,
-    _build_workspace_state_evidence,
+from prismclaw.engine.plugins.hooks.schema import (
+    HookDecision,
 )
-from prismclaw.engine.execution.loop.pending_queue import PendingMessageQueue
-from prismclaw.engine.execution.loop.trajectory_scope import (
-    setup_trajectory_early,
-    TrajectoryScope,
+from prismclaw.engine.security.gate.governance import (
+    assess_turn,
+    make_ledger_event,
 )
-from prismclaw.engine.execution.loop.ownership import (
-    _claim_run_ownership,
-    _restore_review_requirements_from_snapshot,
-    _restore_task_spec_from_snapshot,
-    _RunOwnershipLease,
-    _takeover_run_ownership,
+from prismclaw.engine.security.gate.probes import run_recovery_probe
+from prismclaw.engine.security.gate.types import ParallelTaskExtras
+from prismclaw.engine.toolkit.file.workspace import (
+    WorkspaceBoundaryError,
+    WorkspaceResolver,
 )
+from prismclaw.engine.toolkit.registry.tool_runtime import (
+    ToolContext,
+)
+from prismclaw.infra.workspace_paths import session_dir_in
+from prismclaw.schema.agent.run_control_types import RunControl
+from prismclaw.schema.agent.session import MessageEntry, SystemReminderProjection
+from prismclaw.schema.agent.task_runtime import ConfirmationDecision
 from prismclaw.schema.agent.types import RunRequest
+from prismclaw.schema.config.config import WorkspaceConfig
+from prismclaw.schema.content.streaming import ErrorEvent
+from prismclaw.schema.content.workspace import SandboxTier
+from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState
+from prismclaw.schema.session.types import SessionTree, generate_entry_id, now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +179,6 @@ class PreparedRun:
     total_output_tokens: int = 0
     total_cache_creation_tokens: int = 0
     total_cache_read_tokens: int = 0
-    _mode: str = "chat"
 
     # ── 运行时标记（loop 后 sync-back 用）──
     latest_review_decision: Any = None
@@ -240,13 +231,7 @@ class RunPreparer:
         resolved_ws_path = self._tool_workspace_path
         abort_event = self._control.abort_event
 
-        from prismclaw.engine.execution.control.kernel import resolve_effort_budget
-        _effort_budget = resolve_effort_budget(
-            effort=getattr(request, "effort", "standard") or "standard",
-            long_running=bool(getattr(request, "long_running", False)),
-            tiers=deps.config.effort,
-        )
-        run_deadline_s = _effort_budget.hard_s
+        run_deadline_s = float(deps.config.budget.hard_s)
         run_started = time.monotonic()
         terminated_by = TerminalReason.DONE
 
@@ -287,14 +272,13 @@ class RunPreparer:
         active_skill_invocation = snapshot.invoked_skill_state.active_invocation
         recovery_mode = bool(request.recovery_run_id)
         recovered_task_spec = _restore_task_spec_from_snapshot(snapshot) if recovery_mode else None
-        recovered_review_requirements = (
-            _restore_review_requirements_from_snapshot(snapshot) if recovery_mode else None
-        )
         pending_confirmation_state: str | None = None
         pending_confirmation_response: ConfirmationDecision | None = None
         existing_task_runtime = snapshot.active_context.task_runtime
         existing_task_spec = _restore_task_spec_from_snapshot(snapshot)
-        existing_review_requirements = _restore_review_requirements_from_snapshot(snapshot)
+        # 证据台账提前加载：放弃确认时需要为旧任务写 task.block 记录。
+        evidence_ledger = tree.get_evidence_ledger()
+        ctx.evidence_ledger = evidence_ledger
 
         if recovery_mode:
             if snapshot.run_state.run_id != request.recovery_run_id:
@@ -307,13 +291,12 @@ class RunPreparer:
                 raise RuntimeError(
                     f"recovery snapshot is not eligible for takeover: {decision.reason_code}"
                 )
-            if recovered_task_spec is None or recovered_review_requirements is None:
+            if recovered_task_spec is None:
                 raise RuntimeError(
-                    f"recovery snapshot missing task/review requirements for run_id={request.recovery_run_id}"
+                    f"recovery snapshot missing task spec for run_id={request.recovery_run_id}"
                 )
             request.task_spec = recovered_task_spec
             request.task_id = recovered_task_spec.task_id
-            request.review_requirements = recovered_review_requirements
             request.user_message = recovered_task_spec.source_message
             request.request_id = request.recovery_run_id
 
@@ -421,32 +404,55 @@ class RunPreparer:
             request.request_id = request.request_id or f"req_{generate_entry_id(set())}"
 
             # ── Confirmation handling ──
+            # 处于等待确认态但未带决策，说明用户直接发了新消息：先显式阻断旧任务，
+            # 再按新消息建任务。此前该分支不可达，旧任务会被静默覆盖且无审计记录。
+            awaiting_confirmation_state = (
+                existing_task_runtime.state
+                if (
+                    existing_task_runtime is not None
+                    and existing_task_spec is not None
+                    and existing_task_runtime.state
+                    in {"awaiting_confirmation", "awaiting_risk_confirmation"}
+                )
+                else None
+            )
             if (
-                existing_task_runtime is not None
-                and existing_task_spec is not None
-                and existing_review_requirements is not None
-                and existing_task_runtime.state in {"awaiting_confirmation", "awaiting_risk_confirmation"}
+                awaiting_confirmation_state is not None
                 and request.confirmation_decision is not None
             ):
-                pending_confirmation_state = existing_task_runtime.state
+                pending_confirmation_state = awaiting_confirmation_state
                 pending_confirmation_response = request.confirmation_decision
                 initial_task_spec = existing_task_spec
                 request.task_id = initial_task_spec.task_id
                 request.task_spec = initial_task_spec
-                request.turn_semantics = build_turn_semantics(
-                    user_message=request.user_message,
-                    tree=tree,
-                )
-                request.task_context_contract = build_task_context_contract(
-                    task_spec=initial_task_spec,
-                    turn_semantics=request.turn_semantics,
-                )
-                request.review_requirements = build_review_requirements(
-                    task_context_contract=request.task_context_contract,
-                )
-                if request.review_requirements is None:
-                    request.review_requirements = existing_review_requirements
             else:
+                if request.confirmation_decision is not None:
+                    logger.warning(
+                        "discarding stale confirmation_decision=%s session_id=%s task_id=%s state=%s",
+                        request.confirmation_decision,
+                        request.session_id,
+                        existing_task_runtime.task_id if existing_task_runtime is not None else None,
+                        existing_task_runtime.state if existing_task_runtime is not None else None,
+                    )
+                    request.confirmation_decision = None
+                if awaiting_confirmation_state is not None:
+                    abandon_mutation = _new_task_mutation(
+                        existing_task_runtime,
+                        actor_kind="system",
+                        mutation_type="task.block",
+                        patch=_build_runtime_mutation_patch(
+                            existing_task_runtime,
+                            extras={"reason": "用户发送新消息，放弃确认"},
+                        ),
+                    )
+                    await _evaluate_and_apply_task_mutation(
+                        deps=deps,
+                        tree=tree,
+                        snapshot=snapshot,
+                        task_runtime=existing_task_runtime,
+                        mutation=abandon_mutation,
+                        evidence_records=evidence_ledger,
+                    )
                 initial_task_spec = await _apply_fresh_governance_fields(
                     deps=deps,
                     request=request,
@@ -455,6 +461,18 @@ class RunPreparer:
                 )
         else:
             initial_task_spec = request.task_spec
+
+        # ── 单轮任务评估（减法：简单任务跳过重管道 / 走 fast_path）──
+        # 复用 TaskSpec 的 preflight/turn_index/goal 信号，纯规则零 LLM 调用。
+        # 仅新任务回合评估：确认轮/恢复轮沿用既有任务路径。
+        _is_fresh_turn = not recovery_mode and pending_confirmation_state is None
+        turn_assessment = None
+        if _is_fresh_turn and initial_task_spec is not None:
+            turn_assessment = assess_turn(
+                user_message=request.user_message,
+                task_spec=initial_task_spec,
+            )
+            request.complexity = turn_assessment.level
 
         latest_review_decision = tree.get_latest_review_decision()
         persisted_task_runtime = tree.get_latest_task_runtime()
@@ -475,7 +493,6 @@ class RunPreparer:
                     deps=deps,
                     tree=tree,
                     task_spec=initial_task_spec,
-                    review_requirements=request.review_requirements,
                     workspace_id=request.workspace_id,
                     persist_runtime=False,
                 )
@@ -485,7 +502,6 @@ class RunPreparer:
                     deps=deps,
                     tree=tree,
                     task_spec=initial_task_spec,
-                    review_requirements=request.review_requirements,
                     workspace_id=request.workspace_id,
                 )
                 bootstrapped_runtime_for_new_task = True
@@ -500,7 +516,6 @@ class RunPreparer:
                 failed_runtime = task_runtime.model_copy(
                     update={
                         "entry_resolution_status": "failed",
-                        "entry_failure_code": exc.error_code,
                         "updated_at_epoch_ms": int(time.time() * 1000),
                     }
                 )
@@ -530,9 +545,6 @@ class RunPreparer:
                 prior_runtime=task_runtime,
                 entry_resolution_status="ready",
             )
-
-        evidence_ledger = tree.get_evidence_ledger()
-        ctx.evidence_ledger = evidence_ledger
 
         run_state = snapshot.run_state
         if not recovery_mode:
@@ -581,13 +593,6 @@ class RunPreparer:
                     active_skill_invocation=active_skill_invocation,
                     initial_task_spec=initial_task_spec,
                 )
-            if not bootstrapped_runtime_for_new_task:
-                await _persist_review_requirements_snapshot(
-                    deps,
-                    tree,
-                    review_requirements=request.review_requirements,
-                )
-
             # ── Preflight probe ──
             preflight_probe_event = None
             if initial_task_spec.preflight_probe is not None:
@@ -621,12 +626,9 @@ class RunPreparer:
                         "baseline_risk": initial_task_spec.preflight_probe.baseline_risk,
                         "mentioned_paths": initial_task_spec.preflight_probe.mentioned_paths,
                         "existing_paths": initial_task_spec.preflight_probe.existing_paths,
-                        "touched_roots": initial_task_spec.preflight_probe.touched_roots,
-                        "workspace_file_count": initial_task_spec.preflight_probe.workspace_file_count,
-                        "workspace_dir_count": initial_task_spec.preflight_probe.workspace_dir_count,
-                        "code_file_count": initial_task_spec.preflight_probe.code_file_count,
-                        "git_dirty_paths": initial_task_spec.preflight_probe.git_dirty_paths,
-                        "critical_workspace_paths": initial_task_spec.preflight_probe.critical_workspace_paths,
+                        "critical_workspace_paths": (
+                            initial_task_spec.preflight_probe.critical_workspace_paths
+                        ),
                         "signals": [
                             signal.model_dump(mode="json")
                             for signal in initial_task_spec.preflight_probe.signals
@@ -653,21 +655,53 @@ class RunPreparer:
             )
             await _persist_decision_ledger_event(deps, tree, event=task_interpreted_event)
 
-            review_created_event = make_ledger_event(
-                session_id=request.session_id,
-                task_id=initial_task_spec.task_id,
-                turn_index=initial_task_spec.turn_index,
-                event_type="review_requirements_created",
-                summary="已创建审查要求契约。",
-                payload={
-                    "request_id": request.request_id,
-                    "require_human_review": request.review_requirements.require_human_review,
-                    "require_permission_review": request.review_requirements.require_permission_review,
-                    "require_fact_evidence": request.review_requirements.require_fact_evidence,
-                    "require_tool_verification": request.review_requirements.require_tool_verification,
-                },
-            )
-            await _persist_decision_ledger_event(deps, tree, event=review_created_event)
+            assessment_event = None
+            if turn_assessment is not None:
+                assessment_event = make_ledger_event(
+                    session_id=request.session_id,
+                    task_id=initial_task_spec.task_id,
+                    turn_index=initial_task_spec.turn_index,
+                    event_type="turn_assessed",
+                    summary=(
+                        f"Turn complexity assessed: {turn_assessment.level} "
+                        f"(score={turn_assessment.score})."
+                    ),
+                    actor="turn_assessor",
+                    payload={
+                        "request_id": request.request_id,
+                        "level": turn_assessment.level,
+                        "score": turn_assessment.score,
+                        "signals": turn_assessment.signals,
+                        "risk_level": initial_task_spec.risk_level,
+                    },
+                )
+                await _persist_decision_ledger_event(deps, tree, event=assessment_event)
+
+            # 风险门进入等待态原本只体现在 task_runtime 字段上，决策链缺这一环。
+            # 这里补一条账本事件，说明"为什么停下来等确认"。
+            if task_runtime.state == "awaiting_risk_confirmation":
+                risk_gate_event = make_ledger_event(
+                    session_id=request.session_id,
+                    task_id=initial_task_spec.task_id,
+                    turn_index=initial_task_spec.turn_index,
+                    event_type="risk_confirmation_requested",
+                    summary=task_runtime.pending_confirmation_reason
+                    or "任务风险较高，确认后才会继续执行。",
+                    actor="risk_gate",
+                    payload={
+                        "request_id": request.request_id,
+                        "risk_level": initial_task_spec.risk_level,
+                        "signal_codes": [
+                            signal.code
+                            for signal in (
+                                initial_task_spec.preflight_probe.signals
+                                if initial_task_spec.preflight_probe is not None
+                                else []
+                            )
+                        ],
+                    },
+                )
+                await _persist_decision_ledger_event(deps, tree, event=risk_gate_event)
 
             snapshot.active_context = snapshot.active_context.model_copy(
                 update={
@@ -675,14 +709,14 @@ class RunPreparer:
                     "task_id": initial_task_spec.task_id,
                     "task_spec": initial_task_spec,
                     "task_runtime": task_runtime,
-                    "review_requirements": request.review_requirements,
                     "decision_ledger_tail": [],
                 }
             )
             if preflight_probe_event is not None:
                 _append_decision_tail(snapshot, preflight_probe_event.event_id)
             _append_decision_tail(snapshot, task_interpreted_event.event_id)
-            _append_decision_tail(snapshot, review_created_event.event_id)
+            if assessment_event is not None:
+                _append_decision_tail(snapshot, assessment_event.event_id)
 
         else:
             # ── Recovery mode ──
@@ -796,7 +830,6 @@ class RunPreparer:
                     "task_id": initial_task_spec.task_id,
                     "task_spec": initial_task_spec,
                     "task_runtime": task_runtime,
-                    "review_requirements": request.review_requirements,
                 }
             )
             _append_decision_tail(snapshot, recovery_probe_event.event_id)
@@ -814,35 +847,7 @@ class RunPreparer:
         confirmation_messages = [{"role": "user", "content": request.user_message}]
 
         if pending_confirmation_state is not None:
-            if pending_confirmation_response is None:
-                # 用户发送了新消息但未提供确认决策，视为放弃旧任务、启动新任务。
-                logger.info(
-                    "pending_confirmation_cleared: old_task_state=%s, starting_new_task",
-                    pending_confirmation_state,
-                )
-                block_mutation = _new_task_mutation(
-                    task_runtime,
-                    actor_kind="system",
-                    mutation_type="task.block",
-                    patch=_build_runtime_mutation_patch(
-                        task_runtime,
-                        extras={"reason": "用户发送新消息，放弃确认"},
-                    ),
-                )
-                task_runtime, _blocked, _block_reason = (
-                    await _evaluate_and_apply_task_mutation(
-                        deps=deps,
-                        tree=tree,
-                        snapshot=snapshot,
-                        task_runtime=task_runtime,
-                        mutation=block_mutation,
-                        evidence_records=evidence_ledger,
-                    )
-                )
-                pending_confirmation_state = None
-                pending_confirmation_response = None
-
-            elif pending_confirmation_response == "deny":
+            if pending_confirmation_response == "deny":
                 deny_reason = (
                     "用户拒绝风险确认，任务已停止。"
                     if pending_confirmation_state == "awaiting_risk_confirmation"
@@ -889,89 +894,101 @@ class RunPreparer:
                     initial_task_spec=initial_task_spec,
                 )
 
-            elif pending_confirmation_state == "awaiting_risk_confirmation":
-                resume_mutation = _new_task_mutation(
+            # approve：确认可能跨越多轮，落库前重跑工作区校验。
+            # 目标路径已消失的任务不允许带着旧证据继续执行。
+            confirmation_probe = run_recovery_probe(
+                task_spec=initial_task_spec,
+                workspace_path=resolved_ws_path,
+                preflight_probe=initial_task_spec.preflight_probe,
+            )
+            probe_evidence = _build_recovery_probe_evidence(task_runtime=task_runtime)
+            await _persist_execution_evidence(deps, tree, evidence=probe_evidence)
+            evidence_ledger.append(probe_evidence)
+            probe_event = make_ledger_event(
+                session_id=request.session_id,
+                task_id=initial_task_spec.task_id,
+                turn_index=initial_task_spec.turn_index,
+                event_type="confirmation_probe_completed",
+                summary=confirmation_probe.summary,
+                actor="confirmation_probe",
+                payload={
+                    "request_id": request.request_id,
+                    "confirmation_state": pending_confirmation_state,
+                    "status": confirmation_probe.status,
+                    "baseline_source": confirmation_probe.baseline_source,
+                    "checked_paths": confirmation_probe.checked_paths,
+                    "missing_paths": confirmation_probe.missing_paths,
+                    "signals": [
+                        signal.model_dump(mode="json") for signal in confirmation_probe.signals
+                    ],
+                },
+            )
+            await _persist_decision_ledger_event(deps, tree, event=probe_event)
+            _append_decision_tail(snapshot, probe_event.event_id)
+
+            if confirmation_probe.status == "blocked":
+                blocked_reason = (
+                    f"确认前工作区校验未通过，任务已停止：{confirmation_probe.summary}"
+                )
+                block_mutation = _new_task_mutation(
                     task_runtime,
                     actor_kind="system",
-                    mutation_type="task.risk_confirmed",
-                    patch=_build_runtime_mutation_patch(task_runtime),
-                )
-                task_runtime, _accepted, _reason = await _evaluate_and_apply_task_mutation(
-                    deps=deps,
-                    tree=tree,
-                    snapshot=snapshot,
-                    task_runtime=task_runtime,
-                    mutation=resume_mutation,
-                    evidence_records=evidence_ledger,
-                )
-
-            else:
-                latest_review = tree.get_latest_review_decision()
-                if (
-                    latest_review is not None
-                    and latest_review.decision_id == task_runtime.latest_review_decision_id
-                ):
-                    manual_evidence = _build_manual_confirmation_evidence(
-                        task_runtime=task_runtime,
-                    )
-                    await _persist_execution_evidence(deps, tree, evidence=manual_evidence)
-                    evidence_ledger.append(manual_evidence)
-                    terminal_mutation = _build_task_terminal_mutation(
-                        task_runtime,
-                        actor_kind="review",
-                        evidence_ids=[manual_evidence.evidence_id],
-                    )
-                    task_runtime, accepted, reason_code = await _evaluate_and_apply_task_mutation(
-                        deps=deps,
-                        tree=tree,
-                        snapshot=snapshot,
-                        task_runtime=task_runtime,
-                        mutation=terminal_mutation,
-                        evidence_records=evidence_ledger,
-                    )
-                    if not accepted:
-                        raise RuntimeError(f"manual confirmation completion rejected: {reason_code}")
-                    _set_resume_boundary(snapshot, boundary=ResumeBoundary.AFTER_TURN_FINALIZE)
-                    await persist_snapshot_fn(ctx)
-                    done_event = await complete_no_tool_turn(
-                        deps=deps,
-                        request=request,
-                        tree=tree,
-                        session_messages=confirmation_messages,
-                        append_entry=_append,
-                        response_text="已记录人工签署，当前任务按最新审查结果完成。",
-                        usage_totals={},
-                    )
-                    # ── EarlyExit path #5: Manual confirmation complete ──
-                    return EarlyExit(
-                        events=_single_event_iter(done_event),
-                        ctx=ctx,
-                        tree=tree,
-                        snapshot=snapshot,
-                        tool_ctx=tool_ctx,
-                        ownership_lease=ownership_lease,
-                        profiler=profiler,
-                        active_skill_invocation=active_skill_invocation,
-                        initial_task_spec=initial_task_spec,
-                    )
-
-                resume_mutation = _new_task_mutation(
-                    task_runtime,
-                    actor_kind="system",
-                    mutation_type="task.resume_after_confirmation",
+                    mutation_type="task.block",
                     patch=_build_runtime_mutation_patch(
                         task_runtime,
-                        extras={},
+                        extras={"reason": blocked_reason},
                     ),
+                    evidence_ids=[probe_evidence.evidence_id],
+                    caused_by_event_id=probe_event.event_id,
                 )
-                task_runtime, _accepted, _reason = await _evaluate_and_apply_task_mutation(
+                await _evaluate_and_apply_task_mutation(
                     deps=deps,
                     tree=tree,
                     snapshot=snapshot,
                     task_runtime=task_runtime,
-                    mutation=resume_mutation,
+                    mutation=block_mutation,
                     evidence_records=evidence_ledger,
                 )
+                _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
+                await persist_snapshot_fn(ctx)
+                done_event = await complete_no_tool_turn(
+                    deps=deps,
+                    request=request,
+                    tree=tree,
+                    session_messages=confirmation_messages,
+                    append_entry=_append,
+                    response_text=blocked_reason,
+                    usage_totals={},
+                )
+                return EarlyExit(
+                    events=_single_event_iter(done_event),
+                    ctx=ctx,
+                    tree=tree,
+                    snapshot=snapshot,
+                    tool_ctx=tool_ctx,
+                    ownership_lease=ownership_lease,
+                    profiler=profiler,
+                    active_skill_invocation=active_skill_invocation,
+                    initial_task_spec=initial_task_spec,
+                )
+
+            # ready / degraded 均放行；degraded 的事实已记入 probe_event。
+            resume_mutation = _new_task_mutation(
+                task_runtime,
+                actor_kind="system",
+                mutation_type="task.confirmation_resolved",
+                patch=_build_runtime_mutation_patch(task_runtime),
+                evidence_ids=[probe_evidence.evidence_id],
+                caused_by_event_id=probe_event.event_id,
+            )
+            task_runtime, _accepted, _reason = await _evaluate_and_apply_task_mutation(
+                deps=deps,
+                tree=tree,
+                snapshot=snapshot,
+                task_runtime=task_runtime,
+                mutation=resume_mutation,
+                evidence_records=evidence_ledger,
+            )
 
         elif task_runtime.state == "awaiting_risk_confirmation":
             _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
@@ -1016,8 +1033,6 @@ class RunPreparer:
                 "run_agent_stream requires request.sandbox_policy to be resolved before ToolContext construction"
             )
 
-        # ── Resolve WorkspaceMode + SandboxTier ──
-        _mode = getattr(request, "mode_override", None) or "chat"
         _sandbox_tier = getattr(request, "current_sandbox_tier", None) or SandboxTier.STANDARD
 
         tool_ctx = ToolContext(
@@ -1036,7 +1051,6 @@ class RunPreparer:
             task_runtime=ParallelTaskExtras(
                 parallel_task_store=deps.parallel_task_store,
             ),
-            review_requirements=request.review_requirements,
             hook_registry=deps.hooks if deps.hooks is not None else None,
             hook_dispatcher=getattr(deps, "hook_dispatcher", None),
             capability_catalog=deps.capability_catalog if deps.capability_catalog is not None else None,
@@ -1044,12 +1058,10 @@ class RunPreparer:
             session_store=deps.session_store,
             session_tree=tree,
             mcp_death_handler=deps.callbacks.on_mcp_death if deps.callbacks is not None else None,
-            decision_audit_logger=deps.audit_logger,
             mcp_runtime_manager=deps.plugin.runtime_mcp_manager,
             context_engine=deps.context_engine,
             channel=deps.channel,
             headless=deps.session_queue is None,
-            mode=_mode,
             current_sandbox_tier=_sandbox_tier,
             runtime=deps.runtime_client,
             workspace_tag=getattr(request, "workspace_tag", None),
@@ -1270,7 +1282,6 @@ class RunPreparer:
             total_output_tokens=total_output_tokens,
             total_cache_creation_tokens=total_cache_creation_tokens,
             total_cache_read_tokens=0,
-            _mode=_mode,
             latest_review_decision=latest_review_decision,
             llm_start_monotonic=0.0,
         )
@@ -1286,7 +1297,7 @@ class RunPreparer:
 
         各自激活时已把 prompt 片段写进注入队列、把记录写进
         ``invoked_skill_state.skills``；这里只合并名称与工具策略：
-        - 名称：多个技能用「, 」连接，供 [Active Skill] 与 bash 缓存目录使用；
+        - 名称：多个技能用「, 」连接，供 <active_skill> 与 bash 缓存目录使用；
         - allowed_tools：取并集；任一技能未限制则整体不限制（否则会误锁另
           一个技能需要的工具）。
         """
@@ -1337,7 +1348,8 @@ class RunPreparer:
         hook_context_injections: list[str],
     ) -> SkillInvocationState | None:
         """逐个激活 designated_skills，返回合并后的 active_skill_invocation。"""
-        from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState as _SIS
+        from prismclaw.schema.services.skills import SkillInvocation
+        from prismclaw.schema.services.skills import SkillInvocationState as _SIS
 
         states: list[SkillInvocationState] = []
         for skill_name in dict.fromkeys(n for n in request.designated_skills if n):
@@ -1407,8 +1419,8 @@ class RunPreparer:
         hook_context_injections: list[str],
     ) -> SkillInvocationState | None:
         """逐个激活 designated_plugins，返回与已有技能合并后的 invocation。"""
-        from prismclaw.schema.services.skills import SkillInvocationState as _SIS
         from prismclaw.engine.execution.checkpoint.models import InvokedSkillRecord
+        from prismclaw.schema.services.skills import SkillInvocationState as _SIS
 
         # 命令 dispatch 期间不叠加插件（命令的 active invocation 优先）。
         if _pending_cmd is not None:

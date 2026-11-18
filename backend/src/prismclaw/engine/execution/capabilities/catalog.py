@@ -13,7 +13,6 @@ from prismclaw.engine.toolkit.registry.governance import resolve_registry_tool_g
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.schema.services.skills import SkillInvocationState
 from prismclaw.schema.services.skills import normalize_skill_ref, resolve_skill_name
-from prismclaw.schema.agent.types import WorkspaceMode
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,7 +249,6 @@ class CapabilityCatalogService:
         *,
         skill_invocation: SkillInvocationState | None = None,
         discovered_tools: set[str] | None = None,
-        mode: WorkspaceMode = "work",
         subagent_depth: int = 0,
         headless: bool = False,
     ) -> list[ToolCatalogEntry]:
@@ -260,7 +258,6 @@ class CapabilityCatalogService:
             self.tool_registry,
             skill_invocation=skill_invocation,
             discovered_tools=discovered_tools,
-            mode=mode,
             subagent_depth=subagent_depth,
             headless=headless,
         )
@@ -276,7 +273,6 @@ class CapabilityCatalogService:
         *,
         skill_invocation: SkillInvocationState | None = None,
         discovered_tools: set[str] | None = None,
-        mode: WorkspaceMode = "work",
         subagent_depth: int = 0,
         headless: bool = False,
     ) -> list[ToolCatalogEntry]:
@@ -286,7 +282,6 @@ class CapabilityCatalogService:
             self.tool_registry,
             skill_invocation=skill_invocation,
             discovered_tools=discovered_tools,
-            mode=mode,
             subagent_depth=subagent_depth,
             headless=headless,
         )

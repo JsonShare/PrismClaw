@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 
 from prismclaw.schema.agent.session import SessionContextItem, SessionContextState
-from prismclaw.schema.agent.task_runtime import ReviewRequirements
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.content.subagent import EvidenceRef, SubagentContextSnapshot, SubagentResultEnvelope
 
@@ -102,7 +101,6 @@ def build_context_snapshot(
         return coerce_context_snapshot(raw_snapshot, fallback_task=task)
 
     task_spec = parent_ctx.task_spec
-    review_requirements = parent_ctx.review_requirements
     session_state = _resolve_session_state(parent_ctx)
 
     task_goal = task.strip() or (task_spec.goal if task_spec is not None else "")
@@ -125,7 +123,6 @@ def build_context_snapshot(
         [
             *(_task_profile_lines(task_spec)),
             *(_prefixed_lines("Decision", getattr(session_state, "decisions", []), limit=3)),
-            *(_prefixed_lines("Todo", getattr(session_state, "todos", []), limit=3)),
             *(_recent_messages(session_state, limit=3)),
         ]
     )
@@ -154,7 +151,7 @@ def build_context_snapshot(
         constraints=constraints,
         open_questions=open_questions,
         artifact_refs=artifact_refs,
-        expected_output=_expected_output(task_spec, review_requirements),
+        expected_output=_expected_output(task_spec),
         system_prompt_section_names=system_prompt_section_names,
         system_prompt_cache_break_sections=system_prompt_cache_break_sections,
         active_skill_name=active_skill_name,
@@ -183,6 +180,7 @@ def render_context_snapshot(snapshot: SubagentContextSnapshot) -> str:
             for key, value in ev.domain_extensions.items():
                 lines.append(f"  {key}: {value}")
             # deprecated: 旧域字段兜底（domain_extensions 为空时保留旧格式）
+            # 删除条件：内置子代理全部改用 domain_extensions 且观测窗口内无旧字段产出。
             if not ev.domain_extensions:
                 if ev.evidence_level:
                     lines.append(f"  evidence_level: {ev.evidence_level}")
@@ -288,6 +286,7 @@ def render_result_envelope_handover(envelope: SubagentResultEnvelope) -> str:
             for key, value in ev.domain_extensions.items():
                 ev_line += f" [{key}={value}]"
             # deprecated: 旧域字段兜底
+            # 删除条件：同上方 _render_prior_evidence 的一致性窗口。
             if not ev.domain_extensions:
                 if ev.evidence_level:
                     ev_line += f" [evidence:{ev.evidence_level}]"
@@ -454,10 +453,7 @@ def _task_profile_lines(task_spec: TaskSpec | None) -> list[str]:
     return [f"父任务概要：risk={task_spec.risk_level}"]
 
 
-def _expected_output(
-    task_spec: TaskSpec | None,
-    review_requirements: ReviewRequirements | None,
-) -> str | None:
+def _expected_output(task_spec: TaskSpec | None) -> str | None:
     if task_spec is None:
         return None
     if task_spec.risk_level == "high":

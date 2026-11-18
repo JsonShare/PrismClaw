@@ -5,6 +5,7 @@ from typing import Any, Literal, TYPE_CHECKING
 
 from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.agent.capability import EffectClass
+from prismclaw.schema.shared.tool_markup import has_tool_markup, strip_tool_markup
 
 if TYPE_CHECKING:
     from prismclaw.engine.toolkit.registry.registry import ToolRegistry
@@ -13,13 +14,23 @@ if TYPE_CHECKING:
 # incomplete_turn
 # ---------------------------------------------------------------------------
 
-TurnClassification = Literal["ok", "reasoning", "empty"]
+TurnClassification = Literal["ok", "reasoning", "empty", "tool_markup"]
 
 _THINKING_BLOCK = re.compile(r"<thinking>.*?</thinking>", re.IGNORECASE | re.DOTALL)
 
 
 def strip_thinking(text: str) -> str:
     return _THINKING_BLOCK.sub("", text or "").strip()
+
+
+def strip_noise(text: str) -> str:
+    """剥离一切不该出现在用户可见正文里的模型内部标记。
+
+    = ``<thinking>`` 内部草稿 + 原生工具调用标记（端点缺 tool-call parser 时
+    模型会把 ``<|DSML|tool_calls>…`` 以纯文本写进 content）。所有落树/推送/
+    历史回放的出口都应走这里，而不是只用 ``strip_thinking``。
+    """
+    return strip_tool_markup(strip_thinking(text or "")).strip()
 
 
 def extract_thinking(text: str) -> str:
@@ -38,6 +49,17 @@ def classify_turn(
 
     raw_text = text or ""
     has_reasoning = bool(reasoning) or bool(_THINKING_BLOCK.search(raw_text))
+    # 文本化的工具调用（DSML）：工具并未真正执行，模型只是把调用协议写进了
+    # content。若判成 ok，本轮会被当作完成申报，任务静默失败（用户只看到
+    # 一堆标记）。单独成一类，由治理层按「响应质量问题」重试并给出纠偏提示。
+    # 仅当剥掉标记后没有任何可见文字时才归此类——有实质正文的回合即使混入
+    # 标记，也不该否定已给出的答复（标记会在落库出口被剔除）。
+    if has_tool_markup(raw_text):
+        visible = strip_tool_markup(strip_thinking(raw_text)).strip()
+        if not visible:
+            return "tool_markup"
+        return "ok"
+
     visible = strip_thinking(raw_text)
 
     if not visible.strip() and not has_reasoning:

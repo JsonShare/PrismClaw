@@ -533,7 +533,7 @@ async def evaluate_takeover_eligibility(
             "resume_reason_message": resume_decision.human_readable_reason,
         })
 
-    if snapshot.active_context.task_spec is None or snapshot.active_context.review_requirements is None:
+    if snapshot.active_context.task_spec is None:
         return _with_reason_policy({
             "eligible": False,
             "reason_code": "recovery_context_missing",

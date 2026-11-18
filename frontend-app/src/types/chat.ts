@@ -105,7 +105,6 @@ export interface WSClientChatSend {
   workspace_id?: string
   content: string
   attachments?: AttachmentBlock[]
-  mode?: 'chat' | 'work'
 }
 
 export interface WSClientChatAbort {

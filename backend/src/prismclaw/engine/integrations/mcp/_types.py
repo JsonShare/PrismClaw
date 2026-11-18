@@ -16,7 +16,7 @@ ServerStatusLiteral = Literal["connected", "failed", "disabled", "pending"]
 
 @dataclass
 class MCPRuntimeTelemetry:
-    forced_chat_only: bool = False
+    server_read_only: bool = False
     total_tool_calls: int = 0
     total_denied_calls: int = 0
     total_failed_calls: int = 0

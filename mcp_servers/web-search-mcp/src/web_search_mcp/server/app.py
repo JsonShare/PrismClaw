@@ -15,7 +15,9 @@ from starlette.responses import JSONResponse
 from ..agent import core as agent
 from ..agent import report as report_mod
 from ..config import Settings
+from ..fetch.fetcher import fetch_page
 from ..infra.runtime import close_state, init_state
+from ..infra.security import check_url_safety
 from .auth import TokenAuthMiddleware
 
 logger = logging.getLogger(__name__)
@@ -47,11 +49,8 @@ async def lifespan(_app: Any):
 mcp = FastMCP(
     "web-search-mcp",
     instructions=(
-        "通用网络检索代理：输入信息需求，自动执行多轮网络搜索（含启发式追问），"
-        "提取最相关页面正文，返回带引用来源的 markdown 报告。"
-        "无需后续 search/fetch/extract 调用。"
-        "用于企业资料、公司信息、新闻、人物、产品、公开数据等通用网络检索；"
-        "学术论文/医学文献请使用专用学术工具。"
+        "通用网络检索能力：`search` 按信息需求执行多轮网络搜索并返回带引用来源的 markdown 报告；"
+        "`fetch` 抓取指定 URL 的页面正文。"
     ),
     lifespan=lifespan,
 )
@@ -63,10 +62,8 @@ mcp = FastMCP(
     description=(
         "网络检索代理 — 通用网络检索的默认工具。"
         "用于任何需要公开/时效性/事实性网络证据的问题："
-        "企业资料、公司信息、新闻资讯、人物背景、产品动态、技术趋势、公开数据等。"
         "运行多轮网络搜索（首轮结果不足时自动追问细化），提取最相关页面内容，"
         "返回带引用来源的 markdown 报告。设 fetch=false 仅返回摘要片段。"
-        " 通用网络检索一律用本工具；学术论文/指南/文献等请用专用学术工具。"
     ),
     annotations=ToolAnnotations(
         title="Web retrieval agent",
@@ -109,6 +106,56 @@ async def search_tool(
     return CallToolResult(
         content=[TextContent(type="text", text=markdown.rstrip())],
         structuredContent=payload,
+        isError=False,
+    )
+
+
+@mcp.tool(
+    name="fetch",
+    title="Fetch a web page",
+    description=(
+        "抓取指定 URL 的页面正文，返回 markdown。"
+    ),
+    annotations=ToolAnnotations(
+        title="Fetch a web page",
+        readOnlyHint=True,
+        destructiveHint=False,
+        openWorldHint=True,
+    ),
+    structured_output=False,
+)
+async def fetch_tool(url: str) -> CallToolResult:
+    """Fetch and extract a single known URL."""
+    state = init_state(settings)
+    policy_error = check_url_safety(
+        url,
+        allowed_schemes=settings.scheme_list,
+        allowed_domains=settings.domain_list,
+    )
+    if policy_error:
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"URL 被策略拒绝：{policy_error}")],
+            isError=True,
+        )
+    if not settings.anysearch_api_key:
+        return CallToolResult(
+            content=[
+                TextContent(type="text", text="抓取能力未配置：缺少 anysearch API key。")
+            ],
+            isError=True,
+        )
+    page = await fetch_page(state, url)
+    if page is None:
+        return CallToolResult(
+            content=[
+                TextContent(type="text", text=f"抓取失败：{url}（站点无法抽取或访问被拒）")
+            ],
+            isError=True,
+        )
+    text = f"# {page['title'] or url}\n\n来源：{page['url']}\n\n{page['content']}".rstrip()
+    return CallToolResult(
+        content=[TextContent(type="text", text=text)],
+        structuredContent=page,
         isError=False,
     )
 

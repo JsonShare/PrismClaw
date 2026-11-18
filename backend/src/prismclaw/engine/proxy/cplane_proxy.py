@@ -13,7 +13,6 @@ import hmac
 import ipaddress
 import logging
 import socket
-from typing import Any
 
 import aiohttp
 from aiohttp import web
@@ -50,14 +49,12 @@ class CPlaneProxy:
         hmac_secret: str,
         acl: McpNetworkAcl,
         dlp_scanner: DlpScanner | None = None,
-        worm_audit: Any = None,
     ) -> None:
         self._listen_host = listen_host
         self._listen_port = listen_port
         self._hmac_secret = hmac_secret
         self._acl = acl
         self._dlp = dlp_scanner
-        self._worm_audit = worm_audit
         self._runner: web.AppRunner | None = None
         self._site: web.TCPSite | None = None
         self._tcp_connector: aiohttp.TCPConnector | None = None

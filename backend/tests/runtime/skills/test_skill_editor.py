@@ -439,7 +439,7 @@ def test_outside_all_roots_rejected(tmp_path):
     proj = tmp_path / "proj"
     ws.mkdir()
     proj.mkdir()
-    skill_dir = tmp_path / "elsewhere" / ".prismclaw" / "skills" / "demo"
+    skill_dir = tmp_path / "elsewhere" / "skills" / "demo"
     md = _write_skill_at(skill_dir, "demo", editable=True)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(ws, settings=_full_settings(), project_root=proj)

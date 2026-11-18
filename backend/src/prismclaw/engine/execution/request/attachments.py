@@ -104,8 +104,8 @@ class AttachmentRoutingDecision:
     """Resolved attachment plan for one user turn.
 
     图片不直接进主上下文（实证 2048²≈23000 tokens 必撑爆）：有 OCR 文本时以
-    文本内联，否则给 read_image 引用——故不存在 vision 能力检测或模型切换。
-    ``downgraded_image_count`` 是本轮以引用形式交给 read_image 的图片数。
+    文本内联，否则给 `read` 引用——故不存在 vision 能力检测或模型切换。
+    ``downgraded_image_count`` 是本轮以引用形式交给 `read` 的图片数。
     """
 
     display_content: Any
@@ -176,7 +176,7 @@ def normalize_attachment_blocks(
         item_type = item.get("type")
         if item_type == "image":
             source_path = item.get("source_path")
-            # 图片一律按工作区路径定位（主模型不收图片，OCR 与 read_image 都需要
+            # 图片一律按工作区路径定位（主模型不收图片，OCR 与 `read` 的图片分支都需要
             # path）；无 path / 越界的 payload 无法被任何通道使用，直接忽略。
             if (
                 isinstance(source_path, str)
@@ -251,6 +251,9 @@ def _attachment_policy(
             "- 若附件本身写明任务，或用户消息已明确隐含任务，请直接执行，不要询问。"
             "只有当意图确实含糊时才用 ask_user_question 提问（选项即可能的理解，"
             "推荐项放首位），不要在正文里罗列选项。",
+            "- 附件位于本会话的 `uploads/` 目录：文件工具用 `uploads/<文件名>`，"
+            "bash 用 `$PRISMCLAW_UPLOADS_DIR/<文件名>`。不要写裸文件名"
+            "（bash 的 cwd 是会话根，不是 uploads）。",
         ]
     )
 

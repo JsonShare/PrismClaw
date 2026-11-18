@@ -74,8 +74,8 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
             file_path="backend/src/prismclaw/core/agent/pre_request_pipeline.py",
             symbol="PreRequestPipeline.run",
             summary=(
-                "Resolves per-turn permission tier, visible tool names, and the tool "
-                "schema fingerprint for the LLM callable set before request assembly."
+                "Resolves per-turn visible tool names and the tool schema fingerprint "
+                "for the LLM callable set before request assembly."
             ),
             decision_kinds=(
                 CapabilityDecisionKind.PERMISSION,
@@ -83,21 +83,15 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
                 CapabilityDecisionKind.SKILL,
             ),
             inputs=(
-                "request.mode_override",
-                "tool_ctx.mode",
-                'runtime fallback "work"',
                 "skill_invocation.allowed_tools_override",
                 "turn_state.discovered_tool_ledger",
             ),
             outputs=(
-                "permission_tier",
-                "permission_source",
                 "callable_tools",
                 "tools_for_llm",
                 "tool_pool_id",
             ),
             failure_source_ids=(
-                "permission-tier-derived-in-pipeline",
                 "skill-runtime-tool-constraint-projection",
             ),
         ),
@@ -161,7 +155,6 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
             inputs=(
                 "skill_invocation.allowed_tools_override",
                 "discovered_tool_names_from_ledger",
-                "permission_tier",
                 "registry.deferred",
             ),
             outputs=("resolved_toolset",),
@@ -184,76 +177,6 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
             ),
             outputs=("visible_tools",),
             failure_source_ids=(),
-        ),
-        CapabilityDecisionEntry(
-            entry_id="safety_gate.evaluate",
-            file_path="backend/src/prismclaw/core/agent/safety_gate.py",
-            symbol="SafetyGate.evaluate",
-            summary=(
-                "SafetyGate is the sole gate replacing the old approval pipeline. "
-                "Evaluates tool calls through RuleGate (L0) → RiskRouter (L1) → "
-                "WorkspaceMode check → ConfirmGateway orchestration."
-            ),
-            decision_kinds=(
-                CapabilityDecisionKind.PERMISSION,
-                CapabilityDecisionKind.APPROVAL,
-                CapabilityDecisionKind.DENY,
-                CapabilityDecisionKind.SANDBOX,
-            ),
-            inputs=(
-                "per_turn_tier",
-                "tool.server_config.forced_chat_only",
-                "sandbox_backend",
-            ),
-            outputs=("GateDecision.allowed", "GateDecision.sandbox_tier", "GateDecision.confirmation"),
-            failure_source_ids=(
-                "per-call-tier-rerderived",
-                "forced-tier-server-sidecar",
-            ),
-        ),
-        CapabilityDecisionEntry(
-            entry_id="safety_gate.apply_no_hook_denials",
-            file_path="backend/src/prismclaw/core/agent/safety_gate.py",
-            symbol="SafetyGate._apply_denials",
-            summary=(
-                "Finalizes deny outcomes when gate evaluation determines a tool call "
-                "should be denied based on policy rules."
-            ),
-            decision_kinds=(
-                CapabilityDecisionKind.APPROVAL,
-                CapabilityDecisionKind.DENY,
-            ),
-            inputs=(
-                "gate_decision.allowed",
-                "tool_ctx",
-                "channel",
-                "session_id",
-            ),
-            outputs=("denied_call_ids",),
-            failure_source_ids=("approval-outcome-finalized-after-phase1",),
-        ),
-        CapabilityDecisionEntry(
-            entry_id="safety_gate.confirm_gateway",
-            file_path="backend/src/prismclaw/core/agent/safety_gate.py",
-            symbol="SafetyGate._confirm_gateway",
-            summary=(
-                "Orchestrates user confirmation for tool calls that require explicit "
-                "approval via the ConfirmGateway pattern."
-            ),
-            decision_kinds=(
-                CapabilityDecisionKind.APPROVAL,
-                CapabilityDecisionKind.DENY,
-            ),
-            inputs=(
-                "gate_decision.confirmation",
-                "confirmation_callback",
-                "session_id",
-            ),
-            outputs=(
-                "confirmed_call_ids",
-                "denied_call_ids",
-            ),
-            failure_source_ids=("approval-outcome-finalized-after-phase1",),
         ),
         CapabilityDecisionEntry(
             entry_id="tool_execution.execute_with_handoff",
@@ -437,13 +360,12 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
                 "Builds sub-agent ToolContext from the parent turn_state and "
                 "capability_decision_bundle. Fork inheritance is bundle-owned: "
                 "child callable scope is intersected with parent bundle scope, "
-                "sandbox and permission are inherited from parent bundle, "
+                "sandbox is inherited from parent bundle, "
                 "and memory visibility cannot widen beyond parent."
             ),
             decision_kinds=(
                 CapabilityDecisionKind.FORK,
                 CapabilityDecisionKind.SANDBOX,
-                CapabilityDecisionKind.PERMISSION,
                 CapabilityDecisionKind.TOOL_GOVERNANCE,
             ),
             inputs=(
@@ -530,7 +452,7 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
             symbol="AgentInstance._dispatch_tool_calls",
             summary=(
                 "Hard-denies tool calls outside the governed callable scope, then dispatches "
-                "surviving tool calls directly (SafetyGate handles gating at the parent runner level)."
+                "surviving tool calls directly (pre-tool hooks run at the parent runner level)."
             ),
             decision_kinds=(
                 CapabilityDecisionKind.TOOL_CALLABLE,
@@ -542,7 +464,6 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
                 "allowed_tools",
                 "tool_calls",
                 "resolve_registry_tool_governance",
-                "parent_ctx.mode",
             ),
             outputs=(
                 "tool_results",
@@ -572,16 +493,6 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
 
     failure_sources = (
         CapabilityFailureSource(
-            source_id="permission-tier-derived-in-pipeline",
-            severity=FailureSeverity.HIGH,
-            summary=(
-                "Per-turn permission tier is still decided in PreRequestPipeline "
-                "instead of a single capability resolver."
-            ),
-            impacted_entry_ids=("pre_request_pipeline.capability_surface",),
-            impacted_kinds=(CapabilityDecisionKind.PERMISSION,),
-        ),
-        CapabilityFailureSource(
             source_id="skill-runtime-tool-constraint-projection",
             severity=FailureSeverity.HIGH,
             summary=(
@@ -609,50 +520,6 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
             impacted_kinds=(
                 CapabilityDecisionKind.SKILL,
                 CapabilityDecisionKind.TOOL_GOVERNANCE,
-            ),
-        ),
-        CapabilityFailureSource(
-            source_id="per-call-tier-rerderived",
-            severity=FailureSeverity.HIGH,
-            summary=(
-                "Per-turn permission tier is still recomputed per call inside "
-                "SafetyGate instead of a single capability resolver."
-            ),
-            impacted_entry_ids=("safety_gate.evaluate",),
-            impacted_kinds=(
-                CapabilityDecisionKind.PERMISSION,
-                CapabilityDecisionKind.APPROVAL,
-            ),
-        ),
-        CapabilityFailureSource(
-            source_id="forced-tier-server-sidecar",
-            severity=FailureSeverity.MEDIUM,
-            summary=(
-                "MCP forced_chat_only flags live in server_config sidecars and are merged "
-                "at SafetyGate evaluation time instead of in a first-class capability model."
-            ),
-            impacted_entry_ids=("safety_gate.evaluate",),
-            impacted_kinds=(
-                CapabilityDecisionKind.PERMISSION,
-                CapabilityDecisionKind.APPROVAL,
-            ),
-        ),
-        CapabilityFailureSource(
-            source_id="approval-outcome-finalized-after-phase1",
-            severity=FailureSeverity.HIGH,
-            summary=(
-                "Approval/deny decisions are finalized in follow-up helpers after "
-                "SafetyGate.evaluate, so the authority to approve or deny is split across "
-                "multiple functions."
-            ),
-            impacted_entry_ids=(
-                "safety_gate.evaluate",
-                "safety_gate.apply_no_hook_denials",
-                "safety_gate.confirm_gateway",
-            ),
-            impacted_kinds=(
-                CapabilityDecisionKind.APPROVAL,
-                CapabilityDecisionKind.DENY,
             ),
         ),
         CapabilityFailureSource(

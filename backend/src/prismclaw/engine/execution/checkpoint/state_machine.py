@@ -20,6 +20,8 @@ class RunStateMachine:
             self.state.retry_state.reasoning += 1
         elif classification == "empty":
             self.state.retry_state.empty += 1
+        elif classification == "tool_markup":
+            self.state.retry_state.tool_markup += 1
         else:
             logger.warning("unknown no-tool retry classification: %s", classification)
         return self.retry_counts_view()
@@ -27,6 +29,7 @@ class RunStateMachine:
     def reset_retry_state(self) -> dict[str, int]:
         self.state.retry_state.reasoning = 0
         self.state.retry_state.empty = 0
+        self.state.retry_state.tool_markup = 0
         return self.retry_counts_view()
 
     def load_tool_loop_state(self) -> ToolLoopState:

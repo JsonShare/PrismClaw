@@ -365,7 +365,7 @@ export function useTaskPanelData(): TaskPanelData {
           icon: 'streaming' as const,
         }
       }
-      if (runtime.state === 'intaking' || runtime.state === 'clarifying') {
+      if (runtime.state === 'intaking') {
         const preflightProbe = liveTaskRuntime!.preflight_probe
         return {
           title: '整理处理思路',
@@ -386,13 +386,6 @@ export function useTaskPanelData(): TaskPanelData {
         return {
           title: '任务完成',
           subtitle: '当前任务已完成',
-          icon: 'finalizing' as const,
-        }
-      }
-      if (runtime.state === 'cancelled') {
-        return {
-          title: '任务已取消',
-          subtitle: '当前任务已取消',
           icon: 'finalizing' as const,
         }
       }

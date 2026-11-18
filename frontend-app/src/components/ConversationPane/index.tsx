@@ -11,8 +11,7 @@ import { ChatMessage } from '../ChatMessage'
 import { ClarifyCard } from '../ClarifyCard'
 import { ExecutionSheet } from '../ExecutionTimeline'
 import type { StepRow } from '../../lib/chat/stepRows'
-import { MarkdownText } from '../MarkdownText'
-import ModePicker from '../ModePicker'
+import { StreamingMarkdown } from '../StreamingMarkdown'
 import ReferenceRow from '../ReferenceRow'
 import WorkspacePicker from '../WorkspacePicker'
 import { ThinkingIndicator } from '../ThinkingIndicator'
@@ -32,6 +31,7 @@ const EMPTY_CONV: ConvState = {
   workspaceId: '',
   messages: [],
   streamingText: '',
+  currentStreamingSegmentId: 0,
   liveTimeline: [],
   liveOutputFiles: [],
   liveReferenceSources: [],
@@ -69,7 +69,6 @@ export default function ConversationPane({
   const submitFeedback = useChatStore((s) => s.submitFeedback)
 
   const workspaceId = useAppStore((s) => s.workspaceId)
-  const mode = useAppStore((s) => s.mode)
   const setComposerDraft = useComposerStore((s) => s.setDraft)
 
   // 贴底改用滚动锚点：每次自增锚点 id，避免受控 scrollTop 在重渲染时把用户
@@ -223,7 +222,6 @@ export default function ConversationPane({
     stickBottomRef.current = false
     const userMessageId = sendMessage(sessionId, composeContent(text, chips), {
       workspaceId: wsId,
-      mode,
       attachments,
     })
     if (userMessageId) {
@@ -364,7 +362,7 @@ export default function ConversationPane({
                   {conv.streamingText.trim() ? (
                     <>
                       <View className='msg-text'>
-                        <MarkdownText text={conv.streamingText} />
+                        <StreamingMarkdown text={conv.streamingText} />
                       </View>
                       <View className='live-status'>
                         <ThinkingIndicator text='回复中...' />
@@ -426,8 +424,7 @@ export default function ConversationPane({
           onAbort={() => abort(sessionId)}
           footer={
             started ? undefined : (
-              <View className='mode-dock'>
-                <ModePicker />
+              <View className='dock-tools'>
                 <WorkspacePicker />
               </View>
             )

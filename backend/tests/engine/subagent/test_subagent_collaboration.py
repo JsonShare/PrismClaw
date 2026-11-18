@@ -18,6 +18,7 @@ from prismclaw.engine.subagent.runtime.collaboration import (
     SubagentRunLaunch,
 )
 from prismclaw.engine.subagent.runtime.lease import LocalSubagentLeaseStore
+from prismclaw.engine.subagent.runtime.parallel import ParallelTaskRuntimeRecord
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.content_types import (
     SubagentEnvelopeArtifact,
@@ -40,16 +41,31 @@ class _ToolRegistry:
 
 class _Executor:
     _default_model = "test-model"
+    parallel_store = None
 
     def __init__(self, handler: Any = None) -> None:
         self.handler = handler
         self.calls = 0
 
     async def run(self, manifest, task, parent_ctx, **kwargs) -> AgentRunResult:
-        del manifest, task, parent_ctx
+        del task
         self.calls += 1
         call_number = self.calls
         run_context: SubagentRunContext = kwargs["run_context"]
+        # 与真实 SubAgentExecutor 一致：每个 Run 写一条携带
+        # (agent_id, task_id) 组合键的并行任务记录。
+        if self.parallel_store is not None and kwargs.get("task_id"):
+            await self.parallel_store.append(
+                ParallelTaskRuntimeRecord(
+                    task_id=kwargs["task_id"],
+                    agent_id=run_context.agent_id,
+                    owner_session_id=parent_ctx.session_id,
+                    kind="subagent",
+                    status="running",
+                    run_id=run_context.run_id,
+                    agent_name=manifest.name,
+                )
+            )
         run_context.build_messages()
         if self.handler is not None:
             await self.handler(call_number, run_context)

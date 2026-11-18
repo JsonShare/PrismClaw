@@ -115,7 +115,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     # Step 3: Register message handlers from the chat layer via the
     # handler registry on ConnectionState.  This avoids a direct import
     # of chat.chat_auth from websocket.py, breaking the circular dep.
-    _register_msg_handlers(state, settings)
+    _register_msg_handlers(state)
 
     await websocket.send_json(
         {
@@ -245,7 +245,7 @@ async def _heartbeat_loop(state: ConnectionState, settings: WebSettings) -> None
         return
 
 
-def _register_msg_handlers(state: ConnectionState, settings: WebSettings) -> None:
+def _register_msg_handlers(state: ConnectionState) -> None:
     """Populate ``state.msg_handlers`` with chat-layer callbacks.
 
     The import of :mod:`prismclaw.channels.web.chat.chat_auth` is deferred
@@ -304,7 +304,7 @@ def _register_msg_handlers(state: ConnectionState, settings: WebSettings) -> Non
 
         task_manager.spawn(
             f"ws-enqueue:{state.ws_session_id}",
-            enqueue_chat(state, msg, settings),
+            enqueue_chat(state, msg),
             category="generic",
             on_error=_on_enqueue_error,
             owner=f"web:{state.user_id}",

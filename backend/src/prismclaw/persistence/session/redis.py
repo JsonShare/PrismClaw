@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
 
 import redis.asyncio as aioredis
 
@@ -63,9 +62,6 @@ class RedisSessionStore:
     def _leaf_key(self, sid: str) -> str:
         return f"{self._prefix}session:{{{sid}}}:leaf"
 
-    def _todos_key(self, sid: str) -> str:
-        return f"{self._prefix}session:{{{sid}}}:todos"
-
     def _events_key(self, sid: str) -> str:
         return f"{self._prefix}session:{{{sid}}}:events"
 
@@ -100,8 +96,7 @@ class RedisSessionStore:
             pipe.hgetall(self._entries_key(session_id))
             pipe.lrange(self._order_key(session_id), 0, -1)
             pipe.get(self._leaf_key(session_id))
-            pipe.get(self._todos_key(session_id))
-            hdr_raw, entries_raw, order_raw, leaf_raw, todos_raw = await pipe.execute()
+            hdr_raw, entries_raw, order_raw, leaf_raw = await pipe.execute()
 
         if hdr_raw is None:
             return None
@@ -113,19 +108,11 @@ class RedisSessionStore:
             if entry is not None:
                 entries[entry_id] = entry
 
-        todos: list[dict[str, Any]] = []
-        if todos_raw:
-            try:
-                todos = json.loads(todos_raw)
-            except Exception:
-                pass
-
         tree = SessionTree(
             header=header,
             entries=entries,
             order=list(order_raw or []),
             leaf_id=leaf_raw or None,
-            todos=todos,
         )
         # Legacy sessions persisted before message events carried parent_id
         # load back with a broken branch chain (cross-turn amnesia); relink
@@ -300,7 +287,7 @@ class RedisSessionStore:
 
         问题描述：所有写入方都用各自（可能过期的）内存 tree.leaf_id 构造
         entry 的 parent_id 再提交。同一 run 内的连续写入（task bootstrap 的
-        task_spec / review_requirements / task_runtime_snapshot / evidence /
+        task_spec / task_runtime_snapshot / evidence /
         decision_ledger / run_snapshot）互不推进内存 leaf，全部挂在同一个
         旧 tip 上互为兄弟 fork；与 run_projection flusher 交错提交时 fork
         更严重。fork 上的 entry 不在 root→leaf 分支上，get_branch() 类读取
@@ -380,7 +367,7 @@ class RedisSessionStore:
         Log-only events (no projection; may exist in persisted event logs):
         - turn/start, turn/end, step/start, step/end (factory removed, legacy data only)
         - assistant/chunk
-        - request/context, todo/write, session/end-seed, session_deleted
+        - request/context, session/end-seed, session_deleted
         """
         entries_to_add: list[tuple[str, str]] = []
         entries_to_update: list[tuple[str, str]] = []
@@ -388,7 +375,6 @@ class RedisSessionStore:
         leaf_id: str | None = None
         msg_count_incr = 0
         header_event: SessionEvent | None = None
-        todos_data: list[dict[str, Any]] | None = None
 
         for event in events:
             data = event.data
@@ -436,9 +422,6 @@ class RedisSessionStore:
             elif etype in (SessionEventType.REQUEST_HEADER, SessionEventType.SESSION_CREATED):
                 header_event = event
 
-            elif etype == SessionEventType.TODO_WRITE:
-                todos_data = data.get("todos", [])
-
         hdr_raw = await self._client.get(self._hdr_key(session_id))
 
         async with self._client.pipeline(transaction=False) as pipe:
@@ -464,8 +447,6 @@ class RedisSessionStore:
                     else:
                         header = SessionHeader.model_validate(header_data)
                     pipe.set(self._hdr_key(session_id), header.model_dump_json(), ex=self._ttl)
-            if todos_data is not None:
-                pipe.set(self._todos_key(session_id), json.dumps(todos_data), ex=self._ttl)
 
             pipe.expire(self._entries_key(session_id), self._ttl)
             if leaf_id is not None:

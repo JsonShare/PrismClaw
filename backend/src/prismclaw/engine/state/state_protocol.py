@@ -4,7 +4,12 @@ import hashlib
 import json
 from typing import Any
 
-from prismclaw.schema.agent.session import SessionContextItem, SessionContextState, SessionStateUpdate
+from prismclaw.schema.agent.session import (
+    SessionContextItem,
+    SessionContextState,
+    SessionStateUpdate,
+    TodoItem,
+)
 
 # 状态载荷最近消息条数：结构性展示参数（非预算旋钮），单一来源，
 # state_store 从此导入。
@@ -13,7 +18,7 @@ _STATE_PAYLOAD_RENDER_KEYS = (
     "primary_goal",
     "constraints",
     "decisions",
-    "todos",
+    "todo_list",
     "facts",
     "assumptions",
     "open_questions",
@@ -22,7 +27,6 @@ _STATE_PAYLOAD_RENDER_KEYS = (
 _STATE_PAYLOAD_LIST_KEYS = (
     "constraints",
     "decisions",
-    "todos",
     "facts",
     "assumptions",
     "open_questions",
@@ -98,8 +102,6 @@ def extract_state_update(messages: list[dict[str, Any]]) -> SessionStateUpdate:
             update.constraints.append(_item(value, kind="constraint", source_ref=source_ref))
         for value in _extract_lines(("decision", "decisions"), text):
             update.decisions.append(_item(value, kind="decision", source_ref=source_ref))
-        for value in _extract_lines(("todo", "next", "action"), text):
-            update.todos.append(_item(value, kind="todo", source_ref=source_ref))
         for value in _extract_lines(("assumption", "assumptions"), text):
             update.assumptions.append(_item(value, kind="assumption", source_ref=source_ref))
         for value in _extract_lines(("question", "questions", "open_question"), text):
@@ -137,6 +139,8 @@ def state_payload_from_state(state: SessionContextState) -> dict[str, Any]:
 def session_memory_payload_from_state(state: SessionContextState) -> dict[str, Any]:
     payload = normalize_state_payload(state)
     payload["recent_messages"] = []
+    # 清单每步变化，不能进 run 级 baseline/缓存键
+    payload["todo_list"] = []
     return payload
 
 
@@ -158,10 +162,8 @@ def normalize_state_payload(
                 for item in value.decisions
                 if item.status == "active"
             ],
-            "todos": [
-                item.model_dump(mode="json")
-                for item in value.todos
-                if item.status == "active"
+            "todo_list": [
+                item.model_dump(mode="json") for item in value.todo_list
             ],
             "facts": [
                 item.model_dump(mode="json")
@@ -193,6 +195,7 @@ def normalize_state_payload(
     for key in _STATE_PAYLOAD_LIST_KEYS:
         normalized[key] = _normalize_state_items(payload.get(key))
     normalized["recent_messages"] = _normalize_recent_messages(payload.get("recent_messages"))
+    normalized["todo_list"] = _normalize_todo_list(payload.get("todo_list"))
     # evidence 透传（list[dict]，不做 normalize）
     raw_evidence = payload.get("evidence")
     if isinstance(raw_evidence, list):
@@ -257,6 +260,8 @@ def diff_state_payload(
             and isinstance(item.get("content"), str)
             and item.get("content") not in baseline_contents
         ]
+    # 清单是唯一常驻载体：忽略 baseline，始终输出当前全量（否则第二轮无变化时会消失）。
+    delta["todo_list"] = current_payload.get("todo_list", [])
     baseline_recent = set(baseline_payload.get("recent_messages", []))
     delta["recent_messages"] = [
         item for item in current_payload.get("recent_messages", []) if item not in baseline_recent
@@ -271,33 +276,38 @@ def render_state_payload_block(
     summary_text: str | None = None,
 ) -> str | None:
     normalized = normalize_state_payload(state_payload)
-    if not any(value for value in normalized.values()) and not (
-        isinstance(summary_text, str) and summary_text.strip()
-    ):
-        return None
-    lines = [f"<{wrapper}>"]
+    inner: list[str] = []
     if isinstance(summary_text, str) and summary_text.strip():
-        lines.append("<summary>")
-        lines.append(summary_text.strip())
-        lines.append("</summary>")
+        inner.extend(["<summary>", summary_text.strip(), "</summary>"])
     for key in _STATE_PAYLOAD_RENDER_KEYS:
         value = normalized.get(key)
         if not value:
             continue
-        lines.append(f"<{key}>")
+        if key == "todo_list":
+            if all(item.get("status") == "completed" for item in value):
+                continue
+            total = len(value)
+            inner.append("<todos>")
+            for index, item in enumerate(value, start=1):
+                mark = {"in_progress": "~", "completed": "x"}.get(item.get("status"), " ")
+                inner.append(f"[{mark}] {index}/{total} {item['content']}")
+            inner.append("</todos>")
+            continue
+        inner.append(f"<{key}>")
         if isinstance(value, str):
-            lines.append(value)
+            inner.append(value)
         elif key == "recent_messages":
             for item in value:
-                lines.append(f"- {item}")
+                inner.append(f"- {item}")
         else:
             for item in value:
                 content = item.get("content") if isinstance(item, dict) else None
                 if isinstance(content, str) and content.strip():
-                    lines.append(f"- {content.strip()}")
-        lines.append(f"</{key}>")
-    lines.append(f"</{wrapper}>")
-    return "\n".join(lines)
+                    inner.append(f"- {content.strip()}")
+        inner.append(f"</{key}>")
+    if not inner:
+        return None
+    return "\n".join([f"<{wrapper}>", *inner, f"</{wrapper}>"])
 
 
 def _snippet(value: str, *, limit: int = 240) -> str:
@@ -360,6 +370,31 @@ def _normalize_state_items(value: Any) -> list[dict[str, Any]]:
     return normalized
 
 
+def _normalize_todo_list(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    items: list[dict[str, str]] = []
+    for item in value:
+        if isinstance(item, TodoItem):
+            candidate: dict[str, Any] = item.model_dump(mode="json")
+        elif isinstance(item, dict):
+            candidate = item
+        else:
+            continue
+        content = candidate.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        status = candidate.get("status")
+        items.append(
+            {
+                "id": str(candidate.get("id") or ""),
+                "content": content.strip(),
+                "status": status if status in {"pending", "in_progress", "completed"} else "pending",
+            }
+        )
+    return items
+
+
 def _classify_item_disposition(content: str) -> tuple[str, str, float]:
     text = content.strip()
     lowered = text.lower()
@@ -402,7 +437,6 @@ def _extract_structured_tool_result_sections(text: str) -> dict[str, list[str]] 
         "findings": _string_list(payload.get("findings")),
         "decisions": _string_list(payload.get("decisions")),
         "open_questions": _string_list(payload.get("open_questions")),
-        "recommended_next_actions": _string_list(payload.get("recommended_next_actions")),
     }
 
     # 提取 evidence，存入 session_state.evidence
@@ -418,14 +452,12 @@ def _extract_subagent_result_sections(text: str) -> dict[str, list[str]]:
         "findings": [],
         "decisions": [],
         "open_questions": [],
-        "recommended_next_actions": [],
     }
     active_section: str | None = None
     heading_map = {
         "findings": "findings",
         "decisions": "decisions",
         "open_questions": "open_questions",
-        "recommended_next_actions": "recommended_next_actions",
     }
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -464,8 +496,6 @@ def _merge_subagent_result_update(
         update.decisions.append(_item(value, kind="decision", source_ref=source_ref))
     for value in sections["open_questions"]:
         update.open_questions.append(_item(value, kind="question", source_ref=source_ref))
-    for value in sections["recommended_next_actions"]:
-        update.todos.append(_item(value, kind="todo", source_ref=source_ref))
     # 写入 evidence（原始 dict 列表，由 _collect_prior_evidence 在下游解析）
     if "evidence" in sections:
         update.evidence.extend(sections["evidence"])

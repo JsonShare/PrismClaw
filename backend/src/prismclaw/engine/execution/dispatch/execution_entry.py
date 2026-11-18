@@ -33,6 +33,7 @@ def log_tool_call(
     status: str | None = None,
     duration_ms: int | None = None,
     detail: str | None = None,
+    depth: int | None = None,
 ) -> None:
     """统一工具调用观测日志（start/end 各一条，INFO 级）。
 
@@ -41,6 +42,8 @@ def log_tool_call(
     _execute_subagent_with_failsoft（subagent_parallel 桶）、
     streaming_executor._run_tool（流式执行路径）。
     start/end 配对可用于定位挂死调用（有 start 无 end）。
+
+    ``depth`` 区分主循环（0）与子代理循环（>0）的工具使用，用于频次统计。
     """
     parts = [
         f"tool_call_{phase}",
@@ -54,6 +57,8 @@ def log_tool_call(
         parts.append(f"duration_ms={duration_ms}")
     if detail:
         parts.append(f"detail={detail}")
+    if depth is not None:
+        parts.append(f"depth={depth}")
     logger.info(" ".join(parts))
 
 
@@ -228,7 +233,7 @@ async def execute_tool_calls(
         tool = registry.get(name) if name else None
         if name == _SUBAGENT_TOOL_NAME and tool is not None:
             subagent_parallel.append((i, call))
-        elif tool is None or not _resolve_is_concurrency_safe(tool, name):
+        elif tool is None or not _resolve_is_concurrency_safe(tool):
             sequential.append((i, call))
         else:
             parallel.append((i, call))
@@ -550,9 +555,10 @@ async def _execute_subagent_with_failsoft(
             status=status,
             duration_ms=int((time.monotonic() - t0) * 1000),
             detail=detail,
+            depth=context.subagent_depth,
         )
 
-    log_tool_call("start", session_id=context.session_id, name=name, call_id=call_id)
+    log_tool_call("start", session_id=context.session_id, name=name, call_id=call_id, depth=context.subagent_depth)
 
     tool = registry.get(name)
     if tool is None:
@@ -665,9 +671,10 @@ async def _dispatch_single(
             status=status,
             duration_ms=int((time.monotonic() - t0) * 1000),
             detail=detail,
+            depth=context.subagent_depth,
         )
 
-    log_tool_call("start", session_id=context.session_id, name=name or "<unknown>", call_id=call_id)
+    log_tool_call("start", session_id=context.session_id, name=name or "<unknown>", call_id=call_id, depth=context.subagent_depth)
 
     if not name:
         _log_end("no_name")
@@ -958,8 +965,6 @@ def _needs_legacy_parallel_path(
     registry: ToolRegistry,
     default_tool_timeout_s: float,
 ) -> bool:
-    if bool(call.get("_needs_ctx_override", False)):
-        return True
     if default_tool_timeout_s <= 0:
         return True
 

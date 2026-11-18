@@ -33,6 +33,22 @@ from prismclaw.engine.integrations.mcp._mcp_base import _MCPBackendBase
 logger = logging.getLogger(__name__)
 
 
+def _resolve_stdio_cwd() -> str | None:
+    """stdio MCP 子进程的工作目录：项目根。
+
+    配置里的相对路径（``--directory mcp_servers/x``）以仓库根为基准；子进程
+    继承后端进程 cwd 时，从 ``backend/`` 启动会解析到 ``backend/mcp_servers``，
+    导致服务启动即 ``No such file or directory``。
+    """
+    try:
+        from prismclaw.infra.paths import resolve_project_root
+
+        return str(resolve_project_root())
+    except Exception:
+        logger.debug("resolve stdio mcp cwd failed, fallback to inherited cwd", exc_info=True)
+        return None
+
+
 class ConnectionMixin(_MCPBackendBase):
     def _server_logger(self, name: str) -> logging.Logger:
         """按需安装并返回该 server 的客户端侧文件 logger（logs/mcp_client_<name>/）。"""
@@ -434,6 +450,10 @@ class ConnectionMixin(_MCPBackendBase):
                 command=config.command or "",
                 args=resolved_args,
                 env=resolved_env or None,
+                # 配置里的相对路径（如 `--directory mcp_servers/x`）以项目根为基准。
+                # 不设 cwd 时子进程继承后端进程目录，从 backend/ 启动就会找不到
+                # 仓库根下的服务目录并以 `No such file or directory` 直接退出。
+                cwd=_resolve_stdio_cwd(),
             )
         if config.transport == "sse":
             return SseServerParameters(

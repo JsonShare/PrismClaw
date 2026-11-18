@@ -22,7 +22,7 @@ class EmbeddingSettings(BaseSettings):
 
 
 class VisionSettings(BaseSettings):
-    """Vision model configuration for read_image tool (OCR + image captioning)."""
+    """Vision model configuration for the image branch of ``read`` (OCR + captioning)."""
 
     model: str = Field("Qwen3-VL-30B-A3B-Instruct")
     api_key: str = Field("")

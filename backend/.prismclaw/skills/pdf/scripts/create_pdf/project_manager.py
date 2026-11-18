@@ -12,7 +12,7 @@ Subcommands:
     info             Display project metadata and status
 
 Usage:
-    python3 project_manager.py init <project_name> --type report --dir .prismclaw
+    python3 project_manager.py init <project_name> --type report
     python3 project_manager.py import-sources <project_path> <source_files...>
     python3 project_manager.py validate <project_path>
     python3 project_manager.py info <project_path>
@@ -59,7 +59,7 @@ SUPPORTED_SUFFIXES = PDF_SUFFIXES | PPT_SUFFIXES | DOC_SUFFIXES | TEXT_SUFFIXES 
 # 技能只读这些 env，零自解析；最后 fallback 到相对路径（脚本被手动直接执行时）。
 import os as _os
 
-DEFAULT_BASE_DIR = _os.getenv("PRISMCLAW_SKILL_CACHE", ".prismclaw")
+DEFAULT_BASE_DIR = _os.getenv("PRISMCLAW_SKILL_CACHE", ".work")
 
 PROJECT_SUBDIRS = ["sources", "exports", "assets/images", "build"]
 

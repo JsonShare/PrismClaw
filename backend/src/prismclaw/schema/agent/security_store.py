@@ -1,10 +1,10 @@
 """Security store Protocols.
 
 Low-level store/backend Protocols for security subsystems:
-aggregate counters, break-glass tokens, WORM audit, confirmation channel,
+aggregate counters, break-glass tokens, confirmation channel,
 and consent persistence.
 
-These are distinct from the higher-level ConsentProtocol / SecurityGateProtocol
+These are distinct from the higher-level ConsentProtocol contract
 in ``security.py`` — they describe *storage* contracts, not orchestration.
 """
 from __future__ import annotations
@@ -58,20 +58,3 @@ class BreakGlassStoreProtocol(Protocol):
     def create_token(self, session_id: str, reason: str, duration_seconds: int = 3600) -> str: ...
     def validate_token(self, token: str) -> dict[str, Any] | None: ...
     def revoke_token(self, token: str) -> None: ...
-
-
-@runtime_checkable
-class WormAuditProtocol(Protocol):
-    """Write-Once-Read-Many 审计日志 (§24.6 HIPAA 164.312(b))。"""
-
-    def log(self, session_id: str, event_type: str, payload: dict[str, Any]) -> str: ...
-    def query(self, session_id: str, since: str | None = None) -> list[dict[str, Any]]: ...
-    def verify_integrity(self, event_id: str) -> bool: ...
-
-
-@runtime_checkable
-class ConfirmationChannelProtocol(Protocol):
-    """IRREVERSIBLE 操作的最终确认通道 (§4.3 L2)。"""
-
-    def request(self, session_id: str, reason: str, payload: dict[str, Any]) -> str: ...
-    def check(self, request_id: str) -> str: ...  # "approved" | "rejected" | "pending"

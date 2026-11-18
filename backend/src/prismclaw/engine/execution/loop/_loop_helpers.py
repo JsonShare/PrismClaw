@@ -184,7 +184,7 @@ async def _persist_clarified_turn(
     from prismclaw.engine.execution.dispatch.response_handling import (
         append_assistant_response,
     )
-    from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
+    from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
     from prismclaw.engine.execution.output.tool_result_rendering import (
         tool_result_to_llm_content,
     )
@@ -198,7 +198,7 @@ async def _persist_clarified_turn(
         deps=deps,
         tree=tree,
         append_entry=_append,
-        text=strip_thinking(response.text or ""),
+        text=strip_noise(response.text or ""),
         tool_calls=response.tool_calls,
     )
     _ask_text = (

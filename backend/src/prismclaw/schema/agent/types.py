@@ -1,31 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from prismclaw.schema.agent.task_runtime import (
     ConfirmationDecision,
-    ReviewRequirements,
-    TaskContextContract,
-    TurnSemantics,
+    TaskComplexity,
 )
-WorkspaceMode = Literal["chat", "work"]
-"""用户工作模式。
-- ``chat`` — 只读模式，写类工具不可见
-- ``work`` — 读写模式，全部工具可见
-"""
-
-from prismclaw.schema.services.env_types import ExecutionEnv
-from prismclaw.schema.llm.types import LLMClient
-from prismclaw.schema.storage.storage_types import SessionStore
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
-
 from prismclaw.schema.agent.task_types import TaskSpec
-
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.services.env_types import ExecutionEnv
+from prismclaw.schema.storage.storage_types import SessionStore
 
 # ── RunRequest (moved from core/agent/ownership.py) ────────────────
 
@@ -46,23 +31,22 @@ class RunRequest:
     tool_context_extras: dict[str, Any] = field(default_factory=dict)
     attachments: list[Any] = field(default_factory=list)
     extra_system: str = ""
-    mode_override: WorkspaceMode | None = None
     user_id: str | None = None
     workspace_tag: Any = None
     user_profile: Any = None
     request_id: str | None = None
     task_id: str | None = None
-    effort: Literal["quick", "standard", "deep"] = "standard"
-    long_running: bool = False
+    # 本轮任务复杂度（由 RunPreparer 基于规则评估写入；仅新任务回合写入，
+    # 确认/恢复回合为 None）。simple 路径据此跳过重管道与走 fast_path。
+    complexity: TaskComplexity | None = None
     task_spec: TaskSpec | None = None
-    turn_semantics: TurnSemantics | None = None
-    task_context_contract: TaskContextContract | None = None
-    review_requirements: ReviewRequirements | None = None
     recovery_run_id: str | None = None
     recovery_owner_worker_id: str | None = None
     recovery_reason: str | None = None
-    designated_skills: list[str] = field(default_factory=list)  # 用户指定技能（可多个，首轮前逐个激活）
-    designated_plugins: list[str] = field(default_factory=list)  # 用户指定插件（可多个，逐个注入 profile + 偏向提示）
+    # 用户指定技能（可多个，首轮前逐个激活）
+    designated_skills: list[str] = field(default_factory=list)
+    # 用户指定插件（可多个，逐个注入 profile + 偏向提示）
+    designated_plugins: list[str] = field(default_factory=list)
     # §4.10 动态层：任务级技能路由结果（top-3 候选，仅提示不激活）。
     # 仅 TaskSpec 新建回合（非确认回合）由 _apply_fresh_governance_fields 写入；
     # RunRequest 是 run 级生命周期，确认回合/延续轮不触发路由，天然无残留。
@@ -71,7 +55,8 @@ class RunRequest:
     # 引擎用它从 session_queue 桥 drain steering（排队消息提升注入）；
     # 非 web channel（CLI / 测试）不填 → steering 消费为 no-op；定时任务走 web channel。
     conversation_id: str | None = None
-    referenced_files: list[str] = field(default_factory=list)  # 用户显式引用的工作区文件（工作区根相对路径）
+    # 用户显式引用的工作区文件（工作区根相对路径）
+    referenced_files: list[str] = field(default_factory=list)
     # 落树/回放用的正文（原样，可含内联卡片标记）；user_message 是给模型的
     # 可读文本。None 表示两者相同（非 web 客户端不区分）。
     display_user_message: str | None = None
@@ -93,7 +78,7 @@ class AgentDeps(Protocol):
     delivery 层通过 AgentDeps 引用，不依赖 AgentRunnerDeps 的具体字段。
 
     解耦原理：delivery 层不再直接引用 AgentRunnerDeps 的字段名
-    （audit_logger / callbacks / channel），
+    （callbacks / channel），
     而是通过 with_request_context() 的参数名注入请求级上下文。
     """
 
@@ -109,7 +94,6 @@ class AgentDeps(Protocol):
     def with_request_context(
         self,
         *,
-        audit_logger: Any = None,
         progress_sink: Any = None,
         terminal_sink: Any = None,
         channel: str | None = None,

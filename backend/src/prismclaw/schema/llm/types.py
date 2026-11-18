@@ -55,7 +55,6 @@ class LLMClient(Protocol):
         idle_seconds: float = 0.0,
         abort_event: Any | None = None,
         temperature: float | None = None,
-        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMStreamChunk]: ...
 
     async def complete(
@@ -68,7 +67,6 @@ class LLMClient(Protocol):
         idle_seconds: float = 0.0,
         abort_event: Any | None = None,
         temperature: float | None = None,
-        reasoning_effort: str | None = None,
     ) -> Any: ...
 
 

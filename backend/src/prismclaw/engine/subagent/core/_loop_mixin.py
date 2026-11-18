@@ -26,7 +26,6 @@ class LoopMixin:
         allowed_tools: set[str] | None,
         *,
         sub_ctx: ToolContext,
-        mode: str,
     ) -> SettledSubagentToolSurface:
         from prismclaw.engine.security.gate.types import AllowedToolsPolicy
         from prismclaw.engine.toolkit.registry.governance import (
@@ -90,7 +89,6 @@ class LoopMixin:
             skill_invocation=skill_invocation,
             allowed_tools_policy=allowed_policy,
             discovered_tools=discovered_tools,
-            mode=mode,
             subagent_depth=sub_ctx.subagent_depth,
             # 子代理结构上不持有会话队列，无法暂停等用户回答，
             # 因此对需要交互用户的工具恒为无头。

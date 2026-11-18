@@ -77,7 +77,7 @@
 - nextFireAt 缓存：进程内缓存 + Redis pub/sub 跨 worker 失效
 - Missed-task 恢复：首次 leader tick 时检测错过的一次性任务
 - **fire_slot 必须用不含 jitter 的原始 cron `next_ts`**：`_tick()` 与 `_recover_missed()` 对同一次 fire 必须算出同一个 `run.id`；用带 jitter 的 `next_at` 会让幂等门失效
-- 定时只是「触发方式」，不是另一套执行 mode：不做定时专用的工具策略 / 轮次上限 / 交付物补偿；执行、事件、落库全部与普通 chat 一致
+- 定时只是「触发方式」，不是另一套执行路径：不做定时专用的工具策略 / 轮次上限 / 交付物补偿；执行、事件、落库全部与普通会话一致
 - 单机 N=1 与多节点 N>1 走同一套代码，没有 topology 分支
 
 ## 崩溃语义：at-most-once

@@ -5,8 +5,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from prismclaw.schema.agent.types import WorkspaceMode
-
 
 class WebUserConfig(BaseModel):
     id: str
@@ -73,10 +71,6 @@ class WebSettings(BaseSettings):
     """Per-user WS 连接上限。3 过严：多标签页/多窗口是正常用法（实测单用户
     6 个标签即触发 4004 断连横幅反复闪烁），放宽以避免多标签场景的连接震荡。"""
     trust_proxy_headers: bool = Field(False)
-    default_mode: WorkspaceMode = Field(
-        "chat"
-    )
-    """Default mode when ``chat.send`` arrives without an explicit ``mode`` field."""
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"]

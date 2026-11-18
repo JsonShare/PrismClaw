@@ -102,17 +102,10 @@ async def run_agent_stream(
     total_cache_creation_tokens = prepared.total_cache_creation_tokens
     total_cache_read_tokens = prepared.total_cache_read_tokens
     attachment_decision = prepared.attachment_decision
-    _mode = prepared._mode
     resolved_ws_path = Path(tool_workspace_path).resolve()
 
     abort_event = control.abort_event
-    from prismclaw.engine.execution.control.kernel import resolve_effort_budget
-    _effort_budget = resolve_effort_budget(
-        effort=getattr(request, "effort", "standard") or "standard",
-        long_running=bool(getattr(request, "long_running", False)),
-        tiers=deps.config.effort,
-    )
-    run_deadline_s = _effort_budget.hard_s
+    run_deadline_s = float(deps.config.budget.hard_s)
     run_started = ctx.run_started if ctx is not None else time.monotonic()
 
     try:
@@ -165,7 +158,6 @@ async def run_agent_stream(
                 abort_event=abort_event,
                 run_deadline_s=run_deadline_s,
                 run_started=run_started,
-                mode=_mode,
                 traj_scope=_traj_scope,
                 attachment_guidance=attachment_decision.attachment_guidance if attachment_decision else None,
             )

@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 from prismclaw.engine.state.turn_state import TurnState
-from prismclaw.schema.agent.task_runtime import ReviewRequirements
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.agent.capability import EffectClass
 from prismclaw.schema.agent.task_runtime import TaskRuntimeState
@@ -27,7 +26,7 @@ from prismclaw.engine.execution.checkpoint.models import (
     ToolEffectRecord,
 )
 
-CURRENT_RUN_SNAPSHOT_VERSION = 5
+CURRENT_RUN_SNAPSHOT_VERSION = 6
 
 
 class ActiveRunContextSnapshot(BaseModel):
@@ -37,7 +36,6 @@ class ActiveRunContextSnapshot(BaseModel):
     task_id: str | None = None
     task_spec: TaskSpec | None = None
     task_runtime: TaskRuntimeState | None = None
-    review_requirements: ReviewRequirements | None = None
     decision_ledger_tail: list[str] = Field(default_factory=list)
 
 

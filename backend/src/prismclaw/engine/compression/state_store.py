@@ -53,6 +53,7 @@ class SessionStateStore:
         session_id: str,
         messages: list[dict[str, Any]],
     ) -> SessionContextState:
+        existing = self._states.get(session_id)
         state = SessionContextState(session_id=session_id)
         for message in messages[-_RECENT_MESSAGE_LIMIT:]:
             role = str(message.get("role") or "unknown")
@@ -60,6 +61,9 @@ class SessionStateStore:
             if text.strip():
                 state.record_recent_message(role, _snippet(text))
         state.apply_update(extract_state_update(messages))
+        # 清单由 todo_write 运行时写入，历史消息里没有对应事实，重建时必须原样保留。
+        if existing is not None:
+            state.todo_list = list(existing.todo_list)
         self._states[session_id] = state
         return state
 

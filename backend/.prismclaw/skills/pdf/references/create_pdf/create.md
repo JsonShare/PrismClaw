@@ -11,10 +11,10 @@ Generate a PDF from scratch: the agent writes `content.json`, and the renderer c
 **GATE**: The user has requested a new PDF; the document topic and type are known.
 
 ```bash
-python3 scripts/create_pdf/project_manager.py init <project_name> --type <type> --dir .prismclaw
+python3 scripts/create_pdf/project_manager.py init <project_name> --type <type>
 ```
 
-> The project folder is created under `.prismclaw/` in the current working directory, named `pdf-{project_name}-{YYYYMMDD}-{uuid8}`, with a standard structure containing `sources/`, `assets/images/`, `build/`, and `exports/`.
+> The project folder is created under the workspace skill cache (`PRISMCLAW_SKILL_CACHE`, defaulting to `.work/`), named `pdf-{project_name}-{YYYYMMDD}-{uuid8}`, with a standard structure containing `sources/`, `assets/images/`, `build/`, and `exports/`.
 
 **Checkpoint — Project workspace created. Proceed to Step 2.**
 

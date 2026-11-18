@@ -70,14 +70,6 @@ def order_visible_tools_append_only(
     return [*core, *tail]
 
 
-def _resolve_workspace_mode(*, request: Any, tool_ctx: Any) -> str:
-    request_mode = getattr(request, "mode_override", None)
-    if isinstance(request_mode, str) and request_mode:
-        return request_mode
-    ctx_mode = getattr(tool_ctx, "mode", None)
-    if isinstance(ctx_mode, str) and ctx_mode:
-        return ctx_mode
-    return "work"
 def _build_request_snapshot(
     *,
     request_id: str | None,
@@ -158,7 +150,10 @@ class PreRequestPipeline:
         if _deepcopy_ms > 1.0:
             logger.debug("pre_request_deepcopy %.1fms", _deepcopy_ms)
         audit_trail: List[dict] = []
-        mode = _resolve_workspace_mode(request=request, tool_ctx=tool_ctx)
+        # 减法：complexity=simple（RunPreparer 规则评估写入）视为简单路径，
+        # 跳过 microcompact / file_reinjection 等对短上下文无意义的重步骤。
+        # 只跳过管道步骤，不裁剪工具集（关键词打分不足以判断是否需要写工具）。
+        is_simple_path = getattr(request, "complexity", None) == "simple"
 
         # Static shell ownership now lives on deps.static_shell_cache.
         # The pipeline must resolve the current plan each run so plugin/session
@@ -169,7 +164,6 @@ class PreRequestPipeline:
             tree=tree,
             tool_workspace_path=tool_workspace_path,
             effective_model=effective_model,
-            mode=mode,
             skill_invocation=skill_invocation,
             discovered_tools=turn_state.discovered_tool_names(),
             subagent_depth=tool_ctx.subagent_depth,
@@ -187,7 +181,6 @@ class PreRequestPipeline:
             deps.tools,
             skill_invocation=skill_invocation,
             discovered_tools=turn_state.discovered_tool_names(),
-            mode=mode,
             subagent_depth=subagent_depth,
             headless=headless,
         )
@@ -203,6 +196,10 @@ class PreRequestPipeline:
             for frozen_name in _tls.frozen_tools:
                 visible_tool_names.discard(frozen_name)
                 _callable_tools.discard(frozen_name)
+
+        # 减法：simple 路径仅跳过重管道（microcompact / reinjection），
+        # 不裁剪工具集——关键词打分不足以判断任务是否真的不需要写工具，
+        # 误判会让模型拿不到 write/edit 而无法完成任务。
 
         # 工具数组顺序收口（批 4b-2）：append_only 保护前缀缓存——核心可见工具
         # 沿用 registry 稳定排序，本轮已发现工具只追加到末尾，绝不重排/中间插入。
@@ -241,7 +238,9 @@ class PreRequestPipeline:
                 )
         tools_for_llm = tools_for_llm or []
         declared_tool_names = set(deps.tools.names())
-        visible_name_set = set(resolved_toolset.visible_tools_for_llm)
+        # 必须使用过滤后的可见集，否则 governance 审计里仍声称写工具可见，
+        # 与实发 tools_for_llm 不一致。
+        visible_name_set = set(visible_tool_names)
         # P0-①（工具注入量观测）：visible 子集的真实 wire 字节
         # （json.dumps 即请求体实发字符），与 declared 数一起给出
         # 注册→注入衰减明细。区别于 registry.wire_tokens_estimate()
@@ -255,14 +254,13 @@ class PreRequestPipeline:
             )
         governance_state = ToolGovernanceState.from_contract(
             declared_tools=declared_tool_names,
-            visible_tools=resolved_toolset.visible_tools_for_llm,
+            visible_tools=visible_tool_names,
             callable_tools=list(_callable_tools),
             gated_tools=resolved_toolset.denied_tools,
             discovered_tool_names=turn_state.discovered_tool_names(),
             active_skill_name=getattr(skill_invocation, "skill_name", None),
             restricted=(
-                mode == "chat"
-                or visible_name_set != declared_tool_names
+                visible_name_set != declared_tool_names
                 or _callable_tools != declared_tool_names
             ),
         )
@@ -294,7 +292,15 @@ class PreRequestPipeline:
 
         _mc_mode = resolve_microcompact_mode()
         microcompact_result = None
-        if _mc_mode == "batch":
+        # 减法：simple 路径且无工具结果时，microcompact 无事可做，直接跳过。
+        _has_tool_results = any(
+            isinstance(m, dict) and m.get("role") == "tool"
+            for m in source_message_set.messages
+        )
+        _skip_microcompact = is_simple_path and not _has_tool_results
+        if _skip_microcompact:
+            pass
+        elif _mc_mode == "batch":
             # batch：不每轮滚动改写；只累加 R 区字符，超预算才批量清理一次。
             _mc_threshold = 0
             try:
@@ -339,10 +345,13 @@ class PreRequestPipeline:
 
         # Layer 6: file re-injection — only after a compaction has occurred;
         # ephemeral (query-time rebuild, never persisted into the tree).
-        reinjected = build_file_reinjection_messages(
-            tree=tree,
-            estimate_tokens=estimate_tokens,
-        )
+        # 减法：simple 路径跳过（无压缩发生，没有需要重注入的文件内容）。
+        reinjected: list = []
+        if not is_simple_path:
+            reinjected = build_file_reinjection_messages(
+                tree=tree,
+                estimate_tokens=estimate_tokens,
+            )
         if reinjected:
             effective_message_set = effective_message_set.replace_messages(
                 [*effective_message_set.messages, *reinjected]

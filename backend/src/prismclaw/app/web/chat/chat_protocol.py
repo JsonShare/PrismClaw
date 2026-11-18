@@ -288,7 +288,6 @@ class SessionQueue:
         self._run_controls: dict[str, RunControl] = {}
         self._approval_runtime = _ApprovalRuntime()
         self._last_usage: dict[str, dict[str, int]] = {}
-        self._last_tier: dict[str, str] = {}
         self._web_runtime: dict[str, ConversationWebRuntimeProjection] = {}
         self._detached_tasks: set[asyncio.Task[Any]] = set()
         self._closed: bool = False
@@ -739,7 +738,6 @@ class SessionQueue:
             self._abort_events.pop(conversation_id, None)
             self._run_controls.pop(conversation_id, None)
             self._last_usage.pop(conversation_id, None)
-            self._last_tier.pop(conversation_id, None)
             self._web_runtime.pop(conversation_id, None)
             # steering 兜底置于最后：先注销自身（_consumers 已 pop），drain
             # 转回排队时 _ensure_consumer 才能判定“无活 consumer”而重新拉起，
@@ -761,7 +759,6 @@ class SessionQueue:
         self._run_controls.clear()
         self._approval_runtime.clear()
         self._last_usage.clear()
-        self._last_tier.clear()
         self._web_runtime.clear()
         self._steering.clear()
         self._queue_index.clear()
@@ -818,21 +815,11 @@ class SessionQueue:
         self._abort_events.clear()
         self._run_controls.clear()
         self._last_usage.clear()
-        self._last_tier.clear()
         self._web_runtime.clear()
         self._steering.clear()
         self._queue_index.clear()
         self._steered.clear()
         self._cancelled.clear()
-
-    def maybe_record_tier_change(
-        self, conversation_id: str, new_tier: str
-    ) -> str | None:
-        previous = self._last_tier.get(conversation_id)
-        self._last_tier[conversation_id] = new_tier
-        if previous is not None and previous != new_tier:
-            return previous
-        return None
 
 
 _session_queue = SessionQueue()

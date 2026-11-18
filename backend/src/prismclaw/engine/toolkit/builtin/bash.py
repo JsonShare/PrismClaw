@@ -158,15 +158,7 @@ class BashTool:
             # Node:   让 require() 能找到全局 node_modules
             f'export NODE_PATH={_node_modules}${{NODE_PATH:+:$NODE_PATH}} && '
         )
-        # 单行 && 链：避免换行拆分导致第二行在 cd 失败的错误 cwd 上执行，
-        # 也避免 call_id 为空/含空格时把 `.work/bash_state/` 当裸重定向目标。
-        # bash_state 目录写入是 best-effort（用于持久会话 cwd 恢复的未来钩子），
-        # 失败不影响用户命令退出码。
-        wrapped_command = (
-            f"{_env_prefix}{command} && "
-            f'mkdir -p .work/bash_state 2>/dev/null; '
-            f'printf "%s\n" "$PWD" >> .work/bash_state/_last_pwd 2>/dev/null || true'
-        )
+        wrapped_command = f"{_env_prefix}{command}"
         # TODO GC 策略：全局 runtime 目录 ~/.prismclaw/runtime/ 会无限增长
         # （旧版本 node_modules、卸载技能残留），目前无清理机制。建议：
         #   1. 技能注册时登记安装的依赖清单（pkg-lock 或 node_modules/ 下的目录列表）
@@ -201,7 +193,7 @@ class BashTool:
                 call_id,
                 f"[进程已转入后台运行]\n命令 `{command[:50]}...` "
                 f"执行时间超过 {blocking_budget_s}s，已移至后台继续运行。\n"
-                f"PID: {pid}\n如需停止，请使用 `cancel_task`。",
+                f"PID: {pid}\n如需停止，请使用系统进程管理（kill {pid}）。",
             )
 
         # 同步完成：直接格式化输出（output_bound 处理截断）。

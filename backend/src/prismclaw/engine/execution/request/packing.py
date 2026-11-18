@@ -66,10 +66,9 @@ class RequestPackager:
         ]
         context_payload = _build_context_payload(dynamic_blocks) if dynamic_blocks else None
 
-        # Estimate token overhead that legacy bridge injection would add to
-        # history_budget.  The structured_extension path sends the payload via
-        # ``extra_body`` and does NOT consume message tokens, so we only count
-        # the rendered text + wrapping tags here.
+        # Estimate token overhead that the context bridge adds to
+        # history_budget: the payload is rendered as a user message, so it
+        # consumes message tokens.
         context_payload_tokens = 0
         if context_payload is not None:
             from prismclaw.engine.compression.compaction import estimate_tokens

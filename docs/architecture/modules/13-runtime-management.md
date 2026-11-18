@@ -179,11 +179,11 @@ class ContainerBackend(Protocol):
 |---|---|---|---|---|---|---|
 | GENERAL | office-general | STANDARD | 1.0 | 1g | 允许 | — |
 | OFFICE | office-general | STANDARD | 1.0 | 1g | 允许 | — |
-| LEGAL_CASE | legal-case | TIGHT | 1.0 | 1g | 域名白名单 | WORM 审计 |
-| MEDICAL_GENERAL | medical-general | TIGHT | 1.0 | 1g | 域名白名单 | WORM 审计 |
-| MEDICAL_PHI | medical-phi | STRICT | 2.0 | 2g | 完全禁止 | WORM + 四眼 + PID 隔离 |
+| LEGAL_CASE | legal-case | TIGHT | 1.0 | 1g | 域名白名单 | — |
+| MEDICAL_GENERAL | medical-general | TIGHT | 1.0 | 1g | 域名白名单 | — |
+| MEDICAL_PHI | medical-phi | STRICT | 2.0 | 2g | 完全禁止 | PID 隔离 |
 
-`ResourceTier` 数据类字段（仅列出核心字段）：name、sandbox_tier、cpu_limit（`str`，如 `"1.0"`）、memory_limit（`str`，如 `"1g"`）、template_id、allow_net、deny_pid_namespace、worm_audit、four_eyes、prewarm_count、cpu_reservation（`str`）、memory_reservation（`str`）、allow_read_workspace、allow_read_user_safe、allow_write_workspace、prewarm_idle_timeout_seconds
+`ResourceTier` 数据类字段（仅列出核心字段）：name、sandbox_tier、cpu_limit（`str`，如 `"1.0"`）、memory_limit（`str`，如 `"1g"`）、template_id、allow_net、deny_pid_namespace、prewarm_count、cpu_reservation（`str`）、memory_reservation（`str`）、allow_read_workspace、allow_read_user_safe、allow_write_workspace、prewarm_idle_timeout_seconds
 
 ### SandboxTemplate & TemplateRegistry (`template.py`, `builtin_templates.py`)
 

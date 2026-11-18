@@ -17,17 +17,19 @@ logger = logging.getLogger(__name__)
 
 # 冻结区超预算时的裁剪顺序（越靠前越先被持久化/丢弃）。
 # 原则：先撤可随时重建或按需读回的内容，最后才动"发现面"。
-#   - tools / skills 是技能与工具的唯二发现入口：一旦被撤，模型既看不到
-#     技能名也看不到 skill_search，插件生态等于对模型不可见——必须最后撤。
+#   - tools 是工具的唯一发现入口，catalogs 是技能/子代理/插件包的唯一
+#     发现入口。二者一旦被撤，模型既看不到可用工具，也看不到
+#     skill_search / subagent_search——必须最后撤。
 #   - l1_snapshot 已移至 per-turn 动态区（SDD D3），不再出现在冻结区。
-#   - 名单须与 system_prompt.build_frozen_prompt_sections 的 section.name 一致；
-#     "subagents" 曾漏登记，导致该块因落不到名次而永远最后被裁。
-#     data_safety 故意不登记：安全约束内容极短，且不应先于任何内容被撤。
+#   - 名单须与 system_prompt.build_frozen_prompt_sections 的 section.name 完全一致。
+#     未登记的名字不会报错，而是落进兜底名次（列表长度）——升序排序中即最大值，
+#     等于被排到"最不该撤"的末位。段名漂移因此表现为"该段被过度保护、其它段
+#     替它先撤"，而不是报错。只能靠 test_truncation_priority_matches_real_sections 拦截。
+#   - role / principles / data_safety / delegation 为 truncatable=False，
+#     不进候选集，故不登记。
 SYSTEM_TRUNCATION_PRIORITY = [
     "bootstrap",
-    "subagents",
-    "packages",
-    "skills",
+    "catalogs",
     "workspace",
     "tools",
 ]
@@ -601,7 +603,7 @@ def _has_operational_state(block: ContextBlock) -> bool:
     payload = block.state_payload
     if not isinstance(payload, dict):
         return False
-    for key in ("primary_goal", "constraints", "decisions", "todos", "open_questions"):
+    for key in ("primary_goal", "constraints", "decisions", "open_questions"):
         value = payload.get(key)
         if isinstance(value, str) and value.strip():
             return True

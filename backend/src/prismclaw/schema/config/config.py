@@ -413,17 +413,11 @@ class CompactionConfig(BaseModel):
         description="分块摘要的单块 token 预算。",
     )
     microcompact_keep_recent: dict[str, int] = Field(
-        default_factory=lambda: {
-            # 与 engine/context/microcompact.py TOOL_KEEP_RECENT 分档表等价
-            "web_search": 1, "web_fetch": 1, "web_extract": 1,
-            "fetch_mcp_resource": 1,
-            "tool_search": 1, "skill_search": 1, "activate_skill": 1,
-            "bash": 3, "bash_read": 3, "python": 3,
-            "ls": 4, "grep": 4, "glob": 4,
-            "reduce_subagent_results": 3,
-            "read": 8, "read_image": 6, "read_office": 6,
-        },
-        description="microcompact 分工具保留窗口（tiered retention）。",
+        default_factory=dict,
+        description=(
+            "microcompact 分工具保留窗口覆盖；留空表示使用 "
+            "engine/context/microcompact.py 的内置分档。"
+        ),
     )
     microcompact_mode: Literal["incremental", "batch"] = Field(
         "batch",
@@ -439,8 +433,8 @@ class CompactionConfig(BaseModel):
 class CompletionControlConfig(BaseModel):
     """完成控制内核的修复额度。
 
-    轮次 / 墙钟上限不在这里：它们由 ``effort`` 档位（RunRequest.effort）
-    解析，由 BudgetGuard 统一读取。
+    轮次 / 墙钟上限不在这里：它们由 ``agent.budget`` 解析，
+    由 BudgetGuard 统一读取。
     修复额度属于「完成要求」，因此挂在契约上、由本配置给出上限。
     """
 
@@ -469,7 +463,7 @@ class StuckConfig(BaseModel):
 
 class RunLoopTuningConfig(BaseModel):
     search_intent_tools: list[str] = Field(
-        default_factory=lambda: ["web-search-mcp__search"],
+        default_factory=lambda: ["web-search-mcp__search", "web-search-mcp__fetch"],
         description="Tool names treated as search/fetch intent for wrapping-phase freeze.",
     )
     stuck: StuckConfig = Field(
@@ -763,33 +757,34 @@ class ProviderModelSpecs(BaseModel):
     providers: dict[str, dict[str, ProviderModelSpecEntry]] = Field(default_factory=dict)
 
 
-class EffortTierConfig(BaseModel):
-    """单个 effort 档位的预算配额。
+class RunBudgetConfig(BaseModel):
+    """单次 run 的资源上限。
 
     steps / tool_calls 是硬上限；soft_s 只触发收尾信号，hard_s 才终止。
     派生值（reserve_s / cap_s / converge_tools）不配置，由运行时按
     hard_s 与 tool_calls 计算。
     """
 
-    steps: int = Field(..., ge=1, description="Max LLM steps (stream_llm calls) for this tier.")
-    tool_calls: int = Field(..., ge=1, description="Max tool-call attempts (parallel N counts as N; denied included).")
-    soft_s: float = Field(..., ge=0.0, description="Wall-clock soft deadline (wrap-up signal only).")
-    hard_s: float = Field(..., ge=0.0, description="Wall-clock hard deadline (termination).")
-
-
-class EffortConfig(BaseModel):
-    """三档 effort 预算。调用方通过 RunRequest.effort 选档；
-    RunRequest.long_running 对所选档位放大（steps×3 上限 30、hard_s×2 上限 1800）。"""
-
-    quick: EffortTierConfig = EffortTierConfig(steps=3, tool_calls=6, soft_s=45.0, hard_s=90.0)
-    standard: EffortTierConfig = EffortTierConfig(steps=6, tool_calls=12, soft_s=150.0, hard_s=300.0)
-    deep: EffortTierConfig = EffortTierConfig(steps=15, tool_calls=24, soft_s=420.0, hard_s=900.0)
+    steps: int = Field(
+        default=50, ge=1, description="Max LLM steps (stream_llm calls) per run."
+    )
+    tool_calls: int = Field(
+        default=24,
+        ge=1,
+        description="Max tool-call attempts (parallel N counts as N; denied included).",
+    )
+    soft_s: float = Field(
+        default=300.0, ge=0.0, description="Wall-clock soft deadline (wrap-up signal only)."
+    )
+    hard_s: float = Field(
+        default=600.0, ge=0.0, description="Wall-clock hard deadline (termination)."
+    )
 
 
 class AgentRunConfig(BaseModel):
-    effort: EffortConfig = Field(
-        default_factory=EffortConfig,
-        description="Effort tier budgets (quick/standard/deep). Selected per-run via RunRequest.effort.",
+    budget: RunBudgetConfig = Field(
+        default_factory=RunBudgetConfig,
+        description="Per-run resource caps (steps / tool_calls / soft_s / hard_s).",
     )
     tool_mutation_policy: Literal["append_only", "frozen", "unbounded"] = Field(
         default="append_only",

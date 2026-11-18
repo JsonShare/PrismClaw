@@ -5,12 +5,7 @@ from os import PathLike
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.security.gate.governance import (
-    build_initial_task_spec,
-    build_review_requirements,
-    build_task_context_contract,
-    build_turn_semantics,
-)
+from prismclaw.engine.security.gate.governance import build_initial_task_spec
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.session.types import SessionTree
 
@@ -41,26 +36,13 @@ async def _apply_fresh_governance_fields(
         session_id=request.session_id,
         user_message=request.user_message,
         tree=tree,
-        attachments_present=bool(request.attachments),
-        mode_override=request.mode_override,
         workspace_path=tool_workspace_path,
     )
     request.task_id = request.task_id or task_spec.task_id
     if request.task_id != task_spec.task_id:
         task_spec = task_spec.model_copy(update={"task_id": request.task_id})
     request.task_spec = task_spec
-    request.turn_semantics = build_turn_semantics(
-        user_message=request.user_message,
-        tree=tree,
-    )
-    request.task_context_contract = build_task_context_contract(
-        task_spec=task_spec,
-        turn_semantics=request.turn_semantics,
-    )
-    request.review_requirements = build_review_requirements(
-        task_context_contract=request.task_context_contract,
-    )
-    # §4.10 动态层：任务级技能路由。**仅会话首轮**（turn_relation=new）触发——
+    # §4.10 动态层：任务级技能路由。**仅会话首轮**（turn_index == 1）触发——
     # 实测延续消息（"改成表格"→3 个无关 workflow）与真实短任务（"做个PPT"=3分）
     # 的 BM25 分数分布重叠，置信度阈值无法区分二者，词汇重叠不反映任务语义；
     # 轮次是唯一可靠信号。首轮是技能发现价值最高点（模型零任务上下文）；
@@ -68,7 +50,7 @@ async def _apply_fresh_governance_fields(
     # 包索引永不截断 + skill_search）。
     # 三分支：唯一命中留给 _try_auto_activate_skill 自动激活；多命中写 hints
     # 供动态段提示；零命中/异常不产出。
-    if request.turn_semantics is not None and request.turn_semantics.turn_relation == "new":
+    if task_spec.turn_index == 1:
         request.skill_route_hints = _route_skill_hints(
             user_message=request.user_message,
             capability_catalog=getattr(deps, "capability_catalog", None),

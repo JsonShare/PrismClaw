@@ -217,6 +217,6 @@ class ConsentGate:
             + ", ".join(sorted_purposes)
             + "]",
             "[CONSENT TIP: 工具访问 PHI 前必须声明用途；禁止访问未在上述目的列表中声明的数据用途。"
-            "若 LLM 尝试声明未授权的用途，ConsentGate 将自动阻断并写入 WORM 审计。]",
+            "若 LLM 尝试声明未授权的用途，ConsentGate 将自动阻断该操作。]",
         ]
         return "\n".join(lines)

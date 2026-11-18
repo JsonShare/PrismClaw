@@ -194,11 +194,11 @@ def _build_runtime_status_blocks(context: Any) -> list[ContextBlock]:
             active_goals = [g for g in goals if getattr(g, "status", None) == "active"]
             if active_goals:
                 goal_lines = [
-                    f"  - {g.goal_id}: {g.objective} "
-                    f"(round {g.current_round}/{g.max_goal_rounds})"
+                    f'<goal id="{g.goal_id}" round="{g.current_round}/{g.max_goal_rounds}">'
+                    f"{g.objective}</goal>"
                     for g in active_goals
                 ]
-                goal_text = "Active goals:\n" + "\n".join(goal_lines)
+                goal_text = "<active_goals>\n" + "\n".join(goal_lines) + "\n</active_goals>"
                 est = len(goal_text) // 4
                 if total_tokens + est <= budget_cap:
                     blocks.append(
@@ -481,7 +481,7 @@ def log_turn_token_usage(
 
     logger_.info(
         "token_usage turn=%d frozen=%d bootstrap=%d l1=%d memory_ctx=%d per_turn=%d "
-        "history(total=%d msgs=%d ctx_payload=%d) tools=%d input=%d output=%d "
+        "history(total=%d msgs=%d ctx_payload=%d) tools_tokens=%d input=%d output=%d "
         "budget_remaining=%d drift=%s cache_creation=%d cache_read=%d "
         "cache_read_ratio=%.2f history_compactions=%d history_compaction_reduction=%d",
         iteration,
@@ -504,10 +504,6 @@ def log_turn_token_usage(
         history_compaction_count,
         history_compaction_reduction,
     )
-
-
-def dynamic_payload_tokens(telemetry: TurnTokenTelemetry) -> int:
-    return telemetry.memory_context_tokens + telemetry.per_turn_tokens
 
 
 def log_session_runtime_metrics(
@@ -623,23 +619,6 @@ def _turn_cache_read_ratio(turn_snapshot: TurnRuntimeMetricsSnapshot) -> float:
     input_tokens = int(turn_snapshot["input_tokens"])
     cache_read_tokens = int(turn_snapshot["cache_read_tokens"])
     return (cache_read_tokens / input_tokens) * 100 if input_tokens > 0 else 0.0
-
-
-def apply_context_layout_budgets(
-    plan: ContextPackLayout,
-    *,
-    system_budget: int,
-    dynamic_budget: int,
-    result_budget: int | None = None,
-    ports: Any = None,
-) -> ContextPackLayout:
-    return orchestrate_context_layout_budgets(
-        plan,
-        system_budget=system_budget,
-        dynamic_budget=dynamic_budget,
-        result_budget=result_budget,
-        ports=ports,
-    ).context_layout
 
 
 def orchestrate_context_layout_budgets(

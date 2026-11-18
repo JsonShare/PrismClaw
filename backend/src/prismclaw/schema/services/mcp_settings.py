@@ -95,12 +95,11 @@ class McpServerConfig(BaseModel):
         default=None,
         description="Override the derived tool_class for every tool from this server.",
     )
-    forced_chat_only: bool = Field(
+    server_read_only: bool = Field(
         default=False,
         description=(
-            "Per-server forced chat-only mode. When True, tools from this "
-            "server are restricted to read-only regardless of the user's "
-            "per-turn mode (de-escalation-only contract)."
+            "Per-server read-only policy. When True, write-class tools from "
+            "this server are not visible to the LLM."
         ),
     )
     deferred: bool = Field(

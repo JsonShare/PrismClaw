@@ -1,19 +1,12 @@
-"""policies — 租户策略、工作区标签、聚合防护、MFA 合并。"""
+"""policies — 工作区标签、聚合防护。"""
 from __future__ import annotations
 
-import logging
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
-from pydantic import BaseModel, Field
-
-from prismclaw.schema.content.workspace import SandboxTier, ConfirmationKind
+from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.engine.security.gate.types import AggregateStoreProtocol
-
-
-logger = logging.getLogger(__name__)
 
 
 # ── workspace_tag ───────────────────────────────────────────────────────────
@@ -29,15 +22,14 @@ class DataResidency(str, Enum):
 class WorkspaceTag:
     """工作区安全标签。
 
-    每个工作区绑定一个 WorkspaceTag，SafetyGate 基于 tag 的标志位
+    每个工作区绑定一个 WorkspaceTag，基于 tag 的标志位
     + ToolSafetyMeta 做交叉校验。安全属性自描述——通过布尔标志位
     而非域标签（kind）驱动安全路由。
 
     标志位：
       allow_external_write: 是否允许外部写操作（默认 False，fail-closed）
       require_consent: 敏感用途工具是否需要用户同意（默认 True）
-      restrict_chat_sensitive_data: chat 模式是否隐藏敏感数据工具（默认 True）
-      four_eyes_required: 强制 4-eyes 审批
+      restrict_chat_sensitive_data: 是否隐藏敏感数据工具（默认 True）
     运维字段：
       sandbox_tier: 容器安全等级
       template_id: 容器模板标识（替代 kind 作为资源分配键）
@@ -48,9 +40,6 @@ class WorkspaceTag:
     allow_external_write: bool = False
     require_consent: bool = True
     restrict_chat_sensitive_data: bool = True
-    four_eyes_required: bool = False
-    approver_dept: str = ""
-    four_eyes_delegate_ids: list[str] = field(default_factory=list)
     sandbox_tier: SandboxTier = SandboxTier.STANDARD
     template_id: str = "default-v1"
 
@@ -67,8 +56,6 @@ class WorkspaceTagValidator:
             errors.append("workspace_id is required")
         if not tag.owner_id:
             errors.append("owner_id is required")
-        if tag.four_eyes_required and not tag.four_eyes_delegate_ids and not tag.approver_dept:
-            errors.append("four_eyes_required but no delegate_ids or approver_dept configured")
 
         return errors
 
@@ -297,198 +284,3 @@ def create_aggregate_store(store_type: str = "memory", *, redis_url: str = "", *
         return RedisAggregateStore(redis_url=redis_url, **kwargs)
     from prismclaw.engine.security.gate.types import InMemoryAggregateStore
     return InMemoryAggregateStore(**kwargs)
-
-
-# ── tenant_policy ───────────────────────────────────────────────────────────
-
-class TenantPolicyOverride(BaseModel):
-    """租户级安全策略覆盖。
-
-    覆盖优先级：全局规则 → 租户覆盖 → 最终决策。
-    覆盖只能收紧，不能放宽——即 deny 不可被租户覆盖为 allow，
-    但 allow 可以被租户覆盖为 deny。
-    """
-    tenant_id: str
-
-    # 工具可见性
-    tool_deny_list: list[str] = Field(default_factory=list)
-    # 确认策略覆盖：tool_name → ConfirmationKind（只能升级，不能降级）
-    confirm_policy_overrides: dict[str, ConfirmationKind] = Field(default_factory=dict)
-    # 网络策略覆盖
-    allowed_domains_override: list[str] | None = None   # None = 不覆盖
-    denied_domains_extra: list[str] = Field(default_factory=list)
-    # SandboxTier 覆盖：tool_name → SandboxTier（只能升级，不能降级）
-    sandbox_tier_overrides: dict[str, SandboxTier] = Field(default_factory=dict)
-
-    def effective_tier(self, tool_name: str, base_tier: SandboxTier) -> SandboxTier:
-        """计算生效 tier——取 base_tier 和租户覆盖中的更高者。"""
-        override = self.sandbox_tier_overrides.get(tool_name)
-        if override is None:
-            return base_tier
-        tier_order = {SandboxTier.STANDARD: 0, SandboxTier.TIGHT: 1, SandboxTier.STRICT: 2}
-        if tier_order.get(override, 0) > tier_order.get(base_tier, 0):
-            return override
-        return base_tier
-
-    def effective_confirmation(
-        self, tool_name: str, base_confirmation: ConfirmationKind,
-    ) -> ConfirmationKind:
-        """计算生效确认级别——取 base 和租户覆盖中的更高者。"""
-        override = self.confirm_policy_overrides.get(tool_name)
-        if override is None:
-            return base_confirmation
-        kind_order = {
-            ConfirmationKind.NONE: 0,
-            ConfirmationKind.SOFT_CONFIRM: 1,
-            ConfirmationKind.IRREVERSIBLE: 2,
-        }
-        if kind_order.get(override, 0) > kind_order.get(base_confirmation, 0):
-            return override
-        return base_confirmation
-
-    def is_tool_denied(self, tool_name: str) -> bool:
-        return tool_name in self.tool_deny_list
-
-
-class TenantPolicyStore:
-    """租户策略存储（带 300 秒 TTL 缓存）。"""
-
-    _CACHE_TTL = 300.0
-
-    def __init__(self, pool: Any) -> None:
-        self._pool = pool
-        self._cache: dict[str, tuple[float, TenantPolicyOverride | None]] = {}
-        import time
-        self._time = time.monotonic
-
-    async def get(self, tenant_id: str) -> TenantPolicyOverride | None:
-        """获取租户策略，缓存命中时不查 PG。"""
-        now = self._time()
-        cached = self._cache.get(tenant_id)
-        if cached is not None:
-            ts, policy = cached
-            if now - ts < self._CACHE_TTL:
-                return policy
-
-        try:
-            async with self._pool.acquire() as conn:
-                row = await conn.fetchrow(
-                    "SELECT policy_json FROM pc_tenant_policies WHERE tenant_id = $1",
-                    tenant_id,
-                )
-        except Exception:
-            # PG 不可用时返回缓存（即使过期）
-            if cached is not None:
-                return cached[1]
-            return None
-
-        if row is None:
-            self._cache[tenant_id] = (now, None)
-            return None
-
-        import json
-        policy = TenantPolicyOverride(tenant_id=tenant_id, **json.loads(row["policy_json"]))
-        self._cache[tenant_id] = (now, policy)
-        return policy
-
-    def invalidate(self, tenant_id: str) -> None:
-        """使缓存失效。"""
-        self._cache.pop(tenant_id, None)
-
-
-# ── mfa ─────────────────────────────────────────────────────────────────────
-
-@runtime_checkable
-class MfaProvider(Protocol):
-    """MFA 凭据校验协议。"""
-
-    is_production_ready: bool
-
-    def verify_credential(self, *, user_id: str, credential_id: str) -> bool:
-        """校验 MFA 凭据合法性。
-
-        返回 True 表示凭据有效且归属该用户。
-        """
-        ...
-
-
-class NullMfaProvider:
-    """开发/测试用空实现。
-
-    不做任何真实校验，仅记录警告。``is_production_ready=False`` 用于
-    让 ConfirmGateway 在 production 下 fail-closed。
-    """
-
-    is_production_ready: bool = False
-
-    def verify_credential(self, *, user_id: str, credential_id: str) -> bool:
-        logger.warning(
-            "NullMfaProvider.verify_credential called for user=%s (dev/test only)",
-            user_id,
-        )
-        return True
-
-
-class WebAuthnMfaProvider:
-    """生产用 WebAuthn/FIDO2 MFA provider。
-
-    通过环境变量配置断言验证端点与共享 HMAC 校验密钥。
-    真实部署中，凭据由前端完成 WebAuthn assertion 后随
-    ``ConfirmationResponse.mfa_credential_id`` 回传，此处对 assertion
-    做服务端验证（签名校验 + 时间戳防重放）。
-
-    配置（环境变量）：
-      PRISMCLAW_MFA_VERIFY_URL      断言验证端点（如 /api/mfa/verify）
-      PRISMCLAW_MFA_SHARED_SECRET   服务端用于校验 assertion 完整性的密钥
-
-    当前实现为"可注入、可被测试、fail-closed"骨架：验证端点就绪前，
-    若未配置 ``PRISMCLAW_MFA_VERIFY_URL`` 则视为未就绪并拒绝（不静默放行）。
-    """
-
-    is_production_ready: bool = True
-
-    def __init__(
-        self,
-        *,
-        verify_url: str | None = None,
-        shared_secret: str | None = None,
-    ) -> None:
-        self._verify_url = verify_url or os.getenv("PRISMCLAW_MFA_VERIFY_URL") or ""
-        self._shared_secret = shared_secret or os.getenv("PRISMCLAW_MFA_SHARED_SECRET") or ""
-        # 未配置验证端点 → 视为未就绪，verify_credential 将拒绝（fail-closed）
-        self._ready = bool(self._verify_url and self._shared_secret)
-
-    @property
-    def ready(self) -> bool:
-        return self._ready
-
-    def verify_credential(self, *, user_id: str, credential_id: str) -> bool:
-        if not self._ready:
-            logger.error(
-                "WebAuthnMfaProvider not configured (missing PRISMCLAW_MFA_VERIFY_URL "
-                "or PRISMCLAW_MFA_SHARED_SECRET); refusing MFA verification (fail-closed)"
-            )
-            return False
-        if not credential_id:
-            return False
-        logger.info(
-            "WebAuthnMfaProvider.verify_credential(user=%s) dispatched to %s",
-            user_id,
-            self._verify_url,
-        )
-        # TODO: 接入真实的 assertion 校验后再放行 HTTP 调用。
-        # 当前返回 False 以强制显式配置，避免误以为已放行。
-        return False
-
-
-def build_mfa_provider() -> MfaProvider:
-    """根据部署环境构造 MFA provider。
-
-    生产与未知环境默认返回 WebAuthnMfaProvider（fail-closed）；
-    显式 development/test 且无 MFA 配置时返回 NullMfaProvider。
-    """
-    env = os.getenv("PRISMCLAW_DEPLOYMENT_ENV", "development").lower()
-    if env in ("development", "test", "dev"):
-        if not (os.getenv("PRISMCLAW_MFA_VERIFY_URL") and os.getenv("PRISMCLAW_MFA_SHARED_SECRET")):
-            return NullMfaProvider()
-    return WebAuthnMfaProvider()

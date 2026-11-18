@@ -51,19 +51,31 @@ class TodoWriteTool:
         except Exception as exc:
             return error_result(call_id, f"todo_write：无效的待办条目：{exc}")
 
+        if any(not t.content.strip() for t in todo_items):
+            return error_result(call_id, "todo_write：content 不能为空")
+
+        if len({t.id for t in todo_items}) != len(todo_items):
+            return error_result(call_id, "todo_write：id 必须唯一")
+
+        if len(todo_items) > 20:
+            return error_result(call_id, "todo_write：清单最多 20 项，请合并步骤")
+
+        in_progress_items = [t for t in todo_items if t.status == "in_progress"]
+        if len(in_progress_items) > 1:
+            return error_result(call_id, "todo_write：同一时刻只能有一个 in_progress")
+
         # Pydantic model attribute assignment (not dict-style)
         if hasattr(context, "session_state") and context.session_state is not None:
             context.session_state.todo_list = todo_items
 
         pending_count = sum(1 for t in todo_items if t.status == "pending")
-        in_progress_count = sum(1 for t in todo_items if t.status == "in_progress")
+        in_progress_count = len(in_progress_items)
 
-        return text_result(
-            call_id,
-            f"todo_write：已更新 {len(todo_items)} 项（{pending_count} 项待处理，{in_progress_count} 项进行中）",
-            metadata={
-                "todos": [{"id": t.id, "content": t.content, "status": t.status} for t in todo_items],
-                "pending_count": pending_count,
-                "in_progress_count": in_progress_count,
-            },
-        )
+        text = f"todo_write：已更新 {len(todo_items)} 项（{pending_count} 项待处理，{in_progress_count} 项进行中）"
+        if in_progress_items:
+            current = in_progress_items[0]
+            text += f"；当前步骤：{current.id} {current.content}"
+        else:
+            text += "；当前无进行中步骤"
+
+        return text_result(call_id, text)

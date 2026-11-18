@@ -529,13 +529,17 @@ class MemoryRetriever:
         _selector_ms = (time.monotonic() - _t0) * 1000
         logger.info(
             "retrieval_timing session=%s l2l3=%.0fms archive=%.0fms edges=%.0fms "
-            "selector=%.0fms total=%.0fms",
+            "selector=%.0fms total=%.0fms mem_cand=%s arc_cand=%s strategy=%s fallback=%s",
             session_id,
             _l2l3_ms,
             _archive_ms,
             _edges_ms,
             _selector_ms,
             (time.monotonic() - _impl_start_m) * 1000,
+            selector_metrics.get("input_memory_count", "-"),
+            selector_metrics.get("input_archive_count", "-"),
+            selector_metrics.get("strategy", "-"),
+            selector_metrics.get("fallback", "-"),
         )
         # SDD B1: every post-selector entry is what actually reaches the
         # prompt — record it for attribution (intra-turn dedup inside).

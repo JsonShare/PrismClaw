@@ -13,28 +13,41 @@ from prismclaw.engine.toolkit.registry.tool_classification import is_network_rea
 
 logger = logging.getLogger(__name__)
 
-# Retired builtin web tools — recognized so historical sessions compact the
-# same way. Current web search lives behind an MCP service whose name is
-# deployment config, matched dynamically via is_network_read_tool().
-_LEGACY_WEB_TOOLS = ("web_search", "web_fetch", "web_extract")
+@dataclass(frozen=True, slots=True)
+class ToolResultLifecycle:
+    """单个工具结果的保留窗口与清除后的恢复指引。
 
-COMPACTABLE_TOOLS = {
-    # File tools
-    "read", "read_image", "read_office", "ls", "grep", "glob",
-    # Legacy web tools (historical sessions; current MCP web tools match dynamically)
-    *_LEGACY_WEB_TOOLS, "fetch_mcp_resource",
-    # Shell tools
-    "bash", "bash_read", "python",
-    # Sub-agent
-    "reduce_subagent_results",
-    # Discovery
-    "tool_search", "skill_search", "activate_skill",
+    只登记当前存在的工具；恢复提示必须指向现存工具，否则会把模型导向
+    已删除的工具。
+    """
+
+    keep_recent: int
+    restore_hint: str
+
+
+_TOOL_LIFECYCLE: dict[str, ToolResultLifecycle] = {
+    # Tier 1: ephemeral — consumed in the current reasoning step
+    "fetch_mcp_resource": ToolResultLifecycle(1, "使用 `fetch_mcp_resource` 工具重新获取该 MCP 资源。"),
+    "tool_search": ToolResultLifecycle(1, "使用 `tool_search` 工具重新检索。"),
+    "skill_search": ToolResultLifecycle(1, "使用 `skill_search` 工具重新检索。"),
+    "activate_skill": ToolResultLifecycle(1, "使用 `activate_skill` 工具重新激活该技能。"),
+    # Tier 2: short-term — may be referenced 1-3 turns later
+    "bash": ToolResultLifecycle(3, "使用 `bash` 工具重新执行该命令。"),
+    "ls": ToolResultLifecycle(4, "使用 `ls` 工具重新列出该目录。"),
+    "grep": ToolResultLifecycle(4, "使用 `grep` 工具重新执行搜索。"),
+    "glob": ToolResultLifecycle(4, "使用 `glob` 工具重新执行搜索。"),
+    # Tier 3: persistent — multi-turn reference (code, docs, reports)
+    "read": ToolResultLifecycle(8, "使用 `read` 工具重新读取该文件。"),
+}
+_DEFAULT_KEEP_RECENT = 3  # fallback for unrecognised compactable tools
+_DEFAULT_KEEP_RECENT_TIERS = {
+    name: spec.keep_recent for name, spec in _TOOL_LIFECYCLE.items()
 }
 
 
 def is_compactable_tool(tool_name: str) -> bool:
-    """Compactability: static builtin sets + any configured web-retrieval MCP tool."""
-    return tool_name in COMPACTABLE_TOOLS or is_network_read_tool(tool_name)
+    """Compactability: known lifecycle entry + any configured web-retrieval MCP tool."""
+    return tool_name in _TOOL_LIFECYCLE or is_network_read_tool(tool_name)
 
 
 _CLEARED_TAG_PREFIX = "[已清除的旧工具结果："
@@ -43,22 +56,10 @@ _CLEARED_TAG_PREFIX = "[已清除的旧工具结果："
 # Different tool results have different useful lifetimes.  Ephemeral
 # results (web searches) are useful for one turn; persistent results
 # (file reads) may be referenced across many turns.
-TOOL_KEEP_RECENT: dict[str, int] = {
-    # Tier 1: ephemeral — consumed in the current reasoning step
-    **{name: 1 for name in _LEGACY_WEB_TOOLS},
-    "fetch_mcp_resource": 1,
-    "tool_search": 1, "skill_search": 1, "activate_skill": 1,
-    # Tier 2: short-term — may be referenced 1-3 turns later
-    "bash": 3, "bash_read": 3, "python": 3, "ls": 4, "grep": 4, "glob": 4,
-    "reduce_subagent_results": 3,
-    # Tier 3: persistent — multi-turn reference (code, docs, reports, images)
-    "read": 8, "read_image": 6, "read_office": 6,
-}
-_DEFAULT_KEEP_RECENT = 3  # fallback for unrecognised compactable tools
 
 
 def _load_keep_recent_tiers() -> dict[str, int]:
-    """惰性读取 microcompact 分档表；加载失败回退内置 TOOL_KEEP_RECENT。"""
+    """惰性读取配置分档表；加载失败回退内置分档。"""
     try:
         from prismclaw.infra.settings import load_settings
         tiers = load_settings().agent.context.compaction.microcompact_keep_recent
@@ -66,7 +67,7 @@ def _load_keep_recent_tiers() -> dict[str, int]:
             return tiers
     except Exception:
         pass
-    return TOOL_KEEP_RECENT
+    return _DEFAULT_KEEP_RECENT_TIERS
 
 
 def keep_recent_for(tool_name: str) -> int:
@@ -76,15 +77,12 @@ def keep_recent_for(tool_name: str) -> int:
     tiers = _load_keep_recent_tiers()
     return tiers.get(tool_name, _DEFAULT_KEEP_RECENT)
 
-# Tier 1 tools: ephemeral — archive to disk is wasteful, just clear with preview
-_TIER1_EPHEMERAL = frozenset({
-    *_LEGACY_WEB_TOOLS, "fetch_mcp_resource",
-    "tool_search", "skill_search", "activate_skill",
-})
-
 
 def is_tier1_ephemeral(tool_name: str) -> bool:
-    return tool_name in _TIER1_EPHEMERAL or is_network_read_tool(tool_name)
+    if is_network_read_tool(tool_name):
+        return True
+    spec = _TOOL_LIFECYCLE.get(tool_name)
+    return spec is not None and spec.keep_recent == 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,29 +121,8 @@ def _build_cleared_reference(
     preview_text = _extract_text(original_content)
     preview = preview_text[:500].strip() if preview_text else ""
 
-    recovery_tips = {
-        "read": "使用 `read` 工具重新读取该文件。",
-        "read_image": "使用 `read` 工具重新读取该图片。",
-        # read_office / bash_read：历史 transcript 的工具名（键保留用于
-        # 匹配旧记录），但提示文本必须指向现存工具，否则恢复提示会把
-        # LLM 导向已删除的工具形成 doom-loop。
-        "read_office": "使用 `read` 工具重新读取该文档。",
-        "grep": "使用 `grep` 工具重新执行搜索。",
-        "glob": "使用 `glob` 工具重新执行搜索。",
-        "ls": "使用 `ls` 工具重新列出该目录。",
-        "web_search": "使用 `web_search` 工具重新执行网页搜索。",
-        "web_fetch": "使用 `web_fetch` 工具重新抓取该 URL。",
-        "web_extract": "使用 `web_extract` 工具重新提取该 URL。",
-        "fetch_mcp_resource": "使用 `fetch_mcp_resource` 工具重新获取该 MCP 资源。",
-        "bash": "使用 `bash` 工具重新执行该命令。",
-        "bash_read": "使用 `bash` 工具重新执行该只读命令。",
-        "python": "使用 `python` 工具重新执行该脚本。",
-        "reduce_subagent_results": "如需要，请重新运行该子代理。",
-        "tool_search": "使用 `tool_search` 工具重新检索。",
-        "skill_search": "使用 `skill_search` 工具重新检索。",
-        "activate_skill": "使用 `activate_skill` 工具重新激活该技能。",
-    }
-    tip = recovery_tips.get(tool_name, f"如需使用，请重新调用 `{tool_name}` 工具。")
+    spec = _TOOL_LIFECYCLE.get(tool_name)
+    tip = spec.restore_hint if spec else f"如需使用，请重新调用 `{tool_name}` 工具。"
 
     parts = [
         f"{_CLEARED_TAG_PREFIX} tool={tool_name} call_id={call_id} "
@@ -252,9 +229,6 @@ def _describe_content(tool_name: str, text: str, tool_args: str) -> str:
     if tool_name == "read":
         path = _extract_arg(tool_args, "file_path") or _extract_arg(tool_args, "path") or "file"
         return f"内容：读取文件 {path}（{line_count} 行）"
-    elif tool_name in ("read_office", "read_image"):
-        path = _extract_arg(tool_args, "file_path") or _extract_arg(tool_args, "path") or "document"
-        return f"内容：{tool_name} 处理 {path}"
     elif tool_name == "grep":
         match_count = sum(1 for l in lines if l and not l.startswith(" ") and ":" in l)
         return f"内容：grep 搜索结果（{match_count} 处匹配）"
@@ -262,13 +236,9 @@ def _describe_content(tool_name: str, text: str, tool_args: str) -> str:
         return f"内容：glob 搜索列表（{line_count} 项）"
     elif tool_name == "ls":
         return f"内容：目录列表（{line_count} 项）"
-    elif tool_name in ("bash", "bash_read"):
+    elif tool_name == "bash":
         cmd = _extract_arg(tool_args, "command") or tool_args[:100]
         return f"内容：`{cmd}` 的 bash 输出（{line_count} 行）"
-    elif tool_name == "python":
-        return f"内容：Python 脚本输出（{line_count} 行）"
-    elif tool_name == "reduce_subagent_results":
-        return f"内容：子代理结果汇总（{line_count} 行）"
     else:
         return f"内容：{tool_name} 结果（{line_count} 行）"
 
@@ -316,8 +286,8 @@ def microcompact_query_messages(
     - **Stubbed** (when no ``working_dir``): replaced with a lightweight
       ``[已清除的旧工具结果]`` 标记 + 恢复指引。
 
-    Retention is tiered per tool type (see ``TOOL_KEEP_RECENT``).
-    Ephemeral results (web_search) keep only 1; persistent results
+    Retention is tiered per tool type (see ``_TOOL_LIFECYCLE``).
+    Ephemeral results (fetch_mcp_resource / discovery) keep only 1; persistent results
     (read) keep up to 8.
     """
     # Pass 1: build call_id → tool_name/args mapping and collect compactable IDs

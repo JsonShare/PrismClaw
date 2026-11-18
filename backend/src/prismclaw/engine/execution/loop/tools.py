@@ -39,21 +39,20 @@ async def gate_tool_call(
 
     1. doom-loop 冻结签名命中 → block；反复重试被冻结的调用达升级阈值
        → 置 frozen_call_defied 嫌疑标志（只作观测，不产生终态）。
-    2. evaluate_safety_gate deny → block
+    2. pre-tool hooks deny → block
     都不 deny → None（执行）
     """
     run_state = rt.run_state
     tool_loop_state = rt.tool_loop_state
     deps = rt.deps
     state_machine = rt.state_machine
-    _mode = rt.mode
     request = rt.request
     _traj_scope = rt.traj_scope
 
     # tool_calls_spent 按尝试计，含被拒；并行 N 个调用计 N。
     run_state.loop_state.tool_calls_spent += 1
     from prismclaw.engine.execution.dispatch.call_handling import check_frozen_call
-    from prismclaw.engine.execution.dispatch.tools import evaluate_safety_gate
+    from prismclaw.engine.execution.dispatch.tools import run_pre_tool_checks
 
     _bstate = before_ctx.state
     _bctx = _bstate.ctx if _bstate is not None else None
@@ -75,21 +74,19 @@ async def gate_tool_call(
             block=True, reason=frozen_outcome.guidance or "该工具调用已被死循环防护冻结",
         )
 
-    # ── 2. 安全门 ──
-    _gate_denied, _pre_tool_denied, _allowed = await evaluate_safety_gate(
+    # ── 2. pre-tool hooks ──
+    _pre_tool_denied, _allowed = await run_pre_tool_checks(
         _bctx,
         [call],
-        mode=_mode,
         workspace_tag=getattr(request, "workspace_tag", None),
         traj_turn_counter=_traj_scope.turn_counter if _traj_scope is not None else 0,
         iteration=_bstate.perf.llm_calls if _bstate is not None else 0,
     )
-    all_denied = {**_gate_denied, **_pre_tool_denied}
     call_id = getattr(call, "call_id", None) or (
         call.call.get("id", "") if isinstance(getattr(call, "call", None), dict) else ""
     )
-    if call_id in all_denied:
-        reason = all_denied.get(call_id, "blocked")
+    if call_id in _pre_tool_denied:
+        reason = _pre_tool_denied.get(call_id, "blocked")
         from prismclaw.engine.execution.loop.types import BeforeToolCallResult
         return BeforeToolCallResult(block=True, reason=reason)
     return None
@@ -206,13 +203,13 @@ async def execute_tools(
         from prismclaw.engine.execution.dispatch.response_handling import (
             append_assistant_response,
         )
-        from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
+        from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
 
         await append_assistant_response(
             deps=deps,
             tree=tree,
             append_entry=_append,
-            text=strip_thinking(response.text or ""),
+            text=strip_noise(response.text or ""),
             tool_calls=response.tool_calls,
         )
         # 被拒调用（before_tool_call block）的 tool 结果随之落树。
@@ -372,7 +369,6 @@ async def execute_tools(
         await _persist_turn_runtime_metrics(
             deps,
             tree,
-            request_mode=getattr(request, "mode", None),
             dynamic_payload=_dynamic_payload,
             input_tokens=state.ledger.total_input_tokens,
             cache_read_tokens=state.ledger.total_cache_read_tokens,

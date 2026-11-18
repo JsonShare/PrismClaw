@@ -17,7 +17,6 @@ import ClarifyCard from './ClarifyCard'
 import QueueBar from './QueueBar'
 import { MessageSkeleton } from '../ui/Skeleton'
 import ServerWorkspaceManager from '../file/ServerWorkspaceManager'
-import ModeToggle from './ModeToggle'
 import { UploadQueueModal, UploadTicker, type UploadTask } from '../file/UploadQueue'
 import { StreamingAsrSession } from '../../lib/chat/streamingAsr'
 import {
@@ -37,7 +36,7 @@ import {
 } from '../../lib/file/image'
 import { apiUrl } from '../../lib/system-adapter'
 import { useToast } from '../../lib/toast'
-import { useChatStore, usePermissionStore, useSessionStore } from '../../stores'
+import { useChatStore, useSessionStore } from '../../stores'
 import type { OutboxItem } from '../../stores/chat'
 import { useChatScrollController } from '../../hooks/chat/useChatScroll'
 import { useClarifyFlow } from '../../hooks/chat/useClarifyFlow'
@@ -93,8 +92,6 @@ export default function ChatArea({
   isWorkspacesLoading = false,
   onOpenReviewInPanel,
 }: Props) {
-  const mode = usePermissionStore((s) => s.mode)
-  const isWorkMode = mode === 'work'
   const { toast } = useToast()
   const [input, setInput] = useState('')
   const attachmentId = useCallback((file: File): string => {
@@ -939,7 +936,6 @@ export default function ChatArea({
               />
 
             <div className="mt-2 flex items-center">
-              <ModeToggle />
               <ServerWorkspaceManager
                 workspaceId={workspaceId}
                 workspaces={workspaces}
@@ -948,7 +944,6 @@ export default function ChatArea({
                 onCreateWorkspace={onCreateServerWorkspace}
                 onUploadFiles={handleUploadServerFiles}
                 onRemoveWorkspace={onRemoveServerWorkspace}
-                readOnly={!isWorkMode}
               />
               <div className="flex-1 min-w-0 ml-1 flex items-center justify-end">
                 <UploadTicker tasks={uploadTasks} onClick={() => setUploadQueueOpen(true)} />
@@ -1104,7 +1099,16 @@ export default function ChatArea({
 
               {confirmationVisible && (
                 <div className="mb-3 p-4 rounded-[var(--radius-card)] border border-[var(--c-border)] bg-[var(--c-surface)]/80 backdrop-blur-sm">
-                  <div className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text)] mb-2">需要确认方向</div>
+                  <div className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text)] mb-2">
+                    {liveTaskRuntime?.task?.state === 'awaiting_risk_confirmation'
+                      ? '高风险任务需要确认'
+                      : '恢复运行前需要确认'}
+                  </div>
+                  {liveTaskRuntime?.task?.pending_confirmation_reason && (
+                    <p className="mb-2 text-[length:var(--fs-xs)] text-[var(--c-text-muted)]">
+                      {liveTaskRuntime.task.pending_confirmation_reason}
+                    </p>
+                  )}
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -1128,7 +1132,6 @@ export default function ChatArea({
           </ChatInputBox>
 
             <div className="mt-2 flex items-center">
-              <ModeToggle />
               <ServerWorkspaceManager
                 workspaceId={workspaceId}
                 workspaces={workspaces}
@@ -1137,7 +1140,6 @@ export default function ChatArea({
                 onCreateWorkspace={onCreateServerWorkspace}
                 onUploadFiles={handleUploadServerFiles}
                 onRemoveWorkspace={onRemoveServerWorkspace}
-                readOnly={!isWorkMode}
               />
               <div className="flex-1 min-w-0 ml-1 flex items-center justify-end">
                 {uploadTasks.length > 0 && (

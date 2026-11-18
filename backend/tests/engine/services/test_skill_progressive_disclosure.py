@@ -41,7 +41,6 @@ def _make_prompt_inputs(
         session_id="test-session",
         workspace_id="test-workspace",
         agent_id="test-agent",
-        model="test-model",
         project_skill_names=tuple(skills or []),
         tools=tools or [
             ("skill_search", "search for a skill"),
@@ -242,14 +241,20 @@ class TestSubagentsSection:
         assert "docket-watcher" not in result
         assert "`subagent_search`" in result
 
-    def test_rules_present(self):
-        from prismclaw.engine.execution.request.system_prompt import subagents_section
-        result = subagents_section(_make_prompt_inputs(subagents=[_make_subagent("architect")]))
-        assert result is not None
-        assert "主 Agent 自己规划、拆解和综合" in result
-        assert "不机械采用全体最低置信度" in result
-        assert "`reduce_subagent_results`" in result
-        assert "`subagent_control.send`" in result
+    def test_rules_live_in_delegation_section(self):
+        from prismclaw.engine.execution.request.system_prompt import (
+            delegation_section,
+            subagents_section,
+        )
+        inputs = _make_prompt_inputs(subagents=[_make_subagent("architect")])
+        index = subagents_section(inputs)
+        rules = delegation_section(inputs)
+        assert index is not None and rules is not None
+        assert "主 Agent 自己规划、拆解和综合" not in index
+        assert rules.startswith("<delegation>")
+        assert "主 Agent 自己规划、拆解和综合" in rules
+        assert "不机械采用全体最低置信度" in rules
+        assert "`subagent_control.send`" in rules
 
 
 # ==========================================================================

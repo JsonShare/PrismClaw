@@ -10,7 +10,6 @@ from prismclaw.engine.security.gate.types import ParallelTaskExtras, TaskRuntime
 from prismclaw.engine.security.sandbox.policy import SandboxPolicy
 from prismclaw.schema.agent.capability import EffectClass
 from prismclaw.schema.agent.data_types import TextBlock
-from prismclaw.schema.agent.task_runtime import ReviewRequirements
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.content.content_types import (
     PersistenceArtifact,
@@ -22,7 +21,6 @@ from prismclaw.schema.content.content_types import (
     UiArtifact,
 )
 from prismclaw.schema.content.workspace import SandboxTier
-from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.env_types import ExecutionEnv
 
 ToolClass = Literal["read", "memory-write-safe", "write"]
@@ -64,7 +62,6 @@ class ToolContext:
     request_id: str = ""
     task_id: str = ""
     task_spec: TaskSpec | None = None
-    review_requirements: ReviewRequirements | None = None
     system_prompt_sections: Any = None
     invoked_skill_state: Any = None
     handoff_request_seen: bool = False
@@ -83,7 +80,6 @@ class ToolContext:
     total_output_tokens: int = 0
     total_cache_creation_tokens: int = 0
 
-    mode: WorkspaceMode = "work"
     current_sandbox_tier: SandboxTier = SandboxTier.STANDARD
     runtime: ExecutionEnv | None = None  # WorkspaceRuntimeClient | InProcessRuntimeClient（统一 ExecutionEnv 契约）
     workspace_tag: Any = None  # P1-SEC-04: will become WorkspaceTag
@@ -92,7 +88,6 @@ class ToolContext:
     mcp_runtime_manager: Any = None
     session_tree: Any = None
     approval_execution_audit_contexts: Any = None
-    decision_audit_logger: Any = None
     scheduler_store: Any = None
     scheduler_engine: Any = None
     scheduler_dispatch: Any = None

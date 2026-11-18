@@ -330,7 +330,7 @@
 - **构建函数**：`build_assembly_state_bundle()`
 - **检索查询构建**：`build_state_driven_retrieval_query()`
   - 从 task_spec + prompt + state_payload 构建
-  - 包含：task_goal, task_mode, primary_goal, decisions, todos, constraints, open_questions, facts, recent_messages
+  - 包含：task_goal, task_mode, primary_goal, decisions, constraints, open_questions, facts, recent_messages
   - `_MAX_SECTION_ITEMS = 4`、`_MAX_RECENT_MESSAGES = 3`
 
 ### Evidence Runtime（`engine/compression/evidence_runtime.py`）
@@ -361,7 +361,7 @@
 
 - **类**：`BootstrapProvider`
 - **核心方法**：`get_bootstrap()`
-- **默认文件列表**：/etc/prismclaw/AGENTS.md, ~/.prismclaw/AGENTS.md, .prismclaw/AGENTS.md, AGENTS.md, prismclaw.md, prismclaw.local.md 等
+- **默认文件列表**：/etc/prismclaw/AGENTS.md, ~/.prismclaw/assets/AGENTS.md, .work/AGENTS.md, AGENTS.md 等
 - **常量**：`BOOTSTRAP_FILE_WARN_BYTES = 10_240`
 
 ### Fact Sheet（`engine/compression/fact_sheet.py`）

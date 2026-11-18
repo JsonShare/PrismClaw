@@ -48,17 +48,16 @@ def test_remaining_run_seconds_zero_disables():
     assert remaining_run_seconds(3600.0, started) > 3500
 
 
-def test_agent_config_effort_tiers_present():
-    """预算上限已由 effort 档位取代 max_iterations/run_seconds。"""
+def test_agent_config_budget_present():
+    """预算上限已由单一 agent.budget 取代 max_iterations/run_seconds。"""
     cfg = load_document(_AGENT_CONFIG)
     agent = cfg["agent"]
-    assert "max_iterations" not in agent, "max_iterations 已由 effort 档位取代"
-    assert "run_seconds" not in agent["timeouts"], "run_seconds 已由 effort.hard_s 取代"
-    effort = agent["effort"]
-    for tier in ("quick", "standard", "deep"):
-        assert effort[tier]["steps"] > 0
-        assert effort[tier]["tool_calls"] > 0
-        assert effort[tier]["hard_s"] > 0
-        assert effort[tier]["soft_s"] <= effort[tier]["hard_s"]
+    assert "max_iterations" not in agent, "max_iterations 已由 agent.budget 取代"
+    assert "run_seconds" not in agent["timeouts"], "run_seconds 已由 agent.budget.hard_s 取代"
+    budget = agent["budget"]
+    assert budget["steps"] > 0
+    assert budget["tool_calls"] > 0
+    assert budget["hard_s"] > 0
+    assert budget["soft_s"] <= budget["hard_s"]
 
 

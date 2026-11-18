@@ -7,6 +7,15 @@ from typing import Literal
 
 ArtifactSignature = tuple[int, int]  # (mtime_ns, size)
 
+# 系统/隐藏条目不是交付物：bash 持久会话把 cwd 写进 .work/bash_state/_last_pwd，
+# 若 bash 的 cwd 落在 outputs/ 下，这些内部状态会混进产物面板。
+_INTERNAL_PARTS = frozenset({"_last_pwd", "_LAST_PWD", ".bash_state", ".work", "__pycache__"})
+
+
+def _is_internal(rel: Path) -> bool:
+    """相对路径含隐藏段或已知系统条目时视为非交付物。"""
+    return any(part in _INTERNAL_PARTS or part.startswith(".") for part in rel.parts)
+
 
 @dataclass(frozen=True)
 class Scope:
@@ -61,11 +70,14 @@ class ArtifactScanner:
             for item in start.rglob("*"):
                 if not item.is_file():
                     continue
+                rel_path = item.relative_to(root)
+                if _is_internal(rel_path):
+                    continue
                 try:
                     stat = item.stat()
                 except OSError:
                     continue
-                rel = item.relative_to(root).as_posix()
+                rel = rel_path.as_posix()
                 out[rel] = (stat.st_mtime_ns, stat.st_size)
         return out
 

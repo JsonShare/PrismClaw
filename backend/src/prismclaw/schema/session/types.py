@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from datetime import datetime, timezone
 
-from typing import Annotated, Any, Literal, TYPE_CHECKING, Union
+from typing import Annotated, Any, Literal, TYPE_CHECKING, Union, get_args
+
+logger = logging.getLogger(__name__)
 
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -27,7 +30,6 @@ from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.agent.task_runtime import (
     EvidenceRecord,
     ReviewDecisionRecord,
-    ReviewRequirements,
     TaskMutation,
     TaskRuntimeState,
 )
@@ -45,7 +47,6 @@ SEARCH_EVIDENCE_CUSTOM_TYPE = "search_evidence"
 EXTRACT_EVIDENCE_CUSTOM_TYPE = "extract_evidence"
 TASK_RUNTIME_CUSTOM_TYPE = "task_runtime_snapshot"
 TASK_SPEC_CUSTOM_TYPE = "task_spec_snapshot"
-REVIEW_REQUIREMENTS_CUSTOM_TYPE = "review_requirements_snapshot"
 EVIDENCE_LEDGER_CUSTOM_TYPE = "evidence_ledger"
 REVIEW_DECISION_CUSTOM_TYPE = "review_decision_record"
 TASK_MUTATION_CUSTOM_TYPE = "task_mutation"
@@ -80,11 +81,6 @@ class _CustomPayloadTaskRuntime(BaseModel):
 class _CustomPayloadTaskSpec(BaseModel):
     custom_type: Literal["task_spec_snapshot"]
     data: TaskSpec
-
-
-class _CustomPayloadReviewRequirements(BaseModel):
-    custom_type: Literal["review_requirements_snapshot"]
-    data: ReviewRequirements
 
 
 class _CustomPayloadEvidenceRecord(BaseModel):
@@ -254,7 +250,6 @@ CustomPayload = Annotated[
         _CustomPayloadTurnMetrics,
         _CustomPayloadTaskRuntime,
         _CustomPayloadTaskSpec,
-        _CustomPayloadReviewRequirements,
         _CustomPayloadEvidenceRecord,
         _CustomPayloadReviewDecision,
         _CustomPayloadTaskMutation,
@@ -292,7 +287,6 @@ CustomType = Literal[
     "turn_runtime_metrics",
     "task_runtime_snapshot",
     "task_spec_snapshot",
-    "review_requirements_snapshot",
     "evidence_ledger",
     "review_decision_record",
     "task_mutation",
@@ -320,6 +314,9 @@ CustomType = Literal[
     "subagent_run",
     "subagent_tool_effect",
 ]
+
+# 读取侧允许遇到不认识的 custom_type（旧/新版本写入），按 None 跳过。
+_KNOWN_CUSTOM_TYPES = frozenset(get_args(CustomType))
 
 
 def generate_entry_id(existing_ids: set[str], max_attempts: int = 100) -> str:
@@ -521,6 +518,9 @@ def _parse_entry(data: dict[str, Any]) -> SessionEntry | None:
 
     Replaces the untyped parse_entry() in event_logger.py with proper
     discriminated union validation.
+
+    未知 custom_type 视为不可识别扩展并跳过：会话 event log 是只追加的，
+    旧/新版本写入的类型不应让读取方报错。调用方按既有 None 语义处理。
     """
     entry_type = data.get("type")
     if entry_type == "message":
@@ -530,6 +530,10 @@ def _parse_entry(data: dict[str, Any]) -> SessionEntry | None:
     if entry_type == "model_change":
         return ModelChangeEntry.model_validate(data)
     if entry_type == "custom":
+        custom_type = data.get("custom_type")
+        if custom_type not in _KNOWN_CUSTOM_TYPES:
+            logger.debug("skip unknown custom entry type=%s", custom_type)
+            return None
         return CustomEntry.model_validate(data)
     return None
 
@@ -539,7 +543,6 @@ class SessionTree(BaseModel):
     entries: dict[str, SessionEntry] = Field(default_factory=dict)
     order: list[str] = Field(default_factory=list)
     leaf_id: str | None = None
-    todos: list[dict[str, Any]] = Field(default_factory=list)
 
     @classmethod
     def from_events(cls, events: list[SessionEvent]) -> SessionTree:
@@ -553,7 +556,6 @@ class SessionTree(BaseModel):
         entries: dict[str, SessionEntry] = {}
         order: list[str] = []
         leaf_id: str | None = None
-        todos: list[dict[str, Any]] = []
 
         for event in events:
             data = event.data
@@ -595,8 +597,6 @@ class SessionTree(BaseModel):
                         entries[entry.id] = entry
                     if "leaf_id" in data:
                         leaf_id = data["leaf_id"]
-            elif etype == SessionEventType.TODO_WRITE:
-                todos = data.get("todos", [])
 
         if header is None:
             header = SessionHeader(id="", workspace_id="", agent_id="")
@@ -606,7 +606,6 @@ class SessionTree(BaseModel):
             entries=entries,
             order=order,
             leaf_id=leaf_id,
-            todos=todos,
         )
         _repair_parent_chain(tree)
         return tree
@@ -658,9 +657,6 @@ class SessionTree(BaseModel):
 
     def get_latest_task_spec(self) -> TaskSpec | None:
         return self._proj().task.get_latest_task_spec()
-
-    def get_latest_review_requirements(self) -> ReviewRequirements | None:
-        return self._proj().task.get_latest_review_requirements()
 
     def get_latest_review_decision(self) -> ReviewDecisionRecord | None:
         return self._proj().task.get_latest_review_decision()

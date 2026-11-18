@@ -9,7 +9,6 @@ if TYPE_CHECKING:
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 from prismclaw.engine.execution.checkpoint import RunSnapshot
-from prismclaw.schema.agent.task_runtime import ReviewRequirements
 from prismclaw.schema.agent.task_types import TaskSpec
 
 logger = logging.getLogger(__name__)
@@ -152,7 +151,3 @@ async def _release_run_ownership(lease: _RunOwnershipLease | None, deps: AgentRu
 
 def _restore_task_spec_from_snapshot(snapshot: RunSnapshot) -> TaskSpec | None:
     return snapshot.active_context.task_spec
-
-
-def _restore_review_requirements_from_snapshot(snapshot: RunSnapshot) -> ReviewRequirements | None:
-    return snapshot.active_context.review_requirements

@@ -38,7 +38,6 @@ from prismclaw.engine.execution.request.system_prompt import (
 )
 from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
 from prismclaw.engine.security.gate.governance import runtime_notes_for
-from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.skills import SkillInvocationState
 from prismclaw.schema.session.types import now_iso
 
@@ -53,7 +52,6 @@ async def build_static_context_for_runner(
     tree: Any,
     tool_workspace_path: Any,
     effective_model: str,
-    mode: WorkspaceMode = "work",
     skill_invocation: SkillInvocationState | None = None,
     discovered_tools: set[str] | None = None,
     subagent_depth: int = 0,
@@ -65,7 +63,6 @@ async def build_static_context_for_runner(
         tree=tree,
         tool_workspace_path=tool_workspace_path,
         effective_model=effective_model,
-        mode=mode,
         skill_invocation=skill_invocation,
         discovered_tools=discovered_tools,
         subagent_depth=subagent_depth,
@@ -81,7 +78,6 @@ class StaticContextBuilder:
         tree: SessionTree,
         tool_workspace_path: str | None,
         effective_model: str,
-        mode: WorkspaceMode = "work",
         skill_invocation: SkillInvocationState | None = None,
         discovered_tools: set[str] | None = None,
         subagent_depth: int = 0,
@@ -91,17 +87,11 @@ class StaticContextBuilder:
         is_fast_path = False
         result = "built"
         try:
-            # run_seconds 仅参与 fast_path 判定（<30s）；真实超时由 effort.hard_s 执行
-            from prismclaw.engine.execution.control.kernel import resolve_effort_budget
-            _effort_budget = resolve_effort_budget(
-                effort=getattr(request, "effort", "standard") or "standard",
-                long_running=bool(getattr(request, "long_running", False)),
-                tiers=deps.config.effort,
-            )
-            run_seconds = _effort_budget.hard_s
+            # fast_path 仅由本轮任务复杂度决定（simple → 精简静态壳）；
+            # 复杂任务与恢复轮走 cold_start/follow_up 完整壳。
             request_mode = deps.task_request_policy.resolve_request_mode(
                 tree=tree,
-                run_seconds=run_seconds,
+                complexity=getattr(request, "complexity", None),
             )
             is_fast_path = request_mode == "fast_path"
             capability_catalog = _require_capability_catalog(deps)
@@ -111,7 +101,6 @@ class StaticContextBuilder:
                 tool_workspace_path=tool_workspace_path,
                 effective_model=effective_model,
                 request_mode=request_mode,
-                mode=mode,
                 deps=deps,
                 skill_invocation=skill_invocation,
                 discovered_tools=discovered_tools,
@@ -128,7 +117,6 @@ class StaticContextBuilder:
                     tool_workspace_path=tool_workspace_path,
                     effective_model=effective_model,
                     request_mode=request_mode,
-                    mode=mode,
                     is_fast_path=is_fast_path,
                     skill_invocation=skill_invocation,
                     discovered_tools=discovered_tools,
@@ -138,12 +126,7 @@ class StaticContextBuilder:
             else:
                 result = "reused"
             task_spec = getattr(request, "task_spec", None)
-            review_requirements = getattr(request, "review_requirements", None)
-            strategy_notes = list(
-                runtime_notes_for(review_requirements)
-                if review_requirements is not None
-                else []
-            )
+            strategy_notes = list(runtime_notes_for(task_spec))
             tool_summaries = list(shell_snapshot.tool_summaries)
             strategy_notes.extend(_session_follow_up_notes(tree, tool_summaries))
             # 冻结前缀只索引项目技能名、插件包计数与核心子代理；插件内的
@@ -153,7 +136,6 @@ class StaticContextBuilder:
                 session_id=request.session_id,
                 workspace_id=request.workspace_id,
                 agent_id=request.agent_id,
-                model=shell_snapshot.model,
                 identity=build_identity_text(),
                 preferences=build_preferences_text(),
                 tools=tool_summaries,
@@ -165,9 +147,7 @@ class StaticContextBuilder:
                 handoff_enabled=shell_snapshot.handoff_enabled,
                 any_manifest_has_can_handoff_to=shell_snapshot.any_manifest_has_can_handoff_to,
                 max_handoff_chain_length=shell_snapshot.max_handoff_chain_length,
-                workspace_mode=mode,
                 task_spec=task_spec,
-                review_requirements=review_requirements,
                 active_skill_name=skill_invocation.skill_name if skill_invocation else None,
                 allowed_tools_override=tuple(skill_invocation.allowed_tools_override or [])
                 if skill_invocation
@@ -179,7 +159,6 @@ class StaticContextBuilder:
                 # 注入当前时间（本地化格式 + UTC 精确时间），让模型在每一轮
                 # 都能获取准确的实时日期，而不依赖训练数据中的知识截止日期。
                 now_iso=now_iso(),
-                workspace_tag=getattr(request, "workspace_tag", None),
             )
             return StaticContextResult(
                 prompt_inputs=prompt_inputs,
@@ -210,7 +189,6 @@ class StaticContextBuilder:
         tool_workspace_path: str | None,
         effective_model: str,
         request_mode: str | None,
-        mode: WorkspaceMode = "work",
         is_fast_path: bool,
         skill_invocation: SkillInvocationState | None,
         discovered_tools: set[str] | None,
@@ -221,7 +199,6 @@ class StaticContextBuilder:
                 capability_catalog=capability_catalog,
                 skill_invocation=skill_invocation,
                 discovered_tools=discovered_tools,
-                mode=mode,
                 subagent_depth=subagent_depth,
                 # 无头执行（无会话队列）下不在提示词里宣传需要交互用户的工具，
                 # 与实际下发给模型的工具清单保持一致。
@@ -242,15 +219,21 @@ class StaticContextBuilder:
         workspace_path = str(tool_workspace_path) if tool_workspace_path else None
         # 冻结前缀只放项目技能名、插件包计数与核心子代理；插件内能力由
         # skill_search / subagent_search 披露。排序确定性保证跨轮字节稳定。
-        available_skills, marketplace_summaries = _build_available_skills_catalog(
-            capability_catalog=capability_catalog,
-            workspace_path=workspace_path,
-            tool_summaries=tool_summaries,
-        )
-        available_subagents = _build_available_subagents_catalog(
-            capability_catalog=capability_catalog,
-            tool_summaries=tool_summaries,
-        )
+        # 减法：fast_path 跳过技能/子代理/marketplace 枚举，减少静态壳体积。
+        if is_fast_path:
+            available_skills: tuple[str, ...] = ()
+            marketplace_summaries = ()
+            available_subagents = ()
+        else:
+            available_skills, marketplace_summaries = _build_available_skills_catalog(
+                capability_catalog=capability_catalog,
+                workspace_path=workspace_path,
+                tool_summaries=tool_summaries,
+            )
+            available_subagents = _build_available_subagents_catalog(
+                capability_catalog=capability_catalog,
+                tool_summaries=tool_summaries,
+            )
         bootstrap_text = None
         if not is_fast_path:
             bootstrap_text = await StaticContextBuilder._load_bootstrap_text(
@@ -261,7 +244,6 @@ class StaticContextBuilder:
             session_id=request.session_id,
             workspace_id=request.workspace_id,
             agent_id=request.agent_id,
-            model=effective_model,
             identity=build_identity_text(),
             preferences=build_preferences_text(),
             tools=tool_summaries,
@@ -273,8 +255,6 @@ class StaticContextBuilder:
             handoff_enabled=handoff_enabled,
             any_manifest_has_can_handoff_to=any_manifest_has_can_handoff_to,
             max_handoff_chain_length=max_handoff_chain_length,
-            workspace_mode=mode,
-            workspace_tag=getattr(request, "workspace_tag", None),
         )
         # SDD R-A2 / W13: deduct the measured tool-schema wire cost (fingerprint
         # cached on the registry) from the history budget. Full-registry

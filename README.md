@@ -28,7 +28,7 @@
 
 运行于企业自有基础设施的企业级 AI Agent 平台。用自然语言下达任务，Agent 自主规划、调用工具，直接把结果交付成文件——全过程在企业安全边界内完成。
 
-多用户与多 Agent 并行协作，会话、记忆与审计互不干扰；敏感操作须审批放行，支持双人复核与 MFA，全程可追溯。
+多用户与多 Agent 并行协作，会话、记忆与审计互不干扰；敏感操作须审批放行，全程可追溯。
 
 一个组织一套部署：模型可对接内网推理服务，数据、记忆与审计留在自有存储；用户零安装，打开浏览器登录即用。
 
@@ -63,9 +63,9 @@
 
 输入框里写清目标，Agent 自主规划步骤、调用技能与工具；产出物在右侧实时预览，确认后直接下载。
 
-<img src="./docs/website/assets/readme/pc-index.png" alt="PrismClaw PC 工作台：对话输入框、工作方式切换，以及医疗、法律、科研三个场景示例" width="100%">
+<img src="./docs/website/assets/readme/pc-index.png" alt="PrismClaw PC 工作台：对话输入框、工作区选择，以及医疗、法律、科研三个场景示例" width="100%">
 
-<p align="center"><sub>工作台 · 场景示例一键填入，工作方式与协作区随手切换</sub></p>
+<p align="center"><sub>工作台 · 场景示例一键填入，工作区选择随手切换</sub></p>
 
 <img src="./docs/website/assets/readme/pc-index2.png" alt="PrismClaw 会话页：左侧任务流与追问建议，右侧实时预览生成的 HTML 宣发方案" width="100%">
 
@@ -104,7 +104,7 @@ PC 与移动端 H5 保持一致的界面与操作逻辑：登录、对话、任�
 | **五层单向架构** | `schema → engine → runtime → assembly → app` 依赖严格单向，业务边界清晰，改一处不牵一片。 |
 | **可水平扩展** | Worker 无状态，可按需横向扩容；节点异常自动接管，会话不中断。 |
 | **四层记忆 + Dreaming** | L1 工作 / L2 会话 / L3 语义 / L4 归档；空闲时自动整理沉淀，越用越懂你。 |
-| **安全治理** | 多层安全闸门、内核级沙箱、敏感数据防泄漏；敏感操作须确认放行，可开启 4-Eyes 双人复核与 MFA，审计日志不可篡改。 |
+| **安全治理** | 多层安全闸门、内核级沙箱、敏感数据防泄漏；敏感操作走任务级确认，全程可追溯。 |
 | **可扩展** | 技能、插件、MCP 与子代理均可插拔；新领域以分包方式接入，医疗域为参考实现。 |
 
 ---
@@ -240,7 +240,7 @@ open http://localhost:5173
 | 存储 | Redis 7、PostgreSQL 17（pgvector） |
 | 前端 | React 19、TypeScript 5.8、Vite 6、Tailwind CSS 4、Zustand |
 | 移动端 | Taro 4.3、React 18、SCSS |
-| 安全 | bwrap 沙箱、JWT、DLP、BreakGlass、4-Eyes、WORM 审计、HSM |
+| 安全 | bwrap 沙箱、JWT、DLP、BreakGlass、HSM |
 | 可观测 | OpenTelemetry、Prometheus、结构化 JSON 日志 |
 | 协议 | WebSocket、OpenAI 兼容 SSE、MCP（stdio / streamable-http） |
 

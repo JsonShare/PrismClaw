@@ -173,7 +173,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">&#8943;</button>
         </div>
       </div>
-      <p class="subtitle">Agent Loop 9-step cycle &mdash; Runner &rarr; AgentLoop &rarr; Dispatch &rarr; LLM &rarr; SafetyGate &rarr; ToolExecution &rarr; Arbiter &rarr; ContextUpdate &rarr; TurnUpdate</p>
+      <p class="subtitle">Agent Loop 9-step cycle &mdash; Runner &rarr; AgentLoop &rarr; Dispatch &rarr; LLM &rarr; Pre-tool Check &rarr; ToolExecution &rarr; Arbiter &rarr; ContextUpdate &rarr; TurnUpdate</p>
     </div>
 
     <div class="diagram-container">
@@ -229,10 +229,10 @@
 
         <line x1="546" y1="167" x2="571" y2="167" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-        <!-- Step 4: before_tool_call (SafetyGate) -->
+        <!-- Step 4: before_tool_call (pre-tool checks) -->
         <rect x="574" y="145" width="130" height="45" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
         <text x="639" y="164" fill="white" font-size="10" font-weight="600" text-anchor="middle">before_tool</text>
-        <text x="639" y="180" fill="#94a3b8" font-size="8" text-anchor="middle">SafetyGate</text>
+        <text x="639" y="180" fill="#94a3b8" font-size="8" text-anchor="middle">doom-loop + hooks</text>
 
         <line x1="639" y1="190" x2="639" y2="218" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
@@ -310,9 +310,9 @@
         <line x1="500" y1="328" x2="460" y2="363" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrowEmerald)"/>
         <line x1="710" y1="328" x2="710" y2="363" stroke="#34d399" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrowEmerald)"/>
 
-        <!-- SafetyGate link (dashed rose) -->
+        <!-- Pre-tool check link (dashed rose) -->
         <rect x="100" y="460" width="200" height="55" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
-        <text x="200" y="483" fill="white" font-size="10" font-weight="600" text-anchor="middle">SafetyGate</text>
+        <text x="200" y="483" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pre-tool Check</text>
         <text x="200" y="501" fill="#94a3b8" font-size="8" text-anchor="middle">engine/security/gate/</text>
 
         <path d="M 797 190 L 797 200 L 950 200 L 950 488 L 304 488" fill="none" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4" marker-end="url(#arrowRose)"/>
@@ -378,7 +378,7 @@
 
         <!-- Key config callouts -->
         <text x="100" y="730" fill="#fbbf24" font-size="9" font-weight="600">Key Config</text>
-        <text x="100" y="746" fill="#94a3b8" font-size="8">CONCURRENCY_SAFE_TOOLS | Semaphore=10 | max_handoff=5 | error_fatigue=3</text>
+        <text x="100" y="746" fill="#94a3b8" font-size="8">is_concurrency_safe | Semaphore=10 | max_handoff=5 | error_fatigue=3</text>
         <text x="100" y="762" fill="#94a3b8" font-size="8">Search-loop: dual condition (call count + output char ratio)</text>
 
         <!-- Legend -->

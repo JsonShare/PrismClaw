@@ -104,6 +104,47 @@ def test_core_set_covers_universal_tools():
     assert _UNIVERSAL_TOOLS <= _CORE_VISIBLE_TOOLS
 
 
+def test_skill_allowlist_does_not_hide_universal_tools():
+    """skill 的 allowed_tools 白名单不能隐藏 todo_write 等通用工具。"""
+    resolved = _resolve(
+        [_spec("read"), _spec("todo_write")],
+        allowed_tools_policy=AllowedToolsPolicy(allow_all=False, allowed_names=("read",)),
+    )
+    assert set(resolved.visible_tools_for_llm) == {"read", "todo_write"}
+    assert "todo_write" not in resolved.denied_tools
+
+
+def test_server_read_only_hides_write_tools_but_keeps_read_only_capable():
+    """server_read_only 的服务器：写类工具不可见；显式 read_only_allowed 的工具保留。"""
+    write_tool = _spec("mcp_write").model_copy(
+        update={
+            "permission_traits": ToolPermissionTraits(
+                tool_class="write",
+                server_read_only=True,
+                read_only_allowed=False,
+            )
+        }
+    )
+    read_tool = _spec("mcp_read").model_copy(
+        update={
+            "permission_traits": ToolPermissionTraits(
+                tool_class="write",
+                server_read_only=True,
+                read_only_allowed=True,
+            )
+        }
+    )
+    resolved = _resolve([write_tool, read_tool])
+
+    assert "mcp_write" not in resolved.visible_tools_for_llm
+    assert "mcp_write" in resolved.denied_tools
+    assert "mcp_read" in resolved.visible_tools_for_llm
+
+    trace = [e for e in resolved.decision_trace if e.tool_name == "mcp_write"]
+    assert trace and trace[0].reducer == "ServerReadOnlyReducer"
+    assert trace[0].reason == "tool_server_read_only_blocks_write"
+
+
 def test_core_set_matches_expected_baseline():
     assert _CORE_VISIBLE_TOOLS == frozenset({
         "read", "write", "edit", "bash", "ls", "grep", "glob",

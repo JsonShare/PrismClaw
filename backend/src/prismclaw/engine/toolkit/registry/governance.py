@@ -19,7 +19,6 @@ from prismclaw.engine.toolkit.registry.specs import (
     ToolSpec,
     VisibilityScope,
 )
-from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.skills import SkillInvocationState
 
 logger = logging.getLogger(__name__)
@@ -31,6 +30,8 @@ logger = logging.getLogger(__name__)
 #   - ask_user_question：人机澄清，skill 经常需要向用户确认。
 #   - tool_search / skill_search / subagent_search / activate_skill：能力发现
 #     与激活，是插件生态的入口，被白名单屏蔽会导致无法切换/发现能力。
+#   - todo_write：多步任务的可选清单通道；系统提示不再强制建清单
+#     （强制清单曾把轮次放大到 2N+1），但白名单不能隐藏它。
 _UNIVERSAL_TOOLS = frozenset({
     "present_files",
     "ask_user_question",
@@ -38,6 +39,7 @@ _UNIVERSAL_TOOLS = frozenset({
     "skill_search",
     "subagent_search",
     "activate_skill",
+    "todo_write",
 })
 
 # 核心可见工具集：flag ``tools.core_visible_only`` 开启时，
@@ -93,7 +95,6 @@ class GovernanceInput:
     allowed_tools_policy: AllowedToolsPolicy = field(default_factory=AllowedToolsPolicy)
     runtime_mode: RuntimeMode = field(default_factory=RuntimeMode)
     active_skill_name: str | None = None
-    mode: str = "work"
     discovered_tools: frozenset[str] = frozenset()
     mcp_available_servers: frozenset[str] = frozenset()
     skill_allowed_tools: frozenset[str] = frozenset()
@@ -190,8 +191,8 @@ class ActorIdentityReducer:
         return next_draft
 
 
-class ReadOnlyPermissionReducer:
-    name = "ReadOnlyPermissionReducer"
+class ServerReadOnlyReducer:
+    name = "ServerReadOnlyReducer"
 
     def apply(
         self,
@@ -201,11 +202,7 @@ class ReadOnlyPermissionReducer:
         next_draft = draft
         for tool_name, record in draft.tools.items():
             traits = record.spec.permission_traits
-            enforce_read_only = (
-                input_data.mode == "chat"
-                or traits.forced_chat_only
-            )
-            if not enforce_read_only:
+            if not traits.server_read_only:
                 continue
             if traits.read_only_allowed:
                 continue
@@ -217,15 +214,10 @@ class ReadOnlyPermissionReducer:
                     tool_name=tool_name,
                     reducer=self.name,
                     action="deny",
-                    reason=(
-                        "tool_forced_chat_only_blocks_write"
-                        if traits.forced_chat_only
-                        and input_data.mode != "chat"
-                        else "tool_not_allowed_in_read_only_mode"
-                    ),
+                    reason="tool_server_read_only_blocks_write",
                     details={
                         "tool_class": traits.tool_class,
-                        "forced_chat_only": traits.forced_chat_only,
+                        "server_read_only": traits.server_read_only,
                     },
                 )
             )
@@ -400,7 +392,7 @@ class ToolGovernance:
             or (
                 AllowedToolsPolicyReducer(),
                 ActorIdentityReducer(),
-                ReadOnlyPermissionReducer(),
+                ServerReadOnlyReducer(),
                 HeadlessModeReducer(),
                 DeferredToolReducer(),
                 SkillGatedReducer(),
@@ -459,7 +451,6 @@ def resolve_registry_tool_governance(
     skill_invocation: SkillInvocationState | None,
     allowed_tools_policy: AllowedToolsPolicy | None = None,
     discovered_tools: set[str] | tuple[str, ...] | list[str] | None = None,
-    mode: WorkspaceMode = "work",
     subagent_depth: int = 0,
     headless: bool = False,
     governance: ToolGovernance | None = None,
@@ -481,7 +472,6 @@ def resolve_registry_tool_governance(
             active_skill_name=(
                 skill_invocation.skill_name if skill_invocation is not None else None
             ),
-            mode=mode,
             discovered_tools=frozenset(normalized_discovered),
             skill_allowed_tools=frozenset(
                 skill_invocation.allowed_tools_override or ()
@@ -530,7 +520,7 @@ def tool_to_spec(tool: Tool) -> ToolSpec:
             requires_interactive_user=bool(
                 getattr(tool, "requires_interactive_user", False)
             ),
-            forced_chat_only=getattr(cfg, "forced_chat_only", False) if (cfg := getattr(tool, "server_config", None)) is not None else False,
+            server_read_only=getattr(cfg, "server_read_only", False) if (cfg := getattr(tool, "server_config", None)) is not None else False,
             skill_gated=bool(getattr(tool, "skill_gated", False)),
         ),
         executor_kind=executor_kind,

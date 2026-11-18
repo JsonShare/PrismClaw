@@ -435,7 +435,7 @@ def _build_retrieval_anchor(
     - ``session_memory`` 块基于持久基线状态渲染（非滚动 state）；
     - 历史压缩块仅在压缩时变化。
 
-    滚动会话态（recent_messages/todos/decisions 增量）不在此处——
+    滚动会话态（recent_messages/decisions 增量）不在此处——
     它由 ``_build_turn_state_block`` 每轮渲染、进 iter 层注入。
     """
     memory_block = state_store.build_persisted_memory_block(

@@ -7,8 +7,8 @@ Two layers live here:
    intent evolution, delivery ledger, completion fact evidence) must call it
    instead of inspecting tool attributes or matching names on its own.
 2. Web-retrieval semantics (:func:`is_search_intent_tool`,
-   :func:`is_legacy_web_tool`, :func:`is_network_read_tool`) — an *input* to
-   that decision, not a parallel classifier.
+   :func:`is_network_read_tool`) — an *input* to that decision, not a
+   parallel classifier.
 
 Web search/fetch is provided by a standalone MCP service wired through
 ``backend/configs/mcp.yaml`` — the service (and therefore the tool name) is a
@@ -17,10 +17,7 @@ that name; instead it asks this module semantic questions:
 
 - :func:`is_search_intent_tool` — tools configured as search/fetch intent
   (``RunLoopTuningConfig.search_intent_tools``, mirrored in agent.yaml);
-- :func:`is_legacy_web_tool` — the retired builtin names kept only so
-  historical sessions keep rendering/compacting correctly;
-- :func:`is_network_read_tool` — public-network read-only tools (union of the
-  two above).
+- :func:`is_network_read_tool` — public-network read-only tools.
 
 Both name layers are understood: MCP canonical ``{server}:{tool}`` and the
 LLM-facing rewrite ``{server}__{tool}``.
@@ -29,10 +26,6 @@ LLM-facing rewrite ``{server}__{tool}``.
 from __future__ import annotations
 
 from typing import Any, Literal
-
-# Retired builtins — recognized purely for historical-session compatibility.
-_LEGACY_WEB_TOOLS = frozenset({"web_search", "web_fetch", "web_extract"})
-
 
 def _canonical(name: str) -> str:
     """Normalize an LLM-facing ``{server}__{tool}`` name to ``{server}:{tool}``."""
@@ -59,14 +52,9 @@ def is_search_intent_tool(tool_name: str, *, config: Any = None) -> bool:
     return any(_canonical(name) == canonical for name in names)
 
 
-def is_legacy_web_tool(tool_name: str) -> bool:
-    """True for the retired builtin web tools (historical sessions only)."""
-    return tool_name.lower() in _LEGACY_WEB_TOOLS
-
-
 def is_network_read_tool(tool_name: str, *, config: Any = None) -> bool:
-    """True for public-network read-only tools (search intent or legacy web)."""
-    return is_search_intent_tool(tool_name, config=config) or is_legacy_web_tool(tool_name)
+    """True for public-network read-only tools (search intent)."""
+    return is_search_intent_tool(tool_name, config=config)
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +105,7 @@ def resolve_tool_class(
        ``memory-write-safe`` → ``read``; anything else, including ``write``
        and unknown values → ``write``);
     2. network-read semantics (:func:`is_network_read_tool`) for tools the
-       registry cannot resolve — e.g. legacy ``web_search`` names in
-       historical sessions, or MCP tools outside the current registry;
+       registry cannot resolve — e.g. MCP tools outside the current registry;
     3. ``write`` — conservative default: an unresolvable tool may have
        side effects, so it must never be silently promoted to ``read``.
     """

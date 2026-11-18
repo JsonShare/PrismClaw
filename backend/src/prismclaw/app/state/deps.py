@@ -52,7 +52,6 @@ def build_app_web_deps(
         is_source_trusted_for_load,
         resolve_workspace_trusted,
     )
-    from prismclaw.runtime.facade.security import AuditLogger
     from prismclaw.runtime.facade.services import maybe_spawn_extraction
     from prismclaw.schema.dream import DreamAdminOps
 
@@ -114,7 +113,6 @@ def build_app_web_deps(
     if effective_runner_deps is not None:
         effective_runner_deps.session_queue = session_queue
     connection_registry = ConnectionRegistry()
-    audit_logger = AuditLogger()
 
     # 跨 worker 运行态：owner 写 Redis 心跳，任意 worker 都能判活；
     # 中止请求经 Pub/Sub 转成本地 rc.stop()（非 owner 连接上没有 RunControl）。
@@ -155,7 +153,6 @@ def build_app_web_deps(
         llm_client=getattr(effective_runner_deps, "llm", None),
         agent_settings=effective_settings.agent,
         worker_registry=getattr(state, "worker_registry", None),
-        audit_logger=audit_logger,
         runtime_mode_snapshot=getattr(state, "runtime_mode_snapshot", None),
         sandbox_policy=getattr(state, "sandbox_policy", None),
         scheduler_context=(

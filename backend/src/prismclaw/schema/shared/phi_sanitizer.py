@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from prismclaw.schema.shared._phi_pattern_registry import get_domain_phi_patterns
 
@@ -154,15 +153,13 @@ _SAFE_HARBOR_PATTERNS: list[tuple[str, re.Pattern[str], str]] = []
 def apply_safe_harbor(
     text: str,
     *,
-    worm_audit: Any = None,
     session_id: str = "",
 ) -> tuple[str, bool]:
     """对文本执行 PII/PHI 脱敏（核心通用 + 域注册模式）。
 
     Args:
         text: 待脱敏文本
-        worm_audit: WORM 审计写入器（可选）
-        session_id: 会话 ID（用于审计日志）
+        session_id: 会话 ID（仅用于调用方日志关联）
 
     Returns:
         (sanitized_text, phi_masked): 脱敏后文本 + 是否有脱敏发生
@@ -173,25 +170,11 @@ def apply_safe_harbor(
     all_patterns = get_all_pii_patterns()
     result = text
     any_masked = False
-    redaction_summary: dict[str, int] = {}
 
-    for phi_type, pattern, replacement in all_patterns:
+    for _phi_type, pattern, replacement in all_patterns:
         count = len(pattern.findall(result))
         if count > 0:
             result = pattern.sub(replacement, result)
             any_masked = True
-            redaction_summary[phi_type] = count
-
-    if any_masked and worm_audit is not None:
-        worm_audit.log(
-            session_id,
-            "safe_harbor_applied",
-            {
-                "redaction_count": sum(redaction_summary.values()),
-                "redaction_types": redaction_summary,
-                "text_length": len(text),
-                "phi_masked": True,
-            },
-        )
 
     return result, any_masked

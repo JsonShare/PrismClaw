@@ -22,7 +22,7 @@ def _request(messages: list[dict]) -> SimpleNamespace:
 
 
 def _adapt(messages: list[dict]) -> list[dict]:
-    return _PROVIDER_REQUEST_ADAPTER._adapt_with_legacy_context_bridge(
+    return _PROVIDER_REQUEST_ADAPTER._adapt_with_context_bridge(
         request=_request(messages),
         llm_provider=None,
         prompt_cache_runtime=None,

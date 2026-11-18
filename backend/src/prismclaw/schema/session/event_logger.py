@@ -280,16 +280,6 @@ class SessionEventLogger:
             ignorable=True,
         )
 
-    def todo_write(
-        self, session_id: str, todos: list[dict[str, Any]]
-    ) -> SessionEvent:
-        return _mk(
-            type=SessionEventType.TODO_WRITE,
-            session_id=session_id,
-            data={"type": "todo/write", "todos": todos},
-            ignorable=True,
-        )
-
     def session_end_seed(self, session_id: str) -> SessionEvent:
         return _mk(
             type=SessionEventType.SESSION_END_SEED,

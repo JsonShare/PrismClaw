@@ -71,7 +71,7 @@ class ProviderPreparedRequest:  # 预处理请求
 
 关键特性：
 - **重试逻辑**：3 次尝试，瞬态错误自动重试，非流式降级回退
-- **上下文 payload 传输**：`ProviderRequestAdapter` 支持 none/structured_extension/legacy_bridge 三种模式
+- **上下文 payload 传输**：`ProviderRequestAdapter` 仅两种模式——有 payload 时渲染为尾部 `<system-context>` 消息；无 payload（辅助调用）时直接发送。
 - **工具调用参数消毒**：`_sanitize_tool_call_arguments_json()` 修复畸形 JSON
 - **Qwen thinking 禁用**：非 DashScope 的 OpenAI 兼容端点自动关闭 thinking 模式
 

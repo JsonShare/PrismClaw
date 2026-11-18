@@ -10,5 +10,3 @@ export function purgeConversation(convId: string): string | null {
 export { useChatStore } from './chat'
 export { useSessionStore } from './session'
 export { useUiStore } from './ui'
-export { usePermissionStore, type AgentMode, type PermissionStore } from './permission'
-export { useEffortStore, type EffortLevel, type EffortStore } from './effort'

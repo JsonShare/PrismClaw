@@ -1,8 +1,7 @@
 """P1-SEC-02：RuleGate — L0 静态规则门禁。
 
-RuleGate 是 SafetyGate 的第一层：在 RiskRouter 做风险分级之前，
-先做快速静态规则检查。命中 deny 规则的工具调用直接拒绝，
-不进入后续的 RiskRouter / SafetyGate 流程。
+RuleGate 是工具调用前的第一层静态检查：先做快速静态规则检查，
+命中 deny 规则的工具调用直接拒绝。
 
 5 条规则：
   1. 路径逃逸：路径含 .. 或以 / 开头且不在 workspace 内 → deny

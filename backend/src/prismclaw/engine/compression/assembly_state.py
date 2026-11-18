@@ -72,7 +72,6 @@ def build_state_driven_retrieval_query(
 
     for label, key in (
         ("active_decisions", "decisions"),
-        ("active_todos", "todos"),
         ("active_constraints", "constraints"),
         ("open_questions", "open_questions"),
         ("known_facts", "facts"),

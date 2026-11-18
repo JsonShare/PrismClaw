@@ -43,10 +43,10 @@ Web 层是 PrismClaw 面向用户的 HTTP/WebSocket 交付层，负责：
 │           ▼                                                       │
 │  ┌───────────────────────────────────────────────────────────┐   │
 │  │                    Auth 认证层                             │   │
-│  │  ┌────────────┐ ┌──────────────┐ ┌────────────────────┐  │   │
-│  │  │ JWT 签发   │ │ ProfileStore │ │ ModeResolution     │  │   │
-│  │  │ / 验证     │ │ (用户配置)   │ │ (模式解析)         │  │   │
-│  │  └────────────┘ └──────────────┘ └────────────────────┘  │   │
+│  │  ┌────────────┐ ┌──────────────┐                          │   │
+│  │  │ JWT 签发   │ │ ProfileStore │                          │   │
+│  │  │ / 验证     │ │ (用户配置)   │                          │   │
+│  │  └────────────┘ └──────────────┘                          │   │
 │  └───────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ┌───────────────────────────────────────────────────────────┐   │
@@ -128,7 +128,7 @@ def get_current_user(request: Request) → str
 ```python
 # 客户端消息
 @dataclass IdentifyMessage:     type="identify", token, protocol_version
-@dataclass ChatSendMessage:     type="chat.send", conversation_id, workspace_id, content, confirmation_decision, attachments, mode, trajectory
+@dataclass ChatSendMessage:     type="chat.send", conversation_id, workspace_id, content, confirmation_decision, attachments, trajectory
 @dataclass ChatAbortMessage:    type="chat.abort", conversation_id
 @dataclass PongMessage:         type="pong"
 @dataclass ToolApproveMessage:  type="tool.approve", approval_id, tool_call_id, approved, reason
@@ -204,10 +204,10 @@ async def send_event(state, event_type, conversation_id, data) → (seq, sent):
 ### 聊天运行器（chat_runner.py）
 
 ```python
-async def _run_chat(state: ConnectionState, msg: ChatSendMessage, settings: WebSettings):
+async def _run_chat(state: ConnectionState, msg: ChatSendMessage):
     # 1. session_id 解析: "web:{user_id}:{conversation_id}"
     # 2. workspace_id 校验（会话绑定一致性）
-    # 3. resolve_profile_and_mode() → 用户配置与模式
+    # 3. resolve_profile() → 用户配置
     # 4. 构建 RunRequest
     # 5. chat_service.start_conversation() → 异步事件流
     # 6. 事件处理:
@@ -447,7 +447,7 @@ GatewayRouter.route(session_key, event_payload)
 ```
 POST /api/v1/chat/completions
   → get_current_user() → user_id
-  → resolve_profile_and_mode() → mode
+  → resolve_profile()
   → SessionRouter.resolve_or_create(f"openai:{user_id}")
   → RunRequest 构建
   → stream=True:

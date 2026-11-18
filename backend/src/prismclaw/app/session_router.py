@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 
 from prismclaw.schema.session.types import SessionTree
 from prismclaw.schema.session.types import now_iso
@@ -56,25 +55,3 @@ class SessionRouter:
         updated_header = tree.header.model_copy(update={"last_interaction_at": now_iso()})
         updated_tree = tree.model_copy(update={"header": updated_header})
         await self.store.save_header(updated_tree)
-
-    async def check_idle_reset(
-        self,
-        session_key: str,
-        session_id: str,
-        idle_minutes: int,
-    ) -> bool:
-        if idle_minutes <= 0:
-            return False
-        tree = await self.store.load(session_id)
-        if tree is None:
-            return False
-        last_at = tree.header.last_interaction_at
-        if last_at is None:
-            return False
-        try:
-            last_dt = datetime.fromisoformat(last_at)
-        except ValueError:
-            return False
-        now_dt = datetime.now(timezone.utc)
-        elapsed_seconds = (now_dt - last_dt).total_seconds()
-        return elapsed_seconds >= idle_minutes * 60

@@ -144,9 +144,6 @@ def _build_query_runtime_context(
 ) -> "QueryRuntimeContext":
     from prismclaw.engine.execution.query.state import QueryRuntimeContext
 
-    effective_mode = request.mode_override
-    if effective_mode is None:
-        effective_mode = tool_ctx.mode
     return QueryRuntimeContext(
         query_source="runner",
         capability_snapshot=deps.capability_catalog,
@@ -158,10 +155,6 @@ def _build_query_runtime_context(
             "request_id": request.request_id,
         },
         budget_policy=deps.config.context.budget,
-        permission_context={
-            "effective_tier": effective_mode,
-            "default_tier": None,
-        },
         model_context={
             "effective_model": effective_model,
             "attachment_guidance": attachment_guidance,

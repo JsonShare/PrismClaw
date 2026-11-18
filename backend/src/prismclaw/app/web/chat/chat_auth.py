@@ -14,7 +14,6 @@ from prismclaw.app.web.protocol.messages import (
     ChatSendMessage,
 )
 from prismclaw.app.web.connection import ConnectionState, send_event
-from prismclaw.infra.settings import WebSettings
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,6 @@ logger = logging.getLogger(__name__)
 async def enqueue_chat(
     state: ConnectionState,
     msg: ChatSendMessage,
-    settings: WebSettings,
 ) -> None:
     session_queue = _get_session_queue(state)
     if session_queue._task_manager is None:
@@ -37,7 +35,7 @@ async def enqueue_chat(
         from prismclaw.app.web.chat.chat_runner import _run_chat
 
         try:
-            await _run_chat(state, m, settings)
+            await _run_chat(state, m)
         except asyncio.CancelledError:
             raise
         except Exception:

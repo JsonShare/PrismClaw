@@ -12,6 +12,7 @@ allowed_tools:
   - edit
   - bash
   - "web-search-mcp:search"
+  - "web-search-mcp:fetch"
 ---
 
 你负责在授权范围内完成改动，并确认结果按预期生效。

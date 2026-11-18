@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from prismclaw.schema.shared.phi_sanitizer import apply_safe_harbor
 
@@ -19,7 +18,6 @@ logger = logging.getLogger(__name__)
 def sanitize_before_context_injection(
     text: str,
     *,
-    worm_audit: Any = None,
     session_id: str = "",
     layer: str = "L3",
     source: str = "",
@@ -28,7 +26,6 @@ def sanitize_before_context_injection(
 
     Args:
         text: 待脱敏文本（fact_sheet / 压缩摘要 / 回读文本）
-        worm_audit: WORM 审计写入器
         session_id: 会话 ID
         layer: 层级标记（L1/L2/L3）
         source: 来源标记（fact_sheet / compaction_summary）
@@ -38,18 +35,12 @@ def sanitize_before_context_injection(
     """
     if not text:
         return text, False
-    sanitized, masked = apply_safe_harbor(text, worm_audit=worm_audit, session_id=session_id)
+    sanitized, masked = apply_safe_harbor(text, session_id=session_id)
     if masked:
         # 安全事件留痕：只记 layer/source/长度差，绝不记录脱敏前后文本内容（PHI 红线）。
         logger.info(
             "phi masked before context injection: layer=%s source=%s session_id=%s "
             "orig_len=%d sanitized_len=%d",
             layer, source, session_id, len(text), len(sanitized),
-        )
-    if masked and source and worm_audit is not None:
-        worm_audit.log(
-            session_id,
-            "sanitize_injection",
-            {"layer": layer, "source": source, "text_length": len(text)},
         )
     return sanitized, masked

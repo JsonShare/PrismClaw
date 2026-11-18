@@ -78,7 +78,6 @@ class DlpScanner:
         self,
         text: str,
         *,
-        worm_audit: Any = None,
         session_id: str = "",
     ) -> DlpDecision:
         """执行出站响应 DLP 扫描。
@@ -138,12 +137,6 @@ class DlpScanner:
 
         # k-匿名阻断
         if rows_with_phi >= self._k_rows:
-            if worm_audit:
-                worm_audit.log(
-                    session_id,
-                    "phi_batch_block",
-                    {**audit_event, "reason": f"k_anonymity_exceeded: rows_with_phi={rows_with_phi} >= {self._k_rows}"},
-                )
             return DlpDecision(
                 action=DlpAction.BLOCK,
                 sanitized_text="",
@@ -156,12 +149,6 @@ class DlpScanner:
 
         # 字节阈值阻断
         if phi_byte_ratio >= self._phi_ratio:
-            if worm_audit:
-                worm_audit.log(
-                    session_id,
-                    "phi_ratio_block",
-                    {**audit_event, "reason": f"phi_ratio_exceeded: {phi_byte_ratio:.2%} >= {self._phi_ratio:.0%}"},
-                )
             return DlpDecision(
                 action=DlpAction.BLOCK,
                 sanitized_text="",
@@ -174,12 +161,6 @@ class DlpScanner:
 
         # 脱敏后放行
         if masked:
-            if worm_audit:
-                worm_audit.log(
-                    session_id,
-                    "phi_masked",
-                    audit_event,
-                )
             return DlpDecision(
                 action=DlpAction.MASK,
                 sanitized_text=sanitized,

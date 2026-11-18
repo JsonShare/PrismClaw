@@ -48,11 +48,6 @@ def _coerce_discovered_tools(context: ToolContext) -> set[str] | None:
     return discovered or None
 
 
-def _coerce_permission_tier(context: ToolContext) -> str:
-    mode = context.mode
-    return mode if isinstance(mode, str) and mode else "work"
-
-
 def _coerce_headless(context: ToolContext) -> bool:
     """是否为无头执行（无法暂停等用户回答）。由 runner 写入 ToolContext。"""
     return bool(context.headless)
@@ -270,7 +265,6 @@ class ToolSearchTool:
         all_surface = self._runtime.visible_surface(
             skill_invocation=skill_invocation,
             discovered_tools=discovered_tools,
-            mode=_coerce_permission_tier(context),
             subagent_depth=context.subagent_depth,
             headless=_coerce_headless(context),
         )

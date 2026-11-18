@@ -36,7 +36,6 @@ class WebDeps:
     llm_client: Any = None
     agent_settings: Any = None
     worker_registry: WorkerRegistry | None = None
-    audit_logger: Any = None
     runtime_mode_snapshot: dict[str, Any] | None = None
     sandbox_policy: Any = None
     scheduler_context: dict[str, Any] | None = None
@@ -62,7 +61,7 @@ class WebDeps:
     format_extraction_fn: Any = None        # format_extraction_result_zh(result)
     review_registry_fn: Any = None          # get_review_registry(workspace_root) from engine.services.review_service
     reload_plugin_fn: Any = None            # reload_app_plugin_runtime from app.plugins.reload_service
-    takeover_fns: Any = None                # dict of takeover functions from app.runtime.lifecycle.takeover
+    takeover_fns: Any = None                # dict of takeover functions from app.gateway.takeover
     review_lifecycle_fn: Any = None         # lifecycle module from engine.services.review_service (has gc_blobs)
     upload_fns: Any = None                  # {LocalSink, upload_files, build_file_change, get_tracking_store} from engine.services.upload_service
     review_utils: Any = None                # {normalize_clarify_questions, apply_office_ops, fmt_from_path} from engine.services.review_service

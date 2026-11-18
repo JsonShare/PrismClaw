@@ -7,8 +7,7 @@ from __future__ import annotations
 import logging
 import time as _time
 
-from prismclaw.engine.execution.control.kernel import TerminalReason, evaluate_loop_control
-from prismclaw.engine.execution.loop import terminal as _terminal
+from prismclaw.engine.execution.control.kernel import evaluate_loop_control
 from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.execution.loop.types import RunLoopState, TurnUpdate
 
@@ -48,7 +47,7 @@ async def prepare_next_turn(
 
     _ctrl = evaluate_loop_control(
         run_state=rt.run_state,
-        effort_budget=rt.effort_budget,
+        run_budget=rt.run_budget,
         now=_time.monotonic(),
         phase="prepare",
     )

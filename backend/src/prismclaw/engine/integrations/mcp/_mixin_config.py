@@ -79,7 +79,7 @@ class ConfigMixin(_MCPBackendBase):
     def _initialize_server_statuses(self) -> None:
         for name, config in self._settings.servers.items():
             self._runtime_telemetry[name] = MCPRuntimeTelemetry(
-                forced_chat_only=getattr(config, "forced_chat_only", False),
+                server_read_only=config.server_read_only,
             )
             if not config.enabled:
                 self._servers[name] = ServerStatus(name=name, status="disabled")
@@ -91,7 +91,7 @@ class ConfigMixin(_MCPBackendBase):
         if telemetry is None:
             config = self._settings.servers.get(name)
             telemetry = MCPRuntimeTelemetry(
-                forced_chat_only=getattr(config, "forced_chat_only", False),
+                server_read_only=config.server_read_only if config is not None else False,
             )
             self._runtime_telemetry[name] = telemetry
         return telemetry

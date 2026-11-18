@@ -71,12 +71,20 @@ async def test_tool_returns_markdown_content_and_structured_contract() -> None:
 
 async def test_tool_registered_with_readonly_annotation() -> None:
     tools = await mcp.list_tools()
-    assert len(tools) == 1
-    tool = tools[0]
-    assert tool.name == "search"
+    by_name = {tool.name: tool for tool in tools}
+    assert set(by_name) == {"search", "fetch"}
+
+    tool = by_name["search"]
     assert tool.annotations is not None
     assert tool.annotations.readOnlyHint is True
     assert tool.annotations.destructiveHint is False
     props = tool.inputSchema["properties"]
     assert set(props) == {"query", "num_results", "language", "fetch"}
     assert tool.inputSchema["required"] == ["query"]
+
+    fetch_tool = by_name["fetch"]
+    assert fetch_tool.annotations is not None
+    assert fetch_tool.annotations.readOnlyHint is True
+    assert fetch_tool.annotations.destructiveHint is False
+    assert set(fetch_tool.inputSchema["properties"]) == {"url"}
+    assert fetch_tool.inputSchema["required"] == ["url"]

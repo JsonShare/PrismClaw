@@ -8,7 +8,6 @@ objects (SessionTree, TaskSpec, TaskRuntimeState, etc.) and return new values.
 
 from __future__ import annotations
 
-import hashlib
 import time
 import uuid
 from typing import Any, cast
@@ -20,7 +19,6 @@ from prismclaw.schema.agent.task_runtime import (
 )
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.session.types import SessionTree
-
 
 # ---------------------------------------------------------------------------
 # Session-tree helpers
@@ -83,30 +81,6 @@ def _tool_args_for_call(tree: SessionTree, tool_call_id: str | None) -> str | No
 
 
 # ---------------------------------------------------------------------------
-# Text / anchor helpers
-# ---------------------------------------------------------------------------
-
-def _normalize_anchor_text(text: str, *, max_length: int = 240) -> str:
-    normalized = " ".join(text.strip().split())
-    normalized = normalized.strip(" \t\r\n;；,，。")
-    if len(normalized) <= max_length:
-        return normalized
-    return normalized[: max_length - 1].rstrip() + "…"
-
-
-def _decision_scope_for_task_spec(task_spec: TaskSpec) -> str:
-    constraints = [item.strip() for item in task_spec.constraints if item.strip()]
-    scope_parts = [
-        f"goal={_normalize_anchor_text(task_spec.goal, max_length=240)}",
-        f"risk={task_spec.risk_level}",
-        "constraints=" + "|".join(dict.fromkeys(constraints)),
-        f"attachments_present={'true' if task_spec.attachments_present else 'false'}",
-    ]
-    digest = hashlib.sha256("\n".join(scope_parts).encode("utf-8")).hexdigest()[:24]
-    return f"scope:{digest}"
-
-
-# ---------------------------------------------------------------------------
 # Task-runtime construction
 # ---------------------------------------------------------------------------
 
@@ -116,29 +90,26 @@ def _build_task_runtime_from_spec(
     workspace_id: str | None,
     prior_runtime: TaskRuntimeState | None = None,
     entry_resolution_status: str = "ready",
-    entry_failure_code: str | None = None,
-    state_override: str | None = None,
 ) -> TaskRuntimeState:
     created_at_epoch_ms = (
         prior_runtime.created_at_epoch_ms if prior_runtime is not None else int(time.time() * 1000)
     )
     updated_at_epoch_ms = int(time.time() * 1000)
-    requires_risk_confirmation = entry_resolution_status == "ready" and state_override is None and (
-        task_spec.risk_level in {"high", "critical"} or bool(
-        task_spec.preflight_probe is not None and task_spec.preflight_probe.baseline_risk == "high"
+    requires_risk_confirmation = entry_resolution_status == "ready" and (
+        task_spec.risk_level == "high"
+        or bool(
+            task_spec.preflight_probe is not None
+            and task_spec.preflight_probe.baseline_risk == "high"
         )
     )
     if entry_resolution_status == "pending":
         runtime_state = "intaking"
     elif entry_resolution_status == "failed":
         runtime_state = "blocked"
-    elif state_override is not None:
-        runtime_state = state_override
     elif requires_risk_confirmation:
         runtime_state = "awaiting_risk_confirmation"
     else:
         runtime_state = "executing"
-    confirmation_required = requires_risk_confirmation
     pending_confirmation_reason = (
         "当前任务包含高风险执行，确认后才会继续进入执行主链。"
         if requires_risk_confirmation
@@ -150,13 +121,10 @@ def _build_task_runtime_from_spec(
         workspace_id=workspace_id,
         state=cast(Any, runtime_state),
         entry_resolution_status=cast(Any, entry_resolution_status),
-        entry_failure_code=entry_failure_code,
         state_version=prior_runtime.state_version if prior_runtime is not None else 1,
         latest_review_decision_id=(
             prior_runtime.latest_review_decision_id if prior_runtime is not None else None
         ),
-        risk_level=task_spec.risk_level,
-        confirmation_required=confirmation_required,
         pending_confirmation_reason=pending_confirmation_reason,
         checkpoint_cursor=prior_runtime.checkpoint_cursor if prior_runtime is not None else None,
         last_mutation_id=prior_runtime.last_mutation_id if prior_runtime is not None else None,
@@ -203,19 +171,6 @@ def _build_preflight_probe_evidence(
         evidence_id=f"{task_runtime.task_id}:ev:{uuid.uuid4().hex[:12]}",
         task_id=task_runtime.task_id,
         tool_name="preflight_probe",
-        status="ok",
-        origin="system",
-    )
-
-
-def _build_manual_confirmation_evidence(
-    *,
-    task_runtime: TaskRuntimeState,
-) -> EvidenceRecord:
-    return EvidenceRecord(
-        evidence_id=f"{task_runtime.task_id}:ev:{uuid.uuid4().hex[:12]}",
-        task_id=task_runtime.task_id,
-        tool_name="manual_confirmation",
         status="ok",
         origin="system",
     )

@@ -4,7 +4,7 @@
 
 ## 职责概述
 
-沙箱安全系统为 PrismClaw 提供多层防御体系，覆盖工具调用的全生命周期安全管控。从进程级沙箱隔离（bwrap）到语义防火墙，从静态规则门禁到动态风险分级，从 PHI 数据防泄漏到 WORM 合规审计，构成纵深防御架构。核心设计原则是 **fail-closed**：未注册工具走最严分类，未配置安全组件默认拒绝，不存在"跳过所有检查"的路径。
+沙箱安全系统为 PrismClaw 提供多层防御体系，覆盖工具调用的全生命周期安全管控。从进程级沙箱隔离（bwrap）到语义防火墙，从静态规则门禁到动态风险分级，从 PHI 数据防泄漏到同意与熔断机制，构成纵深防御架构。核心设计原则是 **fail-closed**：未注册工具走最严分类，未配置安全组件默认拒绝，不存在"跳过所有检查"的路径。
 
 ## 架构总览
 
@@ -15,28 +15,27 @@
 │                   Sandbox & Security 总览                        │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │              SafetyGate (安全管线编排器)                     │  │
-│  │  evaluate(): 编排 L0→L1→Mode→Consent→Confirm→Tenant       │  │
-│  └──┬──────────┬──────────┬──────────┬───────────────────────┘  │
-│     │          │          │          │                           │
-│     ▼          ▼          ▼          ▼                           │
-│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐                       │
-│  │RuleGa│  │RiskRo│  │Consent│  │Confir│                        │
-│  │te    │  │uter  │  │Gate  │  │mGate │                        │
-│  │L0    │  │L1    │  │PHI   │  │L2    │                        │
-│  │静态  │  │分级  │  │同意  │  │确认  │                        │
-│  └──────┘  └──────┘  └──────┘  └──────┘                        │
-│     │          │          │          │                           │
-│     ▼          ▼          ▼          ▼                           │
-│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  │
-│  │Bwrap │  │DLP   │  │Consent│  │FourEy│  │Break │  │MCP   │  │
-│  │Policy│  │Scnr  │  │Store │  │esRtr │  │Glass │  │Guard │  │
-│  │沙箱  │  │防泄漏│  │TTL   │  │4-eyes│  │熔断  │  │注册  │  │
-│  └──────┘  └──────┘  └──────┘  └──────┘  └──────┘  └──────┘  │
+│  │        工具调用前置检查（doom-loop 冻结 + pre-tool hooks）    │  │
+│  │        RuleGate.check(): L0 静态规则 deny/pass              │  │
+│  └──┬──────────┬──────────┬───────────────────────────────────┘  │
+│     │          │          │                                       │
+│     ▼          ▼          ▼                                       │
+│  ┌──────┐  ┌──────┐  ┌──────┐                                    │
+│  │RuleGa│  │Consent│ │Hook  │                                     │
+│  │te    │  │Gate  │  │Dispatch│                                  │
+│  │L0    │  │PHI   │  │插件   │                                   │
+│  │静态  │  │同意  │  │拦截   │                                   │
+│  └──────┘  └──────┘  └──────┘                                    │
+│     │          │          │                                       │
+│     ▼          ▼          ▼                                       │
+│  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐              │
+│  │Bwrap │  │DLP   │  │Consent│  │Break │  │MCP   │              │
+│  │Policy│  │Scnr  │  │Store │  │Glass │  │Guard │               │
+│  │沙箱  │  │防泄漏│  │TTL   │  │熔断  │  │注册  │               │
+│  └──────┘  └──────┘  └──────┘  └──────┘  └──────┘              │
 │                                                                 │
-│  决策链: RuleGate(L0) → RiskRouter(L1) → WorkspaceMode          │
-│          → ConsentGate → ConfirmGateway(L2) → TenantOverride    │
-│          → BwrapPolicy / DLP / Audit / BreakGlass / MCP         │
+│  决策链: RuleGate(L0) → 任务级确认（awaiting_* / decision）       │
+│          → BwrapPolicy / DLP / BreakGlass / MCP                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -45,9 +44,8 @@
 | 子目录 | 职责 |
 |--------|------|
 | `sandbox/` | 进程级沙箱隔离（bwrap / passthrough） |
-| `gate/` | 安全门禁编排（SafetyGate、RuleGate、RiskRouter、ConfirmGateway） |
-| `gate/routing/` | 路由层（RuleGate、RiskRouter、ConfirmGateway、FourEyesRouter） |
-| `audit/` | 审计日志（AuditLogger、WORM 审计） |
+| `gate/` | 安全门禁基础设施（WorkspaceTag、聚合防护、probes、constraint） |
+| `gate/routing/` | 路由层（RuleGate、ToolSafetyMeta） |
 | `dlp/` | 数据防泄漏（DLP 扫描器、脱敏、编码预处理） |
 | `consent/` | 同意管理（ConsentGate） |
 | `breakglass/` | 熔断机制（BreakGlassManager） |
@@ -119,35 +117,19 @@
 
 设计原则：**operator 只能收窄，不能放宽**。allowlist 中命中 deny floor 的条目在配置解析时即被拒绝。
 
-### 5. SafetyGate (`gate/gate.py`)
+### 5. 工具调用前置检查（当前实现）
 
-安全管线核心编排器，替代旧的 `approval_gate.py`。
-
-**`evaluate()`** — 编排顺序：
+工具级安全门已移除，不存在 `SafetyGate` / 确认网关。当前工具调用前的检查为：
 
 ```
-Step 0:   get_tool_safety_meta(tool_name) — 获取工具安全元数据
-Step 0.5: TenantPolicyStore — 策略覆盖检查（预留：当前未接线，tenant_id 恒为空）
-Step 1:   RuleGate.check() — L0 静态规则
-Step 2:   RiskRouter.assess() — L1 风险分级
-Step 3:   WorkspaceMode 检查 — chat 模式下写类工具 deny
-Step 3.5: ConsentGate.check() — PHI/法律工作区同意检查
-Step 4:   ConfirmGateway — ConfirmationKind.IRREVERSIBLE 确认
-Step 4.5: TenantPolicyOverride — 策略覆盖 tier/confirmation（预留，同上）
+1. doom-loop 冻结签名检查（确定性决策）
+2. pre-tool hooks（插件）— deny 直接阻断
+3. RuleGate.check() — L0 静态规则（在 executor 中调用）
 ```
 
-**`GateDecision`** 输出：
+需要用户确认的场景由**任务级确认状态机**承担：`awaiting_risk_confirmation` /
+`awaiting_confirmation` + `confirmation_decision` 写入任务状态，前端确认条解析后继续执行。
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `allowed` | `bool` | 是否允许 |
-| `sandbox_tier` | `SandboxTier`（定义于 `schema/content/workspace.py`） | STANDARD / TIGHT / STRICT |
-| `confirmation` | `ConfirmationKind`（定义于 schema 包） | NONE / SOFT_CONFIRM / IRREVERSIBLE |
-| `confirmation_request` | `ConfirmationRequest \| None` | 确认请求详情 |
-| `reason` | `str` | 决策原因 |
-| `risk_assessment` | `RiskAssessment \| None` | 风险评估详情 |
-
-**chat 模式允许的 scope：** `LOCAL_READ` + `INTERNAL_READ`
 
 ### 6. RuleGate (`gate/routing/rule_gate.py`)
 
@@ -158,103 +140,56 @@ L0 静态规则门禁，5 条规则：
 | 路径逃逸 | 路径含 `..` 或绝对路径不在 workspace 内 | deny |
 | 敏感路径 | `/etc/passwd`, `~/.ssh`, `/proc` 等 | deny |
 | SSRF | URL 指向 `169.254.169.254` / 私有 IP / loopback | deny |
-| workspace_tag | PHI + EXTERNAL_WRITE → deny；PHI + bash → 升级 TIGHT | deny / tier_override |
-| MCP 未注册 | `get_tool_safety_meta()` 返回 fail-closed 元数据 | deny（由 RiskRouter 处理） |
+| workspace_tag | allow_external_write=False + EXTERNAL_WRITE → deny；bash/python → 统一 TIGHT | deny / tier_override |
+| MCP 未注册 | `get_tool_safety_meta()` 返回 fail-closed 元数据 | deny |
 
 敏感路径检测包含精确匹配、前缀匹配、`~/` 展开和敏感扩展名匹配（`.dcm`, `.pem`, `.key` 等）。
 
-### 7. RiskRouter (`gate/routing/risk_router.py`)
+### 7. ToolSafetyMeta (`gate/routing/risk_router.py`)
 
-L1 风险分级路由，基于 `ToolSafetyMeta` 三维交叉：
+工具安全元数据，基于三维声明：
 
 ```
 side_effect_scope × data_classification × reversibility
-    → SandboxTier + ConfirmationKind
 ```
 
 **`SideEffectScope`** 枚举：
 
-| 值 | 含义 | chat 模式 |
-|----|------|----------|
-| `LOCAL_READ` | 纯读 | 允许 |
-| `LOCAL_WORKSPACE` | 读写 | 拒绝 |
-| `INTERNAL_READ` | 内部读 | 允许 |
-| `INTERNAL_WRITE` | 内部写 | 拒绝 |
-| `EXTERNAL_WRITE` | 外部写 | 拒绝 |
-| `EXTERNAL_IRREVERSIBLE` | 外部不可逆 | 拒绝 |
+| 值 | 含义 |
+|----|------|
+| `LOCAL_READ` | 纯读 |
+| `LOCAL_WORKSPACE` | 读写 |
+| `INTERNAL_READ` | 内部读 |
+| `INTERNAL_WRITE` | 内部写 |
+| `EXTERNAL_WRITE` | 外部写 |
+| `EXTERNAL_IRREVERSIBLE` | 外部不可逆 |
 
-**`DataClassification`** 枚举：`PUBLIC` / `INTERNAL` / `PRIVILEGED` / `PROTECTED_HEALTH` / `PERSONAL_SENSITIVE`
+**`DataClassification`** 枚举：`PUBLIC` / `INTERNAL` / `SENSITIVE`
 
 **`Reversibility`** 枚举：`REVERSIBLE` / `CONDITIONAL` / `IRREVERSIBLE`
 
-**fail-closed 默认值 `_FAIL_CLOSED_META`：** `EXTERNAL_IRREVERSIBLE` + `PROTECTED_HEALTH` + `IRREVERSIBLE` + `four_eyes_required=True`
+**fail-closed 默认值 `_FAIL_CLOSED_META`：** `EXTERNAL_IRREVERSIBLE` + `SENSITIVE` + `IRREVERSIBLE`
 
-**LLM hint 路径：** bash 危险命令（`rm`, `mkfs.`, `dd`, `shred`, `format`）自动升级为 TIGHT + IRREVERSIBLE
+`_TIER_ORDER`（STANDARD < TIGHT < STRICT）供 breakglass 校验 tier 上限使用。
 
-### 8. ConfirmGateway (`gate/routing/confirm_gateway.py`)
+### 8. WorkspaceTag (`gate/policies.py`)
 
-三级 UX 确认网关，替代旧的 `approval_gate.py` ask 决策：
-
-| 级别 | 触发条件 | 机制 |
-|------|---------|------|
-| `SOFT_BATCH` | 写操作但非不可逆 | 同模板 3 合 1，1 次点击确认 |
-| `HARD_MFA` | IRREVERSIBLE | FIDO2/WebAuthn 二次认证 |
-| `HARD_4EYES` | PHI + IRREVERSIBLE / workspace_tag.four_eyes_required | 第二人审批 |
-
-**signed_payload 防篡改：**
-
-```
-signed_payload = SHA256(tool_name + args_canonical + timestamp + secret)
-验证时校验 payload 完整性 + 时间窗口（默认 300s）
-```
-
-**MFA 生产就绪检查：** 生产环境 + `NullMfaProvider` → fail-closed 拒绝
-
-### 9. FourEyesRouter (`gate/routing/four_eyes_router.py`)
-
-4-eyes 工作流路由：
-
-- **`should_force_four_eyes()`** — 判断是否强制 4-eyes
-- **`upgrade_to_four_eyes()`** — 将请求升级为 `HARD_4EYES`
-- **`assign_approver()`** — 指派第二审批人
-
-审批人指派优先级：
-1. `four_eyes_delegate_ids` 预配置 → round-robin
-2. `approver_dept` 交叉部门指派
-3. 默认占位符
-
-硬性校验：`requester_id != assignee_id`
-
-### 10. WorkspaceTag (`gate/policies.py`)
-
-工作区安全标签，三层校验：
+工作区安全标签：
 
 | 字段 | 说明 |
 |------|------|
-| `kind` | `WorkspaceKind` 枚举（GENERAL / LEGAL_CASE / MEDICAL_GENERAL / MEDICAL_PHI / OFFICE） |
-| `data_residency` | 数据驻留区域（医疗/法律必须指定） |
-| `four_eyes_required` | 强制 4-eyes 审批 |
-| `approver_dept` | 指定审批部门 |
-| `four_eyes_delegate_ids` | 预配置审批人列表 |
+| `workspace_id` | 工作区标识（必填） |
+| `owner_id` | 所有者（必填） |
+| `data_residency` | 数据驻留区域（CN / EU / US） |
+| `allow_external_write` | 是否允许外部写（默认 False） |
+| `require_consent` | 敏感用途工具是否需要用户同意（默认 True） |
+| `restrict_chat_sensitive_data` | 是否隐藏敏感数据工具（默认 True） |
+| `sandbox_tier` | 容器安全等级 |
+| `template_id` | 容器模板标识 |
 
-**`WorkspaceTagValidator`** 三层校验：
-1. kind 必须在枚举内
-2. 医疗/法律场景必须指定 `data_residency`
-3. PHI 工作区必须指定 `owner_id`
+**`WorkspaceTagValidator`** 校验：`workspace_id`、`owner_id` 必填。
 
-### 11. TenantPolicyOverride (`gate/policies.py`)
-
-策略覆盖能力（预留）：`TenantPolicyStore` 尚未在 assembly 接线，`tenant_id` 当前恒为空，不参与实际决策。启用后**只能收紧、不能放宽**：
-
-| 字段 | 说明 |
-|------|------|
-| `tool_deny_list` | 工具黑名单 |
-| `confirm_policy_overrides` | ConfirmationKind 覆盖（只能升级） |
-| `sandbox_tier_overrides` | SandboxTier 覆盖（只能升级） |
-| `allowed_domains_override` | 网络域名白名单 |
-| `denied_domains_extra` | 额外域名黑名单 |
-
-### 12. SessionAggregateGuard (`gate/policies.py`)
+### 9. SessionAggregateGuard (`gate/policies.py`)
 
 Session 级聚合防护，基于 `AggregateStoreProtocol` 的滑动窗口计数器：
 
@@ -269,7 +204,7 @@ Session 级聚合防护，基于 `AggregateStoreProtocol` 的滑动窗口计数�
 
 **后端支持：** `RedisAggregateStore`（生产，Pipeline INCRBY + EXPIRE） / `InMemoryAggregateStore`（开发）
 
-### 13. DLP Scanner (`dlp/scanner.py`)
+### 10. DLP Scanner (`dlp/scanner.py`)
 
 出站响应 DLP 扫描器，四步扫描：
 
@@ -284,7 +219,7 @@ Session 级聚合防护，基于 `AggregateStoreProtocol` 的滑动窗口计数�
 
 **`scan_for_proxy()`** — C Plane Proxy inline DLP 扫描，区分出站（30% 阈值）和入站（50% 阈值）。
 
-### 14. DLP Sanitizer (`dlp/sanitizer.py`)
+### 11. DLP Sanitizer (`dlp/sanitizer.py`)
 
 **`sanitize_tool_args()`** — 工具参数 PHI 脱敏：
 - `_PHI_FIELDS` 集合：`name`, `ssn`, `email`, `phone`, `dob`, `mrn` 等
@@ -300,9 +235,8 @@ Session 级聚合防护，基于 `AggregateStoreProtocol` 的滑动窗口计数�
 **`PhiLlmScanner`** — L2 LLM PHI 残留扫描器：
 - GPU 检测（`nvidia-smi`，≥14GB = T4 级）
 - GPU 不可用时自动 fallback 到 `PhiLlmFallbackScanner`（仅 L3 Safe Harbor）
-- WORM 审计 `dlp_llm_fallback_active`
 
-### 15. ConsentGate (`consent/consent_gate.py`)
+### 12. ConsentGate (`consent/consent_gate.py`)
 
 声明驱动同意管理，HIPAA 164.508 / GDPR Art.6 合规：
 
@@ -317,7 +251,7 @@ Session 级聚合防护，基于 `AggregateStoreProtocol` 的滑动窗口计数�
 
 **`ConsentRecord`** 字段：`consent_id`, `session_id`, `user_id`, `purpose`, `tool_name`, `granted`, `scope`, `workspace_id`, `expires_at`
 
-### 16. BreakGlassManager (`breakglass/breakglass_manager.py`)
+### 13. BreakGlassManager (`breakglass/breakglass_manager.py`)
 
 Emergency Access 熔断机制：
 
@@ -325,7 +259,6 @@ Emergency Access 熔断机制：
 - 硬性校验：`requester_id != approver_id`
 - Token 时间窗口：默认 30min，最长 2h
 - 同部门告警
-- WORM 审计 `breakglass_created`
 - P4-SEC-01：批准后立即启动 `BreakGlassRecorder` 录屏
 
 **`validate()`** — 验证 token，支持 scoping：
@@ -335,7 +268,7 @@ Emergency Access 熔断机制：
 
 **`revoke()`** — 撤销 token + 停止录屏 + 上传索引
 
-### 17. McpRegistryGuard (`mcp_guard/mcp_registry_guard.py`)
+### 14. McpRegistryGuard (`mcp_guard/mcp_registry_guard.py`)
 
 MCP 注册表安全防护：
 
@@ -349,7 +282,7 @@ MCP 注册表安全防护：
 
 **`McpSecurityMeta`** — MCP 安全元数据，含 `runtime_network_expect`（none / limited / full）
 
-### 18. McpRuntimeNetworkObserver (`mcp_guard/mcp_runtime_network_observer.py`)
+### 15. McpRuntimeNetworkObserver (`mcp_guard/mcp_runtime_network_observer.py`)
 
 MCP 运行时网络行为观察器：
 
@@ -357,40 +290,7 @@ MCP 运行时网络行为观察器：
 - **3-strike 自动拉黑** — 违规 3 次自动拉黑 24h
 - **`NetworkViolationKind`** — `UNDECLARED_DOMAIN` / `UNDECLARED_PORT` / `UNDECLARED_PROTOCOL`
 
-### 19. WORM Audit (`audit/worm_audit.py`)
-
-Write-Once-Read-Many 合规审计，满足 HIPAA 164.312(b) 和 GDPR Art.30：
-
-**核心机制：**
-
-| 机制 | 说明 |
-|------|------|
-| 哈希链 | 每条记录包含前一条的 SHA256，不可篡改 |
-| 异步写入 | fire-and-forget + 内存缓冲队列（默认 1000） |
-| 队列满降级 | 本地文件追加 |
-| S3 Object Lock | Compliance Mode 锁定 7 年 |
-| P4 fanout | S3 + syslog-ng TLS + 本地缓冲多副本 |
-
-**Sink 实现：**
-
-| Sink | 说明 |
-|------|------|
-| `InMemoryWormSink` | 内存（开发/测试） |
-| `LocalFileWormSink` | 本地文件 JSONL 追加 |
-| `S3ObjectLockSink` | S3 Object Lock Compliance Mode |
-| `SyslogNgSink` | syslog-ng TLS 远端（RFC5424 格式） |
-| `FanoutWormSink` | 并行写入多后端，≥1 成功即视为成功 |
-
-**`build_default_fanout_sink()`** — 生产可用的 FanoutWormSink 装配入口
-
-### 20. AuditLogger (`audit/audit_logger.py`)
-
-结构化 JSON 审计日志：
-
-- **`log_decision()`** — 审批决策审计
-- **`log_tier_change()`** — 权限层变更审计
-
-### 21. Cryptographic Signing (`crypto/hsm_signer.py`)
+### 16. Cryptographic Signing (`crypto/hsm_signer.py`)
 
 **`SignerProtocol`** — 签名/验签接口
 
@@ -406,11 +306,11 @@ Write-Once-Read-Many 合规审计，满足 HIPAA 164.312(b) 和 GDPR Art.30：
 
 **`KeyVersion`** 数据类：`version`, `public_key_hex`, `created_at`, `rotated_at`, `expires_at`
 
-### 22. KeyRotationCronJob (`crypto/key_rotation.py`)
+### 17. KeyRotationCronJob (`crypto/key_rotation.py`)
 
 定期密钥轮换 Cron Job 入口，支持 APScheduler / systemd timer / K8s CronJob 调度。
 
-### 23. Constraint Guard (`gate/constraint_guard.py`)
+### 18. Constraint Guard (`gate/constraint_guard.py`)
 
 R4 Constraint 硬护栏检测缝隙：
 
@@ -419,7 +319,7 @@ R4 Constraint 硬护栏检测缝隙：
 - 干净完成（`verdict == "complete"`）→ 不报告（零误报）
 - 不做 NLP 猜测，仅消费已有信号
 
-### 24. Governance (`gate/governance.py`)
+### 19. Governance (`gate/governance.py`)
 
 **`SemanticFirewall`** — V3 语义防火墙，检测 prompt injection 模式。
 
@@ -432,55 +332,42 @@ R4 Constraint 硬护栏检测缝隙：
 | 函数 | 作用 |
 |------|------|
 | `build_initial_task_spec()` | 构建 TaskSpec（含 preflight_probe） |
-| `refine_task_spec()` | 用 TaskProfile 精化 TaskSpec |
-| `build_turn_semantics()` | 构建轮次语义 |
-| `build_task_context_contract()` | 构建任务上下文合约 |
-| `build_review_requirements()` | 构建审查需求（required_evidence 唯一来源） |
-| `build_clarify_decision()` | 构建澄清决策 |
+| `assess_turn()` | 单轮任务评估（轮次/目标/风险/路径/写意图） |
 | `make_ledger_event()` | 构建决策账本事件 |
 
-### 25. Preflight & Recovery Probes (`gate/probes.py`)
+### 20. Preflight & Recovery Probes (`gate/probes.py`)
 
 **`run_preflight_probe()`** — 用户消息发出前的 workspace 探测：
 
 - 提及路径解析与存在性检查
-- Workspace tree 扫描（文件/目录计数，上限 400/120）
-- Git dirty 检测
-- 关键路径识别（`pyproject.toml`, `docker-compose.yml` 等）
+- Workspace tree 单次遍历（文件/目录/代码文件计数上限 400/120）与关键路径识别（`pyproject.toml`, `docker-compose.yml` 等）
 - Python 依赖扫描（AST import 分析，上限 8 个文件）
-- 信号生成（`critical_path`, `cross_module_span`, `git_dirty_critical_paths` 等）
+- 信号生成（`critical_path`, `cross_module_span`, `workspace_tree_broad` 等）
+- 不读取 Git 状态；`baseline_risk` 只由 high 级信号决定
 
 **`run_recovery_probe()`** — Recovery 模式下的 workspace 状态检查：
 
-- 与 preflight baseline 对比（文件数/目录数/关键路径/dirty paths）
-- `workspace_surface_changed` — workspace 缩小
-- `dirty_workspace_drift` — 新增 dirty paths
-- `critical_workspace_drift` — 关键路径缺失
+- 复用 preflight 的 `existing_paths` 作为检查目标（无基线时回退任务描述文本）
+- `critical_workspace_drift` — 关键路径缺失 → `blocked`
+- `referenced_paths_missing` — 依赖路径缺失 → `degraded`
 - 状态：`ready` / `degraded` / `blocked`
 
 ## 关键数据流
 
-### SafetyGate 工具调用评估流程
+### 工具调用前置检查流程
 
 ```
 tool_name + arguments + workspace_tag
     ↓
-Step 0:   get_tool_safety_meta() → ToolSafetyMeta (fail-closed)
-Step 0.5: TenantPolicyStore → tool_deny_list check
-    ↓
-Step 1:   RuleGate.check() → 5 条静态规则
+doom-loop 冻结签名检查
+    ↓ (未冻结)
+pre-tool hooks（插件）→ deny 直接阻断
     ↓ (allowed)
-Step 2:   RiskRouter.assess() → SandboxTier + ConfirmationKind
+RuleGate.check() → 5 条静态规则
+    ↓ (allowed)
+工具执行（沙箱内）
     ↓
-Step 3:   WorkspaceMode check (chat 模式写操作 deny)
-    ↓
-Step 3.5: ConsentGate.check() (PHI/法律工作区)
-    ↓
-Step 4:   ConfirmGateway (SOFT_BATCH / HARD_MFA / HARD_4EYES)
-    ↓
-Step 4.5: TenantPolicyOverride (tier/confirmation 只收紧)
-    ↓
-GateDecision (allowed + sandbox_tier + confirmation)
+如需用户确认 → 任务级确认状态机（awaiting_* + confirmation_decision）
 ```
 
 ### DLP 扫描流程
@@ -501,22 +388,6 @@ PHI 字节占比 (≥30% → BLOCK)
 DlpDecision (ALLOW / MASK / BLOCK)
 ```
 
-### WORM 审计写入流程
-
-```
-安全事件 → WormAuditWriter.log() (fire-and-forget)
-    ↓
-asyncio.Queue (maxsize=1000)
-    ↓
-Queue 满或未初始化 → 本地文件 fallback
-    ↓
-_write_loop() → FanoutWormSink.write()
-    ↓
-并行写入: LocalFileWormSink + S3ObjectLockSink + SyslogNgSink
-    ↓
-≥1 sink 成功 → 成功
-```
-
 ### Break-Glass 流程
 
 ```
@@ -530,8 +401,6 @@ BreakGlassRecorder.start_recording()
     ↓
 调度 auto_stop (duration 后)
     ↓
-WORM 审计: breakglass_created
-    ↓
 validate(): workspace_ids + tool_pattern + sandbox_tier_cap scoping
 ```
 
@@ -539,7 +408,7 @@ validate(): workspace_ids + tool_pattern + sandbox_tier_cap scoping
 
 | 接口 | 函数/类 | 说明 |
 |------|---------|------|
-| 安全评估 | `SafetyGate.evaluate()` | 工具调用安全决策 |
+| 安全评估 | `RuleGate.check()` | 工具调用静态规则检查 |
 | 沙箱策略 | `resolve_sandbox_state()` | 沙箱策略解析 |
 | 命令包装 | `BwrapPolicy.wrap_bash_command()` | bash 命令沙箱包装 |
 | MCP 包装 | `BwrapPolicy.wrap_mcp_stdio()` | MCP 进程沙箱包装 |
@@ -550,29 +419,19 @@ validate(): workspace_ids + tool_pattern + sandbox_tier_cap scoping
 | Break-Glass | `BreakGlassManager.request/validate/revoke()` | 紧急访问熔断 |
 | MCP 防护 | `McpRegistryGuard.check()` | MCP server 注册表检查 |
 | 网络观察 | `McpRuntimeNetworkObserver.observe_traffic()` | MCP 运行时网络监控 |
-| WORM 审计 | `WormAuditWriter.log()` | 合规审计记录 |
-| WORM 查询 | `WormAuditWriter.query()` | 审计记录查询 |
-| 完整性验证 | `WormAuditWriter.verify_integrity()` | 哈希链完整性校验 |
-| Fanout 装配 | `build_default_fanout_sink()` | 生产 WORM 多副本装配 |
 | 密钥轮换 | `KeyRotationCronJob.run()` | 密钥轮换检查 |
 | 约束检测 | `detect_constraint_breaches()` | Constraint 硬护栏 |
 | Preflight | `run_preflight_probe()` | 执行前 workspace 探测 |
 | Recovery | `run_recovery_probe()` | Recovery workspace 状态检查 |
 | 语义防火墙 | `ContextValidatorChain.validate_and_transform()` | 上下文预算 + injection 检测 |
 | 聚合防护 | `SessionAggregateGuard.check()` | Session 级计数器阈值检查 |
-| 审计日志 | `AuditLogger.log_decision/log_tier_change()` | 结构化审计日志 |
 
 ## 依赖关系
 
 ```
 security/
-  ├── gate/gate.py → gate/routing/rule_gate.py, gate/routing/risk_router.py,
-  │                   gate/routing/confirm_gateway.py, gate/routing/four_eyes_router.py,
-  │                   gate/policies.py, consent/consent_gate.py
   ├── gate/routing/rule_gate.py → gate/policies.py, gate/routing/risk_router.py
   ├── gate/routing/risk_router.py → (schema types)
-  ├── gate/routing/confirm_gateway.py → gate/policies.py (MfaProvider)
-  ├── gate/routing/four_eyes_router.py → gate/policies.py (WorkspaceTag)
   ├── gate/policies.py → gate/types.py (AggregateStoreProtocol)
   ├── gate/governance.py → gate/probes.py, gate/intent_classifier.py
   ├── gate/constraint_guard.py → (schema types)
@@ -586,8 +445,6 @@ security/
   │                                       gate/types.py (BreakGlassStoreProtocol)
   ├── mcp_guard/mcp_registry_guard.py → crypto/hsm_signer.py, gate/routing/risk_router.py
   ├── mcp_guard/mcp_runtime_network_observer.py → (standalone)
-  ├── audit/worm_audit.py → (standalone)
-  ├── audit/audit_logger.py → (schema types)
   ├── crypto/hsm_signer.py → (schema/agent/security SignerProtocol)
   └── crypto/key_rotation.py → crypto/hsm_signer.py
 ```
@@ -602,16 +459,10 @@ security/
 | k-匿名行数阈值 | `DlpScanner` | 30 | 含 PHI 行数阻断阈值 |
 | PHI 字节占比阈值 | `DlpScanner` | 0.3 (30%) | PHI 字节占比阻断阈值 |
 | 入站 PHI 占比阈值 | `DlpScanner` | 0.5 (50%) | 入站 PHI 占比阻断阈值 |
-| SOFT_BATCH 阈值 | `ConfirmGateway` | 3 | 同模板合并确认数 |
-| signed_payload 容差 | `verify_signed_payload()` | 300s | 签名时间窗口 |
 | Break-Glass 最长时长 | `BreakGlassManager` | 7200s (2h) | Token 最长有效期 |
-| WORM 队列大小 | `WormAuditWriter` | 1000 | 异步写入缓冲队列 |
-| S3 保留天数 | `S3ObjectLockSink` | 7 年 | Object Lock 保留期 |
 | strike 上限 | `McpRuntimeNetworkObserver` | 3 | MCP 违规拉黑阈值 |
 | 拉黑时长 | `McpRuntimeNetworkObserver` | 86400s (24h) | MCP 拉黑有效期 |
 | 密钥轮换间隔 | `KeyRotationJob` | 90 天 | 主密钥轮换周期 |
 | 兼容窗口 | `KeyRotationJob` | 7 天 | 前任钥验签有效期 |
 | `PRISMCLAW_DEPLOYMENT_ENV` | env var | development | 部署环境 |
-| `PRISMCLAW_MFA_VERIFY_URL` | env var | — | MFA 断言验证端点 |
-| `PRISMCLAW_MFA_SHARED_SECRET` | env var | — | MFA HMAC 密钥 |
 | `PRISMCLAW_PKCS11_LIB` | env var | — | HSM PKCS#11 库路径 |

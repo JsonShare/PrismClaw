@@ -178,16 +178,9 @@ TimelinePatch = UpsertNodePatch | SetPhasePatch | IterationBoundaryPatch
 # 投影器
 # --------------------------------------------------------------------------- #
 
-_WRITE_TOOLS = {"write", "edit", "multiedit", "createfile"}
-_READ_TOOLS = {"read", "readfile", "read_office", "read_image"}
-_SEARCH_TOOLS = {
-    "glob",
-    "grep",
-    "ripgrep",
-    "search",
-    "find",
-    "web_search",  # legacy builtin (historical sessions)
-}
+_WRITE_TOOLS = {"write", "edit"}
+_READ_TOOLS = {"read"}
+_SEARCH_TOOLS = {"glob", "grep"}
 
 
 def _is_search_tool(low: str) -> bool:

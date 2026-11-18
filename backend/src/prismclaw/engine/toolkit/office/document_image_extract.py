@@ -117,6 +117,35 @@ def _make_text_block(text: str) -> TextBlock:
     return TextBlock(type="text", text=text)
 
 
+# 二进制文档（docx/pdf）抽取出的正文常带排版专用字符：连字符是 U+2010、
+# 数字范围用 U+2013，模型按 ASCII '-' 写正则或检索时匹配不到。这里把它们
+# 折叠为 ASCII，同时清掉零宽字符与不换行空格。
+#
+# 刻意不折叠 U+2014 EM DASH：中文破折号「——」语义重要，折叠会破坏排版。
+# 也不做 NFKC：那会把全角括号/百分号转成半角，破坏中文正文的既有形态。
+_TYPOGRAPHIC_TRANSLATION = {
+    0x2010: "-",  # HYPHEN
+    0x2011: "-",  # NON-BREAKING HYPHEN
+    0x2012: "-",  # FIGURE DASH
+    0x2013: "-",  # EN DASH（数字范围）
+    0x2212: "-",  # MINUS SIGN
+    0xFF0D: "-",  # FULLWIDTH HYPHEN-MINUS
+    0x00A0: " ",  # NBSP
+    0x200B: "",   # ZERO WIDTH SPACE
+    0x200C: "",   # ZERO WIDTH NON-JOINER
+    0x200D: "",   # ZERO WIDTH JOINER
+    0xFEFF: "",   # BOM
+}
+
+
+def _normalize_extracted_blocks(blocks: list[TextBlock | ImageBlock]) -> list[TextBlock | ImageBlock]:
+    """对二进制抽取文本做字符归一化；ImageBlock 原样保留。"""
+    for block in blocks:
+        if isinstance(block, TextBlock) and block.text:
+            block.text = block.text.translate(_TYPOGRAPHIC_TRANSLATION)
+    return blocks
+
+
 # ---------------------------------------------------------------------------
 # docx
 # ---------------------------------------------------------------------------
@@ -386,12 +415,16 @@ def extract_document_blocks(
     ``source_path`` (images go through read_image, not the main context).
     """
     if fmt == "docx":
-        return _extract_docx_blocks(
-            raw, source_rel_path=source_rel_path, workspace_path=workspace_path
+        return _normalize_extracted_blocks(
+            _extract_docx_blocks(
+                raw, source_rel_path=source_rel_path, workspace_path=workspace_path
+            )
         )
     if fmt == "pdf":
-        return _extract_pdf_blocks(
-            raw, source_rel_path=source_rel_path, workspace_path=workspace_path
+        return _normalize_extracted_blocks(
+            _extract_pdf_blocks(
+                raw, source_rel_path=source_rel_path, workspace_path=workspace_path
+            )
         )
     if fmt in ("markdown", "md"):
         try:

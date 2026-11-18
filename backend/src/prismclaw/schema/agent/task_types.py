@@ -24,8 +24,6 @@ class TaskSpec(BaseModel):
     risk_level: TaskRiskLevel = "normal"
     constraints: list[str] = Field(default_factory=list)
     source_message: str = ""
-    attachments_present: bool = False
-    notes: list[str] = Field(default_factory=list)
     preflight_probe: PreflightProbeResult | None = None
 
 

@@ -101,11 +101,10 @@ async def run_teardown(
     _perf = params.perf
     if _perf is not None:
         logger.info(
-            "turn_perf session=%s mode=%s model=%s steps=%d "
+            "turn_perf session=%s model=%s steps=%d "
             "tool_calls=%d wall_ms=%.0f llm_ms=%.0f tools_ms=%.0f prep_ms=%.0f "
             "loop_self_ms=%.0f recovery_n=%d recovery=%s terminated_by=%s",
             request.session_id,
-            getattr(request, "mode_override", None) or "chat",
             getattr(request, "model", None) or "-",
             _perf.llm_calls,
             _perf.tool_calls,

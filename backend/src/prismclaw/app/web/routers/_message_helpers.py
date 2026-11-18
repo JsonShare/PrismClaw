@@ -15,6 +15,8 @@ from urllib.parse import quote
 
 from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.session import SessionTree
+from prismclaw.schema.shared.path_sanitizer import redact_server_paths
+from prismclaw.schema.shared.tool_markup import strip_tool_markup
 
 
 # OOXML 段落锚点前缀：document_image_extract 在每段前加 ``[w14:paraId] `` 供 docx
@@ -86,28 +88,16 @@ def _message_has_visible_content(content: Any) -> bool:
 
 _THINKING_BLOCK = re.compile(r"<thinking>.*?</thinking>", re.IGNORECASE | re.DOTALL)
 _SYSTEM_REMINDER_BLOCK = re.compile(r"<system-reminder>.*?</system-reminder>", re.IGNORECASE | re.DOTALL)
-_INTERNAL_ASSISTANT_NOISE_BLOCKS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        r"You have already used `web_search` for multiple consecutive turns\..*",
-        re.IGNORECASE | re.DOTALL,
-    ),
-    re.compile(
-        r"已使用 \d+ 次，达到单次运行上限.*",
-        re.DOTALL,
-    ),
-    re.compile(
-        r"As you answer the user's questions, you can use the following context:.*",
-        re.IGNORECASE | re.DOTALL,
-    ),
-)
 
 
 def _sanitize_text(text: str) -> str:
     out = text or ""
     out = _SYSTEM_REMINDER_BLOCK.sub("", out)
     out = _THINKING_BLOCK.sub("", out)
-    for pat in _INTERNAL_ASSISTANT_NOISE_BLOCKS:
-        out = pat.sub("", out)
+    # 端点缺 tool-call parser 时模型会把原生调用标记写进正文；历史落库的旧
+    # 消息也可能带着它们，回放出口统一剔除（与实时链路 strip_noise 同源）。
+    out = strip_tool_markup(out)
+    out = redact_server_paths(out)
     return out.strip()
 
 
@@ -238,6 +228,14 @@ def _sanitize_content(content: Any, *, workspace_id: str | None = None) -> Any:
 
 
 def _content_to_text(content: Any) -> str:
+    """把 content block 投影为纯文本——两个调用方：
+
+    1. assistant 正文拼接 → 后续走 _sanitize_text，那里统一过滤服务器路径
+    2. tool_result_by_call_id（历史回放的 ExecutionTimeline 工具结果展示）
+       → 不过滤，工具执行细节对用户理解"AI 在做什么"是有意义的
+
+    本函数只做结构投影，不做内容审查。
+    """
     if isinstance(content, str):
         return content
     if not isinstance(content, list):

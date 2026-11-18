@@ -97,7 +97,7 @@ resolve skill (SkillManifest 查找)
 
 **`_load_plugin_profile()`** — 读取插件级别的 profile 文档：
 
-路径：`.prismclaw/plugins/config/<plugin>/prismclaw.md`
+路径：`~/.prismclaw/assets/plugins/<plugin>/PLUGIN.md`（回退 `README.md`）
 
 ### 5. Doc Inline (`doc_inline.py`)
 

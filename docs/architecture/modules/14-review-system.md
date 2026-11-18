@@ -131,7 +131,7 @@ Content-addressable blob 存储，完整性即合约：
 | `get(ref: ContentRef) → bytes` | 读取 blob，**每次重新校验 SHA-256**（IntegrityError） |
 | `exists(ref: ContentRef) → bool` | 检查 blob 是否存在 |
 
-- 存储路径：`<workspace>/.prismclaw/edits/blobs/<sha256hex>`
+- 存储路径：`<workspace>/.work/edits/blobs/<sha256hex>`
 - 原子写入：先写 `.tmp.{8hex}` 临时文件，再 `replace` 到最终路径
 - 完整性保证：`get()` 每次重新计算 SHA-256，bit-rot / 静默损坏 → `IntegrityError`
 
@@ -400,6 +400,6 @@ gc_blobs(edits_dir, dry_run=True, older_than_days=30)
 | 参数 | 值 | 说明 |
 |------|-----|------|
 | `_REVIEW_PROMPT_CHAR_BUDGET` | 60,000 | LLM 审查 prompt 字符预算（实际位于 `persistence/curator/repository.py`，批次级） |
-| Blob 存储路径 | `<workspace>/.prismclaw/edits/blobs/` | content-addressable blob 目录 |
-| 事件日志路径 | `<workspace>/.prismclaw/edits/review_events.jsonl` | ReviewRegistry 事件流 |
+| Blob 存储路径 | `<workspace>/.work/edits/blobs/` | content-addressable blob 目录 |
+| 事件日志路径 | `<workspace>/.work/edits/review_events.jsonl` | ReviewRegistry 事件流 |
 | GC 默认保留期 | 30 天 | `{}

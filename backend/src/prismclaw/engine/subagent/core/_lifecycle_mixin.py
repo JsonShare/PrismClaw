@@ -5,17 +5,23 @@ import logging
 import time
 from typing import Any
 
+from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
 from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
+from prismclaw.engine.subagent.core._result_types import (
+    AgentRunResult,
+)
 from prismclaw.engine.subagent.core._subagent_loop_runner import run_subagent_turn_loop
-from prismclaw.engine.subagent.core.run_context import SubagentRunContext
 from prismclaw.engine.subagent.core.contract import (
     normalize_result_envelope_text,
     parse_subagent_result_envelope,
 )
+from prismclaw.engine.subagent.core.evidence_inference import infer_domain_fields
+from prismclaw.engine.subagent.core.run_context import SubagentRunContext
 from prismclaw.engine.subagent.prompting import (
     compose_subagent_system_prompt,
 )
 from prismclaw.engine.toolkit.registry.tool_classification import is_search_intent_tool
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 from prismclaw.schema.content.content_types import (
     HandoffRequestPayload,
     PersistenceArtifact,
@@ -23,12 +29,11 @@ from prismclaw.schema.content.content_types import (
     TextBlock,
     ToolResult,
 )
-from prismclaw.schema.content.subagent import EvidenceRef, SubagentContextSnapshot, SubagentResultEnvelope
-from prismclaw.engine.subagent.core.evidence_inference import infer_domain_fields
-from prismclaw.engine.subagent.core._result_types import (
-    AgentRunResult,
+from prismclaw.schema.content.subagent import (
+    EvidenceRef,
+    SubagentContextSnapshot,
+    SubagentResultEnvelope,
 )
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +59,6 @@ class LifecycleMixin:
         session_store: Any = None,  # SessionStore for loading parent session
         audit_logger: logging.Logger | None = None,
         default_model: str | None = None,
-        tool_approval_hook: Any = None,  # deprecated: kept for signature compat, unused
-        decision_audit_logger: Any = None,
         channel: str = "web",
         skill_runtime: Any = None,
         is_fork: bool = False,
@@ -73,7 +76,6 @@ class LifecycleMixin:
         self._session_store = session_store
         self._audit = audit_logger or logging.getLogger("prismclaw.audit.subagent")
         self._default_model = default_model
-        self._decision_audit = decision_audit_logger
         self._channel = channel
         self._skill_runtime = skill_runtime
         self._is_fork = is_fork
@@ -157,9 +159,7 @@ class LifecycleMixin:
         # Build sub-context
         sub_ctx = self._build_sub_context()
 
-        # Approval hook inheritance removed — SafetyGate is now the sole gate
-        if self._decision_audit is None:
-            self._decision_audit = self._parent_ctx.decision_audit_logger
+        # Approval hook inheritance removed — tool-level gating lives in the parent runner
         if self._parent_ctx.channel is not None:
             self._channel = self._parent_ctx.channel
 
@@ -206,13 +206,9 @@ class LifecycleMixin:
             preload_ctx=preload_ctx,
             available=self._tools.names(),
         )
-        permission_tier = str(
-            self._parent_ctx.mode or "work"
-        )
         settled_tool_surface = self._settle_tool_surface(
             allowed_tools,
             sub_ctx=sub_ctx,
-            mode=permission_tier,
         )
         tool_schemas = self._tools.list_for_llm(settled_tool_surface.visible_tool_names)
         memory_block = await self._collect_memory_injection(
@@ -262,7 +258,9 @@ class LifecycleMixin:
             await self._cleanup_light()
 
         duration = time.monotonic() - started_at
-        final_text = self._extract_last_assistant_text(messages) or ""
+        # 子代理的最终文本会作为 tool_result 回给父级，并可能进入用户可见正文。
+        # 与主循环出口同源清洗：<thinking> 草稿与原生工具调用标记都不能外泄。
+        final_text = strip_noise(self._extract_last_assistant_text(messages) or "")
         pending_handoff = (
             normalize_handoff_request_payload(sub_ctx.pending_handoff)
             if outcome == "success"

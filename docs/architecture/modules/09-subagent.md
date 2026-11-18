@@ -90,7 +90,7 @@ class AgentManifest(BaseModel):
 
 **声明式配置：.md Frontmatter**
 
-Agent 通过 `.md` 文件的 YAML frontmatter 声明自身配置，无需编写 Python 代码。文件位于 `.prismclaw/plugins/<domain>/<sub-plugin>/agents/` 目录下。
+Agent 通过 `.md` 文件的 YAML frontmatter 声明自身配置，无需编写 Python 代码。插件内置的 subagent 文件位于 `~/.prismclaw/assets/plugins/<domain>/<sub-plugin>/agents/`，工作区自定义的位于 `<workspace>/.work/agents/`。
 
 ```yaml
 ---
@@ -116,7 +116,7 @@ can_handoff_to: [reviewer]             # 可选。Handoff 白名单，None=开�
 ```python
 # definition/registry.py
 class SubAgentRegistry:
-    # 从 <workspace>/.prismclaw/agents/ 下 BFS 扫描 <name>.md
+    # 从 <workspace>/.work/agents/ 下 BFS 扫描 <name>.md
     # 构造时自动扫描（__init__），无需显式调用 discover()
     def _do_scan_layer(self, ...)  # 统一扫描器，含硬停保护
     def diagnose(self)             # 3 类缺口分析
@@ -263,7 +263,7 @@ class ParallelTaskRuntimeRecord(BaseModel):
     projection_payload: dict
 
 class ParallelTaskStore(Protocol):
-    def append() / get() / list_for_session() / cancel()
+    def append() / get() / list_for_session()
 
 class SessionParallelTaskStore:
     """session-store-backed 实现；append 依赖 commit_events 的内部锁，不再外层加锁"""
@@ -283,7 +283,7 @@ class SessionParallelTaskStore:
 已派出 2 个后台子任务：
 - pt:3f9a1c2d8e4b explorer（进行中）
 - pt:7c21b45f0a9d executor（进行中）
-完成状态会自动更新；结果用 check_subagent_task 获取，停止用 cancel_task。
+完成状态会自动更新；后台派发返回 (agent_id, task_id)，用 subagent_control 的 status 查询、interrupt 停止（除 list 外必须同时提供两个键）。
 ```
 
 状态机与写入约束：
@@ -294,7 +294,7 @@ scheduled ──► running ──► completed / failed / cancelled
 
 - `launch_background` 先做本会话 `scheduled|running` 计数闸门（`max_parallel_per_turn`），再 `TaskManager.spawn(category="subagent", owner=session_id)`，并登记 `task_id → (TaskManager, managed_task_id)`（`runtime/background.py`）。
 - 记录只由 `run()` 写：`scheduled → running` 在执行开始前落库，使闸门统计与真实执行一致；终态唯一出口 `_finalize`，正常/异常/取消三条路径统一写终态并触发投递。
-- `cancel_task` 经进程内映射调用 `TaskManager.cancel` 真实中止；映射未命中时返回明确错误，绝不沿用父任务的 `managed_task_id`（那等于终止整轮父会话）。
+- 中断经 `subagent_control` 的 `interrupt` 执行：先用 `(agent_id, task_id)` 组合键定位任务，`task_id` 与所属 `agent_id` 不匹配时返回明确错误；中断在安全边界生效，绝不沿用父任务的 `managed_task_id`（那等于终止整轮父会话）。
 - 父 run 中止时，`_background_main` 监听共享 `abort` Event 并取消内层 run，长工具调用无需等待循环检查点。
 - 投递：终态经 `subagent_terminal_sink` 写入会话队列并推送 `subagent_trace`（`sub_session_id="background:<task_id>"`），下一轮 note 携带 `task_id` 指针。running 阶段不推送，避免无 run 的孤立条目。
 - 自动开轮不做：`_run_chat` 以用户消息为可见内容，合成「后台完成」消息会污染会话树；完成信息由下一轮 note 呈现。
@@ -355,8 +355,8 @@ MAX_FILE_BYTES = 256_000
 
 | Agent | 职责 | 工具 |
 |-------|------|------|
-| **explorer** | 只读核对事实与出处：位置、现状、原文 | `read`, `grep`, `glob`, `web-search-mcp:search` |
-| **executor** | 在划定范围内修改或生成内容，并自行验证生效 | `read`, `grep`, `glob`, `write`, `edit`, `bash`, `web-search-mcp:search` |
+| **explorer** | 只读核对事实与出处：位置、现状、原文 | `read`, `grep`, `glob`, `web-search-mcp:search`, `web-search-mcp:fetch` |
+| **executor** | 在划定范围内修改或生成内容，并自行验证生效 | `read`, `grep`, `glob`, `write`, `edit`, `bash`, `web-search-mcp:search`, `web-search-mcp:fetch` |
 | **reviewer** | 独立验收结论或产出，给出可复现依据 | `read`, `grep`, `glob`, `bash` |
 
 协作拓扑：不再有固定的角色瀑布流或必经审查节点。主 Agent 负责规划、任务拆解、
@@ -427,7 +427,7 @@ AllowedToolsPolicy → ActorIdentity → ReadOnlyPermission → HeadlessMode
 |---------|------|
 | `AllowedToolsPolicyReducer` | 基于白名单/黑名单过滤工具可见性和可调用性 |
 | `ActorIdentityReducer` | 根据调用者身份（main/subagent）限制工具 |
-| `ReadOnlyPermissionReducer` | chat 模式下仅允许只读工具 |
+| `ServerReadOnlyReducer` | 只读服务器（`server_read_only`）仅允许只读工具 |
 | `HeadlessModeReducer` | 无界面模式下移除交互式工具 |
 | `DeferredToolReducer` | 隐藏需要发现但尚未发现的工具 |
 | `SkillGatedReducer` | 技能门控——仅激活技能声明的工具 |
@@ -525,7 +525,7 @@ _collect_evidence_from_messages()（模块级函数）
 | `SubAgentTool` (name=`sub_agent`) | 工具 | LLM 调用子代理的入口，支持 sync/parallel/background |
 | `SubAgentExecutor.launch_background()` | 方法 | 后台派发：闸门 + TaskManager 登记，秒回 task_id |
 | `cancel_background_task()` | 函数 | 按 task_id 经进程内句柄映射真实取消 |
-| `check_subagent_task` / `list_subagent_tasks` / `cancel_task` | 工具 | 后台任务查询、列表与取消（main_only，不 skill_gated） |
+| `subagent_control` | 工具 | 子代理 status / list / interrupt / send / resume / close（main_only，不 skill_gated） |
 | `SubAgentRegistry.__init__()` | 方法 | 构造时自动扫描并注册所有子代理清单 |
 | `SubAgentRegistry.diagnose()` | 方法 | 3 类缺口诊断 |
 | `SubAgentExecutor.run()` | 方法 | 执行子代理的统一门面 |

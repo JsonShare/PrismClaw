@@ -2,7 +2,7 @@
 
 每个 template_id 对应不同的容器资源配额和 SandboxTier 映射：
   - default-v1:    默认场景，STANDARD 隔离，轻量资源（基础设施，不可删除）
-  - restricted-v1: 受限场景，STRICT 隔离，严格资源 + WORM 审计（基础设施，fail-closed 默认）
+  - restricted-v1: 受限场景，STRICT 隔离，严格资源（基础设施，fail-closed 默认）
 
 域特定模板通过 register_resource_tier() 注册，由对应 DomainBundle
 在 on_build_runtime() 中完成。
@@ -41,10 +41,6 @@ class ResourceTier:
     allow_net: bool = True               # True = 域名白名单, False = 完全禁止
     deny_pid_namespace: bool = False     # True = 进程命名空间隔离
 
-    # 审计增强
-    worm_audit: bool = False             # Write-Once-Read-Many 审计日志
-    four_eyes: bool = False              # 双人确认
-
     # 预热池配置
     prewarm_count: int = 1               # 常驻预热容器数量
     prewarm_idle_timeout_seconds: int = 300  # 空闲容器超时
@@ -66,8 +62,6 @@ RESOURCE_TIERS: dict[str, ResourceTier] = {
         allow_write_workspace=True,
         allow_net=True,
         deny_pid_namespace=False,
-        worm_audit=False,
-        four_eyes=False,
         prewarm_count=2,
         prewarm_idle_timeout_seconds=600,
     ),
@@ -85,8 +79,6 @@ RESOURCE_TIERS: dict[str, ResourceTier] = {
         allow_write_workspace=True,
         allow_net=False,              # STRICT: 完全禁止网络
         deny_pid_namespace=True,      # STRICT: 进程命名空间隔离
-        worm_audit=True,
-        four_eyes=True,               # 受限场景：双人确认
         prewarm_count=1,
         prewarm_idle_timeout_seconds=180,
     ),

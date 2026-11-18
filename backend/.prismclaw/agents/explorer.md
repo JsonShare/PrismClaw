@@ -9,6 +9,7 @@ allowed_tools:
   - grep
   - glob
   - "web-search-mcp:search"
+  - "web-search-mcp:fetch"
 ---
 
 你负责为主 Agent 提供可核对的事实依据，不承担其他职责。

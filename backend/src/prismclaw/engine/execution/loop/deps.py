@@ -17,9 +17,6 @@ if TYPE_CHECKING:
         HookRegistry,
         SkillProvider,
     )
-    from prismclaw.engine.security.audit.audit_logger import AuditLogger
-    from prismclaw.engine.security.audit.store import AuditStore
-    from prismclaw.engine.security.gate import SafetyGate
     from prismclaw.engine.security.gate.types import SubagentProgressSink
     from prismclaw.engine.subagent.runtime.collaboration import (
         SubagentCollaborationService,
@@ -330,7 +327,6 @@ class AgentRunnerDeps:
     capability_catalog: CapabilityCatalogService | None = field(default=None)
     task_manager: TaskManagerProtocol | None = field(default=None)
     lock_manager: LockManagerProtocol | None = field(default=None)
-    audit_logger: AuditLogger | None = field(default=None)
     handoff_supervisor: HandoffSupervisor | None = field(default=None)
     dream: DreamBundle = field(default_factory=DreamBundle)
     task_profile_service: TaskProfileService = field(default_factory=TaskProfileService)
@@ -348,14 +344,10 @@ class AgentRunnerDeps:
     # 会被 HeadlessModeReducer 直接从模型的工具清单中摘除（不可见、不可调用）。
     # 定时任务已复用 Web 主链路、持有队列，不属此类。
     session_queue: SessionQueueProtocol | None = None  # channels/web 专属，避免 core→channels 反向依赖
-    # ── Runtime 客户端 + SafetyGate ──
+    # ── Runtime 客户端 ──
     # runtime_client: WorkspaceRuntimeClient | InProcessRuntimeClient 实例
     # 统一遵循 ExecutionEnv Protocol 契约
     runtime_client: ExecutionEnv | None = None
-    # safety_gate: SafetyGate 实例（RuleGate → RiskRouter → WorkspaceMode → ConfirmationGateway）
-    safety_gate: SafetyGate | None = field(default=None)
-    # audit_store: AuditStore 实例（异步队列 + 后台 flush worker 持久化工具调用/审批审计到 PG）
-    audit_store: AuditStore | None = field(default=None)
     # The orchestrator is a strategy object, not a state owner.
     # It may be reused across queries, but cross-turn bookkeeping now
     # lives on ``RunSnapshot.compression_runtime`` instead of instance memory.
@@ -433,7 +425,6 @@ class AgentRunnerDeps:
     def with_request_context(
         self,
         *,
-        audit_logger: AuditLogger | None = None,
         progress_sink: SubagentProgressSink | None = None,
         terminal_sink: Any = None,
         channel: str | None = None,
@@ -446,8 +437,6 @@ class AgentRunnerDeps:
         """
         import dataclasses
         overrides: dict[str, Any] = {}
-        if audit_logger is not None:
-            overrides["audit_logger"] = audit_logger
         if progress_sink is not None or terminal_sink is not None:
             base = self.callbacks if self.callbacks is not None else AgentCallbacks()
             overrides["callbacks"] = dataclasses.replace(

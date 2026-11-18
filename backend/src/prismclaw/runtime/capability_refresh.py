@@ -109,22 +109,15 @@ def register_subagent_tools(
     from prismclaw.engine.execution.handoff.request_handoff import RequestHandoffTool
     from prismclaw.engine.subagent import SubAgentExecutor, SubAgentTool
     from prismclaw.engine.toolkit.registry.discovery import SubagentSearchTool
-    from prismclaw.engine.toolkit.subagent.reduce_subagent_results import (
-        ReduceSubAgentResultsTool,
-    )
     from prismclaw.schema.config.config import SubAgentConfig
 
     subagent_config = SubAgentConfig.model_validate(settings.subagent.model_dump())
 
     for name in (
         "sub_agent",
-        "reduce_subagent_results",
         "request_handoff",
         "subagent_search",
         "subagent_control",
-        "check_subagent_task",
-        "list_subagent_tasks",
-        "cancel_task",
     ):
         registry.unregister(name)
 
@@ -139,7 +132,6 @@ def register_subagent_tools(
         llm_client=llm_client,
         memory_store=memory_store,
         default_model=settings.models.default_model,
-        decision_audit_logger=None,
         channel=channel or "web",
         skill_runtime=skill_runtime,
         # 子代理内部工具遵守与主流程相同的 agent 配置：agent.timeouts.tool_seconds
@@ -171,20 +163,8 @@ def register_subagent_tools(
                 executor=executor,
             )
         )
-    registry.register(ReduceSubAgentResultsTool())
     registry.register(RequestHandoffTool())
     registry.register(SubagentSearchTool(capability_catalog=capability_catalog))
-    # 任务管理面与 sub_agent 同生命周期：没有子代理能力时不应出现，
-    # 有子代理能力时必须可见（不可 skill_gated，否则派发回执引用的工具不可见）。
-    from prismclaw.engine.toolkit.builtin.task_tools import (
-        CancelTaskTool,
-        CheckSubagentTaskTool,
-        ListSubagentTasksTool,
-    )
-
-    registry.register(CheckSubagentTaskTool())
-    registry.register(ListSubagentTasksTool())
-    registry.register(CancelTaskTool())
     return subagent_config
 
 

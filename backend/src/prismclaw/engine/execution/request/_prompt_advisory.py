@@ -21,8 +21,8 @@ _HANDOFF_ADVISORY_TEXT = (
     "## 跨代理移交\n"
     "子代理可能发出 request_handoff；ToolResult 的 final_text 会以 "
     f"{handoff_request_marker_contract_summary()} 结尾。"
-    "按 `<subagents>` 的移交规则处理：派发建议的 sub_agent、用 "
-    "reduce_subagent_results 合并，或自行处理并保留 handoff_chain_id。"
+    "按 `<subagents>` 的移交规则处理：派发建议的 sub_agent，"
+    "自行合并结果并保留 handoff_chain_id。"
 )
 
 _HANDOFF_DISABLED_ADVISORY_TEXT = (

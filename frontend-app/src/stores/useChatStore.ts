@@ -2,7 +2,6 @@ import { create } from 'zustand'
 
 import { nextTimelineState } from '../lib/chat/timelineSync'
 import {
-  contentToText,
   fetchMessages,
   fetchRunningRun,
   getSession,
@@ -18,7 +17,7 @@ import type {
   AttachmentBlock,
   ContentBlock,
   Message,
-  Mode,
+  MessageMetadata,
   QuestionItem,
   RunProjection,
   TimelineNode,
@@ -28,7 +27,11 @@ import type {
 const MESSAGE_PAGE_SIZE = 100
 /** chat.done 之后 GET /run 可能仍残留约 2s；此窗口内不再接受运行态快照 */
 const FINALIZE_GUARD_MS = 2500
+/** 流式会话静默多久后主动对账（长任务等待工具结果时可能长时间不吐帧） */
+const STREAM_IDLE_SYNC_MS = 30_000
+const STREAM_WATCHDOG_INTERVAL_MS = 15_000
 
+/** 已定稿后极短窗口内不再接受运行态快照，否则会话会被迟到的旧快照拉回流式态 */
 const finalizedRecently = (conv: ConvState) =>
   !conv.isStreaming &&
   conv.lastFinalizedAt !== null &&
@@ -53,6 +56,12 @@ export interface ConvState {
   messages: Message[]
   /** 流式正文（多轮拼接的兜底文本） */
   streamingText: string
+  /**
+   * 当前 streamingText 归属的迭代段。chat.delta 的 segmentId 变化即代表
+   * 进入新迭代轮次：先清空再追加，避免上一轮草稿与本轮正文粘连。
+   * 与 PC 端 chat.currentStreamingSegmentId 同口径。
+   */
+  currentStreamingSegmentId: number
   liveTimeline: TimelineNode[]
   liveOutputFiles: string[]
   /** 运行中收到的参考来源（event:reference 早于定稿时落到这里） */
@@ -94,7 +103,7 @@ interface ChatStore {
   sendMessage: (
     sessionId: string,
     content: string,
-    options: { workspaceId: string; mode: Mode; attachments?: AttachmentBlock[] },
+    options: { workspaceId: string; attachments?: AttachmentBlock[] },
   ) => string | undefined
   abort: (sessionId: string) => void
   answerClarify: (sessionId: string, answer: string) => void
@@ -106,6 +115,7 @@ function emptyConv(): ConvState {
     workspaceId: '',
     messages: [],
     streamingText: '',
+    currentStreamingSegmentId: 0,
     liveTimeline: [],
     liveOutputFiles: [],
     liveReferenceSources: [],
@@ -184,28 +194,125 @@ export const useChatStore = create<ChatStore>((set, get) => {
 
   /** 会话列表请求序号：快速切换工作区时只接受最后一次请求的结果 */
   let listSeq = 0
+  /** 历史基线尚未建立时到达的 done：等 openConversation 完成后补一次对账 */
+  const needsReconcile = new Set<string>()
+  /** done 时被中止的 assistant 消息 id —— 投影落库后补上可见标记 */
+  const abortedMessageIds = new Set<string>()
+  /**
+   * 定稿前的元数据帧（参考来源/交付物）按 message id 暂存：done 之后不再本地
+   * 建消息，这些帧可能早于投影写入，必须等消息存在再合并。与 PC 端
+   * pendingMetadataRef 同口径。
+   */
+  const pendingMetadata = new Map<string, MessageMetadata>()
+  /**
+   * 各会话最后收到帧的时刻。放在 store 外的 Map 里：每帧都写 store 会触发
+   * 全量重渲染，而它只被 15s 周期的看门狗读取。与 PC 端 lastFrameAtRef 同口径。
+   */
+  const lastFrameAt = new Map<string, number>()
 
-  const finishTurn = (sessionId: string, message?: Message) => {
-    updateConv(sessionId, (conv) => {
-      let messages = conv.messages
-      if (message) {
-        const index = messages.findIndex((m) => m.id === message.id)
-        messages = index >= 0 ? messages.map((m, i) => (i === index ? message : m)) : messages.concat(message)
-      }
-      return {
-        messages,
-        streamingText: '',
-        liveTimeline: [],
-        liveOutputFiles: [],
-        liveReferenceSources: [],
-        clarify: null,
-        isStreaming: false,
-        queuedPosition: null,
-        lastFinalizedAt: Date.now(),
-      }
-    })
+  const patchMessage = (sessionId: string, messageId: string, patch: MessageMetadata) => {
+    updateConv(sessionId, (c) => ({
+      messages: c.messages.map((m) =>
+        m.id === messageId ? { ...m, metadata: { ...m.metadata, ...patch } } : m,
+      ),
+    }))
+  }
+
+  const mergeOrBufferMetadata = (sessionId: string, messageId: string, patch: MessageMetadata) => {
+    if (!messageId) return
+    const existing = (get().convStates[sessionId]?.messages ?? []).find((m) => m.id === messageId)
+    if (existing) {
+      patchMessage(sessionId, messageId, patch)
+      return
+    }
+    pendingMetadata.set(messageId, { ...(pendingMetadata.get(messageId) ?? {}), ...patch })
+  }
+
+  const flushPendingMetadata = (sessionId: string, messages: Message[]) => {
+    if (!pendingMetadata.size) return
+    const ids = new Set(messages.map((m) => m.id))
+    for (const [messageId, patch] of Array.from(pendingMetadata)) {
+      if (!ids.has(messageId)) continue
+      patchMessage(sessionId, messageId, patch)
+      pendingMetadata.delete(messageId)
+    }
+  }
+
+  const refreshConversationList = () => {
     const workspaceId = get().listWorkspaceId
     if (workspaceId) void get().loadConversations(workspaceId, true).catch(() => undefined)
+  }
+
+  /**
+   * done 之后的对账：后端 /run 有约 2s 残留（见 FINALIZE_GUARD_MS），只触发一次
+   * 会读到 active 而跳过定稿，要等下一个 30s 看门狗周期。这里在收尾窗口内短重试，
+   * 直到投影落定（isStreaming 归位）或次数用尽。
+   */
+  const settleAfterDone = async (sessionId: string) => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const before = get().convStates[sessionId]
+      // 历史基线未建立：openConversation 完成后会依据 needsReconcile 补对账，
+      // 这里重试没有意义（syncConversation 会直接返回）。
+      if (!before || before.hydration !== 'loaded') return
+      await get()
+        .syncConversation(sessionId)
+        .catch(() => undefined)
+      const conv = get().convStates[sessionId]
+      if (!conv || !conv.isStreaming) return
+      await new Promise((resolve) => setTimeout(resolve, 800))
+    }
+  }
+
+  /**
+   * 把服务端投影写成权威消息，并清掉本轮 live 叠加层。
+   * 正文只来自 /messages 投影：它按全轮拼接并整段脱敏，是唯一对用户可见的真相。
+   */
+  const settleFromProjection = (sessionId: string, messages: Message[], offset: number) => {
+    const prev = get().convStates[sessionId] ?? emptyConv()
+    // 无 message_id 的旁路帧（参考来源/交付物）只能落 live；run 已确认结束，
+    // 此时挂到本轮最后一条 assistant 上没有归属歧义，不能直接丢弃。
+    const liveMeta: MessageMetadata = {
+      ...(prev.liveOutputFiles.length ? { outputFiles: prev.liveOutputFiles } : {}),
+      ...(prev.liveReferenceSources.length
+        ? { referenceSources: prev.liveReferenceSources }
+        : {}),
+    }
+    const lastAssistantId = [...messages].reverse().find((m) => m.role === 'assistant')?.id
+    const patched = messages.map((m) => {
+      if (m.role !== 'assistant') return m
+      const merged: MessageMetadata = { ...m.metadata }
+      if (m.id === lastAssistantId && Object.keys(liveMeta).length) {
+        merged.outputFiles = Array.from(
+          new Set([...(m.metadata?.outputFiles ?? []), ...(liveMeta.outputFiles ?? [])]),
+        )
+        if (liveMeta.referenceSources?.length) {
+          merged.referenceSources = liveMeta.referenceSources
+        }
+      }
+      if (abortedMessageIds.has(m.id)) merged.interrupted = true
+      return Object.keys(merged).length ? { ...m, metadata: merged } : m
+    })
+    for (const id of abortedMessageIds) {
+      if (patched.some((m) => m.id === id)) abortedMessageIds.delete(id)
+    }
+    patchConv(sessionId, {
+      messages: patched,
+      hydration: 'loaded',
+      loadedOffset: offset,
+      hasMore: offset > 0,
+      streamingText: '',
+      currentStreamingSegmentId: 0,
+      liveTimeline: [],
+      liveOutputFiles: [],
+      liveReferenceSources: [],
+      clarify: null,
+      isStreaming: false,
+      queuedPosition: null,
+      lastFinalizedAt: Date.now(),
+    })
+    flushPendingMetadata(sessionId, patched)
+    lastFrameAt.delete(sessionId)
+    refreshConversationList()
   }
 
   const handleFrame = (frame: WSServerMessage) => {
@@ -214,12 +321,15 @@ export const useChatStore = create<ChatStore>((set, get) => {
         ? frame.conversation_id
         : ''
     if (!sessionId) return
+    // 任何带会话 id 的帧都刷新「最后活动时刻」，供流式静默对账判定。
+    lastFrameAt.set(sessionId, Date.now())
     const conv = get().convStates[sessionId] ?? emptyConv()
 
     switch (frame.type) {
       case 'chat.start':
         patchConv(sessionId, {
           streamingText: '',
+          currentStreamingSegmentId: 0,
           liveTimeline: [],
           liveOutputFiles: [],
           liveReferenceSources: [],
@@ -233,10 +343,24 @@ export const useChatStore = create<ChatStore>((set, get) => {
         break
 
       case 'chat.delta':
-        updateConv(sessionId, (c) => ({
-          isStreaming: true,
-          streamingText: c.streamingText + frame.data.text,
-        }))
+        // segmentId 变化代表进入新迭代轮次：先清空再追加，避免上一轮草稿与本轮
+        // 正文粘连。非流式态收到 delta（HITL 续跑时后端不重发 chat.start，或
+        // chat.start 丢失）同样视作新一轮。均与 PC 端 appendDelta/initStreaming 同口径。
+        updateConv(sessionId, (c) => {
+          const fresh = !c.isStreaming
+          const segChanged =
+            fresh ||
+            (frame.data.segmentId !== undefined &&
+              frame.data.segmentId !== c.currentStreamingSegmentId)
+          return {
+            isStreaming: true,
+            streamingText: segChanged ? frame.data.text : c.streamingText + frame.data.text,
+            currentStreamingSegmentId:
+              frame.data.segmentId !== undefined && segChanged
+                ? frame.data.segmentId
+                : c.currentStreamingSegmentId,
+          }
+        })
         break
 
       case 'chat.queued':
@@ -244,15 +368,13 @@ export const useChatStore = create<ChatStore>((set, get) => {
         break
 
       case 'task.timeline': {
+        // 正文清空时机已迁移到 chat.delta 的 segmentId 切换：若在这里按
+        // iteration_boundary 清空，新轮次首个 TextChunk 到达前会出现空白窗口。
         const state = nextTimelineState(
           { nodes: conv.liveTimeline },
           { nodes: frame.data.nodes, patch: frame.data.patch },
         )
-        let streamingText = conv.streamingText
-        for (const patch of frame.data.patch ?? []) {
-          if (patch.op === 'iteration_boundary') streamingText = ''
-        }
-        patchConv(sessionId, { liveTimeline: state.nodes, streamingText })
+        patchConv(sessionId, { liveTimeline: state.nodes })
         break
       }
 
@@ -266,81 +388,38 @@ export const useChatStore = create<ChatStore>((set, get) => {
           (file): file is string => typeof file === 'string' && file.trim().length > 0,
         )
         if (!files.length) break
-        // 后端先发 chat.done、再发 event:outputs，此时本轮回答已定稿落库；
-        // 迟到的那一帧必须补挂到对应消息上，否则交付物只在 live 态存在、随后被丢弃。
-        const targetId =
-          frame.data.message_id ||
-          [...conv.messages].reverse().find((m) => m.role === 'assistant')?.id
-        const target = targetId ? conv.messages.find((m) => m.id === targetId) : undefined
-        if (!target) {
-          // 消息尚未定稿（或本轮没有正文）：先留在 live 态，由 chat.done 兜底挂载
-          patchConv(sessionId, { liveOutputFiles: files })
+        if (frame.data.message_id) {
+          // 有显式 id：消息可能尚未由投影写入，先暂存再由 settle 补挂
+          mergeOrBufferMetadata(sessionId, frame.data.message_id, { outputFiles: files })
           break
         }
-        updateConv(sessionId, (c) => ({
-          liveOutputFiles: files,
-          messages: c.messages.map((m) =>
-            m.id === target.id
-              ? {
-                  ...m,
-                  metadata: {
-                    ...m.metadata,
-                    outputFiles: Array.from(
-                      new Set([...(m.metadata?.outputFiles ?? []), ...files]),
-                    ),
-                  },
-                }
-              : m,
-          ),
-        }))
+        // 无 id 且已收尾：宁可不显示也不挂到别的回答上（投影侧已持久化交付物）
+        if (conv.isStreaming) patchConv(sessionId, { liveOutputFiles: files })
         break
       }
 
-      // 参考来源在定稿前后都可能到达：先挂 live，已定稿则合并到对应回答
+      // 参考来源在定稿前后都可能到达：有 id 走暂存/合并，无 id 仅在本轮运行中落 live，
+      // 绝不回退到「最后一条 assistant」——那会把本轮资料挂到上一轮回答上。
       case 'event:reference': {
         const sources = (frame.data.sources ?? []).filter(
           (source) => typeof source === 'string' && source.trim().length > 0,
         )
         if (!sources.length) break
-        // 没有 message_id 且本轮仍在运行时，不能挂到上一轮回答上；先落 live，
-        // 由 chat.done 并入本轮消息
-        const targetId =
-          frame.data.message_id ||
-          (conv.isStreaming
-            ? ''
-            : [...conv.messages].reverse().find((m) => m.role === 'assistant')?.id)
-        const target = targetId ? conv.messages.find((m) => m.id === targetId) : undefined
-        if (!target) {
-          patchConv(sessionId, { liveReferenceSources: sources })
+        if (frame.data.message_id) {
+          mergeOrBufferMetadata(sessionId, frame.data.message_id, { referenceSources: sources })
           break
         }
-        updateConv(sessionId, (c) => ({
-          messages: c.messages.map((m) =>
-            m.id === target.id
-              ? { ...m, metadata: { ...m.metadata, referenceSources: sources } }
-              : m,
-          ),
-        }))
+        if (conv.isStreaming) patchConv(sessionId, { liveReferenceSources: sources })
         break
       }
 
-      // 引导问题在 chat.done 之后异步下发（后端最多等 3s 生成），挂到对应回答上
+      // 引导问题在 chat.done 之后异步下发（后端最多等 3s 生成），按 id 挂到对应回答
       case 'event:questions': {
         const questions = (frame.data.questions ?? [])
           .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
           .slice(0, 3)
-        if (!questions.length) break
-        const targetId =
-          frame.data.message_id ||
-          [...conv.messages].reverse().find((m) => m.role === 'assistant')?.id
-        if (!targetId) break
-        updateConv(sessionId, (c) => ({
-          messages: c.messages.map((m) =>
-            m.id === targetId
-              ? { ...m, metadata: { ...m.metadata, followupQuestions: questions } }
-              : m,
-          ),
-        }))
+        if (!questions.length || !frame.data.message_id) break
+        mergeOrBufferMetadata(sessionId, frame.data.message_id, { followupQuestions: questions })
         break
       }
 
@@ -355,49 +434,23 @@ export const useChatStore = create<ChatStore>((set, get) => {
         break
 
       case 'chat.done': {
+        // 与 PC 端同口径：done 只是「去服务端对账」的信号，不在本地合成正文。
+        // 后端 final_message 仅用于审计与非 Web 通道——它只保留最后一轮迭代，
+        // 且实时链路的按 chunk 脱敏会在分片边界留下残缺路径。用户可见正文一律
+        // 取 /messages 的展示投影（全轮拼接 + 整段脱敏）。
         const finalMessage = frame.data.final_message
-        const serverId =
-          finalMessage && typeof finalMessage === 'object' && typeof finalMessage.id === 'string'
-            ? finalMessage.id
-            : typeof frame.data.message_id === 'string'
-              ? frame.data.message_id
-              : `asst_${Date.now()}`
-        const serverText =
-          typeof finalMessage === 'string'
-            ? finalMessage
-            : finalMessage && typeof finalMessage === 'object'
-              ? contentToText(finalMessage.content)
+        const messageId =
+          typeof frame.data.message_id === 'string' && frame.data.message_id
+            ? frame.data.message_id
+            : finalMessage && typeof finalMessage === 'object' && typeof finalMessage.id === 'string'
+              ? finalMessage.id
               : ''
-        const body = serverText.trim() ? serverText : conv.streamingText
-        const timeline =
-          conv.liveTimeline.length > 0
-            ? conv.liveTimeline
-            : finalMessage && typeof finalMessage === 'object' && Array.isArray(finalMessage.timeline)
-              ? finalMessage.timeline
-              : []
-        const metadata = {
-          ...(finalMessage && typeof finalMessage === 'object' ? finalMessage.metadata : {}),
-          ...(conv.liveOutputFiles.length ? { outputFiles: conv.liveOutputFiles } : {}),
-          // event:reference 可能先于 chat.done 到达：定稿时把 live 来源并入消息，
-          // 否则 finishTurn 清空 live 态会让本轮资料行丢失
-          ...(conv.liveReferenceSources.length
-            ? { referenceSources: conv.liveReferenceSources }
-            : {}),
-          // 用户主动停止：本轮回复不完整，给消息打上可见标记
-          ...(frame.data.aborted ? { interrupted: true } : {}),
-        }
-        const message: Message | undefined =
-          body.trim() || timeline.length > 0
-            ? {
-                id: serverId,
-                role: 'assistant' as const,
-                content: body,
-                timestamp: Date.now(),
-                timeline: timeline.length ? timeline : undefined,
-                metadata: Object.keys(metadata).length ? metadata : undefined,
-              }
-            : undefined
-        finishTurn(sessionId, message)
+        if (frame.data.aborted && messageId) abortedMessageIds.add(messageId)
+        needsReconcile.add(sessionId)
+        // 先标记收尾状态，避免 sync 在途期间 run.snapshot 把会话重新拉回流式态；
+        // 但 streamingText / liveTimeline 保留到投影返回后再清，防止收尾闪烁。
+        patchConv(sessionId, { lastFinalizedAt: Date.now() })
+        void settleAfterDone(sessionId)
         break
       }
 
@@ -423,6 +476,28 @@ export const useChatStore = create<ChatStore>((set, get) => {
   }
 
   socket.subscribeFrames(handleFrame)
+
+  /**
+   * 流式静默对账：与 PC 端看门狗同口径——只负责「怀疑」，不负责「判决」。
+   * 长任务等待工具结果时可能长时间不吐帧，此时向服务端确认 run_state，
+   * 是继续等待还是收尾由服务端决定；本地绝不清空正文或合成中断消息。
+   */
+  setInterval(() => {
+    const now = Date.now()
+    const states = get().convStates
+    for (const [sessionId, conv] of Object.entries(states)) {
+      if (!conv.isStreaming || conv.hydration !== 'loaded') continue
+      // 尚未收到任何帧的会话先记一个起点，否则 chat.start 丢失时会永远不触发
+      const last = lastFrameAt.get(sessionId)
+      if (!last) {
+        lastFrameAt.set(sessionId, now)
+        continue
+      }
+      if (now - last > STREAM_IDLE_SYNC_MS) {
+        void get().syncConversation(sessionId).catch(() => undefined)
+      }
+    }
+  }, STREAM_WATCHDOG_INTERVAL_MS)
 
   return {
     conversations: [],
@@ -505,6 +580,13 @@ export const useChatStore = create<ChatStore>((set, get) => {
           hasMore: offset > 0,
           ...(run && !(latest && finalizedRecently(latest)) ? runToPatch(run) : {}),
         })
+        flushPendingMetadata(sessionId, messages)
+        // 基线建立前到达的 done：此时才第一次拿到投影，直接在此定稿，
+        // 避免再发一次 sync 请求。
+        if (!run && needsReconcile.has(sessionId)) {
+          settleFromProjection(sessionId, messages, offset)
+          needsReconcile.delete(sessionId)
+        }
       } catch {
         patchConv(sessionId, { hydration: 'error' })
       }
@@ -523,34 +605,28 @@ export const useChatStore = create<ChatStore>((set, get) => {
           fetchRunningRun(sessionId, detail.workspace_id),
         ])
         const latest = get().convStates[sessionId] ?? conv
-        if (run && !finalizedRecently(latest)) {
-          patchConv(sessionId, {
-            messages,
-            hydration: 'loaded',
-            loadedOffset: offset,
-            hasMore: offset > 0,
-            ...runToPatch(run),
-          })
+        if (run) {
+          // 服务端确认仍在运行：只把运行态写回叠加层，不动已有正文。
+          // 同时刷新 lastFrameAt——这是「刚确认过状态」，不必每 15s 反复请求。
+          if (!finalizedRecently(latest)) {
+            patchConv(sessionId, {
+              messages,
+              hydration: 'loaded',
+              loadedOffset: offset,
+              hasMore: offset > 0,
+              ...runToPatch(run),
+            })
+            lastFrameAt.set(sessionId, Date.now())
+            flushPendingMetadata(sessionId, messages)
+          }
           return
         }
-        if (!run) {
-          patchConv(sessionId, {
-            messages,
-            hydration: 'loaded',
-            loadedOffset: offset,
-            hasMore: offset > 0,
-            streamingText: '',
-            liveTimeline: [],
-            liveOutputFiles: [],
-            liveReferenceSources: [],
-            clarify: null,
-            isStreaming: false,
-            queuedPosition: null,
-            lastFinalizedAt: Date.now(),
-          })
-        }
+        // 服务端确认收尾：定稿正文来自投影（全轮拼接 + 整段脱敏），
+        // 而不是实时流里被分片切断的那份文本。
+        settleFromProjection(sessionId, messages, offset)
+        needsReconcile.delete(sessionId)
       } catch {
-        // 同步失败保持现状，等待下一次重连
+        // 同步失败保持现状，等待下一次重连/看门狗重试
       }
     },
 
@@ -619,7 +695,6 @@ export const useChatStore = create<ChatStore>((set, get) => {
         conversation_id: sessionId,
         workspace_id: workspaceId,
         content: text,
-        mode: options.mode,
         ...(attachments.length ? { attachments } : {}),
       })
       return userMessage.id

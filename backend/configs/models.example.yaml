@@ -71,11 +71,6 @@ models:
           context_window: 131072
           # 单次生成上限；同时参与输出预留计算，不要设为窗口值
           max_output_tokens: 32768
-          # 可选：该端点接受的推理强度档位，取值 minimal/low/medium/high/xhigh/max。
-          # 运行时按 effort 下发档位（quick→low、standard→medium、deep→high），
-          # 不在列表内的档位由 litellm 就近向上取整，避免端点拒绝（400）。
-          # 不写本项 = 不校验，档位原样下发。示例：只支持 low/high 的端点：
-          # reasoning_effort_levels: ["low", "high"]
           #
           # 可选：强制关闭该模型思考模式（下发 chat_template_kwargs.enable_thinking=False）。
           # 适用于 vLLM / OpenAI 兼容端点上开思考做 function-calling 会持续吐 reasoning、

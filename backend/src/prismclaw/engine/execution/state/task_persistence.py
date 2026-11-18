@@ -14,11 +14,11 @@ from prismclaw.engine.execution.checkpoint import (
     ToolEffectRecord,
     evaluate_resume_decision,
 )
-from prismclaw.schema.agent.task_runtime import EvidenceRecord, ReviewDecisionRecord, ReviewRequirements, TaskMutation, TaskRuntimeState
+from prismclaw.schema.agent.task_runtime import EvidenceRecord, ReviewDecisionRecord, TaskMutation, TaskRuntimeState
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.content.compaction import DecisionLedgerEvent
 from prismclaw.schema.content.content_types import ToolResult
-from prismclaw.schema.session.types import CustomEntry, DECISION_LEDGER_EVENT_CUSTOM_TYPE, EVIDENCE_LEDGER_CUSTOM_TYPE, REVIEW_DECISION_CUSTOM_TYPE, REVIEW_REQUIREMENTS_CUSTOM_TYPE, SessionTree, TASK_MUTATION_CUSTOM_TYPE, TASK_RUNTIME_CUSTOM_TYPE, TASK_SPEC_CUSTOM_TYPE, generate_entry_id, now_iso
+from prismclaw.schema.session.types import CustomEntry, DECISION_LEDGER_EVENT_CUSTOM_TYPE, EVIDENCE_LEDGER_CUSTOM_TYPE, REVIEW_DECISION_CUSTOM_TYPE, SessionTree, TASK_MUTATION_CUSTOM_TYPE, TASK_RUNTIME_CUSTOM_TYPE, TASK_SPEC_CUSTOM_TYPE, generate_entry_id, now_iso
 from prismclaw.schema.session.event_logger import SessionEventLogger
 
 if TYPE_CHECKING:
@@ -135,27 +135,6 @@ async def _persist_task_spec_snapshot(
         timestamp=now_iso(),
         custom_type=TASK_SPEC_CUSTOM_TYPE,
         data=task_spec.model_dump(mode="json"),
-    )
-    event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([event])
-    _register_entry(tree, entry)
-
-
-async def _persist_review_requirements_snapshot(
-    deps: AgentRunnerDeps,
-    tree: SessionTree,
-    *,
-    review_requirements: ReviewRequirements,
-) -> None:
-    current = tree.get_latest_review_requirements()
-    if current is not None and current.model_dump(mode="json") == review_requirements.model_dump(mode="json"):
-        return
-    entry = CustomEntry(
-        id=generate_entry_id(set(tree.entries.keys())),
-        parent_id=tree.leaf_id,
-        timestamp=now_iso(),
-        custom_type=REVIEW_REQUIREMENTS_CUSTOM_TYPE,
-        data=review_requirements.model_dump(mode="json"),
     )
     event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
     await deps.session_store.commit_events([event])
@@ -290,37 +269,23 @@ def _apply_task_mutation_to_runtime(
         updated_runtime.state = "completed"
     elif mutation.mutation_type == "task.block":
         updated_runtime.state = "blocked"
-        updated_runtime.confirmation_required = False
         reason = mutation.patch.get("reason")
         updated_runtime.pending_confirmation_reason = str(reason) if reason is not None else None
-    elif mutation.mutation_type == "task.await_risk_confirmation":
-        updated_runtime.state = "awaiting_risk_confirmation"
-        updated_runtime.confirmation_required = True
-        reason = mutation.patch.get("reason")
-        updated_runtime.pending_confirmation_reason = str(reason) if reason is not None else None
-    elif mutation.mutation_type == "task.risk_confirmed":
+    elif mutation.mutation_type == "task.confirmation_resolved":
         updated_runtime.state = "executing"
-        updated_runtime.confirmation_required = False
-        updated_runtime.pending_confirmation_reason = None
-    elif mutation.mutation_type == "task.resume_after_confirmation":
-        updated_runtime.state = "executing"
-        updated_runtime.confirmation_required = False
         updated_runtime.pending_confirmation_reason = None
     elif mutation.mutation_type == "task.review.record" and review_record is not None:
         updated_runtime.state = "reviewing"
-        updated_runtime.confirmation_required = False
         updated_runtime.latest_review_decision_id = review_record.decision_id
         updated_runtime.checkpoint_cursor = review_record.decision_id
     elif mutation.mutation_type == "task.resume_probe_completed":
         resume_state = mutation.patch.get("resume_state")
         if resume_state == "awaiting_confirmation":
             updated_runtime.state = "awaiting_confirmation"
-            updated_runtime.confirmation_required = True
             reason = mutation.patch.get("reason")
             updated_runtime.pending_confirmation_reason = str(reason) if reason is not None else None
         else:
             updated_runtime.state = "executing"
-            updated_runtime.confirmation_required = False
             updated_runtime.pending_confirmation_reason = None
 
     updated_runtime.state_version += 1

@@ -187,7 +187,6 @@ class QueryTurnPreparator:
         assembled_plan = assembled.context_layout
         assembled_budget_audit = load_budget_audit_trail(assembled_plan.metadata)
         task_profile = assembled.task_profile
-        review_requirements = getattr(request, "review_requirements", None)
         per_turn_inputs = replace(
             prompt_inputs,
             runtime_strategy_notes=tuple(
@@ -196,11 +195,7 @@ class QueryTurnPreparator:
                         # 保留 context_preparation 写入的策略提示（含后续动作 note），
                         # 再追加本轮基于 task_profile 的提示，重复项只保留一次。
                         *prompt_inputs.runtime_strategy_notes,
-                        *(
-                            runtime_notes_for(review_requirements)
-                            if review_requirements is not None
-                            else []
-                        ),
+                        *runtime_notes_for(getattr(request, "task_spec", None)),
                         *(
                             deps.task_request_policy.runtime_strategy_notes(
                                 task_profile,
@@ -665,11 +660,8 @@ class QueryTurnPreparator:
         except Exception:
             pass  # never break baseline
         history_tokens = estimate_messages_tokens(dynamic_result.projection.projected_messages)
-        # Legacy bridge injects context_payload as a user message — those tokens
-        # are consumed from history_budget but were not counted above.  The
-        # structured_extension path sends the payload via extra_body and does
-        # NOT consume message tokens, so the overhead is only relevant when
-        # the provider will fall back to legacy_bridge mode.
+        # 上下文桥接会把 context_payload 作为 user 消息注入——这些 token
+        # 从 history_budget 扣除，但上面没有计入。
         if packed_request.context_payload_tokens > 0:
             history_tokens += packed_request.context_payload_tokens
         return TurnPreflightResult(

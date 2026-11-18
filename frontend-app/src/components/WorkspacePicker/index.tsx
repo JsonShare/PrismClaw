@@ -3,7 +3,7 @@ import { Text, View } from '@tarojs/components'
 import { useAppStore } from '../../stores/useAppStore'
 import Icon from '../Icon'
 
-/** 工作区切换（与 ModePicker 同风格：图标 + 文案 + 箭头） */
+/** 工作区切换（PC 下拉按钮的移动端形态：图标 + 文案 + 箭头） */
 export default function WorkspacePicker() {
   const workspaceId = useAppStore((s) => s.workspaceId)
   const workspaces = useAppStore((s) => s.workspaces)

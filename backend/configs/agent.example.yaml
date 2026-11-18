@@ -8,24 +8,13 @@
 #   cp backend/configs/agent.example.yaml backend/configs/agent.yaml
 
 agent:
-  # effort 档位预算（quick/standard/deep），由 RunRequest.effort 选档；
-  # RunRequest.long_running 放大所选档位（steps×3 上限 30、hard_s×2 上限 1800）。
-  effort:
-    quick:
-      steps: 3
-      tool_calls: 6
-      soft_s: 45.0
-      hard_s: 90.0
-    standard:
-      steps: 6
-      tool_calls: 12
-      soft_s: 150.0
-      hard_s: 300.0
-    deep:
-      steps: 15
-      tool_calls: 24
-      soft_s: 420.0
-      hard_s: 900.0
+  # 单次 run 的资源上限：steps / tool_calls 为硬上限，
+  # soft_s 只触发收尾信号，hard_s 才终止。
+  budget:
+    steps: 50
+    tool_calls: 24
+    soft_s: 300.0
+    hard_s: 600.0
   # 工具数组变更策略：append_only 顺序稳定+只追加（保护好前缀缓存）；
   # frozen 需预枚举全部能力；unbounded 放弃缓存红利。
   tool_mutation_policy: "append_only"
@@ -112,25 +101,8 @@ agent:
       reinject_max_files: 5
       # microcompact 触发模式：incremental 每轮滚动；batch 双触发批量（v4 §5.4）
       microcompact_mode: "batch"
-      # microcompact 分工具保留窗口（tiered retention）
-      microcompact_keep_recent:
-        web_search: 1
-        web_fetch: 1
-        web_extract: 1
-        fetch_mcp_resource: 1
-        tool_search: 1
-        skill_search: 1
-        activate_skill: 1
-        bash: 3
-        bash_read: 3
-        python: 3
-        ls: 4
-        grep: 4
-        glob: 4
-        reduce_subagent_results: 3
-        read: 8
-        read_image: 6
-        read_office: 6
+      # microcompact 分工具保留窗口：留空使用代码内置分档（_TOOL_LIFECYCLE）
+      microcompact_keep_recent: {}
 
   timeouts:
     # 无事件空闲超时：超过即判为卡死
@@ -148,6 +120,7 @@ agent:
     # 视为"搜索意图"的工具；wrapping 阶段冻结
     search_intent_tools:
       - "web-search-mcp__search"
+      - "web-search-mcp__fetch"
     # doom-loop 签名冻结阶梯：warn 阈值；冻结阈值派生为 2×（钳制在 12 条窗口）
     stuck:
       signature_warn: 3

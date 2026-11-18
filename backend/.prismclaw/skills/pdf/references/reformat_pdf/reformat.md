@@ -32,10 +32,10 @@ Parse an existing document into `content.json`, then run the CREATE render pipel
 **GATE**: User has provided an existing document to reformat.
 
 ```bash
-python3 scripts/create_pdf/project_manager.py init <project_name> --type <type> --dir .prismclaw
+python3 scripts/create_pdf/project_manager.py init <project_name> --type <type>
 ```
 
-> Project folders are created under `.prismclaw/` with the naming convention `pdf-{project_name}-{YYYYMMDD}-{uuid8}`.
+> Project folders are created under the workspace skill cache (`PRISMCLAW_SKILL_CACHE`, defaulting to `.work/`) with the naming convention `pdf-{project_name}-{YYYYMMDD}-{uuid8}`.
 
 **Checkpoint — Project workspace created. Proceed to Step 2.**
 

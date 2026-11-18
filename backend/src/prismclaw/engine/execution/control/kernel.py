@@ -29,7 +29,7 @@ from prismclaw.schema.agent.task_runtime import EvidenceRecord
 
 if TYPE_CHECKING:
     from prismclaw.engine.execution.checkpoint.models import RunState
-    from prismclaw.schema.config.config import EffortConfig
+    from prismclaw.schema.config.config import RunBudgetConfig
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +119,7 @@ class CompletionState:
 class Budget:
     """资源上限。修复额度不在这里——它属于完成契约。
 
-    steps / hard_s 由 ``resolve_effort_budget`` 按 RunRequest.effort
-    派生，不在此配置。
+    steps / hard_s 由 ``resolve_run_budget`` 按配置预算派生，不在此配置。
     """
 
     max_iterations: int
@@ -129,8 +128,8 @@ class Budget:
 
 
 @dataclass(frozen=True)
-class EffortBudget:
-    """effort 档位解析后的生效预算（含 long_running 修饰与派生值）。"""
+class RunBudget:
+    """生效预算（配置上限 + 运行时派生值）。"""
 
     steps: int
     tool_calls: int
@@ -141,30 +140,20 @@ class EffortBudget:
     converge_tools: int
 
 
-def resolve_effort_budget(
-    *,
-    effort: str,
-    long_running: bool,
-    tiers: "EffortConfig",
-) -> EffortBudget:
-    """按 RunRequest.effort / long_running 与配置档位解析生效预算。
+def resolve_run_budget(*, config: "RunBudgetConfig") -> RunBudget:
+    """按配置上限解析生效预算。
 
-    long_running 修饰：steps ×3（上限 30）、hard_s ×2（上限 1800）。
     派生值不配置：reserve_s = clamp(hard_s*0.25, 20, 120)，
     cap_s = clamp(hard_s*0.6, 90, 240)，converge_tools = max(2, tool_calls//3)。
     """
-    tier = getattr(tiers, effort, None) or tiers.standard
-    steps = int(tier.steps)
-    tool_calls = int(tier.tool_calls)
-    soft_s = float(tier.soft_s)
-    hard_s = float(tier.hard_s)
-    if long_running:
-        steps = min(steps * 3, 30)
-        hard_s = min(hard_s * 2.0, 1800.0)
+    steps = int(config.steps)
+    tool_calls = int(config.tool_calls)
+    soft_s = float(config.soft_s)
+    hard_s = float(config.hard_s)
     reserve_s = min(max(hard_s * 0.25, 20.0), 120.0)
     cap_s = min(max(hard_s * 0.6, 90.0), 240.0)
     converge_tools = max(2, tool_calls // 3)
-    return EffortBudget(
+    return RunBudget(
         steps=steps,
         tool_calls=tool_calls,
         soft_s=soft_s,
@@ -173,20 +162,6 @@ def resolve_effort_budget(
         cap_s=cap_s,
         converge_tools=converge_tools,
     )
-
-
-# effort 档位 → 模型推理强度（litellm 统一 reasoning_effort 取值）。
-# 与 EffortBudget（执行复杂度）正交：一个控制"做多少步"，一个控制"想多深"。
-_REASONING_EFFORT_BY_TIER: dict[str, str] = {
-    "quick": "low",
-    "standard": "medium",
-    "deep": "high",
-}
-
-
-def reasoning_effort_for(effort: str) -> str:
-    """把 RunRequest.effort 映射为模型 reasoning_effort（quick→low / standard→medium / deep→high）。"""
-    return _REASONING_EFFORT_BY_TIER.get(effort, "medium")
 
 
 @dataclass(frozen=True)
@@ -210,7 +185,7 @@ class ControlDecision:
 def evaluate_loop_control(
     *,
     run_state: "RunState",
-    effort_budget: EffortBudget,
+    run_budget: RunBudget,
     now: float,
     phase: str,
 ) -> ControlDecision:
@@ -228,15 +203,15 @@ def evaluate_loop_control(
     阶段消费，下一轮 prepare 才真正停止。
     """
     ls = run_state.loop_state
-    turns_left = effort_budget.steps - ls.steps_spent
-    tools_left = effort_budget.tool_calls - ls.tool_calls_spent
+    turns_left = run_budget.steps - ls.steps_spent
+    tools_left = run_budget.tool_calls - ls.tool_calls_spent
     remaining_soft = ls.soft_at - now
     remaining_hard = ls.hard_at - now
     _wrapup_target = ls.steps_spent + 1 if phase == "prepare" else ls.steps_spent
     if (
         tools_left <= 0
         and turns_left > 0
-        and remaining_hard > effort_budget.reserve_s
+        and remaining_hard > run_budget.reserve_s
     ):
         if phase == "prepare" and ls.tool_wrapup_step < 0:
             ls.tool_wrapup_step = _wrapup_target
@@ -246,11 +221,11 @@ def evaluate_loop_control(
     wrapping = (
         turns_left <= 2
         or remaining_soft <= 0
-        or tools_left <= effort_budget.converge_tools
+        or tools_left <= run_budget.converge_tools
     )
     last_turn = (
         turns_left <= 1
-        or remaining_hard <= effort_budget.reserve_s
+        or remaining_hard <= run_budget.reserve_s
         or wrapup_turn
     )
     should_stop = (

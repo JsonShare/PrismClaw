@@ -28,12 +28,11 @@ class MemoryTool:
     name = "memory"
     description = (
         "为后续会话持久化长期记忆，或归档已过时的记忆。\n"
-        "动作：\n"
-        "- save：存储事实、偏好或工作流。layer='L2' 用于事实性知识"
-        "（用户偏好、环境事实），'L3' 用于工作流 SOP。\n"
-        "- archive：把某条已检索到的记忆标记为过时，使其不再浮现。"
-        "需要提供 entry_id（即 memory_context 中以 [type|id] 形式展示的短 ID）以及归档原因。\n"
-        "只有在当前会话中至少成功执行过一次工具之后，才能使用本工具。"
+        "用户明确要求记住，或出现跨会话仍有用的偏好、环境事实、工作流时写入；"
+        "密钥与凭据永不写入。\n"
+        "save 的 layer：'L2' 存事实与偏好，'L3' 存工作流；"
+        "archive 需 entry_id（记忆中以 [type|id] 展示）与原因。\n"
+        "需在当前会话至少成功执行过一次工具后才能使用。"
     )
     parameters: dict[str, Any] = {
         "type": "object",

@@ -67,6 +67,10 @@ class NoToolGovernanceResult:
 _EMPTY_RESPONSE_HEADLINES = {
     "empty": "本次回合没有产生可见答复，任务尚未完成。",
     "reasoning": "本次回合只产生了内部推理，没有可见答复，任务尚未完成。",
+    "tool_markup": (
+        "本次回合把工具调用写成了纯文本标记（<|DSML|tool_calls>…），"
+        "工具并未真正执行，任务尚未完成。"
+    ),
 }
 
 _GAP_HEADLINE = "完成申报未获受理：机械可核对项仍有缺口。"
@@ -131,7 +135,7 @@ async def evaluate_no_tool_governance(
         complete_no_tool_turn,
         append_assistant_response,
     )
-    from prismclaw.engine.execution.dispatch.turn_utils import strip_thinking
+    from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
     from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.engine.execution.checkpoint import ResumeBoundary
     from prismclaw.engine.execution.loop.arbiter import persist_snapshot_fn
@@ -150,14 +154,14 @@ async def evaluate_no_tool_governance(
         response_policy=response_policy,
     )
 
-    # ── 1. 空答复 / 纯推理的响应质量重试（不属于完成判定） ──
+    # ── 1. 空答复 / 纯推理 / 文本化工具调用的响应质量重试（不属于完成判定） ──
     if decision_no_tool.action == "retry":
         state_machine.record_retry(decision_no_tool.classification)
         await append_assistant_response(
             deps=deps,
             tree=tree,
             append_entry=_append,
-            text=strip_thinking(response.text or ""),
+            text=strip_noise(response.text or ""),
         )
         drive_prompt = _build_goal_drive_prompt(
             contract=kernel.state.contract,
@@ -175,16 +179,21 @@ async def evaluate_no_tool_governance(
         )
 
     # ── 2. 重试已用尽仍无可见答复：硬边界终态 ──
-    if decision_no_tool.classification in {"empty", "reasoning"}:
+    if decision_no_tool.classification in {"empty", "reasoning", "tool_markup"}:
         logger.info(
             "no_tool_exhausted: classification=%s task_id=%s",
             decision_no_tool.classification,
             task_runtime.task_id,
         )
+        exhausted_message = (
+            "模型多次把工具调用写成纯文本标记而非真正调用工具，任务未完成即终止。"
+            if decision_no_tool.classification == "tool_markup"
+            else "模型连续多次未产生可见答复，任务未完成即终止。"
+        )
         return NoToolGovernanceResult(
             decision=Decision("TERMINATE", TerminalReason.NO_RESPONSE_EXHAUSTED),
             terminal_code="no_response_exhausted",
-            terminal_message="模型连续多次未产生可见答复，任务未完成即终止。",
+            terminal_message=exhausted_message,
         )
 
     # ── 3. 完成内核的唯一裁决 ──
@@ -242,7 +251,7 @@ async def evaluate_no_tool_governance(
                 deps=deps,
                 tree=tree,
                 append_entry=_append,
-                text=strip_thinking(response.text or ""),
+                text=strip_noise(response.text or ""),
             )
             headline = "阻塞申报暂不受理：尚未执行任何尝试。"
             if block_intent is not None:

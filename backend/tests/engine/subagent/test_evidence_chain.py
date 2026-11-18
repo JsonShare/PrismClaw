@@ -345,7 +345,6 @@ def test_r11_dynamic_findings_limit():
 
     class MockCtx:
         task_spec = MockTaskSpec()
-        review_requirements = None
         session_state = state
         system_prompt_sections = {}
         invoked_skill_state = None
@@ -484,15 +483,14 @@ def test_r18_render_envelope_handover_confidence():
 # R19: 子代理规则归属固定段 <subagents>
 # ═══════════════════════════════════════════════════════════════
 
-def test_r19_subagents_section_contains_evidence_rules():
+def test_r19_delegation_section_contains_evidence_rules():
     from prismclaw.engine.execution.request._prompt_types import PromptInputs
-    from prismclaw.engine.execution.request.system_prompt import subagents_section
+    from prismclaw.engine.execution.request.system_prompt import delegation_section
 
-    result = subagents_section(PromptInputs(
+    result = delegation_section(PromptInputs(
         session_id="test-session",
         workspace_id="test-ws",
         agent_id="test-agent",
-        model="test-model",
         tools=[("sub_agent", "delegate")],
         subagent_registry_size=2,
     ))
@@ -514,7 +512,6 @@ def test_r19_handoff_advisory_is_protocol_only():
         session_id="test-session",
         workspace_id="test-ws",
         agent_id="test-agent",
-        model="test-model",
         subagent_registry_size=2,
         handoff_enabled=True,
         max_handoff_chain_length=5,
@@ -640,7 +637,6 @@ def test_r20_full_evidence_chain_e2e():
 
     class MockCtx:
         task_spec = MockTaskSpec()
-        review_requirements = None
         session_state = state
         system_prompt_sections = {}
         invoked_skill_state = None

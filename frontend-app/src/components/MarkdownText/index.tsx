@@ -12,6 +12,11 @@ import { RICH_LANGUAGES } from '../../lib/richText'
 
 interface MarkdownTextProps {
   text: string
+  /**
+   * 该段是否只是长文的一个分块（后面还有内容）。为 true 时保留末段的下外边距，
+   * 否则 `.md-paragraph:last-child` 会把块与块之间的间距吃掉，多段正文会黏成一片。
+   */
+  chunked?: boolean
 }
 
 type Block =
@@ -216,10 +221,10 @@ function RichBlock({ code, lang }: { code: string; lang: string }) {
   return <PreviewBlock kind={language.replace('-preview', '') as 'image' | 'pdf' | 'html' | 'markdown'} code={code} />
 }
 
-export function MarkdownText({ text }: MarkdownTextProps) {
+export function MarkdownText({ text, chunked = false }: MarkdownTextProps) {
   const blocks = parseBlocks(text)
   return (
-    <View className='md'>
+    <View className={`md${chunked ? ' md-chunked' : ''}`}>
       {blocks.map((block, index) => {
         const key = `block-${index}`
         if (block.type === 'heading') {

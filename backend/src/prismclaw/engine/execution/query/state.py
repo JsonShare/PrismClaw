@@ -31,7 +31,6 @@ class QueryRuntimeContext:
     tool_context: Any | None = None
     app_context: Any | None = None
     budget_policy: Any | None = None
-    permission_context: Any | None = None
     model_context: Any | None = None
     session_hooks: Any | None = None
 

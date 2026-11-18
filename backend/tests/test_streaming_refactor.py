@@ -28,7 +28,7 @@ def test_reload_body_is_full_transcript():
             parent_id="u1",
             role="assistant",
             content="我先检索一下天气资料。",
-            tool_calls=[{"id": "c1", "function": {"name": "web_search", "arguments": '{"q":"北京天气"}'}}],
+            tool_calls=[{"id": "c1", "function": {"name": "read", "arguments": '{"file_path":"weather.txt"}'}}],
         ),
         "t1": MessageEntry(id="t1", parent_id="a1", role="tool", content="晴 25°C", tool_call_id="c1"),
         "a2": MessageEntry(
@@ -48,7 +48,7 @@ def test_reload_body_is_full_transcript():
     # Exact join matches live contract ("\n\n".join per-turn parts).
     assert body == "我先检索一下天气资料。\n\n根据检索结果，北京今天晴，25°C。"
     # Tool calls preserved in the payload.
-    assert assistants[0]["tool_calls"][0]["name"] == "web_search"
+    assert assistants[0]["tool_calls"][0]["name"] == "read"
 
 
 def test_assistant_bubbles_around_hitl_tool_not_merged():

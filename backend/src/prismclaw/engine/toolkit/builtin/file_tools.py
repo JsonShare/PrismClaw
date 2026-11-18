@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
@@ -15,7 +16,13 @@ from prismclaw.engine.toolkit.builtin.file_helpers import (
     _sha256hex,
     session_root,
 )
-from prismclaw.engine.toolkit.file.workspace import WorkspaceBoundaryError, WorkspaceResolver
+from prismclaw.engine.toolkit.file.workspace import (
+    WorkspaceBoundaryError,
+    WorkspaceResolver,
+    canonicalize_fs_path,
+    is_remote_url,
+    resolve_capability_command,
+)
 from prismclaw.engine.toolkit.file.file_mutation_queue import with_file_mutation_queue
 from prismclaw.engine.review.registry import get_review_registry
 from prismclaw.schema.content.content_types import FileChangeEntry, UiArtifact
@@ -35,7 +42,10 @@ class ListDirectoryTool:
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "相对于工作区的路径"},
+            "path": {
+                "type": "string",
+                "description": "本地目录路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
+            },
             "recursive": {"type": "boolean", "description": "是否递归列出（默认：false）"},
             "ignore_hidden": {"type": "boolean", "description": "是否忽略隐藏文件/目录（默认：true）"},
         },
@@ -57,6 +67,27 @@ class ListDirectoryTool:
         path_str = args.get("path", ".")
         recursive = args.get("recursive", False)
         ignore_hidden = args.get("ignore_hidden", True)
+
+        # 绝对/~ 路径与 read 共用同一套别名纠正；会话内前缀（uploads/ 等）
+        # 与 read 共用同一套虚拟路径映射；其余相对路径保持「基于工作区根」。
+        if is_remote_url(path_str):
+            return error_result(
+                call_id,
+                f"{path_str!r} 是远程 URL，不是本地目录路径。"
+                "文件工具只接受本地路径；如需网页内容，请先将资源下载到工作区"
+                "（如 `outputs/`）再读取。",
+            )
+
+        _first = path_str.strip().split("/", 1)[0]
+        if path_str.startswith(("~", "/")):
+            path_str = str(canonicalize_fs_path(Path(path_str).expanduser()))
+        elif _first in WorkspaceResolver._PREFIX_SESSION_SUBDIRS or _first == "sessions":
+            try:
+                path_str = str(self.resolver.resolve_within(
+                    context.workspace_path, path_str, session_root=session_root(context),
+                ))
+            except WorkspaceBoundaryError as exc:
+                return error_result(call_id, f"ls: {exc}")
 
         runtime = _require_runtime(context)
         _tier = getattr(context, "current_sandbox_tier", SandboxTier.STANDARD)
@@ -112,13 +143,15 @@ class ReadTool:
         "不要用于批量扫描；可传入 `question` 聚焦分析方向。"
         "文件按页读取：未显式指定 limit 时只返回前 "
         f"{_READ_DEFAULT_PAGE_LINES} 行，并附带续读标记以给出下一个 offset——"
-        "对大文件请分页读取，而不是整体载入。对 .xlsx/.pptx，会保留结构锚点"
-        "以供编辑操作使用。"
+        "对大文件请分页读取，而不是整体载入。对 .xlsx/.pptx 会保留结构锚点供编辑。"
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "file_path": {"type": "string", "description": "相对于工作区的路径"},
+            "file_path": {
+                "type": "string",
+                "description": "本地文件路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
+            },
             "offset": {"type": "integer", "description": "起始行号（从 1 开始）"},
             "limit": {"type": "integer", "description": "最多返回的行数"},
             "question": {
@@ -158,6 +191,15 @@ class ReadTool:
             )
         except WorkspaceBoundaryError as exc:
             return error_result(call_id, str(exc))
+
+        # 模型常把 /plugin:cmd 引用当成技能目录（skills/<cmd>/SKILL.md）。命令与
+        # 技能在插件根下同级，正文实际在 commands/<cmd>.md。命中后必须同步
+        # raw_path：下游 document 分支会基于 raw_path 再解析一次。
+        if not full_path.exists():
+            _alt = resolve_capability_command(full_path)
+            if _alt is not None:
+                full_path = _alt
+                raw_path = str(_alt)
 
         # Image files — dispatched to the vision branch (former read_image
         # tool, merged into read). Function-level import keeps the builtin ↔
@@ -293,11 +335,14 @@ class ReadTool:
 
 class WriteTool:
     name = "write"
-    description = "在工作区内写入（创建或覆盖）文本文件，并自动创建缺失的目录。硬性规则：绝不要用于 Office/二进制文件（.docx、.pptx、.xlsx、.pdf）——写入文本会产生损坏文件。这些文件应先用 `read` 读取，再用对应技能（通过 `activate_skill('docx')` 等激活）或 `bash` 调用相应 CLI/库来修改。"
+    description = "在工作区内写入（创建或覆盖）文本文件，并自动创建缺失的目录。硬性规则：绝不要用于 Office/二进制文件（.docx/.pptx/.xlsx/.pdf）；先用 `read` 读取，再用 `activate_skill` 对应技能或 `bash` 修改。"
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "file_path": {"type": "string", "description": "相对于工作区的路径"},
+            "file_path": {
+                "type": "string",
+                "description": "本地文件路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
+            },
             "content": {"type": "string", "description": "要写入的文件内容"},
             "create_dirs": {"type": "boolean", "description": "若父目录不存在则自动创建", "default": False},
         },
@@ -429,11 +474,14 @@ class WriteTool:
 
 class EditTool:
     name = "edit"
-    description = "在文本文件中将唯一的 old_string 替换为 new_string。多处匹配时使用 replace_all。对于 Office 文档（.docx/.xlsx/.pptx）：先用 `read` 读取，再通过 Office 文件技能（activate_skill('docx') 等）修改——绝不要把它们当纯文本编辑。"
+    description = "在文本文件中将唯一的 old_string 替换为 new_string。多处匹配时使用 replace_all。Office 文档（.docx/.xlsx/.pptx）须先用 `read` 读取，再用 `activate_skill` 对应技能修改，不可当纯文本编辑。"
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "file_path": {"type": "string", "description": "相对于工作区的路径"},
+            "file_path": {
+                "type": "string",
+                "description": "本地文件路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
+            },
             "old_string": {"type": "string", "description": "要替换的精确文本"},
             "new_string": {"type": "string", "description": "替换后的文本"},
             "replace_all": {"type": "boolean", "description": "替换所有出现位置", "default": False},
@@ -474,6 +522,14 @@ class EditTool:
             return error_result(call_id, "edit：已中止")
 
         # edit 走读链（SDD §3.1 L127）：裸路径读兜底定位 → 应用补丁 → 写回，
+        # 静态能力目录只读：旧前缀会被解析器纠正进 assets/，写操作必须在此拒绝，
+        # 否则 edit 会把「~/.prismclaw/plugins/x」的误写搬进只读的 assets。
+        _probe = Path(raw_path).expanduser()
+        if _probe.is_absolute() and canonicalize_fs_path(_probe) != _probe:
+            return error_result(
+                call_id, "edit：~/.prismclaw 下的静态能力目录只读，不能编辑。"
+            )
+
         # 全程不传 for_write=True，避免把合法的裸路径原件编辑拦截成边界错误。
         try:
             full_path = self._resolver.resolve_within(

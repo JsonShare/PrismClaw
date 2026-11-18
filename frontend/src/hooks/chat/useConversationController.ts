@@ -1,10 +1,17 @@
 import { useCallback, useEffect } from 'react'
-import { useChatStore, useEffortStore, usePermissionStore, useSessionStore } from '../../stores'
+import { useChatStore, useSessionStore } from '../../stores'
 import type { OutboxItem } from '../../stores/chat'
 import { apiUrl } from '../../lib/system-adapter'
 import { splitAttachmentContent } from '../../lib/chat/attachments'
 import { markersToReadable } from '../../lib/chat/inputMarkers'
-import type { AttachmentBlock, ContentBlock, Message, WSClientMessage, WSState } from '../../types'
+import type {
+  AttachmentBlock,
+  ConfirmationDecision,
+  ContentBlock,
+  Message,
+  WSClientMessage,
+  WSState,
+} from '../../types'
 
 /**
  * 咨询页会话控制器：发送/队列/历史/确认/澄清/重试/中止的唯一入口。
@@ -27,7 +34,7 @@ export interface ConversationController {
   wsState: WSState
   sendMessage: (text: string, attachments?: AttachmentBlock[]) => Promise<void>
   retryMessage: (errorMessageId: string) => void
-  submitConfirmation: (decision: 'approve' | 'deny') => void
+  submitConfirmation: (decision: ConfirmationDecision) => void
   clarifySubmit: (approvalId: string, toolCallId: string, answer: string) => void
   abort: () => void
   runQueued: (itemId: string) => { message: string; tone: 'success' | 'error' } | undefined
@@ -60,15 +67,11 @@ export function useConversationController({
   // ── 唯一 WS 发送原语 ──
   const wsSendChat = useCallback(
     (convId: string, text: string, attachments: AttachmentBlock[], extra: Record<string, unknown> = {}) => {
-      const mode = usePermissionStore.getState().mode
-      const effort = useEffortStore.getState().effort
       send({
         type: 'chat.send',
         conversation_id: convId,
         workspace_id: backendWorkspaceId,
         content: text,
-        mode,
-        effort,
         trajectory: 'full',
         ...(attachments.length > 0 ? { attachments } : {}),
         ...extra,
@@ -285,7 +288,7 @@ export function useConversationController({
 
   // ── 风险确认（确认继续/取消任务） ──
   const submitConfirmation = useCallback(
-    (decision: 'approve' | 'deny') => {
+    (decision: ConfirmationDecision) => {
       if (!activeConvId || wsState !== 'ready' || isStreaming) return
       const text = decision === 'approve' ? '确认继续' : '取消任务'
       dispatchUserMessage(activeConvId, `usr_${Date.now()}`, text, [], { confirmation_decision: decision })

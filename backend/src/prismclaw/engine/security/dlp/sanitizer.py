@@ -167,26 +167,11 @@ class PhiLlmFallbackScanner:
     """GPU 不可用 fallback：仅 L3 Safe Harbor + 告警。
 
     L2 扫描需要 GPU T4 + fine-tune Qwen2.5-7B，当前环境无 GPU 时自动 fallback，
-    写入 WORM 审计 `dlp_llm_fallback_active`，仅依赖 L3 Safe Harbor。
+    仅依赖 L3 Safe Harbor。
     """
-
-    def __init__(self, *, worm_audit: Any = None) -> None:
-        self._worm_audit = worm_audit
-        self._warned_once = False
 
     def scan(self, text: str, *, session_id: str = "") -> LlmPhiScanReport:
         """执行 fallback 扫描：降级为仅 L3（由调用者保证）。"""
-        if not self._warned_once and self._worm_audit is not None:
-            self._worm_audit.log(
-                session_id,
-                "dlp_llm_fallback_active",
-                {
-                    "reason": "GPU not available",
-                    "fallback": "L3 Safe Harbor regex only",
-                    "cache_window": "last_10min",
-                },
-            )
-            self._warned_once = True
         return LlmPhiScanReport(
             result=LlmScanResult.FALLBACK,
             gpu_available=False,
@@ -207,15 +192,13 @@ class PhiLlmScanner:
         *,
         model_name: str = "Qwen/Qwen2.5-7B-Instruct",
         vllm_endpoint: str | None = None,
-        worm_audit: Any = None,
     ) -> None:
         self._model_name = model_name
         self._vllm_endpoint = vllm_endpoint
-        self._worm_audit = worm_audit
         self._gpu_available = self._detect_gpu()
         if not self._gpu_available:
             logger.warning("PhiLlmScanner: GPU not available, falling back to L3 regex")
-            self._fallback = PhiLlmFallbackScanner(worm_audit=worm_audit)
+            self._fallback = PhiLlmFallbackScanner()
         else:
             self._fallback = None
 

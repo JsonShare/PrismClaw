@@ -38,7 +38,10 @@ _ESTIMATOR_V2_ENV = "PRISMCLAW_COMPACTION_ESTIMATOR_V2"
 
 
 def _estimator_v2_enabled() -> bool:
-    """Rollback switch: ``false`` restores the legacy ``len(text) // 4`` path."""
+    """Rollback switch: ``false`` restores the legacy ``len(text) // 4`` path.
+
+    删除条件：线上不再依赖该回退时整块移除（含 legacy 分支与对应测试）。
+    """
     raw = os.environ.get(_ESTIMATOR_V2_ENV, "true")
     return str(raw).strip().lower() not in ("false", "0", "no")
 

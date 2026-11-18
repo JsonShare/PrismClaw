@@ -1,7 +1,7 @@
 """P1-SEC-07 + P2-MCP-01 + P4-SEC-02：McpRegistryGuard — MCP 注册表安全防护。
 
 核心安全约束：
-  1. 未注册 MCP server → fail-closed 最严分类 + WORM 审计
+  1. 未注册 MCP server → fail-closed 最严分类 + 拒绝调用
   2. SSE/HTTP 传输 → deny（容器化完成前不信任网络传输）
   3. 签名校验：Ed25519 / HSM PKCS#11（P4-SEC-02 已接入 SignerProtocol）
   4. 已注册 server → 根据 McpSecurityMeta 分类
@@ -12,7 +12,6 @@ import json
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 from prismclaw.engine.security.gate.routing.risk_router import SideEffectScope, DataClassification, Reversibility
 from prismclaw.engine.security.crypto.hsm_signer import SignerProtocol, LocalEd25519Signer
@@ -126,7 +125,6 @@ class McpRegistryGuard:
         server_name: str,
         transport: str,
         *,
-        worm_audit: Any = None,
         session_id: str = "",
     ) -> McpGuardResult:
         """检查 MCP server 是否允许使用。"""
@@ -139,11 +137,6 @@ class McpRegistryGuard:
                     risk_level=McpRiskLevel.BLOCKED,
                     deny_reason=f"mcp_non_stdio_blocked: {transport} transport not allowed before containerization",
                 )
-                if worm_audit:
-                    worm_audit.log(session_id, "mcp_non_stdio_blocked", {
-                        "server_name": server_name,
-                        "transport": transport,
-                    })
                 return McpGuardResult(
                     allowed=False,
                     risk_level=McpRiskLevel.BLOCKED,
@@ -164,11 +157,6 @@ class McpRegistryGuard:
                 reversibility=Reversibility.IRREVERSIBLE,
                 deny_reason=f"mcp_unregistered: {server_name} not in registry, fail-closed",
             )
-            if worm_audit:
-                worm_audit.log(session_id, "mcp_unregistered", {
-                    "server_name": server_name,
-                    "transport": transport,
-                })
             return McpGuardResult(
                 allowed=False,
                 risk_level=McpRiskLevel.BLOCKED,

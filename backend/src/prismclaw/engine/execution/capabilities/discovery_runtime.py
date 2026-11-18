@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService, ToolCatalogEntry
-from prismclaw.schema.agent.types import WorkspaceMode
 from prismclaw.schema.services.skills import SkillInvocationState
 
 
@@ -90,14 +89,12 @@ class ToolDiscoveryRuntime:
         *,
         skill_invocation: SkillInvocationState | None = None,
         discovered_tools: set[str] | None = None,
-        mode: WorkspaceMode = "work",
         subagent_depth: int = 0,
         headless: bool = False,
     ) -> list[ToolCatalogEntry]:
         return self._catalog.list_searchable_tool_entries(
             skill_invocation=skill_invocation,
             discovered_tools=discovered_tools,
-            mode=mode,
             subagent_depth=subagent_depth,
             headless=headless,
         )
@@ -141,7 +138,6 @@ class ToolDiscoveryRuntime:
         *,
         skill_invocation: SkillInvocationState | None = None,
         discovered_tools: set[str] | None = None,
-        mode: WorkspaceMode = "work",
         subagent_depth: int = 0,
         limit: int = 5,
     ) -> list[ToolDiscoveryEntry]:
@@ -150,7 +146,6 @@ class ToolDiscoveryRuntime:
             self.visible_surface(
                 skill_invocation=skill_invocation,
                 discovered_tools=discovered_tools,
-                mode=mode,
                 subagent_depth=subagent_depth,
             ),
             limit=limit,

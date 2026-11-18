@@ -172,7 +172,6 @@ class SessionEventType(str, Enum):
     # Session / request metadata (log-only or snapshot)
     REQUEST_HEADER = "request/header"
     REQUEST_CONTEXT = "request/context"
-    TODO_WRITE = "todo/write"
     SESSION_CREATED = "session_created"
     SESSION_DELETED = "session_deleted"
     SESSION_END_SEED = "session/end-seed"
@@ -212,7 +211,6 @@ SessionContextItemKind = Literal[
     "fact",
     "constraint",
     "decision",
-    "todo",
     "assumption",
     "question",
 ]
@@ -232,7 +230,6 @@ class SessionStateUpdate(BaseModel):
     facts: list[SessionContextItem] = Field(default_factory=list)
     constraints: list[SessionContextItem] = Field(default_factory=list)
     decisions: list[SessionContextItem] = Field(default_factory=list)
-    todos: list[SessionContextItem] = Field(default_factory=list)
     assumptions: list[SessionContextItem] = Field(default_factory=list)
     open_questions: list[SessionContextItem] = Field(default_factory=list)
     evidence: list[dict] = Field(default_factory=list)
@@ -250,7 +247,7 @@ class GoalRecord(BaseModel):
 class TodoItem(BaseModel):
     id: str
     content: str
-    status: str = "pending"
+    status: Literal["pending", "in_progress", "completed"] = "pending"
 
 
 class SessionContextState(BaseModel):
@@ -261,7 +258,6 @@ class SessionContextState(BaseModel):
     facts: list[SessionContextItem] = Field(default_factory=list)
     constraints: list[SessionContextItem] = Field(default_factory=list)
     decisions: list[SessionContextItem] = Field(default_factory=list)
-    todos: list[SessionContextItem] = Field(default_factory=list)
     todo_list: list[TodoItem] = Field(default_factory=list)
     goals: list[GoalRecord] = Field(default_factory=list)
     assumptions: list[SessionContextItem] = Field(default_factory=list)
@@ -283,7 +279,6 @@ class SessionContextState(BaseModel):
             or any(item.status == "active" for item in self.facts)
             or any(item.status == "active" for item in self.constraints)
             or any(item.status == "active" for item in self.decisions)
-            or any(item.status == "active" for item in self.todos)
             or any(item.status != "completed" for item in self.todo_list)
             or any(goal.status == "active" for goal in self.goals)
             or any(item.status == "active" for item in self.assumptions)
@@ -298,7 +293,6 @@ class SessionContextState(BaseModel):
         self.facts = _merge_session_items(self.facts, update.facts)
         self.constraints = _merge_session_items(self.constraints, update.constraints)
         self.decisions = _merge_session_items(self.decisions, update.decisions)
-        self.todos = _merge_session_items(self.todos, update.todos)
         self.assumptions = _merge_session_items(self.assumptions, update.assumptions)
         self.open_questions = _merge_session_items(
             self.open_questions, update.open_questions
@@ -402,7 +396,7 @@ def _items_conflict(existing: SessionContextItem, incoming: SessionContextItem) 
     incoming_polarity = _state_item_polarity(incoming.content)
     if existing_polarity != 0 and incoming_polarity != 0 and existing_polarity != incoming_polarity:
         return True
-    if incoming.kind in {"todo", "question"} and incoming.status == "superseded":
+    if incoming.kind == "question" and incoming.status == "superseded":
         return True
     return False
 

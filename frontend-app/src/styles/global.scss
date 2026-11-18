@@ -254,11 +254,6 @@ textarea {
 .tool-btn:active {
   background: $surface-3;
 }
-.mode-ico-img {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
 .composer-tools .icon-btn {
   width: 32px;
   height: 32px;
@@ -2002,40 +1997,6 @@ body,
   background: $text;
 }
 
-/* 模式与工作目录：PC 下拉按钮的移动端形态（14 图标 + 文案 + 箭头） */
-.mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  margin-left: 0;
-  padding: 0 6px;
-  border: 0;
-  border-radius: $radius-pill;
-  background: transparent;
-  box-shadow: none;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 16px;
-  letter-spacing: 0;
-  text-transform: none;
-  color: $text-sub;
-  transition: background-color 150ms $ease, color 150ms $ease;
-}
-.mode-btn.is-active {
-  background: $surface;
-  color: $text;
-  box-shadow: $shadow-sm;
-}
-.mode-btn:active {
-  background: $hover;
-  color: $text;
-}
-.mode-btn-label {
-  font-size: 13px;
-  font-weight: 500;
-}
-
 .workspace-btn {
   display: inline-flex;
   align-items: center;
@@ -2120,14 +2081,14 @@ body,
 }
 
 /* ============================================================
-   Design System v4.4 · 输入框自适应与模式区分离
+   Design System v4.4 · 输入框自适应与底部工具区
    ============================================================ */
 
-/* 模式 / 工作目录独立成行，收进一枚悬浮玻璃胶囊 */
+/* 工作目录独立成行，收进一枚悬浮玻璃胶囊 */
 .home-dock {
   padding: 0 16px 16px;
 }
-.mode-dock {
+.dock-tools {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -2141,7 +2102,7 @@ body,
   -webkit-backdrop-filter: none;
 }
 
-/* 输入中自动收起模式/工作区行（折叠而非条件渲染，保持高度过渡） */
+/* 输入中自动收起工具/工作区行（折叠而非条件渲染，保持高度过渡） */
 .composer-footer {
   max-height: 76px;
   padding-bottom: 12px;
@@ -3907,6 +3868,10 @@ body,
 .md-paragraph:last-child {
   margin-bottom: 0;
 }
+/* 流式分块：每块是独立 .md，末段间距不能被 :last-child 吃掉，否则块间黏连 */
+.md-chunked .md-paragraph:last-child {
+  margin-bottom: 8px;
+}
 .md-heading {
   display: block;
   font-weight: 600;
@@ -5087,7 +5052,7 @@ body,
 
 /* ── 玻璃降级：不支持 backdrop-filter 的 WebView 用实底保证可读性 ── */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .mode-dock,
+  .dock-tools,
   .dlg-card,
   .dlg-sheet,
   .add-sheet,

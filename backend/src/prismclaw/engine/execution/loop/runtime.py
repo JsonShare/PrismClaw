@@ -36,7 +36,6 @@ class LoopRuntime:
     abort_event: Any = None
     run_deadline_s: float = 0.0
     run_started: float = 0.0
-    mode: str = "standard"
     task_runtime: Any = None
     snapshot: Any = None
     tree: Any = None
@@ -47,8 +46,7 @@ class LoopRuntime:
     completion_config: Any = None
     completion_state: Any = None
     budget_guard: Any = None
-    effort_level: str = "standard"
-    effort_budget: Any = None
+    run_budget: Any = None
     completion_kernel: Any = None
     terminal_messages: dict[str, str] = field(default_factory=dict)
     run_projector: Any = None
@@ -100,7 +98,6 @@ def build_runtime(
     abort_event: Any = None,
     run_deadline_s: float = 0.0,
     run_started: float = 0.0,
-    mode: str = "standard",
     task_runtime: Any = None,
     snapshot: Any = None,
     tree: Any = None,
@@ -119,23 +116,18 @@ def build_runtime(
         BudgetGuard,
         CompletionKernel,
         CompletionState,
-        resolve_effort_budget,
+        resolve_run_budget,
     )
     from prismclaw.engine.execution.projection.project import RunProjector
 
     completion_config = deps.config.control
     completion_state = CompletionState(contract=None, contract_resolved=False)
-    effort_level = getattr(request, "effort", "standard") or "standard"
-    effort_budget = resolve_effort_budget(
-        effort=effort_level,
-        long_running=bool(getattr(request, "long_running", False)),
-        tiers=deps.config.effort,
-    )
-    run_state.loop_state.soft_at = float(run_started) + effort_budget.soft_s
-    run_state.loop_state.hard_at = float(run_started) + effort_budget.hard_s
+    run_budget = resolve_run_budget(config=deps.config.budget)
+    run_state.loop_state.soft_at = float(run_started) + run_budget.soft_s
+    run_state.loop_state.hard_at = float(run_started) + run_budget.hard_s
     budget_guard = BudgetGuard(
         Budget(
-            max_iterations=effort_budget.steps,
+            max_iterations=run_budget.steps,
             run_deadline_s=float(run_deadline_s or 0.0),
             run_started=float(run_started or 0.0),
         )
@@ -158,7 +150,6 @@ def build_runtime(
         abort_event=abort_event,
         run_deadline_s=run_deadline_s,
         run_started=run_started,
-        mode=mode,
         task_runtime=task_runtime,
         snapshot=snapshot,
         tree=tree,
@@ -167,8 +158,7 @@ def build_runtime(
         completion_config=completion_config,
         completion_state=completion_state,
         budget_guard=budget_guard,
-        effort_level=effort_level,
-        effort_budget=effort_budget,
+        run_budget=run_budget,
         completion_kernel=CompletionKernel(
             state=completion_state,
             reviewer=CompletionReviewer(ArtifactScanner(tool_workspace_path)),

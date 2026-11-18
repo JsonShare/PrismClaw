@@ -13,15 +13,13 @@ from typing import Any, Literal, Protocol
 
 # ── Re-exports from contracts ──────────────────────────────────────────────
 from prismclaw.schema.agent.security import (
-    AllowedToolsPolicy,
-    RuntimeMode,
+    AllowedToolsPolicy,  # noqa: F401
+    RuntimeMode,  # noqa: F401
 )
 from prismclaw.schema.agent.security_store import (
     AggregateStoreProtocol,
     BreakGlassStoreProtocol,
-    ConfirmationChannelProtocol,
-    ConsentStoreProtocol,
-    WormAuditProtocol,
+    ConsentStoreProtocol,  # noqa: F401
 )
 
 
@@ -126,72 +124,3 @@ class NullBreakGlassStore(BreakGlassStoreProtocol):
         t = self._tokens.get(token)
         if t:
             t.revoked = True
-
-
-class InMemoryWormAudit(WormAuditProtocol):
-    """WORM 审计 stub：内存日志，带链哈希完整性校验。"""
-
-    def __init__(self) -> None:
-        self._entries: list[dict[str, Any]] = []
-
-    def log(self, session_id: str, event_type: str, payload: dict[str, Any]) -> str:
-        import hashlib
-        import json
-
-        prev_hash = self._entries[-1]["hash"] if self._entries else ""
-        entry = {
-            "event_id": f"evt-{len(self._entries)+1:06d}",
-            "timestamp": time.time(),
-            "session_id": session_id,
-            "event_type": event_type,
-            "payload": payload,
-            "prev_hash": prev_hash,
-        }
-        entry["hash"] = hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
-        self._entries.append(entry)
-        return entry["event_id"]
-
-    def query(self, session_id: str, since: str | None = None) -> list[dict[str, Any]]:
-        results = [e for e in self._entries if e["session_id"] == session_id]
-        if since is not None:
-            since_ts = float(since) if since.replace(".", "").isdigit() else 0
-            results = [e for e in results if e["timestamp"] >= since_ts]
-        return results
-
-    def verify_integrity(self, event_id: str) -> bool:
-        entries = sorted(self._entries, key=lambda e: e["timestamp"])
-        import hashlib
-        import json
-
-        for i, entry in enumerate(entries):
-            expected_prev = entries[i - 1]["hash"] if i > 0 else ""
-            if entry["prev_hash"] != expected_prev:
-                return False
-            computed = hashlib.sha256(json.dumps({
-                k: v for k, v in entry.items() if k != "hash"
-            }, sort_keys=True).encode()).hexdigest()
-            if computed != entry["hash"]:
-                return False
-            if entry["event_id"] == event_id:
-                return True
-        return event_id == ""
-
-
-class StubConfirmationChannel(ConfirmationChannelProtocol):
-    """确认通道 stub：自动批准（Phase 2 改为 UI 确认）。"""
-
-    def __init__(self) -> None:
-        self._pending: dict[str, dict[str, Any]] = {}
-
-    def request(self, session_id: str, reason: str, payload: dict[str, Any]) -> str:
-        request_id = f"conf-{secrets.token_urlsafe(8)}"
-        self._pending[request_id] = {
-            "session_id": session_id,
-            "reason": reason,
-            "payload": payload,
-            "result": "approved",  # stub: auto-approve
-        }
-        return request_id
-
-    def check(self, request_id: str) -> str:
-        return self._pending.get(request_id, {}).get("result", "rejected")

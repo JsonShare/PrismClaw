@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from prismclaw.app.auth import resolve_profile_and_mode
+from prismclaw.app.auth import resolve_profile
 
 # Re-export helpers for backward compatibility
 from prismclaw.app.web.chat._chat_helpers import (  # noqa: F401
@@ -64,7 +64,7 @@ from prismclaw.app.web.protocol.messages import (
     ChatSendMessage,
 )
 from prismclaw.engine.execution.control.artifacts import ArtifactScanner, Scope
-from prismclaw.infra.settings import WebSettings, load_settings
+from prismclaw.infra.settings import load_settings
 from prismclaw.runtime.facade.trajectory import (
     HeartbeatPayload,
     SetPhasePatch,
@@ -87,6 +87,8 @@ from prismclaw.schema.content.streaming import SubagentProgressItem
 from prismclaw.schema.protocol.protocol_types import ProtocolErrorCode
 from prismclaw.schema.session.ids import build_web_session_key
 from prismclaw.schema.session.output_files_metadata import persist_output_files_metadata
+from prismclaw.schema.shared.path_sanitizer import StreamingPathRedactor
+from prismclaw.schema.shared.tool_markup import MarkupStreamFilter
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +203,6 @@ async def _run_projection_flusher(
 async def _run_chat(
     state: ConnectionState,
     msg: ChatSendMessage,
-    settings: WebSettings,
 ) -> None:
     session_queue = _get_session_queue(state)
     rc = session_queue.get_run_control(msg.conversation_id)
@@ -241,29 +242,11 @@ async def _run_chat(
 
     web_deps = state.ws.app.state.web_deps
     redis_client = web_deps.redis_client
-    user_profile, mode = await resolve_profile_and_mode(
+    user_profile = await resolve_profile(
         channel="web",
         user_id=state.user_id,
         redis_client=redis_client,
-        message_mode=msg.mode,
-        deployment_default=settings.default_mode,
     )
-
-    session_queue = _get_session_queue(state)
-    previous_mode = session_queue.maybe_record_tier_change(msg.conversation_id, mode)
-    if previous_mode is not None and web_deps is not None:
-        audit = getattr(web_deps, "audit_logger", None)
-        if audit is not None:
-            try:
-                audit.log_tier_change(
-                    session_id=session_id,
-                    channel="web",
-                    from_tier=previous_mode,
-                    to_tier=mode,
-                    user_id=state.user_id,
-                )
-            except Exception:
-                logger.warning("audit log_tier_change failed", exc_info=True)
 
     try:
         deps = _get_runner_deps(state)
@@ -339,20 +322,8 @@ async def _run_chat(
             "web chat runtime requires sandbox_policy before constructing RunRequest"
         )
     # 输入框的内联卡片随正文以标记串发来，这里还原成模型可读文本并拆出结构化字段。
-    # 显式字段（非 web 客户端）优先，正文标记作为补充，二者合并去重。
+    # 正文是唯一真相源：协议不再接受客户端单独下发技能/插件/文件数组。
     user_text, mention_skills, mention_plugins, mention_files = extract_mentions(msg.content)
-    referenced_files: list[str] = []
-    for path in [*(msg.referenced_files or []), *mention_files]:
-        if path and path not in referenced_files:
-            referenced_files.append(path)
-    designated_skills: list[str] = []
-    for name in [*(msg.designated_skills or []), *mention_skills]:
-        if name and name not in designated_skills:
-            designated_skills.append(name)
-    designated_plugins: list[str] = []
-    for name in [*(msg.designated_plugins or []), *mention_plugins]:
-        if name and name not in designated_plugins:
-            designated_plugins.append(name)
     request = RunRequest(
         session_id=session_id,
         workspace_id=effective_workspace_id,
@@ -364,15 +335,13 @@ async def _run_chat(
         client_message_id=msg.client_message_id,
         confirmation_decision=msg.confirmation_decision,
         attachments=msg.attachments,
-        mode_override=mode,
-        effort=msg.effort or "standard",
         user_id=state.user_id,
         user_profile=user_profile,
         sandbox_policy=sandbox_policy,
         trajectory_audit_header=msg.trajectory,
-        designated_skills=designated_skills,
-        designated_plugins=designated_plugins,
-        referenced_files=referenced_files or None,
+        designated_skills=mention_skills,
+        designated_plugins=mention_plugins,
+        referenced_files=mention_files or None,
         conversation_id=msg.conversation_id,
     )
 
@@ -444,9 +413,7 @@ async def _run_chat(
             logger.warning("web.subagent_terminal.send_failed", exc_info=True)
 
     if web_deps is not None:
-        web_audit = getattr(web_deps, "audit_logger", None)
         deps = deps.with_request_context(
-            audit_logger=web_audit,
             progress_sink=_subagent_progress_sink,
             terminal_sink=_subagent_terminal_sink,
             channel="web",
@@ -497,6 +464,9 @@ async def _run_chat(
     except Exception:
         logger.warning("chat.start send failed (non-fatal)", exc_info=True)
 
+    run_presence = getattr(web_deps, "run_presence", None)
+    presence_task: asyncio.Task[Any] | None = None
+
     async def _emit_terminal_done(
         *,
         final_message: Any,
@@ -517,6 +487,16 @@ async def _run_chat(
             active=False,
         )
         assistant_message_id = message_id or assistant_message_id
+        # 在场证明与 run 同生命周期：先停心跳再删键，然后才发 done。
+        # 否则 done 后的对账会读到残留 active，把已结束的一轮判成运行中。
+        if presence_task is not None:
+            presence_task.cancel()
+            try:
+                await presence_task
+            except asyncio.CancelledError:
+                pass
+        if run_presence is not None:
+            await run_presence.clear(msg.conversation_id)
         # 指数退避重试：覆盖 WS 短暂断开（网络抖动/VPN 切换/缓冲区满）。
         # 总窗口 ~31.5s，远超大多数 WS 重连时间（通常 <10s）。
         # 退避序列：0.5, 1, 2, 4, 6, 8, 10, 15 秒（8 次）
@@ -569,6 +549,12 @@ async def _run_chat(
         # 避免「ErrorEvent 收尾后又抛异常」产生第二条内容相同的 partial。
         if terminal_done_sent:
             return
+        # 异常/中止收尾：先把 redactor 滞留的尾巴推出并计入正文，否则已流出的
+        # 结尾会缺字，落库内容与用户已看到的正文不一致。
+        try:
+            await _emit_text(_drain_text())
+        except Exception:
+            logger.warning("web.chat.path_redactor.flush_failed", exc_info=True)
         if _current_part[0]:
             full_transcript_parts.append(_current_part[0])
             _current_part[0] = ""
@@ -671,15 +657,71 @@ async def _run_chat(
 
     lifecycle_task: asyncio.Task[Any] | None = None
     run_projection_task: asyncio.Task[Any] | None = None
-    # 跨 worker 在场证明：owner 每 3s 刷新 Redis 键，收尾时删除。取消/异常时
-    # 靠 10s TTL 自动过期，不会留下"幽灵运行中"。
-    run_presence = getattr(web_deps, "run_presence", None)
-    presence_task: asyncio.Task[Any] | None = None
     # 正文累积状态在 try 之前初始化：except 崩溃路径引用它们构建 partial
     # 消息持久化（不变量 I3：final_message == 全量流式文本），必须保证
     # rc.active=True 之后的任何异常入口触达时均已绑定。
     full_transcript_parts: list[str] = []
     _current_part: list[str] = [""]
+    # 跨分片路径脱敏：按 token 切流的绝对路径可能被切断，逐片替换会把
+    # `/tmp/g` 替成 [内部路径] 后让后缀 `z_pages/x.html` 漏出。这里滞留
+    # 可能是路径中段的尾部，等下一片拼接后统一处理。
+    path_redactor = StreamingPathRedactor()
+    # 模型把原生工具调用写成纯文本（端点缺 tool-call parser）时，标记会被
+    # 分片切成 `<|DSML|tool` + `_calls>` 之类，逐片清理无法识别。先由
+    # MarkupStreamFilter 吞掉标记（含未闭合块），再交给路径脱敏处理正文。
+    markup_filter = MarkupStreamFilter()
+
+    def _feed_text(raw: str) -> str:
+        """分片入口：先剥工具标记，再做跨分片路径脱敏。"""
+        return path_redactor.feed(markup_filter.feed(raw))
+
+    def _drain_text() -> str:
+        """取回两级过滤器滞留的尾巴（标记未闭合块在此丢弃）。"""
+        return path_redactor.feed(markup_filter.flush()) + path_redactor.flush()
+
+    async def _emit_text(text: str) -> None:
+        """推送并累积一段**已脱敏**正文。
+
+        正文有五个消费方必须完全同源，否则「用户看到的」与「落库/时间线里的」
+        会分叉：chat.delta 推送、_current_part 转录累积（最终落库）、projector
+        迭代文本、runtime projection 的 streaming_text、追问生成的 preview。
+        新增消费方一律加在这里，不要在各分支就地追加。
+        """
+        nonlocal streamed_assistant_preview, refined_questions_task
+        if not text:
+            return
+        await send_event(
+            state,
+            SERVER_CHAT_DELTA,
+            msg.conversation_id,
+            {"text": text, "segmentId": projector.current_segment},
+        )
+        _current_part[0] = f"{_current_part[0]}{text}"
+        projector.on_iteration_text(text)
+        session_queue.get_or_create_web_runtime_projection(
+            msg.conversation_id
+        ).streaming_text += text
+        if refined_questions_task is None:
+            streamed_assistant_preview = f"{streamed_assistant_preview}{text}"
+            if len(streamed_assistant_preview) >= 400:
+                try:
+                    refined_questions_task = asyncio.create_task(
+                        _generate_followup_questions_for_request(
+                            deps,
+                            session_id=session_id,
+                            user_message=user_text,
+                            raw_attachments=msg.attachments,
+                            assistant_text=streamed_assistant_preview,
+                            max_turns=5,
+                        )
+                    )
+                    try:
+                        session_queue._track_detached(refined_questions_task)
+                    except Exception:
+                        pass
+                except Exception:
+                    refined_questions_task = None
+
     # try 必须覆盖 rc.active=True 之后的全部路径：rc.active 是 run 生命周期的
     # 权威信号，一旦置 True，其后任何 await 点的异常或取消都必须经 finally
     # 把它翻回 False。旧结构中下方首个 await 位于 try 之外——取消恰好落在
@@ -743,6 +785,10 @@ async def _run_chat(
             control=rc,
         ):
             if isinstance(event, IterationBoundary):
+                if event.kind == "llm_start" and event.iteration > 1:
+                    # 滞留的疑似路径尾部属于上一轮文本，必须在 on_iteration_boundary
+                    # 推进 segment 之前吐出，否则会带上下一个 segmentId 落到新一轮。
+                    await _emit_text(_drain_text())
                 projector.on_iteration_boundary(event)
                 if event.kind == "llm_start":
                     # 新迭代开始：把上一轮累积的转录段落 flush 进 full_transcript_parts，
@@ -770,42 +816,14 @@ async def _run_chat(
                 # segmentId 随 payload 一起推 — 前端收到时如果 segmentId 变了（进入新
                 # 迭代轮次），才先清 streamingText 再追加，避免 IterationBoundary 提前
                 # 清空正文导致的"执行一段时间后正文消失"空白窗口。
-                await send_event(
-                    state,
-                    SERVER_CHAT_DELTA,
-                    msg.conversation_id,
-                    {"text": event.text, "segmentId": projector.current_segment},
-                )
-                _current_part[0] = f"{_current_part[0]}{event.text}"
-                # 同时送进 TaskExecutionProjector：每轮迭代的自然语言输出（含中间
-                # 草稿、迭代过渡语）都累积到 _segment_texts[seg]，最终 build_snapshot_dict
-                # 产出的 IterationUnit.text 承载这段内容 → ExecutionTimeline 按 segmentId
-                # 逐轮渲染，完整迭代过程进执行时间线。正文区 final_message 只保留最后
-                # 一轮最终答案，不再重复中间草稿。
-                projector.on_iteration_text(event.text)
-                session_queue.get_or_create_web_runtime_projection(
-                    msg.conversation_id
-                ).streaming_text += event.text
-                if refined_questions_task is None:
-                    streamed_assistant_preview = f"{streamed_assistant_preview}{event.text}"
-                    if len(streamed_assistant_preview) >= 400:
-                        try:
-                            refined_questions_task = asyncio.create_task(
-                                _generate_followup_questions_for_request(
-                                    deps,
-                                    session_id=session_id,
-                                    user_message=user_text,
-                                    raw_attachments=msg.attachments,
-                                    assistant_text=streamed_assistant_preview,
-                                    max_turns=5,
-                                )
-                            )
-                            try:
-                                session_queue._track_detached(refined_questions_task)
-                            except Exception:
-                                pass
-                        except Exception:
-                            refined_questions_task = None
+                #
+                # 路径过滤：LLM 在工具执行过程中可能看到宿主真实路径（bash 输出、
+                # 工具结果里的物理落点），然后在回答里暴露出来。这些实现细节对用户
+                # 没有意义，必须在实时推送链路就过滤掉——不能等历史回放时再处理
+                # （用户在实时打字机效果中已经看到了）。按 token 切分的分片可能把
+                # 一个绝对路径切成两半，故交给有状态 redactor 滞留疑似路径尾部，
+                # 与下一片拼接后再统一替换。
+                await _emit_text(_feed_text(event.text))
 
             elif isinstance(event, ReasoningChunk):
                 _set_loading_active(
@@ -957,6 +975,9 @@ async def _run_chat(
                     active=False,
                 )
                 # flush 最后一段转录（最终答案轮无后续迭代触发 flush）。
+                # 先吐 redactor 滞留的尾巴：它属于正文结尾，不推等于正文缺字，
+                # 且落库与推送会不一致。
+                await _emit_text(_drain_text())
                 if _current_part[0]:
                     full_transcript_parts.append(_current_part[0])
                     _current_part[0] = ""

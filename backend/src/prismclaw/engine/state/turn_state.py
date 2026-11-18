@@ -69,11 +69,6 @@ class ToolGovernanceState(BaseModel):
         return set(self.callable_tools)
 
 
-class PermissionDecision(BaseModel):
-    mode: str = Field(default="work")
-    source: str = Field(default="default")
-
-
 class SandboxPolicyDecision(BaseModel):
     backend: str = Field(default="")
     policy_kind: str = Field(default="")
@@ -239,7 +234,6 @@ def build_canonical_decision_state_from_bundle(
     return CanonicalDecisionState(
         provider_capability_profile=bundle.provider_capability_profile.model_copy(deep=True),
         tool_governance_state=bundle.tool_governance.model_copy(deep=True),
-        permission_decision=bundle.permission.model_copy(deep=True),
         sandbox_policy_decision=bundle.sandbox_policy.model_copy(deep=True),
     )
 
@@ -291,7 +285,6 @@ class CapabilityDecisionBundle(BaseModel):
         default_factory=ProviderCapabilityProfile
     )
     tool_governance: ToolGovernanceState = Field(default_factory=ToolGovernanceState)
-    permission: PermissionDecision = Field(default_factory=PermissionDecision)
     sandbox_policy: SandboxPolicyDecision = Field(default_factory=SandboxPolicyDecision)
     memory_hint_policy: MemoryHintPolicy = Field(default_factory=MemoryHintPolicy)
     fork_policy: ForkPolicyDecision = Field(default_factory=ForkPolicyDecision)
@@ -303,7 +296,6 @@ class CapabilityDecisionBundle(BaseModel):
         *,
         provider_capability_profile: ProviderCapabilityProfile,
         tool_governance: ToolGovernanceState,
-        permission: PermissionDecision,
         sandbox_policy: SandboxPolicyDecision,
         memory_hint_policy: MemoryHintPolicy,
         fork_policy: ForkPolicyDecision,
@@ -313,7 +305,6 @@ class CapabilityDecisionBundle(BaseModel):
         bundle = cls(
             provider_capability_profile=provider_capability_profile.model_copy(deep=True),
             tool_governance=tool_governance.model_copy(deep=True),
-            permission=permission.model_copy(deep=True),
             sandbox_policy=sandbox_policy.model_copy(deep=True),
             memory_hint_policy=normalized_memory_hint_policy,
             fork_policy=normalized_fork_policy,
@@ -324,7 +315,6 @@ class CapabilityDecisionBundle(BaseModel):
                     mode="json"
                 ),
                 "tool_governance": bundle.tool_governance.model_dump(mode="json"),
-                "permission": bundle.permission.model_dump(mode="json"),
                 "sandbox_policy": bundle.sandbox_policy.model_dump(mode="json"),
                 "memory_hint_policy": bundle.memory_hint_policy.model_dump(mode="json"),
                 "fork_policy": bundle.fork_policy.model_dump(mode="json"),
@@ -346,7 +336,6 @@ class CanonicalDecisionState(BaseModel):
         default_factory=ProviderCapabilityProfile
     )
     tool_governance_state: ToolGovernanceState = Field(default_factory=ToolGovernanceState)
-    permission_decision: PermissionDecision = Field(default_factory=PermissionDecision)
     sandbox_policy_decision: SandboxPolicyDecision = Field(default_factory=SandboxPolicyDecision)
     policy_latches: Dict[str, Any] = Field(default_factory=dict)
 
@@ -599,7 +588,6 @@ def resolve_capability_decision_bundle(
         return CapabilityDecisionBundle.from_contract(
             provider_capability_profile=state.canonical_decision_state.provider_capability_profile,
             tool_governance=state.canonical_decision_state.tool_governance_state,
-            permission=state.canonical_decision_state.permission_decision,
             sandbox_policy=state.canonical_decision_state.sandbox_policy_decision,
             memory_hint_policy=MemoryHintPolicy.from_manifest(state.request_assembly_manifest),
             fork_policy=ForkPolicyDecision.from_manifest(state.request_assembly_manifest),

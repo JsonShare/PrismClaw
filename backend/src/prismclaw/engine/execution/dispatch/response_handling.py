@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
-from prismclaw.engine.execution.dispatch.turn_utils import classify_turn, strip_thinking
+from prismclaw.engine.execution.dispatch.turn_utils import classify_turn, strip_noise
 from prismclaw.engine.task_profile.service import TaskResponsePolicy
 from prismclaw.schema.agent.context import ContextTurnFinalizer
 from prismclaw.engine.hooks import ResponseObservation
@@ -35,10 +35,15 @@ def retry_limit_for(
             return response_policy.reasoning_retry_limit
         if classification == "empty":
             return response_policy.empty_retry_limit
+        if classification == "tool_markup":
+            return response_policy.tool_markup_retry_limit
         return 0
     if classification == "reasoning":
         return config.retry.reasoning_only_limit
     if classification == "empty":
+        return config.retry.empty_response_limit
+    if classification == "tool_markup":
+        # 无 task_profile 时按空答复处理：同样是「没有可见答复」。
         return config.retry.empty_response_limit
     return 0
 
@@ -56,9 +61,9 @@ def decide_no_tool_turn(
     )
     retry_limit = retry_limit_for(classification, config, response_policy)
     should_retry = (
-        classification in {"reasoning", "empty"}
+        classification in {"reasoning", "empty", "tool_markup"}
         and retry_limit > 0
-        and retry_counts[classification] < retry_limit
+        and retry_counts.get(classification, 0) < retry_limit
     )
     return NoToolTurnDecision(
         action="retry" if should_retry else "complete",
@@ -74,10 +79,11 @@ async def append_assistant_response(
     text: str,
     tool_calls: list[dict[str, Any]] | None = None,
 ) -> MessageEntry:
-    # 模型可能在 <thinking>...</thinking> 里写内部推理草稿——
-    # 哪怕有 tool_calls（工具回合）也不能把 thinking block 落树。
-    # strip_thinking 对无 block 的纯文本是 no-op，安全。
-    cleaned = strip_thinking(text or "")
+    # 模型可能在 <thinking>...</thinking> 里写内部推理草稿，也可能在端点缺
+    # tool-call parser 时把原生工具调用标记（<|DSML|tool_calls>…）以纯文本
+    # 写进 content——哪怕有 tool_calls（工具回合）都不能落树。
+    # strip_noise 对干净文本是 no-op，安全。
+    cleaned = strip_noise(text or "")
     entry = MessageEntry(
         id=generate_entry_id(set(tree.entries.keys())),
         parent_id=tree.leaf_id,
@@ -100,9 +106,9 @@ async def complete_no_tool_turn(
     response_text: str,
     usage_totals: dict[str, int],
 ) -> Done:
-    # 入口处统一 strip_thinking：assistant 落树、hooks 观测、以及
-    # 回灌给 next turn 的 session_messages 都不该看到模型内部草稿。
-    cleaned = strip_thinking(response_text or "")
+    # 入口处统一 strip_noise：assistant 落树、hooks 观测、以及
+    # 回灌给 next turn 的 session_messages 都不该看到模型内部草稿与工具标记。
+    cleaned = strip_noise(response_text or "")
     assistant_entry = await append_assistant_response(
         deps=deps,
         tree=tree,
@@ -129,7 +135,9 @@ async def complete_no_tool_turn(
         finalizer_messages,
     )
     return Done(
-        final_message=response_text,
+        # 与实时推送同源：final_message 不能带 <thinking> 或工具调用标记，
+        # 否则「审计/非 Web 通道的正文」与「用户实时看到的正文」分叉。
+        final_message=cleaned,
         assistant_message_id=assistant_entry.id,
         usage=usage_totals,
     )

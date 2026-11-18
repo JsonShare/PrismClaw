@@ -17,8 +17,8 @@ PrismClaw 提供两种服务器部署形态，沙箱执行路径随形态切换�
 │      ├── prismclaw (主应用)                                              │
 │      ├── postgres (VectorChord Suite PG17)                               │
 │      ├── redis (Redis 7)                                                 │
-│      ├── runtime-agent-default:9001  ← SafetyGate STANDARD tier         │
-│      └── runtime-agent-restricted:9001 ← SafetyGate STRICT tier         │
+│      ├── runtime-agent-default:9001  ← STANDARD 沙箱档位                  │
+│      └── runtime-agent-restricted:9001 ← STRICT 沙箱档位                  │
 │    沙箱: 主应用通过 WorkspaceRuntimeClient（HMAC）远程调用 Runtime-Agent │
 │          Runtime-Agent 容器级隔离 + 可选 bwrap 二次隔离                   │
 └─────────────────────────────────────────────────────────────────────────┘

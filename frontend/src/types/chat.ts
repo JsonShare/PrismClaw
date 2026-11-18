@@ -121,19 +121,18 @@ export interface WSClientIdentify {
   protocol_version: number
 }
 
+/** 任务挂起后的确认决策，与后端 ConfirmationDecision 对齐。 */
+export type ConfirmationDecision = 'approve' | 'deny'
+
 export interface WSClientChatSend {
   type: 'chat.send'
   conversation_id: string
   workspace_id?: string
   content: string
-  confirmation_decision?: 'approve' | 'deny'
+  confirmation_decision?: ConfirmationDecision
   attachments?: AttachmentBlock[]
-  mode?: 'chat' | 'work'
-  effort?: 'quick' | 'standard' | 'deep'  // 执行档位（steps/tool_calls/墙钟预算）
   trajectory?: string  // 'full', 'dry', or undefined (use env default)
-  designated_skills?: string[]  // 用户指定技能名（可多个）
-  designated_plugins?: string[]  // 用户指定插件名（可多个）
-  referenced_files?: string[]  // 工作区根相对路径列表（含 sessions/<sid>/outputs/x 这类形式）
+  // 技能/插件/引用文件不单独下发：输入框卡片序列化为正文标记，正文是唯一真相源。
   // 客户端生成的消息标识：后端写入 user entry，sync 回传后用于本地气泡 re-key。
   client_message_id?: string
 }

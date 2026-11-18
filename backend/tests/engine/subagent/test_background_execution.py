@@ -1,10 +1,9 @@
 """P1a：后台子代理派的契约测试。
 
-覆盖设计文档第 9 节的四项关键测试：
+覆盖设计文档第 9 节的关键测试：
 1. 不阻塞：``dispatch_mode=background`` 立即返回 task_id，回执不含结果正文
 2. 记录唯一性：一次派发只写一条 scheduled / running / 终态
-3. 取消：``cancel_task`` 真实取消后台 task，并落 cancelled 终态
-4. 停机：TaskManager 排水时后台任务落终态
+3. 停机：TaskManager 排水时后台任务落终态
 """
 
 from __future__ import annotations
@@ -19,13 +18,11 @@ from prismclaw.engine.security.gate.types import ParallelTaskExtras, TaskRuntime
 from prismclaw.engine.subagent.core import executor as executor_mod
 from prismclaw.engine.subagent.core._result_types import AgentRunResult
 from prismclaw.engine.subagent.core.executor import SubAgentExecutor
-from prismclaw.engine.subagent.runtime import background as background_mod
 from prismclaw.engine.subagent.runtime.parallel import (
     PARALLEL_TASK_TERMINAL_STATUSES,
     ParallelTaskRuntimeRecord,
 )
 from prismclaw.engine.subagent.tool import SubAgentTool
-from prismclaw.engine.toolkit.builtin.task_tools import CancelTaskTool
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.infra.task_manager import TaskManager
 from prismclaw.schema.config.config import SubAgentConfig
@@ -39,16 +36,25 @@ class _MemoryTaskStore:
 
     def __init__(self) -> None:
         self.records: list[ParallelTaskRuntimeRecord] = []
-        self._latest: dict[str, ParallelTaskRuntimeRecord] = {}
+        self._latest: dict[tuple[str, str], ParallelTaskRuntimeRecord] = {}
 
     async def append(self, record: ParallelTaskRuntimeRecord) -> None:
+        owner = next(
+            (r for r in self._latest.values() if r.task_id == record.task_id),
+            None,
+        )
+        if owner is not None and owner.agent_id != record.agent_id:
+            raise ValueError(
+                f"parallel task {record.task_id!r} already belongs to "
+                f"agent {owner.agent_id!r}"
+            )
         self.records.append(record)
-        self._latest[record.task_id] = record
+        self._latest[(record.agent_id, record.task_id)] = record
 
     async def get(
-        self, *, session_id: str, task_id: str
+        self, *, session_id: str, agent_id: str, task_id: str
     ) -> ParallelTaskRuntimeRecord | None:
-        return self._latest.get(task_id)
+        return self._latest.get((agent_id, task_id))
 
     async def list_for_session(
         self,
@@ -158,22 +164,23 @@ async def test_launch_background_returns_before_run_finishes(monkeypatch) -> Non
 
     loop = asyncio.get_running_loop()
     started = loop.time()
-    task_id, error = await executor.launch_background(
+    task_id, agent_id, error = await executor.launch_background(
         _manifest(), "do it", _context(store, manager)
     )
     elapsed = loop.time() - started
 
     assert error is None
     assert task_id is not None and task_id.startswith("pt:")
+    assert agent_id is not None and agent_id.startswith("ag:")
     # 派发耗时不包含子代理执行时长（0.2s）
     assert elapsed < 0.1
 
     await _wait_until(
-        lambda: store._latest.get(task_id) is not None
-        and store._latest[task_id].status == "running"
+        lambda: store._latest.get((agent_id, task_id)) is not None
+        and store._latest[(agent_id, task_id)].status == "running"
     )
     await manager.shutdown()
-    assert store._latest[task_id].status == "cancelled"
+    assert store._latest[(agent_id, task_id)].status == "cancelled"
 
 
 async def test_background_dispatch_result_contains_only_task_ids(monkeypatch) -> None:
@@ -190,7 +197,7 @@ async def test_background_dispatch_result_contains_only_task_ids(monkeypatch) ->
             self, manifest, task, ctx, *, call_id="", context_snapshot=None
         ):
             captured["ctx"] = ctx
-            return "pt:abc123", None
+            return "pt:abc123", "ag:test", None
 
         async def run(self, *args, **kwargs):  # pragma: no cover
             raise AssertionError("background dispatch must not await run()")
@@ -215,6 +222,7 @@ async def test_background_dispatch_result_contains_only_task_ids(monkeypatch) ->
     text = result.content[0].text
     assert result.is_error is False
     assert "pt:abc123" in text
+    assert "ag:test" in text
     assert "RESULT-BODY" not in text
     # 后台子上下文必须是原运行时的引用（deepcopy 后按引用回填）
     child = captured["ctx"]
@@ -256,18 +264,19 @@ async def test_background_writes_single_record_per_status(monkeypatch) -> None:
     manager = TaskManager()
     executor = _executor()
 
-    task_id, error = await executor.launch_background(
+    task_id, agent_id, error = await executor.launch_background(
         _manifest(), "do it", _context(store, manager)
     )
     assert error is None and task_id is not None
     await _wait_until(
-        lambda: store._latest.get(task_id) is not None
-        and store._latest[task_id].status in PARALLEL_TASK_TERMINAL_STATUSES
+        lambda: store._latest.get((agent_id, task_id)) is not None
+        and store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
     )
 
     statuses = [r.status for r in store.records if r.task_id == task_id]
     assert statuses == ["scheduled", "running", "completed"]
-    assert store._latest[task_id].result_summary == "done"
+    assert {r.agent_id for r in store.records if r.task_id == task_id} == {agent_id}
+    assert store._latest[(agent_id, task_id)].result_summary == "done"
 
 
 async def test_sync_run_still_writes_same_record_count(monkeypatch) -> None:
@@ -282,62 +291,10 @@ async def test_sync_run_still_writes_same_record_count(monkeypatch) -> None:
     assert result.outcome == "success"
     statuses = [r.status for r in store.records]
     assert statuses == ["scheduled", "running", "completed"]
+    assert all(r.agent_id.startswith("ag:") for r in store.records)
 
 
-# ── 3. 取消 ──────────────────────────────────────────────────────────
-
-
-async def test_cancel_task_really_cancels_background_run(monkeypatch) -> None:
-    cancelled = asyncio.Event()
-
-    async def behavior():
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            cancelled.set()
-            raise
-
-    _patch_instance(monkeypatch, behavior)
-    store = _MemoryTaskStore()
-    manager = TaskManager()
-    executor = _executor()
-    ctx = _context(store, manager)
-
-    task_id, error = await executor.launch_background(_manifest(), "do it", ctx)
-    assert error is None and task_id is not None
-    await _wait_until(
-        lambda: store._latest.get(task_id) is not None
-        and store._latest[task_id].status == "running"
-    )
-
-    result = await CancelTaskTool().execute({"task_id": task_id}, ctx)
-
-    assert result.is_error is False
-    assert "已取消" in result.content[0].text
-    assert cancelled.is_set()
-    assert store._latest[task_id].status == "cancelled"
-    assert task_id not in background_mod._background_handles
-
-
-async def test_cancel_task_rejects_sync_record_and_unknown_handle(monkeypatch) -> None:
-    store = _MemoryTaskStore()
-    manager = TaskManager()
-    await store.append(
-        ParallelTaskRuntimeRecord(
-            task_id="pt:sync",
-            owner_session_id="sess-1",
-            kind="subagent",
-            status="running",
-        )
-    )
-    ctx = _context(store, manager)
-
-    result = await CancelTaskTool().execute({"task_id": "pt:sync"}, ctx)
-    assert result.is_error is True
-    assert "不是本进程可取消的后台任务" in result.content[0].text
-
-
-# ── 4. 停机 ──────────────────────────────────────────────────────────
+# ── 3. 停机 ──────────────────────────────────────────────────────────
 
 
 async def test_shutdown_writes_terminal_state_for_running_background_task(
@@ -351,22 +308,21 @@ async def test_shutdown_writes_terminal_state_for_running_background_task(
     manager = TaskManager()
     executor = _executor()
 
-    task_id, error = await executor.launch_background(
+    task_id, agent_id, error = await executor.launch_background(
         _manifest(), "do it", _context(store, manager)
     )
     assert error is None and task_id is not None
     await _wait_until(
-        lambda: store._latest.get(task_id) is not None
-        and store._latest[task_id].status == "running"
+        lambda: store._latest.get((agent_id, task_id)) is not None
+        and store._latest[(agent_id, task_id)].status == "running"
     )
 
     report = await manager.shutdown()
     assert report.cancelled == 1
-    assert store._latest[task_id].status == "cancelled"
-    assert task_id not in background_mod._background_handles
+    assert store._latest[(agent_id, task_id)].status == "cancelled"
 
 
-# ── 5. 闸门与异常终态 ────────────────────────────────────────────────
+# ── 4. 闸门与异常终态 ────────────────────────────────────────────────
 
 
 async def test_parallel_gate_rejects_launch_over_limit(monkeypatch) -> None:
@@ -379,16 +335,17 @@ async def test_parallel_gate_rejects_launch_over_limit(monkeypatch) -> None:
     executor = _executor(SubAgentConfig(max_parallel_per_turn=1))
     ctx = _context(store, manager)
 
-    first_id, first_error = await executor.launch_background(_manifest(), "a", ctx)
+    first_id, first_agent_id, first_error = await executor.launch_background(_manifest(), "a", ctx)
     assert first_error is None and first_id is not None
     await _wait_until(
-        lambda: store._latest.get(first_id) is not None
-        and store._latest[first_id].status == "running"
+        lambda: store._latest.get((first_agent_id, first_id)) is not None
+        and store._latest[(first_agent_id, first_id)].status == "running"
     )
 
-    second_id, second_error = await executor.launch_background(_manifest(), "b", ctx)
+    second_id, second_agent_id, second_error = await executor.launch_background(_manifest(), "b", ctx)
     assert second_id is None
     assert second_error is not None and "上限" in second_error
+    assert second_agent_id is None
 
     await manager.shutdown()
 
@@ -402,16 +359,16 @@ async def test_background_run_crash_writes_failed_terminal(monkeypatch) -> None:
     manager = TaskManager()
     executor = _executor()
 
-    task_id, error = await executor.launch_background(
+    task_id, agent_id, error = await executor.launch_background(
         _manifest(), "do it", _context(store, manager)
     )
     assert error is None and task_id is not None
     await _wait_until(
-        lambda: store._latest.get(task_id) is not None
-        and store._latest[task_id].status in PARALLEL_TASK_TERMINAL_STATUSES
+        lambda: store._latest.get((agent_id, task_id)) is not None
+        and store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
     )
-    assert store._latest[task_id].status == "failed"
-    assert "boom" in (store._latest[task_id].error_summary or "")
+    assert store._latest[(agent_id, task_id)].status == "failed"
+    assert "boom" in (store._latest[(agent_id, task_id)].error_summary or "")
 
 
 async def test_parent_abort_really_cancels_background_run(monkeypatch) -> None:
@@ -432,42 +389,25 @@ async def test_parent_abort_really_cancels_background_run(monkeypatch) -> None:
     executor = _executor()
     ctx = _context(store, manager)
 
-    task_id, error = await executor.launch_background(_manifest(), "do it", ctx)
+    task_id, agent_id, error = await executor.launch_background(_manifest(), "do it", ctx)
     assert error is None and task_id is not None
     await asyncio.wait_for(started.wait(), timeout=1.0)
     await _wait_until(
-        lambda: store._latest.get(task_id) is not None
-        and store._latest[task_id].status == "running"
+        lambda: store._latest.get((agent_id, task_id)) is not None
+        and store._latest[(agent_id, task_id)].status == "running"
     )
 
     ctx.abort.set()
 
     await _wait_until(
-        lambda: store._latest[task_id].status in PARALLEL_TASK_TERMINAL_STATUSES
+        lambda: store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
     )
     assert cancelled.is_set()
-    assert store._latest[task_id].status == "cancelled"
-    assert task_id not in background_mod._background_handles
+    assert store._latest[(agent_id, task_id)].status == "cancelled"
     await manager.shutdown()
 
 
-async def test_task_tools_are_not_skill_gated() -> None:
-    from prismclaw.engine.toolkit.builtin.task_tools import (
-        CheckSubagentTaskTool,
-        ListSubagentTasksTool,
-    )
-
-    # 派发回执直接引用这些工具；skill_gated 会让正常对话看不到它们。
-    assert CheckSubagentTaskTool.skill_gated is False
-    assert ListSubagentTasksTool.skill_gated is False
-    assert CancelTaskTool.skill_gated is False
-    assert CancelTaskTool.read_only_allowed is True
-    assert CheckSubagentTaskTool.visibility_scope == "main_only"
-    assert ListSubagentTasksTool.visibility_scope == "main_only"
-    assert CancelTaskTool.visibility_scope == "main_only"
-
-
-# ── 6. 终态投递 ──────────────────────────────────────────────────────
+# ── 5. 终态投递 ──────────────────────────────────────────────────────
 
 
 async def test_terminal_sink_receives_record_after_background_completion(
@@ -482,7 +422,7 @@ async def test_terminal_sink_receives_record_after_background_completion(
         delivered.append(record)
 
     executor = _executor()
-    task_id, error = await executor.launch_background(
+    task_id, agent_id, error = await executor.launch_background(
         _manifest(), "do it", _context(store, manager, sink=sink)
     )
     assert error is None and task_id is not None
