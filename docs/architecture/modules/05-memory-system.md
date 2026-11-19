@@ -78,13 +78,14 @@
 
 模型侧唯一记忆写入/归档入口（action=save/archive）。
 
-- **写入质量控制（D7）**：type 走受控词表（`schema/memory/classify.py`：`CANONICAL_TYPES` = fact/preference/constraint/procedure/observation；`normalize_type()` 归一 facts→fact、procedures/process/workflow/auto_sop→procedure、general→fact、patient_medical_fact→fact 等），未知词拒绝；confidence=0.7、origin_stage=`memorize_tool` 确定性补齐；save 返回 8 位短 id
+- **写入质量控制（D7）**：type 走受控词表（`schema/memory/classify.py`：`CANONICAL_TYPES` = fact/preference/constraint/procedure/observation/decision）；`normalize_type()` 只做大小写/空白归一与缺省 fact，**不做别名映射**（未上线、无存量数据）；memory 工具对词表外取值直接报错，LLM 提取路径（capture / dream）把未知词归入 fact，`MemoryEntry` 构造期对词表外取值直接失败；confidence=0.7、origin_stage=`memorize_tool` 确定性补齐；save 返回 8 位短 id。`decision` 为一等类型：dream 评分与检索衰减均对其单独处理（永不衰减）。`auto_sop` 是系统内部类型（`SOP_MEMORY_TYPE`），由 `sop_extraction` 写入、curator 消费，不在模型可写词表中
+- **层由 type 派生**：procedure → L3，其余 → L2；模型侧不再暴露 `layer` 参数（两个自由参数会制造 fact@L3 之类的矛盾状态）
 - **守卫（D8）**：`_has_non_error_tool_use` 只认 `MessageEntry.is_error == False` 的工具执行
 - **archive**：按 entry_id（8 位短 id <=> 完整 id 前缀匹配）下架条目
 
 ### ChatCapture（`engine/memory/capture.py`）
 
-纯聊天回合的事实自动提取器。产出经 `normalize_type()` 归一到受控词表再入库。
+纯聊天回合的事实自动提取器。prompt 只暴露 L2 可落库的类型（`_CHAT_CAPTURE_TYPES`：fact / preference / constraint / observation / decision），产出经 `normalize_type()` 归一后再入库；procedure 不在其中——工作流只能走 `sop_extraction` 的 L3 校验/去重管线。
 
 - **核心函数**：`build_extraction_prompt()` / `parse_facts()` / `extract_chat_facts()` / `store_chat_facts()`
 - **关键常量**：`MIN_CHAT_TURNS_FOR_EXTRACTION = 3`；`SHORT_TERM_TTL_SECONDS = 7*24*3600`；`AUTO_EXTRACTION_CONFIDENCE = 0.5`

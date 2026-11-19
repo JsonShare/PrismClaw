@@ -17,8 +17,17 @@ from prismclaw.schema.memory.memory_types import MemoryEntry
 class _FakeLLM:
     def __init__(self, raw_json: str) -> None:
         self._raw = raw_json
+        self.prompts: list[str] = []
 
     async def complete(self, *, request: Any, temperature: Any = None) -> Any:
+        for message in request.messages:
+            content = (
+                message.get("content")
+                if isinstance(message, dict)
+                else getattr(message, "content", "")
+            )
+            if content:
+                self.prompts.append(str(content))
         return _FakeResponse(self._raw)
 
 
@@ -66,18 +75,18 @@ def _build_engine(memory_store: _FakeMemoryStore, *, raw_json: str) -> DreamEngi
 
 _L1_ENTRIES = [
     MemoryEntry(
-        id="old-a", layer="L1", type="facts", content="preview-a",
+        id="old-a", layer="L1", type="fact", content="preview-a",
         created_at=1730000000.0, updated_at=1730000000.0,
     ),
     MemoryEntry(
-        id="old-b", layer="L1", type="facts", content="preview-b",
+        id="old-b", layer="L1", type="fact", content="preview-b",
         created_at=1730000000.0, updated_at=1730000000.0,
     ),
 ]
 
 _MERGE_JSON = (
     '[{"original_ids": ["old-a", "old-b"], "context": "修复部署报错时",'
-    ' "consolidated_fact": "部署前必须迁移 schema", "type": "facts"}]'
+    ' "consolidated_fact": "部署前必须迁移 schema", "type": "fact"}]'
 )
 
 
@@ -103,3 +112,56 @@ async def test_light_sleep_merge_archives_originals() -> None:
     # 4. 统计口径：去重计数 = 下架原件数
     assert result["deduplicated"] == 2
     assert result["promoted_to_l2"] == 1
+
+
+@pytest.mark.parametrize(
+    ("entry_type", "expected_layer"),
+    [
+        ("fact", "L2"),
+        ("preference", "L2"),
+        ("decision", "L2"),
+        ("procedure", "L3"),  # 仅工作流进 L3
+        ("PROCEDURE", "L3"),  # 大小写归一
+    ],
+)
+@pytest.mark.asyncio
+async def test_light_sleep_layer_follows_normalized_type(
+    entry_type: str, expected_layer: str
+) -> None:
+    """layer 判定必须基于归一后的类型，而不是 LLM 的原始字面量。"""
+    store = _FakeMemoryStore(
+        l1_entries=_L1_ENTRIES,
+        fulltext={"old-a": "a 的完整原文", "old-b": "b 的完整原文"},
+    )
+    raw_json = (
+        '[{"original_ids": ["old-a", "old-b"], "context": "修复部署报错时",'
+        f' "consolidated_fact": "部署前必须迁移 schema", "type": "{entry_type}"}}]'
+    )
+    engine = _build_engine(store, raw_json=raw_json)
+
+    await engine.run_light("web:test")
+
+    assert len(store.stored) == 1
+    assert store.stored[0].layer == expected_layer
+
+
+@pytest.mark.asyncio
+async def test_light_sleep_prompt_uses_controlled_vocabulary() -> None:
+    """提取提示词必须只教受控词表，否则模型会持续产出存量别名。"""
+    llm = _FakeLLM(_MERGE_JSON)
+    store = _FakeMemoryStore(
+        l1_entries=_L1_ENTRIES,
+        fulltext={"old-a": "a 的完整原文", "old-b": "b 的完整原文"},
+    )
+    engine = DreamEngine(
+        memory_store=store,  # type: ignore[arg-type]
+        session_store=None,  # type: ignore[arg-type]
+        llm_client=llm,  # type: ignore[arg-type]
+        light_sleep_threshold_s=0,
+    )
+
+    await engine.run_light("web:test")
+
+    prompt = "\n".join(llm.prompts)
+    assert "facts/procedures" not in prompt
+    assert "fact|preference|constraint|observation|decision|procedure" in prompt

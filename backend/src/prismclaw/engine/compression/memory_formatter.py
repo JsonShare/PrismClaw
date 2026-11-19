@@ -28,7 +28,7 @@ class MemoryFormatter:
             lines = ["<memory_facts>", "<facts>"]
             for entry in l2_entries:
                 lines.append(
-                    f"- [{getattr(entry, 'type', 'general')}] {getattr(entry, 'content', '')}"
+                    f"- [{getattr(entry, 'type', 'fact')}] {getattr(entry, 'content', '')}"
                 )
             lines.extend(["</facts>", "</memory_facts>"])
             sections.append(("memory_facts", "\n".join(lines)))
@@ -37,7 +37,7 @@ class MemoryFormatter:
             for entry in l3_entries:
                 entry_id = getattr(entry, "id", "")[:8]
                 lines.append(
-                    f"- [{getattr(entry, 'type', 'general')}|{entry_id}] "
+                    f"- [{getattr(entry, 'type', 'fact')}|{entry_id}] "
                     f"{getattr(entry, 'content', '')}"
                 )
             lines.extend(["</procedures>", "</memory_procedures>"])
@@ -98,7 +98,7 @@ class MemoryFormatter:
         if l2_entries:
             lines = ["<memory_facts>", "<facts>"]
             for packet in l2_entries:
-                entry_type = packet.provenance.get("entry_type", "general")
+                entry_type = packet.provenance.get("entry_type", "fact")
                 lines.append(f"- [{entry_type}] {packet.content}")
             lines.extend(["</facts>", "</memory_facts>"])
             sections.append(("memory_facts", "\n".join(lines)))
@@ -106,7 +106,7 @@ class MemoryFormatter:
             lines = ["<memory_procedures>", "<procedures>"]
             for packet in l3_entries:
                 entry_id = str(packet.source_ref or packet.packet_id).split(":")[-1][:8]
-                entry_type = packet.provenance.get("entry_type", "general")
+                entry_type = packet.provenance.get("entry_type", "fact")
                 lines.append(f"- [{entry_type}|{entry_id}] {packet.content}")
             lines.extend(["</procedures>", "</memory_procedures>"])
             sections.append(("memory_procedures", "\n".join(lines)))

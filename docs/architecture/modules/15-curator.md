@@ -2,14 +2,14 @@
 
 ## 职责概述
 
-策展器（Curator）是 PrismClaw 的后台 SOP（Standard Operating Procedure）生命周期管理器，作为 Dreaming 引擎的"维护工兵"运行。核心职责包括：
+策展器（Curator）是 PrismClaw 的后台 SOP（Standard Operating Procedure）生命周期管理器，作为 SOP 提取服务的"维护工兵"运行。核心职责包括：
 
 - **SOP 扫描**：按 session_key 扫描活跃 SOP，归档过期条目（`status='archived'`），升级高频条目（`status='graduated'`）
 - **LLM 质量审查**：周期性调用 LLM 对自动生成的 SOP 进行质量审查，执行 keep / promote / archive 决策
 - **分布式锁保护**：通过 `DistributedMutex` 确保同一时刻只有一个策展器实例运行（跨实例互斥）
 - **状态持久化**：通过 `CuratorStateStore` 将扫描和审查完成时间戳写入 Redis，跨实例共享
 
-策展器与 Dreaming 引擎的关系：Dreaming 引擎负责**生成** SOP（`type='auto_sop'`，存储在 `pc_memory_entries` Postgres 表中），策展器负责**维护**这些 SOP 的生命周期——归档过时的、升级优质的、删除有害的。两者形成**生产者-消费者**关系。
+策展器与 SOP 提取服务的关系：`sop_extraction`（`engine/services/sop_extraction.py`，会话结束/轮转时触发）负责**生成** SOP——类型固定为 `SOP_MEMORY_TYPE`（`auto_sop`），存储在 `pc_memory_entries` Postgres 表中；策展器负责**维护**这些 SOP 的生命周期——归档过时的、升级优质的、删除有害的。两者形成**生产者-消费者**关系，写入端与查询端必须引用同一常量，否则策展器会静默漏掉新 SOP。
 
 ## 架构总览
 

@@ -30,7 +30,7 @@ class MemoryTool:
         "为后续会话持久化长期记忆，或归档已过时的记忆。\n"
         "用户明确要求记住，或出现跨会话仍有用的偏好、环境事实、工作流时写入；"
         "密钥与凭据永不写入。\n"
-        "save 的 layer：'L2' 存事实与偏好，'L3' 存工作流；"
+        "save 的 type 决定存储层：procedure 存 L3（工作流），其余存 L2（事实/偏好）；"
         "archive 需 entry_id（记忆中以 [type|id] 展示）与原因。\n"
         "需在当前会话至少成功执行过一次工具后才能使用。"
     )
@@ -46,14 +46,13 @@ class MemoryTool:
                 "type": "string",
                 "description": "要记住的事实、偏好或工作流（save）。",
             },
-            "layer": {
-                "type": "string",
-                "enum": ["L2", "L3"],
-                "description": "L2 = 事实性知识，L3 = 工作流 SOP（save）。",
-            },
             "type": {
                 "type": "string",
-                "description": "类别：user_preference、env_fact、workflow 等（save，默认为 general）。",
+                "enum": sorted(CANONICAL_TYPES),
+                "description": (
+                    "类别（受控词表）：fact / preference / constraint / procedure / "
+                    "observation / decision；环境事实与项目背景归入 fact（save，默认 fact）。"
+                ),
             },
             "entry_id": {
                 "type": "string",
@@ -140,7 +139,6 @@ class MemoryTool:
 
     async def _save(self, call_id: str, args: dict[str, Any], context: ToolContext) -> ToolResult:
         content = args.get("content")
-        layer = args.get("layer")
         # SDD D7: type 走受控词表（归一 + 未知词拒绝），默认 fact。
         entry_type = normalize_type(args.get("type", "fact"))
         if entry_type not in CANONICAL_TYPES:
@@ -151,8 +149,9 @@ class MemoryTool:
 
         if not isinstance(content, str) or not content.strip():
             return error_result(call_id, "memory：'content' 必须是非空字符串")
-        if layer not in ("L2", "L3"):
-            return error_result(call_id, f"memory：'layer' 必须是 'L2' 或 'L3'，实际为 {layer!r}")
+        # 层由 type 派生：procedure → L3（工作流），其余 → L2。让模型分别填写
+        # 两个参数会制造矛盾状态（如 fact 存进 L3），故不暴露 layer。
+        layer = "L3" if entry_type == "procedure" else "L2"
 
         session_key = derive_memory_session_key(context.session_id)
         now = time.time()

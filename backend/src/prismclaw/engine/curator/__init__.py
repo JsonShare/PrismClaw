@@ -26,9 +26,6 @@ logger = logging.getLogger(__name__)
 
 CycleError = Literal["lock_lost", "review_skipped_interval"] | None
 
-# SOP rows live in pc_memory_entries and are identified by type='auto_sop'.
-_SOP_TYPE = "auto_sop"
-
 # SDD A2 (defect D3, docs/memory-dream-sdd.md §1.1): review inputs are never
 # truncated per-entry — the LLM must see each SOP in full to judge promote/
 # archive. Prompt budget is controlled at the BATCH level instead (implemented

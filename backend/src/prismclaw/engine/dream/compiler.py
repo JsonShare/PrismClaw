@@ -19,6 +19,7 @@ from prismclaw.engine.dream.publishing import (
     preferred_str,
 )
 from prismclaw.schema.storage.storage_types import MemoryStore
+from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
 from prismclaw.schema.memory.memory_types import MemoryEntry
 
 logger = logging.getLogger(__name__)
@@ -166,7 +167,9 @@ class DreamCompiler:
         prompt = (
             "你是一个长期记忆编译器。请从给定会话片段中提取值得进入长期记忆的结构化候选。"
             "只保留稳定偏好、约束、事实、可复用流程。"
-            "输出 JSON 数组，每项包含 layer(L2 或 L3)、type、memory_kind、content、entity_key、confidence、"
+            "输出 JSON 数组，每项包含 "
+            "type（fact|preference|constraint|observation|decision|procedure）、"
+            "memory_kind、content、entity_key、confidence、"
             "scope、evidence_count、prerequisites、steps。"
             "如果没有合适候选，输出 []。\n"
             f"session_key: {session_key}\n"
@@ -509,23 +512,26 @@ def _normalize_candidate_memories(raw: list[Any]) -> list[dict[str, Any]]:
     for item in raw:
         if not isinstance(item, dict):
             continue
-        layer = str(item.get("layer", "L2")).upper()
-        if layer not in {"L2", "L3"}:
-            continue
         content = str(item.get("content", "")).strip()
         if not content:
             continue
+        # 层由 type 派生（procedure → L3，其余 → L2），不接受 LLM 单独指定，
+        # 否则会出现 fact@L3 之类与检索分层语义矛盾的状态。
+        entry_type = normalize_type(item.get("type"))
+        if entry_type not in CANONICAL_TYPES:
+            entry_type = "fact"  # LLM 边界：未知词归入 fact
+        layer = "L3" if entry_type == "procedure" else "L2"
         memory_kind = infer_memory_kind(
             item.get("memory_kind"),
             layer=layer,
-            type_=item.get("type"),
+            type_=entry_type,
         )
         steps = normalize_steps(item.get("steps"))
         prerequisites = normalize_steps(item.get("prerequisites"))
         normalized.append(
             {
                 "layer": layer,
-                "type": str(item.get("type", "fact") or "fact"),
+                "type": entry_type,
                 "content": content,
                 "memory_kind": memory_kind,
                 "entity_key": preferred_str(item.get("entity_key")),
@@ -665,6 +671,6 @@ def _resolve_version_chain_id(
     if target is not None and target.version_chain_id:
         return str(target.version_chain_id)
     entity_key = preferred_str(extracted.get("entity_key"), getattr(target, "entity_key", None))
-    memory_type = str(extracted.get("type", getattr(target, "type", "fact")) or "fact")
+    memory_type = normalize_type(extracted.get("type") or getattr(target, "type", None))
     chain_seed = f"{session_key}|{memory_type}|{entity_key or 'global'}"
     return f"ver:{hash(chain_seed) & 0xFFFFFFFF:08x}"

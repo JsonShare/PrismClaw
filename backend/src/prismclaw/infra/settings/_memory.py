@@ -81,7 +81,8 @@ class MemorySettings(BaseSettings):
     # SDD B5 (§5.9): scope routing — agent-scope entries leave the default
     # retrieval path (dedicated channel deferred, open question #2). Write-
     # time stamping happens regardless; this gates read-side enforcement.
-    # Near-no-op today: no writers produce agent-scope entries yet.
+    # agent scope only appears when gateway arbitration lets the LLM refine
+    # the deterministic default (engine/memory/gateway.py).
     scope_routing_enabled: bool = Field(False)
     # E1: 记忆写入前安全拦截器（不可见 Unicode 隐写扫描 + 注入检测 + DLP 脱敏）。
     # notary=None 时 store() 零开销。

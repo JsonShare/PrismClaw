@@ -1,59 +1,42 @@
-from __future__ import annotations
-
 """Memory scope classification — write-time stamping (SDD §5.9).
 
 Moved from prismclaw.persistence.memory.base to break the engine→persistence
 dependency for pure data-model imports.
 """
 
-# SDD B5 (docs/memory-dream-sdd.md §5.9): scope 三值 — user（用户画像，跨会话）
-# / project（项目语境，跨会话）/ agent（通用经验，跨用户——通道因多租户权限
-# 设计未决而延后，SDD 开放问题 #2）。写入时确定性打标，检索按 scope 路由。
-_SCOPE_USER_TYPES = {"user_preference", "preference"}
-_SCOPE_AGENT_TYPES: set[str] = set()  # agent-scope writers deferred (permissions open question)
+from __future__ import annotations
 
-# SDD D7: 受控 type 词表。写入时归一，未知词拒绝；存量杂乱词
-# （facts/fact/procedures/procedure/process/auto_sop/patient_medical_fact 并存）
-# 通过别名映射在读/写两侧兼容，不迁移存量行。
-_TYPE_ALIASES: dict[str, str] = {
-    "fact": "fact",
-    "facts": "fact",
-    "general": "fact",
-    "patient_medical_fact": "fact",
-    "preference": "preference",
-    "user_preference": "preference",
-    "constraint": "constraint",
-    "procedure": "procedure",
-    "procedures": "procedure",
-    "process": "procedure",
-    "workflow": "procedure",
-    "sop": "procedure",
-    "auto_sop": "procedure",
-    "observation": "observation",
-}
+# SDD B5 (docs/memory-dream-sdd.md §5.9): scope 默认二值 — user（用户画像，跨
+# 会话）/ project（项目语境，跨会话）。这里只决定默认值；gateway 仲裁允许
+# LLM 细化为 user/project/agent（见 engine/memory/gateway.py），故分类侧不
+# 保留 agent 分支。
+_SCOPE_USER_TYPES = {"preference"}
 
+# SDD D7: 受控 type 词表。未上线、无存量数据，因此不保留历史别名映射：
+# 写入边界只接受 CANONICAL_TYPES，未知词由各边界归一（LLM 提取）或拒绝
+# （memory 工具）。
+# auto_sop 是系统内部类型，不属于模型可写词表：sop_extraction 写入、curator
+# 靠它识别可归档/毕业的 SOP 行（见 persistence/curator/repository.py）。两侧
+# 必须引用同一常量，否则 curator 会静默漏掉全部新 SOP。
+SOP_MEMORY_TYPE = "auto_sop"
+
+# 模型可写词表（memory.save 的 enum 与 capture 提取校验共用）。auto_sop 不
+# 在其中：模型无权把任意记忆标记为 SOP，否则会误触发 curator 归档/毕业。
 CANONICAL_TYPES: frozenset[str] = frozenset(
-    {"fact", "preference", "constraint", "procedure", "observation"}
+    {"fact", "preference", "constraint", "procedure", "observation", "decision"}
 )
 
 
 def normalize_type(entry_type: str | None) -> str:
-    """type 归一（确定性小写 + 别名映射）；未收录词原样返回（写入侧校验拒绝）。"""
+    """大小写/空白归一 + 缺省 fact；不做别名映射——词表即契约。"""
     normalized = str(entry_type or "").strip().lower()
-    if normalized in _TYPE_ALIASES:
-        return _TYPE_ALIASES[normalized]
     return normalized or "fact"
 
 
 def classify_scope(entry_type: str | None) -> str:
     """Deterministic type→scope mapping for write-time stamping (SDD §5.9).
 
-    user_preference → user; everything else → project (default). The
-    agent channel has no writers yet — see module note above.
+    Deterministic default only: preference → user; everything else → project.
+    Gateway arbitration may refine it afterwards — see module note above.
     """
-    normalized = normalize_type(entry_type)
-    if normalized in _SCOPE_USER_TYPES:
-        return "user"
-    if normalized in _SCOPE_AGENT_TYPES:
-        return "agent"
-    return "project"
+    return "user" if normalize_type(entry_type) in _SCOPE_USER_TYPES else "project"

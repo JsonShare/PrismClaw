@@ -9,7 +9,9 @@ from __future__ import annotations
 import time
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from prismclaw.schema.memory.classify import CANONICAL_TYPES, SOP_MEMORY_TYPE, normalize_type
 
 MemoryLayer = Literal["L1", "L2", "L3"]
 L4ArtifactKind = Literal["archive", "pattern", "graph", "relation"]
@@ -45,6 +47,20 @@ class MemoryEntry(BaseModel):
     supersedes: list[str] = Field(default_factory=list)
     expires_at: float | None = None
     retrieval_path: str | None = None
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def _normalize_entry_type(cls, value: object) -> str:
+        """受控词表强校验：大小写/空白归一 + 缺省 fact，词表外直接报错。
+
+        ``auto_sop`` 是系统内部类型（仅 sop_extraction 写入），同样合法。
+        未上线、无存量数据，因此不做别名映射；未知值应在写入边界先被归一或
+        拒绝，若仍到达构造点说明调用方有 bug，fail fast 比静默落库更好。
+        """
+        normalized = normalize_type(None if value is None else str(value))
+        if normalized not in CANONICAL_TYPES and normalized != SOP_MEMORY_TYPE:
+            raise ValueError(f"未知 memory type: {normalized!r}")
+        return normalized
 
 
 class ArchiveEntry(BaseModel):

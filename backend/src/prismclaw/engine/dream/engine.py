@@ -9,6 +9,7 @@ from typing import Any, Awaitable, Callable
 
 from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
 from prismclaw.schema.dream.dream import DreamAuditLogger
 from prismclaw.schema.dream.dream_types import DreamAuditEntry
 from prismclaw.engine.dream.candidates import DreamCandidateStore, DreamMemoryCandidate
@@ -284,7 +285,8 @@ class DreamEngine:
             "如果有重复内容，请合并。\n"
             "【V4 架构要求：Contextual Chunking】在提取每个事实/规则时，必须在前置生成一段 `<context>...</context>`，"
             "简要说明这个事实产生的背景（比如：在解决某个报错时、在讨论某个特定的业务逻辑时），以便在脱离当前对话流后仍具有清晰的语境。\n"
-            "请以 JSON 格式输出，格式为一个列表：[{\"original_ids\": [\"id1\", \"id2\"], \"context\": \"...\", \"consolidated_fact\": \"...\", \"type\": \"facts/procedures\"}]\n"
+            "请以 JSON 格式输出，格式为一个列表：[{\"original_ids\": [\"id1\", \"id2\"], \"context\": \"...\", \"consolidated_fact\": \"...\", \"type\": \"fact|preference|constraint|observation|decision|procedure\"}]\n"
+            "type 必须取上述受控值之一；procedure 表示可复用工作流（写入 L3），其余类型写入 L2。\n"
             f"记忆列表:\n{contents}"
         )
 
@@ -316,7 +318,9 @@ class DreamEngine:
             for action in actions:
                 fact_body = action.get("consolidated_fact")
                 context_prefix = action.get("context", "")
-                fact_type = action.get("type", "facts")
+                fact_type = normalize_type(action.get("type"))
+                if fact_type not in CANONICAL_TYPES:
+                    fact_type = "fact"  # LLM 边界：未知词归入 fact
                 orig_ids = action.get("original_ids", [])
                 if not fact_body:
                     continue
@@ -326,7 +330,7 @@ class DreamEngine:
 
                 new_entry = MemoryEntry(
                     id=f"mem_{uuid.uuid4().hex[:12]}",
-                    layer="L2" if fact_type == "facts" else "L3",
+                    layer="L3" if fact_type == "procedure" else "L2",
                     type=fact_type,
                     content=contextual_fact,
                     created_at=now,

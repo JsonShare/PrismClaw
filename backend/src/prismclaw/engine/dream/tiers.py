@@ -112,7 +112,7 @@ async def run_light_tier(
             suggestion = MemoryEntry(
                 id=f"sugg_{time.time_ns():x}",
                 layer="L3",
-                type="procedural",
+                type="procedure",
                 content=survivor.content,
                 source_session_id=survivor.source_session_id,
                 created_at=time.time(),
@@ -594,8 +594,10 @@ async def _learn_from_corrections(
         # 旧信息通过 supersedes 关联
         strategy = MemoryEntry(
             id=f"learn_{time.time_ns():x}",
-            layer="L3",
-            type="procedure",
+            # 继承正确条目的 type，层由 type 派生：纠正对象可能是事实而非流程，
+            # 不能一律写成 L3 procedure（会污染过程层）。
+            layer="L3" if correct.type == "procedure" else "L2",
+            type=correct.type,
             content=correct.content,
             scope=entry.scope,
             entity_key=entity_key,

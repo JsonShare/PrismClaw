@@ -23,7 +23,7 @@ import uuid
 from typing import Any
 
 from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.memory.classify import classify_scope
+from prismclaw.schema.memory.classify import classify_scope, normalize_type
 from prismclaw.schema.memory.memory_types import MemoryEntry
 
 logger = logging.getLogger(__name__)
@@ -36,13 +36,17 @@ SHORT_TERM_TTL_SECONDS = 7 * 24 * 3600
 # Initial confidence for auto-extracted facts — low on purpose.
 AUTO_EXTRACTION_CONFIDENCE = 0.5
 _ALLOWED_TIME_SCOPES = {"permanent", "short_term", "recurring"}
-_ALLOWED_FACT_TYPES = {
-    "user_preference",
-    "decision",
-    "env_fact",
-    "project_context",
-    "general",
+# 纯聊天提取只会写 L2（store_chat_facts），因此只允许事实类：procedure 需
+# 走 sop_extraction 的 L3 校验/去重管线，此处不暴露给模型，避免绕过校验
+# 直接污染 L3。键同时充当 parse_facts 的白名单。
+_CHAT_CAPTURE_TYPES = {
+    "fact": "事实（含环境事实、项目背景）",
+    "preference": "用户偏好",
+    "constraint": "稳定约束条件",
+    "observation": "观察",
+    "decision": "明确决策（长期有效、不衰减）",
 }
+_TYPE_HINT = " / ".join(f"{name}（{label}）" for name, label in _CHAT_CAPTURE_TYPES.items())
 
 _EXTRACTION_PROMPT = """你是一个记忆提取引擎。以下是一段纯对话（无工具调用）的完整轮次记录。
 请提取其中值得跨会话记住的持久事实：用户偏好、明确决策、环境/项目背景、稳定的约束条件。
@@ -51,14 +55,14 @@ _EXTRACTION_PROMPT = """你是一个记忆提取引擎。以下是一段纯对�
 1. 忽略闲聊、寒暄、只与当前会话相关的临时内容。
 2. 每条事实一句话，自包含（脱离对话后仍可理解）。
 3. 为每条事实标注 type 与 time_scope：
-   - type: user_preference（用户偏好）/ decision（明确决策）/ env_fact（环境事实）/ project_context（项目背景）/ general
+   - type: {type_hint}
    - time_scope: permanent（长期有效）/ short_term（临时状态/近期计划）/ recurring（周期性）
 4. "我今天/这周末想X"是 short_term；"我一直/我们总是X"是 permanent。
 5. 若整段对话没有值得记忆的内容，返回空数组。
 6. 事实以用户原话及其明确确认为准；assistant 的转述、总结与建议不是事实来源——禁止从中提取，禁止将 assistant 回答中丢失或弱化的细节（如省略的技术专名、数值）再生成一条"残缺版本"事实。同一主题只保留信息最完整的表述，与用户原话冲突的转述一律丢弃。
 
 以 JSON 数组输出，格式：
-[{"fact": "...", "type": "user_preference", "time_scope": "permanent"}]
+[{"fact": "...", "type": "fact", "time_scope": "permanent"}]
 
 === 对话记录 ===
 {transcript}
@@ -77,7 +81,9 @@ def build_extraction_prompt(turns: list[dict[str, Any]]) -> str:
             lines.append(f"assistant: {assistant_text}")
     # NOTE: .replace (not str.format) — the prompt template embeds a JSON
     # example whose braces would be misread as format placeholders.
-    return _EXTRACTION_PROMPT.replace("{transcript}", "\n".join(lines))
+    return _EXTRACTION_PROMPT.replace("{type_hint}", _TYPE_HINT).replace(
+        "{transcript}", "\n".join(lines)
+    )
 
 
 def parse_facts(raw_text: str) -> list[dict[str, str]]:
@@ -107,9 +113,9 @@ def parse_facts(raw_text: str) -> list[dict[str, str]]:
         fact = str(item.get("fact", "")).strip()
         if not fact:
             continue
-        fact_type = str(item.get("type", "general")).strip()
-        if fact_type not in _ALLOWED_FACT_TYPES:
-            fact_type = "general"
+        fact_type = normalize_type(str(item.get("type", "fact")).strip())
+        if fact_type not in _CHAT_CAPTURE_TYPES:
+            fact_type = "fact"
         time_scope = str(item.get("time_scope", "permanent")).strip()
         if time_scope not in _ALLOWED_TIME_SCOPES:
             time_scope = "permanent"

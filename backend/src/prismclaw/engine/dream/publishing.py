@@ -6,6 +6,7 @@ from typing import Any
 
 from prismclaw.engine.dream.candidates import DreamMemoryCandidate
 from prismclaw.engine.dream.models import DreamPublishableArtifact, DreamPublishableMemory
+from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
 from prismclaw.schema.memory.memory_types import L4ArtifactEntry, MemoryEntry
 
 
@@ -18,8 +19,11 @@ def build_publishable_memory(
     payload = dict(extracted)
     if overrides:
         payload.update(overrides)
-    layer = str(payload.get("layer", "L2")).upper()
-    memory_type = str(payload.get("type", "fact") or "fact")
+    memory_type = normalize_type(payload.get("type"))
+    if memory_type not in CANONICAL_TYPES:
+        memory_type = "fact"
+    # 层由 type 派生，与写入侧（memory 工具）保持同一规则。
+    layer = "L3" if memory_type == "procedure" else "L2"
     supersedes_raw = payload.get("supersedes")
     supersedes = [str(item) for item in supersedes_raw] if isinstance(supersedes_raw, list) else []
     return DreamPublishableMemory(
@@ -149,8 +153,8 @@ def normalize_steps(raw: Any) -> list[str]:
 def infer_memory_kind(raw: Any, *, layer: str, type_: Any) -> str:
     if isinstance(raw, str) and raw.strip():
         return raw.strip().lower()
-    type_text = str(type_ or "").lower()
-    if layer == "L3" or type_text in {"procedure", "workflow", "playbook"}:
+    type_text = normalize_type(type_)
+    if layer == "L3" or type_text == "procedure":
         return "procedure"
     if type_text in {"preference", "constraint"}:
         return type_text

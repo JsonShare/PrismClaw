@@ -15,15 +15,19 @@ import uuid
 from typing import Any
 
 from prismclaw.engine.services.llm.client import LiteLLMClient
-from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.schema.session.ids import derive_memory_session_key
 from prismclaw.schema.config.config import EvolutionConfig
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.memory.classify import SOP_MEMORY_TYPE
 from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.session.ids import derive_memory_session_key
 from prismclaw.schema.storage.storage_types import MemoryStore
 from prismclaw.schema.storage.storage_types import SessionStore
 
 # Re-export from sub-modules for backward compatibility
-from prismclaw.engine.services._sop_types import ExtractionResult, format_extraction_result_zh
+from prismclaw.engine.services._sop_types import (  # noqa: F401 - re-exported for runtime facade
+    ExtractionResult,
+    format_extraction_result_zh,
+)
 from prismclaw.engine.services._sop_parse import (
     _build_segments,
     _format_sop_content,
@@ -303,7 +307,7 @@ async def extract_sop_background(
             entry = MemoryEntry(
                 id=str(uuid.uuid4()),
                 layer="L3",
-                type="auto_sop",
+                type=SOP_MEMORY_TYPE,
                 content=content,
                 source_session_id=session_id,
                 created_at=now,

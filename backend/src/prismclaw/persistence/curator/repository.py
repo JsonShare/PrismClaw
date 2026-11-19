@@ -27,6 +27,7 @@ from prismclaw.schema.agent import (
     SopRow,
 )
 from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.memory.classify import SOP_MEMORY_TYPE
 from prismclaw.schema.shared.async_utils import await_or_abort
 
 # SDD D9：验证信号毕业路径阈值——positive 累计两次且无反证即可毕业
@@ -58,8 +59,8 @@ def _graduation_candidates(
 
 logger = logging.getLogger(__name__)
 
-# SOP rows live in pc_memory_entries and are identified by type='auto_sop'.
-_SOP_TYPE = "auto_sop"
+# SOP rows live in pc_memory_entries and are identified by type=auto_sop.
+_SOP_TYPE = SOP_MEMORY_TYPE
 
 # SDD A2 (defect D3, docs/memory-dream-sdd.md §1.1): review inputs are never
 # truncated per-entry — the LLM must see each SOP in full to judge promote/
