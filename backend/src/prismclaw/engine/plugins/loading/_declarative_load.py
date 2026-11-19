@@ -287,9 +287,21 @@ def _substitute_mcp_server_configs(
     return substituted
 
 
-# 单次技能激活注入 PLUGIN.md 的 token 上限。域包（法律/医疗等）的
+# 单次技能激活注入 PLUGIN.md 的 token 上限兜底值。域包（法律/医疗等）的
 # PLUGIN.md 动辄上万 token，全量注入会挤占上下文并淹没当前任务。
+# 实际取值由 ``subcaps.plugin_persona`` 决定，本常量仅作读取失败时的回落。
 _PLUGIN_INSTRUCTIONS_TOKEN_BUDGET = 2000
+
+
+def _plugin_persona_budget() -> int:
+    """读取 ``subcaps.plugin_persona``；配置不可用时回落模块常量。"""
+    try:
+        from prismclaw.infra.settings import load_settings
+
+        return load_settings().agent.context.budget.subcaps.plugin_persona
+    except Exception:
+        return _PLUGIN_INSTRUCTIONS_TOKEN_BUDGET
+
 
 # 超限时优先保留的章节：安全红线、输出规范与护栏类的行为约束。
 _PRIORITY_SECTION_KEYWORDS = (
@@ -339,7 +351,7 @@ def _is_priority_section(heading: str) -> bool:
 
 
 def _cap_plugin_instructions(
-    text: str, token_budget: int = _PLUGIN_INSTRUCTIONS_TOKEN_BUDGET
+    text: str, token_budget: int | None = None
 ) -> str:
     """章节感知的注入限额：优先保留安全/输出规范类章节，其余按原顺序填充。
 
@@ -347,7 +359,11 @@ def _cap_plugin_instructions(
     额度，避免先到先得导致后面的护栏章节被整段挤掉。被舍弃的章节以一行
     说明替代，让模型知道完整规范在插件目录的 PLUGIN.md 里，而不是
     无声丢失。未超限时原样返回。
+
+    ``token_budget`` 为 None 时读 ``subcaps.plugin_persona``；读取失败回落默认值。
     """
+    if token_budget is None:
+        token_budget = _plugin_persona_budget()
     if estimate_tokens(text) <= token_budget:
         return text
 

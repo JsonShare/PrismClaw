@@ -55,7 +55,6 @@ interface Props {
   controller: ConversationController
   prefillInput?: { text: string; nonce: number } | null
   onOpenFilePreview?: (path: string) => void
-  workspaceUploadDir?: string
   layout?: 'default' | 'landing'
   workspaces?: Workspace[]
   onSelectWorkspace?: (id: string) => void
@@ -82,7 +81,6 @@ export default function ChatArea({
   controller,
   prefillInput,
   onOpenFilePreview,
-  workspaceUploadDir,
   layout,
   workspaces,
   onSelectWorkspace,
@@ -305,8 +303,6 @@ export default function ChatArea({
       }
       const params = new URLSearchParams()
       params.set('workspace_id', workspaceId || 'default')
-      const dir = workspaceUploadDir ?? ''
-      if (dir) params.set('dir', dir)
       const uploadSessionId = activeConvId || uploadSessionIdRef.current
       if (uploadSessionId) params.set('session_id', uploadSessionId)
       const res = await fetch(
@@ -334,7 +330,7 @@ export default function ChatArea({
       }
       return { uploaded: data.files ?? [], skipped: data.skipped ?? [] }
     },
-    [activeConvId, token, workspaceId, workspaceUploadDir],
+    [activeConvId, token, workspaceId],
   )
 
   // ── 附件预上传 ──

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import io
-import json
 import logging
 import re
 import shutil
@@ -75,11 +74,6 @@ class InstallSkillRequest(BaseModel):
     version: str | None = None
 
 
-class ToggleSkillRequest(BaseModel):
-    name: str
-    enabled: bool
-
-
 class EditSkillRequest(BaseModel):
     description: str | None = None
     body: str | None = None
@@ -97,49 +91,6 @@ class SimpleOkResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
-
-
-def _skills_state_file(workspace_root: Path) -> Path:
-    return workspace_root / ".work" / "skills_state.json"
-
-
-def _load_disabled_skills(workspace_root: Path) -> set[str]:
-    p = _skills_state_file(workspace_root)
-    if not p.is_file():
-        return set()
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return set()
-    disabled = raw.get("disabled") if isinstance(raw, dict) else None
-    if not isinstance(disabled, list):
-        return set()
-    out: set[str] = set()
-    for item in disabled:
-        if isinstance(item, str) and item.strip():
-            out.add(item.strip())
-    return out
-
-
-def _save_disabled_skills(workspace_root: Path, disabled: set[str]) -> None:
-    state_file = _skills_state_file(workspace_root)
-    state_file.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"disabled": sorted(disabled)}
-    state_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def _discard_disabled_skill_names(workspace_root: Path, *names: str | None) -> None:
-    disabled = _load_disabled_skills(workspace_root)
-    changed = False
-    for raw in names:
-        name = raw.strip() if isinstance(raw, str) else ""
-        if not name:
-            continue
-        if name in disabled:
-            disabled.discard(name)
-            changed = True
-    if changed:
-        _save_disabled_skills(workspace_root, disabled)
 
 
 def _skill_source(
@@ -312,7 +263,6 @@ async def list_skills(
         workspace_root=workspace_root,
         settings_full=settings_full,
     )
-    disabled = _load_disabled_skills(workspace_root)
 
     # Resolve workspace trust state for filtering and display
     workspace_path = getattr(settings_full, "workspaces", None)
@@ -369,7 +319,7 @@ async def list_skills(
                     web_deps=web_deps,
                 ),
                 origin=origin,
-                enabled=True if origin is SkillSource.PLUGIN else m.name not in disabled,
+                enabled=True,
                 location=m.file_path or None,
                 group_path=origin_fns["classify_skill_group_path"](
                     m,
@@ -417,7 +367,6 @@ async def get_skill(
     target = next((m for m in manifests if m.name == skill_name), None)
     if target is None:
         raise HTTPException(status_code=404, detail="Skill not found")
-    disabled = _load_disabled_skills(workspace_root)
     origin = _skill_origin(
         target,
         workspace_root,
@@ -449,7 +398,7 @@ async def get_skill(
             web_deps=web_deps,
         ),
         "origin": origin,
-        "enabled": True if origin == "plugin" else target.name not in disabled,
+        "enabled": True,
         "location": target.file_path or None,
         "body": body,
         "editable": bool(target.editable),
@@ -518,13 +467,6 @@ async def install_skill_from_url(
         except Exception:
             pass
 
-    manifest_name = slug
-    try:
-        installed_manifest = web_deps.skill_parse_fn(dest / "SKILL.md")
-        manifest_name = installed_manifest.name
-    except Exception:
-        pass
-    _discard_disabled_skill_names(workspace_root, slug, manifest_name)
     # Invalidate the cached runner deps so the next request rebuilds the
     # capability catalog with the newly installed skill visible.
     _invalidate_plugin_runtime_state(request.app, web_deps.settings_full)
@@ -564,7 +506,6 @@ async def upload_skill(
         except Exception as exc:
             shutil.rmtree(dest, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Invalid SKILL.md: {exc}") from exc
-        _discard_disabled_skill_names(workspace_root, manifest.name)
         _invalidate_plugin_runtime_state(request.app, web_deps.settings_full)
         return {"ok": True, "name": manifest.name, "dest": str(dest)}
 
@@ -589,53 +530,10 @@ async def upload_skill(
         except Exception as exc:
             shutil.rmtree(dest, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Invalid SKILL.md: {exc}") from exc
-        _discard_disabled_skill_names(workspace_root, manifest.name)
         _invalidate_plugin_runtime_state(request.app, web_deps.settings_full)
         return {"ok": True, "name": manifest.name, "dest": str(dest)}
 
     raise HTTPException(status_code=400, detail="Only .zip or .md is supported")
-
-
-@skills_router.post("/toggle", response_model=SimpleOkResponse)
-async def toggle_skill(
-    payload: ToggleSkillRequest,
-    request: Request,
-    user_id: str = Depends(get_current_user),
-    workspace_id: str = "default",
-) -> SimpleOkResponse:
-    wid = _clean_workspace_id(workspace_id)
-    workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    name = normalize_skill_ref((payload.name or "").strip())
-    if not name:
-        raise HTTPException(status_code=400, detail="name required")
-    web_deps = get_web_deps(request)
-    settings_full = web_deps.settings_full
-    entries, extension_manager = await _list_runtime_skills(
-        request,
-        user_id=user_id,
-        workspace_root=workspace_root,
-        settings_full=settings_full,
-    )
-    manifests = [e.manifest for e in entries]
-    target = next((m for m in manifests if m.name == name), None)
-    if target is not None and _skill_origin(
-        target,
-        workspace_root,
-        settings_full,
-        extension_manager=extension_manager,
-        web_deps=web_deps,
-    ) == "plugin":
-        if payload.enabled:
-            _discard_disabled_skill_names(workspace_root, name)
-            return SimpleOkResponse()
-        raise HTTPException(status_code=403, detail="Cannot disable plugin-provided skills")
-    disabled = _load_disabled_skills(workspace_root)
-    if payload.enabled:
-        disabled.discard(name)
-    else:
-        disabled.add(name)
-    _save_disabled_skills(workspace_root, disabled)
-    return SimpleOkResponse()
 
 
 @skills_router.delete("/{skill_name}", response_model=SimpleOkResponse)
@@ -687,9 +585,6 @@ async def delete_skill(
         shutil.rmtree(skill_dir)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete skill")
-    disabled = _load_disabled_skills(workspace_root)
-    disabled.discard(skill_name)
-    _save_disabled_skills(workspace_root, disabled)
     _invalidate_plugin_runtime_state(request.app, settings_full)
     return SimpleOkResponse()
 

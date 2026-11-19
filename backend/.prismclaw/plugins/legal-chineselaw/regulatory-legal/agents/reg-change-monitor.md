@@ -19,11 +19,11 @@ Licensed under Apache License 2.0
 
 ## 运行方式
 
-被调用时执行一次，检查周期参照 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 信息源配置 → 检查周期（默认建议每周；监管环境活跃时可每日），由主 Agent 通过 schedule 工具定时触发。
+被调用时执行一次，检查周期参照 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 信息源配置 → 检查周期（默认建议每周；监管环境活跃时可每日），由主 Agent 通过 schedule 工具定时触发。
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md` → 监控列表、实质性阈值。
+1. 读取 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 监控列表、实质性阈值。
 2. 运行 reg-feed-watcher：拉取每个信息源，过滤。
 3. 对任何"始终实质性"内容：立即运行 policy-diff，在摘要中包含差距摘要。
 4. 发布摘要。

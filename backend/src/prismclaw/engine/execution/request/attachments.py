@@ -24,7 +24,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-from prismclaw.engine.toolkit.office.document_image_extract import extract_document_blocks
+from prismclaw.engine.toolkit.office.document_image_extract import (
+    extract_document_blocks,
+    to_model_path,
+)
 from prismclaw.schema.agent.data_types import FileBlock, ImageBlock, TextBlock
 
 logger = logging.getLogger(__name__)
@@ -251,9 +254,9 @@ def _attachment_policy(
             "- 若附件本身写明任务，或用户消息已明确隐含任务，请直接执行，不要询问。"
             "只有当意图确实含糊时才用 ask_user_question 提问（选项即可能的理解，"
             "推荐项放首位），不要在正文里罗列选项。",
-            "- 附件位于本会话的 `uploads/` 目录：文件工具用 `uploads/<文件名>`，"
+            "- 附件位于本会话的 `inbox/` 目录：文件工具用 `inbox/<文件名>`，"
             "bash 用 `$PRISMCLAW_UPLOADS_DIR/<文件名>`。不要写裸文件名"
-            "（bash 的 cwd 是会话根，不是 uploads）。",
+            "（bash 的 cwd 是会话根，不是 inbox）。",
         ]
     )
 
@@ -597,10 +600,11 @@ def project_blocks(
 
 def _image_reference_note(path: str, index: int, total: int, *, chars: int) -> str:
     """图片引用 note：序号 + 真实 path + read + 未内联原因（压缩后仍自足）。"""
-    name = Path(path).name if path else "image"
+    display = to_model_path(path)
+    name = Path(display).name if display else "image"
     reason = f"OCR 文本（{chars} 字符）未内联" if chars else "无可用 OCR 文本"
     return (
-        f"[Image #{index}/{total}: {name} ({path or '(unknown path)'}) — {reason}；"
+        f"[Image #{index}/{total}: {name} ({display or '(unknown path)'}) — {reason}；"
         "请用 read 工具读取该路径以查看内容。]"
     )
 
@@ -620,18 +624,22 @@ def _reference_lines(
                 _image_reference_note(unit.path, unit.image_index, image_total, chars=unit.chars)
             )
         elif unit.kind == "document":
+            display = to_model_path(unit.path)
             if unit.content_blocks:
                 lines.append(
-                    f"[Document {unit.path} — 已提取 {unit.chars} 字符，但本轮未内联；"
+                    f"[Document {display} — 已提取 {unit.chars} 字符，但本轮未内联；"
                     "请用 read 工具读取该路径以查看内容。]"
                 )
             else:
                 lines.append(
-                    f"[Document {unit.path} — 未提取到文本；"
+                    f"[Document {display} — 未提取到文本；"
                     "请见下方图片引用。]"
                 )
         else:
-            lines.append(f"[File {unit.path} — 未提取到文本；请用 read 工具读取该路径以查看内容。]")
+            lines.append(
+                f"[File {to_model_path(unit.path)} — 未提取到文本；"
+                "请用 read 工具读取该路径以查看内容。]"
+            )
     lines.extend(
         _image_reference_note(path, index, image_total, chars=chars)
         for path, index, chars in unit.image_refs

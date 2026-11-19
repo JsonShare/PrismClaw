@@ -304,7 +304,7 @@ class SkillEditor:
         """Directories the editor may write into.
 
         The cloud workspace root itself (which covers every workspace-scoped
-        location, including the installed-skill root ``<workspace>/.work/skills``),
+        location, including the installed-skill root ``<workspace>/.work/state/skills``),
         plus the configured user-level capability directories
         (``asset_skills_dir`` / ``asset_plugins_dir``). This mirrors what the
         runtime skill discovery scans, so any manifest the capability catalog

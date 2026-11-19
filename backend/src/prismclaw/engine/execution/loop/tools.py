@@ -58,6 +58,20 @@ async def gate_tool_call(
     _bctx = _bstate.ctx if _bstate is not None else None
     call = before_ctx.tool_call
 
+    # ── 0. 插件作用域（最便宜、最确定，故最先）──
+    # tool_scope 为 None 表示无插件上下文（headless/测试/装配未就绪），不限作用域。
+    _tool_ctx = rt.tool_ctx
+    _scope = getattr(_tool_ctx, "tool_scope", None) if _tool_ctx is not None else None
+    if _scope is not None:
+        _tool = deps.tools.get(call.name)
+        _owner = getattr(_tool, "plugin_name", None) if _tool is not None else None
+        if _owner is not None and _owner not in _scope:
+            from prismclaw.engine.execution.loop.types import BeforeToolCallResult
+            return BeforeToolCallResult(
+                block=True,
+                reason=f"tool_scope_denied:{_owner}（该工具属于插件「{_owner}」，请先 @ 该插件）",
+            )
+
     # ── 1. doom-loop 冻结检查（在安全门之前——冻结是确定性决策）──
     _args = before_ctx.args if isinstance(before_ctx.args, dict) else {}
     _sig = compute_tool_signature(call.name or "", _args)

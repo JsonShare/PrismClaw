@@ -26,10 +26,9 @@
    单元内嵌             → --c-surface-3（亮 #EAEEF2 / 暗 #1C2128）输入 / 槽 / 悬停 / 选中
    不再自建面色令牌：上面两组值在明暗两主题下都与宿主令牌**逐值相同**，
    自建别名只是 1:1 转发（胶水），故整层删除，规则直接引宿主令牌。 */
-/* 域内主题值（遮罩 / 抽屉左向影）已按主题拆到 light.css / dark.css，
-   与宿主 web/src/theme/ 同构。侧栏导航的 hover / active 直接用宿主
-   --c-surface-2 / --c-surface-3 —— 导航的底是画布，而卡片本身就是 --c-surface-2，
-   两者的相对关系已经一致，不再需要另立一套令牌。 */
+/* 域内主题值（遮罩 / 侧滑面板影子）已按主题拆到 light.css / dark.css，
+   与宿主 web/src/theme/ 同构。二级菜单已平铺到系统侧栏，
+   域内不再有导航列，故此处不再声明导航用的 hover / active 令牌。 */
 
 /* ── 语义色 tone：供胶囊 / 图标 / 徽章 / 数字徽标复用 ────────────
    旧名 .mw-pill-* 已删：Pill 组件改走 TONE_CLASS 后不再产出该名（全域零引用）。
@@ -208,7 +207,7 @@
 .mw-cq { container-type: inline-size; }
 
 /* 三栏知识库：facet 220 / 行流 520 / 阅读器 1fr
-   断点 1000 而非 1080 —— 实测域内容容器常在 1040~1070（受宿主侧栏 + 域导航挤压），
+   断点 1000 而非 1080 —— 实测域内容容器常在 1040~1070（受宿主侧栏挤压），
    原值 1080 会让它在只差十几像素时退化成单栏：facet 面板横跨整宽、大而空，
    行流也没变宽，白白损失一档布局。1000 起三栏，阅读器仍有 ~290px。 */
 .mw-cols-kb { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -218,14 +217,6 @@
    断点必须与 .mw-cols-kb 的三栏断点一致 —— 只有三栏布局里才有独立的阅读器列可吸顶，
    两者错位就会出现「吸顶了但没有独立列」的中间态。 */
 @container (min-width: 1000px) { .mw-sticky { position: sticky; top: 0; } }
-
-/* ── 窄屏导航抽屉 ──────────────────────────────────────────
-   <lg（1024）侧栏转为抽屉，默认移出画布，由顶部开关条唤出。
-   注意：原型 MainLayout 的 aside 只写了 transform 过渡却漏了 -translate-x-full，
-   导致窄屏侧栏永久浮在内容之上、汉堡按钮只切换遮罩 —— 属原型缺陷，此处按抽屉意图补全。 */
-/* 遮罩：中性深色，不跟 --c-bg 走 —— 亮色下 --c-bg 就是画布白，
-   白遮罩叠白画布等于没有遮罩，只剩点击穿透（画布改白后暴露的问题）。 */
-.mw-scrim { background: var(--mw-scrim); backdrop-filter: blur(2px); }
 
 /* ── 模态层 ────────────────────────────────────────────────── */
 .mw-overlay {
@@ -504,123 +495,6 @@
   font-size: var(--fs-xs);
   color: var(--c-text-secondary);
   text-align: center;
-}
-
-/* ============================================================
-   域内二级侧栏（菜单）—— 与科研域 `.sci-nav*` 逐项对齐（2026-09-17）
-   ------------------------------------------------------------
-   下列几何值即科研域菜单的**浏览器实测值**，且都落在宿主 Tailwind 步长上
-   （1rem = html font-size = --fs-md = 15px）：
-     --mw-nav-pad    0.75rem  = 11.25px = 宿主 p-3 / px-3
-     --mw-nav-item-y 0.625rem = 9.375px = 宿主 py-2.5
-     --mw-nav-gap    0.5rem   =  7.5px  = 宿主 gap-2
-     --mw-nav-r      0.375rem = 5.625px = 宿主 rounded-md
-   侧栏不铺任何底色 —— 直接露宿主中间栏面（亮 #FFFFFF / 暗 #000000），靠右侧 1px 发丝边分层。
-   激活态 = --c-surface-3 浅底块 + 竖条 + 600 字重（不用「白底浮起」：画布是纯白，白底不可见）。
-   强调色用 --c-accent（医疗域在域内一律用它；不写死十六进制）。
-   ============================================================ */
-.mw-nav {
-  --mw-nav-pad: 0.75rem;
-  --mw-nav-item-y: 0.625rem;
-  --mw-nav-item-x: 0.75rem;
-  --mw-nav-gap: 0.5rem;
-  --mw-nav-r: 0.375rem;
-
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: var(--mw-nav-pad);
-  border-right: 1px solid var(--c-border);
-}
-
-/* 品牌区：18px/600 标题 + 8px 强调色圆点（与科研域同构） */
-.mw-nav-title {
-  display: flex;
-  align-items: center;
-  gap: var(--mw-nav-gap);
-  font-size: var(--fs-lg);
-  font-weight: 600;
-  color: var(--c-text);
-  margin-bottom: var(--mw-nav-pad);
-}
-.mw-nav-title i {
-  display: block;
-  flex: 0 0 8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--c-accent);
-}
-
-/* 分组：标签 12px/500，无装饰横线 */
-.mw-nav-group { margin-top: var(--mw-nav-pad); }
-.mw-nav-group-label {
-  padding: 0 var(--mw-nav-item-x) var(--mw-nav-gap);
-  font-size: var(--fs-xs);
-  font-weight: 500;
-  color: var(--c-text-secondary);
-}
-
-/* 导航项：13px，透明底；hover 走 surface-3 */
-.mw-nav-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--mw-nav-gap);
-  width: 100%;
-  padding: var(--mw-nav-item-y) var(--mw-nav-item-x);
-  border: 0;
-  border-radius: var(--mw-nav-r);
-  font-size: var(--fs-sm);
-  font-weight: 500;
-  color: var(--c-text);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-/* 图标 1.25rem(=18.75px) = 宿主 h-5 w-5，与科研域同值 */
-.mw-nav-item svg {
-  width: 1.25rem;
-  height: 1.25rem;
-  flex: 0 0 1.25rem;
-  stroke: currentColor;
-  opacity: 0.9;
-}
-.mw-nav-item:hover { background: var(--c-surface-2); }
-
-/* 激活：浅底块 + 600 字重 + 左侧竖条，与科研域逐项同构。
-   不用「白底浮起」：域画布已改为宿主中间栏面（亮 #FFFFFF / 暗 #000000），
-   白底在纯白画布上不可见；--c-surface-3 亮 #EAEEF2 / 暗 #1C2128，
-   在两种画布上均有真实明度差，且与科研域逐值相同。 */
-.mw-nav-item.on {
-  background: var(--c-surface-3);
-  font-weight: 600;
-}
-
-/* 激活竖条：偏移量刻意与科研域同一字面量（源自设计稿原型），非节奏值 */
-.mw-nav-item .rail {
-  position: absolute;
-  left: -12px;
-  top: 8px;
-  bottom: 8px;
-  display: block;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--c-accent);
-}
-
-/* <lg 抽屉态：侧栏浮在内容之上，需要完整描边 + 圆角 + 投影才算一块面板
-   （≥lg 是常驻列，只有右发丝边 —— 与科研域一致）。lg 断点 = 1024px */
-@media (max-width: 1023px) {
-  .mw-nav {
-    border: 1px solid var(--c-border);
-    border-radius: var(--radius-xl, 12px);
-    box-shadow: var(--shadow-md);
-  }
 }
 
 /* ── 花名册表格行线 ────────────────────────────────────────────

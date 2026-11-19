@@ -81,13 +81,14 @@ def _resolve_persisted_path(raw: str) -> Path:
     except Exception:  # noqa: BLE001 - 配置不可用时按原样回退
         return p
     # 布局固定为 {base}/web_{user_id}/{workspace_id}/...；session 私有产物
-    # （tool_results/context_blocks）在 sessions/<sid>/ 下。两种层级都尝试，
-    # 避免旧引用/新引用任一布局漏检。
+    # （tool_results/context_blocks）在 sessions/<sid>/ 下。glob 前缀取
+    # workspace_paths 的常量，不在这里硬编码 ``web_*``。
+    from prismclaw.infra.workspace_paths import USER_DIR_GLOB
+
     tail = "/".join(p.parts)
-    for pattern in (f"web_*/*/sessions/*/{tail}", f"web_*/*/{tail}"):
-        for candidate in base.glob(pattern):
-            if candidate.is_file():
-                return candidate
+    for candidate in base.glob(f"{USER_DIR_GLOB}/*/sessions/*/{tail}"):
+        if candidate.is_file():
+            return candidate
     return p
 
 

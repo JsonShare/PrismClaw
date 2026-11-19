@@ -19,7 +19,7 @@ Licensed under Apache License 2.0
 
 # /related-skills-surfacer
 
-1. 加载 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` → 执业档案。
+1. 加载 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 执业档案。
 2. 使用以下工作流。
 3. 检查其他插件一直在做什么。与注册表匹配。
 4. 建议："您一直在做 X——社区有一个针对 Y 的相关技能。"
@@ -39,7 +39,7 @@ Licensed under Apache License 2.0
 
 ## 加载上下文
 
-`~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` → 执业档案、已安装的 skills（不要建议已安装的内容）。
+`${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 执业档案、已安装的 skills（不要建议已安装的内容）。
 来自 registry-browser 的注册表缓存。
 
 ## 匹配
@@ -77,7 +77,7 @@ Licensed under Apache License 2.0
 
 ## 用户控制
 
-根据 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-builder-hub/PLUGIN.md` → 新 skill 通知：
+根据 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 新 skill 通知：
 - **全部：** 显示任何匹配
 - **匹配执业档案：** 按档案过滤（默认）
 - **无：** 此 skill 关闭

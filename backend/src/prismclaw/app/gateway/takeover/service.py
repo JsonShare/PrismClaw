@@ -115,23 +115,16 @@ def session_user_id(session_id: str) -> str | None:
 
 
 def resolve_takeover_workspace_path(state: Any, *, session_id: str, workspace_id: str) -> Path:
-    workspace_base = getattr(state, "workspace_base", None)
-    if not isinstance(workspace_base, Path):
-        raise RuntimeError("workspace_base unavailable")
     user_id = session_user_id(session_id)
-    if user_id is not None:
-        from prismclaw.app.web.chat.chat_runner import _resolve_tool_workspace_path
+    if user_id is None:
+        workspace_base = getattr(state, "workspace_base", None)
+        if not isinstance(workspace_base, Path):
+            raise RuntimeError("workspace_base unavailable")
+        return workspace_base / workspace_id
 
-        settings = getattr(state, "web_settings", None)
-        if settings is None:
-            raise RuntimeError("web settings unavailable")
-        return _resolve_tool_workspace_path(
-            workspace_base,
-            user_id=user_id,
-            workspace_id=workspace_id,
-            settings=settings,
-        )
-    return workspace_base / workspace_id
+    from prismclaw.infra.workspace_paths import resolve_workspace_dir
+
+    return resolve_workspace_dir(user_id, workspace_id)
 
 
 def _parse_takeover_task_name(name: str) -> tuple[str, str] | None:

@@ -45,7 +45,11 @@ logger = logging.getLogger(__name__)
 
 HMAC_SECRET = os.getenv("PRISMCLAW_RUNTIME_HMAC_SECRET", "dev-secret")
 HMAC_KEY_VERSION = os.getenv("PRISMCLAW_RUNTIME_HMAC_KEY_VERSION", "1")
-WORKSPACE_ID = os.getenv("PRISMCLAW_WORKSPACE_ID", "unknown")
+# 专用 agent 模式：设置后只接受该 workspace_id 的请求。
+# 留空 = 共享 agent（一个 agent 服务 WORKSPACE_ROOT 下的多个工作区），
+# 此时作用域由每个请求的 workspace_root 在 RuntimeExecutor 内收窄，
+# 且请求根必须是 agent 自身根的严格子路径。
+WORKSPACE_ID = os.getenv("PRISMCLAW_WORKSPACE_ID", "")
 WORKSPACE_ROOT = os.getenv("PRISMCLAW_WORKSPACE_ROOT", "/workspace")
 ALLOW_NET = os.getenv("PRISMCLAW_ALLOW_NET", "true").lower() == "true"
 
@@ -58,19 +62,24 @@ _SANDBOX_ENFORCE = os.getenv("PRISMCLAW_SANDBOX_ENFORCE", "true").lower() == "tr
 
 
 def _resolve_sandbox_policy() -> BwrapPolicy | None:
-    """解析沙箱策略：enforce=True 时必须 BwrapPolicy，否则 None。"""
+    """解析沙箱策略：enforce=True 时必须拿到 BwrapPolicy，否则拒绝启动。
+
+    与 app 侧 ``resolve_sandbox_state`` 保持同一语义（fail-closed）。此前这里
+    捕获异常后返回 None，同一个 ``PRISMCLAW_SANDBOX_ENFORCE=true`` 在 app 侧
+    是"起不来"、在 agent 侧是"静默无隔离"，两边含义相反。
+    """
     if not _SANDBOX_ENFORCE:
         return None
-    try:
-        from prismclaw.engine.security.sandbox.state import resolve_sandbox_state
-        from prismclaw.schema.config.config import SandboxConfig
-        state = resolve_sandbox_state(SandboxConfig(enforce=True))
-        if isinstance(state.policy, BwrapPolicy):
-            return state.policy
-        return None
-    except Exception:
-        logger.warning("bwrap sandbox policy unavailable, running without process isolation")
-        return None
+    from prismclaw.engine.security.sandbox.state import resolve_sandbox_state
+    from prismclaw.schema.config.config import SandboxConfig
+
+    state = resolve_sandbox_state(SandboxConfig(enforce=True))
+    if not isinstance(state.policy, BwrapPolicy):
+        raise RuntimeError(
+            f"PRISMCLAW_SANDBOX_ENFORCE=true 但未解析出 bwrap 策略（backend={state.backend}）。"
+            "请确认镜像内已安装 bubblewrap，且容器具备运行它所需的权限。"
+        )
+    return state.policy
 
 
 sandbox_policy = _resolve_sandbox_policy()
@@ -113,70 +122,12 @@ async def verify_hmac_middleware(request: Request, call_next):
         logger.warning("HMAC verification failed for %s", request.url.path)
         return JSONResponse(status_code=401, content={"error": "hmac_verification_failed"})
 
-    if ws_id != WORKSPACE_ID:
+    # 专用 agent 才校验 workspace_id；共享 agent 靠 workspace_root 路径边界隔离。
+    if WORKSPACE_ID and ws_id != WORKSPACE_ID:
         logger.warning("Workspace ID mismatch: got %s, expected %s", ws_id, WORKSPACE_ID)
         return JSONResponse(status_code=403, content={"error": "workspace_id_mismatch"})
 
     return await call_next(request)
-
-
-# ── 安全校验工具 ──────────────────────────────────────────────────────
-
-
-def _validate_path_within_workspace(path: str, *, base: str = WORKSPACE_ROOT) -> str | None:
-    """校验路径是否在 workspace 边界内。返回校验后的绝对路径，或 None 表示越界。
-
-    放行规则（按优先级）：
-      1. workspace_root 内 → 放行（用户数据区）
-      2. 运行时只读根（.work/、backend/configs/、backend/src/prismclaw/、~/.prismclaw/）→ 放行（agent 读自己的定义）
-      3. 系统只读路径 → 放行（/usr /lib /bin /sbin /etc）
-      4. 其他 → 拦截
-
-    路径解析顺序很关键：**先 expanduser 再判断绝对/相对**。
-    ``os.path.join(base, "~/.prismclaw/x")`` 会产生 ``base/~/.prismclaw/x``
-    （字面 ``~`` 组件，不被后续 ``expanduser`` 展开），导致 home-relative
-    路径永远匹配不到。
-    """
-    from pathlib import Path as _P
-
-    try:
-        raw = path.strip()
-        expanded = _P(raw).expanduser()
-        if expanded.is_absolute():
-            resolved = expanded.resolve()
-        else:
-            resolved = _P(base).expanduser().resolve() / expanded
-        ws_root = _P(base).resolve()
-    except Exception:
-        return None
-
-    # 1. workspace 内
-    try:
-        resolved.relative_to(ws_root)
-        return str(resolved)
-    except ValueError:
-        pass
-
-    # 2. 运行时只读根（RuntimeExecutor._compute_runtime_readonly_roots 同源）
-    try:
-        from prismclaw.engine.runtime.agent.executor import RuntimeExecutor
-        for ro in RuntimeExecutor._compute_runtime_readonly_roots():
-            ro_expanded = _P(ro).expanduser()
-            try:
-                ro_resolved = ro_expanded.resolve() if ro_expanded.is_absolute() else (ws_root / ro_expanded).resolve()
-                resolved.relative_to(ro_resolved)
-                return str(resolved)
-            except ValueError:
-                continue
-    except Exception:
-        pass
-
-    # 3. 系统只读路径
-    if str(resolved).startswith(("/usr", "/lib", "/bin", "/sbin", "/etc")):
-        return str(resolved)
-
-    # 4. 越界
-    return None
 
 
 # ── Endpoint: /bash ────────────────────────────────────────────────────
@@ -185,34 +136,18 @@ def _validate_path_within_workspace(path: str, *, base: str = WORKSPACE_ROOT) ->
 @app.post("/bash")
 async def exec_bash(request: Request):
     body = await request.json()
-    command = body.get("command", "")
     tier_str = body.get("tier", "standard")
     try:
         tier = SandboxTier(tier_str)
     except ValueError:
         tier = SandboxTier.STANDARD
-    soft_timeout = int(body.get("soft_timeout", body.get("timeout_seconds", 30)))
     hard_timeout = body.get("hard_timeout")
-    workspace_root = body.get("workspace_root")
-    # 安全校验：workspace_root 必须是 WORKSPACE_ROOT 或其子路径
-    if workspace_root is not None:
-        validated = _validate_path_within_workspace(workspace_root, base=WORKSPACE_ROOT)
-        if validated is None:
-            logger.warning(
-                "workspace_root=%r rejected: outside WORKSPACE_ROOT=%r",
-                workspace_root, WORKSPACE_ROOT,
-            )
-            return JSONResponse(
-                status_code=403,
-                content={"error": "workspace_root_outside_boundary", "detail": f"workspace_root must be within {WORKSPACE_ROOT}"},
-            )
-        workspace_root = validated
     return await executor.bash(
-        command,
+        body.get("command", ""),
         tier=tier,
-        soft_timeout=soft_timeout,
+        soft_timeout=int(body.get("soft_timeout", body.get("timeout_seconds", 30))),
         hard_timeout=int(hard_timeout) if hard_timeout is not None else None,
-        workspace_root=workspace_root,
+        workspace_root=body.get("workspace_root"),
     )
 
 
@@ -242,10 +177,12 @@ async def job_kill(pid: int):
 async def read_file(request: Request):
     body = await request.json()
     path = body.get("path", "")
-    mode = body.get("mode", "text")
-    if mode == "bytes":
-        return await executor.read_bytes(path)
-    return await executor.read_text(path, encoding=body.get("encoding", "utf-8"))
+    root = body.get("workspace_root")
+    if body.get("mode") == "bytes":
+        return await executor.read_bytes(path, workspace_root=root)
+    return await executor.read_text(
+        path, encoding=body.get("encoding", "utf-8"), workspace_root=root
+    )
 
 
 # ── Endpoint: /write ───────────────────────────────────────────────────
@@ -255,10 +192,17 @@ async def read_file(request: Request):
 async def write_file(request: Request):
     body = await request.json()
     path = body.get("path", "")
-    mode = body.get("mode", "text")
-    if mode == "bytes":
-        return await executor.write_bytes(path, base64.b64decode(body.get("content_b64", "")))
-    return await executor.write_text(path, body.get("content", ""), encoding=body.get("encoding", "utf-8"))
+    root = body.get("workspace_root")
+    if body.get("mode") == "bytes":
+        return await executor.write_bytes(
+            path, base64.b64decode(body.get("content_b64", "")), workspace_root=root
+        )
+    return await executor.write_text(
+        path,
+        body.get("content", ""),
+        encoding=body.get("encoding", "utf-8"),
+        workspace_root=root,
+    )
 
 
 # ── Endpoint: /write_stream ────────────────────────────────────────────
@@ -270,7 +214,10 @@ async def write_stream(request: Request):
     action = body.get("action", "")
     if action == "begin":
         return await executor.write_stream_begin(
-            body.get("path", ""), body.get("mode", "text"), body.get("encoding", "utf-8")
+            body.get("path", ""),
+            body.get("mode", "text"),
+            body.get("encoding", "utf-8"),
+            workspace_root=body.get("workspace_root"),
         )
     if action == "chunk":
         return await executor.write_stream_chunk(body.get("session_id", ""), body.get("data", ""))
@@ -325,45 +272,12 @@ async def mcp_call(request: Request):
 @app.post("/fs/list")
 async def fs_list(request: Request):
     body = await request.json()
-    path = body.get("path", ".")
-    recursive = body.get("recursive", False)
-    ignore_hidden = body.get("ignore_hidden", True)
-    abs_path = _validate_path_within_workspace(path)
-    if abs_path is None:
-        return JSONResponse(status_code=403, content={"error": "path_outside_workspace"})
-    entries = []
-    if recursive:
-        for root, dirs, files in os.walk(abs_path):
-            if ignore_hidden:
-                dirs[:] = [d for d in dirs if not d.startswith(".")]
-                files = [f for f in files if not f.startswith(".")]
-            for name in files:
-                full = os.path.join(root, name)
-                try:
-                    st = os.stat(full)
-                    entries.append({"name": name, "path": os.path.relpath(full, abs_path), "is_dir": False, "size": st.st_size, "modified_epoch": st.st_mtime})
-                except OSError:
-                    pass
-            for name in dirs:
-                full = os.path.join(root, name)
-                try:
-                    st = os.stat(full)
-                    entries.append({"name": name, "path": os.path.relpath(full, abs_path), "is_dir": True, "size": 0, "modified_epoch": st.st_mtime})
-                except OSError:
-                    pass
-    else:
-        try:
-            for entry in os.scandir(abs_path):
-                if ignore_hidden and entry.name.startswith("."):
-                    continue
-                try:
-                    st = entry.stat()
-                    entries.append({"name": entry.name, "path": entry.name, "is_dir": entry.is_dir(), "size": st.st_size if not entry.is_dir() else 0, "modified_epoch": st.st_mtime})
-                except OSError:
-                    pass
-        except OSError:
-            pass
-    return {"entries": entries}
+    return await executor.fs_list(
+        body.get("path", "."),
+        recursive=body.get("recursive", False),
+        ignore_hidden=body.get("ignore_hidden", True),
+        workspace_root=body.get("workspace_root"),
+    )
 
 
 # ── Endpoint: /fs/glob ────────────────────────────────────────────────
@@ -372,29 +286,12 @@ async def fs_list(request: Request):
 @app.post("/fs/glob")
 async def fs_glob(request: Request):
     body = await request.json()
-    pattern = body.get("pattern", "*")
-    path = body.get("path", ".")
-    max_results = int(body.get("max_results", 200))
-    abs_path = _validate_path_within_workspace(path)
-    if abs_path is None:
-        return JSONResponse(status_code=403, content={"error": "path_outside_workspace"})
-    entries = []
-    try:
-        from pathlib import Path as _P
-        for p in sorted(_P(abs_path).glob(pattern), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
-            if not p.exists():
-                continue
-            try:
-                st = p.stat()
-                entries.append({"path": str(p.relative_to(abs_path)), "size": st.st_size, "modified_epoch": st.st_mtime})
-            except OSError:
-                continue
-            if len(entries) >= max_results:
-                break
-    except Exception:
-        pass
-    truncated = len(entries) >= max_results
-    return {"entries": entries, "truncated": truncated}
+    return await executor.fs_glob(
+        body.get("pattern", "*"),
+        body.get("path", "."),
+        max_results=int(body.get("max_results", 200)),
+        workspace_root=body.get("workspace_root"),
+    )
 
 
 # ── Endpoint: /fs/grep ────────────────────────────────────────────────
@@ -402,41 +299,15 @@ async def fs_glob(request: Request):
 
 @app.post("/fs/grep")
 async def fs_grep(request: Request):
-    import re as _re
     body = await request.json()
-    pattern = body.get("pattern", "")
-    path = body.get("path", ".")
-    include = body.get("include", "*")
-    case_insensitive = body.get("case_insensitive", False)
-    max_matches = int(body.get("max_matches", 200))
-    abs_path = _validate_path_within_workspace(path)
-    if abs_path is None:
-        return JSONResponse(status_code=403, content={"error": "path_outside_workspace"})
-    flags = _re.IGNORECASE if case_insensitive else 0
-    matches = []
-    try:
-        from pathlib import Path as _P
-        for p in _P(abs_path).rglob(include):
-            if not p.is_file():
-                continue
-            try:
-                raw = p.read_bytes()[:8192]
-                if b"\x00" in raw:
-                    continue
-                with open(p, "r", errors="replace") as f:
-                    for line_no, line in enumerate(f, 1):
-                        if _re.search(pattern, line, flags):
-                            matches.append({"path": str(p.relative_to(abs_path)), "line_number": line_no, "line": line.rstrip("\n")})
-                            if len(matches) >= max_matches:
-                                break
-            except OSError:
-                continue
-            if len(matches) >= max_matches:
-                break
-    except Exception:
-        pass
-    truncated = len(matches) >= max_matches
-    return {"matches": matches, "truncated": truncated}
+    return await executor.fs_grep(
+        body.get("pattern", ""),
+        body.get("path", "."),
+        include=body.get("include", "*"),
+        case_insensitive=body.get("case_insensitive", False),
+        max_matches=int(body.get("max_matches", 200)),
+        workspace_root=body.get("workspace_root"),
+    )
 
 
 # ── Endpoint: /http_post ───────────────────────────────────────────────

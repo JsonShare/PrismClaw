@@ -45,6 +45,9 @@ class LifecycleMixin(_MCPBackendBase):
             return
         self._require_sandbox_policy()
         try:
+            # 串行是必需的：ClientSessionGroup._aggregate_components 先检查
+            # 工具重名、再写共享字典，两步之间隔着 await。并发时两个 server
+            # 若提供同名工具，检查会同时通过并在 update 时静默互相覆盖。
             for name, config in self._enabled_servers():
                 try:
                     await self._connect_one(name, config)

@@ -871,20 +871,14 @@ export default function MessageBubble({
   }, [message, questionText])
 
   const handleDownloadAll = async () => {
-    // 无交付物时什么都不做：此按钮只对本条消息产出的交付物生效。此前这里会退化成
-    // 不传 file_paths 的调用，后端于是把**整个工作区** outputs/ 打包下载（实测
-    // 47 个文件 / 883KB），与该轮产出无关。
+    // 无交付物时什么都不做：此按钮只对本条消息产出的交付物生效。
     if (!workspaceId || !token || displayOutputFiles.length === 0) return
     setIsDownloadingAll(true)
     setDownloadAllError(null)
 
-    // 只导出本条消息（当前轮次）产出的交付物，而非整个工作区 outputs/。
-    // 后端 /api/files/export 支持 file_paths 参数（传了就只打包指定文件）；
-    // 单个交付物走 /api/files/download 直下（免解压），多个则打包为 zip。
+    // 只导出本条消息产出的交付物：单个直下，多个按 file_paths 打包。
     if (displayOutputFiles.length === 1) {
-      // a.href 是浏览器导航，无法携带 Authorization 头，必须把 token 放进查询串
-      // 才能过后端鉴权（与 useFilePreviewController.rawFileUrl、下方 fallback 同口径）。
-      // 此前漏传 _token，/api/files/download 直接 401，单文件「下载全部」静默失败。
+      // a.href 无法携带 Authorization 头，token 走查询串鉴权。
       const singleUrl = `${outputDownloadUrl(workspaceId, displayOutputFiles[0])}&_token=${encodeURIComponent(token)}`
       const a = document.createElement('a')
       a.href = singleUrl
@@ -1086,9 +1080,8 @@ export default function MessageBubble({
                 {!isStreaming && (renderedAttachments.length > 0 || displayOutputFiles.length > 0) ? (
                   <div className="mt-6 px-3">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[length:var(--fs-md)] font-medium text-[var(--c-text-secondary)]/70">产物输出</span>
-                      {/* 仅当本条消息确有交付物时才提供下载入口：只有内联附件时
-                          无可下载的文件，此前按钮仍显示且会误触发整工作区导出。 */}
+                      <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text-secondary)]/70">产物输出</span>
+                      {/* 仅在有 outputs 文件时提供下载入口：只有内联附件时无可下载内容 */}
                       {workspaceId && token && displayOutputFiles.length > 0 && (
                         <div className="flex flex-col items-end gap-1">
                           <button
@@ -1148,8 +1141,8 @@ export default function MessageBubble({
                           >
                             <FileIcon filename={name} size={32} className="shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)] truncate leading-tight">{name}</div>
-                              {ext && <div className="mt-0.5 text-[length:var(--fs-sm)] leading-none text-[var(--c-text-secondary)]">{ext}</div>}
+                              <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)] truncate leading-tight">{name}</div>
+                              {ext && <div className="mt-0.5 text-[length:var(--fs-sm)] leading-tight text-[var(--c-text-secondary)]">{ext}</div>}
                             </div>
                           </div>
                         )
@@ -1184,8 +1177,8 @@ export default function MessageBubble({
                         >
                           <FileIcon filename={name} size={32} className="shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)] truncate leading-tight">{name}</div>
-                            {ext && <div className="mt-0.5 text-[length:var(--fs-sm)] leading-none text-[var(--c-text-secondary)]">{ext}</div>}
+                            <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)] truncate leading-tight">{name}</div>
+                            {ext && <div className="mt-0.5 text-[length:var(--fs-sm)] leading-tight text-[var(--c-text-secondary)]">{ext}</div>}
                           </div>
                         </div>
                         )

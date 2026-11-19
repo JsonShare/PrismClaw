@@ -17,15 +17,15 @@ Licensed under Apache License 2.0
 
 # /product-cold-start-interview
 
-1. 检查 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md` 状态。
+1. 检查 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` 状态。
 2. 运行以下冷启动访谈。
 3. 种子文档：10 份过往发布审查文档（来自跟踪器或 Drive）。阅读全部。
 4. 从实际阻塞与发布的对比中构建风险校准表。
-5. 写入 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md`（根据需要创建父目录）。显示校准表以供确认。
+5. 写入 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`（根据需要创建父目录）。显示校准表以供确认。
 
 ## `--check-integrations`
 
-重新运行集成可用性检查（发布跟踪器、文档存储、Slack）并更新 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md` 中的 `## Available integrations`。不重新访谈。在连接或断开 MCP 且希望插件注意到而不重新运行完整设置时使用。
+重新运行集成可用性检查（发布跟踪器、文档存储、Slack）并更新 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` 中的 `## Available integrations`。不重新访谈。在连接或断开 MCP 且希望插件注意到而不重新运行完整设置时使用。
 
 探测时：仅当 MCP 工具调用实际成功时报告 ✓。已配置但未测试的连接器应标记 ⚪ 并附一行如何确认。永远不要仅根据 `.mcp.json` 声明报告 ✓——这会误导用户认为某些东西已连接而实际没有。
 
@@ -49,7 +49,7 @@ Licensed under Apache License 2.0
 
 ## 冷启动检查
 
-读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md`：
+读取 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`：
 - **不存在** → 开始访谈。
 - **包含 `<!-- SETUP PAUSED AT: -->`** → 欢迎用户并提供从该部分恢复。
 - **包含 `[PLACEHOLDER]` 标记但没有暂停注释** → 模板从未完成；提供重新开始或从占位符开始的地方恢复。
@@ -60,7 +60,7 @@ Licensed under Apache License 2.0
 
 ## 检查共享公司档案
 
-查找 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`。
+查找 `${PRISMCLAW_MARKETPLACE_DATA}/company-profile.md`。
 
 - **如果存在：** 读取它。显示一行确认："你是 [姓名]，[执业设置]，在 [公司]，[行业]，在 [司法管辖区]运营。对吗？（或说 'update' 更改共享档案。）"如果确认，跳过公司问题——直接进入插件特定问题。
 - **如果不存在：** 你将是此用户设置的第一个插件。在定向和分支后，询问公司问题并将它们写入共享档案（根据插件根目录中 `references/company-profile-template.md` 的模板），然后继续插件特定问题。告诉用户："我已保存你的公司档案——其他法律插件将读取它并跳过这些问题。"
@@ -119,7 +119,7 @@ Licensed under Apache License 2.0
 - **对于上传（种子发布审查文档、PRD、跟踪器链接）：** "粘贴内容、共享文件路径，或说'暂时跳过'。如果你跳过，我会在你的配置中标记差距以便稍后填充。"然后实际等待。
 - **在写入执业档案之前：** 审查访谈。列出跳过或用占位符回答的问题。说："在写入你的配置之前，这里仍然开放：[列表]。想现在填充其中任何一个，还是将它们留作占位符？"在写入前等待答案。
 - **永远不要**用静默差距写入执业档案。每个占位符都应该是用户故意跳过的选择，而非滚动过去未回答的问题。
-- **暂停和恢复。** 提前告诉用户："如果你需要停止，说'pause'（或'stop'、'让我稍后回到这个'），我会保存你的进度。稍后再次运行 `/product-legal:cold-start-interview`，我会在你离开的地方继续。"当用户暂停时，将部分配置写入 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /product-legal:cold-start-interview to resume -->` 注释，未回答字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，欢迎用户："欢迎回来。你在 [section] 暂停。你之前的答案已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已回答的问题。
+- **暂停和恢复。** 提前告诉用户："如果你需要停止，说'pause'（或'stop'、'让我稍后回到这个'），我会保存你的进度。稍后再次运行 `/product-legal:cold-start-interview`，我会在你离开的地方继续。"当用户暂停时，将部分配置写入 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`，顶部带有 `<!-- SETUP PAUSED AT: [section name] — run /product-legal:cold-start-interview to resume -->` 注释，未回答字段上有 `[PENDING]` 标记（与 `[PLACEHOLDER]` 不同）。当设置重新运行并发现暂停的配置时，欢迎用户："欢迎回来。你在 [section] 暂停。你之前的答案已保存。从我们离开的地方继续，还是重新开始？"不要重新询问已回答的问题。
 
 **在设置中验证用户陈述的法律事实。** 当用户用具体规则引用、法规编号、案例名称、截止日期、阈值、司法管辖区或注册号回答访谈问题时——并且这是你可以健全性检查的内容——在将其写入配置之前进行检查。如果他们所说的与你的理解或他们粘贴的内容冲突，呈现："你说阈值是 X；我的理解是 Y——你能确认哪个进入档案吗？`[premise flagged — verify]`"写入 PLUGIN.md 的错误事实会传播到每个未来输出；在这里捕获是产品中最具影响力的时刻之一。
 
@@ -466,7 +466,7 @@ Licensed under Apache License 2.0
 
 5. **以可更改性备注关闭。** 说：
 
-   > "完成。你的配置位于 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md`——你可以直接阅读和编辑的纯文本文件。你回答的任何内容都可以更改：
+   > "完成。你的配置位于 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`——你可以直接阅读和编辑的纯文本文件。你回答的任何内容都可以更改：
    >
    > - 直接编辑文件进行快速更改
    > - 运行 `/product-legal:cold-start-interview --redo` 进行完整重新访谈

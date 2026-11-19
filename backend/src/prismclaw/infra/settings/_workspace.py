@@ -26,7 +26,8 @@ class SkillSettings(BaseSettings):
 
     # —— 运行时安装链：graduation / ClawHub 安装到 workspace 内，相对路径拼到 workspace_root。
     # skills.py、skill_graduation.py、agent_loop 动态发现读这里。
-    workspace_skills_dir: str = Field(".work/skills")
+    # 落点属于 `.work` 四组的 state/（删了丢功能）；见 docs/architecture/c2-work-layout/spec.md。
+    workspace_skills_dir: str = Field(".work/state/skills")
 
     clawhub_base_url: str = Field("https://clawhub.ai")
     max_skill_file_bytes: int = Field(256_000)

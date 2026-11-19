@@ -101,6 +101,17 @@ def _sign_payload(body: bytes, secret: str, key_version: str) -> str:
     return f"v{key_version}:{sig}"
 
 
+def _with_root(payload: dict[str, Any], workspace_root: str | None) -> dict[str, Any]:
+    """把请求级 ``workspace_root`` 并入 payload（None 时保持原样）。
+
+    服务端据此把执行作用域收窄到该目录。缺省即用服务端自身根，
+    因此不能靠"客户端忘了传"来放大范围——服务端会自行拒绝越界的根。
+    """
+    if workspace_root is not None:
+        payload["workspace_root"] = workspace_root
+    return payload
+
+
 # ── WorkspaceRuntimeClient ─────────────────────────────────────────────
 
 
@@ -120,7 +131,7 @@ class WorkspaceRuntimeClient:
         workspace_id: str = "",
         timeout_seconds: float = 30.0,
     ) -> None:
-        # P10-SEC-04: template_id → agent_url 路由表（dict[kind] = url）。
+        # template_id → agent_url 路由表（dict[kind] = url）。
         self._agent_urls: dict[str, str] = dict(agent_urls or {})
         # 环境变量补全：PRISMCLAW_RUNTIME_AGENT_URLS（JSON 映射）。
         if not self._agent_urls:
@@ -251,8 +262,7 @@ class WorkspaceRuntimeClient:
         }
         if hard_timeout is not None:
             payload["hard_timeout"] = int(hard_timeout)
-        if workspace_root is not None:
-            payload["workspace_root"] = workspace_root
+        _with_root(payload, workspace_root)
 
         data = await self._post("/bash", payload, template_id=template_id, workspace_id=workspace_id)
         if data.get("detached"):
@@ -267,30 +277,30 @@ class WorkspaceRuntimeClient:
 
     async def read_text(self, path: str, *, encoding: str = "utf-8", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
         """在容器内读取文本文件。"""
-        data = await self._post("/read", {"path": path, "mode": "text", "encoding": encoding}, template_id=template_id, workspace_id=workspace_id)
+        data = await self._post("/read", _with_root({"path": path, "mode": "text", "encoding": encoding}, workspace_root), template_id=template_id, workspace_id=workspace_id)
         if data.get("success"):
             return FileResult(success=True, content=data.get("content", ""))
         return FileResult(success=False, error=data.get("error", "unknown error"))
 
     async def write_text(self, path: str, content: str, *, encoding: str = "utf-8", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
         """在容器内写入文本文件。"""
-        data = await self._post("/write", {"path": path, "content": content, "mode": "text", "encoding": encoding}, template_id=template_id, workspace_id=workspace_id)
+        data = await self._post("/write", _with_root({"path": path, "content": content, "mode": "text", "encoding": encoding}, workspace_root), template_id=template_id, workspace_id=workspace_id)
         return FileResult(success=data.get("success", False), error=data.get("error"))
 
     async def read_bytes(self, path: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
         """在容器内读取二进制文件。"""
-        data = await self._post("/read", {"path": path, "mode": "bytes"}, template_id=template_id, workspace_id=workspace_id)
+        data = await self._post("/read", _with_root({"path": path, "mode": "bytes"}, workspace_root), template_id=template_id, workspace_id=workspace_id)
         if data.get("success"):
             return FileResult(success=True, content=base64.b64decode(data.get("content_b64", "")))
         return FileResult(success=False, error=data.get("error", "unknown error"))
 
     async def write_bytes(self, path: str, content: bytes, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
         """在容器内写入二进制文件。"""
-        data = await self._post("/write", {
+        data = await self._post("/write", _with_root({
             "path": path,
             "content_b64": base64.b64encode(content).decode(),
             "mode": "bytes",
-        }, template_id=template_id, workspace_id=workspace_id)
+        }, workspace_root), template_id=template_id, workspace_id=workspace_id)
         return FileResult(success=data.get("success", False), error=data.get("error"))
 
     async def write_stream(
@@ -342,12 +352,12 @@ class WorkspaceRuntimeClient:
             send_mode = "text"
 
         # begin（告知 server 按 text/bytes 模式写出，encoding 也一并传递）
-        begin_data = await self._post("/write_stream", {
+        begin_data = await self._post("/write_stream", _with_root({
             "action": "begin",
             "path": path,
             "mode": send_mode,
             "encoding": encoding,
-        }, template_id=template_id, workspace_id=workspace_id)
+        }, workspace_root), template_id=template_id, workspace_id=workspace_id)
         if not begin_data.get("success"):
             return FileResult(success=False, error=begin_data.get("error", "begin failed"))
         session_id = begin_data["session_id"]
@@ -399,17 +409,17 @@ class WorkspaceRuntimeClient:
 
     async def fs_list(self, path: str = ".", *, recursive: bool = False, ignore_hidden: bool = True, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
         """列出容器内目录内容。"""
-        payload = {"path": path, "recursive": recursive, "ignore_hidden": ignore_hidden}
+        payload = _with_root({"path": path, "recursive": recursive, "ignore_hidden": ignore_hidden}, workspace_root)
         return await self._post("/fs/list", payload, template_id, workspace_id)
 
     async def fs_glob(self, pattern: str = "*", path: str = ".", *, max_results: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
         """在容器内按 glob 模式搜索文件。"""
-        payload = {"pattern": pattern, "path": path, "max_results": max_results}
+        payload = _with_root({"pattern": pattern, "path": path, "max_results": max_results}, workspace_root)
         return await self._post("/fs/glob", payload, template_id, workspace_id)
 
     async def fs_grep(self, pattern: str, path: str = ".", *, include: str = "*", case_insensitive: bool = False, max_matches: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
         """在容器内按正则模式搜索文件内容。"""
-        payload = {"pattern": pattern, "path": path, "include": include, "case_insensitive": case_insensitive, "max_matches": max_matches}
+        payload = _with_root({"pattern": pattern, "path": path, "include": include, "case_insensitive": case_insensitive, "max_matches": max_matches}, workspace_root)
         return await self._post("/fs/grep", payload, template_id, workspace_id)
 
     async def http_post(self, url: str, *, body: Any = None, headers: dict[str, str] | None = None, content_type: str = "application/json", tier: str = "standard", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:

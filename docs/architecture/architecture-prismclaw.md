@@ -133,7 +133,7 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 | 10 | 工具集 | 内置 bash/文件/搜索工具 | [10](modules/10-toolkit.md) |
 | 11 | LLM 服务 | 多 Provider 适配、流式、回退 | [11](modules/11-llm-service.md) |
 | 12 | Web 层 | HTTP/WS、认证、路由、会话 | [12](modules/12-web-layer.md) |
-| 13 | 运行时管理 | 工作区容器、预热池、资源分级 | [13](modules/13-runtime-management.md) |
+| 13 | 运行时管理 | 工作区执行、沙箱、Runtime-Agent 路由 | [13](modules/13-runtime-management.md) |
 | 14 | 审查系统 | 文档变更审查与内容存储 | [14](modules/14-review-system.md) |
 | 15 | 策展器 | 后台扫描与记忆毕业 | [15](modules/15-curator.md) |
 | 16 | 调度器 | 定时任务调度与执行 | [16](modules/16-scheduler.md) |

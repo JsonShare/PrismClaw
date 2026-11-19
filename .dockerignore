@@ -7,7 +7,6 @@ frontend/.vite/
 frontend-app/node_modules/
 frontend-app/dist/
 backend/tests/
-backend/.prismclaw/
 deploy/
 docs/
 mcp_servers/
@@ -15,8 +14,20 @@ mcp_servers/
 .mypy_cache/
 .ruff_cache/
 
-# 真实配置含密钥，禁止进入构建上下文
+# 静态能力目录必须进入构建上下文（app 镜像需要它来 sync assets）。
+# 但运行期产物要排除：本地 node_modules 约 306MB（未被 git 跟踪，会被
+# 通配符一并带上），以及 dev 运行留下的缓存与测试文件。
+backend/.prismclaw/**/node_modules/
+backend/.prismclaw/**/__pycache__/
+backend/.prismclaw/**/*.pyc
+backend/.prismclaw/**/tests/
+backend/.prismclaw/**/test_*.py
+backend/.prismclaw/**/*_test.py
+backend/.prismclaw/**/test-*.sh
+backend/.prismclaw/**/.work/
+backend/.prismclaw/**/.bash_state/
+backend/.prismclaw/**/.assets-migrated-v1
+
+# 真实配置含密钥，禁止进入构建上下文（deploy/ 已整目录排除）
 backend/configs/*.yaml
 !backend/configs/*.example.yaml
-deploy/configs/*.yaml
-!deploy/configs/*.example.yaml

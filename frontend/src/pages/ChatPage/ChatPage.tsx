@@ -24,6 +24,7 @@ import { skipCodeToMessage, type SkippedFile } from '../../lib/chat/attachments'
 import { normalizeWorkspacePath } from '../../lib/chat/paths'
 import { apiUrl } from '../../lib/system-adapter'
 import { SessionSearchModal } from '../../components/modals/SessionSearchModal'
+import { DOMAIN_URL_PARAM_MAP } from '../../domains/_lazy_map.generated'
 import { WorkspaceSelectorModal } from '../../components/modals/WorkspaceSelectorModal'
 import { SettingsPage } from './sections/SettingsPage'
 
@@ -471,14 +472,24 @@ export default function ChatPage() {
   // ── URL 跳转接线：工作台「发起咨询」→ ?section=chat&session={id} ────────────
   // 仅在挂载时读取一次 URL 参数，切换活跃分区和会话后立即 replaceState 清参
   // （防止 session id 泄漏到浏览器历史 / Referer / 网关日志）。
+  // 另外兼容域深链：?mw_page=xxx / ?lw_page=xxx 命中时把分区切到对应域，
+  // 否则用户从域内刷新后会被 localStorage 里上一次的分区顶掉。
   const urlNavigatedRef = useRef(false)
   useEffect(() => {
     if (urlNavigatedRef.current) return
+    urlNavigatedRef.current = true
+
     const params = new URLSearchParams(location.search)
     const section = params.get('section')
     const session = params.get('session')
-    if (!section || !session) return
-    urlNavigatedRef.current = true
+    const domainParam =
+      Object.keys(DOMAIN_URL_PARAM_MAP).find(key => params.get(DOMAIN_URL_PARAM_MAP[key])) ?? null
+
+    if (!section || !session) {
+      // 无 session 跳转：只做域深链校正，参数由域自身读写，不清参
+      if (domainParam) setActiveSection(`domain:${domainParam}`)
+      return
+    }
     // 清参必须在读取之后、异步操作之前——即使后续 selectConversation 失败，
     // URL 也不应残留 session id。
     history.replaceState({}, '', location.pathname)
@@ -1139,7 +1150,6 @@ export default function ChatPage() {
               token={token ?? ''}
               workspaceId={backendWorkspaceId}
               layout={showLandingHome ? 'landing' : 'default'}
-              workspaceUploadDir=""
               workspaces={workspaces}
               onSelectWorkspace={(id: string) => setActiveWorkspaceId(id)}
               onCreateServerWorkspace={handleCreateServerWorkspace}

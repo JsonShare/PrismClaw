@@ -115,6 +115,28 @@ class ActivateSkillTool:
             task_context=task_context,
             source="model",
         )
+
+        # 插件作用域门控：未激活插件的技能不可加载。
+        # 复用 catalog 的解析契约（与 build_skill_execution 同一解析路径），
+        # 避免用技能名前缀去猜归属。解析不到就交给下游维持原有错误路径。
+        _scope = context.tool_scope
+        if _scope is not None and self._capability_catalog is not None:
+            _resolution = self._capability_catalog.resolve_skill_reference(
+                skill_name,
+                plugin_prefer=getattr(active_state, "plugin_name", None),
+            )
+            _owner = (
+                _resolution.entry.plugin_name
+                if _resolution.kind == "resolved" and _resolution.entry is not None
+                else None
+            )
+            if _owner is not None and _owner not in _scope:
+                return error_result(
+                    call_id,
+                    f"skill_scope_denied:{_owner}"
+                    f"（该技能属于插件「{_owner}」，请先 @ 该插件）",
+                )
+
         try:
             plan = self._skill_runtime.build_skill_execution(
                 invocation,

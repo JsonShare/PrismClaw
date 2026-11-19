@@ -16,17 +16,15 @@ Licensed under Apache License 2.0
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md
+  ${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径 READ 配置。不是从此文件。
 2. 如果该文件不存在或仍包含 [PLACEHOLDER] 标记，在进行实质性工作前 STOP。说："此插件需要先完成设置才能给出有用的输出。运行 /regulatory-legal:cold-start-interview —— 大约需要 10-15 分钟，此插件中的每个命令都依赖于它。没有它，输出将是通用的，可能不符合你实际工作的方式。" 不要继续使用占位符或默认配置。唯一无需设置即可运行的技能是 /regulatory-legal:cold-start-interview 本身和任何 --check-integrations 标志。
 3. 设置和冷启动访谈 WRITE 到该路径，根据需要创建父目录。
-4. 在 plugin 更新后的首次运行时，如果旧缓存路径
-   存在已填充的 PLUGIN.md，但配置路径不存在，则在继续前将其复制到配置路径。
-5. 此文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示配置应具有的结构。每次 plugin 更新时它都会被替换。永远不要在此处写入用户数据。
+4. 此文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示配置应具有的结构。每次 plugin 更新时它都会被替换。永远不要在此处写入用户数据。
 
-**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
+**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `${PRISMCLAW_MARKETPLACE_DATA}/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
 -->
 
 # 监管执业档案
@@ -268,7 +266,7 @@ Licensed under Apache License 2.0
 
 **文件访问失败。** 当你无法阅读用户指向你的文件时，不要静默失败。说明发生了什么："我无法读取 [path]。这通常意味着：(a) 插件是项目范围安装，文件在 [项目目录] 之外——重新安装为用户范围或将文件移到这里；(b) 路径有拼写错误；(c) 文件格式我无法读取。你能直接粘贴内容吗，或尝试其中一个修复？" 静默的文件读取失败看起来像是插件忽略了用户的材料。
 
-**核验日志。** 当你或用户核验标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规核验阈值——记录它，以便下一个人不会重新核验。向 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/verification-log.md` 写一行：
+**核验日志。** 当你或用户核验标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规核验阈值——记录它，以便下一个人不会重新核验。向 `${PRISMCLAW_PLUGIN_DATA}/verification-log.md` 写一行：
 
 `[YYYY-MM-DD] [引用或事实] 由 [姓名] 根据 [来源] 核验 — [结论：已确认 / 已更正为 X / 无法核验]`
 
@@ -291,7 +289,7 @@ Plugin 的工作是让 PrismClaw 更好地处理法律工作，而不是引导�
 
 ## 此领域的临时问题
 
-当用户在此 plugin 的执业领域提出问题时——不仅仅是当他们调用技能时——首先阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/PLUGIN.md`（和 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`）的执业档案，并应用它。如果它已填充，作为配置的助手回答：
+当用户在此 plugin 的执业领域提出问题时——不仅仅是当他们调用技能时——首先阅读 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`（和 `${PRISMCLAW_MARKETPLACE_DATA}/company-profile.md`）的执业档案，并应用它。如果它已填充，作为配置的助手回答：
 
 - 使用他们的辖区范围、风险偏好、手册立场和升级链
 - 即使没有技能运行也应用护栏：来源归属、引用卫生、辖区识别、决策立场、复核提示格式
@@ -373,7 +371,7 @@ Plugin 的工作是让 PrismClaw 更好地处理法律工作，而不是引导�
 
 对于私人执业中的 regulatory-legal，"事项"通常是向一个客户提建议的特定监管变化、评议期、内规差异整改项目或机构询问。信息源监控默认在执业级别运行。
 
-当事项工作区启用时，技能在活跃事项的上下文中工作。技能阅读此执业级 PLUGIN.md 了解执业档案级规则（关注的监管机构、政策库、重要性阈值、升级），并阅读事项的 `matter.md` 了解事项特定事实和覆盖。输出写入到 `~/.prismclaw/assets/plugins/legal-chineselaw/regulatory-legal/matters/<matter-slug>/` 的事项文件夹。
+当事项工作区启用时，技能在活跃事项的上下文中工作。技能阅读此执业级 PLUGIN.md 了解执业档案级规则（关注的监管机构、政策库、重要性阈值、升级），并阅读事项的 `matter.md` 了解事项特定事实和覆盖。输出写入到 `${PRISMCLAW_PLUGIN_DATA}/matters/<matter-slug>/` 的事项文件夹。
 
 当跨事项上下文关闭（默认）时，在事项 A 中工作的技能永远不会阅读事项 B 的文件。应该跨事项携带的知识写入此执业级 PLUGIN.md，而不是事项文件夹。
 

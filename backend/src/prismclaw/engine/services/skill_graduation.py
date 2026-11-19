@@ -210,15 +210,19 @@ def graduate_single_sop(
 
     # —— 从 session_key 解析真实 workspace 路径（两层嵌套）——
     # session_key 预期 "web:{uid}:{wid}"；降级时整段当 workspace_id 拼。
+    # 路径拼接统一走 workspace_paths（web_ 前缀唯一拼点），不在此处重复。
     segments = session_key.split(":")
     uid, wid = segments[1], segments[2] if len(segments) > 2 else segments[-1]
-    workspace_path = (workspace_base_dir / f"web_{uid}" / wid) if len(segments) >= 3 else workspace_base_dir
+    if len(segments) >= 3:
+        from prismclaw.infra.workspace_paths import resolve_user_root
+        workspace_path = resolve_user_root(uid, base=workspace_base_dir) / wid
+    else:
+        workspace_path = workspace_base_dir
 
     # —— 能力目录字段从 settings 取（双来源的 workspace 级落点）——
     from prismclaw.infra.settings import SkillSettings
     skill_settings = _nested(settings, "skills", SkillSettings())
-    rel_dir = getattr(skill_settings, "workspace_skills_dir", ".work/skills") or ".work/skills"
-    skill_dir = workspace_path / rel_dir / name
+    skill_dir = workspace_path / skill_settings.workspace_skills_dir / name
     skill_file = skill_dir / "SKILL.md"
 
     if skill_file.exists():

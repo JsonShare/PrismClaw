@@ -1,19 +1,23 @@
-import { Stethoscope, Scale, Puzzle, Microscope, type LucideIcon } from 'lucide-react'
-import { getRegisteredDomains } from '../../domains/registry'
+import { Fragment, useSyncExternalStore } from 'react'
+import {
+  getDomainEntry,
+  getDomainNavItems,
+  getDomainOrder,
+  getRegistryVersion,
+  subscribeRegistryVersion,
+  type DomainNavItem,
+} from '../../domains/registry'
+import {
+  getDomainActive,
+  requestDomainPage,
+  subscribeDomainActive,
+} from '../../domains/nav-bus'
 import type { AppSection } from '../../stores/ui'
-import { useResolvedTheme } from '../../hooks/useResolvedTheme'
 import { HairlineDivider } from '../ui/HairlineDivider'
 import iconNew from '../../images/other_icon/new.png'
 import iconSkill from '../../images/other_icon/skill.png'
 import iconClock from '../../images/other_icon/clock.png'
 import iconFolder from '../../images/other_icon/folder.png'
-
-/** 域图标名 → Lucide 组件映射（与 domains.yaml 中 icon 字段对应） */
-const DOMAIN_ICON_MAP: Record<string, LucideIcon> = {
-  stethoscope: Stethoscope,
-  gavel: Scale,
-  microscope: Microscope,
-}
 
 interface SidebarNavProps {
   activeSection: AppSection
@@ -29,9 +33,51 @@ const MAIN_MENU_ITEMS = [
   { key: 'outputs' as const, label: '产出物', img: iconFolder },
 ]
 
+/** 侧栏平铺后的一组：分组标签 + 该组内的域菜单项 */
+interface NavGroup {
+  label: string
+  domainKey: string
+  items: DomainNavItem[]
+}
+
+/**
+ * 把所有业务域的菜单项按 group 拍平成一维分组列表。
+ * 顺序由 domains.yaml 的声明顺序决定（医疗的临床业务/知识库 → 法律的法律合同），
+ * 每个分组在侧栏里都是一个平级块，块与块之间用发丝线分割。
+ */
+function buildNavGroups(): NavGroup[] {
+  const groups: NavGroup[] = []
+  // 顺序取构建期生成表的键序（= domains.yaml 声明顺序）。
+  // 不能用 getRegisteredDomains() 的顺序：那是后端 bundle 注册顺序，不稳定。
+  for (const domainKey of getDomainOrder()) {
+    const entry = getDomainEntry(domainKey)
+    if (!entry) continue // 后端未启用或前端未编译该域
+    const items = getDomainNavItems(domainKey)
+    // 单页域：整域就是一个块，标签用域名
+    if (items.length < 2) {
+      groups.push({ label: entry.manifest.label, domainKey, items: [] })
+      continue
+    }
+    for (const item of items) {
+      let group = groups.find((g) => g.label === item.group && g.domainKey === domainKey)
+      if (!group) {
+        group = { label: item.group, domainKey, items: [] }
+        groups.push(group)
+      }
+      group.items.push(item)
+    }
+  }
+  return groups
+}
+
 export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSession }: SidebarNavProps) {
-  const domains = getRegisteredDomains()
-  const theme = useResolvedTheme()
+  // 域注册表是异步填充的（App 启动时拉 /api/domains/manifests），
+  // 必须订阅版本号，否则首次渲染拿到的空注册表不会随注册完成而刷新。
+  useSyncExternalStore(subscribeRegistryVersion, getRegistryVersion)
+  const navActive = useSyncExternalStore(subscribeDomainActive, getDomainActive)
+
+  const navGroups = buildNavGroups()
+  const hasDomainNav = navGroups.length > 0
 
   const handleMainItemClick = (key: typeof MAIN_MENU_ITEMS[number]['key']) => {
     if (key === 'chat') {
@@ -45,90 +91,123 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
     onNavigate(key)
   }
 
-  return (
-    <nav className="shrink-0 pb-2 space-y-1">
-      {MAIN_MENU_ITEMS.map(({ key, label, img }) => {
-        const active = activeSection === key && (key !== 'chat' || !activeConvId)
-        return (
-          <button
-            key={key}
-            type="button"
-            onClick={() => handleMainItemClick(key)}
-            className={`sidebar-nav-row grid grid-cols-[20px_1fr] items-center gap-2 px-3 py-2.5 text-[length:var(--fs-sm)] font-medium text-left transition-all duration-200 cursor-pointer mx-3 w-[calc(100%-24px)]
-                ${
-                  active
-                    ? 'rounded-[var(--radius-control)] is-active'
-                    : 'rounded-[var(--radius-control)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)]'
-                }`}
-          >
-            <img src={img} alt={label} className="w-5 h-5 justify-self-start app-icon" />
-            <span>{label}</span>
-          </button>
-        )
-      })}
+  /** 域菜单项点击：切到该域 + 让域切到目标页 */
+  const handleDomainItemClick = (domainKey: string, page: string) => {
+    requestDomainPage(domainKey, page)
+    onNavigate(`domain:${domainKey}` as AppSection)
+  }
 
-      {/* ── 业务域模块入口 ── */}
-      {domains.length > 0 && (
+  return (
+    <nav className="shrink-0 pb-2 flex flex-col min-h-0">
+      {/* 主菜单不参与滚动 —— 否则域子项一多，新任务/能力扩展等会被滚出视野 */}
+      <div className="shrink-0 space-y-1">
+        {MAIN_MENU_ITEMS.map(({ key, label, img }) => {
+          const active = activeSection === key && (key !== 'chat' || !activeConvId)
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => handleMainItemClick(key)}
+              // 图标列用 1.25rem 而非 20px：根字号是 15px（--fs-md），
+              // Tailwind 的 w-5 也是 1.25rem=18.75px；写死 20px 会多出 1.25px 余量，
+              // 导致下方二级菜单的 pl-10 对不齐主菜单文字。统一用 rem 后两者严格同轴。
+              className={`sidebar-nav-row grid grid-cols-[1.25rem_1fr] items-center gap-2 px-3 py-2.5 text-[length:var(--fs-sm)] font-medium text-left transition-colors duration-150 cursor-pointer mx-3 w-[calc(100%-1.5rem)] rounded-[var(--radius-control)] ${
+                active
+                  ? 'is-active'
+                  : 'text-[var(--c-text)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)]'
+              }`}
+            >
+              <img src={img} alt={label} className="w-5 h-5 justify-self-start app-icon" />
+              <span>{label}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── 业务域菜单：每个分组一块，块间发丝线分割 ──
+          仅这一块滚动：侧栏高度有限，域多起来时不能把「所有任务」挤没。
+          纵向节奏统一由容器的 gap 控制，且与主菜单的 space-y-1 同值（0.25rem = 3.75px）：
+          分组标签、子项、分割线之间的间距完全一致，不再给标签单独加 margin。
+          不用 gap-1.5：那是 5.625px，会比主菜单松一档，「统一」就不成立。 */}
+      {hasDomainNav && (
         <>
           <HairlineDivider />
-          <div className="mx-3 px-3 pb-1 pt-0.5 text-[length:var(--fs-xs)] font-medium text-[var(--c-text-secondary)]">
-            智能工作台
-          </div>
-          {domains.map((domain) => {
-            const sectionKey = `domain:${domain.manifest.key}` as AppSection
-            const active = activeSection === sectionKey
-            // 强调色来自业务域自己的描述（domains.yaml），核心只通用读取，无耦合
-            const domAccent =
-              (theme === 'dark'
-                ? domain.manifest.accentDark
-                : domain.manifest.accentDeep || domain.manifest.accent) ||
-              'var(--c-accent)'
-            const IconComp = DOMAIN_ICON_MAP[domain.manifest.icon]
-            const isImgIcon =
-              domain.manifest.icon.startsWith('/') || domain.manifest.icon.startsWith('http')
+          <div className="min-h-0 overflow-y-auto overscroll-contain max-h-[42vh] flex flex-col gap-1">
+            {navGroups.map((group, groupIndex) => {
+              // 只有「换域」时才画线：医疗的 临床业务→知识库 属于同一域，靠统一间距衔接
+              const startNewDomain =
+                groupIndex > 0 && navGroups[groupIndex - 1].domainKey !== group.domainKey
+              return (
+                <Fragment key={`${group.domainKey}:${group.label || '__ungrouped'}`}>
+                  {startNewDomain && <HairlineDivider className="mx-3" />}
 
-            return (
-              <button
-                key={sectionKey}
-                type="button"
-                onClick={() => onNavigate(sectionKey)}
-                className={`sidebar-nav-row grid grid-cols-[20px_1fr] items-center gap-2 px-3 py-2.5 text-[length:var(--fs-sm)] font-medium text-left transition-all duration-200 cursor-pointer mx-3 w-[calc(100%-24px)]
-                  ${
-                    active
-                      ? 'rounded-[var(--radius-control)] is-active'
-                      : 'rounded-[var(--radius-control)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)]'
-                  }`}
-              >
-                {/* 业务域图标：无背景，仅按域描边色，与主菜单同尺寸对齐 */}
-                <span className="grid h-5 w-5 place-items-center justify-self-start">
-                  {IconComp ? (
-                    <IconComp className="h-5 w-5" style={{ color: domAccent }} />
-                  ) : isImgIcon ? (
-                    <img
-                      src={domain.manifest.icon}
-                      alt={domain.manifest.label}
-                      className="h-5 w-5 app-icon"
-                    />
+                  {/* 分组标签：11px/600 + 字距 + 灰字，弱化到「分区标签」层级 */}
+                  <div className="mx-3 flex h-6 items-center px-3 text-[11px] font-semibold tracking-[0.08em] text-[var(--c-text-tertiary)]">
+                    <span className="truncate">{group.label}</span>
+                  </div>
+
+                  {/* 单页域没有子项，整块只有标题，点击标题进入 —— 见下方 onClick 分支 */}
+                  {group.items.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(`domain:${group.domainKey}` as AppSection)}
+                      className={`sidebar-nav-row w-[calc(100%-1.5rem)] mx-3 flex items-center rounded-[var(--radius-control)] px-3 py-2.5 text-[length:var(--fs-sm)] font-semibold text-left transition-colors duration-150 cursor-pointer ${
+                        activeSection === `domain:${group.domainKey}`
+                          ? 'is-active'
+                          : 'text-[var(--c-text-secondary)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)] hover:text-[var(--c-text)]'
+                      }`}
+                    >
+                      <span className="truncate">进入工作台</span>
+                    </button>
                   ) : (
-                    <Puzzle className="h-5 w-5" style={{ color: domAccent }} />
+                    group.items.map((item) => {
+                      const active =
+                        activeSection === `domain:${group.domainKey}` && navActive.page === item.key
+                      return (
+                        <button
+                          key={`${group.domainKey}:${item.key}`}
+                          type="button"
+                          onClick={() => handleDomainItemClick(group.domainKey, item.key)}
+                          aria-current={active ? 'page' : undefined}
+                          // 与主菜单完全同构：同样的 mx-3 + px-3 + 1.25rem 图标列 + gap-2 + py-2.5，
+                          // 因此图标落在 22.5px、文字落在 48.75px、行高与行距都与主菜单一致。
+                          // 字号同主菜单、字重 600；层级只靠灰字色与主菜单区分。
+                          className={`sidebar-nav-row grid w-[calc(100%-1.5rem)] mx-3 grid-cols-[1.25rem_1fr] items-center gap-2 rounded-[var(--radius-control)] px-3 py-2.5 text-[length:var(--fs-sm)] font-semibold text-left transition-colors duration-150 cursor-pointer ${
+                            active
+                              ? 'is-active'
+                              : 'text-[var(--c-text-secondary)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)] hover:text-[var(--c-text)]'
+                          }`}
+                        >
+                          {item.icon ? (
+                            // 业务域自配的图标图片：用 mask 渲染而非 <img>，
+                            // 这样能吃掉 currentColor，普通/悬停/选中自动跟随文字变色，
+                            // 也不必为明暗主题各准备一套图。16px 居中于 18.75px 图标列。
+                            <span
+                              aria-hidden="true"
+                              className="h-[16px] w-[16px] justify-self-center bg-current"
+                              style={{
+                                WebkitMaskImage: `url("${item.icon}")`,
+                                maskImage: `url("${item.icon}")`,
+                                WebkitMaskRepeat: 'no-repeat',
+                                maskRepeat: 'no-repeat',
+                                WebkitMaskPosition: 'center',
+                                maskPosition: 'center',
+                                WebkitMaskSize: 'contain',
+                                maskSize: 'contain',
+                              }}
+                            />
+                          ) : (
+                            <span aria-hidden="true" />
+                          )}
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      )
+                    })
                   )}
-                </span>
-
-                {/* 标题 + 副标题（副标题来自业务域自己的描述） */}
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-[length:var(--fs-sm)] font-semibold leading-tight text-[var(--c-text)]">
-                    {domain.manifest.label}
-                  </span>
-                  {domain.manifest.subtitle && (
-                    <span className="truncate text-[length:var(--fs-xs)] leading-tight text-[var(--c-text-secondary)]">
-                      {domain.manifest.subtitle}
-                    </span>
-                  )}
-                </span>
-              </button>
-            )
-          })}
-          <HairlineDivider />
+                </Fragment>
+              )
+            })}
+          </div>
         </>
       )}
     </nav>

@@ -15,7 +15,7 @@ class WorkspaceBoundaryError(Exception):
 # LLM tool-call payloads often leak template/formatting residue: trailing/leading
 # wrappers ({}, [], (), quotes, backticks), punctuation, extra slashes, or a
 # leading ``/`` that turns a relative workspace path into a bogus absolute path.
-# The classic symptom is ``uploads/a.pptx{}``: the suffix becomes ``.pptx{}``
+# The classic symptom is ``inbox/a.pptx{}``: the suffix becomes ``.pptx{}``
 # so ``fmt_from_path`` returns ``None`` and the user sees a confusing error
 # "only .docx/.xlsx/.pptx are supported" even though the uploaded file is a
 # real .pptx.
@@ -153,14 +153,10 @@ class WorkspaceResolver:
     def resolve(self, workspace_id: str) -> Path:
         return self._config.resolve_path(workspace_id)
 
-    # 虚拟路径前缀 → 物理根目录映射（按优先级匹配，先命中先返回）。
-    # workspace 级共享 → workspace 根；session 私有 → session 根。
-    _PREFIX_SESSION_SUBDIRS = {
-        "uploads": "uploads",
-        "context_blocks": "context_blocks",
-        "tool_results": "tool_results",
-        "outputs": "outputs",
-    }
+    # 虚拟路径前缀 → session 私有子目录（物理目录名 = 前缀名）。
+    _SESSION_PREFIXES = frozenset(
+        {"inbox", "outputs", "context_blocks", "tool_results"}
+    )
 
     def resolve_within(
         self,
@@ -175,16 +171,16 @@ class WorkspaceResolver:
         虚拟路径约定（Agent 在 sandbox 里看到的 /workspace/ 前缀）：
 
           project/<...>             → workspace 根（用户项目文件，读写直达原件）
-                                       ⚠ 写入禁止 sessions/ 和 .work/ 子树
-          inputs/<...>              → workspace 根（所有 session 共享上传，只读语义）
-          uploads/<...>             → sessions/<sid>/uploads/    (session 私有)
+                                       ⚠ 写入禁止 sessions/、biz_domain/ 和 .work/ 子树
+          inbox/<...>              → sessions/<sid>/inbox/      (session 私有)
           context_blocks/<...>      → sessions/<sid>/context_blocks/
           tool_results/<...>        → sessions/<sid>/tool_results/
           outputs/<...>             → sessions/<sid>/outputs/
           sessions/<sid>/<...>      → 物理格式归一：本会话 → 剥前缀按上面规则；
                                        跨会话 → workspace 根直达，只读、禁写
-          <无前缀>                  → session_root/outputs/  (有 session_root)
-                                     或 workspace_root/       (无 session_root)
+          <无前缀>                  → 读：session_root/outputs/；(有 session_root)
+                                       写：必须显式前缀（outputs/ 或 project/）；
+                                       无 session_root → workspace_root/
 
         session_root 由调用方通过 workspace_paths.resolve_session_dir 算好传入——
         本函数不依赖任何业务参数（user_id / workspace_id / session_id），只做
@@ -225,7 +221,17 @@ class WorkspaceResolver:
                 resolved = pre.resolve() if pre.exists() else _lexical_resolve(pre)
                 # 别名纠正只服务读路径：静态能力目录（assets/）是只读区，
                 # 写操作若也被改写就会把旧前缀的误写搬进只读目录。
-                return resolved if for_write else canonicalize_fs_path(resolved)
+                candidate = resolved if for_write else canonicalize_fs_path(resolved)
+                # 绝对路径同样受工作区边界约束：只有静态能力根（assets/）例外，
+                # 且仅限读。否则一条 `~/.prismclaw/workspaces/web_bob/...` 就能
+                # 直接读到别的用户数据。
+                if _within(candidate, Path(workspace_path).resolve()):
+                    return candidate
+                if not for_write and _within(candidate, _assets_root()):
+                    return candidate
+                raise WorkspaceBoundaryError(
+                    f"路径 {relative!r} 越出工作区边界 {Path(workspace_path).resolve()}"
+                )
 
         cleaned = clean_rel_path(relative)
         if cleaned is None:
@@ -242,7 +248,7 @@ class WorkspaceResolver:
 
         # `sessions/<sid>/...` 物理格式泄漏：present_files 报错与系统提示里
         # 出现的就是这种路径，模型会照抄进文件工具参数。若不做显式归一，它会
-        # 落入裸路径分支，首选候选 session_root/outputs/ 造成双重嵌套
+        # 落入裸路径分支，被解析到 session_root/outputs/ 造成双重嵌套
         # （outputs/sessions/<sid>/outputs/x.docx）——写新文件时创建垃圾目录。
         # 本会话自引用 → 剥前缀归一后走正常分支；跨会话 → 只读直达、禁止写。
         preset_target: Path | None = None
@@ -264,7 +270,9 @@ class WorkspaceResolver:
 
         # ── 虚拟路径前缀映射 ────────────────────────────────────────────────
         # project/ → workspace 根（用户项目文件，直达原件）
-        # 写入时禁止 sessions/ 和 .work/ 子树（session 交付物用 outputs/）
+        # 写入时禁止 sessions/、biz_domain/、.work/ 子树
+        #（session 交付物用 outputs/；业务域真实路径在 user_root 下，
+        # 不在 workspace 内，此处禁止是为了不产生同名影子目录）
         if preset_target is not None:
             target = preset_target
         elif cleaned.startswith("project/") or cleaned == "project":
@@ -275,49 +283,37 @@ class WorkspaceResolver:
                         f"project/ 前缀下禁止写入 sessions/ 子树（{relative!r}）。"
                         f"写 session 交付物请改用 outputs/<sid>/..."
                     )
+                if rel_after.startswith("biz_domain/") or rel_after == "biz_domain":
+                    raise WorkspaceBoundaryError(
+                        f"project/ 前缀下禁止写入 biz_domain/ 子树（{relative!r}）。"
+                        f"业务域数据在用户级 biz_domain/ 下，由业务代码管理落点。"
+                    )
                 if rel_after.startswith(".work/") or rel_after == ".work":
                     raise WorkspaceBoundaryError(
                         f"project/ 前缀下禁止写入 .work/ 系统子树（{relative!r}）。"
                     )
             target = workspace_abs / rel_after if rel_after else workspace_abs
-        elif cleaned.startswith("inputs/") or cleaned == "inputs":
-            # inputs/ → workspace 根（workspace 级共享上传）
-            target = workspace_abs / cleaned
         else:
             # session 私有前缀（需要 session_root）
             matched_session = False
-            for prefix, subdir in self._PREFIX_SESSION_SUBDIRS.items():
+            for prefix in self._SESSION_PREFIXES:
                 if cleaned.startswith(f"{prefix}/") or cleaned == prefix:
                     if session_root is None:
                         raise WorkspaceBoundaryError(
                             f"路径 {relative!r} 需要 session_root（session-scoped 前缀）"
                         )
-                    target = session_root.resolve() / subdir / cleaned[len(prefix):].lstrip("/")
+                    target = session_root.resolve() / prefix / cleaned[len(prefix):].lstrip("/")
                     matched_session = True
                     break
 
             if not matched_session:
-                # 无前缀路径：有 session_root 时先默认 outputs/，
-                # 但如果 outputs/ 里找不到，再在其他 session 私有子目录
-                # （context_blocks / tool_results / uploads）里兜底搜索 ——
-                # 防御模型把前缀抄丢（比如引用格式是 context_blocks/cb_xxx.txt
-                # 但模型只写了 cb_xxx.txt）。
                 if session_root is not None:
-                    _sr = session_root.resolve()
-                    _candidates = [_sr / "outputs" / cleaned]
-                    for _alt in ("context_blocks", "tool_results", "uploads"):
-                        _candidates.append(_sr / _alt / cleaned)
-                    target = next((c for c in _candidates if c.exists()), _candidates[0])
-                    # 第 3 候选：workspace 根下的真实文件（用户项目文件，裸路径读兜底）。
-                    _ws_candidate = workspace_abs / cleaned
-                    if not any(c.exists() for c in _candidates) and _ws_candidate.is_file():
-                        if for_write:
-                            raise WorkspaceBoundaryError(
-                                f"裸路径 {relative!r} 命中了 workspace 根下的项目文件；"
-                                "写入请明确前缀：`project/<rel>` 改原件，"
-                                "`outputs/<rel>` 产本会话新版本。"
-                            )
-                        target = _ws_candidate
+                    if for_write:
+                        raise WorkspaceBoundaryError(
+                            f"写入路径 {relative!r} 缺少虚拟前缀；"
+                            "请用 `outputs/<rel>`（本会话交付物）或 `project/<rel>`（用户项目文件）。"
+                        )
+                    target = session_root.resolve() / "outputs" / cleaned
                 else:
                     target = workspace_abs / cleaned
 
@@ -361,6 +357,24 @@ _FS_ROOT_SEGMENTS = frozenset({
 # 用户真实创建的目录。
 _PRISMCLAW_HOME_DIRNAME = ".prismclaw"
 _CAPABILITY_SEGMENTS = frozenset({"plugins", "skills", "agents"})
+
+
+def _assets_root() -> Path:
+    """静态能力根（只读）：与 ``engine/security/sandbox/roots.py`` 同一定义。"""
+    from prismclaw.engine.security.sandbox.roots import runtime_readonly_roots
+
+    roots = runtime_readonly_roots()
+    return roots[0] if roots else Path.home() / _PRISMCLAW_HOME_DIRNAME / "assets"
+
+
+def _within(path: Path, root: Path) -> bool:
+    """``path`` 是否位于 ``root`` 之内（纯路径判定，不要求存在）。"""
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
 
 # 远程 URL 不是文件路径。模型常把网页链接直接传给 read/ls，pathlib 会把它当
 # 相对路径折叠成 ``outputs/https:/host/...``，报错信息毫无指向性。在解析入口

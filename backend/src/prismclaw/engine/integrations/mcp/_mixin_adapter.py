@@ -30,6 +30,7 @@ class AdapterMixin(_MCPBackendBase):
                     group=self._group,
                     sdk_key=sdk_key,
                     runtime_observer=self,
+                    plugin_name=self._plugin_name,
                 )
             except ValueError as exc:
                 logger.warning(

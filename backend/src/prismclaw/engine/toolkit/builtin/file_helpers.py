@@ -126,7 +126,7 @@ def build_file_change(
     newly created file pass old_text="". Returns a dict with `hunks` using the
     same `{type: 'equal'|'insert'|'delete', lines}` shape the frontend renders.
 
-    `before_ref` is the blob path (relative under .work/edits/blobs/) for
+    `before_ref` is the blob path (relative under .work/audit/edits/blobs/) for
     the before-content backup — enables frontend Reject All → API revert.
     `before_sha` is the SHA-256 hex digest of before-content for integrity checks.
     """

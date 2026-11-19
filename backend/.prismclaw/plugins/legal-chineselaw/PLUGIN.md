@@ -72,7 +72,7 @@ python3 -c "import json,glob; [json.load(open(f)) for f in glob.glob('**/*.json'
 
 ### 插件 PLUGIN.md 是模板，不是项目上下文
 
-每个 `<plugin>/PLUGIN.md` 是一个执业档案模板，由 `cold-start-interview` skill 复制到用户机器上的 `~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PLUGIN.md`。安装插件时，它*不会*作为项目上下文加载——插件加载器会对此发出警告，这是预期行为。不要通过将内容移入 skill 来"修复"这个警告。
+每个 `<plugin>/PLUGIN.md` 是一个执业档案模板，由 `cold-start-interview` skill 复制到用户机器上的 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`。安装插件时，它*不会*作为项目上下文加载——插件加载器会对此发出警告，这是预期行为。不要通过将内容移入 skill 来"修复"这个警告。
 
 ### `external_plugins/` 由供应商维护
 

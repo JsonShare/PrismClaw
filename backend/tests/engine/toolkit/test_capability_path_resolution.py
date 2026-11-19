@@ -50,8 +50,10 @@ def test_canonicalize_leaves_existing_and_unrelated_paths(prismclaw_home: Path) 
     assert canonicalize_fs_path(Path("/tmp/elsewhere")) == Path("/tmp/elsewhere")
 
 
-def test_resolve_within_canonicalizes_reads_but_not_writes(prismclaw_home: Path) -> None:
-    """别名纠正只服务读路径；写路径必须保持原样，不能搬进只读的 assets。"""
+def test_resolve_within_canonicalizes_reads_but_rejects_external_writes(
+    prismclaw_home: Path,
+) -> None:
+    """别名纠正只服务读路径；绝对路径读出工作区仅放行 assets，写入一律拒绝。"""
     workspace = prismclaw_home / "ws"
     workspace.mkdir(parents=True)
     old = str(prismclaw_home / "plugins" / "p" / "x")
@@ -59,7 +61,9 @@ def test_resolve_within_canonicalizes_reads_but_not_writes(prismclaw_home: Path)
     assert WorkspaceResolver(None).resolve_within(workspace, old) == (
         prismclaw_home / "assets" / "plugins" / "p" / "x"
     )
-    assert WorkspaceResolver(None).resolve_within(workspace, old, for_write=True) == Path(old)
+    # 写操作不得越出工作区：既不能写进只读的 assets，也不能写其它 home 子目录
+    with pytest.raises(WorkspaceBoundaryError, match="越出工作区边界"):
+        WorkspaceResolver(None).resolve_within(workspace, old, for_write=True)
 
 
 def test_resolve_capability_command_falls_back_to_command(prismclaw_home: Path) -> None:

@@ -245,7 +245,7 @@ async def get_file_text(
     wid = _clean_workspace_id(workspace_id)
     rel = (path or "").lstrip("/")
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    targets = _candidate_file_targets(io_root=workspace_root, workspace_root=workspace_root, raw_path=path)
+    targets = _candidate_file_targets(workspace_root=workspace_root, raw_path=path)
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
@@ -278,7 +278,7 @@ async def get_file_raw(
 ) -> Response:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    targets = _candidate_file_targets(io_root=workspace_root, workspace_root=workspace_root, raw_path=path)
+    targets = _candidate_file_targets(workspace_root=workspace_root, raw_path=path)
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
@@ -313,7 +313,7 @@ async def download_file(
     """Download a file with Content-Disposition: attachment."""
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    targets = _candidate_file_targets(io_root=workspace_root, workspace_root=workspace_root, raw_path=path)
+    targets = _candidate_file_targets(workspace_root=workspace_root, raw_path=path)
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
@@ -341,7 +341,7 @@ async def get_office_preview_pdf(
         raise HTTPException(status_code=415, detail="Not a supported office file")
 
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    targets = _candidate_file_targets(io_root=workspace_root, workspace_root=workspace_root, raw_path=path)
+    targets = _candidate_file_targets(workspace_root=workspace_root, raw_path=path)
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
@@ -358,7 +358,9 @@ async def get_office_preview_pdf(
     if not soffice:
         raise HTTPException(status_code=501, detail="LibreOffice is not installed (soffice not found)")
 
-    preview_dir = workspace_root / ".work" / "previews"
+    from prismclaw.infra.workspace_paths import work_dir
+
+    preview_dir = work_dir(workspace_root, "cache", "previews")
     preview_dir.mkdir(parents=True, exist_ok=True)
     key_src = f"{target.resolve()}|{st.st_mtime_ns}|{st.st_size}".encode("utf-8")
     key = hashlib.sha256(key_src).hexdigest()
@@ -410,15 +412,13 @@ async def upload_to_directory(
     files: list[UploadFile] = File(...),
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-    dir: str = "",
     session_id: str | None = None,
 ) -> UploadResponse:
     """Upload a batch of files into a workspace directory.
 
-    三种落盘模式（按优先级）：
-    1. 有 session_id → session 私有上传（sessions/<sid>/uploads/），chat attach 场景
-    2. 无 session_id 但有 dir → workspace 级共享输入（inputs/<dir>/）
-    3. 无 session_id 无 dir → 自动创建 session_id（返回给前端）+ session 私有上传
+    两种落盘模式（按优先级）：
+    1. 有 session_id → session 私有上传（sessions/<sid>/inbox/），chat attach 场景
+    2. 无 session_id → 自动创建 session_id（返回给前端）+ session 私有上传
 
     目录不存在时自动 mkdir(parents=True)，upload_files 管线零改动。
     """
@@ -426,25 +426,21 @@ async def upload_to_directory(
         raise HTTPException(status_code=400, detail="No files uploaded")
 
     import uuid as _uuid
-    from prismclaw.infra.workspace_paths import resolve_session_uploads_dir
+    from prismclaw.infra.workspace_paths import resolve_session_inbox_dir
     from prismclaw.schema.session.ids import build_web_session_key
 
     wid = _clean_workspace_id(workspace_id)
-    rel_dir = (dir or "").lstrip("/")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
 
     auto_session_id: str | None = None
     if session_id:
-        # 1. session 私有上传（resolve_session_uploads_dir 内部做 sanitize）
-        dest_root = resolve_session_uploads_dir(user_id, wid, session_id)
-    elif rel_dir:
-        # 2. workspace 级共享输入
-        dest_root = root / "inputs"
+        # session 私有上传（resolve_session_inbox_dir 内部做 sanitize）
+        dest_root = resolve_session_inbox_dir(user_id, wid, session_id)
     else:
-        # 3. 自动创建 session_id —— 新任务先上传文件再咨询的场景
+        # 自动创建 session_id —— 新任务先上传文件再咨询的场景
         session_id = f"{build_web_session_key(user_id, wid)}:s:{_uuid.uuid4().hex}"
         auto_session_id = session_id
-        dest_root = resolve_session_uploads_dir(user_id, wid, session_id)
+        dest_root = resolve_session_inbox_dir(user_id, wid, session_id)
 
     # 确保目录存在（LocalSink.begin 只 mkdir dest_root/<rel> 子路径，不负责 session_root）
     dest_root.mkdir(parents=True, exist_ok=True)

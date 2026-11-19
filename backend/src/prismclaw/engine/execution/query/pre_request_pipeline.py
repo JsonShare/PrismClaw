@@ -183,6 +183,7 @@ class PreRequestPipeline:
             discovered_tools=turn_state.discovered_tool_names(),
             subagent_depth=subagent_depth,
             headless=headless,
+            tool_scope=getattr(tool_ctx, "tool_scope", None) if tool_ctx else None,
         )
         visible_tool_names = set(resolved_toolset.visible_tools_for_llm)
 

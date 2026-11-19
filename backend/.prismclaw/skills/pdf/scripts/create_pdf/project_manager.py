@@ -55,7 +55,7 @@ SUPPORTED_SUFFIXES = PDF_SUFFIXES | PPT_SUFFIXES | DOC_SUFFIXES | TEXT_SUFFIXES 
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-# 引擎层在 bash tool / container_backend.py 统一注入的路径 env。
+# 引擎层在 bash tool 统一注入的路径 env。
 # 技能只读这些 env，零自解析；最后 fallback 到相对路径（脚本被手动直接执行时）。
 import os as _os
 

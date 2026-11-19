@@ -459,7 +459,7 @@ class _Catalog:
     def get_agent_entry(self, name: str):
         if name != "researcher":
             return None
-        return SimpleNamespace(manifest=_manifest())
+        return SimpleNamespace(manifest=_manifest(), plugin_name=None)
 
     def list_agent_entries(self) -> list:
-        return [SimpleNamespace(manifest=_manifest())]
+        return [SimpleNamespace(manifest=_manifest(), plugin_name=None)]

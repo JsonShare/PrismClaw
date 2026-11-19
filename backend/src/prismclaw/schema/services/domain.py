@@ -25,6 +25,11 @@ class MenuEntry:
     label: str
     icon: str = ""
     parent: str = ""
+    #: 侧栏分组标签（如「临床业务」「知识库」）。前端按它给平铺菜单分组，
+    #: 同组菜单按声明顺序连排；留空表示不分组。
+    #: 与 parent 的区别：parent 描述菜单层级（子菜单挂在哪一项下），group 只是视觉分组，
+    #: 两者语义不同，不可混用。
+    group: str = ""
 
 
 @dataclass

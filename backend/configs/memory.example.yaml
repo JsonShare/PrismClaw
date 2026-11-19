@@ -5,7 +5,6 @@
 #   cp backend/configs/memory.example.yaml backend/configs/memory.yaml
 
 memory:
-  base_dir: "~/.prismclaw/memory"
   # L1 是“常驻上下文”的记忆索引，直接进入 prompt 尾部
   l1_max_entries: 30
   l1_max_chars: 3000

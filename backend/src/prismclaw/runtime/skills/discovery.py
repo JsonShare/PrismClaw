@@ -127,7 +127,7 @@ def discover_skill_dirs_for_paths(
     if not root_paths:
         return []
     if candidate_dir_names is None:
-        # walk-up 只做 workspace 内相对目录发现：`.work/skills`（graduation/ClawHub
+        # walk-up 只做 workspace 内相对目录发现：`.work/state/skills`（graduation/ClawHub
         # 安装落点）。用户级 assets/skills 是绝对路径，由 layout builder 直接展开，
         # 不参与向上遍历。
         candidate_dir_names = (SkillSettings().workspace_skills_dir,)

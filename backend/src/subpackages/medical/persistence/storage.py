@@ -1,12 +1,14 @@
-"""医疗域原始文件存储 —— 落在用户的默认工作区内。
+"""医疗域原始文件存储 —— 落在用户级业务域目录内。
 
-布局：<workspaces>/web_{user_id}/default/uploads/{report_id}/{filename}
+布局：<workspaces>/web_{user_id}/biz_domain/medical/inbox/{report_id}/{filename}
 
 为什么这么设计：
-  * 业务上传与「系统新任务」共用同一个工作区根——后者本来就在
-    ~/.prismclaw/workspaces/web_{user_id}/default 下干活，上传落在这里，
-    用户在工作区文件树里看得见、域内与通用工具读得到同一处。
-    （此前落在 <项目根>/var/medical/uploads/...，属源码树内的运行时产物。）
+  * 业务域与对话任务是两类东西：后者跑 agent loop、有会话级 engine 目录，
+    医疗是纯编排功能（直调 LLM，不进 loop），只需要「原件进 / 产出出」
+    两个业务语义目录（见 SDD 5.2.8.1）。放在 sessions/ 下会强行按用户
+    会话切碎，但病历上传只有 create_by、没有 session_id。
+  * 与工作区同级（不带 workspace_id）：病历是用户级数据，同一用户在任何
+    工作区里都应看到同一份原件，避免多工作区的文件复制与不同步。
   * 按 user 分目录：web_{user_id} 即用户边界，配合接口层的 create_by 校验，
     越权读取在结构上不成立（目录隔离 + 归属判断两道独立约束）。
   * 按 report_id 分目录：同一报告多次上传不互相覆盖，也便于整报告级清理。
@@ -18,7 +20,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from prismclaw.infra.workspace_paths import resolve_workspace_inputs_dir
+from prismclaw.infra.workspace_paths import resolve_biz_domain_dir
 
 # 只允许这些字符，其余全部替换为下划线（防目录穿越与跨平台非法名）
 _UNSAFE = re.compile(r"[^A-Za-z0-9_.一-鿿-]")
@@ -31,8 +33,11 @@ def _safe(segment: str, fallback: str) -> str:
 
 
 def resolve_upload_dir(user_id: str, report_id: str) -> Path:
-    """返回该报告的上传目录（不创建）。落点：默认工作区的 inputs/<report_id>。"""
-    base = resolve_workspace_inputs_dir(user_id)
+    """返回该报告的上传目录（不创建）。
+
+    落点：用户级 ``biz_domain/medical/inbox/<report_id>/``。
+    """
+    base = resolve_biz_domain_dir(user_id, "medical") / "inbox"
     return base / _safe(report_id, "report")
 
 

@@ -68,7 +68,7 @@ class ListDirectoryTool:
         recursive = args.get("recursive", False)
         ignore_hidden = args.get("ignore_hidden", True)
 
-        # 绝对/~ 路径与 read 共用同一套别名纠正；会话内前缀（uploads/ 等）
+        # 绝对/~ 路径与 read 共用同一套别名纠正；会话内前缀（inbox/ 等）
         # 与 read 共用同一套虚拟路径映射；其余相对路径保持「基于工作区根」。
         if is_remote_url(path_str):
             return error_result(
@@ -81,7 +81,7 @@ class ListDirectoryTool:
         _first = path_str.strip().split("/", 1)[0]
         if path_str.startswith(("~", "/")):
             path_str = str(canonicalize_fs_path(Path(path_str).expanduser()))
-        elif _first in WorkspaceResolver._PREFIX_SESSION_SUBDIRS or _first == "sessions":
+        elif _first in WorkspaceResolver._SESSION_PREFIXES or _first == "sessions":
             try:
                 path_str = str(self.resolver.resolve_within(
                     context.workspace_path, path_str, session_root=session_root(context),

@@ -11,7 +11,7 @@
 
 skills:
   asset_skills_dir: "~/.prismclaw/assets/skills"
-  workspace_skills_dir: ".work/skills"
+  workspace_skills_dir: ".work/state/skills"
   clawhub_base_url: "https://clawhub.ai"
   # 单个技能文件（SKILL.md/脚本）大小上限，防止恶意大文件
   max_skill_file_bytes: 256000

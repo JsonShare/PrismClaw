@@ -143,7 +143,7 @@ async def save_domain_override(
     payload: DomainOverrideRequest,
     user_id: str = Depends(get_current_user),
 ) -> DomainConfigResponse:
-    """保存工作区覆盖。覆盖写入 {workspace}/.work/configs/{domain}.json。"""
+    """保存工作区覆盖。覆盖写入 {workspace}/.work/state/configs/{domain}.json。"""
     _validate_domain_exists(domain)
     overrides = payload.overrides
     if not isinstance(overrides, dict):

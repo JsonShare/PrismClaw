@@ -1,35 +1,12 @@
 from __future__ import annotations
 
-import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-_DEFAULT_MEMORY_BASE_DIR = "~/.prismclaw/memory"
-_FALLBACK_MEMORY_BASE_DIR = "~/.cache/prismclaw/memory"
-
-
-def _dir_supports_writes(path: Path) -> bool:
-    probe = path / f".prismclaw-write-probe-{os.getpid()}"
-    try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink(missing_ok=True)
-        return True
-    except Exception:
-        try:
-            probe.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return False
-
-
 class MemorySettings(BaseSettings):
-    base_dir: str = _DEFAULT_MEMORY_BASE_DIR
     l1_max_entries: int = 30
     l1_max_chars: int = 3000
     l1_ttl_seconds: int = 2_592_000  # 30 days
@@ -93,30 +70,6 @@ class MemorySettings(BaseSettings):
     memory_graph_enabled: bool = Field(False)
 
     model_config = SettingsConfigDict(env_prefix="PRISMCLAW_MEMORY_")
-
-    def model_post_init(self, __context) -> None:
-        configured = (self.base_dir or "").strip() or _DEFAULT_MEMORY_BASE_DIR
-        try:
-            configured_path = Path(configured).expanduser()
-            default_path = Path(_DEFAULT_MEMORY_BASE_DIR).expanduser()
-            fallback_path = Path(_FALLBACK_MEMORY_BASE_DIR).expanduser()
-        except Exception:
-            return
-
-        if configured_path != default_path:
-            return
-        if _dir_supports_writes(configured_path):
-            return
-        if not _dir_supports_writes(fallback_path):
-            return
-
-        logging.getLogger("prismclaw.settings").warning(
-            "configured memory.base_dir points to default path %s but it is not writable; "
-            "using fallback memory directory %s instead",
-            configured_path,
-            fallback_path,
-        )
-        self.base_dir = str(fallback_path)
 
 
 class CuratorSettings(BaseSettings):

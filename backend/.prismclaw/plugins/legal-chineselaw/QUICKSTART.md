@@ -46,7 +46,7 @@ Licensed under Apache License 2.0
 
 ## 您安装了什么
 
-每个 plugin 通过设置访谈了解您的 playbook，将其写入执业档案文件（`~/.prismclaw/assets/plugins/legal-chineselaw/<plugin>/PLUGIN.md`），并且每个 skill 都会读取它。档案是您的——编辑它、重新运行设置，或告诉 skill 更新它。
+每个 plugin 通过设置访谈了解您的 playbook，将其写入执业档案文件（`${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`），并且每个 skill 都会读取它。档案是您的——编辑它、重新运行设置，或告诉 skill 更新它。
 
 **每个输出都是供律师审阅的草稿。** plugin 会标记其不确定的内容，按来源标记引用，并对任何不可逆的内容设置关卡。律师负责审阅、核实并承担责任。它们让审阅更快；它们不替代审阅。
 

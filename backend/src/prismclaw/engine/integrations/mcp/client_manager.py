@@ -98,9 +98,14 @@ class MCPClientManager(ConfigMixin, ConnectionMixin, LifecycleMixin, RegistryMix
         self,
         settings: McpSettings,
         task_manager: TaskManagerProtocol,
+        *,
+        plugin_name: str | None = None,
     ) -> None:
         self._settings = settings
         self._task_manager = task_manager
+        # 本 manager 所辖 server 的归属插件；None = 核心（非插件）server。
+        # 透传至每个 MCPToolAdapter，供插件作用域门控判定归属。
+        self._plugin_name = plugin_name
         self._adapters: dict[str, list[Any]] = {}
         self._servers: dict[str, ServerStatus] = {}
         self._locks: dict[str, asyncio.Lock] = {}

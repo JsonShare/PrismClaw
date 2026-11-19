@@ -73,18 +73,14 @@ def _sanitize_workspace_id(workspace_id: str | None) -> str:
 
 
 def _resolve_tool_workspace_path(
-    workspace_base: Path,
     *,
     user_id: str,
     workspace_id: str,
 ) -> Path:
-    user_root = workspace_base / f"web_{user_id}"
-    user_root.mkdir(parents=True, exist_ok=True)
-    base = (user_root / "default") if workspace_id == "default" else (user_root / workspace_id)
-    base.mkdir(parents=True, exist_ok=True)
-    from prismclaw.app.web._routes_helpers import ensure_managed_workspace_dirs
+    from prismclaw.infra.workspace_paths import resolve_workspace_dir
 
-    ensure_managed_workspace_dirs(base)
+    base = resolve_workspace_dir(user_id, workspace_id)
+    base.mkdir(parents=True, exist_ok=True)
     return base.resolve()
 
 
@@ -608,9 +604,7 @@ async def _get_workspace_runner_deps(
 ) -> AgentDeps:
     app = state.ws.app
     web_deps = app.state.web_deps
-    workspace_base: Path = web_deps.workspace_base
     workspace_root = _resolve_tool_workspace_path(
-        workspace_base,
         user_id=str(state.user_id),
         workspace_id=workspace_id,
     )

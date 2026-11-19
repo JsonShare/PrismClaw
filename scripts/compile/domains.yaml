@@ -12,23 +12,16 @@
 
 domains:
   medical:
-    enabled: false
+    enabled: true
 
     # ── 基本描述 ──
     label: 医疗工作台
-    # icon 使用 FontAwesome 图标名（后端 manifest 返回给前端，侧边栏渲染）
+    # icon 使用 FontAwesome 图标名（后端 manifest 返回，供未来的图标渲染使用）
     icon: stethoscope
-    # 降级图标：前端离线/后端不可达时使用的静态图片路径
-    fallback_icon: /domains/medical.png
     # 工作台路由
     path: /medical
-
-    # ── 侧边栏展示元数据（业务域自己的描述，核心只通用读取，不写死） ──
-    # 副标题：与 label 并列展示，说明该域的能力范畴
-    subtitle: AI 辅助诊断 · 报告解读
-    # 强调色：按域区分，明暗双值（浅色 accent / 深色 accent_dark）
-    accent: "#185FA5"
-    accent_dark: "#6FB0EE"
+    # 域内当前页的 URL 参数名（核心据此把 ?mw_page=... 还原成医疗分区，无需认识具体域）
+    url_param: mw_page
 
     # ── 包发现 ──
     # Python entry_point（pyproject.toml 中注册）
@@ -43,32 +36,39 @@ domains:
     lazy_import: "@domains/medical/MedicalWorkbenchPage"
     lazy_export: MedicalWorkbenchPage
 
-    # ── 工作台菜单（menus >= 2 时左侧显示二级菜单） ──
-    # parent 分组与新版临床工作台侧栏对齐：
-    #   clinical  → 临床业务（records 智能病历 / patients 患者管理）
-    #   knowledge → 知识库（literature / guidelines / drugs）
-    # 新版 UI 渲染自有内部侧栏；此处仅为前端描述对齐实际导航。
+    # ── 工作台菜单（menus >= 2 时在系统左侧栏按 group 分组平铺） ──
+    # group     ：侧栏分组标签，同组菜单按声明顺序连排；未声明则归入无标签分组。
+    # icon      ：逻辑图标名，仅写入后端 manifest（协议字段，供其他端使用）。
+    # icon_asset：前端侧栏图片，路径相对本域前端分包（frontend/subpackages/<域>/），
+    #             建议 24×24 单色透明底 SVG/PNG。构建期以 ?url 引入并哈希，
+    #             侧栏用 CSS mask 渲染，会跟随文字颜色（普通/悬停/选中自动变色）。
+    # 渲染位置：核心侧栏（SidebarNav），域内不再渲染自有侧栏。
     menus:
       - key: records
         label: 智能病历
-        icon: file-medical
-        parent: clinical
+        icon: file-text
+        icon_asset: assets/icons/records.svg
+        group: 临床业务
       - key: patients
         label: 患者管理
-        icon: user-injured
-        parent: clinical
+        icon: users
+        icon_asset: assets/icons/patients.svg
+        group: 临床业务
       - key: literature
         label: 文献知识库
-        icon: microscope
-        parent: knowledge
+        icon: book-open
+        icon_asset: assets/icons/literature.svg
+        group: 知识库
       - key: guidelines
         label: 指南知识库
-        icon: book-medical
-        parent: knowledge
+        icon: compass
+        icon_asset: assets/icons/guidelines.svg
+        group: 知识库
       - key: drugs
         label: 药品知识库
-        icon: pills
-        parent: knowledge
+        icon: pill
+        icon_asset: assets/icons/drugs.svg
+        group: 知识库
 
     # ── 前端页面路由 ──
     # 患者详情为工作台内部状态（URL 同步 ?mw_patient=<id>），不再单独挂路由。
@@ -79,17 +79,13 @@ domains:
 
   # ── 法律域 ──
   legal:
-    enabled: false
+    enabled: true
 
     label: 法律工作台
     icon: gavel
-    fallback_icon: /domains/legal.png
     path: /legal
-
-    # ── 侧边栏展示元数据（启用后由构建脚本生成前端映射） ──
-    subtitle: 合同审查 · 合规检查
-    accent: "#854F0B"
-    accent_dark: "#E0A33C"
+    # 域内当前页的 URL 参数名（核心据此把 ?lw_page=... 还原成法律分区）
+    url_param: lw_page
 
     entry_point: subpackages.legal.integration.bundle:LegalBundle
     backend_path: backend/src/subpackages/legal
@@ -101,10 +97,14 @@ domains:
     menus:
       - key: contract
         label: 合同审查
-        icon: file-contract
+        icon: file-check
+        icon_asset: assets/icons/contract.svg
+        group: 法律合同
       - key: compliance
         label: 合规检查
-        icon: shield-halved
+        icon: shield-check
+        icon_asset: assets/icons/compliance.svg
+        group: 法律合同
 
     pages:
       - key: workbench

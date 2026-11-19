@@ -501,6 +501,8 @@ class SubcapsSettings(BaseModel):
     reinject_file_tokens: int = Field(3200, ge=0)
     # 技能 preload 注入 token 上限
     skill_preload: int = Field(7500, ge=0)
+    # 单次插件激活注入 PLUGIN.md 的 token 上限（超限按优先级章节裁剪）
+    plugin_persona: int = Field(2000, ge=1)
 
 
 class ContextBudgetConfig(BaseModel):

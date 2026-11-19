@@ -12,8 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from prismclaw.app.auth.auth import get_current_user
-from prismclaw.app.web.deps import get_web_deps, user_root as _user_root
+from prismclaw.app.web.deps import get_web_deps
 from prismclaw.app.web._routes_helpers import _clean_workspace_id
+from prismclaw.infra.workspace_paths import resolve_user_root
 
 logger = logging.getLogger(__name__)
 
@@ -21,34 +22,26 @@ logger = logging.getLogger(__name__)
 # Workspace constants
 # ---------------------------------------------------------------------------
 
-_WORKSPACE_ENVS_DIR = ".envs"
-_WORKSPACE_NODE_MODULES_DIR = "node_modules"
-_WORKSPACE_SKILLS_DIR = "skills"
-_WORKSPACE_SANDBOX_DIR = "sandbox"
 _WORKSPACE_SESSIONS_DIR = "sessions"  # 🆕 session 级根目录
 _SESSION_OUTPUTS_SUBDIR = "outputs"    # 🆕 sessions/<sid>/outputs/
-_SESSION_UPLOADS_SUBDIR = "uploads"    # 🆕 sessions/<sid>/uploads/
 
 # Sub-directory names excluded from recursive output scanning (any depth).
 _EXCLUDED_OUTPUTS_SUBDIRS = frozenset({
     ".git",
     ".work",
     "node_modules",
-    ".envs",
     "tmp",
-    "uploads",
-    "sandbox",
-    "skills",
+    "inbox",
 })
 
 # Names directly under user_root that are NOT custom workspaces.
-# T2 后 workspace 根只剩 inputs/ sessions/ .work/ + 用户项目文件，
-# 系统子目录一律收进 .work/，保留名清单同步收缩。
+# workspace 根只剩 sessions/ biz_domain/ .work/ + 用户项目文件，
+# 系统子目录一律收进 .work/。
 _RESERVED_WORKSPACE_ROOT_NAMES = frozenset({
     "default",
     ".work",
     _WORKSPACE_SESSIONS_DIR,
-    "inputs",
+    "biz_domain",
 })
 
 
@@ -64,8 +57,11 @@ def _workspace_meta_file(user_root: Path) -> Path:
     directories under ``user_root``; this file persists only display metadata
     (friendly name + creation timestamp) so listings survive restarts instead
     of falling back to the raw directory id.
+
+    The metadata lives directly under the user root as
+    ``web_<user_id>/workspaces.json`` — not inside ``.work/``.
     """
-    return user_root / ".work" / "workspaces.json"
+    return user_root / "workspaces.json"
 
 
 def _load_workspace_meta(user_root: Path) -> dict[str, dict[str, str]]:
@@ -189,8 +185,7 @@ async def list_workspaces(
     request: Request,
     user_id: str = Depends(get_current_user),
 ) -> WorkspacesResponse:
-    workspace_base: Path = get_web_deps(request).workspace_base
-    user_root = _user_root(workspace_base, user_id)
+    user_root = resolve_user_root(user_id)
 
     items: list[WorkspaceItem] = [WorkspaceItem(id="default", name="默认工作区")]
     meta = _load_workspace_meta(user_root)
@@ -257,8 +252,7 @@ async def list_workspace_outputs(
     - Excludes system sub-directories at any depth.
     - Purely read-only; never mutates the filesystem.
     """
-    workspace_base: Path = get_web_deps(request).workspace_base
-    user_root = _user_root(workspace_base, user_id)
+    user_root = resolve_user_root(user_id)
     meta = _load_workspace_meta(user_root)
 
     targets: list[tuple[str, str]] = []
@@ -350,8 +344,7 @@ async def create_workspace(
         # 也不会出现在列表里（被 reserved 过滤），直接拒绝。
         raise HTTPException(status_code=400, detail=f"workspace id '{wid}' is reserved")
 
-    workspace_base: Path = get_web_deps(request).workspace_base
-    user_root = _user_root(workspace_base, user_id)
+    user_root = resolve_user_root(user_id)
     ws_dir = user_root / wid
     if ws_dir.exists() and not ws_dir.is_dir():
         raise HTTPException(status_code=409, detail="Workspace path exists and is not a directory")
@@ -376,8 +369,7 @@ async def delete_workspace(
     if wid == "default":
         raise HTTPException(status_code=400, detail="default workspace cannot be deleted")
 
-    workspace_base: Path = get_web_deps(request).workspace_base
-    user_root = _user_root(workspace_base, user_id)
+    user_root = resolve_user_root(user_id)
     ws_dir = user_root / wid
     if not ws_dir.exists():
         raise HTTPException(status_code=404, detail="workspace not found")

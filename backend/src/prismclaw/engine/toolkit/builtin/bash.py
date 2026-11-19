@@ -77,7 +77,7 @@ class BashTool:
         # 技能/脚本可以按 $PRISMCLAW_OUTPUT_DIR 环境变量或直接相对路径写产物。
         #   全局共享 PRISMCLAW_RUNTIME_ROOT    ← ~/.prismclaw/runtime（所有 workspace 共用，
         #                                          node_modules/pip --target 等重资产装这里）
-        #   workspace-local PRISMCLAW_SKILL_CACHE ← $PRISMCLAW_WORKSPACE/.work/cache/skills/<skill>
+        #   workspace-local PRISMCLAW_SKILL_CACHE ← $PRISMCLAW_WORKSPACE/.work/cache/projects/<skill>
         #                                          （docx-p...-20261020-xxx 项目目录落这里）
         # 每种 runtime 发现机制各有不同，引擎层统一注入 PATH 扩展：
         #   Python: pip install --target <dir>/site-packages
@@ -91,7 +91,7 @@ class BashTool:
         _raw_skill = getattr(context, "active_skill_name", None) or "_default"
         _skill_safe = _re.sub(r"[^\w.\-]", "_", _raw_skill)[:64] or "_default"
         _global_runtime = _resolve_runtime_root()
-        _skill_cache = f'"$PRISMCLAW_WORKSPACE/.work/cache/skills/{_skill_safe}"'
+        _skill_cache = f'"$PRISMCLAW_WORKSPACE/.work/cache/projects/{_skill_safe}"'
         _skill_runtime = f'"{_global_runtime}/skills/{_skill_safe}"'
         _py_site = f'"{_global_runtime}/skills/{_skill_safe}/site-packages"'
         _node_modules = f'"{_global_runtime}/skills/{_skill_safe}/node_modules"'
@@ -101,12 +101,12 @@ class BashTool:
             # bash cd 到 session 根后，$PWD 即 session 根，
             # 所以 env var 直接用 $PWD/<subdir> 即可。
             _output_dir = '"$PWD/outputs"'
-            _uploads_dir = '"$PWD/uploads"'
+            _uploads_dir = '"$PWD/inbox"'
             _cb_dir = '"$PWD/context_blocks"'
             _tr_dir = '"$PWD/tool_results"'
+            _tmp_dir = '"$PWD/.work/tmp"'
             _mkdir_dirs = (
-                f'"$PRISMCLAW_WORKSPACE/.work/tmp" '
-                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/uploads" '
+                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/inbox" '
                 f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/outputs" '
                 f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/context_blocks" '
                 f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/tool_results" '
@@ -115,15 +115,16 @@ class BashTool:
             )
         else:
             # 降级（无 session_id 的罕见路径）：没有 session 级隔离概念，
-            # 所有引擎产出统一落到 workspace 系统区 `.work/tmp`——
-            # 避免 env 指向 workspace 根裸 outputs/uploads 污染用户项目目录。
-            _safe = '"$PWD/.work/tmp"'
+            # 所有引擎产出统一落到工作区的 run/tmp——
+            # 避免 env 指向 workspace 根裸 outputs/inbox 污染用户项目目录。
+            _safe = '"$PWD/.work/run/tmp"'
             _output_dir = _safe
             _uploads_dir = _safe
             _cb_dir = _safe
             _tr_dir = _safe
+            _tmp_dir = _safe
             _mkdir_dirs = (
-                f'"$PWD/.work/tmp" "$PWD/.work/bash_state" '
+                f'"$PWD/.work/run/tmp" '
                 f'{_skill_cache} {_skill_runtime} {_py_site} {_node_modules}'
             )
         # bash cwd 策略：workspace 根 → session 根。
@@ -136,7 +137,7 @@ class BashTool:
             _cd_cmd = (
                 f'mkdir -p "$PWD/sessions/{_sr.name}" '
                 f'&& cd "$PWD/sessions/{_sr.name}" '
-                f'&& mkdir -p .work/tmp .work/bash_state && '
+                f'&& mkdir -p .work/tmp && '
             )
         else:
             _cd_cmd = ''
@@ -144,7 +145,7 @@ class BashTool:
             f'export PRISMCLAW_WORKSPACE="$PWD" && '
             f'{_cd_cmd}'
             f'mkdir -p {_mkdir_dirs} && '
-            f'export PRISMCLAW_TMP_DIR="$PWD/.work/tmp" && '
+            f'export PRISMCLAW_TMP_DIR={_tmp_dir} && '
             f'export PRISMCLAW_OUTPUT_DIR={_output_dir} && '
             f'export PRISMCLAW_UPLOADS_DIR={_uploads_dir} && '
             f'export PRISMCLAW_CONTEXT_BLOCKS_DIR={_cb_dir} && '

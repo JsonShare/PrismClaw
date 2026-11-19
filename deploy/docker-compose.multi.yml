@@ -36,34 +36,48 @@ services:
       - "127.0.0.1:8001:8000"
     environment: &worker-env
       # ── PostgreSQL ───────────────────────────────────────────────────
+      # {env:} 占位符只能整值替换，DSN 在这里插值（infra.yaml 只做整值引用）。
       PRISMCLAW_STORAGE_POSTGRES_DSN: postgresql+asyncpg://prismclaw:${POSTGRES_PASSWORD}@postgres:5432/prismclaw
       # ── Redis (session / lock / affinity) ───────────────────────────
       PRISMCLAW_STORAGE_SESSION_BACKEND: redis
       PRISMCLAW_STORAGE_LOCK_BACKEND: redis
-      PRISMCLAW_REDIS_HOST: redis
-      PRISMCLAW_REDIS_PASSWORD: ${REDIS_PASSWORD}
       PRISMCLAW_AFFINITY_ENABLED: "true"
+      # Redis 密码：deploy/configs/infra.yaml 的 redis.password 用 {env:} 引用
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}
       # ── Web channel auth ─────────────────────────────────────────────
-      PRISMCLAW_WEB_JWT_SECRET: ${PRISMCLAW_WEB_JWT_SECRET}
-      PRISMCLAW_WEB_ADMIN_TOKEN: ${PRISMCLAW_WEB_ADMIN_TOKEN}
+      PRISMCLAW_WEB_JWT_SECRET: ${PRISMCLAW_WEB_JWT_SECRET:?set in deploy/.env}
       # First-run admin bootstrap (after first seed, these are ignored)
       PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID:-admin}
-      PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD}
+      PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD:?set in deploy/.env}
       # ── Production flags ─────────────────────────────────────────────
       PRISMCLAW_LOG_LEVEL: ${PRISMCLAW_LOG_LEVEL:-INFO}
-      PRISMCLAW_WEB_WORKERS: ${PRISMCLAW_WEB_WORKERS:-4}
+      PRISMCLAW_DEPLOYMENT_ENV: production
+      # ── Runtime-Agent 路由（生产强制要求，缺失则 fail-fast）───────────
+      PRISMCLAW_RUNTIME_AGENT_URLS: '{"default-v1":"http://runtime-agent-default:9001","restricted-v1":"http://runtime-agent-restricted:9001"}'
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
     volumes:
       - ../backend/configs:/app/backend/configs:ro
-      - prismclaw-workspaces:/app/workspaces
+      # 容器视角覆盖：runtime/workspaces 改 /runtime、/workspace，
+      # redis/postgres 改 compose 服务名（与 docker-compose.yml 一致）。
+      - ./configs/server.yaml:/app/backend/configs/server.yaml:ro
+      - ./configs/infra.yaml:/app/backend/configs/infra.yaml:ro
+      # ★ 与 runtime-agent 同卷同路径（对称于 deploy/docker-compose.yml）
+      - prismclaw-workspaces:/workspace
+      - prismclaw-runtime:/runtime
+      - prismclaw-home:/app/home
     networks:
       - backend
     depends_on:
+      runtime-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
+      runtime-agent-default:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)"]
       interval: 15s
       timeout: 3s
       retries: 4
@@ -175,7 +189,100 @@ services:
       <<: *json-logging
     restart: unless-stopped
 
+  # ── runtime-init: 一次性对齐 runtime 卷权限 ──────────────────────────
+  # 与 docker-compose.yml 同源：app（UID 10001）与两个 agent（UID 10002）
+  # 共用 prismclaw-runtime；任一方先建 0755 目录都会让另一方 EPERM。
+  runtime-init:
+    image: alpine:3.20
+    user: "0:0"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mkdir -p /runtime/skills/_default/site-packages
+        mkdir -p /runtime/skills/_default/node_modules
+        mkdir -p /runtime/cache/pip /runtime/cache/npm /runtime/cache/uv
+        chmod -R a+rwX /runtime
+    volumes:
+      - prismclaw-runtime:/runtime
+    restart: "no"
+
+  # ── Runtime-Agent（默认沙箱）─────────────────────────────────────────
+  runtime-agent-default:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.runtime-agent
+    image: prismclaw-runtime-agent:latest
+    environment:
+      PRISMCLAW_WORKSPACE_ROOT: /workspace
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
+      PRISMCLAW_RUNTIME_HMAC_KEY_VERSION: "1"
+      PRISMCLAW_ALLOW_NET: "false"
+    volumes:
+      - prismclaw-workspaces:/workspace
+      - prismclaw-runtime:/runtime
+      # 只挂 assets 子目录（整个 home 含 app 专属数据，不挂给 agent）
+      - type: volume
+        source: prismclaw-home
+        target: /app/home/.prismclaw/assets
+        read_only: true
+        volume:
+          subpath: .prismclaw/assets
+    networks:
+      - backend
+    depends_on:
+      runtime-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 20s
+    logging:
+      <<: *json-logging
+    restart: unless-stopped
+
+  # ── Runtime-Agent（受限沙箱：禁网）───────────────────────────────────
+  runtime-agent-restricted:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.runtime-agent
+    image: prismclaw-runtime-agent:latest
+    environment:
+      PRISMCLAW_WORKSPACE_ROOT: /workspace
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
+      PRISMCLAW_RUNTIME_HMAC_KEY_VERSION: "1"
+      PRISMCLAW_ALLOW_NET: "false"
+    volumes:
+      - prismclaw-workspaces:/workspace
+      - prismclaw-runtime:/runtime
+      # 只挂 assets 子目录（同 default agent）
+      - type: volume
+        source: prismclaw-home
+        target: /app/home/.prismclaw/assets
+        read_only: true
+        volume:
+          subpath: .prismclaw/assets
+    networks:
+      - backend
+    depends_on:
+      runtime-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+      start_period: 20s
+    logging:
+      <<: *json-logging
+    restart: unless-stopped
+
 volumes:
   redis-data:
   postgres-data:
   prismclaw-workspaces:
+  prismclaw-runtime:
+  prismclaw-home:

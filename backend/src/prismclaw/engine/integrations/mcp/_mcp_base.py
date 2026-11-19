@@ -48,6 +48,7 @@ class _MCPBackendBase:
     _task_manager: Any  # TaskManager
     runtime_observer: Any
     _impl_to_config: dict[str, str]
+    _plugin_name: str | None  # 归属插件；None = 核心 server
 
     # Defined in ConnectionMixin — declared here for cross-mixin type resolution
     async def _connect_one(self, name: str, config: Any) -> None: ...

@@ -21,8 +21,8 @@ resolve 优先级 (**三阶段，容器探针在 env 之后**):
 4. ``~/.prismclaw/server.yaml`` 的 ``runtime.default``（用户级配置文件）
 5. 硬编码 fallback ``~/.prismclaw/runtime``
 
-这和 plugins-data（~/.prismclaw/plugins-data/）、workspaces（~/.prismclaw/workspaces/）
-同属 ``~/.prismclaw/`` 用户级共享根下的并列子目录。
+这和 workspaces（``~/.prismclaw/workspaces/``）同属 ``~/.prismclaw/``
+用户级共享根下的并列子目录。
 
 缓存: ``resolve_runtime_root()`` 调用无 override 时结果被模块级 LRU 缓存
 （只缓存最后一次无 override 场景），消除 bash tool 每次执行时的 json.load +
@@ -43,9 +43,9 @@ _SERVER_CONFIG_PATH = Path("~/.prismclaw/server.yaml").expanduser()
 _CONTAINER_RUNTIME_PROBE = Path("/runtime")
 
 # ── 模块级缓存（仅缓存无 override 的场景）─────────────────────────────
-# LRU(maxsize=1) 足够：bash.py 每次调 _resolve_runtime_root() 都没 override
-# container_backend.py 也不用 override —— 整个进程里 resolve_runtime_root()
-# 的无 override 调用每次拿到同一个值，缓存命中 100%。
+# LRU(maxsize=1) 足够：bash.py 每次调 _resolve_runtime_root() 都没 override，
+# 整个进程里 resolve_runtime_root() 的无 override 调用每次拿到同一个值，
+# 缓存命中 100%。
 _CACHED_NO_OVERRIDE: Path | None = None
 _CACHE_VERSION: int = 0  # 给测试用，允许手动失效
 

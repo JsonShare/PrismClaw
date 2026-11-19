@@ -62,7 +62,6 @@ class WebDeps:
     review_registry_fn: Any = None          # get_review_registry(workspace_root) from engine.services.review_service
     reload_plugin_fn: Any = None            # reload_app_plugin_runtime from app.plugins.reload_service
     takeover_fns: Any = None                # dict of takeover functions from app.gateway.takeover
-    review_lifecycle_fn: Any = None         # lifecycle module from engine.services.review_service (has gc_blobs)
     upload_fns: Any = None                  # {LocalSink, upload_files, build_file_change, get_tracking_store} from engine.services.upload_service
     review_utils: Any = None                # {normalize_clarify_questions, apply_office_ops, fmt_from_path} from engine.services.review_service
     chat_service: Any = None                # ChatService Protocol instance
@@ -78,12 +77,3 @@ class WebDeps:
 
 def get_web_deps(request: Request) -> WebDeps:
     return request.app.state.web_deps
-
-
-def user_root(workspace_base: Path, user_id: str) -> Path:
-    # user_id 可能已经带了 "web_" 前缀（JWT sub 生成时加的），
-    # 也可能没有（旧 token 或非 web 用户）。避免重复拼接成 web_web_xxx。
-    root_dir = user_id if user_id.startswith("web_") else f"web_{user_id}"
-    root = workspace_base / root_dir
-    root.mkdir(parents=True, exist_ok=True)
-    return root

@@ -57,12 +57,17 @@ async def run_pre_tool_checks(
         _skill_inv = getattr(_loop_state, "active_skill_invocation", None) if _loop_state else None
         if _skill_inv is not None:
             _active_skill_name = getattr(_skill_inv, "skill_name", None)
+        _tool_ctx = ctx._tool_ctx
+        _active_plugins = (
+            getattr(_tool_ctx, "tool_scope", None) if _tool_ctx is not None else None
+        )
         pre_tool_denied = await _dispatch_pre_tool_hooks(
             dispatcher=deps.hook_dispatcher,
             parsed_calls=parsed_calls,
             session_id=request.session_id,
             cwd=ctx._tool_workspace_path,
             active_skill_name=_active_skill_name,
+            active_plugins=_active_plugins,
         )
 
     # Compute allowed calls

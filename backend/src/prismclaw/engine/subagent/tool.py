@@ -288,6 +288,19 @@ class SubAgentTool:
                     f"agents[{i}]：未找到子代理 '{agent_name}'{hint}"
                 )
                 continue
+            # 插件作用域门控：目录过滤只影响「模型看到什么」，
+            # 模型仍可能从历史消息中获知 agent 名直接派发，故派发处二次校验。
+            _owner = entry.plugin_name
+            if (
+                _owner is not None
+                and context.tool_scope is not None
+                and _owner not in context.tool_scope
+            ):
+                errors.append(
+                    f"agents[{i}]：agent_scope_denied:{_owner}"
+                    f"（该子代理属于插件「{_owner}」，请先 @ 该插件）"
+                )
+                continue
             resolved_configs.append({
                 "index": i,
                 "agent_cfg": agent_cfg,

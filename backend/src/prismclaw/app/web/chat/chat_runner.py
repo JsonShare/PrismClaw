@@ -424,9 +424,7 @@ async def _run_chat(
             terminal_sink=_subagent_terminal_sink,
         )
 
-    workspace_base: Path = web_deps.workspace_base
     tool_workspace_path = _resolve_tool_workspace_path(
-        workspace_base,
         user_id=str(state.user_id),
         workspace_id=effective_workspace_id,
     )

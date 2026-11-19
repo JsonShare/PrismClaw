@@ -31,12 +31,12 @@ export function normalizeWorkspacePath(raw: string): string | null {
   }
 
   const internalMarker = '/.prismclaw/workspaces/'
-  const uploadsMarker = '/uploads/'
+  const inboxMarker = '/inbox/'
   const internalIdx = p.indexOf(internalMarker)
   if (internalIdx >= 0) {
-    const uploadsIdx = p.indexOf(uploadsMarker, internalIdx + internalMarker.length)
-    if (uploadsIdx >= 0) {
-      p = p.slice(uploadsIdx + uploadsMarker.length)
+    const inboxIdx = p.indexOf(inboxMarker, internalIdx + internalMarker.length)
+    if (inboxIdx >= 0) {
+      p = p.slice(inboxIdx + inboxMarker.length)
     }
   }
 

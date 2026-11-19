@@ -91,7 +91,7 @@ def _supports_skill_descriptor(extension_manager: Any | None) -> bool:
 
 
 def _iter_skill_roots(workspace_root: Path, settings: Any) -> list[Path]:
-    """skills 的双来源根：workspace 级 ``.work/skills`` + 用户级 assets/skills。"""
+    """skills 的双来源根：workspace 级 ``.work/state/skills`` + 用户级 assets/skills。"""
     skill_settings = _skill_settings(settings)
     roots: list[Path] = []
 

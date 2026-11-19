@@ -95,9 +95,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _apply_env_overrides(self):
-        """环境变量优先于配置文件，供容器部署注入密钥。"""
+        """环境变量优先于配置文件，供容器部署注入密钥。
+
+        只处理**需要注入密钥**的字段。其余配置一律走 yaml（含 {env:VAR}
+        整值占位符），不做嵌套 env 覆盖——子模型是 BaseSettings，但
+        Settings 通过 model_validate(yaml) 构造，不会触发子模型的 env 读取，
+        所以 ``PRISMCLAW_REDIS_HOST`` 这类变量写了也不生效（已实测）。
+        """
         import os
 
+        # JWT 签名密钥
         jwt_secret = os.getenv("PRISMCLAW_WEB_JWT_SECRET", "").strip()
         if jwt_secret:
             self.channels.web.jwt_secret = jwt_secret

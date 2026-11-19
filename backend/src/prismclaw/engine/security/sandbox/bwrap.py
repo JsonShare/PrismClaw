@@ -8,11 +8,14 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
 from prismclaw.schema.config.config import SandboxConfig
 from prismclaw.schema.content.workspace import SandboxTier
+from prismclaw.engine.security.sandbox.roots import runtime_readonly_roots
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +34,41 @@ _HARDCODED_DENY_BIND: tuple[str, ...] = (
 
 class BwrapBinaryNotFound(RuntimeError):
     """Raised when ``bwrap`` is required but missing on $PATH."""
+
+
+def _resolve_runtime_root() -> Path | None:
+    """解析 runtime 卷根；不可用时返回 None（沙箱仍可运行，只是没有技能包）。"""
+    try:
+        from prismclaw.runtime.runtime_root import resolve_runtime_root
+
+        return resolve_runtime_root()
+    except Exception:
+        logger.debug("runtime root 解析失败，bwrap 不挂载 runtime 卷", exc_info=True)
+        return None
+
+
+@lru_cache(maxsize=1)
+def _proc_mount_supported() -> bool:
+    """探测当前环境是否允许在 sandbox 内挂载 /proc。
+
+    Docker（尤其 Desktop 的 LinuxKit）即使给了 SYS_ADMIN + seccomp/apparmor
+    unconfined，仍可能返回 "Can't mount proc on /newroot/proc: Operation not
+    permitted"。这个探测只做一次，不支持就不加 ``--proc``，退回容器自身的
+    只读 /proc 视图——可见性不变，但沙箱里每条命令都能正常执行。
+    """
+    bwrap = shutil.which("bwrap")
+    if bwrap is None:
+        return False
+    try:
+        probe = subprocess.run(
+            [bwrap, "--unshare-all", "--ro-bind", "/", "/", "--proc", "/proc", "true"],
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("bwrap proc 挂载探测失败", exc_info=True)
+        return False
+    return probe.returncode == 0
 
 
 class BwrapCommandTooLong(RuntimeError):
@@ -142,26 +180,17 @@ class BwrapPolicy:
     def _compute_runtime_readonly_roots() -> tuple[Path, ...]:
         """所有运行时只读目录。
 
-        与 RuntimeExecutor._compute_runtime_readonly_roots 同源 —— 这里
-        是 bwrap 沙箱的 bind-read-only 入口，那边是 macOS 无 bwrap 的
-        Python 层路径校验入口。两处必须返回同一集合。
+        与 ``RuntimeExecutor`` 共用 ``security/sandbox/roots.py`` 的单一定义：
+        只放行 ``~/.prismclaw/assets/``（静态能力），以及项目内 ``backend/configs``
+        与引擎源码（agent 自省需要）。
 
-        统一放行：
-          - ~/.prismclaw/                     → skills + agents + plugins
-                                               （启动时 sync_prismclaw_home
-                                                 已把 backend/.prismclaw 拷到这里）
-          - project_root/backend/configs/    → models.yaml, agent.yaml 等配置
-          - project_root/backend/src/prismclaw/ → 源码（agent introspection）
+        **不放行整个 ``~/.prismclaw``**：同层还有 ``workspaces/``（其它用户数据）
+        与 ``data/`` / ``plugins-data/``（凭据与插件持久数据）。
         """
-        roots: list[Path] = []
-        # 1) 用户级 ~/.prismclaw（sync 目标）
-        home_root = (Path.home() / ".prismclaw").resolve()
-        if home_root.is_dir():
-            roots.append(home_root)
-
-        # 2) 项目内 repo 目录（configs + src）
+        roots: list[Path] = list(runtime_readonly_roots())
         try:
             from prismclaw.infra.paths import resolve_project_root
+
             project_root = resolve_project_root()
             for sub in ("backend/configs", "backend/src/prismclaw"):
                 p = (project_root / sub).resolve()
@@ -237,6 +266,21 @@ class BwrapPolicy:
         except Exception:
             pass  # 路径解析失败时不阻塞，由 bwrap 自身报错
 
+        # 运行时卷与静态能力的只读挂载点。二者都不在 /usr 体系内：
+        # 技能安装的包在 runtime 卷，skills/plugins/agents 在 assets 下。
+        runtime_root = _resolve_runtime_root()
+        runtime_binds: list[str] = []
+        if runtime_root is not None:
+            runtime_binds.extend(["--ro-bind", str(runtime_root), str(runtime_root)])
+        for root in self._runtime_readonly_roots:
+            runtime_binds.extend(["--ro-bind", str(root), str(root)])
+            if root.name == "assets":
+                # 沙箱内 HOME=/workspace；把 assets 同时映射过去，让文档与技能
+                # 脚本里 `~/.prismclaw/assets/...` 的写法在隔离环境中仍可解析。
+                runtime_binds.extend(
+                    ["--ro-bind", str(root), "/workspace/.prismclaw/assets"]
+                )
+
         args = [
             # ── 系统目录只读挂载 ──
             "--ro-bind", "/usr", "/usr",
@@ -262,12 +306,19 @@ class BwrapPolicy:
             # ── 用户工作区读写挂载 ──
             "--bind", workspace_root, "/workspace",
 
+            # ── 运行时卷与静态能力（只读，挂在 workspace 之后以覆盖嵌套路径）──
+            *runtime_binds,
+
             # ── 隔离临时目录 ──
             "--tmpfs", "/tmp",
             "--tmpfs", "/run/user",
 
             # ── 虚拟文件系统 ──
-            "--proc", "/proc",
+            # Docker（含 Desktop 的 LinuxKit）可能拒绝在 sandbox 内 mount proc，
+            # 实测报 "Can't mount proc on /newroot/proc: Operation not permitted"。
+            # 不支持时退回容器自身的只读 /proc 视图：可见性不变，但不会让每条
+            # 命令都失败。
+            *(["--proc", "/proc"] if _proc_mount_supported() else []),
             "--dev", "/dev",
 
             # ── 进程隔离 ──
@@ -283,9 +334,20 @@ class BwrapPolicy:
         ])
 
         # ── 白名单环境变量注入 ──
-        args.extend(["--setenv", "PATH", "/usr/bin:/bin"])
+        args.extend(["--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin"])
         args.extend(["--setenv", "HOME", "/workspace"])
         args.extend(["--setenv", "USER", "nobody"])
+        # --clearenv 之后必须重新注入，否则沙箱内 import 不到技能安装的包。
+        if runtime_root is not None:
+            skill_runtime = runtime_root / "skills" / "_default"
+            args.extend(["--setenv", "PRISMCLAW_RUNTIME_ROOT", str(runtime_root)])
+            args.extend(["--setenv", "PRISMCLAW_SKILL_RUNTIME", str(skill_runtime)])
+            site_packages = skill_runtime / "site-packages"
+            if site_packages.is_dir():
+                args.extend(["--setenv", "PYTHONPATH", str(site_packages)])
+            node_modules = skill_runtime / "node_modules"
+            if node_modules.is_dir():
+                args.extend(["--setenv", "NODE_PATH", str(node_modules)])
         for var in self._settings.default_env_allowlist:
             val = os.environ.get(var)
             if val is not None:

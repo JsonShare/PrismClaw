@@ -394,14 +394,21 @@ class SubagentSearchTool:
         package = raw_package.strip() if isinstance(raw_package, str) and raw_package.strip() else None
         raw_limit = args.get("limit", 10)
         limit = raw_limit if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) else 10
-        matches = self._runtime.search(query, package=package, limit=limit)
+        matches = self._runtime.search(
+            query,
+            package=package,
+            limit=limit,
+            active_plugins=context.tool_scope,
+        )
         if not matches:
             # 0 结果兜底：列出范围内插件子代理，避免模型盲目重试同一 query
             return text_result(
                 call_id,
                 _render_subagent_fallback(
                     query,
-                    self._runtime.list_plugin_agents(limit=20, package=package),
+                    self._runtime.list_plugin_agents(
+                        limit=20, package=package, active_plugins=context.tool_scope
+                    ),
                 ),
             )
         return text_result(call_id, _render_subagent_matches(query, matches))

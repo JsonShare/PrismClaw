@@ -4,10 +4,10 @@
  *
  * 从 scripts/compile/domains.yaml（唯一真实来源）生成三份产物：
  *
- * 1. 前端懒加载映射：frontend/src/domains/_lazy_map.generated.ts
+ * 1. 前端映射：frontend/src/domains/_lazy_map.generated.ts
  *    - DOMAIN_LAZY_MAP: key → React.lazy 工厂
- *    - DOMAIN_FALLBACK_ICON_MAP: key → 降级图标路径
  *    - DOMAIN_LABEL_MAP: key → 降级标签
+ *    - DOMAIN_NAV_MAP: key → 侧栏导航项（标签 / 分组 / 顺序）
  *
  * 2. 后端 manifest 片段：各域 _manifest.generated.py
  *    - 每个域一个文件，bundle.py 的 get_manifest() 直接返回
@@ -143,6 +143,20 @@ function generateLazyMapTs(enabledDomains) {
   const OBJ_DEFAULT = '{ default:'
   const OBJ_DEFAULT_CT = '{ default: ComponentType }'
 
+  // 域菜单图标：资源归属业务域（subpackages/<域>/...），构建期以 ?url 引入并哈希。
+  // 只读 icon_asset（前端资源），icon 是写入后端 manifest 的逻辑名，两者互不替代。
+  // 不放 core/public —— 那是核心目录，按域名组织会形成核心对业务域的反向依赖。
+  const navIconImports = []
+  const navIconVar = new Map()
+  enabledDomains.forEach((d, di) => {
+    d.menus.forEach((m, mi) => {
+      if (!m.icon_asset) return
+      const name = `_navIcon${di}_${mi}`
+      navIconImports.push(`import ${name} from '@domains/${d.key}/${m.icon_asset}?url'`)
+      navIconVar.set(`${d.key}:${m.key}`, name)
+    })
+  })
+
   const lines = [
     '/**',
     ' * 自动生成 — 由 scripts/compile/domains-registry.mjs 从 domains.yaml 生成',
@@ -151,6 +165,7 @@ function generateLazyMapTs(enabledDomains) {
     ' */',
     '',
     "import type { ComponentType } from 'react'",
+    ...(navIconImports.length ? ['', ...navIconImports] : []),
     '',
     '// React.lazy 工厂类型（抽成别名避免 IDE 语言注入误报解构）',
     'type DomainLazyFactory = () => Promise<' + OBJ_DEFAULT_CT + '>',
@@ -164,15 +179,6 @@ function generateLazyMapTs(enabledDomains) {
   lines.push('}')
   lines.push('')
 
-  // 降级图标（仅后端不可达时使用）
-  lines.push('// 域降级图标 — 前端离线场景的图片路径备用')
-  lines.push('export const DOMAIN_FALLBACK_ICON_MAP: Record<string, string> = {')
-  for (const d of enabledDomains) {
-    lines.push(`  ${d.key}: '${d.fallback_icon || ''}',`)
-  }
-  lines.push('}')
-  lines.push('')
-
   // 降级标签
   lines.push('// 域降级标签 — 前端离线场景的标签备用')
   lines.push('export const DOMAIN_LABEL_MAP: Record<string, string> = {')
@@ -182,21 +188,25 @@ function generateLazyMapTs(enabledDomains) {
   lines.push('}')
   lines.push('')
 
-  // 域副标题 — 来自业务域自己的描述（domains.yaml），核心只通用读取
-  lines.push('// 域副标题 — 来自业务域自己的描述（侧边栏副标题展示）')
-  lines.push('export const DOMAIN_SUBTITLE_MAP: Record<string, string> = {')
+  // 域深链参数 —— 核心据此把 ?<param>=... 还原成对应分区，避免在核心硬编码域名
+  lines.push('// 域深链参数 — 键为域 key，值为域内当前页的 query 参数名')
+  lines.push('export const DOMAIN_URL_PARAM_MAP: Record<string, string> = {')
   for (const d of enabledDomains) {
-    lines.push(`  ${d.key}: '${d.subtitle || ''}',`)
+    lines.push(`  ${d.key}: '${d.url_param || ''}',`)
   }
   lines.push('}')
   lines.push('')
 
-  // 域强调色（明暗双值 + 浅色可读描边色）— 来自业务域自己的描述，核心只通用读取
-  lines.push('// 域强调色（明暗双值）— 来自业务域自己的描述（侧边栏强调条 / 图标描边）')
-  lines.push('//   accentDeep: 仅当 accent 在浅色模式下过浅时提供，用作图标描边可读色（否则回退 accent）')
-  lines.push('export const DOMAIN_ACCENT_MAP: Record<string, { accent: string; accentDark: string; accentDeep?: string }> = {')
+  // 域左侧栏导航项 —— 分组标签 + 顺序 + 图标均来自 domains.yaml，核心侧栏据此平铺渲染
+  lines.push('// 域左侧栏导航项 — 顺序 / 分组 / 图标来自 domains.yaml（核心侧栏平铺渲染）')
+  lines.push('export const DOMAIN_NAV_MAP: Record<string, { key: string; label: string; group: string; icon: string }[]> = {')
   for (const d of enabledDomains) {
-    lines.push(`  ${d.key}: { accent: '${d.accent || ''}', accentDark: '${d.accent_dark || ''}', accentDeep: '${d.accent_deep || ''}' },`)
+    lines.push(`  ${d.key}: [`)
+    for (const m of d.menus) {
+      const iconExpr = navIconVar.get(`${d.key}:${m.key}`) || "''"
+      lines.push(`    { group: '${m.group || ''}', icon: ${iconExpr}, key: '${m.key}', label: '${m.label}' },`)
+    }
+    lines.push('  ],')
   }
   lines.push('}')
   lines.push('')
@@ -208,7 +218,7 @@ function generateLazyMapTs(enabledDomains) {
 
 function generateManifestPy(domain) {
   const menusLines = domain.menus.map(m =>
-    `        MenuEntry(key="${m.key}", label="${m.label}", icon="${m.icon || ''}", parent="${m.parent || ''}"),`
+    `        MenuEntry(key="${m.key}", label="${m.label}", icon="${m.icon || ''}", parent="${m.parent || ''}", group="${m.group || ''}"),`
   )
   const pagesLines = domain.pages.map(p =>
     `        PageEntry(key="${p.key}", path="${p.path}", js_asset="${p.js_asset || ''}", css_asset="${p.css_asset || ''}"),`
@@ -352,6 +362,7 @@ function main() {
   const backendPaths = enabledDomains
     .map(d => d.backend_path || `backend/src/prismclaw_${d.key}`)
   const envPath = resolve(__dirname, 'out/.domains.env')
+  mkdirSync(dirname(envPath), { recursive: true })
   const envLines = [
     '# 自动生成 — 由 scripts/compile/domains-registry.mjs 生成',
     `PRISMCLAW_ENABLED_DOMAINS="${enabledDomains.map(d => d.key).join(',')}"`,

@@ -1,67 +1,92 @@
-# PrismClaw Runtime-Agent — 通用办公场景
-# 
-# 标准 Dockerfile 变体：default-v1 / legal-v1 / restricted-v1
-# 通过 BUILD_ARG TEMPLATE_ID 切换安全配置。
+# PrismClaw Runtime-Agent — 工作区执行容器
+#
+# 构建上下文是**仓库根**（compose 中 `context: ..`），因此所有 COPY 源
+# 都带 `backend/` 前缀。
 #
 # 构建：
-#   docker build -f deploy/Dockerfile.runtime-agent --build-arg TEMPLATE_ID=default-v1 -t prismclaw/runtime-agent:default-v1 .
-#   docker build -f deploy/Dockerfile.runtime-agent --build-arg TEMPLATE_ID=restricted-v1 -t prismclaw/runtime-agent:restricted-v1 .
+#   docker build -f deploy/Dockerfile.runtime-agent --build-arg TEMPLATE_ID=default-v1 \
+#     -t prismclaw/runtime-agent:default-v1 .
 #
-# 运行（Swarm 模式）：
-#   docker service create --name prismclaw-ws-001 prismclaw/runtime-agent:restricted-v1
+# 该镜像由 docker-compose.yml / docker-compose.multi.yml 静态声明为固定服务
+# （runtime-agent-default / -restricted），不再有动态容器创建路径。
 
 # Pin Python patch version to avoid :slim (mutable) tag drift between builds.
 ARG PYTHON_VERSION=3.12.7
 
-# ── Stage 1: 构建依赖 ────────────────────────────────────────────────
+# ── Stage 1: 构建 Python 依赖 ────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim AS builder
 
 WORKDIR /build
-COPY pyproject.toml ./
+COPY backend/pyproject.toml ./
+COPY backend/src/ ./src/
 RUN pip install --no-cache-dir --prefix=/install .
 
-# ── Stage 2: Runtime ────────────────────────────────────────────────
+# ── Stage 2: Node 运行时（npx 型 stdio MCP 需要）─────────────────────
+FROM node:20-bookworm-slim AS node-src
+
+# ── Stage 3: Runtime ────────────────────────────────────────────────
 FROM python:${PYTHON_VERSION}-slim
 
 ARG TEMPLATE_ID=default-v1
 
-# 安全标签（嵌入镜像元数据）
 LABEL prismclaw.template_id=${TEMPLATE_ID}
 LABEL prismclaw.component=runtime-agent
 
-# 系统依赖（tini 用于信号转发；运行时不保留 curl）
+# tini 负责信号转发；bubblewrap 是 bash 工具的进程隔离（agent 默认 enforce）。
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
+    bubblewrap \
     && rm -rf /var/lib/apt/lists/*
 
-# Python 依赖（从 builder 阶段复制）
+# Node / npm / npx（现网 11 个 stdio MCP 全部是 `npx -y <pkg>`）
+COPY --from=node-src /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-src /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+# Python 依赖（含 prismclaw 包）
 COPY --from=builder /install /usr/local
 
-# 源码
-COPY src/ ./src/
+# 应用源码 — 镜像仓库 backend/ 布局，使 resolve_project_root() markers 一致
+WORKDIR /app
+COPY backend/src/ ./backend/src/
 
-# 工作区目录（非 root 归属）
-RUN groupadd --system --gid 10002 agentuser \
-    && useradd --system --uid 10002 --gid 10002 --home-dir /workspace --shell /usr/sbin/nologin agentuser \
-    && mkdir -p /workspace \
-    && chown -R agentuser:agentuser /workspace /usr/local
-USER agentuser
+# 非 root（UID 10001，与 app 容器一致）
+# 两个容器共用 /workspace 卷（prismclaw-workspaces）与 /app/home 卷，
+# UID 必须相同，否则 app 写的文件 agent 读不了、反之亦然。
+# /workspace 必须在此创建并 chown：命名卷首次挂载到空目录时继承镜像内
+# 该目录的属主；否则卷为 root:root 0755，非 root 进程无法建子目录。
+RUN groupadd --system --gid 10001 appuser \
+    && useradd --system --uid 10001 --gid 10001 --home-dir /app/home \
+       --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/home /workspace /runtime/skills/_default /runtime/cache/pip \
+       /runtime/cache/npm /runtime/cache/uv \
+    && chown -R appuser:appuser /runtime /app /workspace
+USER appuser
 
-# Runtime-Agent 端口
 EXPOSE 9001
 
-# 环境变量默认值（Swarm 部署时覆盖）
-ENV PRISMCLAW_WORKSPACE_ROOT=/workspace
-ENV PRISMCLAW_TEMPLATE_ID=${TEMPLATE_ID}
-ENV PRISMCLAW_RUNTIME_AGENT_PORT=9001
-ENV HOME=/workspace
+# 工作区根由 compose 注入（必须与 app 侧 workspaces.default 完全一致）。
+# 默认值仅为镜像自测用。
+ENV PRISMCLAW_WORKSPACE_ROOT=/app/home/.prismclaw/workspaces
+# HOME 与 app 容器一致 → ~/.prismclaw/assets/... 解析到同一路径
+ENV HOME=/app/home
+# 包位于 /app/backend/src；技能依赖在 runtime 卷
+ENV PYTHONPATH=/app/backend/src:/runtime/skills/_default/site-packages
+ENV NODE_PATH=/runtime/skills/_default/node_modules
+# 共享运行时根（bash.py 会把它 export 给用户命令）
+ENV PRISMCLAW_RUNTIME_ROOT=/runtime
+ENV PRISMCLAW_SKILL_RUNTIME=/runtime/skills/_default
+# 包管理器缓存落 runtime 卷，避免污染 /app/home
+ENV PIP_CACHE_DIR=/runtime/cache/pip
+ENV NPM_CONFIG_CACHE=/runtime/cache/npm
+ENV UV_CACHE_DIR=/runtime/cache/uv
 
-# Health check via Python (no curl in runtime image).
+# 镜像内不装 curl，用 python 探活
 HEALTHCHECK --interval=15s --timeout=3s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)" || exit 1
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"
 
-# 启动 Runtime-Agent（tini 处理信号）
 CMD ["tini", "--", "python", "-m", "uvicorn", \
-     "prismclaw.runtime.agent.server:app", \
+     "prismclaw.engine.runtime.agent.server:app", \
      "--host", "0.0.0.0", "--port", "9001", \
      "--no-access-log"]

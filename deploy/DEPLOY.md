@@ -59,7 +59,7 @@ PrismClaw 提供两种服务器部署形态，沙箱执行路径随形态切换�
 
 ### 1.1 前置条件
 
-- Docker Engine ≥ 24.0 + Docker Compose V2
+- Docker Engine ≥ 25.0 + Docker Compose ≥ 2.26（Runtime-Agent 用 `volume.subpath` 只挂 assets 子目录）
 - Nginx（宿主机安装）+ TLS 证书
 - 主机内核支持 user namespace（Runtime-Agent 内 bwrap 需要）
 
@@ -96,6 +96,18 @@ cd -
 - `backend/configs/models.yaml`：LLM / Embedding / Vision / ASR 端点与 API Key
 - `backend/configs/server.yaml`：`channels.web.jwt_secret`、SMTP（注册/找回密码）
 - `backend/configs/infra.yaml`：Redis 与 PostgreSQL 连接串
+
+**同时生成容器部署配置**（compose 会 bind mount 三个文件，缺任何一个都会被挂载成空目录）：
+
+```bash
+cd deploy/configs
+for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done
+cd -
+```
+
+这三份是容器内视角的配置（路径为 `/workspace`、`/runtime`，连接地址为 compose 服务名），
+与 `backend/configs/` 的宿主视角配置职责不同，**不要混用**。它们本身不含密钥，
+密钥通过 `.env` + `{env:VAR}` 占位符注入。
 
 ### 1.4 构建镜像
 
@@ -195,7 +207,7 @@ docker compose -f deploy/docker-compose.yml --env-file deploy/.env down -v   # �
 
 ### 2.1 前置条件
 
-- Docker Engine ≥ 24.0 + Docker Compose V2
+- Docker Engine ≥ 25.0 + Docker Compose ≥ 2.26（Runtime-Agent 用 `volume.subpath` 只挂 assets 子目录）
 - Nginx（宿主机安装）
 - TLS 证书（自签名或 Let's Encrypt）
 - **bubblewrap 已安装**（Worker 容器需 `security_opt: seccomp=unconfined`，详见 [§4.3](#43-安装-bwrap)）
@@ -476,25 +488,28 @@ yum install -y bubblewrap
 bwrap --version
 ```
 
-**Docker 镜像中安装**：在 Dockerfile 中添加一行：
+**Docker 镜像中安装**：`deploy/Dockerfile` 与 `deploy/Dockerfile.runtime-agent`
+均已安装 `bubblewrap`，无需额外改动。
 
-```dockerfile
-RUN apt-get update && apt-get install -y bubblewrap && rm -rf /var/lib/apt/lists/*
-```
-
-**注意**：Docker 容器内运行 bwrap 需要以下安全选项之一：
+**注意**：Docker 容器内运行 bwrap 需要放宽内核限制：
 
 ```yaml
-# docker-compose.multi.yml
 services:
-  worker1:
+  runtime-agent-default:
     security_opt:
-      - seccomp=unconfined    # 方式 A：放宽 seccomp 限制（推荐）
-    # 或
-    privileged: true           # 方式 B：特权模式（不推荐）
+      - seccomp=unconfined   # 必需：默认 seccomp 拦截 unshare / pivot_root
+      - apparmor=unconfined
+    # 仅 Docker Desktop（LinuxKit）需要，普通 Linux 宿主不要加：
+    # cap_add: [SYS_ADMIN]
 ```
 
-> 当前 `docker-compose.multi.yml` 未显式配置 `security_opt`，部署时如启用 `PRISMCLAW_SANDBOX_ENFORCE=true` 需自行添加。或参照 `docker-compose.yml` 的单节点全栈方案，将 bash 执行委托给独立 Runtime-Agent 容器（其 Dockerfile 可独立配置安全选项）。
+> `docker-compose.yml` 的两个 Runtime-Agent 服务已按上述配置声明（**不含
+> `SYS_ADMIN`**）。`docker-compose.multi.yml` 未显式配置：启用
+> `PRISMCLAW_SANDBOX_ENFORCE=true` 时必须自行补齐，否则 Runtime-Agent 会按
+> fail-closed 策略拒绝启动（启动自检直接报「bwrap 不可用」，而不是静默降级为无隔离）。
+>
+> **在 macOS 的 Docker Desktop 上跑 compose**：LinuxKit 会拒绝 `pivot_root`，
+> 需要临时加回 `cap_add: [SYS_ADMIN]`，否则两个 Runtime-Agent 起不来。
 
 ### 4.4 沙箱配置
 
@@ -633,22 +648,9 @@ docker build -t prismclaw:latest -f deploy/Dockerfile .
 
 ### 5.3 沙箱模板镜像构建
 
-`deploy/templates/build.py` 从 `SandboxTemplate` 规格生成 Dockerfile 并构建沙箱基础镜像：
-
-```bash
-# 构建所有内置模板（dry-run 预览）
-python deploy/templates/build.py --all --dry-run
-
-# 构建指定模板并推送
-python deploy/templates/build.py --template office-v1 --push
-```
-
-自定义模板（`TenantTemplate`，基于基础模板叠加 `extra_apt` / `extra_pip` / `extra_npm`）：
-
-```python
-from prismclaw.engine.runtime.template import TenantTemplate
-# build_tenant_template(tenant_tmpl, base_tmpl, push=True)
-```
+> 动态容器/沙箱模板体系（`deploy/templates/build.py`、`engine/runtime/template.py`、
+> `container_backend.py` 等）已被移除：生产部署走 compose 静态声明两个
+> runtime-agent（default / restricted），不再由 app 动态创建容器。
 
 ---
 

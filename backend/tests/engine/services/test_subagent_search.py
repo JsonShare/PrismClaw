@@ -7,9 +7,11 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 from prismclaw.engine.toolkit.registry.discovery import SubagentSearchTool
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 
 
 def _agent(
@@ -56,7 +58,7 @@ _CATALOG = _FakeCatalog([
 
 def _call(args):
     tool = SubagentSearchTool(capability_catalog=_CATALOG)
-    result = asyncio.run(tool.execute(args, context=None))
+    result = asyncio.run(tool.execute(args, context=ToolContext(workspace_id="w", workspace_path=Path("/tmp"))))
     return result.content[0].text
 
 
@@ -91,7 +93,7 @@ def test_limit_caps_result_count():
         for i in range(25)
     ]
     tool = SubagentSearchTool(capability_catalog=_FakeCatalog(entries))
-    result = asyncio.run(tool.execute({"query": "案件", "limit": 99}, context=None))
+    result = asyncio.run(tool.execute({"query": "案件", "limit": 99}, context=ToolContext(workspace_id="w", workspace_path=Path("/tmp"))))
     text = result.content[0].text
     assert text.count("plugin-agent-") == 20
 

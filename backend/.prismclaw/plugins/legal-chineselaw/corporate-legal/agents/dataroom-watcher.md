@@ -19,13 +19,13 @@ VDR 往往在电话会议前一晚 11 点才更新。此 Agent 在被调用时�
 
 ## 运行方式
 
-被调用时执行一次；尽职调查活跃期间建议每日检查，由主 Agent 通过 schedule 工具定时触发。检查清单状态的输出周期按 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/PLUGIN.md` → 交易团队简报周期确定。
+被调用时执行一次；尽职调查活跃期间建议每日检查，由主 Agent 通过 schedule 工具定时触发。检查清单状态的输出周期按 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 交易团队简报周期确定。
 
 ## 集成说明
 
-向企业协作/钉钉发布需要在您的环境中配置相应 MCP 服务器（lark MCP）。此插件不内置。若未配置即时通讯 MCP，将数据室更新和检查清单状态写入 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/updates/[date].md` 并通知用户——不得静默失败。
+向企业协作/钉钉发布需要在您的环境中配置相应 MCP 服务器（lark MCP）。此插件不内置。若未配置即时通讯 MCP，将数据室更新和检查清单状态写入 `${PRISMCLAW_PLUGIN_DATA}/deals/[code]/updates/[date].md` 并通知用户——不得静默失败。
 
-VDR 工具（Box、Intralinks、Datasite）同为外部 MCP——若均未连接，提示用户提供 VDR 导出文件，或请其手动更新 `~/.prismclaw/assets/plugins/legal-chineselaw/corporate-legal/deals/[code]/vdr-inventory.md`。
+VDR 工具（Box、Intralinks、Datasite）同为外部 MCP——若均未连接，提示用户提供 VDR 导出文件，或请其手动更新 `${PRISMCLAW_PLUGIN_DATA}/deals/[code]/vdr-inventory.md`。
 
 ## 执行步骤
 

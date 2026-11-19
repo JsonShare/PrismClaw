@@ -46,6 +46,10 @@ COPY frontend/public/ ./public/
 COPY frontend/index.html frontend/vite.config.ts frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json ./
 RUN npm run build
 
+# ── Stage 1b: Node 运行时（glibc 版，供 app 容器内的 npx 型 MCP 使用）──
+# 不能复用 frontend-builder（alpine/musl），运行阶段是 debian/glibc。
+FROM node:20-bookworm-slim AS node-runtime
+
 # ── Stage 2: Python dependency build (main + domain modules) ─────────
 FROM python:${PYTHON_VERSION}-slim AS builder
 ARG PRISMCLAW_DOMAINS
@@ -75,7 +79,8 @@ FROM python:${PYTHON_VERSION}-slim
 WORKDIR /app
 
 # Runtime system deps: tini for signal forwarding, curl for healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends tini curl \
+# bubblewrap：bash 工具的进程隔离（sandbox.enforce=true 时必需）
+RUN apt-get update && apt-get install -y --no-install-recommends tini curl bubblewrap \
     && rm -rf /var/lib/apt/lists/*
 
 # Python deps from builder (includes domain modules)
@@ -83,26 +88,45 @@ COPY --from=builder /install /usr/local
 
 # Application source — 镜像仓库 backend/ 布局，使 resolve_project_root() markers 一致
 COPY backend/src/ ./backend/src/
+# 静态能力权威源：启动时 sync_prismclaw_home() 读它，同步到 ~/.prismclaw/assets。
+# 不打进镜像 → assets 为空、技能/插件/子代理全部不可用（启动会直接抛错）。
+COPY backend/.prismclaw/ ./backend/.prismclaw/
 # 配置不打包进镜像：真实配置含密钥，由 docker-compose 以只读方式挂载到
 # /app/backend/configs。镜像内不放 *.yaml，避免密钥随镜像分发。
 
 # Built frontend from Stage 1 — 镜像仓库 frontend/ 布局
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
+# Node/npm/npx（glibc 版）— npx 型 stdio MCP 由 app 进程拉起
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
 # Non-root runtime user (UID 10001 to avoid clashing with host users)
+# /workspace 必须在此创建并 chown：Docker 命名卷首次挂载到空目录时，
+# 会继承镜像内该目录的属主。否则卷为 root:root 0755，非 root 进程
+# 无法创建 /workspace/<user_id>/ 等工作区目录。
 RUN groupadd --system --gid 10001 appuser \
     && useradd --system --uid 10001 --gid 10001 --home-dir /app/home --shell /usr/sbin/nologin appuser \
-    && mkdir -p /app/home /app/workspaces \
-    && chown -R appuser:appuser /app
+    && mkdir -p /app/home /workspace /runtime/cache/pip /runtime/cache/npm /runtime/cache/uv \
+    && chown -R appuser:appuser /app /workspace /runtime
 USER appuser
 ENV HOME=/app/home
 # 主包源码位于 backend/src/，域模块也在此路径下可直接 import
 ENV PYTHONPATH=/app/backend/src
+# 共享运行时根（与 runtime-agent 共用 prismclaw-runtime 卷）
+ENV PRISMCLAW_RUNTIME_ROOT=/runtime
+ENV PRISMCLAW_SKILL_RUNTIME=/runtime/skills/_default
+# 包管理器缓存落 runtime 卷，避免污染 /app/home
+ENV PIP_CACHE_DIR=/runtime/cache/pip
+ENV NPM_CONFIG_CACHE=/runtime/cache/npm
+ENV UV_CACHE_DIR=/runtime/cache/uv
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=3s --retries=3 --start-period=20s \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/api/health || exit 1
 
 # Run under tini for proper signal handling; bind to 0.0.0.0 inside container.
 CMD ["tini", "--", "python", "-m", "uvicorn", \

@@ -1,0 +1,46 @@
+# 生产环境 MCP 覆盖层：容器内通过 docker-compose 挂载到
+# /app/backend/configs/mcp.yaml，覆盖仓库默认（uv run 本地启动 web-search-mcp）。
+# 模板变量 {env:X} 由容器 env 提供（见 docker-compose.yml 的 environment 段）。
+
+mcp:
+  enabled: true
+  servers:
+    web-search-mcp:
+      type: "streamable-http"
+      url: "{env:WEB_SEARCH_MCP_URL}"
+      headers:
+        X-WSM-Token: "{env:WEB_SEARCH_MCP_TOKEN}"
+      trust_annotations: true
+      forced_tool_class: "read"
+      deferred: false
+      connect_timeout_seconds: 15.0
+      call_timeout_seconds: 90.0
+
+  # ── 插件自带的远端 MCP server 凭据 ──────────────────────────────────
+  # 插件 mcp.json 位于只读权威目录，OAuth token 不能写在那里，只能在此补。
+  # 键用裸 server 名：同一个 server 在多个插件里重复声明，裸键一次覆盖全部。
+  # 值全部走 {env:X}，未设置时展开为空串（该 server 连接失败并标记，不影响其它）。
+  # 鉴权方式来自各端点 2026-11-19 实测的 WWW-Authenticate 响应头。
+  plugin_overrides:
+    Slack:
+      headers:
+        Authorization: "Bearer {env:PRISMCLAW_MCP_SLACK_TOKEN}"
+    "Google Drive":
+      headers:
+        Authorization: "Bearer {env:PRISMCLAW_MCP_GOOGLE_DRIVE_TOKEN}"
+    CourtListener:
+      headers:
+        Authorization: "Bearer {env:PRISMCLAW_MCP_COURTLISTENER_TOKEN}"
+    Linear:
+      headers:
+        Authorization: "Bearer {env:PRISMCLAW_MCP_LINEAR_TOKEN}"
+    Atlassian:
+      headers:
+        Authorization: "Bearer {env:PRISMCLAW_MCP_ATLASSIAN_TOKEN}"
+    # 端点已失效，启用只会产生连接错误（实测 2026-11-19）：
+    #   Asana        https://mcp.asana.com/sse        → 410 Gone
+    #   Courtroom5   https://mcp.courtroom5.com       → 404
+    Asana:
+      enabled: false
+    Courtroom5:
+      enabled: false

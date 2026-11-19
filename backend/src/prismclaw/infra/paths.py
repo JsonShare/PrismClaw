@@ -132,7 +132,7 @@ def build_project_capability_layout(
             的 ``workspace_*_dir`` 字段）；空字符串表示该类未配置，不展开也不诊断。
         extra_skills_dirs: 追加的 skills 目录（如用户级 ``asset_skills_dir``
             绝对路径）。skills 是唯一有双来源的能力类：workspace 级
-            ``.work/skills``（graduation / ClawHub 安装）与用户级
+            ``.work/state/skills``（graduation / ClawHub 安装）与用户级
             ``~/.prismclaw/assets/skills``（repo 同步）都必须进入发现链。
         hint: 仅当 primary=None 现场解析时透传给根定位。
 

@@ -178,9 +178,15 @@ async def upload_files(
 class LocalSink:
     """``UploadSink`` that streams directly into a workspace directory.
 
-    ``workspace_root`` 是工作区根目录（commit 时返回它的相对路径，供前端 +
-    附件解析用）；``dest_root`` 是实际写盘目录（可以是 workspace 根下任意
-    子目录：inputs/、sessions/<sid>/uploads/、…）。两者可以相同（兼容旧用法）。
+    ``workspace_root`` 同时承担两个职责，且必须是同一个已 resolve 的根：
+
+      * **安全边界** —— 所有落点必须在其内（symlink escape 会抛 ``InvalidPath``）；
+      * **返回值基准** —— ``commit()`` 返回相对它的路径，供前端与附件解析拼接。
+
+    落点可以在 workspace 根下任意子目录（如 ``sessions/<sid>/inbox/``）。
+    ``biz_domain/`` 不在此列：它挂在 ``{user_root}/biz_domain/``，与工作区同级，
+    不在 ``workspace_root`` 之内；业务域落点由业务代码
+    （``resolve_biz_domain_dir``）自行管理，不走上传管线。
 
     Path safety: ``split_rel_path`` neutralizes lexical traversal (``..`` /
     ``\\`` / control chars); an additional ``resolve().relative_to()`` check
@@ -193,6 +199,14 @@ class LocalSink:
     def __init__(self, workspace_root: Path, dest_root: Path | None = None) -> None:
         self._workspace_root = workspace_root.expanduser().resolve()
         self._dest_root = (dest_root or workspace_root).expanduser().resolve()
+        # dest_root 是落点基准，必须就在 workspace 根内——否则 begin() 通过、
+        # commit() 必然在取相对路径时失败，属于构造期就能发现的配置错误。
+        try:
+            self._dest_root.relative_to(self._workspace_root)
+        except ValueError as exc:
+            raise InvalidPath(
+                f"上传落点 {self._dest_root} 不在工作区 {self._workspace_root} 内"
+            ) from exc
         self._open: dict[str, dict] = {}
 
     async def begin(self, upload_id: str, rel: str, total_size: int | None) -> None:
@@ -235,11 +249,17 @@ class LocalSink:
             raise InvalidPath("上传会话不存在")
         session["fh"].close()
         dest: Path = session["dest"]
+        # 返回值是 workspace 根相对路径（前端 + 附件解析都按它拼接）。
+        # dest 在 begin() 已 resolve 过，因此这里也必须在**已 resolve 的**
+        # workspace 根上取相对路径，否则 macOS 的 /var→/private/var 之类
+        # 符号链接会让 relative_to 抛 ValueError（裸路径不匹配前缀）。
         try:
-            rel_path = str(dest.resolve().relative_to(self._workspace_root))
-        except ValueError:
-            rel_path = str(dest.relative_to(self._workspace_root))
-        return {"path": rel_path, "size": session["size"]}
+            rel_path = dest.relative_to(self._workspace_root)
+        except ValueError as exc:
+            raise InvalidPath(
+                f"上传落点越出工作区：{dest} 不在 {self._workspace_root} 内"
+            ) from exc
+        return {"path": str(rel_path), "size": session["size"]}
 
     async def abort(self, upload_id: str) -> None:
         session = self._open.pop(upload_id, None)

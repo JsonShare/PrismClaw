@@ -239,26 +239,39 @@ class HookDispatcher:
     """
 
     def __init__(self, *, default_timeout: float = DEFAULT_DISPATCH_TIMEOUT) -> None:
-        self._hooks: dict[HookEvent, list[HookHandler]] = {
+        # 每个 handler 携带归属插件名（None = 全局 handler）。
+        self._hooks: dict[HookEvent, list[tuple[str | None, HookHandler]]] = {
             event: [] for event in HookEvent
         }
         self._default_timeout = default_timeout
 
-    def register(self, event: HookEvent, handler: HookHandler) -> None:
+    def register(
+        self,
+        event: HookEvent,
+        handler: HookHandler,
+        *,
+        plugin_name: str | None = None,
+    ) -> None:
         """注册 HookHandler。"""
         if not isinstance(handler, HookHandler):
             raise TypeError(
                 f"Hook handler must be HookHandler instance, got {type(handler).__name__}"
             )
         if event in self._hooks:
-            self._hooks[event].append(handler)
+            self._hooks[event].append((plugin_name, handler))
 
-    def register_named(self, event_name: str, handler: HookHandler) -> bool:
+    def register_named(
+        self,
+        event_name: str,
+        handler: HookHandler,
+        *,
+        plugin_name: str | None = None,
+    ) -> bool:
         """按事件名注册。"""
         normalized = _normalize_hook_event_name(event_name)
         if normalized is None:
             return False
-        self.register(normalized, handler)
+        self.register(normalized, handler, plugin_name=plugin_name)
         return True
 
     def unregister(self, event: HookEvent, handler: HookHandler) -> None:
@@ -266,13 +279,17 @@ class HookDispatcher:
         key = event if isinstance(event, HookEvent) else HookEvent(event)
         if key in self._hooks:
             handlers = self._hooks[key]
-            try:
-                handlers.remove(handler)
-            except ValueError:
-                pass
+            for idx, (_, registered) in enumerate(handlers):
+                if registered is handler:
+                    del handlers[idx]
+                    break
 
     def register_extension_hooks(self, extension_manager: Any) -> None:
-        """从 ExtensionManager 注册所有 hook bindings。"""
+        """从 ExtensionManager 注册所有 hook bindings。
+
+        保留 ``binding.plugin_name``：插件 hook 只在所属插件激活时执行
+        （见 :meth:`dispatch`），未激活的 hook 仍保持注册，重新激活即可恢复。
+        """
         for binding in extension_manager.iter_hook_bindings():
             event_name = binding.event_name
             handler = binding.handler
@@ -283,7 +300,9 @@ class HookDispatcher:
                     "Skipping non-HookHandler binding for event %s", event_name
                 )
                 continue
-            self.register_named(event_name, handler)
+            self.register_named(
+                event_name, handler, plugin_name=binding.plugin_name
+            )
 
     async def dispatch(
         self,
@@ -291,11 +310,15 @@ class HookDispatcher:
         context: HookContext | Any,
         *,
         timeout: float | None = None,
+        active_plugins: frozenset[str] | set[str] | None = None,
     ) -> HookResult:
         """分发事件，返回聚合 HookResult。
 
         聚合 decision / updated_input / additional_context 等字段，
         第一个 blocking 结果即停止后续 handler 执行。
+
+        ``active_plugins`` 为 None 表示无插件上下文，所有 handler 照常执行；
+        否则归属插件不在激活集的 handler 被静默跳过（全局 hook 恒执行）。
         """
         if event not in self._hooks or not self._hooks[event]:
             return HookResult.success()
@@ -304,7 +327,16 @@ class HookDispatcher:
         logger.debug("Dispatching hook event: %s", event.value)
 
         aggregated = HookResult.success()
-        for handler in self._hooks[event]:
+        for owner, handler in self._hooks[event]:
+            if (
+                active_plugins is not None
+                and owner is not None
+                and owner not in active_plugins
+            ):
+                logger.debug(
+                    "hook_scope_skipped: event=%s plugin=%s", event.value, owner
+                )
+                continue
             try:
                 result = await asyncio.wait_for(
                     self._execute_handler(handler, context),
@@ -469,6 +501,7 @@ async def _dispatch_pre_tool_hooks(
     session_id: str,
     cwd: str,
     active_skill_name: str | None = None,
+    active_plugins: frozenset[str] | set[str] | None = None,
 ) -> dict[str, str]:
     """逐调用分发 PRE_TOOL hook，收集插件拒绝决策。
 
@@ -496,7 +529,9 @@ async def _dispatch_pre_tool_hooks(
             tool_input=parsed.arguments or None,
             skill_name=active_skill_name,
         )
-        result = await dispatcher.dispatch(HookEvent.PRE_TOOL, context)
+        result = await dispatcher.dispatch(
+            HookEvent.PRE_TOOL, context, active_plugins=active_plugins
+        )
         _log_hook_outcome(HookEvent.PRE_TOOL, result)
         reason: str | None = None
         if result.permission_decision == PermissionDecision.DENY:

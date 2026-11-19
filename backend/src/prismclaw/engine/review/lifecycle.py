@@ -1,7 +1,7 @@
 """Blob lifecycle (garbage collection) for the file-review subsystem.
 
 Both review ledgers write content-addressed blobs under
-``<workspace>/.work/edits/blobs``:
+``<workspace>/.work/audit/edits/blobs``:
 
   * text / code revisions  -> ``ReviewRegistry``          (``review_events.jsonl``, ``content_ref``)
   * office edits            -> ``ChangeTrackingStore``     (``log.jsonl``, ``before_ref`` / ``after_ref``)
@@ -192,3 +192,50 @@ def gc_blobs(
             logger.warning("lifecycle.delete_failed", extra={"path": str(blob_path)}, exc_info=True)
 
     return report
+
+
+def sweep_workspace_base(
+    workspace_base: Path,
+    *,
+    dry_run: bool = True,
+    older_than_days: int = 30,
+) -> GcReport:
+    """对 ``workspace_base`` 下所有用户工作区各跑一次 :func:`gc_blobs` 并汇总。
+
+    工作区布局为 ``<base>/web_<user_id>/<workspace_id>/.work/audit/edits``。
+    单个工作区失败只记日志，不中断整轮清理——一个损坏的目录不该让其它工作区
+    的回收也跟着停摆。
+
+    Args:
+        workspace_base: 工作区根（``settings.workspaces.default``）
+        dry_run: True 时只统计不删除
+        older_than_days: 保留窗口，早于该窗口且无引用的 blob 才会被删
+
+    Returns:
+        汇总后的 :class:`GcReport`，``workspace`` 字段为基目录
+    """
+    aggregate = GcReport(workspace=str(workspace_base), dry_run=dry_run)
+    if not workspace_base.is_dir():
+        return aggregate
+
+    for edits_dir in sorted(
+        workspace_base.glob("web_*/*/.work/audit/edits")
+    ):
+        try:
+            part = gc_blobs(edits_dir, dry_run=dry_run, older_than_days=older_than_days)
+        except Exception:
+            logger.warning(
+                "lifecycle.sweep_workspace_failed",
+                extra={"path": str(edits_dir)},
+                exc_info=True,
+            )
+            continue
+        aggregate.referenced_count += part.referenced_count
+        aggregate.total_blobs += part.total_blobs
+        aggregate.kept_referenced += part.kept_referenced
+        aggregate.kept_young += part.kept_young
+        aggregate.planned_removals += part.planned_removals
+        aggregate.removed += part.removed
+        aggregate.freed_bytes += part.freed_bytes
+
+    return aggregate

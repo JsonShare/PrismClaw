@@ -246,11 +246,12 @@ class SubagentDiscoveryRuntime:
         *,
         package: str | None = None,
         limit: int = 10,
+        active_plugins: frozenset[str] | set[str] | None = None,
     ) -> list[SubagentDiscoveryEntry]:
         tokens = _tokenize_query(query)
         package_key = package.strip().lower() if package else None
         matches: list[SubagentDiscoveryEntry] = []
-        for agent in self._plugin_agents():
+        for agent in self._plugin_agents(active_plugins):
             if package_key is not None and package_key not in {
                 (agent.marketplace_name or "").lower(),
                 (agent.plugin_name or "").lower(),
@@ -271,13 +272,17 @@ class SubagentDiscoveryRuntime:
         return matches[: self._clamp_limit(limit)]
 
     def list_plugin_agents(
-        self, *, limit: int = 20, package: str | None = None
+        self,
+        *,
+        limit: int = 20,
+        package: str | None = None,
+        active_plugins: frozenset[str] | set[str] | None = None,
     ) -> list[SubagentDiscoveryEntry]:
         """无关键词兜底：列出插件子代理，避免模型盲目重试同一 query。"""
         package_key = package.strip().lower() if package else None
         entries = [
             self._entry(agent, score=0)
-            for agent in self._plugin_agents()
+            for agent in self._plugin_agents(active_plugins)
             if package_key is None
             or package_key
             in {
@@ -288,10 +293,13 @@ class SubagentDiscoveryRuntime:
         entries.sort(key=lambda item: item.name)
         return entries[: self._clamp_limit(limit)]
 
-    def _plugin_agents(self) -> list:
+    def _plugin_agents(
+        self, active_plugins: frozenset[str] | set[str] | None = None
+    ) -> list:
         return [
             entry for entry in self._catalog.list_agent_entries()
             if entry.plugin_name is not None
+            and (active_plugins is None or entry.plugin_name in active_plugins)
         ]
 
     def _entry(self, agent, *, score: int) -> SubagentDiscoveryEntry:

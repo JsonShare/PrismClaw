@@ -9,17 +9,15 @@ Licensed under Apache License 2.0
 
 此 plugin 的用户特定配置位于独立于版本的路径，在 plugin 更新后保留：
 
-  ~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md
+  ${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md
 
 此 plugin 中每个 skill、命令和 agent 的规则：
 1. 从该路径 READ 配置。不是从此文件。
 2. 如果该文件不存在或仍包含 [PLACEHOLDER] 标记，在进行实质性工作前 STOP。说："This plugin needs setup before it can give you useful output. Run /ip-legal:cold-start-interview — it takes about 10-15 minutes and every command in this plugin depends on it. Without it, outputs will be generic and may not match how your practice actually works." 不要继续使用占位符或默认配置。唯一无需设置即可运行的 skill 是 /ip-legal:cold-start-interview 本身和任何 --check-integrations 标志。
 3. 设置和冷启动访谈 WRITE 到该路径，根据需要创建父目录。
-4. 在 plugin 更新后的首次运行时，如果旧缓存路径
-   存在已填充的 PLUGIN.md，但配置路径不存在，则在继续前将其复制到配置路径。
-5. 此文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示配置应具有的结构。每次 plugin 更新时它都会被替换。永远不要在此处写入用户数据。
+4. 此文件（你正在阅读的文件）是模板。它随 plugin 一起提供，并显示配置应具有的结构。每次 plugin 更新时它都会被替换。永远不要在此处写入用户数据。
 
-**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
+**共享公司简介。** 公司级事实（你是谁、做什么、在哪里运营、你的风险立场、关键人物）位于 `${PRISMCLAW_MARKETPLACE_DATA}/company-profile.md`——比此文件高一级，由所有 12 个 plugin 共享。在此 plugin 的执业档案之前阅读它。如果它不存在，此 plugin 的设置会创建它。
 -->
 
 # IP 执业档案
@@ -200,7 +198,7 @@ Licensed under Apache License 2.0
 
 **文件访问失败。** 当你无法阅读用户指向你的文件时，不要静默失败。说明发生了什么："I can't read [path]. This usually means one of: (a) the plugin is installed project-scoped and the file is outside [project dir] — reinstall user-scoped or move the file here; (b) the path has a typo; (c) the file is a format I can't read. Can you paste the content directly, or try one of the fixes?" 静默的文件读取失败看起来像是 plugin 忽略了用户的材料。
 
-**验证日志。** 当你或用户验证标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规验证阈值——记录它，以便下一个人不会重新验证。向 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/verification-log.md` 写一行：
+**验证日志。** 当你或用户验证标记项时——根据主要来源确认引用、根据本地规则检查截止日期、根据当前法规验证阈值——记录它，以便下一个人不会重新验证。向 `${PRISMCLAW_PLUGIN_DATA}/verification-log.md` 写一行：
 
 `[YYYY-MM-DD] [cite or fact] verified by [name] against [source] — [verdict: confirmed / corrected to X / could not verify]`
 
@@ -238,7 +236,7 @@ Licensed under Apache License 2.0
 
 ## IP 投资组合
 
-**登记册：** `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/portfolio.yaml`
+**登记册：** `${PRISMCLAW_PLUGIN_DATA}/portfolio.yaml`
 
 *登记册保存团队跟踪的每个商标、专利和版权注册，包含司法管辖区、注册号、续期日期和状态。在冷启动时从 IP 管理系统（如果已连接）或用户提供的导出数据构建。由 `/ip-legal:portfolio` 更新，并由续期监控程序消费。*
 
@@ -300,7 +298,7 @@ Plugin 的工作是让 PrismClaw 更好地处理法律工作，而不是引导�
 
 ## 此领域的临时问题
 
-当用户在此 plugin 的执业领域提出问题时——不仅仅是当他们调用 skill 时——首先阅读 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/PLUGIN.md`（和 `~/.prismclaw/assets/plugins/legal-chineselaw/company-profile.md`）的执业档案，并应用它。如果它已填充，作为配置的助手回答：
+当用户在此 plugin 的执业领域提出问题时——不仅仅是当他们调用 skill 时——首先阅读 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md`（和 `${PRISMCLAW_MARKETPLACE_DATA}/company-profile.md`）的执业档案，并应用它。如果它已填充，作为配置的助手回答：
 
 - 使用他们的司法管辖区范围、风险偏好、剧本立场和升级链
 - 即使没有 skill 运行也应用护栏：来源归因、引用卫生、司法管辖区识别、决策立场、审阅者注释格式
@@ -372,7 +370,7 @@ Skill 的默认框架、测试、法规和程序通常以美国为中心。当�
 **活跃事项：** 无
 **跨事项上下文：** 关闭
 
-当事项工作区启用时，skills 在活跃事项的上下文中工作。Skills 阅读此执业级 PLUGIN.md 了解执业档案级规则（执法立场、审批矩阵、品牌监控），并阅读事项的 `matter.md` 了解事项特定事实和覆盖。输出写入到 `~/.prismclaw/assets/plugins/legal-chineselaw/ip-legal/matters/<matter-slug>/` 的事项文件夹。
+当事项工作区启用时，skills 在活跃事项的上下文中工作。Skills 阅读此执业级 PLUGIN.md 了解执业档案级规则（执法立场、审批矩阵、品牌监控），并阅读事项的 `matter.md` 了解事项特定事实和覆盖。输出写入到 `${PRISMCLAW_PLUGIN_DATA}/matters/<matter-slug>/` 的事项文件夹。
 
 当跨事项上下文关闭（默认）时，在事项 A 中工作的 skill 永远不会阅读事项 B 的文件。应该跨事项携带的知识写入此执业级 PLUGIN.md，而不是事项文件夹。
 

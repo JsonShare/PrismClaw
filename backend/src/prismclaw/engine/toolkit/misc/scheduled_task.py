@@ -1,7 +1,7 @@
 """Agent-facing tool for managing scheduled (automation) tasks via dialogue.
 
 This is the dialogue-creation entry point for the scheduler system. It is the
-native-tool replacement for the deprecated ``.work/skills/cron`` skill.
+native-tool replacement for the retired cron skill.
 
 Design:
 - Single tool, multiple actions (create/list/update/delete/trigger/enable/disable).

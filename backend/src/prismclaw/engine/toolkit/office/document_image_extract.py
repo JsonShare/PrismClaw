@@ -1,10 +1,16 @@
 """Document reader that extracts text and images in document order.
 
 When an agent reads a document (docx / pdf / markdown), this module extracts
-both text and any inline images. Images are persisted to the workspace system
-area ``.work/cache/extracted/<source-key>/`` (never beside the user's source
-file) and referenced by ``source_path`` only — base64 is no longer extracted
+both text and any inline images. Images are persisted to the **session** area
+``sessions/<sid>/context_blocks/images/<source-key>/`` when the source file
+lives inside a session (uploads do), otherwise to ``.work/cache/extracted/``.
+They are referenced by ``source_path`` only — base64 is no longer extracted
 (images go through the read_image tool, never the main context).
+
+Session-scoped placement matters for three reasons: the cache is derived from a
+session's private upload, it must not be readable from another session, and
+deleting the session should reclaim it. ``to_model_path`` converts the physical
+path into the virtual prefix the agent sees (``context_blocks/...``).
 
 The single public entry point is :func:`extract_document_blocks`.
 Returns list[TextBlock | ImageBlock] — no intermediate type, no path markers.
@@ -60,6 +66,34 @@ def _guess_mime_type(ext: str) -> str:
     return _IMAGE_EXT_MIME.get(ext.lower(), "image/png")
 
 
+_SESSION_VISIBLE_DIRS = frozenset({"inbox", "outputs", "context_blocks", "tool_results"})
+
+
+def _session_root_of(workspace_path: Path, rel_source: Path) -> Path | None:
+    """源文件在 ``sessions/<sid>/...`` 下时返回会话根目录。"""
+    parts = rel_source.parts
+    if len(parts) >= 3 and parts[0] == "sessions":
+        return workspace_path / "sessions" / parts[1]
+    return None
+
+
+def to_model_path(rel_path: str) -> str:
+    """把 ``sessions/<sid>/{inbox,outputs,context_blocks,tool_results}/...``
+    折叠成模型可见的虚拟前缀。
+
+    模型只认识虚拟前缀（见 ``WorkspaceResolver.resolve_within``）；
+    直接把物理路径写进提示会让它照抄后解析失败。
+    """
+    parts = Path(rel_path).parts
+    if (
+        len(parts) >= 4
+        and parts[0] == "sessions"
+        and parts[2] in _SESSION_VISIBLE_DIRS
+    ):
+        return Path(*parts[2:]).as_posix()
+    return rel_path
+
+
 def _save_image_block(
     workspace_path: Path,
     source_rel_path: str,
@@ -67,16 +101,25 @@ def _save_image_block(
     ext: str,
     data: bytes,
 ) -> str:
-    """Persist image to the workspace cache and return its workspace-relative path.
+    """Persist image to the session cache and return its workspace-relative path.
 
-    落点固定在 ``<ws>/.work/cache/extracted/<source-key>/``：图片是引擎副产物，
-    不能散落在用户源文件旁边（D7）。``source-key`` 由源文件的绝对路径派生，
-    同一源文件跨会话稳定命中同一目录，re-extract 时可按内容比对跳过重写。
+    落点：源文件在会话内（上传件）时写
+    ``sessions/<sid>/context_blocks/images/<source-key>/``；否则退回
+    ``<ws>/.work/cache/extracted/<source-key>/``。``source-key`` 由源文件的
+    绝对路径派生，同一源文件重复解析稳定命中同一目录（re-extract 时按内容
+    比对跳过重写）。
+
+    返回值是**工作区相对物理路径**（供 ``workspace_path / rel`` 直接读）；
+    渲染给模型前必须过 :func:`to_model_path`。
     """
     src = Path(source_rel_path)
     abs_src = (workspace_path / src).resolve(strict=False)
     source_key = hashlib.sha1(str(abs_src).encode("utf-8")).hexdigest()[:16]
-    out_dir = workspace_path / ".work" / "cache" / "extracted" / source_key
+    session_root = _session_root_of(workspace_path, src)
+    if session_root is not None:
+        out_dir = session_root / "context_blocks" / "images" / source_key
+    else:
+        out_dir = workspace_path / ".work" / "cache" / "extracted" / source_key
     out_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{src.stem}_img_{counter:03d}{ext}"
     out_path = out_dir / fname

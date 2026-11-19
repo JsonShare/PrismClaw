@@ -33,7 +33,7 @@ def fmt_from_path(path: str) -> str | None:
 
     Runs ``clean_rel_path`` first so LLM template-leak wrappers (``{}``,
     quotes, brackets, trailing punctuation, etc.) never make it to
-    ``Path.suffix``. Without this, ``"uploads/a.pptx{}"`` ends up with
+    ``Path.suffix``. Without this, ``"inbox/a.pptx{}"`` ends up with
     suffix ``".pptx{}"`` and the user sees "only .docx/.xlsx/.pptx are
     supported" for a file that is genuinely a .pptx.
     """

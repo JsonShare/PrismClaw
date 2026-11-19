@@ -430,7 +430,7 @@ async def write_file_content(
 
     # 与 get_file_raw 完全相同的目标解析逻辑，确保预览与保存指向同一文件
     targets = _candidate_file_targets(
-        io_root=workspace_root, workspace_root=workspace_root, raw_path=body.path,
+        workspace_root=workspace_root, raw_path=body.path,
     )
     if not targets:
         raise HTTPException(status_code=400, detail="Invalid path")

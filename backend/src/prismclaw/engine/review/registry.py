@@ -41,9 +41,12 @@ def _review_set_id(conversation_id: str) -> str:
 
 class ReviewRegistry:
     def __init__(self, workspace_path: Path) -> None:
+        from prismclaw.infra.workspace_paths import work_dir
+
         self._workspace = workspace_path
-        self._content = FileSystemContentStore.for_workspace(workspace_path)
-        self._events_path = workspace_path / ".work" / "edits" / "review_events.jsonl"
+        self._edits_dir = work_dir(workspace_path, "audit", "edits")
+        self._content = FileSystemContentStore(self._edits_dir)
+        self._events_path = self._edits_dir / "review_events.jsonl"
         self._lock = threading.RLock()
         self._cache: dict[str, ReviewSet] = {}  # conversation_id -> live ReviewSet
 

@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import secrets
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,6 +41,7 @@ from prismclaw.engine.security.gate.routing.risk_router import (
     get_tool_safety_meta,
 )
 from prismclaw.engine.security.sandbox.bwrap import BwrapPolicy
+from prismclaw.engine.security.sandbox.roots import runtime_readonly_roots
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,7 @@ class _JobEntry:
     pid: int
     command: str
     proc: asyncio.subprocess.Process
+    job_dir: Path
     stdout_path: Path
     stderr_path: Path
     started_at: float = field(default_factory=time.time)
@@ -108,84 +111,89 @@ class RuntimeExecutor:
         self._allow_net = allow_net
         self._workspace_id = workspace_id
         self._sandbox_policy = sandbox_policy
-        # 运行时只读根：agent 系统必需的插件/技能/配置/源码目录（与 BwrapPolicy 同源）
-        self._runtime_readonly_roots: tuple[Path, ...] = self._compute_runtime_readonly_roots()
+        # 静态能力根（只读）：唯一来源见 security/sandbox/roots.py
+        self._readonly_roots: tuple[Path, ...] = runtime_readonly_roots()
         self._rule_gate = RuleGate()
         self._jobs: dict[int, _JobEntry] = {}
         self._mcp_processes: dict[str, asyncio.subprocess.Process] = {}
         self._mcp_request_counter = itertools.count(1)
 
-    @staticmethod
-    def _compute_runtime_readonly_roots() -> tuple[Path, ...]:
-        """与 BwrapPolicy._compute_runtime_readonly_roots 同源的共享 helper。
+    # ── 请求根与路径授权 ──────────────────────────────────────────────
 
-        executor.py 不能直接 import BwrapPolicy（会拉 bwrap binary 检查），
-        故在这里重复实现，保证 macOS（无 bwrap）上的后备路径校验同样放行
-        运行时只读根。
+    def _request_root(self, workspace_root: str | None) -> Path:
+        """解析请求级 workspace 根；必须收窄在 executor 自身根内。
 
-        统一放行：~/.prismclaw（含 assets/ 静态能力目录）+
-        backend/configs（settings）+ backend/src/prismclaw（引擎源码）。
+        一个 agent 进程可以服务其根下的多个工作区（共享 agent 模式），
+        因此请求可以**收窄**作用域，但绝不能扩大：请求根若不在实例根内，
+        等于把单个请求提权到宿主任意目录。
         """
-        roots: list[Path] = []
-        # 1) 用户级 ~/.prismclaw（assets/ 为启动时 sync 目标，所有能力读这里）
-        user_prismclaw = (Path.home() / ".prismclaw").resolve()
-        if user_prismclaw.is_dir():
-            roots.append(user_prismclaw)
-
-        # 2) 项目内 repo 目录（configs + src；backend/.prismclaw 上面已 sync
-        #    到 ~/.prismclaw/assets，这里只保留 project_root/configs 和 src）
+        base = Path(self._workspace_root).expanduser().resolve()
+        if not workspace_root:
+            return base
         try:
-            from prismclaw.infra.paths import resolve_project_root
-            project_root = resolve_project_root()
-            for sub in ("backend/configs", "backend/src/prismclaw"):
-                p = (project_root / sub).resolve()
-                if p.is_dir():
-                    roots.append(p)
-        except Exception:
-            pass
-        return tuple(roots)
+            candidate = Path(workspace_root).expanduser().resolve()
+        except OSError as exc:
+            raise ValueError(f"invalid workspace_root: {workspace_root!r}") from exc
+        try:
+            candidate.relative_to(base)
+        except ValueError as exc:
+            raise ValueError(
+                f"workspace_root {candidate} is not within {base}"
+            ) from exc
+        return candidate
 
-    # ── 路径解析（workspace_root 基准）─────────────────────────────────
+    def _bound_root(self, workspace_root: str | None) -> tuple[Path | None, str | None]:
+        """``_request_root`` 的非抛异常包装，供文件方法统一返回错误。"""
+        try:
+            return self._request_root(workspace_root), None
+        except ValueError as exc:
+            return None, str(exc)
 
-    def _resolve_path(self, path: str) -> Path:
-        """把请求路径解析为 workspace_root 内的绝对路径（解析符号链接）。
+    def _resolve_path(self, path: str, root: Path) -> Path:
+        """把请求路径解析为 ``root`` 内的绝对路径（解析符号链接）。
 
-        相对路径 join 到 workspace_root；绝对路径保持（由 BwrapPolicy 校验边界）。
-        统一用 ``.resolve()`` 以避免 macOS ``/var``→``/private/var`` 之类的
-        符号链接导致校验与落盘路径不一致。
+        相对路径 join 到 root；绝对路径保持原样，由 :meth:`_authorize` 校验边界。
+        统一 ``.resolve()``，避免 macOS ``/var``→``/private/var`` 之类的符号链接
+        让校验与落盘路径不一致。
 
-        **expanduser first**: ``Path("~/.prismclaw/x").is_absolute()`` returns
-        ``False`` — ``~`` is not a root component in pathlib — so ``~/.prismclaw/x``
-        would be classified as *relative* and concatenated onto ``workspace_root``,
-        producing ``<ws>~/.prismclaw/x`` (literal ``~``). ``expanduser`` before the
-        absolute check ensures home-relative inputs are routed correctly.
+        **expanduser first**: ``Path("~/.prismclaw/x").is_absolute()`` 返回
+        ``False``（``~`` 不是 pathlib 的根组件），若不先展开就会拼成
+        ``<root>~/.prismclaw/x`` 这种含字面 ``~`` 的路径。
         """
         p = Path(path.strip()).expanduser()
         if not p.is_absolute():
-            p = Path(self._workspace_root) / p
+            p = root / p
         return p.resolve()
 
-    def _check_path(self, path: str, tier: SandboxTier) -> str | None:
-        resolved = self._resolve_path(path)
-        if self._sandbox_policy is not None:
-            return self._sandbox_policy.validate_path(
-                str(resolved), tier, self._workspace_root
-            )
-        # 无沙箱策略时的后备检查（macOS dev 走这里）
-        root = Path(self._workspace_root).resolve()
+    def _authorize(
+        self,
+        path: str,
+        *,
+        root: Path,
+        write: bool,
+    ) -> tuple[Path | None, str | None]:
+        """解析并授权一个路径，返回 ``(resolved, error)``。
+
+        - 读：允许 ``root`` 内 + 静态能力根（assets/，只读）；
+        - 写：只允许 ``root`` 内 —— 只读根对写操作不生效。
+        """
+        try:
+            resolved = self._resolve_path(path, root)
+        except OSError as exc:
+            return None, f"invalid_path: {path}: {exc}"
         try:
             resolved.relative_to(root)
-            return None
+            return resolved, None
         except ValueError:
             pass
-        # 运行时只读根（与 BwrapPolicy 同源）
-        for ro in self._runtime_readonly_roots:
-            try:
-                resolved.relative_to(ro)
-                return None
-            except ValueError:
-                continue
-        return f"path_outside_workspace: {path} outside {self._workspace_root}"
+        if not write:
+            for ro in self._readonly_roots:
+                try:
+                    resolved.relative_to(ro)
+                    return resolved, None
+                except ValueError:
+                    continue
+        return None, f"path_outside_workspace: {path} outside {root}"
 
     # ── bash ──────────────────────────────────────────────────────────
 
@@ -209,7 +217,17 @@ class RuntimeExecutor:
           - 同步：``{"exit_code", "stdout", "stderr", "timed_out", "tier_used"}``
           - 后台：``{"detached": True, "job_id": pid, "pid": pid}``
         """
-        effective_workspace = workspace_root or self._workspace_root
+        try:
+            root = self._request_root(workspace_root)
+        except ValueError as exc:
+            return {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"workspace_root rejected: {exc}",
+                "timed_out": False,
+                "tier_used": tier.value,
+            }
+        effective_workspace = str(root)
 
         # RuleGate: 入口静态规则校验
         meta = get_tool_safety_meta("bash")
@@ -285,7 +303,9 @@ class RuntimeExecutor:
             }
         except asyncio.TimeoutError:
             # 软超时：detach 为后台任务（不杀进程），注册硬超时杀手
-            job_dir = Path(effective_workspace) / ".work" / "runtime_jobs" / str(proc.pid)
+            from prismclaw.infra.workspace_paths import work_dir
+
+            job_dir = work_dir(effective_workspace, "run", "jobs") / str(proc.pid)
             job_dir.mkdir(parents=True, exist_ok=True)
             stdout_path = job_dir / "stdout"
             stderr_path = job_dir / "stderr"
@@ -293,6 +313,7 @@ class RuntimeExecutor:
                 pid=proc.pid,
                 command=command,
                 proc=proc,
+                job_dir=job_dir,
                 stdout_path=stdout_path,
                 stderr_path=stderr_path,
             )
@@ -317,7 +338,7 @@ class RuntimeExecutor:
         except (ProcessLookupError, PermissionError, OSError):
             pass
         finally:
-            self._jobs.pop(pid, None)
+            self._retire_job(pid)
 
     @staticmethod
     async def _pump(stream: asyncio.StreamReader | None, path: Path) -> None:
@@ -331,6 +352,19 @@ class RuntimeExecutor:
             pass
 
     # ── 后台任务管理 ──────────────────────────────────────────────────
+
+    def _retire_job(self, pid: int) -> None:
+        """任务结束后回收内存记录与 ``run/jobs/<pid>`` 磁盘目录。
+
+        stdout/stderr 只在任务存活期间有意义（``job_status`` 会读它们）；
+        完成后条目不对外可见，文件不该继续占盘。
+        """
+        entry = self._jobs.pop(pid, None)
+        if entry is None:
+            return
+        for task in entry.pump_tasks:
+            task.cancel()
+        shutil.rmtree(entry.job_dir, ignore_errors=True)
 
     def job_status(self, pid: int) -> dict[str, Any] | None:
         entry = self._jobs.get(pid)
@@ -369,25 +403,29 @@ class RuntimeExecutor:
 
     def list_jobs(self) -> list[dict[str, Any]]:
         out = []
-        for pid, entry in self._jobs.items():
+        # 快照后再遍历：_retire_job 会从 _jobs 中删除条目。
+        for pid, entry in list(self._jobs.items()):
             done = entry.proc.returncode is not None
             # 已完成的清理
             if done:
-                for t in entry.pump_tasks:
-                    t.cancel()
-                self._jobs.pop(pid, None)
+                self._retire_job(pid)
                 continue
             out.append({"pid": pid, "command": entry.command, "status": "Running"})
         return out
 
     # ── 文件读取 ──────────────────────────────────────────────────────
 
-    async def read_text(self, path: str, *, encoding: str = "utf-8") -> dict[str, Any]:
-        err = self._check_path(path, SandboxTier.STANDARD)
+    async def read_text(
+        self, path: str, *, encoding: str = "utf-8", workspace_root: str | None = None
+    ) -> dict[str, Any]:
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"success": False, "error": err}
+        resolved, err = self._authorize(path, root=root, write=False)
         if err:
             return {"success": False, "error": err}
         try:
-            p = self._resolve_path(path)
+            p = resolved
             if not p.exists():
                 # 落盘引用的内容哈希被抄错时，按 <前缀>_<id>_*.txt 唯一回退（见模块顶部注释）
                 p = _resolve_persisted_reference_alias(p) or p
@@ -397,12 +435,17 @@ class RuntimeExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def read_bytes(self, path: str) -> dict[str, Any]:
-        err = self._check_path(path, SandboxTier.STANDARD)
+    async def read_bytes(
+        self, path: str, *, workspace_root: str | None = None
+    ) -> dict[str, Any]:
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"success": False, "error": err}
+        resolved, err = self._authorize(path, root=root, write=False)
         if err:
             return {"success": False, "error": err}
         try:
-            p = self._resolve_path(path)
+            p = resolved
             if not p.exists():
                 # 同上：哈希段不承重
                 p = _resolve_persisted_reference_alias(p) or p
@@ -415,25 +458,36 @@ class RuntimeExecutor:
     # ── 文件写入 ──────────────────────────────────────────────────────
 
     async def write_text(
-        self, path: str, content: str, *, encoding: str = "utf-8"
+        self,
+        path: str,
+        content: str,
+        *,
+        encoding: str = "utf-8",
+        workspace_root: str | None = None,
     ) -> dict[str, Any]:
-        err = self._check_path(path, SandboxTier.STANDARD)
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"success": False, "error": err}
+        p, err = self._authorize(path, root=root, write=True)
         if err:
             return {"success": False, "error": err}
         try:
-            p = self._resolve_path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding=encoding)
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def write_bytes(self, path: str, content: bytes) -> dict[str, Any]:
-        err = self._check_path(path, SandboxTier.STANDARD)
+    async def write_bytes(
+        self, path: str, content: bytes, *, workspace_root: str | None = None
+    ) -> dict[str, Any]:
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"success": False, "error": err}
+        p, err = self._authorize(path, root=root, write=True)
         if err:
             return {"success": False, "error": err}
         try:
-            p = self._resolve_path(path)
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(content)
             return {"success": True}
@@ -442,19 +496,26 @@ class RuntimeExecutor:
 
     # ── 分片流式写入 ──────────────────────────────────────────────────
 
-    async def write_stream_begin(self, path: str, mode: str, encoding: str = "utf-8") -> dict[str, Any]:
+    async def write_stream_begin(
+        self,
+        path: str,
+        mode: str,
+        encoding: str = "utf-8",
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         if not path:
             return {"success": False, "error": "path is required"}
         if mode not in ("text", "bytes"):
             return {"success": False, "error": f"invalid mode: {mode}"}
-        err = self._check_path(path, SandboxTier.STANDARD)
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"success": False, "error": err}
+        p, err = self._authorize(path, root=root, write=True)
         if err:
             return {"success": False, "error": err}
         session_id = f"ws-{secrets.token_urlsafe(8)}"
         try:
-            p = self._resolve_path(path)
-            if str(p.parent):
-                p.parent.mkdir(parents=True, exist_ok=True)
+            p.parent.mkdir(parents=True, exist_ok=True)
         except (OSError, PermissionError) as e:
             return {"success": False, "error": f"mkdir failed: {e}"}
         try:
@@ -579,6 +640,129 @@ class RuntimeExecutor:
             return {"success": False, "error": "MCP call timed out (30s)"}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    # ── 结构化文件系统查询（HTTP 与进程内共用本实现）───────────────
+
+    async def fs_list(
+        self,
+        path: str = ".",
+        *,
+        recursive: bool = False,
+        ignore_hidden: bool = True,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"entries": [], "error": err}
+        base, err = self._authorize(path, root=root, write=False)
+        if err:
+            return {"entries": [], "error": err}
+        if not base.is_dir():
+            return {"entries": [], "error": f"directory not found: {path}"}
+        entries: list[dict[str, Any]] = []
+        try:
+            if recursive:
+                for p in sorted(base.rglob("*")):
+                    rel = p.relative_to(base)
+                    if ignore_hidden and any(part.startswith(".") for part in rel.parts):
+                        continue
+                    st = p.stat()
+                    entries.append({
+                        "name": p.name,
+                        "path": str(rel),
+                        "is_dir": p.is_dir(),
+                        "size": 0 if p.is_dir() else st.st_size,
+                        "modified_epoch": st.st_mtime,
+                    })
+            else:
+                for p in base.iterdir():
+                    if ignore_hidden and p.name.startswith("."):
+                        continue
+                    st = p.stat()
+                    entries.append({
+                        "name": p.name,
+                        "path": p.name,
+                        "is_dir": p.is_dir(),
+                        "size": 0 if p.is_dir() else st.st_size,
+                        "modified_epoch": st.st_mtime,
+                    })
+        except OSError as e:
+            return {"entries": entries, "error": str(e)}
+        return {"entries": entries}
+
+    async def fs_glob(
+        self,
+        pattern: str = "*",
+        path: str = ".",
+        *,
+        max_results: int = 200,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"entries": [], "error": err}
+        base, err = self._authorize(path, root=root, write=False)
+        if err:
+            return {"entries": [], "error": err}
+        entries: list[dict[str, Any]] = []
+        for p in sorted(
+            base.glob(pattern),
+            key=lambda x: x.stat().st_mtime if x.exists() else 0,
+            reverse=True,
+        ):
+            if not p.exists():
+                continue
+            st = p.stat()
+            entries.append({
+                "path": str(p.relative_to(base)),
+                "size": st.st_size,
+                "modified_epoch": st.st_mtime,
+            })
+            if len(entries) >= max_results:
+                break
+        return {"entries": entries, "truncated": len(entries) >= max_results}
+
+    async def fs_grep(
+        self,
+        pattern: str,
+        path: str = ".",
+        *,
+        include: str = "*",
+        case_insensitive: bool = False,
+        max_matches: int = 200,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
+        import re as _re
+
+        root, err = self._bound_root(workspace_root)
+        if err:
+            return {"matches": [], "error": err}
+        base, err = self._authorize(path, root=root, write=False)
+        if err:
+            return {"matches": [], "error": err}
+        flags = _re.IGNORECASE if case_insensitive else 0
+        matches: list[dict[str, Any]] = []
+        for p in base.rglob(include):
+            if not p.is_file():
+                continue
+            try:
+                if b"\x00" in p.read_bytes()[:8192]:
+                    continue
+                with open(p, "r", errors="replace") as f:
+                    for line_no, line in enumerate(f, 1):
+                        if _re.search(pattern, line, flags):
+                            matches.append({
+                                "path": str(p.relative_to(base)),
+                                "line_number": line_no,
+                                "line": line.rstrip("\n"),
+                            })
+                            if len(matches) >= max_matches:
+                                break
+            except OSError:
+                continue
+            if len(matches) >= max_matches:
+                break
+        return {"matches": matches, "truncated": len(matches) >= max_matches}
 
     # 分片写入会话（实例级，区别于模块全局）
     _write_sessions: dict[str, dict[str, Any]] = {}

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Protocol, cast, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from prismclaw.engine.hooks import HookRegistry
 from prismclaw.engine.security.gate.types import ParallelTaskExtras, TaskRuntimeContext
@@ -23,15 +23,6 @@ from prismclaw.schema.content.content_types import (
 from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.schema.services.env_types import ExecutionEnv
 
-ToolClass = Literal["read", "memory-write-safe", "write"]
-"""Permission classification consumed by the runner under ``read-only`` tier.
-
-- ``read``: pure read or session-isolated mutation (e.g. ``update_working_memory``)
-- ``memory-write-safe``: writes to L2/L3 memory with the subsystem's own guards
-  (e.g. ``memorize``); allowed in ``read-only`` per spec ``tool-approval-tiers``
-- ``write``: file mutation, shell, destructive memory ops; auto-denied in
-  ``read-only`` tier
-"""
 
 @dataclass(frozen=True)
 class GoalBlockIntent:
@@ -97,6 +88,10 @@ class ToolContext:
     turn_state: Any = None
     active_skill_name: str | None = None
     invoked_skill_names: list[str] = field(default_factory=list)
+    # 本轮激活的插件集合（frozenset[str]）——插件作用域门控的唯一依据。
+    # None = 无插件上下文（headless/测试/装配未就绪），不做任何作用域限制。
+    # 子代理通过 deepcopy 继承（收窄不放大），因此必须是可 copy 的纯数据。
+    tool_scope: frozenset[str] | None = None
     decision_ledger_tail: list[Any] = field(default_factory=list)
     headless: bool = False
     parent_session_id: str | None = None
@@ -205,37 +200,6 @@ class Tool(Protocol):
     effect_class: str
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult: ...
-
-
-async def check_abort_or_run(
-    tool: Tool,
-    args: dict[str, Any],
-    context: ToolContext,
-) -> ToolResult:
-    call_id = args.get("_call_id", "")
-    if context.abort.is_set():
-        return error_result(call_id, f"{tool.name}：执行前已中止")
-    return await tool.execute(args, context)
-
-
-def wrap_tool_with_abort(tool: Tool) -> Tool:
-    wrapped_class: ToolClass = getattr(tool, "tool_class", "write")
-    wrapped_effect_class = getattr(tool, "effect_class", resolve_tool_effect_class(tool).value)
-
-    class _AbortWrapped:
-        name = tool.name
-        description = tool.description
-        parameters = tool.parameters
-        side_effect = tool.side_effect
-        tool_class: str = wrapped_class
-        effect_class: str = wrapped_effect_class
-        timeout_seconds = getattr(tool, "timeout_seconds", None)
-        max_output_chars = getattr(tool, "max_output_chars", None)
-
-        async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
-            return await check_abort_or_run(tool, args, context)
-
-    return _AbortWrapped()
 
 
 def resolve_tool_effect_class(tool: Tool) -> EffectClass:

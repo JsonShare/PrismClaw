@@ -18,8 +18,15 @@ import './src/styles/patient-detail.css'
 import './src/styles/light.css'
 import './src/styles/dark.css'
 
-export function MedicalWorkbenchPage() {
-  return <MedicalWorkbenchApp />
+export interface MedicalWorkbenchPageProps {
+  /** 系统侧栏下发的目标页 */
+  page?: string
+  /** 跳转意图序号 */
+  pageNonce?: number
+}
+
+export function MedicalWorkbenchPage({ page, pageNonce }: MedicalWorkbenchPageProps) {
+  return <MedicalWorkbenchApp page={page} pageNonce={pageNonce} />
 }
 
 export default MedicalWorkbenchPage

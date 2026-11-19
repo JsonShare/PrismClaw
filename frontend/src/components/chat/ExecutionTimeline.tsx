@@ -76,11 +76,12 @@ export default function ExecutionTimeline({
   const light = weight === 'light'
 
   // 展开状态在关键生命周期点由系统重置，用户可在任意时刻手动 toggle：
+  // - 挂载即终态（落库消息 / 历史回放）：初始整体折叠，只留一行入口
   // - 新一轮开始（isExecuting false→true）：重置为展开（展示执行过程）
-  // - 执行完成（isExecuting true→false）：自动折叠（收起执行过程）
+  // - 执行完成（isExecuting true→false）：整体折叠（收起整段执行过程）
   // - 用户手动 toggle 后：跟随用户选择，直到下一轮开始
-  const wasOpenRef = useRef(false)
-  const [userOpen, setUserOpen] = useState(true)
+  const wasOpenRef = useRef(true)
+  const [userOpen, setUserOpen] = useState(!!isExecuting)
   const prevExecutingRef = useRef(false)
 
   useEffect(() => {

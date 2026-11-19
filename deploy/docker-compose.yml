@@ -50,13 +50,16 @@ services:
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --timeout 0 --tcp-keepalive 30
+    # requirepass 与 app 侧 infra.yaml 的 {env:REDIS_PASSWORD} 同源：
+    # REDIS_PASSWORD 为空时不加 --requirepass（本地开发免认证），
+    # 非空时两端都会带认证，避免「app 发 AUTH 但服务端没密码」导致启动失败。
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru --timeout 0 --tcp-keepalive 30 ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a \"${REDIS_PASSWORD}\"} ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -67,7 +70,33 @@ services:
           memory: 512m
     restart: unless-stopped
 
+  # ── runtime-init: 一次性对齐 runtime 卷权限 ───────────────────────
+  # app（UID 10001）与两个 runtime-agent（UID 10002）共用 prismclaw-runtime
+  # 卷。任一方先写就会创建 0755 目录，另一个 UID 随后写入直接 EPERM —— 表现
+  # 为技能安装、依赖写入随机失败且难以定位。这里在业务容器启动前统一建目录并
+  # 放开组/其他写权限；该卷只在容器之间共享，不含主机敏感数据。
+  runtime-init:
+    image: alpine:3.20
+    user: "0:0"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -e
+        mkdir -p /runtime/skills/_default/site-packages
+        mkdir -p /runtime/skills/_default/node_modules
+        mkdir -p /runtime/cache/pip /runtime/cache/npm /runtime/cache/uv
+        chmod -R a+rwX /runtime
+    volumes:
+      - prismclaw-runtime:/runtime
+    restart: "no"
+
   # ── Runtime-Agent: default workspace (SafetyGate STANDARD tier) ────
+  # 单 agent 服务该租户的所有工作区。关键不变量：
+  #   agent 的 PRISMCLAW_WORKSPACE_ROOT 必须与 app 侧 workspaces.default
+  #   （deploy/configs/server.yaml → /workspace）逐字节一致，
+  #   且两侧挂同一个卷到同一路径 —— 这样 app 传的 workspace_root
+  #   在 agent 内无需任何翻译即可通过越界校验（否则 403）。
   runtime-agent-default:
     build:
       context: ..
@@ -76,12 +105,34 @@ services:
         TEMPLATE_ID: default-v1
     image: prismclaw/runtime-agent:default-v1
     environment:
-      PRISMCLAW_WORKSPACE_ID: ws-default
-      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:-dev-secret}
+      PRISMCLAW_WORKSPACE_ROOT: /workspace
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
       PRISMCLAW_RUNTIME_HMAC_KEY_VERSION: "1"
       PRISMCLAW_ALLOW_NET: "true"
     volumes:
-      - ws-default-data:/workspace
+      # 工作区根（与 app 同一卷、同一路径、读写）
+      - prismclaw-workspaces:/workspace
+      # 技能依赖共享卷（与 app 共用）
+      - prismclaw-runtime:/runtime
+      # 只挂 assets 子目录：整个 ~/.prismclaw 里还有 plugins-data/ 等
+      # app 专属数据，挂整根会让 agent 进程可读（SDD §8.1 的安全不变量）。
+      # volume.subpath 需要 Docker Compose >= 2.26（Engine >= 25）。
+      - type: volume
+        source: prismclaw-home
+        target: /app/home/.prismclaw/assets
+        read_only: true
+        volume:
+          subpath: .prismclaw/assets
+    depends_on:
+      runtime-init:
+        condition: service_completed_successfully
+    # bubblewrap 需要创建 user/mount namespace；Docker 默认 seccomp 会拦下
+    # unshare/pivot_root。普通 Linux 宿主只需放宽 seccomp（不加 SYS_ADMIN）。
+    # 若你的宿主是 Docker Desktop（LinuxKit），bwrap 会在启动自检时失败，
+    # Runtime-Agent 按 fail-closed 拒绝启动，此时才需要额外加 cap_add: SYS_ADMIN。
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"]
       interval: 15s
@@ -95,6 +146,7 @@ services:
     restart: unless-stopped
 
   # ── Runtime-Agent: restricted workspace (SafetyGate STRICT tier) ──
+  # 与 default 同一存储根，仅策略不同（无网络、禁 PID 命名空间）。
   runtime-agent-restricted:
     build:
       context: ..
@@ -103,13 +155,30 @@ services:
         TEMPLATE_ID: restricted-v1
     image: prismclaw/runtime-agent:restricted-v1
     environment:
-      PRISMCLAW_WORKSPACE_ID: ws-restricted
-      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:-dev-secret}
+      PRISMCLAW_WORKSPACE_ROOT: /workspace
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
       PRISMCLAW_RUNTIME_HMAC_KEY_VERSION: "1"
       PRISMCLAW_ALLOW_NET: "false"
-      PRISMCLAW_DENY_PID_NS: "true"
     volumes:
-      - ws-restricted-data:/workspace
+      - prismclaw-workspaces:/workspace
+      - prismclaw-runtime:/runtime
+      # 只挂 assets 子目录（同 default 服务的 subpath 说明）
+      - type: volume
+        source: prismclaw-home
+        target: /app/home/.prismclaw/assets
+        read_only: true
+        volume:
+          subpath: .prismclaw/assets
+    depends_on:
+      runtime-init:
+        condition: service_completed_successfully
+    # bubblewrap 需要创建 user/mount namespace；Docker 默认 seccomp 会拦下
+    # unshare/pivot_root。普通 Linux 宿主只需放宽 seccomp（不加 SYS_ADMIN）。
+    # 若你的宿主是 Docker Desktop（LinuxKit），bwrap 会在启动自检时失败，
+    # Runtime-Agent 按 fail-closed 拒绝启动，此时才需要额外加 cap_add: SYS_ADMIN。
+    security_opt:
+      - seccomp=unconfined
+      - apparmor=unconfined
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:9001/health').status==200 else 1)"]
       interval: 15s
@@ -153,17 +222,30 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # Override 127.0.0.1 in server.yaml → container service names
-      PRISMCLAW_REDIS_HOST: redis
-      PRISMCLAW_STORAGE_POSTGRES_DSN: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/prismclaw
+      # Postgres 连接串：infra.yaml 用 {env:PRISMCLAW_STORAGE_POSTGRES_DSN} 整值引用。
+      # {env:} 占位符只能整值替换，无法嵌入密码，故整条 DSN 在这里插值。
+      PRISMCLAW_STORAGE_POSTGRES_DSN: "postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/prismclaw"
+      # Redis 密码：deploy/configs/infra.yaml 用 {env:REDIS_PASSWORD} 引用
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       # 首次启动管理员（users 表为空时写入一次；留空则不创建）
       PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID:-}
       PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD: ${PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD:-}
-      # JWT 签名密钥：设置后覆盖 server.yaml 中的 jwt_secret
-      PRISMCLAW_WEB_JWT_SECRET: ${PRISMCLAW_WEB_JWT_SECRET:-}
-      # SafetyGate + Runtime-Agent 连接（P10-SEC-04: template_id → agent URL 路由表）
+      # JWT 签名密钥：设置后覆盖 server.yaml 中的 jwt_secret。
+      # 必须强制必填 —— {env:} 缺失会展开为空串，空密钥可伪造任意用户 token。
+      PRISMCLAW_WEB_JWT_SECRET: ${PRISMCLAW_WEB_JWT_SECRET:?set PRISMCLAW_WEB_JWT_SECRET in deploy/.env}
+      # 生产标记：缺失会退化为 development，使 runtime client 的 fail-fast
+      # 与启动校验全部失效（静默退回进程内执行）。
+      PRISMCLAW_DEPLOYMENT_ENV: production
+      # SafetyGate + Runtime-Agent 连接（template_id → agent URL 路由表）
       PRISMCLAW_RUNTIME_AGENT_URLS: '{"default-v1":"http://runtime-agent-default:9001","restricted-v1":"http://runtime-agent-restricted:9001"}'
-      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:-dev-secret}
+      PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
+      # 插件远端 MCP 凭据（deploy/configs/mcp.prod.yaml 的 plugin_overrides 引用）。
+      # 留空则该 server 连接失败并被标记，不影响其它 server 与主流程。
+      PRISMCLAW_MCP_SLACK_TOKEN: ${PRISMCLAW_MCP_SLACK_TOKEN:-}
+      PRISMCLAW_MCP_GOOGLE_DRIVE_TOKEN: ${PRISMCLAW_MCP_GOOGLE_DRIVE_TOKEN:-}
+      PRISMCLAW_MCP_COURTLISTENER_TOKEN: ${PRISMCLAW_MCP_COURTLISTENER_TOKEN:-}
+      PRISMCLAW_MCP_LINEAR_TOKEN: ${PRISMCLAW_MCP_LINEAR_TOKEN:-}
+      PRISMCLAW_MCP_ATLASSIAN_TOKEN: ${PRISMCLAW_MCP_ATLASSIAN_TOKEN:-}
       # web-search-mcp (streamable-http, token authenticated)
       WEB_SEARCH_MCP_URL: http://web-search-mcp:9002/mcp
       WEB_SEARCH_MCP_TOKEN: ${WEB_SEARCH_MCP_TOKEN:?set WEB_SEARCH_MCP_TOKEN in deploy/.env}
@@ -173,22 +255,33 @@ services:
       PRISMCLAW_LOG_DIR: "off"
     volumes:
       - ../backend/configs:/app/backend/configs:ro
+      # 容器路径配置：覆盖 server.yaml 的 runtime/workspaces 为容器内绝对路径，
+      # 覆盖 infra.yaml 的 redis/postgres 为 compose 服务名。
+      # redis/storage 的归属文件是 infra.yaml，写在 server.yaml 里会被覆盖。
+      - ./configs/server.yaml:/app/backend/configs/server.yaml:ro
+      - ./configs/infra.yaml:/app/backend/configs/infra.yaml:ro
       # Overlay the production MCP config onto the dev-oriented repo default
       - ./configs/mcp.prod.yaml:/app/backend/configs/mcp.yaml:ro
-      - prismclaw-workspaces:/app/workspaces
-      # Non-root home (container runs as UID 10001, HOME=/app/home)
+      # 工作区根：与 runtime-agent 挂**同一个卷、同一个容器路径**（C 批定为
+      # /workspace，见 deploy/configs/server.yaml 的 workspaces.default）。
+      - prismclaw-workspaces:/workspace
+      # 技能依赖共享卷（与 runtime-agent 共用）
+      - prismclaw-runtime:/runtime
+      # Non-root home (UID 10001, HOME=/app/home)：~/.prismclaw/assets 在此
       - prismclaw-home:/app/home
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      runtime-init:
+        condition: service_completed_successfully
       runtime-agent-default:
         condition: service_healthy
       web-search-mcp:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)"]
       interval: 15s
       timeout: 5s
       retries: 4
@@ -227,8 +320,10 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  # 工作区数据（app 与 runtime-agent 共用，挂载路径一致）
   prismclaw-workspaces:
+  # /app/home：assets/ 静态能力 + 会话元数据（两个容器共用，agent 只读）
   prismclaw-home:
-  ws-default-data:
-  ws-restricted-data:
+  # 技能依赖（site-packages / node_modules），两个容器共用
+  prismclaw-runtime:
   pg-backups:

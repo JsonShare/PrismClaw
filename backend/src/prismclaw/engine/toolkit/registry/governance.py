@@ -454,10 +454,24 @@ def resolve_registry_tool_governance(
     subagent_depth: int = 0,
     headless: bool = False,
     governance: ToolGovernance | None = None,
+    tool_scope: frozenset[str] | set[str] | None = None,
 ) -> ResolvedToolSet:
     normalized_discovered = normalize_registry_tool_names(
         registry,
         discovered_tools or (),
+        tool_scope=tool_scope,
+    )
+    # 技能声明的 allowed_tools 必须同时受本插件作用域约束：未激活插件的
+    # 工具不得被技能解锁。此归一化结果同时喂给 policy 与
+    # ``skill_allowed_tools``，保证「能看见」与「能解锁」口径一致。
+    normalized_skill_tools = (
+        normalize_registry_tool_names(
+            registry,
+            skill_invocation.allowed_tools_override,
+            tool_scope=tool_scope,
+        )
+        if skill_invocation is not None and skill_invocation.allowed_tools_override
+        else None
     )
     return (governance or ToolGovernance()).resolve(
         GovernanceInput(
@@ -465,17 +479,19 @@ def resolve_registry_tool_governance(
             actor_identity="subagent" if subagent_depth > 0 else "main",
             runtime_mode=RuntimeMode(headless_mode=headless),
             allowed_tools_policy=allowed_tools_policy
-            or allowed_tools_policy_for_skill(
-                registry,
-                skill_invocation,
+            or (
+                AllowedToolsPolicy(
+                    allow_all=False,
+                    allowed_names=tuple(sorted(normalized_skill_tools)),
+                )
+                if normalized_skill_tools is not None
+                else AllowedToolsPolicy()
             ),
             active_skill_name=(
                 skill_invocation.skill_name if skill_invocation is not None else None
             ),
             discovered_tools=frozenset(normalized_discovered),
-            skill_allowed_tools=frozenset(
-                skill_invocation.allowed_tools_override or ()
-            ) if skill_invocation is not None else frozenset(),
+            skill_allowed_tools=frozenset(normalized_skill_tools or ()),
         )
     )
 def registry_tool_specs(registry: ToolRegistry) -> list[ToolSpec]:
@@ -520,53 +536,52 @@ def tool_to_spec(tool: Tool) -> ToolSpec:
             requires_interactive_user=bool(
                 getattr(tool, "requires_interactive_user", False)
             ),
-            server_read_only=getattr(cfg, "server_read_only", False) if (cfg := getattr(tool, "server_config", None)) is not None else False,
+            server_read_only=(
+                getattr(cfg, "server_read_only", False)
+                if (cfg := getattr(tool, "server_config", None)) is not None
+                else False
+            ),
             skill_gated=bool(getattr(tool, "skill_gated", False)),
         ),
         executor_kind=executor_kind,
     )
 
 
-def allowed_tools_policy_for_skill(
-    registry: ToolRegistry,
-    skill_invocation: SkillInvocationState | None,
-) -> AllowedToolsPolicy:
-    if (
-        skill_invocation is None
-        or skill_invocation.allowed_tools_override is None
-    ):
-        return AllowedToolsPolicy()
-    allowed_names = tuple(
-        sorted(
-            normalize_registry_tool_names(
-                registry,
-                skill_invocation.allowed_tools_override,
-            )
-        )
-    )
-    return AllowedToolsPolicy(
-        allow_all=False,
-        allowed_names=allowed_names,
-    )
-
-
 def normalize_registry_tool_names(
     registry: ToolRegistry,
     raw_names: set[str] | tuple[str, ...] | list[str],
+    *,
+    tool_scope: frozenset[str] | set[str] | None = None,
 ) -> set[str]:
     registered = registry.names()
     lower_map: dict[str, str] = {n.lower(): n for n in registered}
 
     normalized: set[str] = set()
     dropped: list[str] = []
+    out_of_scope: list[str] = []
+
+    def _in_scope(tool: Any) -> bool:
+        if tool_scope is None:
+            return True
+        owner = getattr(tool, "plugin_name", None)
+        return owner is None or owner in tool_scope
+
     for raw_name in raw_names:
         tool = registry.get(raw_name)
         if tool is not None:
+            # 技能不得解锁未激活插件的工具（越权提升）
+            if not _in_scope(tool):
+                out_of_scope.append(tool.name)
+                continue
             normalized.add(tool.name)
             continue
         # 大小写不敏感回退
         canonical = lower_map.get(raw_name.lower())
         if canonical is not None:
+            _canonical_tool = registry.get(canonical)
+            if _canonical_tool is not None and not _in_scope(_canonical_tool):
+                out_of_scope.append(canonical)
+                continue
             normalized.add(canonical)
             logger.info(
                 "normalize_registry_tool_names: case-insensitive match %r → %r",
@@ -579,5 +594,10 @@ def normalize_registry_tool_names(
         logger.warning(
             "normalize_registry_tool_names: dropped unregistered names: %s",
             ", ".join(dropped),
+        )
+    if out_of_scope:
+        logger.warning(
+            "normalize_registry_tool_names: dropped tools of inactive plugins: %s",
+            ", ".join(out_of_scope),
         )
     return normalized

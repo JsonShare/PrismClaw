@@ -25,7 +25,7 @@ Licensed under Apache License 2.0
 
 ## 执行步骤
 
-1. 读取 `~/.prismclaw/assets/plugins/legal-chineselaw/product-legal/PLUGIN.md` → 发布跟踪器位置、校准表、升级频道。
+1. 读取 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` → 发布跟踪器位置、校准表、升级频道。
 2. 查询跟踪器中目标日期在 30 天内的工单。
 3. 对每个工单，对工单标题/描述运行 `is-this-a-problem` 的轻量版本。
 4. 过滤：仅呈现与"通常需要工作"或"通常阻塞"模式匹配，或提及触发关键词的工单。

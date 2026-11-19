@@ -15,7 +15,7 @@ from urllib.parse import quote
 from fastapi import HTTPException, Request
 
 from prismclaw.app.session_router import SessionRouter
-from prismclaw.app.web.deps import get_web_deps, user_root as _user_root
+from prismclaw.app.web.deps import get_web_deps
 from prismclaw.app.web.workspace_ids import (
     InvalidWorkspaceIdError,
     clean_workspace_id,
@@ -35,15 +35,6 @@ _llm_client: Any = None
 _evolution_settings: Any = None
 _nudge_hook: Any = None
 
-# Managed workspace sub-directory layout.
-# uploads / outputs / tmp 已切 session 级（sessions/<sid>/uploads|outputs|tmp），
-# 这里只保留 workspace 级共享目录。
-_WORKSPACE_ENVS_DIR = ".envs"
-_WORKSPACE_NODE_MODULES_DIR = "node_modules"
-_WORKSPACE_SKILLS_DIR = "skills"
-_WORKSPACE_SANDBOX_DIR = "sandbox"
-
-
 # ---------------------------------------------------------------------------
 # Lazy import for the module-level session queue defined in chat.py.
 # We avoid a top-level import to prevent circular-import issues; the chat
@@ -52,23 +43,6 @@ _WORKSPACE_SANDBOX_DIR = "sandbox"
 def _get_chat_session_queue():
     from prismclaw.app.web.chat.chat_protocol import _session_queue
     return _session_queue
-
-
-def ensure_managed_workspace_dirs(root: Path) -> None:
-    """Create the constrained workspace directories (single source of truth).
-
-    inputs/ is workspace-level shared (所有 session 只读可见)，
-    sessions/<sid>/ 是 session 级隔离（每个会话独立 uploads/outputs/context_blocks/tool_results）。
-    系统运行目录统一收进 `.work/`。
-    """
-    # 用户可见目录（留根）
-    for name in ("inputs", "sessions"):
-        (root / name).mkdir(parents=True, exist_ok=True)
-    # 系统运行目录（收进 .work/）
-    work_dirs = (_WORKSPACE_ENVS_DIR, _WORKSPACE_NODE_MODULES_DIR,
-                 _WORKSPACE_SKILLS_DIR, _WORKSPACE_SANDBOX_DIR)
-    for name in work_dirs:
-        (root / ".work" / name).mkdir(parents=True, exist_ok=True)
 
 
 def set_web_deps(
@@ -124,21 +98,15 @@ def _resolve_workspace_root(
     """Resolve a cloud workspace's server-managed directory.
 
     Every workspace ("default" or a custom id) is a direct sub-directory of the
-    user's container (``user_root``); the concrete folders (outputs/uploads/
+    user's container (``user_root``); the concrete folders (outputs/inbox/
     tmp/...) live *inside* that sub-directory — never flattened at user_root.
     There is no local-filesystem binding: cloud workspaces always resolve to a
     server-side directory under ``workspace_base``.
     """
-    workspace_base: Path = get_web_deps(request).workspace_base
-    user_root = _user_root(workspace_base, user_id)
+    from prismclaw.infra.workspace_paths import resolve_workspace_dir
 
-    if workspace_id == "default":
-        base = user_root / "default"
-    else:
-        base = user_root / workspace_id
+    base = resolve_workspace_dir(user_id, workspace_id)
     base.mkdir(parents=True, exist_ok=True)
-
-    ensure_managed_workspace_dirs(base)
     return base.resolve()
 
 
@@ -304,78 +272,35 @@ def _content_disposition_attachment(filename: str) -> str:
 
 def _candidate_file_targets(
     *,
-    io_root: Path,
     workspace_root: Path,
     raw_path: str,
 ) -> list[Path]:
+    from prismclaw.engine.toolkit.file.workspace import clean_rel_path
+
     s = (raw_path or "").strip()
     if not s:
         return []
-    if (
-        (s.startswith('"') and s.endswith('"'))
-        or (s.startswith("'") and s.endswith("'"))
-        or (s.startswith("`") and s.endswith("`"))
-    ):
-        s = s[1:-1].strip()
     s = s.replace("\\", "/")
     if s.startswith("file://"):
         s = s[len("file://") :]
 
-    io_root_abs = io_root.expanduser().resolve()
     workspace_root_abs = workspace_root.expanduser().resolve()
 
-    rel_candidates: list[str] = []
-    abs_candidate: Path | None = None
-    is_abs = bool(re.match(r"^[A-Za-z]:/", s)) or s.startswith("/") or s.startswith("//")
-    if not is_abs:
-        for base in (io_root_abs, workspace_root_abs):
-            base_posix = base.as_posix()
-            if base_posix.startswith("/") and (s == base_posix[1:] or s.startswith(base_posix[1:] + "/")):
-                s = "/" + s
-                is_abs = True
-                break
+    is_abs = bool(re.match(r"^[A-Za-z]:/", s)) or s.startswith("/")
     if is_abs:
-        abs_candidate = Path(s)
-
-    if abs_candidate is not None:
         try:
-            abs_resolved = abs_candidate.expanduser().resolve()
+            abs_resolved = Path(s).expanduser().resolve()
         except Exception:
-            abs_resolved = abs_candidate.expanduser()
-        for base in (io_root_abs, workspace_root_abs):
-            try:
-                rel_candidates.append(str(abs_resolved.relative_to(base)))
-            except ValueError:
-                continue
-
-    unbound_uploads_root = io_root_abs.name == "uploads" and io_root_abs.parent == workspace_root_abs
-    if unbound_uploads_root:
-        if s.startswith("uploads/"):
-            rel_candidates.append(s[len("uploads/") :])
-        elif s.startswith("/uploads/"):
-            rel_candidates.append(s[len("/uploads/") :])
-
-    rel_candidates.append(s.lstrip("/"))
-
-    if io_root_abs == workspace_root_abs:
-        stripped = s.lstrip("/")
-        if stripped and not stripped.startswith("uploads/"):
-            rel_candidates.append(f"uploads/{stripped}")
-
-    uniq_rels: list[str] = []
-    for r in rel_candidates:
-        rr = (r or "").strip().lstrip("/")
-        if not rr:
-            continue
-        if rr.startswith("../"):
-            continue
-        if rr not in uniq_rels:
-            uniq_rels.append(rr)
-
-    targets: list[Path] = []
-    for rr in uniq_rels:
+            abs_resolved = Path(s).expanduser()
         try:
-            targets.append(_resolve_within_root(workspace_root_abs if rr.startswith(".work/") else io_root_abs, rr))
-        except HTTPException:
-            continue
-    return targets
+            return [_resolve_within_root(workspace_root_abs, str(abs_resolved.relative_to(workspace_root_abs)))]
+        except ValueError:
+            return []
+
+    rel = clean_rel_path(s)
+    if not rel:
+        return []
+    try:
+        return [_resolve_within_root(workspace_root_abs, rel)]
+    except HTTPException:
+        return []

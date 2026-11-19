@@ -43,8 +43,8 @@ Thumbs.db
 # 首次部署：cp backend/configs/*.example.yaml 到同名 *.yaml 后填写实际值
 backend/configs/*.yaml
 !backend/configs/*.example.yaml
-deploy/configs/*.yaml
-!deploy/configs/*.example.yaml
+# deploy/configs 是容器覆盖层：只含 {env:} 占位符与服务名，无密钥，直接入库
+# （缺文件时 compose 的 bind 源会被 Docker 建成空目录，app 启动即失败）
 deploy/.env
 mcp_servers/web-search-mcp/.env
 

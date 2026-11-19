@@ -212,11 +212,17 @@ class SkillRuntime:
     ) -> str:
         """activate_skill 失败时的路由消息——错误自带下一步指引，绝不自反。"""
         if resolution is not None and resolution.kind == "ambiguous":
+            members = list(resolution.member_names)
+            # 大包（如 medical-healthcare 的 60 个技能）全量列进错误会撑爆 UI，
+            # 也让模型更难选；截断后指向 skill_search 按主题检索。
+            shown = members[:12]
+            more = "" if len(members) <= len(shown) else (
+                f" …（共 {len(members)} 个，此处仅列前 {len(shown)} 个）"
+            )
             return (
                 f"'{skill_name}' 是插件包名，不是技能名。"
-                f"该包包含 {len(resolution.member_names)} 个技能："
-                f"{', '.join(resolution.member_names)}。"
-                f"请用上述精确技能名重新调用 activate_skill。"
+                f"该包包含 {len(members)} 个技能：{', '.join(shown)}{more}。"
+                f"请用 skill_search 按主题检索，再用上述精确技能名重新调用 activate_skill。"
             )
         msg = f"Skill '{skill_name}' not found."
         if resolution is None or resolution.kind == "not_found":

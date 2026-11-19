@@ -5,7 +5,7 @@ Provides the foundation for file-edit review-and-revert:
   - A FileEditRecord is appended to log.jsonl for each edit.
   - The Revert HTTP API reads the blob and restores the file, then records a new revert entry.
 
-Storage layout (under workspace_path/.work/edits/):
+Storage layout (under workspace_path/.work/audit/edits/):
   log.jsonl          — one FileEditRecord per line (append-only)
   blobs/<sha256hex>  — content-addressed backup files (deduped by hash)
 """
@@ -170,6 +170,7 @@ class ChangeTrackingStore:
         return None
 
 def get_tracking_store(workspace_path: Path) -> ChangeTrackingStore:
-    """Factory — returns a ChangeTrackingStore rooted at workspace_path/.work/edits/."""
-    edits_dir = workspace_path / ".work" / "edits"
-    return ChangeTrackingStore(edits_dir)
+    """Factory — returns a ChangeTrackingStore rooted at workspace_path/.work/audit/edits/."""
+    from prismclaw.infra.workspace_paths import work_dir
+
+    return ChangeTrackingStore(work_dir(workspace_path, "audit", "edits"))

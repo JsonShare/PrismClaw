@@ -27,3 +27,31 @@ mcp:
       call_timeout_seconds: 60.0
       sandbox:
         enabled: false
+
+  # 插件 MCP server 的凭据补丁。
+  #
+  # 插件自带的 mcp.json 位于仓库权威目录（容器内只读），OAuth token、
+  # API key 不能写在那里。插件声明的远端 server（Slack / Linear / PubMed /
+  # CourtListener 等）大多需要授权，在这里补上即可，无需改动插件文件。
+  #
+  # 键的写法：
+  #   "plugin.server"  精确匹配某个插件的 server（插件名 = 子插件目录名）
+  #   "server"         裸名，对所有同名 server 生效（如 Slack 在多个插件里重名）
+  #
+  # 合并方向：同名 header / env 以插件声明为准，这里只补空缺键——
+  # 插件定义了该 endpoint 的协议要求，不该被用户笔误覆盖。
+  #
+  # 值支持 {env:VAR_NAME} 占位符，启动时从环境变量解析；变量未设置时
+  # 该 server 标记为 failed 并给出变量名，不会静默使用空凭据。
+  plugin_overrides:
+    # 精确键：只影响 legal-chineselaw 下 employment-legal 子插件的 Slack
+    legal-chineselaw.employment-legal.Slack:
+      headers:
+        Authorization: "Bearer {env:SLACK_BOT_TOKEN}"
+    # 裸键：所有名为 CourtListener 的 server 共用同一个 token
+    CourtListener:
+      headers:
+        Authorization: "Token {env:COURTLISTENER_TOKEN}"
+    # 没有凭据又不想看到启动失败时，直接停用
+    Asana:
+      enabled: false

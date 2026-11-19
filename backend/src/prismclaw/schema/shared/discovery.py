@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 _BLOCKED_NAMES = frozenset({
     "node_modules", ".git", "venv", "__pycache__", ".venv", "env",
-    "uploads", "outputs", "tmp", ".envs", ".work",
+    "inbox", "outputs", "tmp", ".envs", ".work",
     "skills", "sandbox",
 })
 

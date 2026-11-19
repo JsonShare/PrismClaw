@@ -20,6 +20,44 @@ def _derive_project_root(config_file: Path | None) -> Path:
     return resolve_project_root(hint=config_file)
 
 
+async def _sweep_review_blobs(workspace_base: Path) -> None:
+    """后台跑一次 review blob 回收；失败只记日志，不影响服务可用性。"""
+    try:
+        from prismclaw.engine.review.lifecycle import sweep_workspace_base
+
+        report = await asyncio.to_thread(sweep_workspace_base, workspace_base)
+    except Exception:
+        logger.warning("review blob gc failed", exc_info=True)
+        return
+    if report.removed:
+        logger.info(
+            "review blob gc: removed=%d freed_bytes=%d kept_referenced=%d kept_young=%d",
+            report.removed,
+            report.freed_bytes,
+            report.kept_referenced,
+            report.kept_young,
+        )
+
+
+async def _sweep_ephemeral(workspace_base: Path) -> None:
+    """后台跑一次 `.work` 可重算产物的 TTL 回收；失败不影响服务可用性。"""
+    try:
+        from prismclaw.infra.workspace_gc import sweep_base
+
+        report = await asyncio.to_thread(sweep_base, workspace_base)
+    except Exception:
+        logger.warning("workspace ttl gc failed", exc_info=True)
+        return
+    if report.removed_files or report.removed_dirs:
+        logger.info(
+            "workspace ttl gc: files=%d dirs=%d freed_bytes=%d failed=%d",
+            report.removed_files,
+            report.removed_dirs,
+            report.freed_bytes,
+            report.failed,
+        )
+
+
 def _publish_capability_layout(app: FastAPI, runner_deps: Any) -> None:
     """从冷启动 plugin lifecycle 取出唯一能力布局：挂到 app.state 并聚合记录日志。
 
@@ -266,25 +304,46 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     project_root = _derive_project_root(find_config_file())
     app.state.project_root = project_root
 
-    # ── 启动同步：backend/.prismclaw → ~/.prismclaw ──────────────────────
+    # ── 启动同步：backend/.prismclaw → ~/.prismclaw/assets ──────────────
     # SKILL.md / PLUGIN.md 全写 ~/.prismclaw 路径，repo 里权威源在
-    # backend/.prismclaw/；运行时代码和文档统一读 ~/.prismclaw，启动时
-    # 把静态能力目录（skills/plugins/agents）同步过去，运行时数据保留。
-    try:
-        from prismclaw.infra.prismclaw_home import sync_prismclaw_home
+    # backend/.prismclaw/；启动时把静态能力目录（skills/plugins/agents）
+    # 同步到 assets/。源缺失必须中止启动：建空 assets 会让技能/插件
+    # 全部为零却仍显示服务正常。
+    from prismclaw.infra.prismclaw_home import sync_prismclaw_home
 
-        sync_result = sync_prismclaw_home(project_root)
-        if not sync_result.ok:
-            # 静默失效是历史 bug：拷贝失败时启动照常，运行时继续用旧资产。
-            logger.error(
-                "启动资产同步未完全生效：failed=%s drifted=%s"
-                "（子代理/技能可能是旧版本；可执行 "
-                "`python -m prismclaw.infra.prismclaw_home <project_root>` 手动同步）",
-                sync_result.failed,
-                sync_result.drifted[:10],
-            )
-    except Exception:
-        logger.exception("sync_prismclaw_home failed; continuing startup")
+    sync_result = sync_prismclaw_home(project_root)
+    if not sync_result.ok:
+        raise RuntimeError(
+            f"启动资产同步失败：failed={sync_result.failed} "
+            f"drifted={sync_result.drifted[:10]}"
+        )
+
+    # ── 容器模式自检：assets / runtime 卷 ────────────────────────────────
+    # 宿主机开发直接跳过；容器内缺失即中止，避免"服务正常但能力全空"。
+    from prismclaw.infra.deployment_checks import validate_container_layout
+    from prismclaw.runtime.runtime_root import resolve_runtime_root
+
+    validate_container_layout(
+        assets_root=Path.home() / ".prismclaw" / "assets",
+        runtime_root=resolve_runtime_root(),
+    )
+
+    # ── review blob 回收：只在容器内跑 ──────────────────────────────────
+    # .work/audit/edits/blobs 由两个 ledger 引用，未被引用的旧 blob（含写入
+    # 中断留下的 .tmp 残片）没有任何入口清理，会随编辑次数单调增长。这里在
+    # 后台扫一遍，30 天窗口 + 仅删无引用者；宿主机开发与测试不执行，避免在
+    # 每次起服务时对本地工作区做 IO。
+    from prismclaw.infra.deployment_checks import is_container
+
+    if is_container():
+        workspace_base = Path(settings.workspaces.default).expanduser()
+        app.state.blob_gc_task = asyncio.create_task(
+            _sweep_review_blobs(workspace_base)
+        )
+        # .work/cache/* 与 run/spills 只写不删，启动时按 mtime 收一遍。
+        app.state.workspace_gc_task = asyncio.create_task(
+            _sweep_ephemeral(workspace_base)
+        )
 
     # Shared PostgreSQL engine — used by user store, memory store, scheduler,
     # dream, curator, and context audit subsystems.

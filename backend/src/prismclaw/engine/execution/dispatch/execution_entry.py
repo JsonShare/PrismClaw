@@ -111,7 +111,9 @@ async def _apply_post_tool_hooks(
             tool_output=_result_text(result),
         )
         try:
-            hook_result = await dispatcher.dispatch(HookEvent.POST_TOOL, hook_context)
+            hook_result = await dispatcher.dispatch(
+                HookEvent.POST_TOOL, hook_context, active_plugins=context.tool_scope
+            )
         except Exception:
             logger.warning(
                 "post_tool_hook.dispatch_failed tool=%s", name, exc_info=True,
@@ -299,8 +301,26 @@ async def execute_preflighted_tool_calls(
 ) -> list[ToolResult]:
     results: list[ToolResult | None] = [None] * len(tool_calls)
 
-    _denied_call_ids = denied_call_ids or {}
+    _denied_call_ids = dict(denied_call_ids or {})
     _approved_calls = approved_calls or tool_calls
+
+    # 插件作用域门控：子代理循环无 before_tool_call 门控（见
+    # _subagent_loop_runner.execute_tools），此处是本路径唯一的归属校验点。
+    # 主循环另有 gate_tool_call 闸门，故不会重复拦截。
+    _scope = context.tool_scope
+    if _scope is not None:
+        for call in tool_calls:
+            call_id = call.get("id", "")
+            if not call_id or call_id in _denied_call_ids:
+                continue
+            _name = _function_name(call)
+            _tool = registry.get(_name) if _name else None
+            _owner = getattr(_tool, "plugin_name", None) if _tool is not None else None
+            if _owner is not None and _owner not in _scope:
+                _denied_call_ids[call_id] = (
+                    f"tool_scope_denied:{_owner}"
+                    f"（该工具属于插件「{_owner}」，请先 @ 该插件）"
+                )
 
     for idx, call in enumerate(tool_calls):
         call_id = call.get("id", "")
@@ -312,6 +332,7 @@ async def execute_preflighted_tool_calls(
         (idx, call)
         for idx, call in enumerate(tool_calls)
         if id(call) in approved_call_tokens
+        and call.get("id", "") not in _denied_call_ids
     ]
 
     if approved_slots:
@@ -739,8 +760,6 @@ async def _dispatch_single(
 
     # Apply output_bound truncation for non-error results
     if isinstance(result, ToolResult) and not result.is_error:
-        from pathlib import Path as _Path
-
         from prismclaw.engine.execution.output.output_bound import OutputBoundConfig, output_bound
 
         text_content = ""
@@ -749,7 +768,9 @@ async def _dispatch_single(
                 text_content += block.text
 
         if text_content:
-            spill_dir = _Path(context.workspace_path) / ".work" / "spills"
+            from prismclaw.infra.workspace_paths import work_dir
+
+            spill_dir = work_dir(context.workspace_path, "run", "spills")
             config = OutputBoundConfig(spill_dir=spill_dir)
             truncated_text, extra_meta = output_bound(text_content, config=config, tool_name=name)
 

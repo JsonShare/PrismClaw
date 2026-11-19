@@ -25,22 +25,43 @@ def _resolve_abs_path(workspace_path: str, source_path: str) -> Path:
     return Path(workspace_path) / source_path
 
 
+def _session_root_of(workspace_path: str, abs_path: Path) -> Path | None:
+    """源文件位于 ``sessions/<sid>/...`` 时返回会话根目录。
+
+    OCR 缓存与 analysis.md 是会话私有上传的派生物，跟着会话走：
+    跨会话不可读，删会话即回收。
+    """
+    try:
+        rel = abs_path.resolve(strict=False).relative_to(
+            Path(workspace_path).resolve(strict=False)
+        )
+    except (OSError, ValueError):
+        return None
+    parts = rel.parts
+    if len(parts) >= 3 and parts[0] == "sessions":
+        return Path(workspace_path) / "sessions" / parts[1]
+    return None
+
+
 def _cache_dir(workspace_path: str, abs_path: Path) -> Path:
     """按源文件绝对路径派生稳定的缓存目录。
 
-    用哈希而非目录镜像，避免把 ``inputs/...``、``sessions/<sid>/...`` 的层级
-    结构复制进缓存区（用户源目录名可能含路径分隔语义）。
+    用哈希而非目录镜像，避免把 ``inbox/...``、``sessions/<sid>/...`` 的层级
+    结构复制进缓存区（用户源目录名可能含路径分隔语义）。落点跟随源文件：
+    会话内文件 → ``sessions/<sid>/.work/cache/ocr/``；工作区根文件 →
+    ``<ws>/.work/cache/ocr/``。
     """
     source_key = hashlib.sha1(
         str(abs_path.resolve(strict=False)).encode("utf-8")
     ).hexdigest()[:16]
-    return Path(workspace_path) / ".work" / "cache" / "ocr" / source_key
+    root = _session_root_of(workspace_path, abs_path) or Path(workspace_path)
+    return root / ".work" / "cache" / "ocr" / source_key
 
 
 def ocr_cache_path(workspace_path: str, source_path: str) -> Path:
     """根据源文件 stat 属性计算 OCR 缓存路径（绝对路径）。
 
-    缓存位于 ``<ws>/.work/cache/ocr/<source-key>/``，
+    缓存位于 ``<session|ws>/.work/cache/ocr/<source-key>/``，
     用文件的 size_ctime_ns_ino 作为指纹。
     stat 失败时返回 Path("/nonexistent/_cache_miss.json")。
     """
@@ -97,7 +118,7 @@ def write_ocr_cache(workspace_path: str, source_path: str, text: str, model: str
 def analysis_md_path(workspace_path: str, source_path: str) -> Path:
     """根据源文件 stat 属性计算 analysis.md 路径（绝对路径）。
 
-    与 OCR 缓存同属引擎副产物，落在 ``<ws>/.work/cache/ocr/<source-key>/``。
+    与 OCR 缓存同属引擎副产物，落在 ``<session|ws>/.work/cache/ocr/<source-key>/``。
     """
     abs_path = _resolve_abs_path(workspace_path, source_path)
     try:

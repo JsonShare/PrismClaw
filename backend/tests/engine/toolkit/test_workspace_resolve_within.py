@@ -4,8 +4,7 @@
   1. 字面 shell 变量（``$PRISMCLAW_OUTPUT_DIR/x``）进文件工具必须报错，不能
      生成名为 ``$...`` 的目录；
   2. 容器挂载点前缀泄漏（``/workspace/...``）按设计剥离；
-  3. 裸路径读兜底可命中 workspace 根下的真实项目文件，写命中该项目文件时必须
-     报错并指引 ``project/`` / ``outputs/``。
+  3. 裸路径写必须显式前缀（``outputs/`` / ``project/``），无兜底猜测。
 """
 from __future__ import annotations
 
@@ -38,31 +37,6 @@ def test_container_workspace_prefix_is_stripped(tmp_path: Path):
     resolved = _resolver().resolve_within(tmp_path, "workspace/notes/a.md")
 
     assert resolved == (tmp_path / "notes" / "a.md").resolve()
-
-
-def test_bare_read_falls_back_to_workspace_root_file(tmp_path: Path):
-    session_root = tmp_path / "sessions" / "s1"
-    session_root.mkdir(parents=True)
-    project_file = tmp_path / "brief.md"
-    project_file.write_text("v1", encoding="utf-8")
-
-    resolved = _resolver().resolve_within(
-        tmp_path, "brief.md", session_root=session_root
-    )
-
-    assert resolved == project_file.resolve()
-
-
-def test_bare_write_hitting_project_file_requires_explicit_prefix(tmp_path: Path):
-    session_root = tmp_path / "sessions" / "s1"
-    session_root.mkdir(parents=True)
-    project_file = tmp_path / "brief.md"
-    project_file.write_text("v1", encoding="utf-8")
-
-    with pytest.raises(WorkspaceBoundaryError, match="project/"):
-        _resolver().resolve_within(
-            tmp_path, "brief.md", session_root=session_root, for_write=True
-        )
 
 
 def _mk_session(tmp_path: Path, sid: str = "s1") -> Path:
@@ -106,5 +80,3 @@ def test_sessions_prefix_cross_session_is_read_only(tmp_path: Path):
     # 跨会话写：拒绝
     with pytest.raises(WorkspaceBoundaryError, match="禁止写入"):
         r.resolve_within(tmp_path, "sessions/s2/outputs/evil.docx", session_root=sr, for_write=True)
-    # 无 session 上下文：读允许
-    assert r.resolve_within(tmp_path, "sessions/s2/outputs/o.docx") == other

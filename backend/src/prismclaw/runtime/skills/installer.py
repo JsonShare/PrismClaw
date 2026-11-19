@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import fcntl
 import hashlib
 import io
 import json
@@ -7,11 +10,33 @@ import shutil
 import tempfile
 import time
 import zipfile
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from prismclaw.runtime.skills.clawhub_client import ClawHubClient
 from prismclaw.runtime.skills.models import SkillInstallError
+
+
+@contextlib.asynccontextmanager
+async def _install_lock(install_dir: Path) -> AsyncIterator[None]:
+    """跨进程串行化同一个 skills 目录下的安装。
+
+    ``dest.exists()`` → ``rmtree`` → ``copytree`` 与 ``skills-lock.json`` 的
+    读改写都不是原子操作。两个并发安装同名 skill 会互相删掉对方刚拷入的目录，
+    或让 lock 文件丢更新。用 flock 而不是 ``asyncio.Lock``：uvicorn 多 worker
+    部署时进程内锁无效，文件锁才真正互斥。
+    """
+    install_dir.mkdir(parents=True, exist_ok=True)
+    handle = (install_dir / ".install.lock").open("a+")
+    try:
+        await asyncio.to_thread(fcntl.flock, handle.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            await asyncio.to_thread(fcntl.flock, handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
 
 
 def _validate_zip_entry(entry_name: str, target_dir: Path) -> bool:
@@ -132,12 +157,13 @@ async def install_skill(
         root = _resolve_root(tmp_dir)
 
         dest = install_dir / slug
-        if dest.exists():
-            shutil.rmtree(dest)
-        shutil.copytree(root, dest)
+        async with _install_lock(install_dir):
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(root, dest)
 
-        write_origin_json(dest, slug, version)
-        update_lock_json(install_dir.parent, slug, version)
+            write_origin_json(dest, slug, version)
+            update_lock_json(install_dir.parent, slug, version)
 
         return dest
     finally:

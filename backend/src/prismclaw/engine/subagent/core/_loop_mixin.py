@@ -93,6 +93,7 @@ class LoopMixin:
             # 子代理结构上不持有会话队列，无法暂停等用户回答，
             # 因此对需要交互用户的工具恒为无头。
             headless=True,
+            tool_scope=sub_ctx.tool_scope,
         )
         return SettledSubagentToolSurface(
             visible_tool_names=tuple(resolved_toolset.visible_tools_for_llm),

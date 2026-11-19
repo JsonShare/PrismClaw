@@ -40,20 +40,6 @@ def _assert_non_production() -> None:
         )
 
 
-def _resolve_fs_path(root: str, path: str) -> str:
-    """Resolve a filesystem path relative to ``root``, with expanduser first.
-
-    ``os.path.join(root, "~/.x")`` produces ``root/~/.x`` (literal ``~`` —
-    not expanded), so we expand first, then only join when the input is
-    genuinely relative. Mirror :func:`server._validate_path_within_workspace`
-    and :class:`WorkspaceResolver.resolve_within` for consistency.
-    """
-    expanded = Path(path.strip()).expanduser()
-    if expanded.is_absolute():
-        return str(expanded)
-    return str(Path(root).expanduser().resolve() / expanded)
-
-
 class InProcessRuntimeClient:
     """进程内运行时客户端：委托 RuntimeExecutor，与生产共用执行核心。"""
 
@@ -88,10 +74,6 @@ class InProcessRuntimeClient:
             )
             self._executors[root] = exe
         return exe
-
-    def _resolve_root(self, workspace_root: str | None) -> str:
-        """解析 workspace 根路径，与 _executor_for 使用相同逻辑。"""
-        return workspace_root or self._default_root or str(Path.cwd())
 
     # ── bash ──────────────────────────────────────────────────────────
 
@@ -207,99 +189,26 @@ class InProcessRuntimeClient:
             http_headers=data.get("http_headers"),
         )
 
-    # ── 结构化文件系统端点（与 server.py /fs/* 语义一致） ─────────
+    # ── 结构化文件系统端点（与 server.py /fs/* 共用 executor 实现） ──
 
     async def fs_list(self, path: str = ".", *, recursive: bool = False, ignore_hidden: bool = True, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
-        root = self._resolve_root(workspace_root)
-        abs_path = _resolve_fs_path(root, path)
-        if not os.path.isdir(abs_path):
-            return {"entries": [], "error": f"directory not found or not accessible: {path}"}
-        entries: list[dict[str, Any]] = []
-        if recursive:
-            for dirpath, dirnames, filenames in os.walk(abs_path):
-                if ignore_hidden:
-                    dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-                    filenames = [f for f in filenames if not f.startswith(".")]
-                rel_dir = os.path.relpath(dirpath, abs_path)
-                for name in filenames:
-                    full = os.path.join(dirpath, name)
-                    try:
-                        st = os.stat(full)
-                        rel = name if rel_dir == "." else os.path.join(rel_dir, name)
-                        entries.append({"name": name, "path": rel, "is_dir": False, "size": st.st_size, "modified_epoch": st.st_mtime})
-                    except OSError:
-                        pass
-                for name in dirnames:
-                    full = os.path.join(dirpath, name)
-                    try:
-                        st = os.stat(full)
-                        rel = name if rel_dir == "." else os.path.join(rel_dir, name)
-                        entries.append({"name": name, "path": rel, "is_dir": True, "size": 0, "modified_epoch": st.st_mtime})
-                    except OSError:
-                        pass
-        else:
-            try:
-                with os.scandir(abs_path) as it:
-                    for entry in it:
-                        if ignore_hidden and entry.name.startswith("."):
-                            continue
-                        try:
-                            st = entry.stat()
-                            entries.append({"name": entry.name, "path": entry.name, "is_dir": entry.is_dir(), "size": st.st_size if not entry.is_dir() else 0, "modified_epoch": st.st_mtime})
-                        except OSError:
-                            pass
-            except OSError:
-                pass
-        return {"entries": entries}
+        return await self._executor_for(workspace_root).fs_list(
+            path, recursive=recursive, ignore_hidden=ignore_hidden
+        )
 
     async def fs_glob(self, pattern: str = "*", path: str = ".", *, max_results: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
-        root = self._resolve_root(workspace_root)
-        abs_path = _resolve_fs_path(root, path)
-        entries: list[dict[str, Any]] = []
-        try:
-            for p in sorted(Path(abs_path).glob(pattern), key=lambda x: x.stat().st_mtime if x.exists() else 0, reverse=True):
-                if not p.exists():
-                    continue
-                try:
-                    st = p.stat()
-                    entries.append({"path": str(p.relative_to(abs_path)), "size": st.st_size, "modified_epoch": st.st_mtime})
-                except OSError:
-                    continue
-                if len(entries) >= max_results:
-                    break
-        except Exception:
-            pass
-        truncated = len(entries) >= max_results
-        return {"entries": entries, "truncated": truncated}
+        return await self._executor_for(workspace_root).fs_glob(
+            pattern, path, max_results=max_results
+        )
 
     async def fs_grep(self, pattern: str, path: str = ".", *, include: str = "*", case_insensitive: bool = False, max_matches: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
-        import re as _re
-        root = self._resolve_root(workspace_root)
-        abs_path = _resolve_fs_path(root, path)
-        flags = _re.IGNORECASE if case_insensitive else 0
-        matches: list[dict[str, Any]] = []
-        try:
-            for p in Path(abs_path).rglob(include):
-                if not p.is_file():
-                    continue
-                try:
-                    raw = p.read_bytes()[:8192]
-                    if b"\x00" in raw:
-                        continue
-                    with open(p, "r", errors="replace") as f:
-                        for line_no, line in enumerate(f, 1):
-                            if _re.search(pattern, line, flags):
-                                matches.append({"path": str(p.relative_to(abs_path)), "line_number": line_no, "line": line.rstrip("\n")})
-                                if len(matches) >= max_matches:
-                                    break
-                except OSError:
-                    continue
-                if len(matches) >= max_matches:
-                    break
-        except Exception:
-            pass
-        truncated = len(matches) >= max_matches
-        return {"matches": matches, "truncated": truncated}
+        return await self._executor_for(workspace_root).fs_grep(
+            pattern,
+            path,
+            include=include,
+            case_insensitive=case_insensitive,
+            max_matches=max_matches,
+        )
 
     async def http_post(self, url: str, *, body: Any = None, headers: dict[str, str] | None = None, content_type: str = "application/json", tier: str = "standard", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
         allow_net = getattr(self._executor_for(self._default_root), "_allow_net", True) or True

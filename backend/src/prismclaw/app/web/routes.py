@@ -921,11 +921,24 @@ async def delete_session(
     session_id: str,
     user_id: str = Depends(get_current_user),
 ) -> Response:
-    await _load_and_verify(session_id, user_id)
+    tree = await _load_and_verify(session_id, user_id)
     store = _get_store()
     deleted = await store.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
+    # Redis 记录删除后，磁盘上的会话目录（inbox/outputs/tool_results/.work）也要
+    # 收掉：否则删会话只清元数据，文件会永久残留。
+    import shutil
+
+    from prismclaw.infra.workspace_paths import resolve_session_dir
+
+    session_key = tree.header.session_key
+    parts = session_key.split(":")
+    workspace_id = parts[2] if len(parts) > 2 else "default"
+    targets = {resolve_session_dir(user_id, workspace_id, session_key)}
+    targets.add(resolve_session_dir(user_id, workspace_id, session_id))
+    for target in targets:
+        shutil.rmtree(target, ignore_errors=True)
     return Response(status_code=204)
 
 
@@ -1161,26 +1174,19 @@ async def list_uploads(
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
     session_id: str | None = Query(default=None),
-    dir: str = "",
 ) -> UploadResponse:
     """List uploaded files in a workspace.
 
-    零兼容代码：必须传 session_id 或 dir。
-    - session_id → session 私有（sessions/<sid>/uploads/）
-    - dir → workspace 级共享（inputs/<dir>/）
-    两者都没传 → 空列表（不再扫已废弃的 workspace root uploads/）。
+    只列 session 私有上传（sessions/<sid>/inbox/）；无 session_id 返回空。
     """
     wid = _clean_workspace_id(workspace_id)
-    rel_dir = (dir or "").lstrip("/")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
 
-    if session_id:
-        from prismclaw.infra.workspace_paths import resolve_session_uploads_dir
-        target = resolve_session_uploads_dir(user_id, wid, session_id)
-    elif rel_dir:
-        target = root / "inputs" / rel_dir
-    else:
+    if not session_id:
         return UploadResponse(files=[])
+
+    from prismclaw.infra.workspace_paths import resolve_session_inbox_dir
+    target = resolve_session_inbox_dir(user_id, wid, session_id)
 
     if not target.is_dir():
         return UploadResponse(files=[])

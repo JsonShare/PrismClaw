@@ -79,7 +79,6 @@ class PromptInputs:
     # 区分调用来源: "skill" 或 "command"。命令 dispatch 时设为 "command",
     # 系统提示词据此输出 <active_skill source="command"> 而非 source="skill"。
     invocation_context: str = "skill"
-    invoked_skill_attachments: str | None = None  # 压缩后重新注入的已调用技能片段
 
 
 @dataclass(frozen=True, slots=True)

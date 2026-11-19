@@ -8,12 +8,10 @@ from prismclaw.engine.compression.retention import (
 )
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.services.skills import SkillInvocationState
-from prismclaw.schema.shared.utils import estimate_tokens
 
 if TYPE_CHECKING:
     # 类型注解所需，runtime 通过 ports 访问。
     from prismclaw.engine.execution.checkpoint import RunSnapshot
-    from prismclaw.engine.execution.checkpoint.models import InvokedSkillState
 
 
 def project_preservation_runtime(
@@ -162,37 +160,3 @@ async def cleanup_preservation_runtime_on_terminal_exit(
     )
     return cleaned_invocation
 
-
-def build_invoked_skill_attachment(
-    invoked_skill_state: InvokedSkillState,
-) -> str | None:
-    """从 invoked_skill_state 构建技能附件文本，用于压缩后重新注入。
-
-    将所有已调用技能的 rendered_prompt_fragment 拼接为一个 attachment。
-    仅包含 clear_after_terminal_result=False 的持久记录。
-    总量受 subcaps.skill_attachment 约束（CJK 感知 token 估算）。
-    """
-    try:
-        from prismclaw.infra.settings import load_settings
-        max_tokens = load_settings().agent.context.budget.subcaps.skill_attachment
-    except Exception:
-        max_tokens = 6000
-
-    if not invoked_skill_state.skills:
-        return None
-
-    fragments: list[str] = []
-    total_tokens = 0
-    for name, record in invoked_skill_state.skills.items():
-        if not record.rendered_prompt_fragment:
-            continue
-        fragment = f"[Invoked Skill: {name}]\n{record.rendered_prompt_fragment}"
-        fragment_tokens = estimate_tokens(fragment)
-        if total_tokens + fragment_tokens > max_tokens:
-            break
-        fragments.append(fragment)
-        total_tokens += fragment_tokens + 2  # "\n\n" separator
-
-    if not fragments:
-        return None
-    return "\n\n".join(fragments)

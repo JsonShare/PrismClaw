@@ -347,6 +347,30 @@ class TestBuildSkillExecutionErrors:
         assert "legal_b" in msg
         assert "插件包名" in msg
 
+    def test_ambiguous_error_truncates_large_package(self):
+        """大插件包（60 个技能）只列前 12 个，并指向 skill_search。"""
+        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.skills.runtime import SkillRuntime
+        from prismclaw.schema.services.skills import SkillInvocation
+        entries = [
+            _make_catalog_entry(name=f"skill-{i:02d}", marketplace_name="medical-healthcare")
+            for i in range(60)
+        ]
+        svc = CapabilityCatalogService()
+        rt = SkillRuntime(capability_catalog=svc)
+        invocation = SkillInvocation(
+            skill_name="medical-healthcare", task_context="", source="model"
+        )
+        with mock.patch.object(CapabilityCatalogService, "list_skill_entries", return_value=entries):
+            with pytest.raises(LookupError) as exc_info:
+                rt.build_skill_execution(invocation, workspace_path=Path("/tmp"))
+        msg = str(exc_info.value)
+        assert "该包包含 60 个技能" in msg
+        assert "skill-11" in msg
+        assert "skill-12" not in msg
+        assert "skill_search" in msg
+        assert len(msg) < 600
+
     def test_not_found_error_has_no_reflexive_text(self):
         """not_found → 近邻指引 + skill_search 提示，无自反文案。"""
         from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService

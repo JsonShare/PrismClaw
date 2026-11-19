@@ -1,79 +1,84 @@
 /**
  * 域 Bundle 注册表 — 后端驱动的域发现 + React.lazy 按需加载
  *
- * 架构设计：
- * 1. 构建时 domains-registry.mjs 根据 scripts/compile/domains.yaml
- *    生成 _lazy_map.generated.ts（只包含启用的域），实现编译时裁剪
- * 2. 后端 `GET /api/domains/manifests` 是域的运行时真实来源
- * 3. 前端启动时拉取 manifests，动态匹配已编译的域模块
- * 4. 域页面组件使用 React.lazy() 按需加载，Vite 自动代码分割
+ * 数据分工（三者互不重复）：
+ *   - 侧栏导航项（顺序 / 分组 / 标签）：构建期由 domains.yaml 生成 DOMAIN_NAV_MAP
+ *   - 启用域集合与域身份（key / label）：运行时 GET /api/domains/manifests
+ *   - 页面组件：React.lazy 按需加载，Vite 自动代码分割
  */
 
 import { lazy, type ComponentType } from 'react'
+
 import { apiUrl } from '../lib/system-adapter'
+import { DOMAIN_LAZY_MAP, DOMAIN_LABEL_MAP, DOMAIN_NAV_MAP } from './_lazy_map.generated'
 
-// 从构建时生成的映射文件导入（只包含 enabled 的域）
-import {
-  DOMAIN_LAZY_MAP,
-  DOMAIN_FALLBACK_ICON_MAP,
-  DOMAIN_LABEL_MAP,
-  DOMAIN_SUBTITLE_MAP,
-  DOMAIN_ACCENT_MAP,
-} from './_lazy_map.generated'
+/* ─── 类型定义 ─── */
 
-/* ─── 类型定义（与后端 DomainManifest 对应） ─── */
-
-/** 域菜单项 */
-export interface DomainMenuItem {
-  key: string
-  label: string
-  icon: string
-  path?: string
-  parent?: string
-}
-
-/** 域页面项 */
-export interface DomainPageEntry {
-  key: string
-  path: string
-  js_asset?: string
-  css_asset?: string
-}
-
-/** 域 manifest（后端返回的完整结构） */
+/** 域 identity（前端只消费 key / label 两项，其余字段由后端协议保留） */
 export interface DomainManifest {
   key: string
   label: string
-  icon: string
-  path?: string
-  menus: DomainMenuItem[]
-  pages?: DomainPageEntry[]
-  /** 副标题 — 来自业务域自己的描述（侧边栏副标题展示），核心系统不硬编码 */
-  subtitle?: string
-  /** 强调色（亮色主题）— 来自业务域自己的描述（侧边栏强调条 / 图标描边） */
-  accent?: string
-  /** 强调色（暗色主题）— 来自业务域自己的描述 */
-  accentDark?: string
-  /** 强调色（浅色模式图标描边用的可读色）— 仅当 accent 在浅色下过浅时提供 */
-  accentDeep?: string
 }
 
 /** 域注册条目 */
 export interface DomainEntry {
   manifest: DomainManifest
-  /** 工作台页面组件（React.lazy 包裹，需配合 Suspense 使用） */
-  WorkbenchPage: React.LazyExoticComponent<ComponentType>
-  /** 独立功能页面组件映射（menus <= 1 时使用） */
-  PageComponent?: React.LazyExoticComponent<ComponentType>
+  /**
+   * 工作台页面组件（React.lazy 包裹，需配合 Suspense 使用）。
+   * 由系统侧栏驱动页面切换，组件通过 page / pageNonce 接收跳转意图。
+   */
+  WorkbenchPage: React.LazyExoticComponent<ComponentType<WorkbenchPageProps>>
+}
+
+/** 工作台页面的受控 props：由 DomainSection 从 nav-bus 的下行意图透传 */
+export interface WorkbenchPageProps {
+  /** 侧栏选中的页面 key；undefined 表示由域自行决定初始页（URL / 默认页） */
+  page?: string
+  /** 跳转意图序号：重复点击同一子项时自增，域据此可「重置到该页顶层」 */
+  pageNonce?: number
+}
+
+/** 域的侧栏导航项（顺序 / 标签 / 分组 / 图标均来自 domains.yaml，经构建脚本生成） */
+export interface DomainNavItem {
+  key: string
+  label: string
+  group: string
+  /** lucide 图标名（kebab-case）；空串表示只显示文字 */
+  icon: string
 }
 
 /* ─── 注册表 ─── */
 
 const registry = new Map<string, DomainEntry>()
 
+/**
+ * 注册表版本号 —— 供 useSyncExternalStore 订阅。
+ * 域是异步发现的（App 启动后拉 /api/domains/manifests），
+ * 不订阅的话侧栏首次渲染拿到空表就再也不会更新。
+ */
+let registryVersion = 0
+const registryListeners = new Set<() => void>()
+
+function bumpRegistryVersion(): void {
+  registryVersion += 1
+  for (const fn of registryListeners) fn()
+}
+
+export function subscribeRegistryVersion(listener: () => void): () => void {
+  registryListeners.add(listener)
+  return () => {
+    registryListeners.delete(listener)
+  }
+}
+
+export function getRegistryVersion(): number {
+  return registryVersion
+}
+
 /** 注册一个域 */
 export function registerDomain(entry: DomainEntry): void {
   registry.set(entry.manifest.key, entry)
+  bumpRegistryVersion()
 }
 
 /** 获取所有已注册域 */
@@ -86,42 +91,23 @@ export function getDomainEntry(key: string): DomainEntry | undefined {
   return registry.get(key)
 }
 
-/** 判断 manifest 是否为工作台模式 */
-export function isWorkbenchMode(manifest: DomainManifest): boolean {
-  return manifest.menus.length >= 2
+/** 取某域的侧栏导航项（构建期生成；域未在 domains.yaml 声明时为空） */
+export function getDomainNavItems(domainKey: string): DomainNavItem[] {
+  return DOMAIN_NAV_MAP[domainKey] ?? []
 }
-
-/** 清空注册表（用于重新发现时） */
-export function clearRegistry(): void {
-  registry.clear()
-}
-
-/* ─── 描述性元信息合并（核心零耦合）─── */
 
 /**
- * 将业务域自带的描述性元信息（副标题 / 强调色）合并进 manifest。
- * 数据全部来自业务域自己在 domains.yaml 中的描述（经构建脚本生成为通用映射），
- * 核心系统只做 UI 展示，不硬编码任何域特例。
- * 若 manifest 自身已携带（后端下发），优先使用 manifest 原值。
+ * 域在侧栏中的展示顺序 —— 取构建期生成表的键序（= domains.yaml 声明顺序）。
+ * 不能依赖 getRegisteredDomains() 的顺序：它来自后端 /api/domains/manifests
+ * 返回的 bundle 顺序，bundle 注册顺序变化会悄悄改变侧栏排列。
  */
-function withDomainMeta(manifest: DomainManifest): DomainManifest {
-  const hasSubtitle = Object.prototype.hasOwnProperty.call(DOMAIN_SUBTITLE_MAP, manifest.key)
-  const hasAccent = Object.prototype.hasOwnProperty.call(DOMAIN_ACCENT_MAP, manifest.key)
-  if (!hasSubtitle && !hasAccent) return manifest
-  return {
-    ...manifest,
-    subtitle: manifest.subtitle ?? (hasSubtitle ? DOMAIN_SUBTITLE_MAP[manifest.key] : undefined),
-    accent: manifest.accent ?? (hasAccent ? DOMAIN_ACCENT_MAP[manifest.key].accent : undefined),
-    accentDark:
-      manifest.accentDark ?? (hasAccent ? DOMAIN_ACCENT_MAP[manifest.key].accentDark : undefined),
-    accentDeep:
-      manifest.accentDeep ?? (hasAccent ? DOMAIN_ACCENT_MAP[manifest.key].accentDeep : undefined),
-  }
+export function getDomainOrder(): string[] {
+  return Object.keys(DOMAIN_NAV_MAP)
 }
 
 /* ─── 后端驱动的域发现 ─── */
 
-/** 从后端 API 拉取域 manifests 并注册到本地 */
+/** 从后端 API 拉取域 identity 并注册到本地 */
 export async function discoverAndRegisterDomains(): Promise<void> {
   let manifests: DomainManifest[] = []
 
@@ -138,16 +124,9 @@ export async function discoverAndRegisterDomains(): Promise<void> {
   if (manifests.length > 0) {
     for (const manifest of manifests) {
       const lazyFactory = DOMAIN_LAZY_MAP[manifest.key]
-      if (!lazyFactory) continue  // 前端未编译该域（被裁剪），跳过
-
-      const enrichedManifest: DomainManifest = withDomainMeta({
-        ...manifest,
-        icon: manifest.icon || DOMAIN_FALLBACK_ICON_MAP[manifest.key] || '',
-        path: manifest.path || `/${manifest.key}`,
-      })
-
+      if (!lazyFactory) continue // 前端未编译该域（被裁剪），跳过
       registerDomain({
-        manifest: enrichedManifest,
+        manifest: { key: manifest.key, label: manifest.label },
         WorkbenchPage: lazy(lazyFactory),
       })
     }
@@ -157,13 +136,7 @@ export async function discoverAndRegisterDomains(): Promise<void> {
   // 降级：后端未返回 → 全量本地注册（开发模式 / 离线场景）
   for (const [key, lazyFactory] of Object.entries(DOMAIN_LAZY_MAP)) {
     registerDomain({
-      manifest: withDomainMeta({
-        key,
-        label: DOMAIN_LABEL_MAP[key] || key,
-        icon: DOMAIN_FALLBACK_ICON_MAP[key] || '',
-        path: `/${key}`,
-        menus: [],
-      }),
+      manifest: { key, label: DOMAIN_LABEL_MAP[key] || key },
       WorkbenchPage: lazy(lazyFactory),
     })
   }

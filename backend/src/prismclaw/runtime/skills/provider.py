@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Iterable
@@ -124,14 +123,7 @@ class DefaultSkillProvider:
             dynamic_state=self._dynamic_state,
         )
 
-        # 禁用状态属于"工作区"级配置：读 workspace 而不是 project_root，
-        # 否则用户在 workspace 里禁用的技能不生效。
-        disabled = self._disabled_skills(Path(workspace_path))
-        return [
-            skill
-            for skill in filter_eligible(all_skills)
-            if skill.name not in disabled
-        ]
+        return [skill for skill in filter_eligible(all_skills)]
 
     def get(self, name: str, workspace_path: str | None = None) -> SkillManifest | None:
         skills = self.list_skills(workspace_path)
@@ -235,21 +227,3 @@ class DefaultSkillProvider:
             )
 
         return newly
-
-    @staticmethod
-    def _disabled_skills(workspace_root: Path) -> set[str]:
-        state_path = workspace_root / ".work" / "skills_state.json"
-        if not state_path.is_file():
-            return set()
-        try:
-            payload = json.loads(state_path.read_text(encoding="utf-8"))
-        except Exception:
-            return set()
-        disabled = payload.get("disabled") if isinstance(payload, dict) else None
-        if not isinstance(disabled, list):
-            return set()
-        return {
-            item.strip()
-            for item in disabled
-            if isinstance(item, str) and item.strip()
-        }

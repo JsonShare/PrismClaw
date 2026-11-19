@@ -259,6 +259,30 @@ class ConnectionMixin(_MCPBackendBase):
                         "PRISMCLAW_INFRA_PATH",
                         str(_Path(__file__).resolve().parents[3] / "infra"),
                     )
+                # runtime 卷：MCP SDK 的 stdio 子进程只继承
+                # HOME/LOGNAME/PATH/SHELL/TERM/USER 六个白名单变量，技能安装的
+                # Python 包与 node_modules 不在默认搜索路径上。容器部署里
+                # 这两个变量由镜像 ENV 提供，宿主机部署则依赖这里注入。
+                try:
+                    from prismclaw.runtime.runtime_root import resolve_runtime_root
+
+                    runtime_root = resolve_runtime_root()
+                    resolved_env.setdefault("PRISMCLAW_RUNTIME_ROOT", str(runtime_root))
+                    skill_runtime = runtime_root / "skills" / "_default"
+                    site_packages = skill_runtime / "site-packages"
+                    if site_packages.is_dir():
+                        existing = resolved_env.get("PYTHONPATH", "")
+                        resolved_env["PYTHONPATH"] = (
+                            f"{site_packages}:{existing}" if existing else str(site_packages)
+                        )
+                    node_modules = skill_runtime / "node_modules"
+                    if node_modules.is_dir():
+                        existing = resolved_env.get("NODE_PATH", "")
+                        resolved_env["NODE_PATH"] = (
+                            f"{node_modules}:{existing}" if existing else str(node_modules)
+                        )
+                except Exception as e:
+                    logger.debug("Failed to inject runtime paths into MCP server %r: %s", name, e)
                 # 工作区根：MCP server 侧的路径沙箱（所有工具的路径参数必须 resolve 后在
                 # 该根下），防止 agent 传 /etc/passwd、~/.ssh/id_rsa 等任意物理路径。
                 try:

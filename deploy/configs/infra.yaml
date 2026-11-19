@@ -1,0 +1,15 @@
+# 容器部署版 infra 配置：外部依赖指向 compose 服务名。
+# 挂载到 /app/backend/configs/infra.yaml（覆盖宿主版）。
+# 归属顶层键：redis / storage
+
+redis:
+  host: "redis"
+  port: 6379
+  password: "{env:REDIS_PASSWORD}"
+  database: 15
+  key_prefix: "prismClaw:"
+
+storage:
+  # {env:} 占位符只支持**整值**替换（正则 ^\{env:VAR\}$），不能嵌在字符串中间。
+  # 故整条 DSN 由 compose 组装后注入（密码在那儿插值），这里只做整值替换。
+  postgres_dsn: "{env:PRISMCLAW_STORAGE_POSTGRES_DSN}"

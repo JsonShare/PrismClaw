@@ -56,7 +56,13 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
         </div>
       </div>
-      <p class="subtitle">Transport-Executor separation · ContainerBackend Protocol · PreWarmPool</p>
+      <p class="subtitle">Transport-Executor separation · 固定 Runtime-Agent 容器</p>
+    </div>
+
+    <div style="margin: 0 0 1rem; padding: .75rem 1rem; border: 1px solid #f59e0b; border-radius: .5rem; background: rgba(245,158,11,.08); color: #fbbf24; font-size: .85rem;">
+      注意：本图绘于 2026-11 之前。图中的 ContainerBackend / WorkspaceContainerManager /
+      PreWarmPool / SwarmBackend / K8sJobBackend / FirecrackerBackend 已整体删除；
+      当前部署只用 compose 静态声明的 runtime-agent-default / runtime-agent-restricted。
     </div>
 
     <div class="diagram-container">

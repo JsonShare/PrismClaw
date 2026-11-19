@@ -50,11 +50,11 @@ def _workspace_config_dir(
     """返回工作区配置覆盖目录。
 
     工作区目录由 ``infra.workspace_paths`` 单一权威源解析（消除本地复刻）：
-    {workspace_base}/web_{user_id}/{workspace_id}/.work/configs/
+    {workspace_base}/web_{user_id}/{workspace_id}/.work/state/configs/
     """
-    from prismclaw.infra.workspace_paths import resolve_workspace_dir
+    from prismclaw.infra.workspace_paths import work_dir, resolve_workspace_dir
 
-    return resolve_workspace_dir(user_id, workspace_id) / ".work" / "configs"
+    return work_dir(resolve_workspace_dir(user_id, workspace_id), "state", "configs")
 
 
 def _override_config_path(
@@ -99,7 +99,7 @@ def get_effective_config(
 
     流程:
       1. 读取 backend/src/subpackages/{domain}/configs/{domain}.json (defaults)
-      2. 读取 {workspace}/.work/configs/{domain}.json (override, 可选)
+      2. 读取 {workspace}/.work/state/configs/{domain}.json (override, 可选)
       3. 版本守卫 → deep_merge → 返回
     """
     validate_domain_name(domain)
@@ -149,7 +149,7 @@ def save_override(
     """保存工作区覆盖文件。
 
     自动附加当前 defaults 的 schema_version。
-    写入 {workspace}/.work/configs/{domain}.json。
+    写入 {workspace}/.work/state/configs/{domain}.json。
     """
     validate_domain_name(domain)
 

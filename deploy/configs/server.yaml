@@ -1,0 +1,53 @@
+# PrismClaw 容器部署配置（production）
+#
+# 挂载到 /app/backend/configs/server.yaml（覆盖宿主版），
+# 与同目录的 infra.yaml / models.yaml 等模块文件自动深度合并。
+#
+# 与宿主版的两点差异：
+#   1. 路径改容器内绝对路径 —— app 与 runtime-agent 必须一致；
+#   2. 连接地址改 compose 服务名（见 infra.yaml），密钥用 {env:} 占位符注入。
+#
+# 注意：Settings 通过 model_validate(yaml) 构造，不会触发子模型的 env 读取，
+# 因此嵌套字段只能用 yaml 里的 {env:VAR} 整值占位符，不能靠 PRISMCLAW_* 环境变量。
+#
+# 本文件不含密钥，可入库 review。
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+affinity:
+  enabled: false
+
+runtime:
+  # 与 runtime-agent 共享 prismclaw-runtime 卷
+  default: "/runtime"
+
+workspaces:
+  # ★ 必须与 runtime-agent 的 PRISMCLAW_WORKSPACE_ROOT 逐字节一致。
+  #   两侧挂同一个卷到同一路径 → app 传的 workspace_root 无需翻译。
+  default: "/workspace"
+  bootstrap_files:
+    - "AGENTS.md"
+
+channels:
+  web:
+    enabled: true
+    heartbeat_interval: 30
+    pong_timeout: 10
+    max_connections_per_user: 12
+    cors_origins:
+      - "http://localhost:5173"
+      - "http://127.0.0.1:5173"
+    jwt_secret: "{env:PRISMCLAW_WEB_JWT_SECRET}"
+    jwt_expires: 2592000
+    smtp:
+      enabled: false
+      host: "smtp.qq.com"
+      port: 465
+      username: ""
+      password: "{env:PRISMCLAW_SMTP_PASSWORD}"
+      from_addr: ""
+      from_name: ""
+      encryption: "ssl"
+      timeout_seconds: 15

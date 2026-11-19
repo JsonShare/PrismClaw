@@ -29,6 +29,7 @@ async def get_domain_manifests(request: Request) -> list[dict[str, Any]]:
                         "label": m.label,
                         "icon": getattr(m, "icon", ""),
                         "parent": getattr(m, "parent", ""),
+                        "group": getattr(m, "group", ""),
                     }
                     for m in manifest.menus
                 ],

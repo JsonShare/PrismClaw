@@ -94,7 +94,7 @@ plugin 是否包括正式审查工作流——学生 draft → 教授审查 → 
 2. **可配置标记，非正式审查**——某些触发条件将输出标记为"CHECK WITH PROFESSOR"，无队列机制
 3. **轻触**——所有内容上的标准保障标签，教授通过现有诊所结构监督（案件 rounds，一对一会面）
 
-稍后可通过编辑 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 更改。你的配置存储在该版本无关的路径中，并在 plugin 更新后保留。
+稍后可通过编辑 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` 更改。你的配置存储在该版本无关的路径中，并在 plugin 更新后保留。
 
 ## 学期轮换：`/ramp` 解决方案
 
@@ -147,7 +147,7 @@ Clio 被标记为可选的未来集成——120 多所法学院使用 Clio 进�
 
 ## 它如何学习
 
-你在 `~/.prismclaw/assets/plugins/legal-chineselaw/legal-clinic/PLUGIN.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
+你在 `${PRISMCLAW_PLUGIN_DATA}/PLUGIN.md` 的执业档案不是静态的——它会随着你使用 plugin 而改进。Skill 会告诉你何时输出使用了你应该调整的默认值。你可以重新运行设置，直接编辑文件，或告诉 skill 记录新立场。
 
 ## 文件结构
 

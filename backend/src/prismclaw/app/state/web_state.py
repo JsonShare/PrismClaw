@@ -77,8 +77,6 @@ def sync_web_runtime_state(
             "spawn_takeover_recovery": _takeover_mod.spawn_takeover_recovery,
             "takeover_reason_catalog": _takeover_mod.takeover_reason_catalog,
         }
-        from prismclaw.runtime.facade.review import review_lifecycle as _review_lifecycle
-        web_deps.review_lifecycle_fn = _review_lifecycle
         from prismclaw.runtime.facade.toolkit import build_file_change, get_tracking_store
         from prismclaw.runtime.facade.toolkit import upload_pipeline as _upload_pipeline
         web_deps.upload_fns = {
@@ -168,7 +166,6 @@ def sync_web_runtime_state(
             set_openai_deps(
                 DefaultChatService(runner_deps),
                 session_router,
-                workspace_base=getattr(state, "workspace_base", None),
                 web_settings=getattr(state, "web_settings", None),
                 redis_client=getattr(state, "redis_client", None),
                 sandbox_policy=_require_runtime_sandbox_policy(state),

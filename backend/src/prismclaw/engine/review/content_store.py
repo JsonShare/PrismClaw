@@ -5,9 +5,7 @@ read with no verification. ``get`` always re-checks the SHA-256, so a corrupted
 backup can never be silently restored (this is the fix for the old
 "read blob, trust it" bug).
 
-The on-disk layout is intentionally compatible with the legacy
-``ChangeTrackingStore`` blobs dir (``<edits>/blobs/<sha256hex>``) so existing
-backups remain readable during the migration window.
+The on-disk layout is ``<workspace>/.work/audit/edits/blobs/<sha256hex>``.
 
 ContentRef and ContentStore Protocol are defined in
 ``prismclaw.contracts.agent.review``; this module re-exports them for
@@ -67,8 +65,3 @@ class FileSystemContentStore:
 
     def exists(self, ref: ContentRef) -> bool:
         return (self._blobs_dir / ref.sha256).exists()
-
-    # -- helpers ---------------------------------------------------------
-    @classmethod
-    def for_workspace(cls, workspace_path: Path) -> "FileSystemContentStore":
-        return cls(workspace_path / ".work" / "edits")

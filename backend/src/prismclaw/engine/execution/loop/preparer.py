@@ -1197,6 +1197,19 @@ class RunPreparer:
                         exc_info=True,
                     )
 
+        # ── 插件作用域 ──
+        # 无 chip 时沿用上一轮（粘性）；有 chip 时由 _activate_designated_plugins
+        # 按「真正激活成功」的插件集覆盖（替换语义）。
+        # 粘性载体是快照里持久化的 ``_plugin:<name>`` 记录，而不是
+        # active_invocation.plugin_name：后者在「用户只 @ 了某插件下的技能」时
+        # 也会被写成该插件名，用它做粘性会把整个插件解锁（越权）。
+        if not request.designated_plugins:
+            tool_ctx.tool_scope = frozenset(
+                rec.skill_name.removeprefix("_plugin:")
+                for rec in snapshot.invoked_skill_state.skills.values()
+                if rec.skill_name.startswith("_plugin:")
+            )
+
         # ── Designated plugins activation ──
         if request.designated_plugins:
             active_skill_invocation = await self._activate_designated_plugins(
@@ -1321,8 +1334,12 @@ class RunPreparer:
         else:
             merged_tools = list(dict.fromkeys(t for o in overrides for t in (o or [])))
 
+        # skill_name 只承载真实技能名。若本次只有插件（无真实技能），
+        # skill_names 为空——绝不能回退成 ordered[0].skill_name，
+        # 那会把 ``_plugin:legal`` 这种内部伪技能名经 active_skill_name
+        # 渲染进 system prompt（R2 断言：prompt 不得出现 `_plugin:`）。
         return ordered[0].model_copy(update={
-            "skill_name": ", ".join(skill_names) if skill_names else ordered[0].skill_name,
+            "skill_name": ", ".join(skill_names),
             "plugin_name": plugin_names[0] if plugin_names else ordered[0].plugin_name,
             "allowed_tools_override": merged_tools,
             "is_active": True,
@@ -1422,21 +1439,51 @@ class RunPreparer:
         from prismclaw.engine.execution.checkpoint.models import InvokedSkillRecord
         from prismclaw.schema.services.skills import SkillInvocationState as _SIS
 
-        # 命令 dispatch 期间不叠加插件（命令的 active invocation 优先）。
+        # 命令 dispatch 期间不叠加插件（命令的 active invocation 优先），
+        # 但作用域必须收敛为空集而非留 None——None 的语义是「无插件上下文、
+        # 不做限制」，会让插件工具被恒放行。
         if _pending_cmd is not None:
+            tool_ctx.tool_scope = frozenset()
             return active_skill_invocation
         if (
             active_skill_invocation is not None
             and active_skill_invocation.invocation_context == "command"
         ):
+            tool_ctx.tool_scope = frozenset()
             return active_skill_invocation
 
+        _requested = list(dict.fromkeys(n for n in request.designated_plugins if n))
+
+        # 本轮显式 @ 了插件 → 替换语义。``_plugin:`` 记录只增不减，
+        # 不清理会让「@ 过的插件」永久保持解锁（先 @legal 再 @fin，
+        # 下一轮不 @ 时 legal 仍被解锁）。因此先剔除不在本轮 chip 里的旧记录。
+        _requested_set = set(_requested)
+        for _key in [
+            k for k in snapshot.invoked_skill_state.skills
+            if k.startswith("_plugin:")
+            and k.removeprefix("_plugin:") not in _requested_set
+        ]:
+            del snapshot.invoked_skill_state.skills[_key]
+
         states: list[SkillInvocationState] = []
-        for plugin_name in dict.fromkeys(n for n in request.designated_plugins if n):
+        # 多插件互斥（§3.9 架构降级）：chip 顺序即优先级，只取首个作为主专家。
+        # 其余插件仅解锁能力（由 tool_scope 承载），不注入 persona——
+        # 两份 persona 叠加会直接冲突（两套输出规范/安全红线互相打架）。
+        _primary = _requested[0] if _requested else None
+        if len(_requested) > 1:
+            logger.info(
+                "plugin_persona_degraded: primary=%s ignored=%s session=%s",
+                _primary, _requested[1:], request.session_id,
+            )
+        for plugin_name in _requested:
+            _is_primary = plugin_name == _primary
             try:
                 _plugin_rt = getattr(deps, "skill_runtime", None)
                 if _plugin_rt is not None:
-                    _plugin_instructions = _plugin_rt.get_plugin_instructions(plugin_name)
+                    # 始终读取 instructions 用于「插件是否存在」的判定；
+                    # 但只有主插件才注入 persona（§3.9 多插件互斥）。
+                    _declared = _plugin_rt.get_plugin_instructions(plugin_name)
+                    _plugin_instructions = _declared if _is_primary else None
                     _catalog = getattr(_plugin_rt, "_capability_catalog", None)
                     _plugin_has_skills = False
                     if _catalog is not None:
@@ -1445,7 +1492,7 @@ class RunPreparer:
                             if e.plugin_name == plugin_name
                         ]
                         _plugin_has_skills = len(_plugin_skills) > 0
-                    if not _plugin_instructions and not _plugin_has_skills:
+                    if not _declared and not _plugin_has_skills:
                         logger.warning(
                             "designated_plugin_unknown: plugin=%s has no instructions "
                             "and no skills in catalog, skipping activation session=%s",
@@ -1466,21 +1513,13 @@ class RunPreparer:
                         invocation_context="skill",
                     ))
 
-                    _bias_msg = (
-                        f"用户指定使用插件「{plugin_name}」。"
-                        f"请优先从该插件的技能中选取合适的工具完成任务。"
-                    )
-                    hook_context_injections.append(_bias_msg)
-
-                    _rendered_fragment_parts = []
                     if _plugin_instructions:
-                        _rendered_fragment_parts.append(_plugin_instructions)
-                    _rendered_fragment_parts.append(_bias_msg)
-                    snapshot.invoked_skill_state.skills[f"_plugin:{plugin_name}"] = InvokedSkillRecord(
-                        skill_name=f"_plugin:{plugin_name}",
-                        rendered_prompt_fragment="\n\n".join(_rendered_fragment_parts),
-                        clear_after_terminal_result=False,
-                    )
+                        _skill_key = f"_plugin:{plugin_name}"
+                        snapshot.invoked_skill_state.skills[_skill_key] = InvokedSkillRecord(
+                            skill_name=_skill_key,
+                            rendered_prompt_fragment=_plugin_instructions,
+                            clear_after_terminal_result=False,
+                        )
                 else:
                     logger.warning(
                         "designated_plugin_fallback: skill_runtime unavailable, "
@@ -1503,6 +1542,15 @@ class RunPreparer:
                 )
 
         merged = self._merge_invocations(active_skill_invocation, states)
+        if merged is not None and states:
+            # 本轮显式 @ 了插件 → 替换语义：合并态的插件身份取「首个激活成功的插件」
+            # （主插件未识别时会被 continue 跳过，此时即为下一个），
+            # 不能沿用 base 的旧插件（否则先 @A 再 @B 会残留 A）。
+            # skill_name 无需改：_merge_invocations 只承载真实技能名，不含 _plugin:。
+            merged = merged.model_copy(update={"plugin_name": states[0].plugin_name})
+        # scope 只含「真正激活成功」的插件：主插件未知时会被 continue 跳过，
+        # 此时不得解锁一个不存在的插件，也不得让下一轮粘性沿用幽灵身份。
+        tool_ctx.tool_scope = frozenset(s.plugin_name for s in states if s.plugin_name)
         if merged is not None:
             project_active_skill_invocation(
                 request=request,

@@ -126,6 +126,33 @@ class PluginLifecycleManager:
         hook_dispatcher.register_extension_hooks(extension_manager)
         return hook_dispatcher
 
+    def _apply_user_mcp_overrides(
+        self, plugin_name: str, server_name: str, config: Any
+    ) -> Any:
+        """用 ``mcp.plugin_overrides`` 的同名条目补充插件 MCP server 的凭据。
+
+        插件 ``mcp.json`` 位于仓库权威目录（容器内只读），OAuth token / API
+        key 不能写在那里。运维在配置文件的 ``mcp.plugin_overrides`` 下用
+        ``plugin.server`` 精确键或裸 ``server`` 共享键声明同一条目即可补上
+        ``headers`` / ``env``，或置 ``enabled: false`` 停用。
+
+        合并方向：同名键以插件声明为准（它定义了该 endpoint 的协议要求），
+        补丁只填空缺键，避免用户笔误覆盖掉 ``Authorization: Bearer`` 之外的
+        必要头。
+        """
+        overrides = getattr(self._settings.mcp, "plugin_overrides", None) or {}
+        override = overrides.get(f"{plugin_name}.{server_name}") or overrides.get(server_name)
+        if override is None:
+            return config
+        merged = config.model_copy(deep=True)
+        if override.headers:
+            merged.headers = {**override.headers, **merged.headers}
+        if override.env:
+            merged.env = {**override.env, **merged.env}
+        if override.enabled is not None:
+            merged.enabled = override.enabled
+        return merged
+
     def _build_runtime_mcp_manager(self, extension_manager: Any) -> Any:
         from prismclaw.engine.integrations.mcp.client_manager import (
             CompositeMCPManager,
@@ -162,25 +189,9 @@ class PluginLifecycleManager:
                                 )
                             )
                             continue
-                    if config.transport in {"http", "streamable-http"}:
-                        declarative_plugin_mcp_statuses.append(
-                            ServerStatus(
-                                name=f"{plugin_name}.{server_name}",
-                                status="disabled",
-                                reason=(
-                                    f"transport={config.transport} is parsed and exposed declaratively, "
-                                    "but auto-connect is disabled until HTTP MCP lifecycle handling is stabilized"
-                                ),
-                            )
-                        )
-                        logger.info(
-                            "Plugin MCP server %s.%s uses transport=%s; keeping declarative metadata only until HTTP MCP lifecycle is fully stabilized.",
-                            plugin_name,
-                            server_name,
-                            config.transport,
-                        )
-                        continue
-                    plugin_servers[f"{plugin_name}.{server_name}"] = config
+                    plugin_servers[f"{plugin_name}.{server_name}"] = (
+                        self._apply_user_mcp_overrides(plugin_name, server_name, config)
+                    )
 
                 if not plugin_servers:
                     continue
@@ -188,6 +199,7 @@ class PluginLifecycleManager:
                 plugin_manager = MCPClientManager(
                     McpSettings(enabled=True, servers=plugin_servers),
                     task_manager=self._task_manager,
+                    plugin_name=plugin_name,
                 )
                 sandbox_policy = None
                 if self._base_mcp_manager is not None:

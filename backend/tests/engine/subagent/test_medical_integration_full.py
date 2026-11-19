@@ -219,6 +219,7 @@ class AgentCatalogEntry:
         self.description = description
         self.can_handoff_to = manifest.can_handoff_to
         self.manifest = manifest
+        self.plugin_name = None
 
 
 class MockCapabilityCatalog:

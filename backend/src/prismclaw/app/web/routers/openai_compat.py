@@ -24,7 +24,6 @@ openai_router = APIRouter(prefix="/api/v1", tags=["openai"])
 
 _chat_service: ChatService | None = None
 _session_router: SessionRouter | None = None
-_workspace_base: Path | None = None
 _web_settings: WebSettings | None = None
 _redis_client: Any = None
 _sandbox_policy: Any = None
@@ -42,14 +41,12 @@ def set_openai_deps(
     chat_service: ChatService,
     session_router: SessionRouter,
     sandbox_policy: Any,
-    workspace_base: Path | None = None,
     web_settings: WebSettings | None = None,
     redis_client: Any = None,
 ) -> None:
-    global _chat_service, _session_router, _workspace_base, _web_settings, _redis_client, _sandbox_policy
+    global _chat_service, _session_router, _web_settings, _redis_client, _sandbox_policy
     _chat_service = chat_service
     _session_router = session_router
-    _workspace_base = workspace_base
     _web_settings = web_settings
     _redis_client = redis_client
     _sandbox_policy = _require_sandbox_policy(sandbox_policy)
@@ -116,14 +113,12 @@ async def chat_completions(
 
 
 def _resolve_user_workspace(user_id: str) -> Path:
-    assert _workspace_base is not None, "workspace_base not configured"
-    user_workspace = _workspace_base / f"web_{user_id}"
-    user_workspace.mkdir(parents=True, exist_ok=True)
-    from prismclaw.app.web._routes_helpers import ensure_managed_workspace_dirs
-
     # OpenAI 兼容路由没有 workspace_id 维度：web_<uid>/ 本身就是本次运行的
     # workspace 根，与 /chat 的 <ws> 使用同一套目录脚手架。
-    ensure_managed_workspace_dirs(user_workspace)
+    from prismclaw.infra.workspace_paths import resolve_user_root
+
+    user_workspace = resolve_user_root(user_id)
+    user_workspace.mkdir(parents=True, exist_ok=True)
     return user_workspace
 
 

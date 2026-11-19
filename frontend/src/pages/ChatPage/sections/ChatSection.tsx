@@ -16,7 +16,6 @@ interface ChatSectionProps {
   token: string
   workspaceId: string
   layout: 'landing' | 'default'
-  workspaceUploadDir: string
   workspaces: Workspace[]
   onSelectWorkspace: (id: string) => void
   onCreateServerWorkspace: (name: string) => Promise<void>
@@ -51,7 +50,6 @@ export function ChatSection(props: ChatSectionProps) {
           token={props.token}
           workspaceId={props.workspaceId}
           layout={props.layout}
-          workspaceUploadDir={props.workspaceUploadDir}
           workspaces={props.workspaces}
           onSelectWorkspace={props.onSelectWorkspace}
           onCreateServerWorkspace={props.onCreateServerWorkspace}

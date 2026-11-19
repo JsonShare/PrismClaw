@@ -204,19 +204,19 @@ def test_skills_dual_source_expands_workspace_and_extra_absolute(tmp_path: Path)
     root = _make_marker_tree(tmp_path / "repo")
     second = tmp_path / "ws"
     second.mkdir()
-    (second / ".work" / "skills").mkdir(parents=True)
+    (second / ".work" / "state" / "skills").mkdir(parents=True)
     extra = tmp_path / "home" / "assets" / "skills"
     extra.mkdir(parents=True)
 
     layout = build_project_capability_layout(
         primary=root,
         additional=[second],
-        skills_dir=".work/skills",
+        skills_dir=".work/state/skills",
         extra_skills_dirs=(str(extra),),
     )
 
     paths = [p.resolve() for p in layout.existing_locations_of(CapabilityKind.SKILLS)]
-    assert (second / ".work" / "skills").resolve() in paths
+    assert (second / ".work" / "state" / "skills").resolve() in paths
     assert extra.resolve() in paths
     # 绝对目录只出现一次，不被两个 root 重复展开
     assert paths.count(extra.resolve()) == 1

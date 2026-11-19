@@ -17,6 +17,7 @@ from typing import Any
 
 from prismclaw.engine.toolkit.office.document_image_extract import (
     extract_document_blocks,
+    to_model_path,
 )
 from prismclaw.engine.review.changes.office_engines import (
     read_office_text,
@@ -66,7 +67,7 @@ def _blocks_to_text(blocks: list) -> str:
                 parts.append(b.text)
         elif isinstance(b, ImageBlock) and b.source_path:
             parts.append(
-                f"[图片: {b.source_path} — 使用 read 工具识别图片内容]"
+                f"[图片: {to_model_path(b.source_path)} — 使用 read 工具识别图片内容]"
             )
     return "".join(parts)
 
@@ -142,11 +143,18 @@ async def read_document_branch(
             text = await asyncio.to_thread(read_office_text, raw, fmt)
         else:
             # 图文文档格式：按序提取文本+图片
+            # 必须传物理相对路径：extract 内部按 sessions/<sid>/ 前缀决定
+            # 图片落点（会话级 context_blocks/images/）。raw_path 可能是虚拟前缀
+            # （inbox/...），不能直接当物理路径用。
+            try:
+                source_rel = full_path.relative_to(context.workspace_path).as_posix()
+            except ValueError:
+                source_rel = raw_path
             blocks = await asyncio.to_thread(
                 extract_document_blocks,
                 raw,
                 fmt,
-                source_rel_path=raw_path,
+                source_rel_path=source_rel,
                 workspace_path=context.workspace_path,
             )
             text = _blocks_to_text(blocks)

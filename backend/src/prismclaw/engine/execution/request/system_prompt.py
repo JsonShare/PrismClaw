@@ -418,11 +418,10 @@ def workspace_section(inputs: PromptInputs) -> str | None:
     # 去掉宿主绝对路径暴露，模型只需要知道虚拟前缀语义。
     vocab = [
         "### 虚拟路径前缀契约（所有文件工具共用）",
-        "- `project/<rel>` — 用户项目文件，直达原件（读写）。禁止写入 `sessions/` 和 `.work/` 子树。",
-        "- `inputs/<rel>` — 工作区级共享上传（只读）。",
+        "- `project/<rel>` — 用户项目文件，直达原件（读写）。禁止写入 `sessions/`、`biz_domain/` 和 `.work/` 子树。",
         "- `outputs/<rel>` — **当前会话交付物目录**（最终交付物必须落在这里）。",
-        "- `uploads/<rel>`、`context_blocks/<rel>`、`tool_results/<rel>` — 当前会话私有临时区（读写）。",
-        "- 无前缀 — 读：自动在会话交付物目录和私有区兜底搜索；写：禁止（必须明确 `project/` 或 `outputs/`）。",
+        "- `inbox/<rel>`、`context_blocks/<rel>`、`tool_results/<rel>` — 当前会话私有临时区（读写）。",
+        "- 无前缀 — 读：按当前会话交付物目录解析（等价 `outputs/`）；写：禁止（必须明确 `project/` 或 `outputs/`）。",
     ]
     lines.extend(vocab)
 
@@ -433,6 +432,7 @@ def workspace_section(inputs: PromptInputs) -> str | None:
             "### bash 环境变量",
             "- `$PRISMCLAW_WORKSPACE` — 工作区根（bash 内可用的绝对路径变量，不暴露具体挂载点）。",
             "- `$PRISMCLAW_OUTPUT_DIR` — 当前会话交付物目录（等价于 `outputs/` 前缀的物理落点）。",
+            "- `$PRISMCLAW_UPLOADS_DIR` — 当前会话输入目录（等价于 `inbox/` 前缀的物理落点）。",
         ]
         lines.extend(env)
 
@@ -534,7 +534,6 @@ def build_frozen_prompt_sections(
 
     # l1_snapshot（<memory_index>）已移至 per-turn 动态区（SDD D3 方案 A）：
     # 动态记忆不得进入 static shell cache，否则缓存命中即冻结记忆。
-    # invoked_skill_attachments 同样移至 per-turn 动态区（volatile，不缓存）。
     return [section for section in ordered if section is not None]
 
 
@@ -692,22 +691,6 @@ async def build_per_turn_prompt_sections(
                 priority="medium",
             )
         )
-
-    # 压缩后重新注入已调用技能的指令片段（volatile：每轮可能变化）。
-    if inputs.invoked_skill_attachments:
-        invoked_text = _wrap_xml("invoked_skills", inputs.invoked_skill_attachments)
-        if invoked_text:
-            sections.append(
-                PromptSectionSpec(
-                    name="invoked_skill_attachments",
-                    text=invoked_text,
-                    zone="dynamic",
-                    truncatable=True,
-                    cacheable=False,  # 每轮可能变化
-                    priority="high",
-                    stability="volatile",
-                )
-            )
 
     # 运行时上下文只保留时间等无法静态化的信息，固定排在动态段末尾。
     runtime_text = runtime_context_section(inputs)
