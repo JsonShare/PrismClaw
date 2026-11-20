@@ -80,3 +80,16 @@ def test_sessions_prefix_cross_session_is_read_only(tmp_path: Path):
     # 跨会话写：拒绝
     with pytest.raises(WorkspaceBoundaryError, match="禁止写入"):
         r.resolve_within(tmp_path, "sessions/s2/outputs/evil.docx", session_root=sr, for_write=True)
+
+
+def test_ensure_session_layout_creates_all_standard_subdirs(tmp_path: Path):
+    """新会话必须在 run 启动时就建好全部标准子目录，读取方不应看到“不存在”。"""
+    from prismclaw.infra.workspace_paths import SESSION_SUBDIRS, ensure_session_layout
+
+    root = ensure_session_layout(tmp_path, "web:admin:default:s:1")
+
+    assert root == tmp_path / "sessions" / "web-admin-default-s-1"
+    for sub in SESSION_SUBDIRS:
+        assert (root / sub).is_dir(), sub
+    # 幂等：重复调用不报错且落点不变
+    assert ensure_session_layout(tmp_path, "web:admin:default:s:1") == root

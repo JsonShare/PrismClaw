@@ -436,10 +436,8 @@ async def _run_chat(
     active_tool_call_ids: set[str] = set()
     output_files: list[str] = []
     # session 级 outputs 扫描（只看本 session 的产出）
-    from prismclaw.infra.workspace_paths import resolve_session_dir
-    user_id = str(state.user_id)
-    session_root = resolve_session_dir(user_id, effective_workspace_id, session_id)
-    session_root.mkdir(parents=True, exist_ok=True)
+    from prismclaw.infra.workspace_paths import ensure_session_layout
+    session_root = ensure_session_layout(tool_workspace_path, session_id)
     _outputs_scope = Scope(kind="session", root=str(session_root), prefixes=("outputs",))
     outputs_baseline = ArtifactScanner(session_root).scan(_outputs_scope)
     file_changes: list[dict[str, Any]] = []

@@ -16,10 +16,10 @@ from prismclaw.schema.content.content_types import ToolResult
 class PresentFilesTool:
     name = "present_files"
     description = (
-        "向用户展示最终交付文件——已完成的作品（报告、代码、图表、文档）。"
-        "只有通过本工具调用才会出现在交付物面板中。请在全部文件完成后调用。"
+        "声明最终交付文件——已完成的作品（报告、图表、文档）。"
         "只接受会话交付目录（sessions/<sid>/outputs/，见 workspace 段的「会话交付目录」）"
-        "下的文件；目录之外的文件会被拒绝，需先复制/写入该目录再调用。"
+        "下的路径；目录之外的路径会被拒绝。本工具只做声明，不创建文件："
+        "文件可以稍后写入，写入后会自动出现在交付物面板；尚未生成时返回「已登记」。"
         "只列出最终交付物，不要列出中间产物或工具输出。"
         "若本次任务没有产出任何文件，请不要调用本工具。"
     )
@@ -43,10 +43,6 @@ class PresentFilesTool:
     effect_class = "pure_read"
     approval_eligible = False
     is_concurrency_safe = True
-    # 交付物唯一通道：文件必须在会话交付目录（sessions/<sid>/outputs/）内。
-    # Web 展示链（_extract_presented_paths + ArtifactScanner 兜底扫描 +
-    # SERVER_OUTPUTS）只认该目录。校验失败返回可纠正的错误（模型可复制
-    # 文件后重试），而不是假成功——假成功会让模型声称"已展示"但前端无卡片。
 
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
@@ -66,23 +62,28 @@ class PresentFilesTool:
                 "present_files：缺少会话上下文，无法确定会话交付目录，未展示任何文件。",
             )
 
-        # 统一走 resolve_within——与 read/write/edit/file_tools 完全一致的路径解析
-        # 裸路径 "outputs/x" → sessions/<sid>/outputs/x
-        # 前缀 "outputs/x" → sessions/<sid>/outputs/x
-        # 前缀 "sessions/<sid>/outputs/x" → 同名归一分支
-        # session_root 用 session_dir_in 算——它会 sanitize subagent sid（`#`/`:`→`-`），
-        # 与磁盘上的真实会话目录一致；同时用 context.workspace_path（当前会话真实
-        # workspace 根），避免 resolver.resolve(workspace_id) 与 context 不一致。
+
         session_root = session_dir_in(Path(context.workspace_path), context.session_id)
         outputs_dir = session_root / "outputs"
 
         accepted: list[str] = []
         outside: list[str] = []
-        missing: list[str] = []
+        pending: list[str] = []
         for raw in files:
             if not isinstance(raw, str) or not raw.strip():
                 continue
             normalized = raw.strip().replace("\\", "/")
+            # 只接受显式交付目录路径。裸相对路径会被 resolve_within 静默改写到
+            # session outputs 下（如 `other/outputs/x` → `outputs/other/outputs/x`），
+            # 与声明意图不符，直接按“不在交付目录”拒绝。
+            is_abs = normalized.startswith("/") or normalized.startswith("~/")
+            in_outputs_prefix = normalized.startswith("outputs/") or normalized == "outputs"
+            in_session_prefix = normalized.startswith(
+                f"sessions/{session_root.name}/outputs"
+            )
+            if not is_abs and not (in_outputs_prefix or in_session_prefix):
+                outside.append(normalized)
+                continue
             try:
                 full = self._resolver.resolve_within(
                     context.workspace_path,
@@ -91,46 +92,54 @@ class PresentFilesTool:
                     for_write=False,
                 )
             except WorkspaceBoundaryError:
-                missing.append(normalized)
+                outside.append(normalized)
                 continue
             try:
                 full = full.resolve()
             except OSError:
-                missing.append(normalized)
-                continue
-            if not full.is_file():
-                missing.append(normalized)
+                outside.append(normalized)
                 continue
             try:
                 full.relative_to(outputs_dir.resolve())
             except ValueError:
                 outside.append(normalized)
                 continue
+            # 只登记落点：文件可能稍后才由 write/bash 创建，不在此处判存在。
             accepted.append(normalized)
+            if not full.is_file():
+                pending.append(normalized)
 
         if not accepted:
             details = []
             if outside:
                 details.append(f"不在会话交付目录：{', '.join(f'`{p}`' for p in outside[:5])}")
-            if missing:
-                details.append(f"文件不存在：{', '.join(f'`{p}`' for p in missing[:5])}")
             return error_result(
                 call_id,
-                f"present_files：未展示任何文件。"
-                f"本工具只接受会话交付目录 `outputs/` 下的文件。"
+                "present_files：未登记任何交付文件。"
+                "本工具只接受会话交付目录 `outputs/` 下的路径。"
                 f"（{'；'.join(details)}）"
-                "请将最终交付物复制/写入该目录后重新调用。",
+                "请改用 `outputs/<rel>` 形式的路径后重新声明。",
             )
 
-        listed = ", ".join(f"`{f}`" for f in accepted[:10])
-        suffix = f" 等，另有 {len(accepted) - 10} 个" if len(accepted) > 10 else ""
-        result = f"已向用户展示 {len(accepted)} 个交付文件：{listed}{suffix}。"
-        rejected = outside + missing
-        if rejected:
+        existing = [p for p in accepted if p not in pending]
+        parts: list[str] = []
+        if existing:
+            listed = ", ".join(f"`{f}`" for f in existing[:10])
+            suffix = f" 等，另有 {len(existing) - 10} 个" if len(existing) > 10 else ""
+            parts.append(f"已向用户展示 {len(existing)} 个交付文件：{listed}{suffix}。")
+        if pending:
+            listed = ", ".join(f"`{f}`" for f in pending[:10])
+            suffix = f" 等，另有 {len(pending) - 10} 个" if len(pending) > 10 else ""
+            parts.append(
+                f"已登记 {len(pending)} 个待生成交付文件：{listed}{suffix}；"
+                "写入 `outputs/` 后会自动出现在交付物面板。"
+            )
+        result = "".join(parts)
+        if outside:
             result += (
-                f"另有 {len(rejected)} 个路径被忽略"
-                f"（须在会话交付目录 `outputs/` 下且文件存在）："
-                + ", ".join(f"`{p}`" for p in rejected[:5])
+                f"另有 {len(outside)} 个路径被忽略"
+                f"（须在会话交付目录 `outputs/` 下）："
+                + ", ".join(f"`{p}`" for p in outside[:5])
                 + "。"
             )
         return text_result(call_id, result)

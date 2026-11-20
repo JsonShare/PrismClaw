@@ -31,6 +31,22 @@ from prismclaw.schema.content.workspace import SandboxTier
 
 # ─── ListDirectoryTool ────────────────────────────────────────────────
 
+def _is_uncreated_session_dir(raw_path: str, session_dir: Path | None) -> bool:
+    """路径是否为尚未创建的标准会话私有目录（inbox/outputs/...）。
+
+    这些目录按需创建；对读取方而言「不存在」等价于空目录，不应报错。
+    放在同步函数里，避免在 async 工具入口直接调用 pathlib。
+    """
+    if session_dir is None:
+        return False
+    try:
+        target = Path(raw_path).expanduser().resolve()
+        target.relative_to(session_dir.resolve())
+    except (OSError, ValueError):
+        return False
+    return target.name in WorkspaceResolver._SESSION_PREFIXES
+
+
 class ListDirectoryTool:
     name = "ls"
     description = (
@@ -81,7 +97,10 @@ class ListDirectoryTool:
         _first = path_str.strip().split("/", 1)[0]
         if path_str.startswith(("~", "/")):
             path_str = str(canonicalize_fs_path(Path(path_str).expanduser()))
-        elif _first in WorkspaceResolver._SESSION_PREFIXES or _first == "sessions":
+        elif (
+            _first in WorkspaceResolver._SESSION_PREFIXES
+            or _first in ("sessions", "project")
+        ):
             try:
                 path_str = str(self.resolver.resolve_within(
                     context.workspace_path, path_str, session_root=session_root(context),
@@ -107,7 +126,14 @@ class ListDirectoryTool:
         entries: list[dict[str, Any]] = resp.get("entries", []) if isinstance(resp, dict) else []
 
         if isinstance(resp, dict) and resp.get("error"):
-            return error_result(call_id, f"ls: {resp['error']}")
+            err = str(resp["error"])
+            # 会话私有目录（inbox/outputs/...）是按需创建的；尚未创建时
+            # 对读取方等价于空目录，不应作为错误回给模型。
+            if err.startswith("directory not found") and _is_uncreated_session_dir(
+                path_str, session_root(context)
+            ):
+                return text_result(call_id, "目录为空（尚未创建）。")
+            return error_result(call_id, f"ls: {err}")
 
         if not entries:
             return text_result(call_id, "目录为空。")

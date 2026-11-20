@@ -58,6 +58,8 @@ __all__ = [
     "resolve_biz_domain_dir",
     "resolve_session_dir",
     "session_dir_in",
+    "SESSION_SUBDIRS",
+    "ensure_session_layout",
     "resolve_session_inbox_dir",
 ]
 
@@ -171,6 +173,30 @@ def session_dir_in(workspace_root: Path, session_id: str) -> Path:
     """
     safe_sid = session_id.replace("#", "-").replace(":", "-")
     return workspace_root / "sessions" / _safe_segment(safe_sid, label="session_id")
+
+
+#: 会话目录的完整子目录布局（与 workspace_paths 顶部文档一致）。
+SESSION_SUBDIRS: tuple[str, ...] = (
+    "inbox",
+    "outputs",
+    "context_blocks",
+    "context_blocks/images",
+    "tool_results",
+    ".work/tmp",
+    ".work/cache/ocr",
+)
+
+
+def ensure_session_layout(workspace_root: Path, session_id: str) -> Path:
+    """幂等创建会话目录及全部标准子目录，返回会话根。
+
+    会话私有目录按需写入时才创建会导致 ``ls inbox`` 等读取先于首次写入
+    时看到“不存在”。统一在 run 启动时建好，读取方永远看到空目录。
+    """
+    root = session_dir_in(workspace_root, session_id)
+    for sub in SESSION_SUBDIRS:
+        (root / sub).mkdir(parents=True, exist_ok=True)
+    return root
 
 
 def resolve_session_inbox_dir(

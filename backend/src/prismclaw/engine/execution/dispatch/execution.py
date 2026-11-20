@@ -43,10 +43,8 @@ def _session_working_dir(tool_ctx: Any) -> str | None:
     sid = getattr(tool_ctx, "session_id", "")
     if not ws or not sid:
         return str(ws) if ws else None
-    safe_sid = sid.replace("#", "-").replace(":", "-")
-    session_root = Path(ws) / "sessions" / safe_sid
-    session_root.mkdir(parents=True, exist_ok=True)
-    return str(session_root)
+    from prismclaw.infra.workspace_paths import ensure_session_layout
+    return str(ensure_session_layout(Path(ws), sid))
 
 
 def _handoff_request_projection(result: ToolResult) -> dict[str, Any] | None:

@@ -151,6 +151,7 @@ class BashTool:
         import re as _re
         from prismclaw.infra.runtime_root import resolve_runtime_root as _resolve_runtime_root
         from prismclaw.engine.toolkit.builtin.file_helpers import session_root as _session_root
+        from prismclaw.infra.workspace_paths import SESSION_SUBDIRS as _SESSION_SUBDIRS
         _raw_skill = getattr(context, "active_skill_name", None) or "_default"
         _skill_safe = _re.sub(r"[^\w.\-]", "_", _raw_skill)[:64] or "_default"
         _global_runtime = _resolve_runtime_root()
@@ -169,12 +170,11 @@ class BashTool:
             _tr_dir = '"$PWD/tool_results"'
             _tmp_dir = '"$PWD/.work/tmp"'
             _mkdir_dirs = (
-                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/inbox" '
-                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/outputs" '
-                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/context_blocks" '
-                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/tool_results" '
-                f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/.work/tmp" '
-                f'{_skill_cache} {_skill_runtime} {_py_site} {_node_modules}'
+                " ".join(
+                    f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/{sub}"'
+                    for sub in _SESSION_SUBDIRS
+                )
+                + f' {_skill_cache} {_skill_runtime} {_py_site} {_node_modules}'
             )
         else:
             # 降级（无 session_id 的罕见路径）：没有 session 级隔离概念，

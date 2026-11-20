@@ -50,15 +50,18 @@ class TestPresentFilesEnforcement:
         skill_out.mkdir(parents=True)
         (skill_out / "report.html").write_text("<html></html>", encoding="utf-8")
         text = _call(resolver, tmp_path, ["rust_inhibitor_mining/outputs/report.html"])
-        assert "未展示任何文件" in text
+        assert "未登记任何交付文件" in text
         assert "outputs/" in text  # 虚拟前缀（不再暴露宿主物理路径）
         assert "rust_inhibitor_mining/outputs/report.html" in text  # 指出违规路径
-        assert "复制" in text  # 纠正指引
+        assert "outputs/<rel>" in text  # 纠正指引
 
-    def test_rejects_missing_file(self, resolver, tmp_path):
+    def test_declares_missing_file_without_error(self, resolver, tmp_path):
+        """present_files 是声明而非创建：文件尚未生成时应登记为待生成，而不是报错。"""
         text = _call(resolver, tmp_path, ["sessions/s-abc123/outputs/ghost.html"])
-        assert "未展示任何文件" in text
-        assert "文件不存在" in text
+        assert "已登记 1 个待生成交付文件" in text
+        assert "ghost.html" in text
+        assert "文件不存在" not in text
+        assert "未登记" not in text
 
     def test_mixed_acceptance_reports_rejected(self, resolver, tmp_path):
         out_dir = tmp_path / "sessions" / "s-abc123" / "outputs"
@@ -88,7 +91,6 @@ class TestPresentFilesEnforcement:
 
     def test_empty_session_id_rejected(self, resolver, tmp_path):
         text = _call(resolver, tmp_path, ["sessions/x/outputs/a.html"], session_id="")
-        assert "未展示任何文件" in text
         assert "缺少会话上下文" in text
 
     def test_empty_files_list_rejected(self, resolver, tmp_path):

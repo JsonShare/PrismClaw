@@ -146,6 +146,23 @@ export function useFilePreviewController({
     setPreviewBlobUrl(null)
   }, [])
 
+  // 切换会话（含新建任务 → activeConvId 变为 null）时清空右侧预览：
+  // 否则新任务仍会显示上一个任务打开的文件/审阅内容。
+  const previewConvIdRef = useRef(activeConvId)
+  useEffect(() => {
+    if (previewConvIdRef.current === activeConvId) return
+    previewConvIdRef.current = activeConvId
+    loadingPathRef.current = null
+    reviewHtmlPathRef.current = null
+    revokePreviewBlobUrl()
+    setPreviewBlob(null)
+    setSelectedFile(null)
+    setSelectedFileError(null)
+    setReviewingChange(null)
+    setReviewHtml(null)
+    setReviewHtmlError(null)
+  }, [activeConvId, revokePreviewBlobUrl])
+
   const closePreviewModal = useCallback(() => {
     revokePreviewBlobUrl()
     setPreviewBlob(null)

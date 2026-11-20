@@ -99,7 +99,7 @@ from prismclaw.engine.toolkit.file.workspace import (
 from prismclaw.engine.toolkit.registry.tool_runtime import (
     ToolContext,
 )
-from prismclaw.infra.workspace_paths import session_dir_in
+from prismclaw.infra.workspace_paths import ensure_session_layout, session_dir_in
 from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.schema.agent.session import MessageEntry, SystemReminderProjection
 from prismclaw.schema.agent.task_runtime import ConfirmationDecision
@@ -208,6 +208,9 @@ class RunPreparer:
             workspace_id=request.workspace_id,
             agent_id=request.agent_id,
         )
+        # 会话目录及标准子目录在每次 run 启动时幂等建好：后续 ls inbox /
+        # ls outputs 等读取永远看到空目录，而不是“目录不存在”。
+        ensure_session_layout(resolved_ws_path, request.session_id)
         snapshot = load_run_snapshot_for_tree(tree)
         rt.tree = tree
         rt.snapshot = snapshot
