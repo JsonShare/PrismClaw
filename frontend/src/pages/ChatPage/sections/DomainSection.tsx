@@ -32,8 +32,8 @@ function DomainLoadingFallback() {
  * 因此这里补一条仅在收起态出现的窄工具条 —— 否则鼠标用户会困在域内。
  */
 export function DomainSection({ domainKey }: DomainSectionProps) {
-  // 域是异步发现的：刷新时 activeSection 可能先从 localStorage 恢复成 domain:xxx，
-  // 而注册表还没填充完。此时不能直接返回 null（会白屏），要转圈等发现完成。
+  // 域是异步发现的：注册表尚未填充时找不到 entry，先转圈等发现完成，
+  // 避免直接返回 null 造成白屏。
   const registryVersion = useSyncExternalStore(subscribeRegistryVersion, getRegistryVersion)
   const intent = useSyncExternalStore(subscribeDomainIntent, getDomainIntent)
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed)

@@ -272,6 +272,32 @@ class TestResolveSkillReference:
             assert r.entry.name == "tech-mining"
             assert r.marketplace_name == "research-kit"
 
+    def test_unique_short_name_suffix_resolves(self):
+        """短名唯一命中后缀 → resolved（xlsx → officecli-xlsx）。"""
+        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        entries = [
+            _make_catalog_entry(name="officecli-xlsx"),
+            _make_catalog_entry(name="officecli-docx"),
+        ]
+        svc = CapabilityCatalogService()
+        with mock.patch.object(CapabilityCatalogService, "list_skill_entries", return_value=entries):
+            r = svc.resolve_skill_reference("xlsx")
+            assert r.kind == "resolved"
+            assert r.entry.name == "officecli-xlsx"
+            assert r.marketplace_name is None
+
+    def test_ambiguous_short_name_suffix_stays_not_found(self):
+        """短名命中多个后缀 → 不猜，保持 not_found。"""
+        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        entries = [
+            _make_catalog_entry(name="a-xlsx"),
+            _make_catalog_entry(name="b-xlsx"),
+        ]
+        svc = CapabilityCatalogService()
+        with mock.patch.object(CapabilityCatalogService, "list_skill_entries", return_value=entries):
+            r = svc.resolve_skill_reference("xlsx")
+            assert r.kind == "not_found"
+
     def test_multi_member_package_alias_is_ambiguous(self):
         """多技能包名 → ambiguous 且 member_names 齐全。"""
         from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService

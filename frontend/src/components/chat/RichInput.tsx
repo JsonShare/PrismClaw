@@ -235,9 +235,15 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
     const el = editorRef.current
     if (!el) return ''
     resize()
-    const next = serializeNode(el)
+    let next = serializeNode(el)
+    // 浏览器删空 contenteditable 后常残留一个 <br>（序列化为 "\n"）：
+    // 不清掉会让受控值永远非空，placeholder 再也回不来。
+    if (!next.trim()) {
+      el.textContent = ''
+      next = ''
+    }
     lastValueRef.current = next
-    el.dataset.empty = next.length === 0 ? 'true' : 'false'
+    el.dataset.empty = next ? 'false' : 'true'
     onChangeRef.current(next)
     emitCaret()
     return next
@@ -288,7 +294,7 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
     ensureFiller()
     lastValueRef.current = text
     lastRangeRef.current = null
-    el.dataset.empty = text.length === 0 ? 'true' : 'false'
+    el.dataset.empty = text.trim() ? 'false' : 'true'
     resize()
   }, [appendText, ensureFiller, resize])
 
@@ -487,7 +493,7 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
       // 正在输入的组字文本叠在一起。
       const el = editorRef.current
       if (el) {
-        el.dataset.empty = serializeNode(el).length === 0 ? 'true' : 'false'
+        el.dataset.empty = serializeNode(el).trim() ? 'false' : 'true'
         resize()
       }
       return
@@ -563,7 +569,7 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
       aria-multiline="true"
       aria-label={placeholder}
       data-placeholder={placeholder}
-      data-empty={value.length === 0 ? 'true' : 'false'}
+      data-empty={value.trim() ? 'false' : 'true'}
       onInput={handleInput}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}

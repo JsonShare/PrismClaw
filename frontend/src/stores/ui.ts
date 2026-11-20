@@ -69,7 +69,11 @@ function loadInitialSection(): AppSection {
     const stored = window.localStorage.getItem(SECTION_KEY)
     if (!stored) return 'chat'
     if (VALID_SECTIONS.has(stored)) return stored as AppSection
-    if (stored.startsWith('domain:')) return stored as AppSection
+    // 业务域页面不跨刷新恢复：域内页码只存在于内存总线，恢复 section 会让侧栏
+    // 默认高亮第一个域菜单。刷新统一回到「新任务」。
+    if (stored.startsWith('domain:')) {
+      window.localStorage.setItem(SECTION_KEY, 'chat')
+    }
   } catch {}
   return 'chat'
 }
@@ -77,7 +81,12 @@ function loadInitialSection(): AppSection {
 function persistSection(section: AppSection): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(SECTION_KEY, section)
+    // 业务域页面不持久化：显式落为 chat，保证从域页面刷新后回到「新任务」，
+    // 而不是恢复 domain:* 后让侧栏默认高亮第一个域菜单。
+    window.localStorage.setItem(
+      SECTION_KEY,
+      section.startsWith('domain:') ? 'chat' : section,
+    )
   } catch {}
 }
 

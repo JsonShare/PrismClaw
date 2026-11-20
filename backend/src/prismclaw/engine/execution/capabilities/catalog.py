@@ -158,6 +158,11 @@ class CapabilityCatalogService:
 
         Pass 1 (skill name): exact then case-folded match via ``resolve_skill_name``,
         ``plugin_prefer`` picks the version among same-name candidates.
+        Pass 1.5 (short name): when the reference is an un-namespaced short token
+        (e.g. ``xlsx``), a skill whose canonical name ends with ``-xlsx`` /
+        ``:xlsx`` resolves too — but only if exactly one such skill exists.
+        This absorbs the common model habit of calling by file type while keeping
+        ambiguity an error.
         Pass 2 (marketplace alias): the normalized reference is case-fold-compared
         against each entry's ``marketplace_name``; a package holding exactly one
         distinct skill name resolves directly to it (carrying the package name for
@@ -173,6 +178,21 @@ class CapabilityCatalogService:
             )
 
         normalized = normalize_skill_ref(skill_name)
+        if normalized and ":" not in normalized and len(normalized) >= 2:
+            folded = normalized.lower()
+            suffix_hits = sorted(
+                {
+                    entry.name
+                    for entry in entries
+                    if entry.name.lower().endswith(("-" + folded, ":" + folded))
+                }
+            )
+            if len(suffix_hits) == 1:
+                return SkillResolution(
+                    kind="resolved",
+                    entry=self._pick_entry(entries, suffix_hits[0], plugin_prefer),
+                )
+
         if normalized:
             folded = normalized.lower()
             alias_entries = [
