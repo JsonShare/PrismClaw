@@ -3,7 +3,8 @@
 当前提供：
 - 前端菜单/页面描述（get_manifest 从编译产物读取）
 - USER_PROMPT_SUBMIT 上下文注入钩子（法律域标注要求，按任务内容触发）
-- on_build_infrastructure / on_build_lifecycle 仍为空实现
+- on_build_infrastructure 执行法律域初始化脚本（当前为注释占位）
+- on_build_lifecycle 仍为空实现
 """
 from __future__ import annotations
 
@@ -90,10 +91,12 @@ class LegalBundle:
     depends_on: list[str] = []
     task_store: Any | None = None  # Protocol 数据成员；本域无长任务 store
 
-    # ── 基础设施：暂空（骨架阶段无持久化存储） ─────────────────────
+    # ── 基础设施：执行法律域初始化脚本（当前为占位） ──────────────
 
-    def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
-        """骨架阶段无域级存储。"""
+    async def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
+        from prismclaw.persistence.sql_runner import apply_domain_schema
+
+        await apply_domain_schema(ctx.db_engine, "legal")
 
     # ── 运行时：注册法律域上下文注入钩子 ──────────────────────────
 

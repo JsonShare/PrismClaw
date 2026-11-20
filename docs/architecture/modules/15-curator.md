@@ -219,7 +219,7 @@ should_run_llm_review(settings, state_store)
 - **Schema**：`prismclaw.schema.agent.curator.CuratorSopRepository` — SOP 仓库接口（scan_session / review_session / list_active_sop_sessions）
 - **Schema**：`prismclaw.schema.agent.curator_types.CuratorReport`、`CycleReport`、`ReviewOutcome`
 - **Schema**：`prismclaw.schema.shared.exceptions.LockAcquireError`、`LockLostError`
-- **Schema**：`prismclaw.schema.persistence.LockManager`
+- **Schema**：`prismclaw.schema.storage.LockManager`
 - **Schema**：`prismclaw.schema.services.task_protocol.TaskManagerProtocol`
 - **外部**：`redis.asyncio` — 状态存储
 

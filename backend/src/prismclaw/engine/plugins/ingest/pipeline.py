@@ -1,13 +1,12 @@
 """Ingest pipeline: materialize a canonical plugin copy from any dialect.
 
-Orchestrates :mod:`detect` + :mod:`trae_convert` to produce a plugin directory
-that PrismClaw's declarative loader can consume directly (``.plugin/plugin.json`` + conventional ``skills/``). The source directory is never
-modified; a copy is materialized under the chosen ``output_root``.
+Orchestrates :mod:`detect` to produce a plugin directory that PrismClaw's
+declarative loader can consume directly (``.plugin/plugin.json`` + conventional
+``skills/``). The source directory is never modified; a copy is materialized
+under the chosen ``output_root``.
 
-Dialect handling (per SDD P2):
+Dialect handling:
     CANONICAL   → copied through unchanged (already loadable);
-    TRAE        → copied, then a canonical manifest is generated from
-                  ``.trae-plugin/plugin.json``;
     BARE_SKILLS → copied, then a minimal canonical manifest is synthesized;
     UNKNOWN     → rejected with ``IngestError``.
 """
@@ -22,9 +21,7 @@ from prismclaw.engine.plugins.ingest.detect import (
     PluginDialect,
     detect_dialect,
 )
-from prismclaw.engine.plugins.ingest.trae_convert import (
-    write_canonical_manifest,
-)
+from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
 
 __all__ = ["IngestError", "IngestResult", "ingest_plugin"]
 
@@ -56,8 +53,7 @@ def ingest_plugin(source_dir: Path, output_root: Path) -> IngestResult:
     detection = detect_dialect(source_dir)
     if detection.dialect is PluginDialect.UNKNOWN:
         raise IngestError(
-            f"无法识别插件方言（在以下位置未找到 plugin.json / .trae-plugin / "
-            f"skills/）：{source_dir}"
+            f"无法识别插件方言（在以下位置未找到 plugin.json / skills/）：{source_dir}"
         )
 
     output_root = Path(output_root)
@@ -74,13 +70,8 @@ def ingest_plugin(source_dir: Path, output_root: Path) -> IngestResult:
         manifest_path = output_dir / (
             detection.manifest_path.relative_to(source_dir)
             if detection.manifest_path is not None
-            else Path(".plugin/plugin.json")
+            else MANIFEST_REL_PATH
         )
-    elif detection.dialect is PluginDialect.TRAE:
-        trae_manifest = json.loads(
-            (output_dir / ".trae-plugin" / "plugin.json").read_text(encoding="utf-8")
-        )
-        manifest_path = write_canonical_manifest(trae_manifest, output_dir)
     else:  # BARE_SKILLS
         manifest_path = _write_bare_skills_manifest(output_dir)
 
@@ -95,9 +86,8 @@ def ingest_plugin(source_dir: Path, output_root: Path) -> IngestResult:
 def _write_bare_skills_manifest(plugin_dir: Path) -> Path:
     """Synthesize a minimal canonical manifest for a bare ``skills/`` plugin."""
     manifest = {"name": plugin_dir.name, "skills": "skills"}
-    plugin_dir_plugin = plugin_dir / ".plugin"
-    plugin_dir_plugin.mkdir(parents=True, exist_ok=True)
-    out_path = plugin_dir_plugin / "plugin.json"
+    out_path = plugin_dir / MANIFEST_REL_PATH
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",

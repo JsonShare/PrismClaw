@@ -24,7 +24,7 @@ class SkillCatalogEntry:
     manifest: Any
     plugin_name: str | None = None
     origin: str | None = None
-    # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
+    # v5 渐进式披露：所属 marketplace 名称（如 my-marketplace）
     marketplace_name: str | None = None
     # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
     marketplace_description: str | None = None

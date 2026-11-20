@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PrismClaw — 企业级私有化 AI Agent 平台</title>
-<meta name="description" content="PrismClaw 是运行于企业自有基础设施的 AI Agent 平台：多用户、多 Agent 并行协作，医疗、法律、办公场景内置，能力按需扩展；敏感操作须审批放行，数据与审计不出内网。">
+<meta name="description" content="PrismClaw 把 AI Agent 放回企业自己的基础设施上：医疗参考实现、法律导航与页面骨架，以及办公、科研通用 Agent 任务场景；敏感操作审批放行，数据、密钥与审计日志全程不出内网。">
 <meta name="theme-color" content="#FDF2D8">
 <meta property="og:type" content="website">
 <meta property="og:title" content="PrismClaw — 企业级私有化 AI Agent 平台">
@@ -31,8 +31,9 @@
 
     <nav class="nav__links" id="nav-menu" aria-label="主导航">
       <a href="#scenarios">场景</a>
-      <a href="#capabilities">能力</a>
       <a href="#workflow">工作流</a>
+      <a href="#choices">取舍</a>
+      <a href="#capabilities">能力</a>
       <a href="#experience">双端</a>
       <a href="#architecture">架构</a>
       <a href="#start">快速开始</a>
@@ -56,7 +57,7 @@
 
       <h1 id="hero-title">让 <span class="hl">AI 能力</span><br>留在企业边界之内。</h1>
 
-      <p class="lede">PrismClaw 是运行于企业自有基础设施的 AI Agent 平台：员工通过浏览器即可对话、调度工具并产出可交付文件。医疗、法律、办公场景内置，能力按需扩展；敏感操作须审批放行，<strong>全程可追溯</strong>。</p>
+      <p class="lede">PrismClaw 把 AI Agent 放回企业自己的基础设施上。员工打开浏览器就能开工：对话、调工具，最后交出的不是一段回答，而是一份能直接交付的文件。医疗、法律、办公、科研四类任务入口共享同一套基座，建设状态清晰标注。多人、多 Agent 并行推进，敏感操作停在审批关口等人放行，数据、密钥与审计日志<strong>全程不出内网</strong>。</p>
 
       <div class="hero__ctas">
         <a class="btn btn--yellow" href="#start">一条命令跑起来 <span aria-hidden="true">→</span></a>
@@ -78,11 +79,11 @@
           <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           <span class="window__url">prismclaw.local:8000</span>
         </div>
-        <img src="./assets/readme/pc-light.png" width="1600" height="1000" alt="PrismClaw PC 端登录页：品牌介绍、四领域能力与登录表单" fetchpriority="high" decoding="async">
+        <img src="./assets/readme/pc-light.png" width="1440" height="900" alt="PrismClaw PC 端登录页：品牌介绍、四领域能力与登录表单" fetchpriority="high" decoding="async">
       </figure>
 
       <figure class="phone phone--hero">
-        <img src="./assets/readme/mobile-light.png" width="780" height="1688" alt="PrismClaw 移动端 H5 首页" loading="lazy" decoding="async">
+        <img src="./assets/readme/mobile-light.png" width="390" height="844" alt="PrismClaw 移动端 H5 首页" loading="lazy" decoding="async">
       </figure>
 
       <div class="sticker sticker--pink" aria-hidden="true">越用越懂你</div>
@@ -95,8 +96,8 @@
     <div class="stats reveal">
       <div class="stat">
         <span class="stat__k" style="--c:var(--blue)" aria-hidden="true"></span>
-        <div class="stat__value">3<em>大专业场景</em></div>
-        <div class="stat__label">医疗 / 法律 / 办公</div>
+        <div class="stat__value">4<em>类任务入口</em></div>
+        <div class="stat__label">医疗 / 法律 / 办公 / 科研</div>
       </div>
       <div class="stat">
         <span class="stat__k" style="--c:var(--green)" aria-hidden="true"></span>
@@ -146,10 +147,10 @@
   <section class="section container" id="scenarios" aria-labelledby="scenarios-title">
     <div class="section-head">
       <div>
-        <p class="eyebrow">01 / Scenarios</p>
-        <h2 id="scenarios-title">一套系统，<span class="hl">三个专业现场。</span></h2>
+        <p class="eyebrow">01 / Scenarios & Delivery</p>
+        <h2 id="scenarios-title">四类任务入口，<span class="hl">边界清楚。</span></h2>
       </div>
-      <p>医疗、法律、办公共享同一个垂直大模型基座——不是三个割裂的工具，而是一套可持续扩展的能力底座。</p>
+      <p>医疗、法律、办公、科研共享同一套 Agent 基座；专属工作台与通用任务场景的建设状态分别标明。</p>
     </div>
 
     <div class="scenario-grid">
@@ -162,9 +163,9 @@
           </span>
           <span class="scenario__index">01</span>
         </div>
-        <h3>医疗 AI</h3>
-        <p>融合权威医学指南与循证文献库，构建专业医学知识底座。辅助医生诊疗决策，提供有循证依据的临床支持。</p>
-        <p class="scenario__foot"><span>MEDICAL</span><span>循证知识库</span><span>临床决策</span></p>
+        <h3>医疗场景</h3>
+        <p>参考实现已接入智能病历、患者管理与医学知识库，面向病历整理、指南 / 文献 / 药品检索等任务；循证内容强调出处，诊疗决策仍由医生作出。</p>
+        <p class="scenario__foot"><span>MEDICAL</span><span>参考实现</span><span>专属工作台</span></p>
       </article>
 
       <article class="scenario scenario--pink reveal" style="--d:.06s">
@@ -177,9 +178,9 @@
           </span>
           <span class="scenario__index">02</span>
         </div>
-        <h3>法律 AI</h3>
-        <p>覆盖法规检索、合同审查与案例分析全链路，提供精准法律意见与合规审查，构建完整法律技能生态。</p>
-        <p class="scenario__foot"><span>LEGAL</span><span>合同审查</span><span>合规意见</span></p>
+        <h3>法律场景</h3>
+        <p>合同审查与合规检查已接入左侧导航和页面骨架，支持子页深链与刷新恢复；专属法律工作台仍在建设中。</p>
+        <p class="scenario__foot"><span>LEGAL</span><span>导航与骨架</span><span>建设中</span></p>
       </article>
 
       <article class="scenario scenario--yellow reveal">
@@ -191,23 +192,118 @@
           </span>
           <span class="scenario__index">03</span>
         </div>
-        <h3>办公 AI</h3>
-        <p>智能文档处理、会议摘要生成与工作流自动化，全面提升协作效率。支持 IM 对话与多模态交互。</p>
-        <p class="scenario__foot"><span>OFFICE</span><span>文档 × 流程</span><span>多模态</span></p>
+        <h3>办公场景</h3>
+        <p>通过通用 Agent 处理文档与格式转换、会议纪要、待办拆解和流程自动化，按任务交付 HTML / Markdown 报告、表格或文件。</p>
+        <p class="scenario__foot"><span>OFFICE</span><span>通用 Agent</span><span>任务场景</span></p>
       </article>
 
       <article class="scenario scenario--green reveal" style="--d:.06s">
         <div class="scenario__top">
           <span class="scenario__icon" aria-hidden="true">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>
+              <path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M8 15h8"/>
             </svg>
           </span>
           <span class="scenario__index">04</span>
         </div>
-        <h3>更多领域，值得探索</h3>
-        <p>医疗、法律、办公只是起点。同一套垂直大模型基座与技能体系，可按行业快速扩展——金融、制造、政务……下一个领域，由你定义。</p>
-        <p class="scenario__foot"><span>MORE DOMAINS</span><span>按行业扩展</span><span>由你定义</span></p>
+        <h3>科研场景</h3>
+        <p>通过通用 Agent 完成文献调研、资料整理、综述初稿与数据分析；实际结果取决于企业已接入的模型、工具与数据源。</p>
+        <p class="scenario__foot"><span>RESEARCH</span><span>通用 Agent</span><span>任务场景</span></p>
+      </article>
+
+      <p class="scenario-note reveal"><strong>扩展方式不变：</strong>新领域沿用同一套分层与分包机制，由 IT 统一验收后开放；终端用户不需要安装插件或配置模型。</p>
+    </div>
+  </section>
+
+  <!-- WORKFLOW -->
+  <section class="section section--rule container" id="workflow" aria-labelledby="workflow-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">02 / Workflow</p>
+        <h2 id="workflow-title">说一句话，<span class="hl">换一份可交付文件。</span></h2>
+      </div>
+      <p>输入目标，Agent 规划步骤、调用技能与工具；产物在会话右侧实时预览，确认后下载。以下均来自真实本地运行页面。</p>
+    </div>
+
+    <div class="shots">
+      <figure class="shot shot--lead reveal">
+        <a class="window shot__link" href="./assets/readme/pc-index.png" target="_blank" rel="noopener" aria-label="查看 PC 工作台原始截图">
+          <div class="window__bar" aria-hidden="true">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            <span class="window__url">prismclaw.local — 新任务</span>
+          </div>
+          <img src="./assets/readme/pc-index.png" width="1440" height="900" alt="PrismClaw PC 工作台：对话输入框、工作区选择，以及医疗、法律、办公、科研四个场景入口" loading="lazy" decoding="async">
+        </a>
+        <figcaption><b>01 / 工作台</b> · 四类场景示例一键填入，工作区随手切换</figcaption>
+      </figure>
+
+      <div class="shots__pair">
+        <figure class="shot reveal">
+          <a class="window shot__link" href="./assets/readme/pc-index2.png" target="_blank" rel="noopener" aria-label="查看会话与交付预览原始截图">
+            <div class="window__bar" aria-hidden="true">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="window__url">prismclaw.local — 会话 · 交付预览</span>
+            </div>
+            <img src="./assets/readme/pc-index2.png" width="2552" height="1213" alt="PrismClaw 会话页：左侧任务流与追问建议，右侧实时预览生成的 HTML 交付物" loading="lazy" decoding="async">
+          </a>
+          <figcaption><b>02 / 会话</b> · 左侧任务流，右侧实时预览并下载交付物</figcaption>
+        </figure>
+
+        <figure class="shot reveal" style="--d:.06s">
+          <a class="window shot__link" href="./assets/readme/pc-knowledge.png" target="_blank" rel="noopener" aria-label="查看医学知识库原始截图">
+            <div class="window__bar" aria-hidden="true">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="window__url">prismclaw.local — 医学知识库</span>
+            </div>
+            <img src="./assets/readme/pc-knowledge.png" width="1440" height="900" alt="PrismClaw 医学知识库：文献、指南、药品检索入口，当前环境暂无文献数据" loading="lazy" decoding="async">
+          </a>
+          <figcaption><b>03 / 医学知识库</b> · 检索入口与结果区域；当前截图环境暂无文献数据</figcaption>
+        </figure>
+      </div>
+
+      <p class="shots__note">REAL SCREENSHOTS / 点击截图可查看原图；界面数据来自截图时的本地环境。</p>
+    </div>
+  </section>
+
+  <!-- CHOICES -->
+  <section class="section section--rule container" id="choices" aria-labelledby="choices-title">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">03 / Choices</p>
+        <h2 id="choices-title">这些事，<span class="hl">我们故意不做。</span></h2>
+      </div>
+      <p>加法谁都会做，难的是知道什么不该做。下面三件事，是我们在企业现场反复权衡后决定放弃的。</p>
+    </div>
+
+    <div class="bento">
+      <article class="cap reveal">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--blue)">01</span>
+          <span class="cap__tag">NO USER PLUGINS</span>
+        </div>
+        <h3>不开放扩展</h3>
+        <p>把技能、插件、MCP 交给用户自己装，看似自由，实则把版本、依赖、密钥的坑一起交了出去。内置能力逐个适配、回归验证；领域能力以分包接入，由 IT 统一验收。</p>
+        <div class="cap__chips"><span>逐个适配</span><span>统一验收</span><span>开箱即用</span></div>
+      </article>
+
+      <article class="cap reveal" style="--d:.05s">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--pink)">02</span>
+          <span class="cap__tag">NO NATIVE CLIENT</span>
+        </div>
+        <h3>不做本地客户端</h3>
+        <p>本地客户端更快、更贴近系统，但每台机器都是一个维护点。浏览器即用：一处部署、全组织可用，升级只发生在服务器上。</p>
+        <div class="cap__chips"><span>浏览器即用</span><span>零安装</span><span>一处升级</span></div>
+      </article>
+
+      <article class="cap reveal" style="--d:.1s">
+        <div class="cap__top">
+          <span class="cap__num" style="--c:var(--green)">03</span>
+          <span class="cap__tag">FEWER DECISIONS</span>
+        </div>
+        <h3>不留多余的按钮</h3>
+        <p>每个开关都是在向用户要一次判断。模型怎么选、上下文怎么拼、技能怎么调，全部留在后台。用户只做两件事：说出你要什么，拿走你要的东西。</p>
+        <div class="cap__chips"><span>一个输入框</span><span>一个预览区</span><span>零配置</span></div>
       </article>
     </div>
   </section>
@@ -216,7 +312,7 @@
   <section class="section section--rule container" id="capabilities" aria-labelledby="capabilities-title">
     <div class="section-head">
       <div>
-        <p class="eyebrow">02 / Capabilities</p>
+        <p class="eyebrow">04 / Capabilities</p>
         <h2 id="capabilities-title">平台该有的，<span class="hl">全部开箱即用。</span></h2>
       </div>
       <p>从部署、记忆到安全治理，不需要再东拼西凑一堆开源件，也不用为每家企业重写一遍底座。</p>
@@ -259,8 +355,8 @@
           <span class="cap__tag">MEMORY + DREAMING</span>
         </div>
         <h3>四层记忆 + Dreaming</h3>
-        <p>L1 工作 / L2 会话 / L3 语义（pgvector）/ L4 归档。空闲窗口执行 Light → Deep → REM 三阶段整理，把经验沉淀成可复用的团队记忆。</p>
-        <div class="cap__chips"><span>pgvector</span><span>三阶段策展</span><span>越用越懂你</span></div>
+        <p>L1 工作 / L2 会话 / L3 语义（VectorChord）/ L4 归档。空闲窗口执行 Light → Deep → REM 三阶段整理，把经验沉淀成可复用的团队记忆。</p>
+        <div class="cap__chips"><span>VectorChord Suite</span><span>三阶段策展</span><span>越用越懂你</span></div>
       </article>
 
       <article class="cap cap--wide reveal">
@@ -279,44 +375,9 @@
           <span class="cap__tag">SCALE OUT</span>
         </div>
         <h3>可水平扩展</h3>
-        <p>Worker 无状态，Redis 维护 <code>session_key → worker_id</code> 亲和；宕机经 TTL 过期自动接管。技能、插件、MCP、子代理均可插拔。</p>
-        <div class="cap__chips"><span>active-active</span><span>可插拔</span></div>
+        <p>Worker 无状态，Redis 维护 <code>session_key → worker_id</code> 亲和；宕机经 TTL 过期自动接管。领域能力以分包接入、由 IT 统一验收，终端用户无需配置。</p>
+        <div class="cap__chips"><span>active-active</span><span>领域分包</span></div>
       </article>
-    </div>
-  </section>
-
-  <!-- WORKFLOW -->
-  <section class="section container section--rule" id="workflow" aria-labelledby="workflow-title">
-    <div class="section-head">
-      <div>
-        <p class="eyebrow">03 / Workflow</p>
-        <h2 id="workflow-title">说一句话，<span class="hl">换一份可交付文件。</span></h2>
-      </div>
-      <p>输入框里写清目标，Agent 自主规划步骤、调用技能与工具；产出物在右侧实时预览，确认后直接下载。</p>
-    </div>
-
-    <div class="shots">
-      <figure class="shot reveal">
-        <div class="window">
-          <div class="window__bar" aria-hidden="true">
-            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            <span class="window__url">prismclaw.local — 新任务</span>
-          </div>
-          <img src="./assets/readme/pc-index.png" width="2555" height="1213" alt="PrismClaw PC 工作台：对话输入框、工作区选择，以及医疗、法律、科研三个场景示例" loading="lazy" decoding="async">
-        </div>
-        <figcaption><b>工作台</b> · 场景示例一键填入，工作区选择随手切换</figcaption>
-      </figure>
-
-      <figure class="shot reveal">
-        <div class="window">
-          <div class="window__bar" aria-hidden="true">
-            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-            <span class="window__url">prismclaw.local — 会话 · 交付预览</span>
-          </div>
-          <img src="./assets/readme/pc-index2.png" width="2552" height="1213" alt="PrismClaw 会话页：左侧任务流与追问建议，右侧实时预览生成的 HTML 宣发方案" loading="lazy" decoding="async">
-        </div>
-        <figcaption><b>会话</b> · 左侧任务流与追问建议，右侧实时预览 HTML 交付物并可直接下载</figcaption>
-      </figure>
     </div>
   </section>
 
@@ -324,7 +385,7 @@
   <section class="experience" id="experience" aria-labelledby="experience-title">
     <div class="container exp-grid">
       <div class="exp__copy reveal">
-        <p class="eyebrow">04 / Experience</p>
+        <p class="eyebrow">05 / Experience</p>
         <h2 id="experience-title">一套设计语言，<span class="hl">两端无缝接力。</span></h2>
         <p class="exp__lede">PC 工作台与移动端 H5 共享同一套主题令牌与信息层级：亮色近白冷灰，暗色靛蓝黑。登录、对话、任务、文件、自动化，在两端都在熟悉的位置。</p>
         <ul class="exp__list">
@@ -342,10 +403,10 @@
             <span class="dot"></span><span class="dot"></span><span class="dot"></span>
             <span class="window__url">prismclaw.local — dark</span>
           </div>
-          <img src="./assets/readme/pc-dark.png" width="1600" height="1000" alt="PrismClaw PC 端暗色模式登录页" loading="lazy" decoding="async">
+          <img src="./assets/readme/pc-dark.png" width="1440" height="900" alt="PrismClaw PC 端暗色模式登录页" loading="lazy" decoding="async">
         </figure>
         <figure class="phone phone--exp">
-          <img src="./assets/readme/mobile-dark.png" width="780" height="1688" alt="PrismClaw 移动端 H5 暗色模式首页" loading="lazy" decoding="async">
+          <img src="./assets/readme/mobile-dark.png" width="390" height="844" alt="PrismClaw 移动端 H5 暗色模式首页" loading="lazy" decoding="async">
         </figure>
         <div class="sticker sticker--yellow" aria-hidden="true">暗色模式</div>
       </div>
@@ -356,7 +417,7 @@
   <section class="section container" id="architecture" aria-labelledby="architecture-title">
     <div class="section-head">
       <div>
-        <p class="eyebrow">05 / Architecture</p>
+        <p class="eyebrow">06 / Architecture</p>
         <h2 id="architecture-title">五层单向，<span class="hl">改一处不牵一片。</span></h2>
       </div>
       <p>依赖严格单向：L4 → L3 → L2 → L1 → L0。L1 承载全部业务逻辑且无状态，存储独立于 Worker——这是水平扩展的支点。</p>
@@ -406,7 +467,7 @@
   <section class="section section--rule container" id="start" aria-labelledby="start-title">
     <div class="section-head">
       <div>
-        <p class="eyebrow">06 / Quickstart</p>
+        <p class="eyebrow">07 / Quickstart</p>
         <h2 id="start-title">一条命令，<span class="hl">把平台跑起来。</span></h2>
       </div>
       <p>Docker 单机起全套：PostgreSQL + Redis + 应用 + Runtime-Agent，首次启动会构建镜像。</p>
@@ -455,7 +516,7 @@ docker compose up -d
           <ul class="req">
             <li><strong>Docker 24+</strong>（推荐，单机起全套）</li>
             <li>或源码：Python 3.12+ / uv / Node 18+</li>
-            <li>Redis 7 · PostgreSQL 16+（含 pgvector）</li>
+            <li>Redis 7 · PostgreSQL 17（VectorChord Suite）</li>
             <li>首次启动构建镜像，需可访问镜像源</li>
           </ul>
         </div>
@@ -485,13 +546,14 @@ docker compose up -d
           <img src="./assets/readme/logo.png" width="44" height="44" alt="">
           <strong>PrismClaw</strong>
         </div>
-        <p>企业级 · 私有化 · 多用户 · 多 Agent。运行于企业自有基础设施，数据、记忆与审计不出内网。</p>
+        <p>企业级 · 私有化 · 多用户 · 多 Agent。AI Agent 长在企业自己的基础设施上，数据、记忆与审计不出内网。</p>
       </div>
 
       <nav class="footer__links" aria-label="页脚导航">
         <div class="footer__col">
           <h4>产品</h4>
           <a href="#scenarios">应用场景</a>
+          <a href="#workflow">任务流程</a>
           <a href="#capabilities">平台能力</a>
           <a href="#architecture">系统架构</a>
           <a href="#start">快速开始</a>

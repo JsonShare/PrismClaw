@@ -55,7 +55,6 @@ async def gate_tool_call(
     from prismclaw.engine.execution.dispatch.tools import run_pre_tool_checks
 
     _bstate = before_ctx.state
-    _bctx = _bstate.ctx if _bstate is not None else None
     call = before_ctx.tool_call
 
     # ── 0. 插件作用域（最便宜、最确定，故最先）──
@@ -90,7 +89,7 @@ async def gate_tool_call(
 
     # ── 2. pre-tool hooks ──
     _pre_tool_denied, _allowed = await run_pre_tool_checks(
-        _bctx,
+        rt,
         [call],
         workspace_tag=getattr(request, "workspace_tag", None),
         traj_turn_counter=_traj_scope.turn_counter if _traj_scope is not None else 0,
@@ -124,20 +123,18 @@ async def after_tool_call(
     state_machine = rt.state_machine
 
     _state = after_ctx.state
-    _ctx = _state.ctx if _state is not None else None
 
     if (
         _state is not None
         and after_ctx.tool_calls
-        and _ctx is not None
         and _completion_state.contract is not None
     ):
         from prismclaw.engine.execution.control.artifacts import ArtifactScanner
         from prismclaw.engine.execution.control.kernel import CompletionReviewer
 
         _review = CompletionReviewer(
-            ArtifactScanner(_ctx._tool_workspace_path)
-        ).evaluate(_completion_state.contract, _ctx.evidence_ledger)
+            ArtifactScanner(rt.tool_workspace_path)
+        ).evaluate(_completion_state.contract, rt.evidence_ledger)
         if _review.accepted and not tool_loop_state.convergence_advisory_sent:
             tool_loop_state.convergence_advisory_sent = True
             state_machine.update_tool_loop_state(tool_loop_state)
@@ -191,7 +188,7 @@ async def execute_tools(
         postprocess_tool_results,
         project_tool_result_entries,
     )
-    from prismclaw.engine.execution.loop.arbiter import persist_snapshot_fn
+    from prismclaw.engine.execution.loop.terminal import persist_snapshot_fn
     from prismclaw.engine.execution.loop.tree_writer import (
         _append,
         _persist_turn_runtime_metrics,
@@ -362,7 +359,7 @@ async def execute_tools(
         )
 
         # ── 13. Persist snapshot ──
-        await persist_snapshot_fn(state.ctx)
+        await persist_snapshot_fn(rt)
 
         # ── 14. Turn runtime metrics persistence ──
         _dynamic_payload = 0

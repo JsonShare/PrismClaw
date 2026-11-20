@@ -1,10 +1,10 @@
-"""药品检索工具 — 检索药品信息、适应症与相互作用。
+"""药品检索工具 — 检索药品说明书信息、适应症与注意事项。
 
 符合 Tool Protocol：name / description / parameters / tool_class /
 side_effect / effect_class + async execute()。
 
-当前实现：基于内置药品数据库进行检索。
-后续可接入 DrugBank / 国家药监局 API。
+数据源：`pc_medical_kb_drugs`（西药 / 中成药三级分类目录 + 说明书要点），
+由 bundle 在注册时注入 KbStore 实例。
 """
 from __future__ import annotations
 
@@ -14,115 +14,94 @@ from typing import Any
 
 from .._protocols import ToolContext, text_result, error_result
 
-# 内置药品数据库（示例数据）
-_DRUG_DB: list[dict[str, Any]] = [
-    {
-        "generic_name": "Osimertinib",
-        "brand_names": ["Tagrisso", "泰瑞沙"],
-        "category": "靶向药",
-        "indications": ["EGFR T790M 突变阳性非小细胞肺癌", "EGFR Ex19del/L858R 一线治疗"],
-        "contraindications": ["对奥希替尼过敏者"],
-        "interactions": ["CYP3A4 强诱导剂降低血药浓度", "与华法林合用增加出血风险"],
-    },
-    {
-        "generic_name": "Pembrolizumab",
-        "brand_names": ["Keytruda", "帕博利珠单抗"],
-        "category": "免疫检查点抑制剂",
-        "indications": ["PD-L1 高表达 NSCLC 一线", "黑色素瘤", "MSI-H/dMMR 实体瘤"],
-        "contraindications": ["严重自身免疫性疾病", "器官移植受者"],
-        "interactions": ["免疫抑制剂降低疗效", "与其他免疫治疗联用增加免疫相关不良事件"],
-    },
-    {
-        "generic_name": "Capecitabine",
-        "brand_names": ["Xeloda", "希罗达"],
-        "category": "化疗药（抗代谢类）",
-        "indications": ["结直肠癌", "乳腺癌", "胃癌"],
-        "contraindications": ["DPD 酶缺乏", "严重肝肾功能不全"],
-        "interactions": ["与华法林合用显著增加 INR", "亚叶酸钙增强毒性"],
-    },
-    {
-        "generic_name": "Amlodipine",
-        "brand_names": ["Norvasc", "络活喜"],
-        "category": "钙通道阻滞剂",
-        "indications": ["高血压", "心绞痛"],
-        "contraindications": ["严重主动脉瓣狭窄", "心源性休克"],
-        "interactions": ["CYP3A4 抑制剂增加血药浓度", "与辛伐他汀合用限制辛伐他汀剂量≤20mg"],
-    },
-]
-
 
 @dataclass
 class SearchDrugTool:
     """药品检索工具。
 
     支持：
-    - 按药品名/通用名检索
+    - 按药品名 / 通用名检索
     - 适应症与禁忌查询
-    - 药品相互作用查询
+    - 不良反应与相互作用查询
     """
 
     name: str = "search_drug"
-    description: str = "药品检索工具 — 检索药品信息、适应症与相互作用"
+    description: str = "药品检索工具 — 检索知识库中药品说明书的适应症、用法用量、禁忌与不良反应"
     parameters: dict[str, Any] = field(default_factory=lambda: {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "药品名/通用名/商品名",
+                "description": "药品名 / 通用名",
             },
             "action": {
                 "type": "string",
                 "enum": ["info", "indication", "interaction"],
-                "description": "查询类型：info=基本信息, indication=适应症, interaction=相互作用",
+                "description": "查询类型：info=基本信息, indication=适应症与禁忌, interaction=相互作用",
+                "default": "info",
             },
-            "drug_names": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "相互作用查询的药品列表（interaction 时必填）",
+            "limit": {
+                "type": "integer",
+                "description": "返回结果数量上限",
+                "default": 10,
             },
         },
-        "required": ["query", "action"],
+        "required": ["query"],
     })
     tool_class: str = "read"
     side_effect: bool = False
     effect_class: str = "search"
 
+    # 由 bundle 注入
+    kb_store: Any = None
+
     async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
         """执行药品检索。"""
         call_id = args.get("_call_id", "")
         query = args.get("query", "")
-        action = args.get("action", "")
+        action = args.get("action") or "info"
 
         if not query:
             return error_result(call_id, "缺少查询药品名 query")
-        if not action:
-            return error_result(call_id, "缺少查询类型 action")
-
-        query_lower = query.lower()
-
-        # 匹配药品
-        matched = []
-        for drug in _DRUG_DB:
-            names = [drug["generic_name"].lower()] + [n.lower() for n in drug.get("brand_names", [])]
-            if any(query_lower in n for n in names):
-                matched.append(drug)
-
-        if not matched:
-            return text_result(call_id, json.dumps({"query": query, "results": [], "message": "未找到匹配药品"}, ensure_ascii=False))
-
-        if action == "info":
-            results = [{"generic_name": d["generic_name"], "brand_names": d["brand_names"], "category": d["category"]} for d in matched]
-        elif action == "indication":
-            results = [{"generic_name": d["generic_name"], "indications": d["indications"], "contraindications": d["contraindications"]} for d in matched]
-        elif action == "interaction":
-            drug_names = args.get("drug_names", [])
-            results = []
-            for d in matched:
-                entry = {"generic_name": d["generic_name"], "interactions": d["interactions"]}
-                if drug_names:
-                    entry["query_drug_names"] = drug_names
-                results.append(entry)
-        else:
+        if action not in ("info", "indication", "interaction"):
             return error_result(call_id, f"未知 action: {action}")
+        if self.kb_store is None:
+            return error_result(call_id, "KbStore 未注入，无法检索药品")
 
-        return text_result(call_id, json.dumps({"query": query, "action": action, "results": results}, ensure_ascii=False))
+        limit = int(args.get("limit", 10) or 10)
+        page = await self.kb_store.list_drugs(keyword=query, page=1, page_size=max(limit * 5, 50))
+
+        results: list[dict[str, Any]] = []
+        for d in page["items"]:
+            base = {
+                "name": d.get("name", ""),
+                "generic_name": d.get("generic_name", ""),
+                "category": d.get("category", ""),
+                "drug_class": d.get("atc_l2", "") or d.get("atc_group", ""),
+            }
+            if action == "info":
+                base.update({
+                    "dosage": d.get("dosage", ""),
+                    "mechanism": d.get("mechanism", ""),
+                    "pregnancy_grade": d.get("pregnancy_grade", ""),
+                })
+            elif action == "indication":
+                base.update({
+                    "indications": d.get("indications_json") or [],
+                    "contraindications": d.get("contraindications_json") or [],
+                    "side_effects": d.get("side_effects_json") or [],
+                })
+            else:
+                base["interactions"] = d.get("interactions_json") or []
+            results.append(base)
+            if len(results) >= limit:
+                break
+
+        payload: dict[str, Any] = {
+            "query": query, "action": action,
+            "results": results, "count": len(results),
+            "total_matched": page["total"],
+        }
+        if not results:
+            payload["message"] = "未找到匹配药品"
+        return text_result(call_id, json.dumps(payload, ensure_ascii=False))

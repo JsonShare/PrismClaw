@@ -51,16 +51,8 @@ class MemoryEntry(BaseModel):
     @field_validator("type", mode="before")
     @classmethod
     def _normalize_entry_type(cls, value: object) -> str:
-        """受控词表强校验：大小写/空白归一 + 缺省 fact，词表外直接报错。
-
-        ``auto_sop`` 是系统内部类型（仅 sop_extraction 写入），同样合法。
-        未上线、无存量数据，因此不做别名映射；未知值应在写入边界先被归一或
-        拒绝，若仍到达构造点说明调用方有 bug，fail fast 比静默落库更好。
-        """
-        normalized = normalize_type(None if value is None else str(value))
-        if normalized not in CANONICAL_TYPES and normalized != SOP_MEMORY_TYPE:
-            raise ValueError(f"未知 memory type: {normalized!r}")
-        return normalized
+        """normalize_type 单点把关（非兼容：非法值直接 raise）。"""
+        return normalize_type(None if value is None else str(value))
 
 
 class ArchiveEntry(BaseModel):

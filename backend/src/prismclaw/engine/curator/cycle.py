@@ -24,7 +24,7 @@ from prismclaw.schema.shared.exceptions import LockAcquireError, LockLostError
 if TYPE_CHECKING:
     from prismclaw.engine.curator.state import CuratorStateStore
     from prismclaw.schema.services.task_protocol import TaskManagerProtocol
-    from prismclaw.schema.persistence import LockManager
+    from prismclaw.schema.storage import LockManager
 
 logger = logging.getLogger(__name__)
 

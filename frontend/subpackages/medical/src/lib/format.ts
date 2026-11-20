@@ -5,7 +5,7 @@
  * 页面与 feature 组件一律从这里取，避免同一份派生逻辑散落多处。
  */
 
-import type { DrugCategory, InteractionResult, PatientProfile, PatientReport, NarrativeSection } from '../types/view'
+import type { PatientProfile, PatientReport, NarrativeSection } from '../types/view'
 
 /* ════════════════════════ 数值与趋势 ════════════════════════ */
 
@@ -72,31 +72,6 @@ export function groupReportsByYear<T extends { visitDate: string; date: string }
   return [...buckets]
     .map(([year, list]) => ({ year, items: list }))
     .sort((a, b) => (a.year === '未知' ? 1 : b.year === '未知' ? -1 : b.year.localeCompare(a.year)))
-}
-
-/* ════════════════════════ 药品相互作用核查 ════════════════════════ */
-
-/** 按两种药品的分类组合给出核查提示（窄切口工具，输出行动建议而非结论） */
-export function checkInteraction(
-  aName: string,
-  bName: string,
-  drugs: Array<{ name: string; cat: DrugCategory }>,
-): InteractionResult | null {
-  if (!aName || !bName) return null
-  if (aName === bName) return { level: 'warn', text: '为同一种药物，请选择两种不同药物' }
-
-  const a = drugs.find((d) => d.name === aName)
-  const b = drugs.find((d) => d.name === bName)
-  if (!a || !b) return null
-
-  const pair = [a.cat, b.cat]
-  const nChemo = pair.filter((c) => c === '化疗药物').length
-  const nImmuno = pair.filter((c) => c === '免疫治疗').length
-
-  if (nChemo === 2) return { level: 'high', text: '化疗×化疗：骨髓抑制叠加，需监测血象并考虑减量' }
-  if (nImmuno === 1 && nChemo === 1) return { level: 'warn', text: '免疫×化疗：注意免疫相关不良反应与化疗毒性的鉴别' }
-  if (nImmuno === 2) return { level: 'warn', text: '免疫×免疫：双免方案需重点关注免疫相关不良反应' }
-  return { level: 'ok', text: '未检索到明确相互作用，仍建议临床药师复核' }
 }
 
 /* ════════════════════════ 分页 ════════════════════════ */

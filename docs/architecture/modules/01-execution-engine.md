@@ -50,7 +50,7 @@
 
 | 子目录 | 职责 |
 |--------|------|
-| `loop/` | Agent 循环骨架、类型定义、Arbiter 仲裁 |
+| `loop/` | Agent 循环骨架、run 级容器、终态副作用 |
 | `dispatch/` | LLM 流式调用管道、工具执行编排、StreamingExecutor 并发 |
 | `query/` | PreRequestPipeline — LLM 请求功能性管道 |
 | `checkpoint/` | RunState 模型、RunStateMachine 状态机 |
@@ -72,8 +72,8 @@
 | `PreparePort.prepare_next_turn` | `(state) -> TurnUpdate` | 每轮上下文重建 |
 | `StreamPort.stream_llm` | `(state) -> AsyncIterator` | LLM 流式调用，写入 `state.llm_outcome` |
 | `ExecutePort.execute_tools` | `(state, response, calls)` | handoff 分派 + 工具执行 + 落树 |
-| `ExecutePort.before_tool_call` | `(ctx) -> BeforeToolCallResult \| None` | 冻结签名 + 安全门 |
-| `ExecutePort.after_tool_call` | `(ctx) -> AfterToolCallResult \| None` | 完成契约收敛提示 |
+| `ExecutePort.before_tool_call` | `(before_ctx) -> BeforeToolCallResult \| None` | 冻结签名 + 安全门 |
+| `ExecutePort.after_tool_call` | `(after_ctx) -> AfterToolCallResult \| None` | 完成契约收敛提示 |
 | `LoopConfig.should_continue` | `(state, response, *, event) -> Decision` | 续跑 / 终态唯一裁决 |
 | `ExecutePort.persist_denied_turn` | `(state, response, blocked)` | 全拒回合落树 |
 | `ExecutePort.persist_clarified_turn` | `(state, response, calls, ask_id, answer)` | HITL 回合落树 |
@@ -86,12 +86,12 @@
 | 模块 | 职责 |
 |------|------|
 | `agent_loop.py` | `run_loop` 纯控制流，不 import 任何 deps 子系统 |
-| `runtime.py` | `LoopRuntime` 依赖容器 + `build_runtime()` 装配 |
-| `wiring.py` | `build_loop_config()`：把 stage 函数绑定到端口 |
-| `terminal.py` | 幂等终态 `terminate`、`persist_turn`、HITL、steering |
+| `runtime.py` | `LoopRuntime`（唯一 run 级容器）+ `build_runtime()` 原地装配 |
+| `wiring.py` | `build_loop_config(rt)`：原地装配后把 stage 函数绑定到端口 |
+| `terminal.py` | 幂等终态 `terminate`、`persist_snapshot_fn` / `mark_task_blocked` / `record_review_outcome`、HITL、steering |
 | `continue_.py` | `should_continue`：统一续跑/终态决策 |
 | `tools.py` | `gate_tool_call` / `after_tool_call` / `execute_tools` |
-| `prepare.py` | `prepare_next_turn`：每轮上下文重建 |
+| `turn_prepare.py` | `prepare_next_turn`：每轮上下文重建 |
 | `stream.py` | `stream_llm`：LLM 调用 + usage 埋点 + context_overflow 恢复 |
 
 **核心数据流：**
@@ -138,20 +138,19 @@ class AgentCallbacks:
 
 约束：所有回调均可为 `None`（循环引擎调用前必须检查）；回调中不得抛出未处理异常；异步回调应有超时保护。
 
-**端口绑定**：`wiring.build_loop_config()` 是唯一知道子系统存在的地方。`run_loop()` 不直接 import Arbiter、HookDispatcher，所有行为通过 `LoopConfig` 的端口注入，确保循环骨架纯化、子系统可独立替换、测试友好。`LoopRuntime` 把原先闭包隐式捕获的变量（deps、request、recovery、state_machine、completion_kernel、budget_guard 等）显式化为 dataclass 字段，无运行期行为。
+**端口绑定**：`wiring.build_loop_config(rt)` 是唯一知道子系统存在的地方。`run_loop()` 不直接 import HookDispatcher 或完成控制子系统，所有行为通过 `LoopConfig` 的端口注入，确保循环骨架纯化、子系统可独立替换、测试友好。`LoopRuntime` 是单次 run 的**唯一状态容器**，字段按「入参 / run 级状态 / 装配产物 / 可变标志」四组组织，无运行期行为。
 
 ### 2. Runner 入口 (`loop/runner.py`)
 
-**核心函数：`run_agent_stream()`**（约 1137 行）
+**核心函数：`run_agent_stream()`**（约 130 行）
 
-负责完整的运行生命周期：
+只保留三段职责：
 
-- Session 初始化与 TaskSpec 构建
-- Hook dispatch（session_start / session_end）
-- ToolContext 构造与 RunLoopState 初始化
-- 循环运行与 teardown
-- Recovery 模式处理
-- 确认流程（`awaiting_confirmation` / `awaiting_risk_confirmation`）
+1. `RunPreparer.prepare()` 判定启动路径，返回 `EarlyExit | LoopRuntime`
+2. 正常路径：`build_loop_config(rt)` 装配 → 构建 `RunLoopState` → `run_loop()` → 回填 run 级结果
+3. `finally` 统一调用 `run_teardown(rt)`
+
+Session 初始化、TaskSpec 构建、Hook dispatch、ToolContext 构造、Recovery 模式与确认流程由 `loop/preparer.py` 承担；遥测、skill 清理、ownership 释放与 SESSION_END 通知由 `loop/teardown.py` 承担。
 
 ### 3. LLM 流式管道 (`dispatch/pipeline.py`)
 
@@ -204,18 +203,19 @@ plan_handoff_dispatch()
 2. `side_effect=False` 推断
 3. 默认 `False`（安全优先）
 
-### 6. Arbiter 仲裁 (`loop/arbiter.py`)
+### 6. 终态副作用与任务阻断 (`loop/terminal.py`)
 
-**核心类：`Arbiter`** + **`RunContext`** + **`consult_arbiter()`**
+终态收敛只做副作用、不做裁决，全部集中在 `terminal.py`：
 
-信号集：`IterationSignals`
+| 函数 | 职责 |
+|------|------|
+| `persist_snapshot_fn(rt)` | 持久化当前 `RunSnapshot` |
+| `mark_task_blocked(rt, reason)` | 通过 `task_persistence` 提交 `task.block` 变更 |
+| `record_review_outcome(rt, record)` | 审查遥测（只度量，不计数） |
 
-仲裁能力：
-- **路径感知恢复限制**：基于 `RunContext` 中的恢复链信息
-- **多路径螺旋检测**：防止 Agent 在多条推理路径间循环
-- **结构性仲裁**：`evaluate_task_mutation()` 检测任务偏移
+结构性仲裁 `evaluate_task_mutation()` 与 `MutationDecision` 位于 `execution/state/task_persistence.py`，与任务变更的持久化同域。
 
-**终止函数：** `terminate_with_error()` — 统一的错误终止入口
+**终态裁决不在本模块**：run 级终态唯一出口是 `control/kernel.py` 的 `CompletionKernel.decide()`；`terminal.terminate()` 只负责收敛副作用（写 `rt.terminated_by`、关闭孤儿工具调用、阻断任务、持久化快照）。
 
 ### 7. 核心类型 (`loop/types.py`)
 
@@ -223,7 +223,7 @@ plan_handoff_dispatch()
 |------|------|
 | `RunLoopState` | 跨迭代可变状态（累加计数器、消息队列通道、状态机对象、语义演化对象）；run_loop 以扁平名访问，底部 property 是唯一扁平访问层 |
 | `LoopConfig` | 端口配置：`PreparePort` / `StreamPort` / `ExecutePort` + `should_continue` + 可选 `get_steering_messages` |
-| `LoopRuntime` | stage 函数的显式依赖容器（`runtime.py`），由 `build_runtime()` 装配 |
+| `LoopRuntime` | 唯一 run 级状态容器（`runtime.py`）：入参 / run 级状态 / 装配产物 / 可变标志；`build_runtime()` 原地填充并返回同一对象 |
 | `BeforeToolCallContext/Result` | 前检上下文（`tool_call` / `args` / `state`）与结果（`block` / `reason`） |
 | `AfterToolCallContext/Result` | 后检上下文（`tool_calls` / `state`）与结果（`inject_messages`） |
 | `TurnUpdate` | 轮次更新（含 `restart` 标志与 `pending_messages`） |
@@ -240,11 +240,10 @@ plan_handoff_dispatch()
 
 **`RunStateMachine`**（`state_machine.py`）封装 RunState 操作：
 - `retry_counts_view()` — 重试计数视图
-- `advance_iteration()` — 推进迭代
 - `record_retry()` — 记录重试
+- `reset_retry_state()` — 重置重试状态
 - `load_tool_loop_state()` — 加载工具循环状态
-- `recovery_chain_for_arbiter()` — 为 Arbiter 构建恢复链
-- `terminate_run()` — 终止运行
+- `update_tool_loop_state()` — 写回工具循环状态
 
 ### 9. HandoffSupervisor (`handoff/supervisor.py`)
 
@@ -289,7 +288,7 @@ plan_handoff_dispatch()
 | Search-loop detection | 双条件：调用次数 + 输出字符占比 |
 | Same-target re-read (Check 5) | 同目标累计读取 ≥ `same_target_read_warn_at`（默认 4）且该目标零写入 → advisory |
 | doom-loop 三级阶梯 | 连续相同工具签名 → soft-warn → 纠偏注入（after_tool_call 节流后）→ freeze（只冻结调用，不终止；终态由 CompletionKernel 裁决） |
-| 有界循环检测 (Check 2b) | 签名窗口满且独特组合 ≤ 2 的交替打转 → warn（终止权收编后只产嫌疑信号） |
+| 有界循环检测 (Check 2b) | 签名窗口满且独特组合 ≤ 2 的交替打转 → warn（只产嫌疑信号） |
 | 失败归因分流 | external 失败（MCP 传输/业务错误、sub-agent 整体失败）不进签名窗口、不计连错，只累计 external 计数 |
 | 交付观测 | 本批次有**命名** write 类工具（write/edit 等；bash 整体排除——其小结果可能是计算 stdout，假交付比漏判更糟）的成功执行 → 追加进 `delivery_events` 台账（v2.2 累积式证据，非一次性布尔） |
 
@@ -303,16 +302,16 @@ plan_handoff_dispatch()
 | 纠偏注入 | `warn_at` < streak < `absolute_max` | 注入中文纠偏 guidance（action=warn，主循环 continue，调用方 after_tool_call 节流后回流） |
 | 冻结 | streak >= `absolute_max`（2×threshold） | action=freeze：注册冻结签名，下一回合 before_tool_call 起 block；模型无视冻结重试达 `escalate_above` → 置 `frozen_call_defied` 嫌疑标志 |
 
-**Check 5 同目标重复读取（2026-10-23，s:d54adf8fb4aa4742 事故修复）：**
+**Check 5 同目标重复读取：**
 
-Check 2 的指纹是「同调用 + 逐字节同结果」，对「同文件不同区间」重读天然失效（每次区间/字节都不同 = 机械层面的新信息）——该事故中模型 26 轮反复 `sed`/`cat` 同一 mining_work 区间，L1 全过，直到 L2 评审第 3 次连击才熔断（前 12 轮零拦截）。
+Check 2 的指纹是「同调用 + 逐字节同结果」，对「同文件不同区间」重读天然失效（每次区间/字节都不同 = 机械层面的新信息）——模型可能 26 轮反复 `sed`/`cat` 同一区间而 L1 全过，直到 L2 评审连击才熔断。
 
 - **计数**：`record_target_observations`（after_tool_call，全批次覆盖——`record_tool_call_observation` 只看首个调用）维护 `ToolLoopState.target_read_counts` / `target_write_counts`。读/写由**结果规模**判别（≥ `_READ_MIN_RESULT_CHARS`=500 字符 = 读取；write 类工具的小结果 = 写入），不解析 shell 语义；bash 多路径等歧义调用不计（宁缺勿错）。
 - **触发**：当前调用目标累计读取 ≥ K 且零写入（读后编辑再读是合法模式，写计数即排除）→ `action="warn"` 定向 advisory。**不冻结**——读取是任务刚需（Check 4 能冻 search 是因为搜索可弃）。预警后每 3 次重读再提醒（K 及 K+3、K+6…），无额外状态。
-- **配套（同次修复）**：P0 重写 streak=2 注入文案（现行"consolidate & conclude NOW"对已宣布计划的模型是"劝弃"，恰与其自我计划冲突；新文案点名重叠重读 + 提醒执行计划 + 允许不完整交付）；P1 把读取直方图（`build_read_histogram`，top-3）喂进评审提示，首个 stalled 预计从 iter 17 提前到 8-11。
+- **配套**：streak=2 注入文案点名重叠重读 + 提醒执行计划 + 允许不完整交付（"consolidate & conclude NOW"对已宣布计划的模型是"劝弃"，与其自我计划冲突）；读取直方图（`build_read_histogram`，top-3）喂进评审提示，stalled 预计从 iter 17 提前到 8-11。
 - **搜索类工具归 Check 4**（query 目标重复计价在那边），Check 5 显式跳过避免双重预警。
 
-**终止权收编（CompletionKernel）：** 机械层（Check 1-5、冻结阶梯）与 L2 进展评审均不再自行 terminate，只产 warn/freeze 引导与**纠偏**信号（偏离只回流纠偏指引，不掐断）；run 级终态**唯一出口**是 `engine/execution/control/kernel.py` 的 `CompletionKernel.decide()`（2026-10-30 收权，由 `execution/state/governance.py` 调用）。`should_continue` 的 preflight / all_blocked / post 三个站点均只把事件交给内核裁决，不各自 terminate。
+**终态裁决（CompletionKernel）：** 机械层（Check 1-5、冻结阶梯）与 L2 进展评审只产 warn/freeze 引导与**纠偏**信号（偏离只回流纠偏指引，不掐断）；run 级终态**唯一出口**是 `engine/execution/control/kernel.py` 的 `CompletionKernel.decide()`，由 `execution/state/governance.py` 调用。`should_continue` 的 preflight / all_blocked / post 三个站点均只把事件交给内核裁决，不各自 terminate。
 
 **`CompletionKernel.decide(event)` 裁决顺序（首个命中返回）：**
 
@@ -402,11 +401,11 @@ run_agent_stream() → 构建 TaskSpec + RunLoopState
 run_loop() 循环：
     prepare_next_turn() → 准备轮次上下文（合并 pending_messages）
     stream_llm() → LLM 流式响应
-    should_continue(preflight) → Arbiter 前置判断
+    should_continue(preflight) → 预算 / abort 预检
     before_tool_call() → doom-loop 冻结 + Hook 拦截
     execute_tools() → StreamingExecutor 并发执行
     after_tool_call() → Hook 后处理 + 技能上下文修改
-    should_continue(post-turn) → Arbiter 后置判断
+    should_continue(post-turn) → CompletionKernel 终态裁决
     ↓
 TurnUpdate.restart → continue（轮次重启）
 TurnUpdate.done → 循环结束
@@ -415,9 +414,9 @@ TurnUpdate.done → 循环结束
 ### Recovery 模式数据流
 
 ```
-RunState.recovery_state → RunStateMachine.recovery_chain_for_arbiter()
-    → Arbiter.decide() 路径感知恢复限制
-    → RunLoopState 语义演化对象
+RunState.recovery_state → RunPreparer 构造 RecoveryPolicy(limit, chain)
+    → CompletionKernel.decide() 预算 / 恢复熔断
+    → LoopRuntime.recovery 供 stage 读取
 ```
 
 ## 对外接口
@@ -426,11 +425,12 @@ RunState.recovery_state → RunStateMachine.recovery_chain_for_arbiter()
 |------|---------|------|
 | 主入口 | `run_agent_stream()` | Agent 运行入口 |
 | 循环骨架 | `run_loop()` | 纯控制流循环 |
-| 端口绑定 | `wiring.build_loop_config()` | 把 stage 函数绑定到 LoopConfig 端口 |
-| 运行时装配 | `runtime.build_runtime()` | 构造 LoopRuntime（预算 / 完成内核 / 投影器） |
+| 端口绑定 | `wiring.build_loop_config(rt)` | 原地装配 LoopRuntime 并绑定端口 |
+| 运行时装配 | `runtime.build_runtime(rt)` | 原地填充预算 / 完成内核 / 投影器 |
 | LLM 调用 | `call_llm_stream_with_outcome()` | 流式 LLM 请求 |
 | 工具执行 | `execute_tool_calls_with_handoff()` | 工具调度入口 |
-| 仲裁 | `consult_arbiter()` | 统一仲裁入口 |
+| 终态裁决 | `CompletionKernel.decide()` | run 级终态唯一出口 |
+| 终态副作用 | `terminal.mark_task_blocked()` / `persist_snapshot_fn()` | 任务阻断与快照持久化 |
 | 状态操作 | `RunStateMachine` | RunState CRUD |
 
 ## 依赖关系
@@ -439,17 +439,15 @@ RunState.recovery_state → RunStateMachine.recovery_chain_for_arbiter()
 execution/
   ├── loop/agent_loop.py → loop/types.py, loop/_loop_helpers.py,
   │                        control/kernel.py (LoopEvent), dispatch/pipeline.py
-  ├── loop/wiring.py → loop/{prepare,stream,tools,terminal,continue_}.py,
+  ├── loop/wiring.py → loop/{turn_prepare,stream,tools,terminal,continue_}.py,
   │                    loop/runtime.py, loop/types.py
   ├── loop/runtime.py → control/{kernel,completion,artifacts}.py,
-  │                     projection/project.py
+  │                     projection/project.py,
+  │                     query/pre_request_pipeline.py
   ├── loop/continue_.py → control/{kernel,completion}.py, loop/terminal.py,
   │                       loop/_loop_helpers.py
-  ├── loop/runner.py → loop/wiring.py, loop/preparer.py, loop/teardown.py,
-  │                    loop/trajectory_scope.py,
-  │                    dispatch/pipeline.py, dispatch/execution.py,
-  │                    checkpoint/state_machine.py, handoff/supervisor.py,
-  │                    capabilities/catalog.py
+  ├── loop/runner.py → loop/{preparer,wiring,teardown,types}.py,
+  │                    loop/agent_loop.py
   ├── loop/deps.py → AgentRunnerDeps + 子容器（Dream/Plugin/Persistence）
   ├── loop/tree_writer.py → loop/deps.py, loop/_bootstrap_helpers.py,
   │                         schema/session/types.py
@@ -484,7 +482,7 @@ execution/
 | 终态 / HITL / steering | `engine/execution/loop/terminal.py` |
 | 续跑与终态裁决 | `engine/execution/loop/continue_.py` |
 | 工具执行主流程 | `engine/execution/loop/tools.py` |
-| 上下文重建 | `engine/execution/loop/prepare.py` |
+| 上下文重建 | `engine/execution/loop/turn_prepare.py` |
 | LLM 流式调用 | `engine/execution/loop/stream.py` |
 | 循环类型定义 | `engine/execution/loop/types.py` |
 

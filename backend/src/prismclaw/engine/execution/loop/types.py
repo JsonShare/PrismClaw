@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from prismclaw.engine.compression.cache_block_packing import PromptCacheRuntimeContract
     from prismclaw.engine.execution.checkpoint import RunSnapshot, RunStateMachine
     from prismclaw.engine.execution.checkpoint.models import RunState
     from prismclaw.engine.execution.control.kernel import Decision
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
         LLMStreamResult,
         LLMStreamRetry,
     )
-    from prismclaw.engine.execution.loop.arbiter import RunContext
     from prismclaw.engine.execution.loop.ownership import _RunOwnershipLease
     from prismclaw.engine.execution.query.pre_request_pipeline import PreparedTurn
     from prismclaw.engine.foundation.telemetry.profiler import TurnProfiler
@@ -37,7 +35,7 @@ if TYPE_CHECKING:
     from prismclaw.engine.state.tool_loop_state import ToolLoopState
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
     from prismclaw.schema.agent.session import ProjectionInputMessage
-    from prismclaw.schema.agent.task_runtime import EvidenceRecord, TaskRuntimeState
+    from prismclaw.schema.agent.task_runtime import EvidenceRecord
     from prismclaw.schema.content.content_types import ToolResult
     from prismclaw.schema.content.streaming import Done, ErrorEvent, ToolClarifyRequest
     from prismclaw.schema.services.skills import SkillInvocationState
@@ -175,13 +173,11 @@ class RunLoopState:
 
     # ── Run 级状态机对象（构造时注入，跨迭代存活）──
     iteration: int = 0
-    ctx: RunContext | None = None
     tree: SessionTree | None = None
     snapshot: RunSnapshot | None = None
     run_state: RunState | None = None
     state_machine: RunStateMachine | None = None
     tool_loop_state: ToolLoopState | None = None
-    task_runtime: TaskRuntimeState | None = None
 
     # ── 语义演化对象（只收紧不回退）──
     active_skill_invocation: SkillInvocationState | None = None
@@ -194,7 +190,6 @@ class RunLoopState:
     tool_ctx: ToolContext | None = None
     ownership_lease: _RunOwnershipLease | None = None
     profiler: TurnProfiler | None = None
-    prompt_cache_runtime: PromptCacheRuntimeContract | None = None
 
     # ── Pipeline 产物（prepare 端口写入，stream 端口与内核绑定读取）──
     prepared_turn: PreparedTurn | None = None

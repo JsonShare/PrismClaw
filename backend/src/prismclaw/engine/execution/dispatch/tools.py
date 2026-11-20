@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from prismclaw.engine.execution.loop.arbiter import RunContext
+from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
 from prismclaw.engine.hooks import _dispatch_pre_tool_hooks
 
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 async def run_pre_tool_checks(
-    ctx: RunContext,
+    rt: LoopRuntime,
     parsed_calls: list[ParsedToolCall],
     *,
     workspace_tag: Any = None,
@@ -46,18 +46,18 @@ async def run_pre_tool_checks(
         hook_denied:   call_id → reason for pre-tool hook denials
         allowed_calls: parsed_calls that passed all checks
     """
-    deps = ctx.deps
-    request = ctx.request
+    deps = rt.deps
+    request = rt.request
 
     # Pre-tool hooks
     pre_tool_denied: dict[str, str] = {}
     if getattr(deps, "hook_dispatcher", None) is not None:
         _active_skill_name: str | None = None
-        _loop_state = getattr(ctx, "loop_state", None)
+        _loop_state = getattr(rt, "loop_state", None)
         _skill_inv = getattr(_loop_state, "active_skill_invocation", None) if _loop_state else None
         if _skill_inv is not None:
             _active_skill_name = getattr(_skill_inv, "skill_name", None)
-        _tool_ctx = ctx._tool_ctx
+        _tool_ctx = rt.tool_ctx
         _active_plugins = (
             getattr(_tool_ctx, "tool_scope", None) if _tool_ctx is not None else None
         )
@@ -65,7 +65,7 @@ async def run_pre_tool_checks(
             dispatcher=deps.hook_dispatcher,
             parsed_calls=parsed_calls,
             session_id=request.session_id,
-            cwd=ctx._tool_workspace_path,
+            cwd=rt.tool_workspace_path,
             active_skill_name=_active_skill_name,
             active_plugins=_active_plugins,
         )

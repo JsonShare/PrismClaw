@@ -15,6 +15,7 @@ import logging
 import time as _time
 from typing import Any
 
+from prismclaw.engine.execution.checkpoint import persist_run_snapshot
 from prismclaw.engine.execution.control.kernel import TerminalReason
 from prismclaw.engine.execution.loop._loop_helpers import (
     _build_clarify_request,
@@ -27,9 +28,59 @@ from prismclaw.engine.execution.loop.types import (
     HITLCheckResult,
     RunLoopState,
 )
+from prismclaw.engine.execution.state.task_persistence import (
+    _evaluate_and_apply_task_mutation,
+    _new_task_mutation,
+)
+from prismclaw.schema.agent.task_runtime import ReviewDecisionRecord
 from prismclaw.schema.content.streaming import ErrorEvent
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 终态副作用 — terminate 与 teardown 共用的原子操作
+# ---------------------------------------------------------------------------
+
+async def persist_snapshot_fn(rt: LoopRuntime) -> None:
+    """持久化当前运行快照。"""
+    await persist_run_snapshot(
+        rt.deps.session_store,
+        rt.tree,
+        rt.snapshot,
+        snapshot_store=rt.deps.persistence.run_snapshot_store,
+    )
+
+
+async def mark_task_blocked(rt: LoopRuntime, reason: str) -> None:
+    """标记任务为 blocked 状态。"""
+    if rt.task_runtime is None:
+        return
+    if rt.task_runtime.state == "blocked":
+        return
+    mutation = _new_task_mutation(
+        rt.task_runtime,
+        actor_kind="system",
+        mutation_type="task.block",
+        patch={"reason": reason},
+    )
+    rt.task_runtime, _accepted, _reason = await _evaluate_and_apply_task_mutation(
+        deps=rt.deps,
+        tree=rt.tree,
+        snapshot=rt.snapshot,
+        task_runtime=rt.task_runtime,
+        mutation=mutation,
+        evidence_records=rt.evidence_ledger,
+    )
+
+
+def record_review_outcome(rt: LoopRuntime, record: ReviewDecisionRecord) -> None:
+    """审查遥测（只度量，不计数）。"""
+    rt.hotpath.observe(
+        "turn.review.repair",
+        1.0 if record.verdict == "repair" else 0.0,
+        labels={"action": record.verdict},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +102,6 @@ async def terminate(
     ``code`` 是 ErrorEvent 的错误码；``terminated_by`` 是遥测用的终态标签，
     缺省与 ``code`` 相同。
     """
-    from prismclaw.engine.execution.loop.arbiter import mark_task_blocked, persist_snapshot_fn
-
     if state.terminal_error is not None:
         return
 
@@ -71,14 +120,13 @@ async def terminate(
         rt.tool_loop_state.convergence_advisory_sent = False
         rt.state_machine.update_tool_loop_state(rt.tool_loop_state)
 
-    if state.ctx is not None:
-        # 闭集收敛：terminated_by 显式给出时优先；否则 code 必须本身就是
-        # 合法的 TerminalReason（内核/治理的终态码），否则在此刻抛错，
-        # 杜绝新的魔法字符串渗入遥测通道。
-        state.ctx.terminated_by = terminated_by or TerminalReason(code)
-        if code != "aborted":
-            await mark_task_blocked(state.ctx, code)
-        await persist_snapshot_fn(state.ctx)
+    # 闭集收敛：terminated_by 显式给出时优先；否则 code 必须本身就是
+    # 合法的 TerminalReason（内核/治理的终态码），否则在此刻抛错，
+    # 杜绝新的魔法字符串渗入遥测通道。
+    rt.terminated_by = terminated_by or TerminalReason(code)
+    if code != "aborted":
+        await mark_task_blocked(rt, code)
+    await persist_snapshot_fn(rt)
 
     state.terminal_error = ErrorEvent(
         error_code=code,

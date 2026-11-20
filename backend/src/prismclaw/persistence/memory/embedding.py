@@ -29,7 +29,6 @@ class EmbeddingClient:
         model: str,
         api_key: str,
         api_base: str,
-        dimensions: int,
         llm_provider: str | None = None,
         timeout_s: float | None = None,
         cache_size: int = 512,
@@ -37,7 +36,6 @@ class EmbeddingClient:
         self._model = model
         self._api_key = api_key
         self._api_base = api_base
-        self._dimensions = dimensions
         self._llm_provider = llm_provider
         self._timeout_s = (
             timeout_s if timeout_s is not None and timeout_s > 0 else _DEFAULT_EMBED_TIMEOUT_S
@@ -49,10 +47,6 @@ class EmbeddingClient:
         # 上限防止 upsert 写入的大量唯一文本无限占用内存（FIFO 淘汰最旧项）。
         self._embed_cache: dict[str, list[float]] = {}
         self._embed_cache_cap = max(0, int(cache_size))
-
-    @property
-    def dimensions(self) -> int:
-        return self._dimensions
 
     async def _request(self, texts: list[str]):
         """带硬超时的 embedding 请求：外层 asyncio.wait_for 是权威上界，
@@ -90,7 +84,7 @@ class EmbeddingClient:
         vecs = [item["embedding"] for item in response.data]
         # 批量结果同样按文本填充缓存，保持与 embed 一致的复用语义。
         if self._embed_cache_cap > 0:
-            for text, vec in zip(texts, vecs):
+            for text, vec in zip(texts, vecs, strict=True):
                 self._embed_cache[text] = list(vec)
                 if len(self._embed_cache) > self._embed_cache_cap:
                     self._embed_cache.pop(next(iter(self._embed_cache)))

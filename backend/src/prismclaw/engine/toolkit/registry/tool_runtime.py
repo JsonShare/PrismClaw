@@ -44,7 +44,6 @@ class ToolContext:
     session_id: str = ""
     sandbox_policy: SandboxPolicy | None = None
     abort: asyncio.Event = field(default_factory=asyncio.Event)
-    tenant_id: str | None = None
     user_id: str | None = None
     user_profile: Any = None
     subagent_depth: int = 0

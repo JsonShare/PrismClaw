@@ -16,6 +16,7 @@ from prismclaw.engine.plugins.manifest import (
     UserConfigOption,
     parse_manifest,
 )
+from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -40,16 +41,8 @@ def _load_json_file(path: Path) -> Any:
 
 
 def _resolve_canonical_manifest(install_path: Path) -> PluginManifest:
-    """定位并加载 canonical 方言的 plugin.json，立即解析为 pydantic 模型。
-
-    canonical 方言把清单放在 ``.plugin/plugin.json``，兼容根目录
-    ``plugin.json``。返回的 ``PluginManifest`` 已经过 schema 校验。
-    方言策略（如 ``.trae-plugin``）不经过此函数，而是先把自身清单转换为
-    canonical 形态，再经 ``manifest_override`` 注入 ``_build_manifest_and_capability``。
-    """
-    plugin_json_path = install_path / ".plugin" / "plugin.json"
-    if not plugin_json_path.exists():
-        plugin_json_path = install_path / "plugin.json"
+    """定位并加载 canonical ``.plugin/plugin.json``，立即解析为 pydantic 模型。"""
+    plugin_json_path = install_path / MANIFEST_REL_PATH
     raw = _load_json_file(plugin_json_path)
     if not isinstance(raw, dict):
         raise ValueError("plugin.json must be a JSON object")

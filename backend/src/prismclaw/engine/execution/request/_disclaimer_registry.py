@@ -9,12 +9,9 @@ Usage:
 
     # In domain bundle on_build_runtime():
     register_advisory_rule(DomainAdvisoryRule(
-        domain="medical",
-        title="医疗免责声明（强制）",
-        body='当任务涉及医疗信息（药物剂量、禁忌证、治疗建议、诊断标准）时，'
-             '必须附加免责声明：'
-             '"以上信息仅供参考，不构成医疗建议。具体用药请遵医嘱。" '
-             '无论置信度高低都必须附加此声明。',
+        domain="my_domain",
+        title="<domain disclaimer title>",
+        body="<domain-specific mandatory advisory text>",
     ))
 """
 from __future__ import annotations
@@ -30,7 +27,7 @@ class DomainAdvisoryRule:
     by ``_prompt_advisory.domain_advisory_section()``.
     """
     domain: str
-    title: str   # e.g., "Medical disclaimer (MANDATORY)"
+    title: str   # e.g., "<Domain> disclaimer (MANDATORY)"
     body: str    # Full rule body after the bold title
 
 

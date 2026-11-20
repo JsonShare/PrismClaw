@@ -28,9 +28,20 @@ CANONICAL_TYPES: frozenset[str] = frozenset(
 
 
 def normalize_type(entry_type: str | None) -> str:
-    """大小写/空白归一 + 缺省 fact；不做别名映射——词表即契约。"""
+    """大小写/空白归一 + 受控词表强校验 + 缺省 fact。
+
+    非兼容变更：非法值直接 raise ValueError，不再让各调用方分散 check。
+    所有写入路径（memory_tools / capture / dream / sop_extraction /
+    _row_mapping）统一走这一个入口，单点把关。
+    """
     normalized = str(entry_type or "").strip().lower()
-    return normalized or "fact"
+    if not normalized:
+        return "fact"
+    if normalized in CANONICAL_TYPES or normalized == SOP_MEMORY_TYPE:
+        return normalized
+    raise ValueError(
+        f"未知 memory type: {normalized!r}（允许值：{', '.join(sorted(CANONICAL_TYPES))}）"
+    )
 
 
 def classify_scope(entry_type: str | None) -> str:

@@ -12,7 +12,6 @@ embedding:
   api_key: "YOUR_API_KEY"
   base_url: "https://api.openai.com/v1"
   llm_provider: "openai"
-  dimensions: 1024
 
 vision:
   model: "your-vision-model"

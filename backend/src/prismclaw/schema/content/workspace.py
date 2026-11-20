@@ -24,4 +24,4 @@ class SandboxTier(str, Enum):
     """+ denyRead 敏感用户目录; + denyNet *.corp 内网域名"""
 
     STRICT = "strict"
-    """allowRead=仅 workspace; allowNet=[]; denyPidNS=on — 医疗 PHI / 法律案件"""
+    """allowRead=仅 workspace; allowNet=[]; denyPidNS=on — 高敏感数据场景"""

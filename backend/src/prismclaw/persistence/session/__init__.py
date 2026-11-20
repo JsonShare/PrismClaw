@@ -1,1 +1,1 @@
-"""Session storage - DAG tree persistence with Redis and file backends."""
+"""Session storage - DAG tree persistence backed by Redis."""

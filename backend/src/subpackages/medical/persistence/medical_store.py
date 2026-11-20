@@ -2,7 +2,7 @@
 
 使用 AsyncEngine 执行，不使用 ORM。
 
-表集（与 schema.py 一致，6 表 + 1 视图）：
+表集（与 deploy/sql/init_medical.sql 一致）：
 - pc_medical_patients          患者档案 + 画像（合并原 patients + patients_extended）
 - pc_medical_patient_reports   统一临床文档表（合并原 patient_reports + processing_tasks + records）
 - pc_medical_consultations     咨询会话登记（域侧记录，核心不感知）
@@ -14,25 +14,25 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
-    select,
-    insert,
-    update,
-    func,
-    or_,
     String,
+    func,
+    insert,
+    or_,
+    select,
+    update,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from ..models.tables import (
-    patients,
-    patient_reports,
-    consultations,
     PATIENT_COLUMNS,
     REPORT_COLUMNS,
+    consultations,
+    patient_reports,
+    patients,
 )
 from .helpers import row_to_dict
 
@@ -160,7 +160,7 @@ class MedicalStore:
     ) -> list[dict[str, Any]]:
         """搜索患者（按 name/primary_diagnosis 模糊匹配，按 tags 过滤）。
 
-        limit/offset: 服务端分页。默认 limit=20 仅为兼容旧调用方，
+        limit/offset: 服务端分页。默认 limit=20，
         分页场景务必由调用方显式传入（配合 count_patients 取总数）。
         create_by: 行级过滤，仅返回该用户创建的患者档案。None 不过滤。
         """
@@ -562,7 +562,7 @@ class MedicalStore:
     ) -> list[dict[str, Any]]:
         """某患者的临床文档（时间线「报告解析」卡用）。
 
-        limit 默认 100 仅为兼容旧调用方；分页场景调用方需显式传 limit/offset。
+        limit 默认 100；分页场景调用方需显式传 limit/offset。
         """
         return await self.search_reports(
             {"patient_id": patient_id}, limit=limit, offset=offset,

@@ -271,7 +271,7 @@ LLM 服务模块
   ├── infra.settings             — LLM/模型配置
   ├── schema.session             — SessionTree, SessionStore
   ├── schema.config              — 模型/Provider 配置
-  ├── engine.skills              — 技能运行时（SOP 晋升目标）
+  ├── engine.execution.skills    — 技能运行时（SOP 晋升目标）
   └── engine.security            — PII/凭据检测（SOP 验证）
 ```
 

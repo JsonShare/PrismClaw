@@ -29,11 +29,9 @@ from .ingest import (
     PathRemapRule,
     PluginDialect,
     apply_path_remap,
-    convert_trae_manifest,
     detect_dialect,
     ingest_plugin,
     parse_remap_rules,
-    write_canonical_manifest,
 )
 
 # ── lifecycle ──────────────────────────────────────────────────────────────
@@ -74,7 +72,6 @@ from .loading import (
     PluginLoadResult,
     PluginLoadStrategy,
     PluginSourceSpec,
-    TraePluginLoadStrategy,
     default_strategies,
     get_plugin_data_dir,
     install_plugin,
@@ -175,7 +172,6 @@ __all__ = [
     "PathRemapRule",
     "PluginDialect",
     "apply_path_remap",
-    "convert_trae_manifest",
     "detect_dialect",
     "ingest_plugin",
     "parse_remap_rules",
@@ -214,7 +210,6 @@ __all__ = [
     "PluginLoadResult",
     "PluginLoadStrategy",
     "PluginSourceSpec",
-    "TraePluginLoadStrategy",
     "default_strategies",
     "get_plugin_data_dir",
     "install_plugin",

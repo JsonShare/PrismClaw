@@ -11,7 +11,6 @@ Channel = Literal["web"]
 class UserProfile:
     channel: Channel
     user_id: str
-    tenant_id: str | None = None
     unknown_fields: dict[str, Any] | None = None
 
 

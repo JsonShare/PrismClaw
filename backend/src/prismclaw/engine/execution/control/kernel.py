@@ -49,7 +49,7 @@ def _code_value(code: str) -> str:
 
 
 class TerminalReason(str, Enum):
-    """run 终态标签的闭集词汇（``ctx.terminated_by`` / teardown / 轨迹通道）。
+    """run 终态标签的闭集词汇（``rt.terminated_by`` / teardown / 轨迹通道）。
 
     与 ``ErrorEvent.error_code`` 严格区分：error_code 是开放集（LLMError
     code、模型申报的阻塞码等），``terminated_by`` 只允许这里的闭集标签。

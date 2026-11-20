@@ -62,11 +62,6 @@ def context_snapshot_json_schema() -> dict[str, Any]:
                             "type": "object",
                             "additionalProperties": {"type": "string"},
                         },
-                        "evidence_level": {"type": "string"},
-                        "recommendation_grade": {"type": "string"},
-                        "legal_source_type": {"type": "string"},
-                        "legal_effective_date": {"type": "string"},
-                        "legal_status": {"type": "string"},
                     },
                 },
             },
@@ -179,19 +174,6 @@ def render_context_snapshot(snapshot: SubagentContextSnapshot) -> str:
             # 领域扩展（泛化渲染）
             for key, value in ev.domain_extensions.items():
                 lines.append(f"  {key}: {value}")
-            # deprecated: 旧域字段兜底（domain_extensions 为空时保留旧格式）
-            # 删除条件：内置子代理全部改用 domain_extensions 且观测窗口内无旧字段产出。
-            if not ev.domain_extensions:
-                if ev.evidence_level:
-                    lines.append(f"  evidence_level: {ev.evidence_level}")
-                if ev.recommendation_grade:
-                    lines.append(f"  recommendation_grade: {ev.recommendation_grade}")
-                if ev.legal_source_type:
-                    lines.append(f"  legal_source_type: {ev.legal_source_type}")
-                if ev.legal_effective_date:
-                    lines.append(f"  legal_effective_date: {ev.legal_effective_date}")
-                if ev.legal_status:
-                    lines.append(f"  legal_status: {ev.legal_status}")
         lines.append("</prior_evidence>")
     if snapshot.expected_output:
         lines.extend(_render_section("expected_output", [snapshot.expected_output]))
@@ -285,19 +267,6 @@ def render_result_envelope_handover(envelope: SubagentResultEnvelope) -> str:
             # 领域扩展（泛化渲染，保留域名前缀避免歧义）
             for key, value in ev.domain_extensions.items():
                 ev_line += f" [{key}={value}]"
-            # deprecated: 旧域字段兜底
-            # 删除条件：同上方 _render_prior_evidence 的一致性窗口。
-            if not ev.domain_extensions:
-                if ev.evidence_level:
-                    ev_line += f" [evidence:{ev.evidence_level}]"
-                if ev.recommendation_grade:
-                    ev_line += f" [grade:{ev.recommendation_grade}]"
-                if ev.legal_source_type:
-                    ev_line += f" [legal:{ev.legal_source_type}]"
-                if ev.legal_effective_date:
-                    ev_line += f" effective:{ev.legal_effective_date}"
-                if ev.legal_status:
-                    ev_line += f" ({ev.legal_status})"
             lines.append(ev_line)
     if envelope.confidence_assessment:
         lines.append(f"confidence: {envelope.confidence_assessment}")

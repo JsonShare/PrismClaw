@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from collections.abc import AsyncIterator
-from pathlib import Path
 from typing import Any
 
 from prismclaw.schema.agent.run_control_types import RunControl
@@ -15,25 +13,19 @@ __all__ = ["run_agent_stream"]
 logger = logging.getLogger(__name__)
 
 
+from prismclaw.engine.execution.control.kernel import TerminalReason
+from prismclaw.engine.execution.loop.agent_loop import run_loop
 from prismclaw.engine.execution.loop.deps import (
     AgentRunnerDeps,
 )
-
-from prismclaw.engine.execution.control.kernel import TerminalReason
-from prismclaw.engine.execution.query.pre_request_pipeline import PreRequestPipeline
-from prismclaw.engine.execution.loop.teardown import (
-    TeardownParams,
-    run_teardown,
-)
-from prismclaw.engine.execution.loop.agent_loop import run_loop
-from prismclaw.engine.execution.loop.wiring import build_loop_config
-from prismclaw.engine.execution.loop.types import IterationFrame, RunLedger, RunLoopState
-from prismclaw.schema.agent.types import RunRequest
 from prismclaw.engine.execution.loop.preparer import (
     EarlyExit,
-    PreparedRun,
     RunPreparer,
 )
+from prismclaw.engine.execution.loop.teardown import run_teardown
+from prismclaw.engine.execution.loop.types import IterationFrame, RunLedger, RunLoopState
+from prismclaw.engine.execution.loop.wiring import build_loop_config
+from prismclaw.schema.agent.types import RunRequest
 
 
 async def run_agent_stream(
@@ -60,106 +52,46 @@ async def run_agent_stream(
     if isinstance(result, EarlyExit):
         async for event in result.events:
             yield event
-        # EarlyExit 也需要 teardown（telemetry / ownership release / hooks 通知）
-        await run_teardown(
-            TeardownParams(
-                ctx=result.ctx,
-                iteration=result.iteration,
-                terminated_by=TerminalReason.EARLY_EXIT,
-                initial_task_spec=result.initial_task_spec,
-                tree=result.tree,
-                snapshot=result.snapshot,
-                tool_ctx=result.tool_ctx,
-                ownership_lease=result.ownership_lease,
-                profiler=result.profiler,
-                active_skill_invocation=result.active_skill_invocation,
-            ),
-            deps=deps,
-            request=request,
-        )
+        result.runtime.terminated_by = TerminalReason.EARLY_EXIT
+        await run_teardown(result.runtime)
         return
 
-    # ── Phase 2: 主循环（从 PreparedRun 拿所有确定性初始值）──
-    prepared: PreparedRun = result
-    ctx = prepared.ctx
-    tree = prepared.tree
-    snapshot = prepared.snapshot
-    run_state = prepared.run_state
-    task_runtime = prepared.task_runtime
-    initial_task_spec = prepared.initial_task_spec
-    recovery = prepared.recovery
-    state_machine = prepared.state_machine
-    tool_ctx = prepared.tool_ctx
-    ownership_lease = prepared.ownership_lease
-    profiler = prepared.profiler
-    _traj_scope = prepared.traj_scope
-    effective_model = prepared.effective_model
-    active_skill_invocation = prepared.active_skill_invocation
-    prompt_cache_runtime = prepared.prompt_cache_runtime
-    evidence_ledger = prepared.evidence_ledger
-    total_input_tokens = prepared.total_input_tokens
-    total_output_tokens = prepared.total_output_tokens
-    total_cache_creation_tokens = prepared.total_cache_creation_tokens
-    total_cache_read_tokens = prepared.total_cache_read_tokens
-    attachment_decision = prepared.attachment_decision
-    resolved_ws_path = Path(tool_workspace_path).resolve()
-
-    abort_event = control.abort_event
-    run_deadline_s = float(deps.config.budget.hard_s)
-    run_started = ctx.run_started if ctx is not None else time.monotonic()
+    # ── Phase 2: 主循环（rt 是唯一 run 级容器）──
+    rt = result
+    snapshot = rt.snapshot
+    total_output_tokens = snapshot.total_output_tokens if isinstance(snapshot.total_output_tokens, int) else 0
+    total_cache_creation_tokens = (
+        snapshot.total_cache_creation_tokens if isinstance(snapshot.total_cache_creation_tokens, int) else 0
+    )
 
     try:
-        tool_loop_state = state_machine.load_tool_loop_state()
-        retry_counts = state_machine.retry_counts_view()
+        async with rt.traj_scope:
 
-        async with _traj_scope:
+            # ── 先原地装配 rt（build_runtime 填充 tool_loop_state / retry_counts /
+            #    pipeline 等），再据此构建 RunLoopState —— 顺序不能反，否则
+            #    RunLoopState 会拿到未装配的 None 字段。──
+            _loop_config = build_loop_config(rt)
 
             # ── 构建 RunLoopState（三周期载体：frame / ledger / Run 级对象）──
             _loop_state = RunLoopState(
-                iteration=prepared.iteration,
-                ctx=ctx,
-                tree=tree,
-                snapshot=snapshot,
-                run_state=run_state,
-                state_machine=state_machine,
-                tool_loop_state=tool_loop_state,
-                task_runtime=task_runtime,
-                frame=IterationFrame(pending_messages=prepared.pending_messages),
+                iteration=rt.iteration,
+                tree=rt.tree,
+                snapshot=rt.snapshot,
+                run_state=rt.run_state,
+                state_machine=rt.state_machine,
+                tool_loop_state=rt.tool_loop_state,
+                frame=IterationFrame(pending_messages=rt.pending_messages),
                 ledger=RunLedger(
-                    evidence_ledger=evidence_ledger,
-                    total_input_tokens=total_input_tokens,
+                    evidence_ledger=rt.evidence_ledger,
+                    total_input_tokens=0,
                     total_output_tokens=total_output_tokens,
                     total_cache_creation_tokens=total_cache_creation_tokens,
-                    total_cache_read_tokens=total_cache_read_tokens,
+                    total_cache_read_tokens=0,
                 ),
-                active_skill_invocation=active_skill_invocation,
-                tool_ctx=tool_ctx,
-                ownership_lease=ownership_lease,
-                profiler=profiler,
-                prompt_cache_runtime=prompt_cache_runtime,
-            )
-            _loop_config = build_loop_config(
-                deps=deps,
-                request=request,
-                recovery=recovery,
-                state_machine=state_machine,
-                tool_loop_state=tool_loop_state,
-                run_state=run_state,
-                initial_task_spec=initial_task_spec,
-                retry_counts=retry_counts,
-                response_policy=None,  # computed per-turn inside closure
-                pipeline=PreRequestPipeline(),
-                task_runtime=task_runtime,
-                snapshot=snapshot,
-                tree=tree,
-                tool_ctx=tool_ctx,
-                tool_workspace_path=resolved_ws_path,
-                effective_model=effective_model,
-                abort_event=abort_event,
-                run_deadline_s=run_deadline_s,
-                run_started=run_started,
-                traj_scope=_traj_scope,
-                attachment_guidance=attachment_decision.attachment_guidance if attachment_decision else None,
+                active_skill_invocation=rt.active_skill_invocation,
+                tool_ctx=rt.tool_ctx,
+                ownership_lease=rt.ownership_lease,
+                profiler=rt.profiler,
             )
 
             # ── 运行循环 ──
@@ -168,13 +100,12 @@ async def run_agent_stream(
                 # 轨迹追踪
                 if isinstance(event, IterationBoundary):
                     if event.kind == "llm_end":
-                        _traj_scope.publish_iteration_end(request.session_id, _loop_state.perf.llm_calls)
+                        rt.traj_scope.publish_iteration_end(request.session_id, _loop_state.perf.llm_calls)
                     elif event.kind == "llm_start":
-                        _traj_scope.publish_iteration_start(request.session_id, _loop_state.perf.llm_calls)
+                        rt.traj_scope.publish_iteration_start(request.session_id, _loop_state.perf.llm_calls)
 
             # ── Post-loop: abort 场景合成未启动工具的 ToolCallEnd ──
-            _term_reason = _loop_state.ctx.terminated_by if _loop_state.ctx is not None else None
-            if _term_reason in (TerminalReason.ABORTED, TerminalReason.TIMEOUT):
+            if rt.terminated_by in (TerminalReason.ABORTED, TerminalReason.TIMEOUT):
                 _pending_ids = _loop_state.frame._pending_tool_call_ids or []
                 _completed_ids = {
                     getattr(r, "tool_call_id", None) for r in (_loop_state.frame.last_tool_results or [])
@@ -185,47 +116,20 @@ async def run_agent_stream(
                         yield _create_aborted_tool_result(call_id)
 
             # ── 写入 turn-end reason 到 trajectory scope ──
-            _traj_scope.terminated_by = (
-                _loop_state.ctx.terminated_by if _loop_state.ctx is not None else prepared.terminated_by
-            )
+            rt.traj_scope.terminated_by = rt.terminated_by
 
-            # Sync state back from RunLoopState for the finally block
-            prepared.iteration = _loop_state.perf.llm_calls
-            if _loop_state.ctx is not None:
-                prepared.terminated_by = _loop_state.ctx.terminated_by
-            prepared.active_skill_invocation = _loop_state.active_skill_invocation
-            prepared.snapshot = _loop_state.snapshot
-            prepared.tree = _loop_state.tree
-            prepared.ctx = _loop_state.ctx
-            prepared.tool_ctx = _loop_state.tool_ctx
-            prepared.ownership_lease = _loop_state.ownership_lease
-            prepared.profiler = _loop_state.profiler
-            prepared.total_input_tokens = _loop_state.ledger.total_input_tokens
-            prepared.total_output_tokens = _loop_state.ledger.total_output_tokens
-            prepared.latest_review_decision = tree.get_latest_review_decision() if tree is not None else None
-            prepared.llm_start_monotonic = _loop_state.frame.llm_start_monotonic
+            # ── 把 loop 期累积的 run 级状态归拢回 rt（同一对象，供 teardown 读取）──
+            rt.iteration = _loop_state.perf.llm_calls
+            rt.active_skill_invocation = _loop_state.active_skill_invocation
+            rt.snapshot = _loop_state.snapshot
+            rt.tree = _loop_state.tree
+            rt.tool_ctx = _loop_state.tool_ctx
+            rt.ownership_lease = _loop_state.ownership_lease
+            rt.profiler = _loop_state.profiler
+            rt.latest_review_decision = rt.tree.get_latest_review_decision() if rt.tree is not None else None
+            rt.llm_start_monotonic = _loop_state.frame.llm_start_monotonic
             # 回合级计时聚合（度量用；异常路径下保持 None，teardown 会跳过）
-            prepared.perf = _loop_state.perf
+            rt.perf = _loop_state.perf
 
     finally:
-        # 不再需要 try/except NameError 守护——PreparedRun 中所有字段有确定初始值
-        await run_teardown(
-            TeardownParams(
-                ctx=prepared.ctx,
-                iteration=prepared.iteration,
-                llm_start=prepared.llm_start_monotonic,
-                terminated_by=prepared.terminated_by,
-                initial_task_spec=prepared.initial_task_spec,
-                latest_review_decision=prepared.latest_review_decision,
-                tree=prepared.tree,
-                snapshot=prepared.snapshot,
-                tool_ctx=prepared.tool_ctx,
-                ownership_lease=prepared.ownership_lease,
-                profiler=prepared.profiler,
-                perf=prepared.perf,
-                recovery_chain=recovery.chain if recovery is not None else [],
-                active_skill_invocation=prepared.active_skill_invocation,
-            ),
-            deps=deps,
-            request=request,
-        )
+        await run_teardown(rt)

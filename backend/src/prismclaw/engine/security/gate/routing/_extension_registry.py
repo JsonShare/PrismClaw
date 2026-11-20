@@ -2,7 +2,7 @@
 
 Core RuleGate checks file extensions for security-sensitive formats.
 Cryptographic and signature-related extensions are universal (domain-agnostic).
-Domain-specific sensitive extensions (healthcare formats, legal formats, etc.)
+Domain-specific sensitive extensions (e.g. industry-specific binary formats)
 are registered by domain bundles during on_build_runtime().
 
 Usage:
@@ -12,7 +12,7 @@ Usage:
     )
 
     # In domain bundle on_build_runtime():
-    register_sensitive_extensions("medical", {".dcm", ".dicom", ".hl7", ...})
+    register_sensitive_extensions("my_domain", {".ext", ...})
 """
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ def register_sensitive_extensions(domain: str, extensions: frozenset[str]) -> No
     """Register domain-specific sensitive file extensions.
 
     Args:
-        domain:      Domain key, e.g. "medical"
-        extensions:  Set of sensitive extensions, e.g. {".dcm", ".dicom"}
+        domain:      Domain key, e.g. "my_domain"
+        extensions:  Set of sensitive extensions, e.g. {".foo", ".bar"}
     """
     _EXTENSIONS.append((domain, extensions))
 

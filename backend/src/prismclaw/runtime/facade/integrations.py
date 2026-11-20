@@ -1,1 +1,1 @@
-from prismclaw.engine.integrations.mcp.client_manager import MCPClientManager  # noqa: F401
+from prismclaw.engine.mcp.client_manager import MCPClientManager  # noqa: F401

@@ -20,6 +20,9 @@ class _RunOwnershipLease:
     owner_worker_id: str
     stop_event: asyncio.Event
     task: asyncio.Task[None]
+    # 释放幂等标记：teardown 可能因异常路径或未来双调用被触发多次，
+    # 只有首次调用真正 stop heartbeat + 释放 store 记录。
+    _released: bool = False
 
 
 async def _claim_run_ownership(snapshot: RunSnapshot, deps: AgentRunnerDeps) -> _RunOwnershipLease | None:
@@ -128,8 +131,9 @@ async def _run_ownership_heartbeat_loop(store: Any, *, snapshot: RunSnapshot, st
 
 
 async def _release_run_ownership(lease: _RunOwnershipLease | None, deps: AgentRunnerDeps) -> None:
-    if lease is None:
+    if lease is None or lease._released:
         return
+    lease._released = True
     lease.stop_event.set()
     try:
         await lease.task

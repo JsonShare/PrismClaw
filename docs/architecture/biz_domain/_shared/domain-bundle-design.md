@@ -2,7 +2,7 @@
 
 ## 一、目标
 
-安装一个 pip 包 + 配置启用，即可获得完整的后端能力和前端 UI。
+安装一个 pip 包即通过 entry_points 钩子自动注册，即可获得完整的后端能力和前端 UI（可选配置裁剪）。
 
 ```
 pip install prismclaw-medical
@@ -134,8 +134,8 @@ class DomainBundle(Protocol):
     - API 路由、后台任务（on_build_lifecycle）
     - 前端菜单/页面描述（get_manifest）
 
-    通过 entry_points(group="prismclaw.domains") 发现，
-    配置 domains.enabled 启用。
+    通过 entry_points(group="prismclaw.domains") 钩子发现，安装即注册；
+    settings.domains.enabled 仅用于可选裁剪（空 = 加载全部已安装域）。
     """
 
     name: str                                    # "medical"
@@ -152,7 +152,7 @@ class DomainBundle(Protocol):
 
 @dataclass
 class MenuEntry:
-    """工作台内嵌菜单项描述 — 不再需要 path，功能页面在工作台内 Tab 切换。
+    """工作台内嵌菜单项描述 — 不需要 path，功能页面在工作台内 Tab 切换。
 
     当 DomainManifest.menus 长度 <= 1 时，工作台不显示左侧菜单，
     直接全屏渲染功能页面，此时 MenuEntry 仅用于声明默认 Tab key。
@@ -956,7 +956,7 @@ medical = "subpackages.medical.integration.bundle:MedicalBundle"
 |------|------|
 | PG 表名 | `pc_{domain}_*`（如 `pc_medical_records`） |
 | Redis 键 | `{prefix}{domain}:*`，prefix 从 `settings.redis.key_prefix` 派生 |
-| DDL 安全 | `pg_advisory_xact_lock` + advisory lock key 在 742200+ 区间 |
+| DDL 安全 | 域 SQL 由通用执行器按文件名持有 `pg_advisory_xact_lock`，语句保持 `IF NOT EXISTS` 幂等 |
 | 禁止 | 不直接操作其他域的表 |
 
 ---

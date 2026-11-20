@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Any, cast
+from typing import Literal
 
 from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.agent.task_runtime import (
@@ -89,27 +89,18 @@ def _build_task_runtime_from_spec(
     task_spec: TaskSpec,
     workspace_id: str | None,
     prior_runtime: TaskRuntimeState | None = None,
-    entry_resolution_status: str = "ready",
 ) -> TaskRuntimeState:
     created_at_epoch_ms = (
         prior_runtime.created_at_epoch_ms if prior_runtime is not None else int(time.time() * 1000)
     )
     updated_at_epoch_ms = int(time.time() * 1000)
-    requires_risk_confirmation = entry_resolution_status == "ready" and (
-        task_spec.risk_level == "high"
-        or bool(
-            task_spec.preflight_probe is not None
-            and task_spec.preflight_probe.baseline_risk == "high"
-        )
+    requires_risk_confirmation = task_spec.risk_level == "high" or bool(
+        task_spec.preflight_probe is not None
+        and task_spec.preflight_probe.baseline_risk == "high"
     )
-    if entry_resolution_status == "pending":
-        runtime_state = "intaking"
-    elif entry_resolution_status == "failed":
-        runtime_state = "blocked"
-    elif requires_risk_confirmation:
-        runtime_state = "awaiting_risk_confirmation"
-    else:
-        runtime_state = "executing"
+    runtime_state: Literal["awaiting_risk_confirmation", "executing"] = (
+        "awaiting_risk_confirmation" if requires_risk_confirmation else "executing"
+    )
     pending_confirmation_reason = (
         "当前任务包含高风险执行，确认后才会继续进入执行主链。"
         if requires_risk_confirmation
@@ -119,8 +110,7 @@ def _build_task_runtime_from_spec(
         task_id=task_spec.task_id,
         session_id=task_spec.session_id,
         workspace_id=workspace_id,
-        state=cast(Any, runtime_state),
-        entry_resolution_status=cast(Any, entry_resolution_status),
+        state=runtime_state,
         state_version=prior_runtime.state_version if prior_runtime is not None else 1,
         latest_review_decision_id=(
             prior_runtime.latest_review_decision_id if prior_runtime is not None else None

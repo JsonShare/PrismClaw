@@ -1,28 +1,22 @@
 """Scheduled task persistence — PostgreSQL implementation.
 
 SQLAlchemy Core (``Table`` + ``MetaData``) is used so that ``update_run``'s
-dynamic ``**fields`` are validated against the table metadata structurally,
-eliminating the f-string column-name injection vector of the old SQLite store.
-Schema creation is idempotent via ``metadata.create_all`` under a Postgres
-advisory lock (mirrors ``prismclaw.persistence.user.models.init_schema``).
+dynamic ``**fields`` are validated against the table metadata structurally.
+表结构见 ``deploy/sql/init_postgres.sql``。
 
-Timestamps are ``DOUBLE PRECISION`` (Unix epoch seconds) — matching
-``prismclaw.contracts.infra.scheduler`` which uses ``float`` throughout. A
-``float → datetime`` type upgrade is out of scope for the storage migration.
+Timestamps are ``DOUBLE PRECISION`` (Unix epoch seconds), matching the
+``float`` fields of ``prismclaw.schema.scheduler``.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Column,
     Double,
-    Index,
     Integer,
     MetaData,
     String,
@@ -35,13 +29,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from prismclaw.persistence.sql_runner import apply_core_schema
 from prismclaw.schema.scheduler.scheduler import ScheduledTask, ScheduledTaskRun
-
-logger = logging.getLogger(__name__)
-
-# Distinct advisory-lock key per subsystem to avoid cross-subsystem contention.
-# userdb uses 742100; scheduler uses 742101.
-_SCHED_ADVISORY_LOCK_KEY = 742101
 
 _metadata = MetaData()
 
@@ -73,15 +62,6 @@ scheduled_tasks = Table(
         nullable=False,
         server_default=text("'skip'"),
     ),
-    CheckConstraint(
-        "last_status IN ('idle','running','success','failed','disabled')",
-        name="ck_pc_sched_tasks_last_status",
-    ),
-    CheckConstraint(
-        "missed_policy IN ('skip','run_once')", name="ck_pc_sched_tasks_missed_policy"
-    ),
-    Index("idx_pc_sched_tasks_user_workspace", "user_id", "workspace_id"),
-    Index("idx_pc_sched_tasks_enabled", "enabled", postgresql_where=text("enabled = true")),
 )
 
 scheduled_task_runs = Table(
@@ -96,11 +76,6 @@ scheduled_task_runs = Table(
     Column("session_id", String),
     Column("error", Text),
     Column("duration_s", Double),
-    CheckConstraint(
-        "status IN ('pending','running','success','failed')",
-        name="ck_pc_sched_runs_status",
-    ),
-    Index("idx_pc_sched_runs_task", "task_id", "fired_at"),
 )
 
 # Non-PK columns upserted by ``put_task`` — built once, reused per call.
@@ -108,14 +83,7 @@ _TASK_UPSERT_COLUMNS = [c.name for c in scheduled_tasks.columns if c.name != "id
 
 
 async def init_schema(engine: AsyncEngine) -> None:
-    """Idempotent schema creation under an advisory lock.
-
-    Prevents concurrent DDL races when multiple workers start simultaneously
-    against a shared database.
-    """
-    async with engine.begin() as conn:
-        await conn.execute(text(f"SELECT pg_advisory_xact_lock({_SCHED_ADVISORY_LOCK_KEY})"))
-        await conn.run_sync(_metadata.create_all)
+    await apply_core_schema(engine)
 
 
 class PostgresSchedulerStore:
@@ -155,8 +123,7 @@ class PostgresSchedulerStore:
         return self._row_to_task(row) if row else None
 
     async def put_task(self, task: ScheduledTask) -> None:
-        """UPSERT a task (``ON CONFLICT (id) DO UPDATE`` — Postgres equivalent
-        of SQLite's ``INSERT OR REPLACE``)."""
+        """UPSERT a task (``ON CONFLICT (id) DO UPDATE``)。"""
         values = self._task_to_values(task)
         stmt = pg_insert(scheduled_tasks).values(**values)
         stmt = stmt.on_conflict_do_update(

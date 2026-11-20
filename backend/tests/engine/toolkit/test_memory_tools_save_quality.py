@@ -17,9 +17,12 @@ def test_normalize_type_normalizes_case_and_defaults() -> None:
     assert normalize_type("  Procedure ") == "procedure"
     assert normalize_type(None) == "fact"
     assert normalize_type("") == "fact"
-    # 无存量兼容：不做别名映射，未知词原样返回，由写入边界归一或拒绝
-    assert normalize_type("workflow") == "workflow"
-    assert normalize_type("auto_sop") == "auto_sop"
+    # 非兼容变更：normalize_type 单点强校验，非法值直接 raise
+    with pytest.raises(ValueError, match="未知 memory type"):
+        normalize_type("workflow")
+    with pytest.raises(ValueError, match="未知 memory type"):
+        normalize_type("procedures")
+    assert normalize_type("auto_sop") == "auto_sop"  # SOP_MEMORY_TYPE 合法
     for canonical in CANONICAL_TYPES:
         assert normalize_type(canonical) == canonical
 

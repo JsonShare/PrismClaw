@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
-
-from prismclaw.schema.audit.audit_types import RetrievalAuditEntry
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-logger = logging.getLogger(__name__)
+from prismclaw.schema.audit.audit_types import RetrievalAuditEntry
 
 
 @dataclass(slots=True)
@@ -35,45 +32,6 @@ class RetrievalAuditSummary:
     l2l3_error_count: int
     archive_error_count: int
 
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_retrieval_audit_entries (
-    id                                  BIGSERIAL PRIMARY KEY,
-    session_key                         TEXT NOT NULL,
-    retrieval_query                     TEXT NOT NULL,
-    started_at                          DOUBLE PRECISION NOT NULL,
-    ended_at                            DOUBLE PRECISION NOT NULL,
-    duration_s                          DOUBLE PRECISION NOT NULL,
-    memory_candidate_count              INTEGER NOT NULL DEFAULT 0,
-    archive_candidate_count             INTEGER NOT NULL DEFAULT 0,
-    memory_text_candidate_count         INTEGER NOT NULL DEFAULT 0,
-    memory_vector_candidate_count       INTEGER NOT NULL DEFAULT 0,
-    archive_text_candidate_count        INTEGER NOT NULL DEFAULT 0,
-    archive_vector_candidate_count      INTEGER NOT NULL DEFAULT 0,
-    selected_memory_count               INTEGER NOT NULL DEFAULT 0,
-    selected_archive_count              INTEGER NOT NULL DEFAULT 0,
-    selected_layer_distribution_json    JSONB NOT NULL DEFAULT '{}'::jsonb,
-    memory_source_mix_json              JSONB NOT NULL DEFAULT '{}'::jsonb,
-    archive_source_mix_json             JSONB NOT NULL DEFAULT '{}'::jsonb,
-    selector_strategy                   TEXT NOT NULL DEFAULT 'unknown',
-    selector_fallback                   BOOLEAN NOT NULL DEFAULT FALSE,
-    planner_strategy                    TEXT NOT NULL DEFAULT 'unknown',
-    planner_temporal_mode               TEXT NOT NULL DEFAULT 'unknown',
-    planner_memory_layers_json          JSONB NOT NULL DEFAULT '[]'::jsonb,
-    planner_artifact_kinds_json         JSONB NOT NULL DEFAULT '[]'::jsonb,
-    planner_graph_expansion_enabled     BOOLEAN NOT NULL DEFAULT FALSE,
-    archive_cache_hit                   BOOLEAN NOT NULL DEFAULT FALSE,
-    memory_vector_fallback              BOOLEAN NOT NULL DEFAULT FALSE,
-    archive_vector_fallback             BOOLEAN NOT NULL DEFAULT FALSE,
-    l2l3_error                          BOOLEAN NOT NULL DEFAULT FALSE,
-    archive_error                       BOOLEAN NOT NULL DEFAULT FALSE
-)
-"""
-
-_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_pc_retrieval_audit_session
-ON pc_retrieval_audit_entries (session_key, started_at DESC)
-"""
 
 _SELECT_COLUMNS = """
     session_key, retrieval_query, started_at, ended_at, duration_s,
@@ -122,13 +80,6 @@ INSERT INTO pc_retrieval_audit_entries (
     :l2l3_error, :archive_error
 )
 """
-
-
-async def init_schema(engine: AsyncEngine) -> None:
-    """Create the retrieval audit table and index if they do not exist."""
-    async with engine.begin() as conn:
-        await conn.execute(text(_DDL))
-        await conn.execute(text(_INDEX))
 
 
 class PostgresRetrievalAuditLog:

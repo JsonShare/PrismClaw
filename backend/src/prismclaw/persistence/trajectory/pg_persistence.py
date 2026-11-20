@@ -1,13 +1,13 @@
 """Trajectory audit → PostgreSQL persistence.
 
-Replaces Redis single-HASH storage with PostgreSQL row-level storage:
+Trajectory audit persisted as PostgreSQL rows:
   - pc_trajectory_session: One row per session (aggregate metadata)
   - pc_trajectory_record: One row per LLM iteration (full RequestAuditRecord)
 
 Uses the project-wide shared AsyncEngine (see `prismclaw.infra.db`)
 and follows the same raw-SQL-with-text() pattern as userdb.
 
-Key interfaces (drop-in replacement for Redis persistence):
+Key interfaces:
   flush_state_to_pg(state, session_factory, *, only_if_dirty) -> bool
   load_state_from_pg(session_id, session_factory) -> TrajectoryProjectionState
   read_snapshot_v2_pg(session_id, session_factory, *, limit, ascending) -> TrajectorySnapshot
@@ -17,19 +17,20 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from prismclaw.persistence.sql_runner import apply_core_schema
+from prismclaw.persistence.trajectory import sql_models
 from prismclaw.schema.trajectory import (
     RequestAuditRecord,
     TrajectoryCell,
     TrajectorySnapshot,
     TrajectorySnapshotMeta,
 )
-
-from prismclaw.persistence.trajectory import sql_models
 
 if TYPE_CHECKING:
     from prismclaw.schema.trajectory import TrajectoryProjectionState
@@ -42,82 +43,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 async def init_pg_schema(session_factory: async_sessionmaker[AsyncSession]) -> None:
-    """Create trajectory tables if they don't exist.
-
-    Uses pg_advisory_xact_lock to prevent concurrent DDL races.
-    Also ensures the unique constraint for incremental UPSERT exists.
-
-    Migrations are tracked in ``pc_schema_migrations`` — each migration
-    runs at most once.  After the first successful application, subsequent
-    startups skip the migration pass entirely (only the ``CREATE IF NOT
-    EXISTS`` bootstrap runs, which is near-instant on existing tables).
-    """
-    # Step 1: base tables + indexes (pure CREATE IF NOT EXISTS — never
-    # fails on existing objects, safe inside one transaction).
-    async with session_factory() as session:
-        async with session.begin():
-            await session.execute(text("SELECT pg_advisory_xact_lock(742101)"))
-            await session.execute(text(sql_models.CREATE_TRAJECTORY_SESSION_TABLE))
-            await session.execute(text(sql_models.CREATE_TRAJECTORY_RECORD_TABLE))
- # per-conversation-event cell table
-            await session.execute(text(sql_models.CREATE_TRAJECTORY_CELL_TABLE))
-            # Migration tracking table (also CREATE IF NOT EXISTS)
-            await session.execute(text(sql_models.CREATE_SCHEMA_MIGRATIONS_TABLE))
-            for stmt in sql_models.INDEXES:
-                await session.execute(text(stmt))
-            for stmt in sql_models.TOUCH_UPDATED_AT:
-                await session.execute(text(stmt))
-
-    # Step 2: migrations — each statement in its OWN transaction.
-    # Only execute if not yet recorded in pc_schema_migrations.
-    migrations: list[tuple[str, str]] = [
-        ("ADD_UNIQUE_CONSTRAINT", sql_models.ADD_UNIQUE_CONSTRAINT),
-        (
-            "ADD_PROJECTOR_APPENDED_MSG_COUNT_COLUMN",
-            sql_models.ADD_PROJECTOR_APPENDED_MSG_COUNT_COLUMN,
-        ),
-        ("ADD_CONTENT_PREVIEW_COLUMNS", sql_models.ADD_CONTENT_PREVIEW_COLUMNS),
-    ]
-    # Cell detail columns: standalone statements, same per-statement rule
-    # (PostgreSQL treats multi-column ALTER ADD atomically — one per tx
-    # so a legacy-DB miss cannot block the rest).
-    migrations.extend(("CELL_DETAIL", stmt) for stmt in sql_models.ADD_CELL_DETAIL_COLUMNS)
-
-    applied_count = 0
-    for migration_name, migration_stmt in migrations:
-        # Check if already applied
-        async with session_factory() as session:
-            result = await session.execute(
-                text(sql_models.CHECK_MIGRATION),
-                {"name": migration_name},
-            )
-            if result.scalar() is not None:
-                continue
-
-        # Apply migration
-        try:
-            async with session_factory() as session:
-                async with session.begin():
-                    await session.execute(text(migration_stmt))
-                    # Record successful migration
-                    await session.execute(
-                        text(sql_models.RECORD_MIGRATION),
-                        {"name": migration_name},
-                    )
-            applied_count += 1
-            logger.info("trajectory migration %s applied.", migration_name)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "trajectory migration %s failed: %s", migration_name, exc,
-            )
-
-    if applied_count:
-        logger.info(
-            "Trajectory PostgreSQL schema initialized (%d migration(s) applied).",
-            applied_count,
-        )
-    else:
-        logger.debug("Trajectory PostgreSQL schema up-to-date (0 migrations applied).")
+    """创建轨迹表；DDL 见 deploy/sql/init_postgres.sql。"""
+    await apply_core_schema(session_factory)
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +74,7 @@ def _to_jsonb(obj: Any) -> str:
 def _record_to_params(record: RequestAuditRecord) -> dict[str, Any]:
     """Convert a RequestAuditRecord to a dict matching :param_name placeholders.
 
-    Keys MUST match sql_models.INSERT_RECORD / INSERT_RECORD_UPSERT
+    Keys MUST match sql_models.INSERT_RECORD_UPSERT
     :param_name format exactly (52 fields).
 
     IMPORTANT: JSONB columns receive JSON strings (via _to_jsonb),
@@ -254,16 +181,15 @@ def _parse_jsonb(val: Any) -> Any:
 def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
     """Convert a PostgreSQL row dict back to a RequestAuditRecord."""
     started_ms = int(row["started_at_ms"] or 0)
-    completed_ms = row.get("completed_at_ms")
+    completed_ms = row["completed_at_ms"]
     if completed_ms is not None and completed_ms < started_ms:
-        # 历史记录可能因 wall-clock 回拨出现倒序；拒收整条会丢失审计节点，
-        # 读取时把时长归一到 0。
+        # wall-clock 回拨可能造成倒序；拒收整条会丢失审计节点，读取时归零。
         completed_ms = started_ms
     return RequestAuditRecord(
-        schema_version=row.get("schema_version", 1),
+        schema_version=1,
         session_id=row["session_id"],
         iteration=row["iteration"],
-        turn=row.get("turn"),
+        turn=row["turn"],
         started_at_ms=started_ms,
         completed_at_ms=completed_ms,
         status=row["status"],
@@ -278,60 +204,56 @@ def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
         projector_msg_roles=tuple(_parse_jsonb(row["projector_msg_roles"]) or []),
         projector_head=tuple(_parse_jsonb(row["projector_head"]) or []),
         projector_tail=tuple(_parse_jsonb(row["projector_tail"]) or []),
-        # Fix F: read with .get() for forward-compat with rows loaded from
-        # older DB schemas that don't have the column yet (returns 0 default).
-        projector_appended_msg_count=row.get("projector_appended_msg_count", 0) or 0,
- # read content previews with .get() for forward-compat
-        # with rows loaded from older DB schemas that don't have the columns yet.
-        projector_user_message_preview=row.get("projector_user_message_preview"),
-        projector_tool_results_preview=tuple(_parse_jsonb(row.get("projector_tool_results_preview")) or []),
-        projector_meta=_parse_jsonb(row.get("projector_meta")) or {},
+        projector_appended_msg_count=row["projector_appended_msg_count"] or 0,
+        projector_user_message_preview=row["projector_user_message_preview"],
+        projector_tool_results_preview=tuple(_parse_jsonb(row["projector_tool_results_preview"]) or []),
+        projector_meta=_parse_jsonb(row["projector_meta"]) or {},
         # Layer ②
         assemble_entry_msg_count=row["assemble_entry_msg_count"],
         assemble_entry_roles=tuple(_parse_jsonb(row["assemble_entry_roles"]) or []),
         assemble_entry_head=tuple(_parse_jsonb(row["assemble_entry_head"]) or []),
         assemble_entry_tail=tuple(_parse_jsonb(row["assemble_entry_tail"]) or []),
         assemble_entry_meta_keys=tuple(_parse_jsonb(row["assemble_entry_meta_keys"]) or []),
-        assemble_entry_meta_values_hash=row.get("assemble_entry_meta_values_hash", ""),
+        assemble_entry_meta_values_hash=row["assemble_entry_meta_values_hash"],
         # Layer ③
         pipeline_out_msg_count=row["pipeline_out_msg_count"],
         pipeline_out_roles=tuple(_parse_jsonb(row["pipeline_out_roles"]) or []),
         pipeline_out_head=tuple(_parse_jsonb(row["pipeline_out_head"]) or []),
         pipeline_out_tail=tuple(_parse_jsonb(row["pipeline_out_tail"]) or []),
-        pipeline_out_budget_summary=_parse_jsonb(row.get("pipeline_out_budget_summary")) or {},
+        pipeline_out_budget_summary=_parse_jsonb(row["pipeline_out_budget_summary"]) or {},
         pipeline_out_compressors_used=tuple(_parse_jsonb(row["pipeline_out_compressors_used"]) or []),
-        pipeline_out_compaction_happened=row.get("pipeline_out_compaction_happened", False),
-        pipeline_out_compaction_summary=row.get("pipeline_out_compaction_summary"),
+        pipeline_out_compaction_happened=row["pipeline_out_compaction_happened"],
+        pipeline_out_compaction_summary=row["pipeline_out_compaction_summary"],
         # Layer ④
         packer_final_msg_count=row["packer_final_msg_count"],
         packer_final_roles=tuple(_parse_jsonb(row["packer_final_roles"]) or []),
         packer_final_head=tuple(_parse_jsonb(row["packer_final_head"]) or []),
         packer_final_tail=tuple(_parse_jsonb(row["packer_final_tail"]) or []),
-        packer_final_tokens=row.get("packer_final_tokens"),
-        packer_final_model=row.get("packer_final_model", ""),
-        packer_final_system_prompt_len=row.get("packer_final_system_prompt_len", 0),
-        packer_final_system_prompt_sha1_16=row.get("packer_final_system_prompt_sha1_16", ""),
-        packer_final_system_prompt_text=row.get("packer_final_system_prompt_text"),
-        packer_final_system_prompt_budget=row.get("packer_final_system_prompt_budget"),
-        packer_final_tool_schema_total_chars=row.get("packer_final_tool_schema_total_chars"),
-        packer_final_response_format_text=row.get("packer_final_response_format_text"),
-        packer_final_tool_schema_text=row.get("packer_final_tool_schema_text"),
+        packer_final_tokens=row["packer_final_tokens"],
+        packer_final_model=row["packer_final_model"],
+        packer_final_system_prompt_len=row["packer_final_system_prompt_len"],
+        packer_final_system_prompt_sha1_16=row["packer_final_system_prompt_sha1_16"],
+        packer_final_system_prompt_text=row["packer_final_system_prompt_text"],
+        packer_final_system_prompt_budget=row["packer_final_system_prompt_budget"],
+        packer_final_tool_schema_total_chars=row["packer_final_tool_schema_total_chars"],
+        packer_final_response_format_text=row["packer_final_response_format_text"],
+        packer_final_tool_schema_text=row["packer_final_tool_schema_text"],
         # LLM response
-        llm_provider=row.get("llm_provider"),
-        llm_model=row.get("llm_model"),
-        finish_reason=row.get("finish_reason"),
-        usage_input_tokens=row.get("usage_input_tokens"),
-        usage_output_tokens=row.get("usage_output_tokens"),
-        usage_cache_read_tokens=row.get("usage_cache_read_tokens"),
-        usage_cache_write_tokens=row.get("usage_cache_write_tokens"),
-        usage_reasoning_tokens=row.get("usage_reasoning_tokens"),
-        ttft_ms=row.get("ttft_ms"),
-        total_ms=row.get("total_ms"),
-        assistant_text_preview=row.get("assistant_text_preview"),
-        tool_calls_summary=tuple(_parse_jsonb(row.get("tool_calls_summary")) or []),
+        llm_provider=row["llm_provider"],
+        llm_model=row["llm_model"],
+        finish_reason=row["finish_reason"],
+        usage_input_tokens=row["usage_input_tokens"],
+        usage_output_tokens=row["usage_output_tokens"],
+        usage_cache_read_tokens=row["usage_cache_read_tokens"],
+        usage_cache_write_tokens=row["usage_cache_write_tokens"],
+        usage_reasoning_tokens=row["usage_reasoning_tokens"],
+        ttft_ms=row["ttft_ms"],
+        total_ms=row["total_ms"],
+        assistant_text_preview=row["assistant_text_preview"],
+        tool_calls_summary=tuple(_parse_jsonb(row["tool_calls_summary"]) or []),
         # Error
-        error=row.get("error"),
-        error_stack=row.get("error_stack"),
+        error=row["error"],
+        error_stack=row["error_stack"],
     )
 
 
@@ -366,55 +288,54 @@ async def flush_state_to_pg(
         return False
 
     try:
-        async with session_factory() as session:
-            async with session.begin():
-                # Step 1: UPSERT session metadata FIRST (must exist before
-                # inserting records due to foreign key constraint)
-                await session.execute(
-                    text(sql_models.UPSERT_SESSION_META),
-                    {
-                        "session_id": sid,
-                        "record_count": len(state.records),
-                        "turn_count_estimate": len(set(
-                            r.turn for r in state.records if r.turn is not None
-                        )),
-                        "gap_count": state.gap_count,
-                        "gap_ratio": 0.0,
-                        "orphan_count": state.orphan_count,
-                        "gap_warning": state.gap_count > 0,
-                        "zstd_compressed_record_count": 0,
-                        "last_updated_ms": int(time.time() * 1000),
-                    },
+        async with session_factory() as session, session.begin():
+            # Step 1: UPSERT session metadata FIRST (must exist before
+            # inserting records due to foreign key constraint)
+            await session.execute(
+                text(sql_models.UPSERT_SESSION_META),
+                {
+                    "session_id": sid,
+                    "record_count": len(state.records),
+                    "turn_count_estimate": len(set(
+                        r.turn for r in state.records if r.turn is not None
+                    )),
+                    "gap_count": state.gap_count,
+                    "gap_ratio": 0.0,
+                    "orphan_count": state.orphan_count,
+                    "gap_warning": state.gap_count > 0,
+                    "zstd_compressed_record_count": 0,
+                    "last_updated_ms": int(time.time() * 1000),
+                },
+            )
+
+            # Step 2: Get existing keys to identify new vs updated records
+            existing_keys: set[tuple[int, int]] = set()
+            if state.records:
+                keys_result = await session.execute(
+                    text(sql_models.SELECT_EXISTING_RECORD_KEYS),
+                    {"session_id": sid},
                 )
+                for row in keys_result:
+                    existing_keys.add((row[0], row[1]))
 
-                # Step 2: Get existing keys to identify new vs updated records
-                existing_keys: set[tuple[int, int]] = set()
-                if state.records:
-                    keys_result = await session.execute(
-                        text(sql_models.SELECT_EXISTING_RECORD_KEYS),
-                        {"session_id": sid},
-                    )
-                    for row in keys_result:
-                        existing_keys.add((row[0], row[1]))
-
-                # Step 3: UPSERT records (new + updated). Both paths use the
-                # ON CONFLICT upsert — the existing_keys probe only drives
-                # the inserted/updated counters, so a cross-process writer
-                # can no longer blow up the whole flush batch on a unique
-                # constraint violation.
-                inserted_count = 0
-                updated_count = 0
-                for record in state.records:
-                    key = (record.iteration, record.started_at_ms)
-                    params = _record_to_params(record)
-                    await session.execute(
-                        text(sql_models.INSERT_RECORD_UPSERT),
-                        params,
-                    )
-                    if key not in existing_keys:
-                        inserted_count += 1
-                    else:
-                        updated_count += 1
+            # Step 3: UPSERT records (new + updated). Both paths use the
+            # ON CONFLICT upsert — the existing_keys probe only drives
+            # the inserted/updated counters, so a cross-process writer
+            # can no longer blow up the whole flush batch on a unique
+            # constraint violation.
+            inserted_count = 0
+            updated_count = 0
+            for record in state.records:
+                key = (record.iteration, record.started_at_ms)
+                params = _record_to_params(record)
+                await session.execute(
+                    text(sql_models.INSERT_RECORD_UPSERT),
+                    params,
+                )
+                if key not in existing_keys:
+                    inserted_count += 1
+                else:
+                    updated_count += 1
 
         state.mark_clean()
         logger.info(
@@ -613,38 +534,35 @@ def _cell_to_params(cell: TrajectoryCell) -> dict[str, Any]:
 def _row_to_cell(row: Any) -> TrajectoryCell:
     """Deserialize a DB row back to a TrajectoryCell."""
     return TrajectoryCell(
-        cell_id=str(row.get("cell_id") or ""),
-        session_id=str(row.get("session_id") or ""),
-        entry_id=str(row.get("entry_id") or ""),
-        seq=int(row.get("seq") or 0),
-        turn=int(row.get("turn") or 0),
-        kind=str(row.get("kind") or "system"),
-        role=str(row.get("role") or ""),
-        content_preview=row.get("content_preview"),
-        tool_calls_summary=tuple(_parse_jsonb(row.get("tool_calls_summary")) or []),
-        tool_call_id=row.get("tool_call_id"),
-        tool_name=row.get("tool_name"),
- # full-content + metric fields (use .get() for
-        # forward-compat with rows loaded from older DB schemas that don't
-        # have these columns yet — defaults to the model's None / False).
-        input_detail=row.get("input_detail"),
-        output_detail=row.get("output_detail"),
-        thinking_detail=row.get("thinking_detail"),
-        model=row.get("model"),
-        finish_reason=row.get("finish_reason"),
-        usage_input_tokens=row.get("usage_input_tokens"),
-        usage_output_tokens=row.get("usage_output_tokens"),
-        usage_cache_read_tokens=row.get("usage_cache_read_tokens"),
-        usage_cache_write_tokens=row.get("usage_cache_write_tokens"),
-        usage_reasoning_tokens=row.get("usage_reasoning_tokens"),
-        ttft_ms=row.get("ttft_ms"),
-        decoding_ms=row.get("decoding_ms"),
-        is_error=bool(row.get("is_error") or False),
-        schema_detail=row.get("schema_detail"),
-        started_at_ms=int(row.get("started_at_ms") or 0),
-        completed_at_ms=row.get("completed_at_ms"),
-        iteration=row.get("iteration"),
-        error=row.get("error"),
+        cell_id=str(row["cell_id"]),
+        session_id=str(row["session_id"]),
+        entry_id=str(row["entry_id"]),
+        seq=int(row["seq"]),
+        turn=int(row["turn"]),
+        kind=str(row["kind"]),
+        role=str(row["role"]),
+        content_preview=row["content_preview"],
+        tool_calls_summary=tuple(_parse_jsonb(row["tool_calls_summary"]) or []),
+        tool_call_id=row["tool_call_id"],
+        tool_name=row["tool_name"],
+        input_detail=row["input_detail"],
+        output_detail=row["output_detail"],
+        thinking_detail=row["thinking_detail"],
+        model=row["model"],
+        finish_reason=row["finish_reason"],
+        usage_input_tokens=row["usage_input_tokens"],
+        usage_output_tokens=row["usage_output_tokens"],
+        usage_cache_read_tokens=row["usage_cache_read_tokens"],
+        usage_cache_write_tokens=row["usage_cache_write_tokens"],
+        usage_reasoning_tokens=row["usage_reasoning_tokens"],
+        ttft_ms=row["ttft_ms"],
+        decoding_ms=row["decoding_ms"],
+        is_error=row["is_error"],
+        schema_detail=row["schema_detail"],
+        started_at_ms=int(row["started_at_ms"]),
+        completed_at_ms=row["completed_at_ms"],
+        iteration=row["iteration"],
+        error=row["error"],
     )
 
 
@@ -659,9 +577,8 @@ async def insert_cell_pg(
     writes the whole row. There is no secondary metrics-UPDATE path.
     """
     params = _cell_to_params(cell)
-    async with session_factory() as session:
-        async with session.begin():
-            await session.execute(text(sql_models.INSERT_CELL), params)
+    async with session_factory() as session, session.begin():
+        await session.execute(text(sql_models.INSERT_CELL), params)
 
 
 async def mark_or_synthesize_error_pg(
@@ -692,49 +609,48 @@ async def mark_or_synthesize_error_pg(
     from sqlalchemy.engine import CursorResult as _CursorResult
 
     try:
-        async with session_factory() as session:
-            async with session.begin():
-                result = _cast(
-                    _CursorResult,
-                    await session.execute(
-                        text(sql_models.MARK_CELL_ERROR),
-                        {
-                            "session_id": session_id,
-                            "turn": turn,
-                            "iteration": iteration,
-                            "error": error_code,
-                            "model": model,
-                            "completed_at_ms": failed_at_ms,
-                        },
-                    ),
+        async with session_factory() as session, session.begin():
+            result = _cast(
+                _CursorResult,
+                await session.execute(
+                    text(sql_models.MARK_CELL_ERROR),
+                    {
+                        "session_id": session_id,
+                        "turn": turn,
+                        "iteration": iteration,
+                        "error": error_code,
+                        "model": model,
+                        "completed_at_ms": failed_at_ms,
+                    },
+                ),
+            )
+            if result.rowcount == 0:
+                logger.info(
+                    "trajectory: no partial cell for sid=%s turn=%s "
+                    "iter=%s — synthesizing error cell",
+                    session_id, turn, iteration,
                 )
-                if result.rowcount == 0:
-                    logger.info(
-                        "trajectory: no partial cell for sid=%s turn=%s "
-                        "iter=%s — synthesizing error cell",
-                        session_id, turn, iteration,
-                    )
-                    await session.execute(
-                        text(sql_models.INSERT_ERROR_CELL),
-                        {
-                            "cell_id": f"cell_{_uuid.uuid4().hex}",
-                            "session_id": session_id,
-                            # deterministic entry_id → retry-idempotent
-                            # via the (session_id, entry_id) unique key
-                            "entry_id": f"llm_error_{turn}_{iteration}",
-                            "turn": turn,
-                            "content_preview": (
-                                f"LLM request failed: {error_message[:200]}"
-                            ),
-                            "output_detail": error_message,
-                            "model": model,
-                            "ttft_ms": ttft_ms,
-                            "started_at_ms": failed_at_ms - int(total_ms or 0),
-                            "completed_at_ms": failed_at_ms,
-                            "iteration": iteration,
-                            "error": error_code,
-                        },
-                    )
+                await session.execute(
+                    text(sql_models.INSERT_ERROR_CELL),
+                    {
+                        "cell_id": f"cell_{_uuid.uuid4().hex}",
+                        "session_id": session_id,
+                        # deterministic entry_id → retry-idempotent
+                        # via the (session_id, entry_id) unique key
+                        "entry_id": f"llm_error_{turn}_{iteration}",
+                        "turn": turn,
+                        "content_preview": (
+                            f"LLM request failed: {error_message[:200]}"
+                        ),
+                        "output_detail": error_message,
+                        "model": model,
+                        "ttft_ms": ttft_ms,
+                        "started_at_ms": failed_at_ms - int(total_ms or 0),
+                        "completed_at_ms": failed_at_ms,
+                        "iteration": iteration,
+                        "error": error_code,
+                    },
+                )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "trajectory mark_or_synthesize_error_pg failed sid=%s turn=%s "
@@ -762,24 +678,23 @@ async def insert_system_cell_pg(
 
     now_ms = int(time.time() * 1000)
     try:
-        async with session_factory() as session:
-            async with session.begin():
-                await session.execute(
-                    text(sql_models.INSERT_SYSTEM_CELL),
-                    {
-                        "cell_id": f"cell_{_uuid.uuid4().hex}",
-                        "session_id": session_id,
-                        "entry_id": f"system_{turn}",
-                        "turn": turn,
-                        "content_preview": (
-                            f"System prompt sha1={sha1_16} ({len(full_text)} chars)"
-                        ),
-                        "input_detail": full_text,
-                        "iteration": iteration,
-                        "started_at_ms": now_ms,
-                        "completed_at_ms": now_ms,
-                    },
-                )
+        async with session_factory() as session, session.begin():
+            await session.execute(
+                text(sql_models.INSERT_SYSTEM_CELL),
+                {
+                    "cell_id": f"cell_{_uuid.uuid4().hex}",
+                    "session_id": session_id,
+                    "entry_id": f"system_{turn}",
+                    "turn": turn,
+                    "content_preview": (
+                        f"System prompt sha1={sha1_16} ({len(full_text)} chars)"
+                    ),
+                    "input_detail": full_text,
+                    "iteration": iteration,
+                    "started_at_ms": now_ms,
+                    "completed_at_ms": now_ms,
+                },
+            )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "trajectory insert_system_cell_pg failed sid=%s turn=%s: %s",

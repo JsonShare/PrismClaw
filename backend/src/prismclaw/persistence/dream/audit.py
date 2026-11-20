@@ -1,45 +1,10 @@
 from __future__ import annotations
 
-import asyncio
-
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from prismclaw.persistence.sql_runner import apply_core_schema
 from prismclaw.schema.dream.dream_types import DreamAuditEntry, DreamBatchHealthMetrics
-
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_dream_audit_entries (
-    id                       BIGSERIAL PRIMARY KEY,
-    session_key              TEXT NOT NULL,
-    batch_id                 TEXT NOT NULL,
-    phase                    TEXT NOT NULL,
-    trigger                  TEXT NOT NULL,
-    status                   TEXT NOT NULL,
-    started_at               DOUBLE PRECISION NOT NULL,
-    ended_at                 DOUBLE PRECISION NOT NULL,
-    duration_s               DOUBLE PRECISION NOT NULL,
-    promoted_count           INTEGER NOT NULL DEFAULT 0,
-    deduplicated_count       INTEGER NOT NULL DEFAULT 0,
-    archived_count           INTEGER NOT NULL DEFAULT 0,
-    synthesized_count        INTEGER NOT NULL DEFAULT 0,
-    compiled_candidates      INTEGER NOT NULL DEFAULT 0,
-    extracted_candidates     INTEGER NOT NULL DEFAULT 0,
-    published_candidates     INTEGER NOT NULL DEFAULT 0,
-    discarded_candidates     INTEGER NOT NULL DEFAULT 0,
-    merged_entries           INTEGER NOT NULL DEFAULT 0,
-    temporal_updates         INTEGER NOT NULL DEFAULT 0,
-    gate_rejected_entries    INTEGER NOT NULL DEFAULT 0,
-    published_memory_count   INTEGER NOT NULL DEFAULT 0,
-    llm_cost                 INTEGER NOT NULL DEFAULT 0,
-    failure_reason           TEXT
-)
-"""
-
-_INDEXES = (
-    "CREATE INDEX IF NOT EXISTS idx_pc_dream_audit_batch ON pc_dream_audit_entries(batch_id)",
-    "CREATE INDEX IF NOT EXISTS idx_pc_dream_audit_session ON pc_dream_audit_entries(session_key)",
-)
 
 _SELECT_COLUMNS = """
     id, session_key, batch_id, phase, trigger, status, started_at, ended_at, duration_s,
@@ -71,22 +36,9 @@ class PostgresDreamAuditLog:
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
-        self._migrated = False
-        self._init_lock = asyncio.Lock()
 
     async def _init_schema(self) -> None:
-        if self._migrated:
-            return
-        async with self._init_lock:
-            if self._migrated:
-                return
-            async with self._sf() as session:
-                conn = await session.connection()
-                await conn.execute(text(_DDL))
-                for stmt in _INDEXES:
-                    await conn.execute(text(stmt))
-                await session.commit()
-            self._migrated = True
+        await apply_core_schema(self._sf)
 
     async def record(self, entry: DreamAuditEntry) -> None:
         await self._init_schema()

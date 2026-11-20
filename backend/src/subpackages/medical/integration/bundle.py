@@ -14,14 +14,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from prismclaw.schema.services.domain import (
-    DomainInfrastructureContext,
-    DomainRuntimeContext,
-    DomainLifecycleContext,
-    DomainManifest,
-)
 # HookEvent 定义在 prismclaw.engine.hooks，通过 facade 门面访问
 from prismclaw.runtime.facade.hooks import HookEvent  # type: ignore[attr-defined]
+from prismclaw.schema.services.domain import (
+    DomainInfrastructureContext,
+    DomainLifecycleContext,
+    DomainManifest,
+    DomainRuntimeContext,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,20 +43,17 @@ class MedicalBundle:
 
     async def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
         """注册医疗域持久化存储并确保数据库 Schema 就绪。"""
-        from ..persistence.medical_store import MedicalStore
-        from ..persistence.kb_store import KbStore
         from ..persistence.brief_store import BriefStore
+        from ..persistence.kb_store import KbStore
+        from ..persistence.medical_store import MedicalStore
         from ..persistence.schema import ensure_medical_schema
 
         ctx.register_store("medical", MedicalStore(ctx.db_engine))
         ctx.register_store("medical_kb", KbStore(ctx.db_engine))
         ctx.register_store("medical_briefs", BriefStore(ctx.db_engine))
 
-        # 确保 DDL 就绪
-        try:
-            await ensure_medical_schema(ctx.db_engine)
-        except Exception:
-            logger.exception("医疗域 Schema 初始化失败")
+        # 确保 DDL 就绪；失败由域注册器统一记录
+        await ensure_medical_schema(ctx.db_engine)
 
     # ── 运行时：工具 + 钩子 + 治理规则 + 域扩展 ────────────────────
 
@@ -70,21 +67,31 @@ class MedicalBundle:
 
     def _register_tools(self, ctx: DomainRuntimeContext) -> None:
         """注册 8 个医疗工具（5 个原有 + 3 个咨询只读）。"""
+        from ..persistence.kb_store import KbStore
         from ..persistence.medical_store import MedicalStore
-        from ..tools.smart_medical_record import SmartMedicalRecordTool
         from ..tools.medical_translate import MedicalTranslateTool
-        from ..tools.search_guideline import SearchGuidelineTool
-        from ..tools.search_drug import SearchDrugTool
-        from ..tools.search_literature import SearchLiteratureTool
+        from ..tools.read_patient_profile import ReadPatientProfileTool
         from ..tools.read_patient_reports import ReadPatientReportsTool
         from ..tools.read_raw_report import ReadRawReportTool
-        from ..tools.read_patient_profile import ReadPatientProfileTool
+        from ..tools.search_drug import SearchDrugTool
+        from ..tools.search_guideline import SearchGuidelineTool
+        from ..tools.search_literature import SearchLiteratureTool
+        from ..tools.smart_medical_record import SmartMedicalRecordTool
 
         medical_store: MedicalStore | None = ctx.domain_stores.get("medical")
+        kb_store: KbStore | None = ctx.domain_stores.get("medical_kb")
 
         # 原有工具
         record_tool = SmartMedicalRecordTool()
         record_tool.store = medical_store
+
+        # 知识库检索工具（读真实 KB 表，不再用内置字典）
+        guideline_tool = SearchGuidelineTool()
+        guideline_tool.kb_store = kb_store
+        drug_tool = SearchDrugTool()
+        drug_tool.kb_store = kb_store
+        literature_tool = SearchLiteratureTool()
+        literature_tool.kb_store = kb_store
 
         # 咨询只读工具
         reports_tool = ReadPatientReportsTool()
@@ -96,17 +103,17 @@ class MedicalBundle:
 
         ctx.register_tool(record_tool)
         ctx.register_tool(MedicalTranslateTool())
-        ctx.register_tool(SearchGuidelineTool())
-        ctx.register_tool(SearchDrugTool())
-        ctx.register_tool(SearchLiteratureTool())
+        ctx.register_tool(guideline_tool)
+        ctx.register_tool(drug_tool)
+        ctx.register_tool(literature_tool)
         ctx.register_tool(reports_tool)
         ctx.register_tool(raw_report_tool)
         ctx.register_tool(profile_tool)
 
     def _register_hooks(self, ctx: DomainRuntimeContext) -> None:
         """注册 PHI 脱敏钩子（PRE_TOOL）+ 咨询上下文注入钩子（SESSION_START）。"""
-        from ..domain.hooks.phi_redact import PHIRedactHook
         from ..domain.hooks.consultation_context import ConsultationContextHook
+        from ..domain.hooks.phi_redact import PHIRedactHook
         from ..persistence.medical_store import MedicalStore
 
         ctx.register_hook(HookEvent.PRE_TOOL, PHIRedactHook())
@@ -126,11 +133,12 @@ class MedicalBundle:
     def _register_domain_extensions(self, ctx: DomainRuntimeContext) -> None:
         """注册证据推断器、免责声明、敏感扩展、PHI 模式。"""
         # 证据推断器
-        from ..domain.analysis.evidence import medical_evidence_inferencer
         from prismclaw.engine.subagent.core.evidence_inference import (
             register_inferencer,
             unregister_inferencer,
         )
+
+        from ..domain.analysis.evidence import medical_evidence_inferencer
 
         register_inferencer("medical", medical_evidence_inferencer)
         ctx.defer_registry_cleanup(lambda: unregister_inferencer("medical"))
@@ -168,6 +176,7 @@ class MedicalBundle:
             register_phi_patterns,
             unregister_phi_patterns,
         )
+
         from ..domain.governance.phi_patterns import MEDICAL_PHI_PATTERNS
 
         register_phi_patterns("medical", MEDICAL_PHI_PATTERNS)
@@ -177,11 +186,11 @@ class MedicalBundle:
 
     def on_build_lifecycle(self, ctx: DomainLifecycleContext) -> None:
         """注册医疗域 REST API 路由。"""
-        from ..api.records import router as records_router
-        from ..api.patients import router as patients_router
-        from ..api.kb import router as kb_router
-        from ..api.consultations import router as consultations_router
         from ..api.briefs import router as briefs_router
+        from ..api.consultations import router as consultations_router
+        from ..api.kb import router as kb_router
+        from ..api.patients import router as patients_router
+        from ..api.records import router as records_router
 
         ctx.register_route(records_router, "/api/medical/records")
         ctx.register_route(patients_router, "/api/medical/patients")

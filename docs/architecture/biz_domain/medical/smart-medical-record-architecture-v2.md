@@ -1,5 +1,13 @@
 # 肿瘤患者智能病历工作台 — 功能架构设计 v3
 
+> **状态：历史设计提案（部分未落地）**。当前实现以
+> [medical-domain-design.md](./medical-domain-design.md) 为准。本文中的
+> `POST /api/medical/patients/{id}/ai/*` 五个端点、`ai_assist.py`、
+> `AIAssistantPanel`、「报告整理 / 病历生成」独立 Tab 均**未实现**：AI 能力收敛为
+> 患者详情页的 `/api/medical/consultations/*` 会话 + 三个只读工具，
+> 报告整理并入 `MedicalRecordsPage` 三栏与解析队列。
+> 保留本文仅作演进背景参考。
+
 > 以患者为中心，非以功能为中心。患者管理是入口，报告整理和病历生成是基于患者的功能。
 
 ---

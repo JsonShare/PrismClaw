@@ -1,6 +1,6 @@
 """状态事件发射 — 域无关的 store mixin。
 
-任何带长任务状态写点的域 store（legal / medical / 自建 agent）继承此 mixin
+任何带长任务状态写点的域 store（域包 / 自建 agent）继承此 mixin
 即自动获得「写点唯一化 + fire-and-forget + 子任务过滤」能力。域层只负责实现
 自己的 SQL，事件发射的全部通用逻辑由 mixin 接管。
 

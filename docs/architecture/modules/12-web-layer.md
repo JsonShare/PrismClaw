@@ -226,7 +226,7 @@ async def _run_chat(state: ConnectionState, msg: ChatSendMessage):
 ```
 
 关键机制：
-- **单 pass 实时正文（PrismClaw 模式）**：所有轮次的 `TextChunk` 即时推送 `chat.delta`，token 级零缓冲；`Done` 时提交 `final_message = "\n\n".join(full_transcript_parts)` 作为全转录权威提交源（与实时流逐字节相等，I3 不变量）。中间轮过程文本保留在正文，不再撤回/归入思考区。
+- **单 pass 实时正文（PrismClaw 模式）**：所有轮次的 `TextChunk` 即时推送 `chat.delta`，token 级零缓冲；`Done` 时提交 `final_message = "\n\n".join(full_transcript_parts)` 作为全转录权威提交源（与实时流逐字节相等，I3 不变量）。中间轮过程文本保留在正文，不撤回、不归入思考区。
 - **chat.done 指数退避**：覆盖 WS 短暂断开（退避序列 0.5, 1, 2, 4, 6, 8, 10, 15s，共 8 次）
 - **交付物确定策略**：仅 LLM 通过 `present_files` 主动声明的文件才展示；自动扫描 `outputs/` 仅用于验证
 
@@ -519,14 +519,14 @@ Web 层
   ├── opentelemetry                  — 分布式追踪
   ├── assembly.runtime_coordinator     — 基础设施/运行时/生命周期 bundle
   ├── engine.services.llm            — LLM 调用
-  ├── engine.services.chat_service   — ChatService Protocol
+  ├── schema.services.chat_service    — ChatService Protocol
   ├── engine.subagent.runtime        — 并行任务管理
   ├── engine.trajectory.timeline     — 执行时间线
   ├── engine.security.sandbox        — 沙箱策略
-  ├── engine.integrations.mcp        — MCP 客户端管理
+  ├── engine.mcp                     — MCP 客户端管理
   ├── engine.dream.dispatch          — Dream 调度
   ├── engine.scheduler               — 调度系统
-  ├── engine.skills                  — 技能管理
+  ├── engine.execution.skills        — 技能管理
   ├── persistence.session            — Session 存储
   ├── persistence.user               — 用户存储（PostgreSQL）
   ├── persistence.lock               — 分布式锁

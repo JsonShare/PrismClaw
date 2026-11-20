@@ -49,7 +49,7 @@ from prismclaw.engine.execution.checkpoint.state_machine import (
     RunStateMachine,
 )
 
-from prismclaw.schema.persistence.persistence import RunSnapshotStore
+from prismclaw.schema.storage.persistence_types import RunSnapshotStore
 
 __all__ = [
     # models

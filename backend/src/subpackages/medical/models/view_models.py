@@ -1,6 +1,6 @@
 """医疗域 ViewModel 转换器 — DB snake_case 行 → 前端 camelCase dict。
 
-集中管理 8 个转换函数：
+集中管理 7 个转换函数：
 - patient_to_vm:       患者档案 → PatientProfile
 - report_to_vm:        临床文档 → PatientReport
 - queue_task_to_vm:    队列任务 → QueueTask
@@ -8,12 +8,11 @@
 - literature_to_vm:    文献 → LiteratureEntry
 - guideline_to_vm:     指南 → GuidelineEntry
 - drug_to_vm:          药品 → DrugEntry
-- drug_option_to_vm:   药品选项 → DrugOption
 """
 from __future__ import annotations
 
 import json
-from datetime import datetime, date
+from datetime import date, datetime
 from typing import Any
 
 
@@ -165,13 +164,24 @@ def queue_task_to_vm(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _iso(value: Any) -> str:
+    """datetime → ISO 字符串；空值返回空串。"""
+    return value.isoformat() if isinstance(value, datetime) else ""
+
+
 def literature_to_vm(row: dict[str, Any]) -> dict[str, Any]:
     """文献 DB 行 → 前端 LiteratureEntry (camelCase)。"""
     return {
         "id": row.get("id", ""),
         "title": row.get("title", ""),
+        "titleEn": row.get("title_en", ""),
+        "titleCn": row.get("title_cn", ""),
+        "studyType": row.get("study_type", ""),
         "authors": row.get("authors", ""),
         "journal": row.get("journal", ""),
+        "journalTags": row.get("journal_tags_json", []),
+        "impactFactor": row.get("impact_factor") or 0,
+        "publishedAt": _iso(row.get("published_at")),
         "year": row.get("year") or 0,
         "category": row.get("category", ""),
         "abstract": row.get("abstract", ""),
@@ -186,6 +196,12 @@ def guideline_to_vm(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": row.get("id", ""),
         "title": row.get("title", ""),
+        "titleCn": row.get("title_cn", ""),
+        "docType": row.get("doc_type", ""),
+        "authors": row.get("authors", ""),
+        "specialty": row.get("specialty", ""),
+        "region": row.get("region", ""),
+        "publishedAt": _iso(row.get("published_at")),
         "org": row.get("org", ""),
         "year": row.get("year") or 0,
         "cat": row.get("category", ""),
@@ -202,6 +218,11 @@ def drug_to_vm(row: dict[str, Any]) -> dict[str, Any]:
         "name": row.get("name", ""),
         "generic": row.get("generic_name", ""),
         "cat": row.get("category", ""),
+        "kind": row.get("drug_kind", ""),
+        "atcL1": row.get("atc_l1", ""),
+        "atcL2": row.get("atc_l2", ""),
+        "atcGroup": row.get("atc_group", ""),
+        "atcGroupDesc": row.get("atc_group_desc", ""),
         "dosage": row.get("dosage", ""),
         "indications": row.get("indications_json", []),
         "mechanism": row.get("mechanism", ""),
@@ -210,15 +231,6 @@ def drug_to_vm(row: dict[str, Any]) -> dict[str, Any]:
         "interactions": row.get("interactions_json", []),
         "pregnancy": row.get("pregnancy_grade", ""),
         "essential": row.get("is_essential") or False,
-    }
-
-
-def drug_option_to_vm(row: dict[str, Any]) -> dict[str, Any]:
-    """药品选项 → 前端 DrugOption (camelCase)。"""
-    return {
-        "id": row.get("id", ""),
-        "name": row.get("name", ""),
-        "cat": row.get("cat") or row.get("category", ""),
     }
 
 

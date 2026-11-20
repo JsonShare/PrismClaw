@@ -5,9 +5,10 @@
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-from importlib.metadata import entry_points, version as pkg_version
+from importlib.metadata import entry_points
+from importlib.metadata import version as pkg_version
+from inspect import isawaitable
 from typing import Any
 
 from prismclaw.schema.services.domain import (
@@ -50,27 +51,17 @@ class DomainRegistry:
                 self._errors[ep.name] = str(e)
         return bundles
 
-    def load_enabled(
-        self,
-        enabled: list[str],
-        *,
-        load_all_when_empty: bool = True,
-    ) -> list[DomainBundle]:
+    def load_enabled(self, enabled: list[str]) -> list[DomainBundle]:
         """按配置加载指定域，校验版本 + 依赖。
 
         返回按依赖拓扑排序后的域列表。
 
-        ``load_all_when_empty`` 区分「enabled 为空」的两种语义：
-        - True（默认，未编译/旧行为）：空列表 = 未指定，加载所有已安装域。
-        - False（编译期已裁剪）：空列表 = 明确启用 0 个域，加载为空。
-        调用方在成功 import 到 ``_capability_filters_generated.py``（即已运行
-        过编译脚本）时传 False——此时 ``ENABLED_DOMAINS=[]`` 是权威的「0 个域」，
-        而非「未指定」。
+        ``enabled`` 为空表示「未指定」，加载所有已发现（已安装）的域——
+        安装即注册；非空则仅加载列表中的域。
         """
         discovered = {b.name: b for b in self.discover()}
 
-        # enabled 为空且未声明裁剪意图 → 加载所有已安装的域（旧行为，安装即启用）
-        if not enabled and load_all_when_empty:
+        if not enabled:
             enabled = list(discovered.keys())
 
         core_version = self._get_core_version()
@@ -119,7 +110,7 @@ class DomainRegistry:
         for b in bundles:
             try:
                 result = b.on_build_infrastructure(ctx)
-                if asyncio.iscoroutine(result):
+                if isawaitable(result):
                     await result
                 logger.info("Domain '%s' infrastructure registered", b.name)
             except Exception as e:
@@ -173,7 +164,7 @@ class DomainRegistry:
         前提：bundle.task_store 非空（带 StatusEmitterMixin） +
         web_deps.domain_task_emitter 可用。接线动作：调
         store.set_status_listener(adapter(bundle.name, emitter))。
-        域命名空间参数化：kind = bundle.name（legal / medical / 自建 agent）。
+        域命名空间参数化：kind = bundle.name（每个域或自建 agent 互不冲突）。
         """
         store = getattr(bundle, "task_store", None)
         if store is None:

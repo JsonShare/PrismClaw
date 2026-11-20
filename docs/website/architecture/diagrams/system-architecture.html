@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismClaw System Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2gguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    .container { max-width: 1460px; margin: 0 auto; }
+    .header { margin-bottom: 2rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot {
+      width: 12px; height: 12px; background: #a78bfa; border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg { width: 100%; min-width: 1180px; display: block; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card h3 { font-size: 0.875rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
+    .card li { margin-bottom: 0.375rem; }
+    .card code { color: #e2e8f0; }
+    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    .toolbar { display: flex; gap: 0.5rem; margin-left: auto; flex-shrink: 0; align-items: center; }
+    .toolbar-toggle {
+      background: transparent; border: none; color: #475569; cursor: pointer;
+      font-size: 1.25rem; line-height: 1; padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem; transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions { display: none; gap: 0.5rem; }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8); border: 1px solid #334155; color: #94a3b8;
+      padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-family: inherit;
+      font-size: 0.75rem; cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .toolbar-actions button:hover { background: rgba(51, 65, 85, 0.8); color: white; border-color: #475569; }
+    @media print {
+      body { background: #020617; padding: 1rem; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>PrismClaw Architecture</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">5-Layer Dependency · L0 Schema → L1 Engine → L2 Runtime/Infra → L3 Assembly → L4 App · Single Run Container</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1400 1100">
+        <defs>
+          <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#64748b" />
+          </marker>
+          <marker id="arrowhead-cyan" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowhead-amber" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#fbbf24" />
+          </marker>
+          <marker id="arrowhead-violet" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowhead-emerald" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#34d399" />
+          </marker>
+          <marker id="arrowhead-rose" markerWidth="8" markerHeight="6" refX="7.5" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#fb7185" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ===== Dependency spine · 统一 16px 层间隙内居中 ===== -->
+        <line x1="52" y1="130" x2="52" y2="142" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="52" y1="250" x2="52" y2="262" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead-amber)"/>
+        <line x1="52" y1="370" x2="52" y2="382" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead-violet)"/>
+        <line x1="52" y1="766" x2="52" y2="778" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead-emerald)"/>
+        <line x1="52" y1="952" x2="52" y2="964" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead-violet)"/>
+
+        <!-- ============================================================
+             L4 · App
+             ============================================================ -->
+        <rect x="40" y="24" width="800" height="104" rx="12" fill="rgba(8, 51, 68, 0.08)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="56" y="44" fill="#22d3ee" font-size="10" font-weight="600">L4 · App 通信层 — 请求接入与流式回传</text>
+
+        <rect x="56" y="56" width="183" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+        <text x="147.5" y="80" fill="white" font-size="10" font-weight="600" text-anchor="middle">app/web · WebSocket</text>
+        <text x="147.5" y="98" fill="#7dd3fc" font-size="7.5" text-anchor="middle">SSE / 流式事件</text>
+
+        <rect x="251" y="56" width="183" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+        <text x="342.5" y="80" fill="white" font-size="10" font-weight="600" text-anchor="middle">app/auth · Gateway</text>
+        <text x="342.5" y="98" fill="#7dd3fc" font-size="7.5" text-anchor="middle">JWT / 鉴权 / 路由</text>
+
+        <rect x="446" y="56" width="183" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+        <text x="537.5" y="80" fill="white" font-size="10" font-weight="600" text-anchor="middle">ChatRunner</text>
+        <text x="537.5" y="98" fill="#7dd3fc" font-size="7.5" text-anchor="middle">会话编排 / 取消 / 续跑</text>
+
+        <rect x="641" y="56" width="183" height="58" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+        <text x="732.5" y="80" fill="white" font-size="10" font-weight="600" text-anchor="middle">app/state · routes</text>
+        <text x="732.5" y="98" fill="#7dd3fc" font-size="7.5" text-anchor="middle">会话状态 / HTTP 入口</text>
+
+        <!-- ============================================================
+             L3 · Assembly
+             ============================================================ -->
+        <rect x="40" y="144" width="800" height="104" rx="12" fill="rgba(69, 26, 3, 0.10)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="56" y="164" fill="#fbbf24" font-size="10" font-weight="600">L3 · Assembly 编配层 — DI bundles 组装 L1/L2</text>
+
+        <rect x="56" y="176" width="183" height="58" rx="6" fill="rgba(69, 26, 3, 0.35)" stroke="#fbbf24" stroke-width="1.2"/>
+        <text x="147.5" y="200" fill="white" font-size="10" font-weight="600" text-anchor="middle">bundles · wiring</text>
+        <text x="147.5" y="218" fill="#fcd34d" font-size="7.5" text-anchor="middle">依赖装配 / 端口绑定</text>
+
+        <rect x="251" y="176" width="183" height="58" rx="6" fill="rgba(69, 26, 3, 0.35)" stroke="#fbbf24" stroke-width="1.2"/>
+        <text x="342.5" y="200" fill="white" font-size="10" font-weight="600" text-anchor="middle">lifecycle</text>
+        <text x="342.5" y="218" fill="#fcd34d" font-size="7.5" text-anchor="middle">启动 / 关闭 / 后台任务</text>
+
+        <rect x="446" y="176" width="183" height="58" rx="6" fill="rgba(69, 26, 3, 0.35)" stroke="#fbbf24" stroke-width="1.2"/>
+        <text x="537.5" y="200" fill="white" font-size="10" font-weight="600" text-anchor="middle">plugins</text>
+        <text x="537.5" y="218" fill="#fcd34d" font-size="7.5" text-anchor="middle">插件装载 / hook 注册</text>
+
+        <rect x="641" y="176" width="183" height="58" rx="6" fill="rgba(69, 26, 3, 0.35)" stroke="#fbbf24" stroke-width="1.2"/>
+        <text x="732.5" y="200" fill="white" font-size="10" font-weight="600" text-anchor="middle">workspace</text>
+        <text x="732.5" y="218" fill="#fcd34d" font-size="7.5" text-anchor="middle">Runner 装配 / 工作区</text>
+
+        <!-- ============================================================
+             L2 · Runtime / Infra
+             ============================================================ -->
+        <rect x="40" y="264" width="800" height="104" rx="12" fill="rgba(46, 16, 101, 0.12)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="56" y="284" fill="#a78bfa" font-size="10" font-weight="600">L2 · Runtime / Infra — 服务启动器与基础设施</text>
+
+        <rect x="56" y="296" width="183" height="58" rx="6" fill="rgba(46, 16, 101, 0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+        <text x="147.5" y="320" fill="white" font-size="10" font-weight="600" text-anchor="middle">runtime/facade</text>
+        <text x="147.5" y="338" fill="#c4b5fd" font-size="7.5" text-anchor="middle">引擎门面 / 懒加载</text>
+
+        <rect x="251" y="296" width="183" height="58" rx="6" fill="rgba(46, 16, 101, 0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+        <text x="342.5" y="320" fill="white" font-size="10" font-weight="600" text-anchor="middle">runtime/skills</text>
+        <text x="342.5" y="338" fill="#c4b5fd" font-size="7.5" text-anchor="middle">技能发现 / 加载</text>
+
+        <rect x="446" y="296" width="183" height="58" rx="6" fill="rgba(46, 16, 101, 0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+        <text x="537.5" y="320" fill="white" font-size="10" font-weight="600" text-anchor="middle">infra/settings · config</text>
+        <text x="537.5" y="338" fill="#c4b5fd" font-size="7.5" text-anchor="middle">配置加载 / 环境解析</text>
+
+        <rect x="641" y="296" width="183" height="58" rx="6" fill="rgba(46, 16, 101, 0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+        <text x="732.5" y="320" fill="white" font-size="10" font-weight="600" text-anchor="middle">infra/runtime_root</text>
+        <text x="732.5" y="338" fill="#c4b5fd" font-size="7.5" text-anchor="middle">运行时卷 / 沙箱挂载</text>
+
+        <!-- ============================================================
+             L1 · Engine
+             ============================================================ -->
+        <rect x="40" y="384" width="800" height="380" rx="12" fill="rgba(6, 78, 59, 0.08)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="56" y="404" fill="#34d399" font-size="10" font-weight="600">L1 · Engine 引擎层 — Agent 循环与领域子系统</text>
+
+        <!-- agent loop hero -->
+        <rect x="56" y="414" width="768" height="64" rx="8" fill="rgba(6, 78, 59, 0.45)" stroke="#34d399" stroke-width="1.8"/>
+        <text x="72" y="438" fill="white" font-size="11" font-weight="700">Agent Loop 核心</text>
+        <text x="72" y="457" fill="#6ee7b7" font-size="8">runner · preparer · wiring · agent_loop · runtime · terminal · types</text>
+        <rect x="654" y="424" width="156" height="42" rx="6" fill="rgba(16, 185, 129, 0.18)" stroke="#34d399" stroke-width="1"/>
+        <text x="732" y="441" fill="#a7f3d0" font-size="8" font-weight="600" text-anchor="middle">LoopRuntime</text>
+        <text x="732" y="456" fill="#6ee7b7" font-size="7" text-anchor="middle">唯一 run 级容器</text>
+
+        <!-- subsystem grid: 4 x 4 -->
+        <rect x="56" y="492" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="147.5" y="513" fill="white" font-size="10" font-weight="600" text-anchor="middle">execution</text>
+        <text x="147.5" y="530" fill="#86efac" font-size="7.5" text-anchor="middle">loop / dispatch / checkpoint</text>
+
+        <rect x="251" y="492" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="342.5" y="513" fill="white" font-size="10" font-weight="600" text-anchor="middle">security</text>
+        <text x="342.5" y="530" fill="#86efac" font-size="7.5" text-anchor="middle">gate / sandbox / policy</text>
+
+        <rect x="446" y="492" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="537.5" y="513" fill="white" font-size="10" font-weight="600" text-anchor="middle">execution/skills</text>
+        <text x="537.5" y="530" fill="#86efac" font-size="7.5" text-anchor="middle">技能运行时</text>
+
+        <rect x="641" y="492" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="732.5" y="513" fill="white" font-size="10" font-weight="600" text-anchor="middle">plugins · hooks</text>
+        <text x="732.5" y="530" fill="#86efac" font-size="7.5" text-anchor="middle">插件 / 生命周期 hook</text>
+
+        <rect x="56" y="560" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="147.5" y="581" fill="white" font-size="10" font-weight="600" text-anchor="middle">memory</text>
+        <text x="147.5" y="598" fill="#86efac" font-size="7.5" text-anchor="middle">长期记忆 / 检索</text>
+
+        <rect x="251" y="560" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="342.5" y="581" fill="white" font-size="10" font-weight="600" text-anchor="middle">dream</text>
+        <text x="342.5" y="598" fill="#86efac" font-size="7.5" text-anchor="middle">离线整合 / dispatch</text>
+
+        <rect x="446" y="560" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="537.5" y="581" fill="white" font-size="10" font-weight="600" text-anchor="middle">compression</text>
+        <text x="537.5" y="598" fill="#86efac" font-size="7.5" text-anchor="middle">上下文压缩 / 缓存打包</text>
+
+        <rect x="641" y="560" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="732.5" y="581" fill="white" font-size="10" font-weight="600" text-anchor="middle">engine/mcp</text>
+        <text x="732.5" y="598" fill="#86efac" font-size="7.5" text-anchor="middle">MCP 客户端 / 传输</text>
+
+        <rect x="56" y="628" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="147.5" y="649" fill="white" font-size="10" font-weight="600" text-anchor="middle">subagent</text>
+        <text x="147.5" y="666" fill="#86efac" font-size="7.5" text-anchor="middle">子代理执行 / 隔离</text>
+
+        <rect x="251" y="628" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="342.5" y="649" fill="white" font-size="10" font-weight="600" text-anchor="middle">toolkit</text>
+        <text x="342.5" y="666" fill="#86efac" font-size="7.5" text-anchor="middle">工具注册 / 执行 / 工作区</text>
+
+        <rect x="446" y="628" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="537.5" y="649" fill="white" font-size="10" font-weight="600" text-anchor="middle">services/llm</text>
+        <text x="537.5" y="666" fill="#86efac" font-size="7.5" text-anchor="middle">LLM 客户端 / provider</text>
+
+        <rect x="641" y="628" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="732.5" y="649" fill="white" font-size="10" font-weight="600" text-anchor="middle">review</text>
+        <text x="732.5" y="666" fill="#86efac" font-size="7.5" text-anchor="middle">审查 / 完成契约</text>
+
+        <rect x="56" y="696" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="147.5" y="717" fill="white" font-size="10" font-weight="600" text-anchor="middle">scheduler</text>
+        <text x="147.5" y="734" fill="#86efac" font-size="7.5" text-anchor="middle">定时任务 / 执行器</text>
+
+        <rect x="251" y="696" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="342.5" y="717" fill="white" font-size="10" font-weight="600" text-anchor="middle">curator</text>
+        <text x="342.5" y="734" fill="#86efac" font-size="7.5" text-anchor="middle">知识策展 / 巡检</text>
+
+        <rect x="446" y="696" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="537.5" y="717" fill="white" font-size="10" font-weight="600" text-anchor="middle">engine/runtime</text>
+        <text x="537.5" y="734" fill="#86efac" font-size="7.5" text-anchor="middle">Runtime-Agent 通信</text>
+
+        <rect x="641" y="696" width="183" height="54" rx="6" fill="rgba(6, 78, 59, 0.25)" stroke="#34d399" stroke-width="1"/>
+        <text x="732.5" y="717" fill="white" font-size="10" font-weight="600" text-anchor="middle">commands</text>
+        <text x="732.5" y="734" fill="#86efac" font-size="7.5" text-anchor="middle">斜杠命令 / 内置指令</text>
+
+        <!-- ============================================================
+             L0 · Schema
+             ============================================================ -->
+        <rect x="40" y="780" width="800" height="170" rx="12" fill="rgba(46, 16, 101, 0.10)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="56" y="800" fill="#a78bfa" font-size="10" font-weight="600">L0 · Schema 契约层 — 零业务依赖（15 个模块）</text>
+
+        <g font-size="9" fill="white">
+          <rect x="56" y="808" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="129" y="830" text-anchor="middle">agent</text>
+          <rect x="211.5" y="808" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="284.5" y="830" text-anchor="middle">llm</text>
+          <rect x="367" y="808" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="440" y="830" text-anchor="middle">services</text>
+          <rect x="522.5" y="808" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="595.5" y="830" text-anchor="middle">content</text>
+          <rect x="678" y="808" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="751" y="830" text-anchor="middle">config</text>
+
+          <rect x="56" y="852" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="129" y="874" text-anchor="middle">session</text>
+          <rect x="211.5" y="852" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="284.5" y="874" text-anchor="middle">storage</text>
+          <rect x="367" y="852" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="440" y="874" text-anchor="middle">memory</text>
+          <rect x="522.5" y="852" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="595.5" y="874" text-anchor="middle">security</text>
+          <rect x="678" y="852" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="751" y="874" text-anchor="middle">scheduler</text>
+
+          <rect x="56" y="896" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="129" y="918" text-anchor="middle">audit</text>
+          <rect x="211.5" y="896" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="284.5" y="918" text-anchor="middle">dream</text>
+          <rect x="367" y="896" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="440" y="918" text-anchor="middle">protocol</text>
+          <rect x="522.5" y="896" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="595.5" y="918" text-anchor="middle">shared</text>
+          <rect x="678" y="896" width="146" height="34" rx="5" fill="rgba(46, 16, 101, 0.35)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="751" y="918" text-anchor="middle">trajectory</text>
+        </g>
+
+        <!-- ============================================================
+             Persistence
+             ============================================================ -->
+        <rect x="40" y="966" width="800" height="88" rx="12" fill="rgba(30, 41, 59, 0.35)" stroke="#64748b" stroke-width="1"/>
+        <text x="56" y="986" fill="#94a3b8" font-size="10" font-weight="600">Persistence — 适配器（Redis / PostgreSQL）</text>
+
+        <rect x="56" y="996" width="380" height="38" rx="5" fill="rgba(15, 23, 42, 0.8)" stroke="#475569" stroke-width="1"/>
+        <text x="246" y="1021" fill="white" font-size="9" text-anchor="middle">session · lock · pg_checkpoint</text>
+
+        <rect x="452" y="996" width="368" height="38" rx="5" fill="rgba(15, 23, 42, 0.8)" stroke="#475569" stroke-width="1"/>
+        <text x="636" y="1016" fill="white" font-size="8" text-anchor="middle">memory · workspace · user · scheduler</text>
+        <text x="636" y="1030" fill="white" font-size="8" text-anchor="middle">dream · curator · trajectory · audit</text>
+
+        <!-- ============================================================
+             RIGHT · Agent Loop lifecycle
+             ============================================================ -->
+        <rect x="876" y="24" width="488" height="392" rx="12" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="896" y="48" fill="white" font-size="11" font-weight="700">Agent Loop · 单次 run 生命周期</text>
+
+        <rect x="896" y="62" width="448" height="44" rx="6" fill="rgba(6, 78, 59, 0.35)" stroke="#34d399" stroke-width="1"/>
+        <text x="910" y="80" fill="white" font-size="9.5" font-weight="600">1 · RunPreparer.prepare()</text>
+        <text x="910" y="96" fill="#6ee7b7" font-size="8">返回 EarlyExit | LoopRuntime；启动路径全部闭合</text>
+
+        <rect x="896" y="116" width="448" height="44" rx="6" fill="rgba(6, 78, 59, 0.35)" stroke="#34d399" stroke-width="1"/>
+        <text x="910" y="134" fill="white" font-size="9.5" font-weight="600">2 · build_loop_config(rt)</text>
+        <text x="910" y="150" fill="#6ee7b7" font-size="8">build_runtime(rt) 原地装配预算 / 完成内核 / 投影器</text>
+
+        <rect x="896" y="170" width="448" height="44" rx="6" fill="rgba(6, 78, 59, 0.35)" stroke="#34d399" stroke-width="1"/>
+        <text x="910" y="188" fill="white" font-size="9.5" font-weight="600">3 · RunLoopState → run_loop()</text>
+        <text x="910" y="204" fill="#6ee7b7" font-size="8">frame / ledger / run 级对象；stage 第一参数统一为 rt</text>
+
+        <rect x="896" y="224" width="448" height="44" rx="6" fill="rgba(6, 78, 59, 0.35)" stroke="#34d399" stroke-width="1"/>
+        <text x="910" y="242" fill="white" font-size="9.5" font-weight="600">4 · stages</text>
+        <text x="910" y="258" fill="#6ee7b7" font-size="8">stream · tools · continue_ · terminal（端口注入）</text>
+
+        <rect x="896" y="278" width="448" height="44" rx="6" fill="rgba(6, 78, 59, 0.35)" stroke="#34d399" stroke-width="1"/>
+        <text x="910" y="296" fill="white" font-size="9.5" font-weight="600">5 · run_teardown(rt)</text>
+        <text x="910" y="312" fill="#6ee7b7" font-size="8">遥测 · skill 清理 · ownership 释放 · SESSION_END</text>
+
+        <rect x="896" y="334" width="448" height="68" rx="8" fill="rgba(16, 185, 129, 0.12)" stroke="#34d399" stroke-width="1.4"/>
+        <text x="910" y="356" fill="#a7f3d0" font-size="10" font-weight="700">LoopRuntime · 唯一 run 级容器</text>
+        <text x="910" y="374" fill="#6ee7b7" font-size="8">入参 / run 级状态 / 装配产物 / 可变标志（无运行期行为）</text>
+        <text x="910" y="392" fill="#6ee7b7" font-size="8">run 级状态单一真相源；随 run 创建，随 teardown 释放</text>
+
+        <!-- ============================================================
+             RIGHT · Data flows
+             ============================================================ -->
+        <rect x="876" y="432" width="488" height="310" rx="12" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="896" y="456" fill="white" font-size="11" font-weight="700">数据流</text>
+
+        <text x="896" y="486" fill="#22d3ee" font-size="9" font-weight="600">❶ 请求主路径</text>
+        <g font-size="7.5" fill="white" text-anchor="middle">
+          <rect x="896" y="496" width="76" height="28" rx="4" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="0.8"/>
+          <text x="934" y="514">WebSocket</text>
+          <rect x="989" y="496" width="76" height="28" rx="4" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="0.8"/>
+          <text x="1027" y="514">ChatRunner</text>
+          <rect x="1082" y="496" width="76" height="28" rx="4" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="0.8"/>
+          <text x="1120" y="514">Preparer</text>
+          <rect x="1175" y="496" width="76" height="28" rx="4" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="0.8"/>
+          <text x="1213" y="514">run_loop</text>
+          <rect x="1268" y="496" width="76" height="28" rx="4" fill="rgba(8, 51, 68, 0.5)" stroke="#22d3ee" stroke-width="0.8"/>
+          <text x="1306" y="514">teardown</text>
+        </g>
+        <line x1="973" y1="510" x2="988" y2="510" stroke="#22d3ee" stroke-width="1.2" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="1066" y1="510" x2="1081" y2="510" stroke="#22d3ee" stroke-width="1.2" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="1159" y1="510" x2="1174" y2="510" stroke="#22d3ee" stroke-width="1.2" marker-end="url(#arrowhead-cyan)"/>
+        <line x1="1252" y1="510" x2="1267" y2="510" stroke="#22d3ee" stroke-width="1.2" marker-end="url(#arrowhead-cyan)"/>
+
+        <text x="896" y="554" fill="#fb7185" font-size="9" font-weight="600">❷ 安全决策链</text>
+        <g font-size="7.5" fill="white" text-anchor="middle">
+          <rect x="896" y="564" width="100" height="28" rx="4" fill="rgba(76, 5, 25, 0.45)" stroke="#fb7185" stroke-width="0.8"/>
+          <text x="946" y="582">Pre-tool Check</text>
+          <rect x="1012" y="564" width="100" height="28" rx="4" fill="rgba(76, 5, 25, 0.45)" stroke="#fb7185" stroke-width="0.8"/>
+          <text x="1062" y="582">Security Gate</text>
+          <rect x="1128" y="564" width="100" height="28" rx="4" fill="rgba(76, 5, 25, 0.45)" stroke="#fb7185" stroke-width="0.8"/>
+          <text x="1178" y="582">Sandbox / Bwrap</text>
+          <rect x="1244" y="564" width="100" height="28" rx="4" fill="rgba(76, 5, 25, 0.45)" stroke="#fb7185" stroke-width="0.8"/>
+          <text x="1294" y="582">CompletionKernel</text>
+        </g>
+        <line x1="997" y1="578" x2="1011" y2="578" stroke="#fb7185" stroke-width="1.2" marker-end="url(#arrowhead-rose)"/>
+        <line x1="1113" y1="578" x2="1127" y2="578" stroke="#fb7185" stroke-width="1.2" marker-end="url(#arrowhead-rose)"/>
+        <line x1="1229" y1="578" x2="1243" y2="578" stroke="#fb7185" stroke-width="1.2" marker-end="url(#arrowhead-rose)"/>
+
+        <text x="896" y="622" fill="#a78bfa" font-size="9" font-weight="600">❸ 记忆 / 上下文路径</text>
+        <g font-size="7.5" fill="white" text-anchor="middle">
+          <rect x="896" y="632" width="100" height="28" rx="4" fill="rgba(46, 16, 101, 0.45)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="946" y="650">Context Prepare</text>
+          <rect x="1012" y="632" width="100" height="28" rx="4" fill="rgba(46, 16, 101, 0.45)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="1062" y="650">Compression</text>
+          <rect x="1128" y="632" width="100" height="28" rx="4" fill="rgba(46, 16, 101, 0.45)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="1178" y="650">Memory</text>
+          <rect x="1244" y="632" width="100" height="28" rx="4" fill="rgba(46, 16, 101, 0.45)" stroke="#a78bfa" stroke-width="0.8"/>
+          <text x="1294" y="650">Projection</text>
+        </g>
+        <line x1="997" y1="646" x2="1011" y2="646" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#arrowhead-violet)"/>
+        <line x1="1113" y1="646" x2="1127" y2="646" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#arrowhead-violet)"/>
+        <line x1="1229" y1="646" x2="1243" y2="646" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#arrowhead-violet)"/>
+
+        <text x="896" y="690" fill="#94a3b8" font-size="8">run 级状态只经 LoopRuntime 传递；stage 通过 (rt, state) 显式读写。</text>
+        <text x="896" y="708" fill="#94a3b8" font-size="8">依赖方向严格向下：App → Assembly → Runtime/Infra → Engine → Schema。</text>
+        <text x="896" y="726" fill="#94a3b8" font-size="8">engine 只向下依赖 schema；runtime / app / persistence 均位于其上层。</text>
+
+        <!-- ============================================================
+             RIGHT · Legend
+             ============================================================ -->
+        <rect x="876" y="758" width="488" height="120" rx="12" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="896" y="782" fill="white" font-size="10" font-weight="700">Legend</text>
+        <g font-size="8" fill="#94a3b8">
+          <rect x="896" y="790" width="10" height="10" rx="2" fill="rgba(8, 51, 68, 0.6)" stroke="#22d3ee"/>
+          <text x="914" y="799">L4 App</text>
+          <rect x="1000" y="790" width="10" height="10" rx="2" fill="rgba(69, 26, 3, 0.6)" stroke="#fbbf24"/>
+          <text x="1018" y="799">L3 Assembly</text>
+          <rect x="1120" y="790" width="10" height="10" rx="2" fill="rgba(46, 16, 101, 0.6)" stroke="#a78bfa"/>
+          <text x="1138" y="799">L2 Runtime · L0 Schema</text>
+
+          <rect x="896" y="818" width="10" height="10" rx="2" fill="rgba(6, 78, 59, 0.6)" stroke="#34d399"/>
+          <text x="914" y="827">L1 Engine / Agent Loop</text>
+          <rect x="1060" y="818" width="10" height="10" rx="2" fill="rgba(76, 5, 25, 0.6)" stroke="#fb7185"/>
+          <text x="1078" y="827">Security</text>
+          <rect x="1160" y="818" width="10" height="10" rx="2" fill="rgba(30, 41, 59, 0.8)" stroke="#64748b"/>
+          <text x="1178" y="827">Persistence</text>
+
+          <line x1="896" y1="846" x2="928" y2="846" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <text x="936" y="849">依赖方向（向下）</text>
+          <rect x="1060" y="840" width="72" height="12" rx="3" fill="rgba(16, 185, 129, 0.18)" stroke="#34d399" stroke-width="1"/>
+          <text x="1140" y="849">单容器 / 状态</text>
+        </g>
+
+        <!-- ============================================================
+             RIGHT · Principles
+             ============================================================ -->
+        <rect x="876" y="894" width="488" height="160" rx="12" fill="rgba(15, 23, 42, 0.6)" stroke="#1e293b" stroke-width="1"/>
+        <text x="896" y="918" fill="white" font-size="10" font-weight="700">Architecture Principles</text>
+        <g font-size="8" fill="#94a3b8">
+          <text x="896" y="940">• L0 零依赖；依赖只能向下，禁止反向导入。</text>
+          <text x="896" y="959">• LoopRuntime 是单次 run 的唯一状态容器。</text>
+          <text x="896" y="978">• build_loop_config(rt) 单参数 + build_runtime 原地装配。</text>
+          <text x="896" y="997">• stage 统一 (rt, state) 签名，行为经端口注入。</text>
+          <text x="896" y="1016">• 终态唯一出口：CompletionKernel.decide()。</text>
+          <text x="896" y="1035">• 终态副作用集中在 terminal.py（幂等）。</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot violet"></div><h3>Schema · 契约层 (L0)</h3></div>
+        <ul>
+          <li>15 个模块，零业务依赖</li>
+          <li><code>agent / llm / services / content / config</code></li>
+          <li><code>session / storage / memory / security / scheduler</code></li>
+          <li><code>audit / dream / protocol / shared / trajectory</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Engine · 引擎层 (L1)</h3></div>
+        <ul>
+          <li>Agent Loop：runner → preparer → wiring → run_loop</li>
+          <li>stage：stream / tools / continue_ / terminal</li>
+          <li>子系统：execution / security / skills / plugins / memory</li>
+          <li>dream / compression / mcp / subagent</li>
+          <li>toolkit / llm / review</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>Runtime (L2) · Assembly (L3) · App (L4)</h3></div>
+        <ul>
+          <li>L2：runtime/facade、runtime/skills</li>
+          <li>L2：infra/settings、infra/runtime_root</li>
+          <li>L3：bundles、wiring、lifecycle、plugins、workspace</li>
+          <li>L4：app/web、auth、gateway、ChatRunner、routes</li>
+          <li>Persistence：Redis / PostgreSQL 适配器</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      PrismClaw · 5-Layer Architecture · L0 Schema → L1 Engine → L2 Runtime/Infra → L3 Assembly → L4 App · 2026
+    </p>
+  </div>
+
+  <script>
+    async function captureCanvas() {
+      const el = document.getElementById('report-container');
+      const r = el.getBoundingClientRect();
+      const pad = 32;
+      return html2canvas(document.body, {
+        backgroundColor: '#020617', scale: 2, useCORS: true,
+        ignoreElements: (e) => e.classList && e.classList.contains('toolbar'),
+        x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad,
+        width: r.width + pad * 2, height: r.height + pad * 2
+      });
+    }
+
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const canvas = await captureCanvas();
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const canvas = await captureCanvas();
+        const link = document.createElement('a');
+        link.download = 'prismclaw-architecture.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const canvas = await captureCanvas();
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('prismclaw-architecture.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

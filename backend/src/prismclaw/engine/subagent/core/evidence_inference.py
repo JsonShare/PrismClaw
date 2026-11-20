@@ -4,7 +4,7 @@
 各域模块在 on_build_runtime() 中调用 register_inferencer() 注册推断器。
 
 推断器签名: (source_type, source_path, result_text) -> dict[str, str]
-  返回 dict 的 key 须带域名前缀，如 "medical.evidence_level"。
+  返回 dict 的 key 须带域名前缀，如 "{domain}.evidence_level"。
 """
 from __future__ import annotations
 

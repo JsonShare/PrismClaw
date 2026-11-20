@@ -15,11 +15,10 @@ import re
 
 from prismclaw.schema.shared._phi_pattern_registry import get_domain_phi_patterns
 
-
 # ── 通用 PII 模式（域无关，始终生效） ─────────────────────────────────
 
 _CORE_PII_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
-    # 1. 姓名：通用前缀（姓名/Name），医疗前缀由域 bundle 注册
+    # 1. 姓名：通用前缀（姓名/Name），其余前缀由域 bundle 注册
     ("NAME", re.compile(
         r'(?:姓名)[：:]\s*[\u4e00-\u9fff]{2,4}'
         r'|'
@@ -132,19 +131,6 @@ _CORE_PII_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
 def get_all_pii_patterns() -> list[tuple[str, re.Pattern[str], str]]:
     """返回核心 PII 模式 + 域注册模式的合并列表。"""
     return _CORE_PII_PATTERNS + get_domain_phi_patterns()
-
-
-# ── 向后兼容 ──────────────────────────────────────────────────────────
-
-
-def _get_safe_harbor_patterns() -> list[tuple[str, re.Pattern[str], str]]:
-    """向后兼容：消费方通过此函数获取合并后的模式列表。"""
-    return get_all_pii_patterns()
-
-
-# 模块级占位（注册表运行时填充，模块加载时可能为空）。
-# 消费方应优先使用 get_all_pii_patterns() / _get_safe_harbor_patterns()。
-_SAFE_HARBOR_PATTERNS: list[tuple[str, re.Pattern[str], str]] = []
 
 
 # ── 核心 API ──────────────────────────────────────────────────────────

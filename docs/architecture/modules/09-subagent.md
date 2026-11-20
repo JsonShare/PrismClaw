@@ -292,7 +292,7 @@ class SessionParallelTaskStore:
 scheduled ──► running ──► completed / failed / cancelled
 ```
 
-- `launch_background` 先做本会话 `scheduled|running` 计数闸门（`max_parallel_per_turn`），再 `TaskManager.spawn(category="subagent", owner=session_id)`，并登记 `task_id → (TaskManager, managed_task_id)`（`runtime/background.py`）。
+- `launch_background` 先做本会话 `scheduled|running` 计数闸门（`max_parallel_per_turn`），再 `TaskManager.spawn(category="subagent", owner=session_id)`，并登记 `task_id → (TaskManager, managed_task_id)`（`engine/subagent/core/executor.py`）。
 - 记录只由 `run()` 写：`scheduled → running` 在执行开始前落库，使闸门统计与真实执行一致；终态唯一出口 `_finalize`，正常/异常/取消三条路径统一写终态并触发投递。
 - 中断经 `subagent_control` 的 `interrupt` 执行：先用 `(agent_id, task_id)` 组合键定位任务，`task_id` 与所属 `agent_id` 不匹配时返回明确错误；中断在安全边界生效，绝不沿用父任务的 `managed_task_id`（那等于终止整轮父会话）。
 - 父 run 中止时，`_background_main` 监听共享 `abort` Event 并取消内层 run，长工具调用无需等待循环检查点。
@@ -359,7 +359,7 @@ MAX_FILE_BYTES = 256_000
 | **executor** | 在划定范围内修改或生成内容，并自行验证生效 | `read`, `grep`, `glob`, `write`, `edit`, `bash`, `web-search-mcp:search`, `web-search-mcp:fetch` |
 | **reviewer** | 独立验收结论或产出，给出可复现依据 | `read`, `grep`, `glob`, `bash` |
 
-协作拓扑：不再有固定的角色瀑布流或必经审查节点。主 Agent 负责规划、任务拆解、
+协作拓扑：不设固定的角色瀑布流或必经审查节点。主 Agent 负责规划、任务拆解、
 写入范围分工、冲突裁决、架构取舍与最终综合；子代理只承担边界清晰的能力单元。
 三个角色共用同一套生命周期和结果契约；默认 `context_mode="isolated"`，工具权限
 由 manifest 的 `allowed_tools` 显式限定。
@@ -513,9 +513,9 @@ SubAgentTool.execute(dispatch_mode="background")
 _collect_evidence_from_messages()（模块级函数）
   → 遍历工具调用历史
   → _TOOL_EVIDENCE_MAP 映射提取
-  → _infer_domain_fields()（模块级函数）
-    → URL 模式匹配 → medical evidence_level
-    → 内容关键词 → legal_source_type
+  → _infer_domain_fields()
+    → 遍历域注册的 EvidenceInferencer（核心不含领域规则）
+    → 返回 {domain}.{field} → domain_extensions
 ```
 
 ## 对外接口
@@ -547,7 +547,7 @@ _collect_evidence_from_messages()（模块级函数）
   ├── schema.session                    — SessionTree, SessionStore
   ├── persistence.session               — session 存储
   ├── persistence.lock                  — 分布式锁
-  ├── engine.skills                     — 技能预加载与 runtime
+  ├── engine.execution.skills          — 技能预加载与 runtime
   ├── engine.security.sandbox           — 沙箱策略
   ├── infra.redis                       — 并行任务、分布式锁
   └── infra.settings                   — 配置

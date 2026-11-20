@@ -1,6 +1,6 @@
 """Path remapping for ported plugins — a generic, plugin-declared mechanism.
 
-Plugins translated from another ecosystem (e.g. ``legal-chineselaw`` from the
+Plugins translated from another ecosystem (e.g. ``my-plugin`` from the
 reference implementation) may hard-code that ecosystem's stateful paths in
 their prose, such as ``~/.prismclaw/plugins/config/<root>/<area>/...``. Those paths do not
 exist under PrismClaw until the user has run their cold-start interview, and

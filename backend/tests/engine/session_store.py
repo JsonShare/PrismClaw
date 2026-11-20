@@ -61,6 +61,11 @@ class _FakeRedisClient:
     async def get(self, key: str) -> Any:
         return self._kv.get(key)
 
+    async def incr(self, key: str, amount: int = 1) -> int:
+        value = int(self._kv.get(key, 0) or 0) + amount
+        self._kv[key] = value
+        return value
+
     async def expire(self, key: str, ttl: int) -> bool:
         _ = key, ttl
         return True
@@ -68,8 +73,19 @@ class _FakeRedisClient:
     async def hgetall(self, key: str) -> dict[Any, Any]:
         return dict(self._hashes.get(key, {}))
 
-    async def hset(self, key: str, field: str, value: Any) -> int:
-        self._hashes.setdefault(key, {})[field] = value
+    async def hset(
+        self,
+        key: str,
+        field: str | None = None,
+        value: Any = None,
+        *,
+        mapping: dict[str, Any] | None = None,
+    ) -> int:
+        bucket = self._hashes.setdefault(key, {})
+        if mapping is not None:
+            bucket.update(mapping)
+            return len(mapping)
+        bucket[field] = value
         return 1
 
     async def hvals(self, key: str) -> list[Any]:

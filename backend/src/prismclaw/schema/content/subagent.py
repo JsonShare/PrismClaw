@@ -9,7 +9,7 @@ class EvidenceRef(BaseModel):
     自动从 subagent 的 tool call 历史中提取，不依赖 LLM 手动填写。
 
     领域扩展通过 domain_extensions 存放，key 格式 ``{domain}.{field}``
-    （如 ``medical.evidence_level``、``legal.source_type``）。
+    （如 ``my_domain.evidence_level``）。
     各域模块通过 EvidenceInferencer 注册表填充，核心不包含域逻辑。
     """
 
@@ -22,13 +22,6 @@ class EvidenceRef(BaseModel):
     # 领域扩展——由各域 EvidenceInferencer 自动填充
     # key 格式: "{domain}.{field}"，值均为字符串
     domain_extensions: dict[str, str] = Field(default_factory=dict)
-
-    # -- deprecated: 以下字段保留向后兼容，新代码应使用 domain_extensions --
-    evidence_level: str = ""       # [deprecated] 循证等级，现由 domain_extensions["medical.evidence_level"] 承载
-    recommendation_grade: str = "" # [deprecated] 推荐等级，现由 domain_extensions["medical.recommendation_grade"] 承载
-    legal_source_type: str = ""    # [deprecated] 法规类型，现由 domain_extensions["legal.source_type"] 承载
-    legal_effective_date: str = "" # [deprecated] 法规生效日期，现由 domain_extensions["legal.effective_date"] 承载
-    legal_status: str = ""         # [deprecated] 效力状态，现由 domain_extensions["legal.status"] 承载
 
 
 class SubagentContextSnapshot(BaseModel):

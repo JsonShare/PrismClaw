@@ -5,7 +5,7 @@
 两类内容：
 
 - ``handoff_advisory``：移交协议格式与链长约束（随运行时状态变化）；
-- ``domain_advisory``：领域 bundle 注册的合规规则（如医疗免责声明）。
+- ``domain_advisory``：领域 bundle 注册的合规规则（如域自定义免责声明）。
 """
 
 from __future__ import annotations

@@ -79,7 +79,7 @@ class SkillDescriptor(BaseDescriptor):
     # v5 渐进式披露:延迟 content pipeline 参数
     # 从 SkillManifest.pipeline_context 复制，供 body 按需加载时使用。
     pipeline_context: dict[str, Any] = field(default_factory=dict)
-    # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
+    # v5 渐进式披露：所属 marketplace 名称（如 my-marketplace）
     # 用于系统提示词按包名聚合展示插件技能。
     marketplace_name: str | None = None
     # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）

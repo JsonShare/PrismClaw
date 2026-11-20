@@ -4,7 +4,7 @@ from typing import Protocol
 
 from prismclaw.engine.foundation.distributed_mutex import DistributedMutex
 from prismclaw.schema.shared.exceptions import LockAcquireError
-from prismclaw.schema.persistence.persistence import LockManager
+from prismclaw.schema.storage.persistence_types import LockManager
 
 
 class DreamExecutionLease(Protocol):

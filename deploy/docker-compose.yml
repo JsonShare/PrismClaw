@@ -92,7 +92,7 @@ services:
     restart: "no"
 
   # ── Runtime-Agent: default workspace (SafetyGate STANDARD tier) ────
-  # 单 agent 服务该租户的所有工作区。关键不变量：
+  # 单 agent 服务本部署的所有工作区。关键不变量：
   #   agent 的 PRISMCLAW_WORKSPACE_ROOT 必须与 app 侧 workspaces.default
   #   （deploy/configs/server.yaml → /workspace）逐字节一致，
   #   且两侧挂同一个卷到同一路径 —— 这样 app 传的 workspace_root

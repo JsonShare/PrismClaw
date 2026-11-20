@@ -517,8 +517,9 @@ def _normalize_candidate_memories(raw: list[Any]) -> list[dict[str, Any]]:
             continue
         # 层由 type 派生（procedure → L3，其余 → L2），不接受 LLM 单独指定，
         # 否则会出现 fact@L3 之类与检索分层语义矛盾的状态。
-        entry_type = normalize_type(item.get("type"))
-        if entry_type not in CANONICAL_TYPES:
+        try:
+            entry_type = normalize_type(item.get("type"))
+        except ValueError:
             entry_type = "fact"  # LLM 边界：未知词归入 fact
         layer = "L3" if entry_type == "procedure" else "L2"
         memory_kind = infer_memory_kind(
@@ -671,6 +672,9 @@ def _resolve_version_chain_id(
     if target is not None and target.version_chain_id:
         return str(target.version_chain_id)
     entity_key = preferred_str(extracted.get("entity_key"), getattr(target, "entity_key", None))
-    memory_type = normalize_type(extracted.get("type") or getattr(target, "type", None))
+    try:
+        memory_type = normalize_type(extracted.get("type") or getattr(target, "type", None))
+    except ValueError:
+        memory_type = "fact"  # 非法 type 用 fact 兜底，保证版本链可计算
     chain_seed = f"{session_key}|{memory_type}|{entity_key or 'global'}"
     return f"ver:{hash(chain_seed) & 0xFFFFFFFF:08x}"

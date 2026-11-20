@@ -343,35 +343,10 @@ export function useTaskPanelData(): TaskPanelData {
           icon: 'finalizing' as const,
         }
       }
-      if (runtime.state === 'resuming') {
-        const recoveryProbe = liveTaskRuntime!.recovery_probe
-        return {
-          title: '恢复现场',
-          subtitle: recoveryProbe?.summary || '正在执行恢复探针…',
-          icon: 'streaming' as const,
-        }
-      }
-      if (runtime.state === 'reviewing') {
-        return {
-          title: '校验结果',
-          subtitle: liveTaskRuntime!.latest_review?.reason || currentStepTitle || '正在核对事实证据…',
-          icon: 'finalizing' as const,
-        }
-      }
       if (runtime.state === 'executing') {
         return {
           title: '处理中',
           subtitle: currentStepTitle || '正在执行当前步骤…',
-          icon: 'streaming' as const,
-        }
-      }
-      if (runtime.state === 'intaking') {
-        const preflightProbe = liveTaskRuntime!.preflight_probe
-        return {
-          title: '整理处理思路',
-          subtitle:
-            preflightProbe?.summary ||
-            '正在建立任务方案…',
           icon: 'streaming' as const,
         }
       }

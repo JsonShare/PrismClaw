@@ -26,7 +26,6 @@ __all__ = [
     "literature_to_vm",
     "guideline_to_vm",
     "drug_to_vm",
-    "drug_option_to_vm",
 ]
 
 _LAZY_IMPORTS: dict[str, str] = {
@@ -53,7 +52,6 @@ _LAZY_IMPORTS: dict[str, str] = {
     "literature_to_vm": ".view_models",
     "guideline_to_vm": ".view_models",
     "drug_to_vm": ".view_models",
-    "drug_option_to_vm": ".view_models",
 }
 
 

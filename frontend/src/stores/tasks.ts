@@ -32,10 +32,10 @@ function isDomainTaskStatus(status: string): status is DomainTaskStatus {
   return VALID_STATUSES.has(status)
 }
 
-/** 单个域任务（业务域长任务，legal / medical / 自建 agent 等）的 App 级状态。 */
+/** 单个域任务（业务域长任务，由域 bundle 注册）的 App 级状态。 */
 export interface DomainTaskState {
   threadId: number
-  kind: string  // 域命名空间：bundle.name（legal / medical / my_agent）
+  kind: string  // 域命名空间：bundle.name（由域包自定义）
   status: DomainTaskStatus
   title: string | null
   stage: string | null

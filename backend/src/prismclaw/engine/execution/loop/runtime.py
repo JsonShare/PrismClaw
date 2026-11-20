@@ -1,7 +1,8 @@
-"""LoopRuntime — stage 函数的显式依赖容器。
+"""LoopRuntime — 单次 run 的唯一状态容器。
 
-各 stage 函数以 ``rt: LoopRuntime`` 为第一参数，显式读写受控字段，不依赖
-隐式作用域。不是框架：字段 + 一个装配函数，无运行期行为。
+prepare 阶段构造并填充「入参 / run 级状态」，``build_runtime`` 原地填充
+「装配产物」。stage 函数以 ``rt: LoopRuntime`` 为第一参数显式读写，不依赖
+隐式作用域，也不存在第二份 run 级上下文。
 """
 from __future__ import annotations
 
@@ -11,24 +12,27 @@ from typing import Any
 
 @dataclass
 class LoopRuntime:
-    """stage 函数的显式依赖容器。
+    """单次 run 的唯一状态容器（纯数据，无运行期行为）。
 
-    字段按来源分三组：
-    - 入参：build_loop_config 的形参
-    - 装配产物：completion_kernel / budget_guard 等构造期一次生成
-    - 可变标志：iteration_budget_warned / time_budget_warned / overflow_recovered（run 级一次性）
+    字段按生命周期分四组：
+    - 入参：prepare 构造时确定
+    - run 级状态：prepare 填充，stage 在 run 内读写
+    - 装配产物：build_runtime 原地填充
+    - 可变标志：run 级一次性
     """
 
     # ── 入参 ──
     deps: Any
     request: Any
-    recovery: Any
-    state_machine: Any
-    tool_loop_state: Any
-    run_state: Any
-    initial_task_spec: Any
-    retry_counts: Any
-    response_policy: Any
+
+    # ── prepare 填充的 run 级状态 ──
+    recovery: Any = None
+    state_machine: Any = None
+    tool_loop_state: Any = None
+    run_state: Any = None
+    initial_task_spec: Any = None
+    retry_counts: Any = None
+    response_policy: Any = None
     pipeline: Any = None
     tool_ctx: Any = None
     tool_workspace_path: Any = None
@@ -42,7 +46,20 @@ class LoopRuntime:
     traj_scope: Any = None
     attachment_guidance: str | None = None
 
-    # ── 装配产物 ──
+    # run 级状态（prepare 填充，stage 在 run 内读写）
+    hotpath: Any = None
+    terminated_by: Any = None  # TerminalReason
+    iteration: int = 0
+    evidence_ledger: list[Any] = field(default_factory=list)
+    latest_review_decision: Any = None
+    llm_start_monotonic: float = 0.0
+    perf: Any = None
+    pending_messages: list[Any] = field(default_factory=list)
+    active_skill_invocation: Any = None
+    ownership_lease: Any = None
+    profiler: Any = None
+
+    # ── 装配产物（build_runtime 原地填充）──
     completion_config: Any = None
     completion_state: Any = None
     budget_guard: Any = None
@@ -66,7 +83,7 @@ class LoopRuntime:
 
 
 # ---------------------------------------------------------------------------
-# 装配 — LoopRuntime 的构造点
+# 装配 — LoopRuntime 的原地填充点
 # ---------------------------------------------------------------------------
 
 # 终态码 → 用户可见文案（terminate 的唯一文案源）
@@ -80,34 +97,14 @@ TERMINAL_MESSAGES: dict[str, str] = {
 }
 
 
-def build_runtime(
-    deps: Any,
-    request: Any,
-    recovery: Any,
-    state_machine: Any,
-    tool_loop_state: Any,
-    run_state: Any,
-    initial_task_spec: Any,
-    retry_counts: Any,
-    response_policy: Any,
-    *,
-    pipeline: Any = None,
-    tool_ctx: Any = None,
-    tool_workspace_path: Any = None,
-    effective_model: str | None = None,
-    abort_event: Any = None,
-    run_deadline_s: float = 0.0,
-    run_started: float = 0.0,
-    task_runtime: Any = None,
-    snapshot: Any = None,
-    tree: Any = None,
-    traj_scope: Any = None,
-    attachment_guidance: str | None = None,
-) -> LoopRuntime:
+def build_runtime(rt: LoopRuntime) -> LoopRuntime:
     """装配 LoopRuntime：预算、完成内核、终态文案、责任投影器一次生成。
 
     这是**唯一知道完成控制子系统存在的地方**；stage 模块只消费 ``rt``
     的字段，不知道 CompletionKernel / BudgetGuard 如何构造。
+
+    原地填充同一 ``rt`` 并返回它——全程只有一个对象，teardown 持有的
+    引用与 loop 内看到的是同一份状态。
     """
     from prismclaw.engine.execution.control.artifacts import ArtifactScanner
     from prismclaw.engine.execution.control.completion import CompletionReviewer
@@ -119,52 +116,33 @@ def build_runtime(
         resolve_run_budget,
     )
     from prismclaw.engine.execution.projection.project import RunProjector
+    from prismclaw.engine.execution.query.pre_request_pipeline import PreRequestPipeline
 
-    completion_config = deps.config.control
-    completion_state = CompletionState(contract=None, contract_resolved=False)
-    run_budget = resolve_run_budget(config=deps.config.budget)
-    run_state.loop_state.soft_at = float(run_started) + run_budget.soft_s
-    run_state.loop_state.hard_at = float(run_started) + run_budget.hard_s
-    budget_guard = BudgetGuard(
+    if rt.pipeline is None:
+        rt.pipeline = PreRequestPipeline()
+    if rt.tool_loop_state is None:
+        rt.tool_loop_state = rt.state_machine.load_tool_loop_state()
+    if rt.retry_counts is None:
+        rt.retry_counts = rt.state_machine.retry_counts_view()
+
+    rt.completion_config = rt.deps.config.control
+    rt.completion_state = CompletionState(contract=None, contract_resolved=False)
+    rt.run_budget = resolve_run_budget(config=rt.deps.config.budget)
+    rt.run_state.loop_state.soft_at = float(rt.run_started) + rt.run_budget.soft_s
+    rt.run_state.loop_state.hard_at = float(rt.run_started) + rt.run_budget.hard_s
+    rt.budget_guard = BudgetGuard(
         Budget(
-            max_iterations=run_budget.steps,
-            run_deadline_s=float(run_deadline_s or 0.0),
-            run_started=float(run_started or 0.0),
+            max_iterations=rt.run_budget.steps,
+            run_deadline_s=float(rt.run_deadline_s or 0.0),
+            run_started=float(rt.run_started or 0.0),
         )
     )
-
-    return LoopRuntime(
-        deps=deps,
-        request=request,
-        recovery=recovery,
-        state_machine=state_machine,
-        tool_loop_state=tool_loop_state,
-        run_state=run_state,
-        initial_task_spec=initial_task_spec,
-        retry_counts=retry_counts,
-        response_policy=response_policy,
-        pipeline=pipeline,
-        tool_ctx=tool_ctx,
-        tool_workspace_path=tool_workspace_path,
-        effective_model=effective_model,
-        abort_event=abort_event,
-        run_deadline_s=run_deadline_s,
-        run_started=run_started,
-        task_runtime=task_runtime,
-        snapshot=snapshot,
-        tree=tree,
-        traj_scope=traj_scope,
-        attachment_guidance=attachment_guidance,
-        completion_config=completion_config,
-        completion_state=completion_state,
-        budget_guard=budget_guard,
-        run_budget=run_budget,
-        completion_kernel=CompletionKernel(
-            state=completion_state,
-            reviewer=CompletionReviewer(ArtifactScanner(tool_workspace_path)),
-            budget=budget_guard,
-            recovery=recovery,
-        ),
-        terminal_messages=TERMINAL_MESSAGES,
-        run_projector=RunProjector(label=getattr(request, "task_id", "") or "run"),
+    rt.completion_kernel = CompletionKernel(
+        state=rt.completion_state,
+        reviewer=CompletionReviewer(ArtifactScanner(rt.tool_workspace_path)),
+        budget=rt.budget_guard,
+        recovery=rt.recovery,
     )
+    rt.terminal_messages = TERMINAL_MESSAGES
+    rt.run_projector = RunProjector(label=getattr(rt.request, "task_id", "") or "run")
+    return rt

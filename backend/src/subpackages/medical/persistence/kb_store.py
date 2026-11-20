@@ -1,4 +1,4 @@
-"""医疗域知识库存储 — KB 三表 CRUD + facet 计数。
+"""医疗域知识库存储 — KB 三表列表与种子 upsert。
 
 表集：
 - pc_medical_kb_literatures   文献
@@ -9,29 +9,17 @@
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from sqlalchemy import (
-    select,
-    insert,
-    update,
-    func,
-)
+from sqlalchemy import func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ..models.tables import (
-    kb_literatures,
-    kb_guidelines,
-    kb_drugs,
-)
+from ..models.tables import kb_drugs, kb_guidelines, kb_literatures
 from .helpers import row_to_dict
-
-logger = logging.getLogger(__name__)
 
 
 class KbStore:
-    """知识库三表存储 — 列表 + facet + 轻量 options。"""
+    """知识库三表存储 — 列表查询 + 种子 upsert。"""
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -47,12 +35,17 @@ class KbStore:
         page: int = 1,
         page_size: int = 8,
     ) -> dict[str, Any]:
-        """文献列表 + facet 计数。"""
+        """文献列表（按发布时间倒序）。"""
         async with self._engine.connect() as conn:
             base = kb_literatures.select().where(kb_literatures.c.is_deleted == 0)
             stmt = base
             if keyword:
-                stmt = stmt.where(kb_literatures.c.title.ilike(f"%{keyword}%"))
+                like = f"%{keyword}%"
+                stmt = stmt.where(
+                    kb_literatures.c.title.ilike(like)
+                    | kb_literatures.c.title_en.ilike(like)
+                    | kb_literatures.c.title_cn.ilike(like)
+                )
             if category and category != "全部":
                 stmt = stmt.where(kb_literatures.c.category == category)
             if year is not None:
@@ -60,33 +53,15 @@ class KbStore:
 
             total = (await conn.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
             rows = (await conn.execute(
-                stmt.order_by(kb_literatures.c.year.desc()).offset((page - 1) * page_size).limit(page_size)
+                stmt.order_by(
+                    kb_literatures.c.published_at.desc().nullslast(),
+                    kb_literatures.c.year.desc(),
+                ).offset((page - 1) * page_size).limit(page_size)
             )).fetchall()
             items = [row_to_dict(r) for r in rows]
 
-            # facet: categories
-            cat_rows = (await conn.execute(
-                select(kb_literatures.c.category, func.count()).where(kb_literatures.c.is_deleted == 0)
-                .group_by(kb_literatures.c.category)
-            )).fetchall()
-            total_count = sum(c for _, c in cat_rows)
-            categories = [{"name": "全部", "count": total_count}] + [
-                {"name": cat, "count": cnt} for cat, cnt in cat_rows if cat
-            ]
-
-            # facet: years
-            yr_rows = (await conn.execute(
-                select(kb_literatures.c.year, func.count()).where(kb_literatures.c.is_deleted == 0)
-                .group_by(kb_literatures.c.year)
-            )).fetchall()
-            yr_total = sum(c for _, c in yr_rows)
-            years = [{"name": "全部", "count": yr_total}] + [
-                {"name": str(yr), "count": cnt} for yr, cnt in yr_rows if yr
-            ]
-
         return {
             "items": items, "total": total, "page": page, "pageSize": page_size,
-            "facets": {"categories": categories, "years": years},
         }
 
     # ── 指南 ────────────────────────────────────────────────────
@@ -100,33 +75,32 @@ class KbStore:
         page: int = 1,
         page_size: int = 8,
     ) -> dict[str, Any]:
-        """指南列表 + facet。"""
+        """指南列表（默认按发布时间倒序）。"""
         async with self._engine.connect() as conn:
             stmt = kb_guidelines.select().where(kb_guidelines.c.is_deleted == 0)
             if keyword:
-                stmt = stmt.where(kb_guidelines.c.title.ilike(f"%{keyword}%"))
+                like = f"%{keyword}%"
+                stmt = stmt.where(
+                    kb_guidelines.c.title.ilike(like)
+                    | kb_guidelines.c.title_cn.ilike(like)
+                    | kb_guidelines.c.authors.ilike(like)
+                )
             if category and category != "全部":
                 stmt = stmt.where(kb_guidelines.c.category == category)
 
             total = (await conn.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
-            order_col = kb_guidelines.c.year.desc() if sort == "year" else kb_guidelines.c.title
+            order_col = (
+                (kb_guidelines.c.published_at.desc().nullslast(), kb_guidelines.c.year.desc())
+                if sort == "year"
+                else (kb_guidelines.c.title,)
+            )
             rows = (await conn.execute(
-                stmt.order_by(order_col).offset((page - 1) * page_size).limit(page_size)
+                stmt.order_by(*order_col).offset((page - 1) * page_size).limit(page_size)
             )).fetchall()
             items = [row_to_dict(r) for r in rows]
 
-            cat_rows = (await conn.execute(
-                select(kb_guidelines.c.category, func.count()).where(kb_guidelines.c.is_deleted == 0)
-                .group_by(kb_guidelines.c.category)
-            )).fetchall()
-            total_count = sum(c for _, c in cat_rows)
-            categories = [{"name": "全部", "count": total_count}] + [
-                {"name": cat, "count": cnt} for cat, cnt in cat_rows if cat
-            ]
-
         return {
             "items": items, "total": total, "page": page, "pageSize": page_size,
-            "facets": {"categories": categories},
         }
 
     # ── 药品 ────────────────────────────────────────────────────
@@ -140,11 +114,15 @@ class KbStore:
         page: int = 1,
         page_size: int = 8,
     ) -> dict[str, Any]:
-        """药品列表 + facet。"""
+        """药品列表（前端按分类树在内存组目录）。"""
         async with self._engine.connect() as conn:
             stmt = kb_drugs.select().where(kb_drugs.c.is_deleted == 0)
             if keyword:
-                stmt = stmt.where(kb_drugs.c.name.ilike(f"%{keyword}%"))
+                # 商品名与通用名都要能命中（如「泰瑞沙」→ 奥希替尼 / Osimertinib）
+                like = f"%{keyword}%"
+                stmt = stmt.where(
+                    kb_drugs.c.name.ilike(like) | kb_drugs.c.generic_name.ilike(like)
+                )
             if category and category != "全部":
                 stmt = stmt.where(kb_drugs.c.category == category)
             if essential_only:
@@ -156,35 +134,9 @@ class KbStore:
             )).fetchall()
             items = [row_to_dict(r) for r in rows]
 
-            cat_rows = (await conn.execute(
-                select(kb_drugs.c.category, func.count()).where(kb_drugs.c.is_deleted == 0)
-                .group_by(kb_drugs.c.category)
-            )).fetchall()
-            total_count = sum(c for _, c in cat_rows)
-            categories = [{"name": "全部", "count": total_count}] + [
-                {"name": cat, "count": cnt} for cat, cnt in cat_rows if cat
-            ]
-
-            essential_count = (await conn.execute(
-                select(func.count()).select_from(kb_drugs).where(
-                    (kb_drugs.c.is_deleted == 0) & (kb_drugs.c.is_essential == True)  # noqa: E712
-                )
-            )).scalar() or 0
-
         return {
             "items": items, "total": total, "page": page, "pageSize": page_size,
-            "facets": {"categories": categories, "essentialCount": essential_count},
         }
-
-    async def list_drug_options(self) -> list[dict[str, Any]]:
-        """药品轻量选项（id+name+category），供「相互作用核查」下拉。"""
-        async with self._engine.connect() as conn:
-            rows = (await conn.execute(
-                select(kb_drugs.c.id, kb_drugs.c.name, kb_drugs.c.category)
-                .where(kb_drugs.c.is_deleted == 0)
-                .order_by(kb_drugs.c.name)
-            )).fetchall()
-        return [{"id": r.id, "name": r.name, "cat": r.category} for r in rows]
 
     # ── 种子数据 upsert ─────────────────────────────────────────
 
@@ -199,18 +151,6 @@ class KbStore:
                 await conn.execute(update(kb_literatures).where(kb_literatures.c.id == data["id"]).values(**values))
             else:
                 await conn.execute(insert(kb_literatures).values(**data))
-
-    async def upsert_guideline(self, data: dict[str, Any]) -> None:
-        """幂等插入/更新指南。"""
-        async with self._engine.begin() as conn:
-            existing = await conn.execute(
-                select(kb_guidelines.c.id).where(kb_guidelines.c.id == data["id"])
-            )
-            if existing.fetchone():
-                values = {k: data[k] for k in data if k != "id"}
-                await conn.execute(update(kb_guidelines).where(kb_guidelines.c.id == data["id"]).values(**values))
-            else:
-                await conn.execute(insert(kb_guidelines).values(**data))
 
     async def upsert_drug(self, data: dict[str, Any]) -> None:
         """幂等插入/更新药品。"""

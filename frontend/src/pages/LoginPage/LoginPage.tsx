@@ -4,9 +4,9 @@ import {
   ArrowRight,
   Loader2,
   ChevronLeft,
-  Activity,
-  Scale,
+  LayoutGrid,
   FileText,
+  ShieldCheck,
   Compass,
 } from 'lucide-react'
 import { TextField } from '../../components/ui/TextField'
@@ -178,7 +178,7 @@ export default function Login() {
 
   return (
     <div className="login-bg">
-      {/* ══ 左面板：品牌 + 介绍 + 四领域卡 ══ */}
+      {/* ══ 左面板：品牌 + 介绍 + 能力卡 ══ */}
       <div className="login-left">
         <div className="login-aurora" aria-hidden="true">
           <div className="aurora orb orb-1" />
@@ -195,29 +195,29 @@ export default function Login() {
           </div>
 
           <p className="login-hero">
-            生产级多域 AI 智能体平台 —— 记得住团队每一份经验，<b>用得越久越懂你</b>；敏感操作层层审批、全程可追溯，<b>安全无需你操心</b>。一套系统，从三大场景到星辰大海。
+            生产级多域 AI 智能体平台 —— 记得住团队每一份经验，<b>用得越久越懂你</b>；敏感操作层层审批、全程可追溯，<b>安全无需你操心</b>。一套系统，适配你的每个专业场景。
           </p>
 
           <div className="domain-grid">
-            <div className="domain-card domain-medical login-domain-card">
-              <Activity className="d-icon" strokeWidth={1.8} />
-              <h3>医疗 AI</h3>
-              <p>融合权威医学指南与循证文献库，构建专业医学知识底座。辅助医生诊疗决策，提供有循证依据的临床支持。</p>
+            <div className="domain-card login-domain-card">
+              <LayoutGrid className="d-icon" strokeWidth={1.8} />
+              <h3>多域工作台</h3>
+              <p>安装能力包即自动获得独立工作台与侧栏入口，核心无需为任何具体领域改动。</p>
             </div>
-            <div className="domain-card domain-legal login-domain-card">
-              <Scale className="d-icon" strokeWidth={1.8} />
-              <h3>法律 AI</h3>
-              <p>覆盖法规检索、合同审查与案例分析全链路，提供精准法律意见与合规审查，构建完整法律技能生态。</p>
-            </div>
-            <div className="domain-card domain-office login-domain-card">
+            <div className="domain-card login-domain-card">
               <FileText className="d-icon" strokeWidth={1.8} />
-              <h3>办公 AI</h3>
-              <p>智能文档处理、会议摘要生成与工作流自动化，全面提升协作效率。支持 IM 对话与多模态交互。</p>
+              <h3>技能生态</h3>
+              <p>插件与技能按需安装，Agent 依据技能规范执行，能力可持续扩展。</p>
             </div>
-            <div className="domain-card domain-base login-domain-card">
+            <div className="domain-card login-domain-card">
+              <ShieldCheck className="d-icon" strokeWidth={1.8} />
+              <h3>安全治理</h3>
+              <p>敏感操作层层审批、全程可追溯，权限与审计边界清晰可控。</p>
+            </div>
+            <div className="domain-card login-domain-card">
               <Compass className="d-icon" strokeWidth={1.8} />
-              <h3>更多领域，值得探索</h3>
-              <p>医疗、法律、办公只是起点。同一套垂直大模型基座与技能体系，可按行业快速扩展——金融、制造、政务……下一个领域，由你定义。</p>
+              <h3>自由扩展</h3>
+              <p>同一套基座与技能体系，可按需接入新的领域能力——下一个场景，由你定义。</p>
             </div>
           </div>
         </div>

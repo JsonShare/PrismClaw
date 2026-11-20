@@ -464,10 +464,8 @@ async def _persist_session_memory_snapshot(
         current=_dump_model(tree.get_latest_session_memory_state()),
     )
 
-
-
-
-
+# INTENTIONAL_RAW_WRITE: pre-governance bootstrap path only.
+# Do NOT call once the task-mutation guard is active — use the mutation API instead.
 async def _persist_task_runtime_snapshot(
     deps: AgentRunnerDeps,
     tree: SessionTree,

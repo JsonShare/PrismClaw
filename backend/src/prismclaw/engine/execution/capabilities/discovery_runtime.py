@@ -176,7 +176,7 @@ class SkillDiscoveryRuntime:
         matches: list[SkillDiscoveryEntry] = []
         for skill in self._catalog.list_skill_entries(workspace_path):
             # marketplace_name + marketplace_description + plugin_name 参与匹配，
-            # 搜索"医疗健康"能命中 marketplace_description="医疗健康综合插件包"下的技能，
+            # 搜索"插件包中文名"能命中 marketplace_description="综合插件包"下的技能，
             # 搜索子插件名也能匹配该子插件下的技能
             score = _score_text(
                 tokens,

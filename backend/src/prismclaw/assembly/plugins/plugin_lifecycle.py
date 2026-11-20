@@ -154,13 +154,13 @@ class PluginLifecycleManager:
         return merged
 
     def _build_runtime_mcp_manager(self, extension_manager: Any) -> Any:
-        from prismclaw.engine.integrations.mcp.client_manager import (
+        from prismclaw.engine.mcp.client_manager import (
             CompositeMCPManager,
             DeclarativeMCPManager,
             MCPClientManager,
             ServerStatus,
         )
-        from prismclaw.engine.integrations.mcp.settings import McpServerConfig, McpSettings
+        from prismclaw.engine.mcp.settings import McpServerConfig, McpSettings
 
         plugin_mcp_managers: list[MCPClientManager] = []
         declarative_plugin_mcp_statuses: list[ServerStatus] = []

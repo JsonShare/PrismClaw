@@ -75,6 +75,9 @@ class PluginManifest(BaseModel):
     3. 对象映射: ``{"slug": {"source": "./x.md", "description": "..."}}``
     """
 
+    schema_version: int = Field(
+        default=1, description="Manifest schema version. Only 1 accepted for now.", alias="schemaVersion"
+    )
     name: str
     version: str | None = None
     description: str | None = None
@@ -92,7 +95,9 @@ class PluginManifest(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="ignore")
 
     @model_validator(mode="after")
-    def _validate_name(self) -> "PluginManifest":
+    def _validate(self) -> "PluginManifest":
+        if self.schema_version != 1:
+            raise ValueError(f"unsupported schema_version={self.schema_version}, expected 1")
         if not is_valid_plugin_name(self.name):
             raise ValueError(f"Invalid plugin name: {self.name!r}")
         return self

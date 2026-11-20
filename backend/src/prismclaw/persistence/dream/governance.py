@@ -1,41 +1,20 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from prismclaw.schema.dream.dream_types import DreamTargetType, DreamReviewStatus, DreamPublishChannel, DreamRolloutStage, DreamGovernanceRecord, DreamPublishState
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_dream_governance_records (
-    record_id        TEXT PRIMARY KEY,
-    session_key      TEXT NOT NULL,
-    target_type      TEXT NOT NULL,
-    target_id        TEXT NOT NULL,
-    publish_state    TEXT NOT NULL,
-    review_status    TEXT NOT NULL,
-    publish_channel  TEXT NOT NULL DEFAULT 'direct',
-    rollout_stage    TEXT NOT NULL DEFAULT 'live',
-    shadow           BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at       DOUBLE PRECISION NOT NULL,
-    updated_at       DOUBLE PRECISION NOT NULL,
-    metadata_json    JSONB NOT NULL DEFAULT '{}'::jsonb
-)
-"""
-
-_INDEXES = (
-    """
-    CREATE INDEX IF NOT EXISTS idx_pc_dream_governance_lookup
-    ON pc_dream_governance_records(session_key, target_type, review_status, created_at DESC)
-    """,
-    """
-    CREATE INDEX IF NOT EXISTS idx_pc_dream_governance_target_lookup
-    ON pc_dream_governance_records(session_key, target_type, target_id, created_at DESC)
-    """,
+from prismclaw.persistence.sql_runner import apply_core_schema
+from prismclaw.schema.dream.dream_types import (
+    DreamGovernanceRecord,
+    DreamPublishChannel,
+    DreamPublishState,
+    DreamReviewStatus,
+    DreamRolloutStage,
+    DreamTargetType,
 )
 
 _SELECT_COLUMNS = """
@@ -79,22 +58,9 @@ class PostgresDreamGovernanceStore:
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
-        self._migrated = False
-        self._init_lock = asyncio.Lock()
 
     async def _init_schema(self) -> None:
-        if self._migrated:
-            return
-        async with self._init_lock:
-            if self._migrated:
-                return
-            async with self._sf() as session:
-                conn = await session.connection()
-                await conn.execute(text(_DDL))
-                for stmt in _INDEXES:
-                    await conn.execute(text(stmt))
-                await session.commit()
-            self._migrated = True
+        await apply_core_schema(self._sf)
 
     async def record(self, record: DreamGovernanceRecord) -> None:
         await self._init_schema()

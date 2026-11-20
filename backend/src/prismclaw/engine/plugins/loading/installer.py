@@ -27,10 +27,11 @@ from typing import Any
 
 import httpx
 
-from prismclaw.engine.plugins.registry.identity import LOCAL_SOURCE, PluginID
 from prismclaw.engine.plugins.loading.install_store import InstalledPluginsStore
 from prismclaw.engine.plugins.loading.load_result import ManifestValidationError
 from prismclaw.engine.plugins.manifest import PluginManifest
+from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
+from prismclaw.engine.plugins.registry.identity import LOCAL_SOURCE, PluginID
 from prismclaw.engine.plugins.trust import (
     is_source_allowed_by_policy,
     is_source_trusted_for_load,
@@ -140,9 +141,7 @@ async def _download_zip(
 
 
 def _validate_manifest(target: Path) -> None:
-    manifest_path = target / ".plugin" / "plugin.json"
-    if not manifest_path.exists():
-        manifest_path = target / "plugin.json"
+    manifest_path = target / MANIFEST_REL_PATH
     if not manifest_path.exists():
         raise PluginInstallError(f"No plugin.json found in fetched plugin at {target}")
     try:

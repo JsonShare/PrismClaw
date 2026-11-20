@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.schema.dream import (
-    DreamCandidateStore,
-    DreamStateStore,
     DreamAuditLogger,
-    DreamGovernanceStore,
+    DreamCandidateStore,
     DreamDecisionAuditStore,
+    DreamGovernanceStore,
+    DreamStateStore,
 )
 
 
@@ -23,11 +23,11 @@ class DreamStores:
 
 
 def create_dream_stores(session_factory: async_sessionmaker[AsyncSession]) -> DreamStores:
-    from prismclaw.persistence.dream.candidates import PostgresDreamCandidateStore
-    from prismclaw.persistence.dream.state_store import PostgresDreamStateStore
     from prismclaw.persistence.dream.audit import PostgresDreamAuditLog
-    from prismclaw.persistence.dream.governance import PostgresDreamGovernanceStore
+    from prismclaw.persistence.dream.candidates import PostgresDreamCandidateStore
     from prismclaw.persistence.dream.decision_audit import PostgresDreamDecisionAuditStore
+    from prismclaw.persistence.dream.governance import PostgresDreamGovernanceStore
+    from prismclaw.persistence.dream.state_store import PostgresDreamStateStore
 
     return DreamStores(
         candidate_store=PostgresDreamCandidateStore(session_factory),

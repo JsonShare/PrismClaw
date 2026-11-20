@@ -15,7 +15,6 @@ from prismclaw.engine.plugins.loading.load_strategy import (
     DeclarativePluginLoadStrategy,
     NativePythonPluginLoadStrategy,
     PluginLoadStrategy,
-    TraePluginLoadStrategy,
     default_strategies,
 )
 from prismclaw.engine.plugins.loading.agent_loader import PluginAgentLoader
@@ -79,7 +78,6 @@ __all__ = [
     "PluginLoadResult",
     "PluginLoadStrategy",
     "PluginSourceSpec",
-    "TraePluginLoadStrategy",
     "default_strategies",
     "get_plugin_data_dir",
     "install_plugin",

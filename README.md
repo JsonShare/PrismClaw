@@ -4,143 +4,219 @@
 
 # PrismClaw
 
-**企业级 · 私有化 · 多用户 · 多 Agent**
+**Enterprise-grade · Private deployment · Multi-user · Multi-agent**
 
-运行于企业自有基础设施的 AI Agent 平台
+Put the AI agent back on your own infrastructure
 
 [![License](https://img.shields.io/badge/license-MIT-2C59BC.svg?style=flat-square)](./LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12%2B-3776ab.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/react-19-61dafb.svg?style=flat-square&logo=react&logoColor=white)](https://react.dev/)
-[![Deploy](https://img.shields.io/badge/deploy-self--hosted%20%C2%B7%20Docker-2496ed.svg?style=flat-square&logo=docker&logoColor=white)](./deploy/DEPLOY.md)
+[![Deploy](https://img.shields.io/badge/deploy-private%20%C2%B7%20Docker-2496ed.svg?style=flat-square&logo=docker&logoColor=white)](./deploy/DEPLOY.md)
+
+[**English**](./README.md) · [简体中文](./README.zh-CN.md)
+
+<img src="./docs/website/assets/readme/demo.gif" alt="PrismClaw demo: switch between medical, legal, office and research scenarios, open a task, and download the generated artifact on the right" width="100%">
+
+<p align="center"><sub>Real run · switch scenarios → run a task → execution trace on the left, download-ready artifact on the right</sub></p>
 
 </div>
 
+> **Status:** beta. The medical domain is the reference implementation; legal has navigation and a page skeleton only; office and research run as general agent tasks.
+
 ---
 
-## 一套系统，从三大场景到星辰大海
+## Why we built this
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/website/assets/readme/pc-dark.png">
-  <img src="./docs/website/assets/readme/pc-light.png" alt="PrismClaw PC 端登录页：品牌介绍、四领域能力与登录表单" width="100%">
-</picture>
+Most AI tools assume three things: the network is open, users will configure things, and a chat reply is the finish line. Inside an enterprise, none of the three holds.
 
-<p align="center"><sub>PC 端 · 亮色 / 暗色随系统自动切换</sub></p>
+- **Data cannot leave.** Medical records, contracts and internal documents cannot be uploaded to a public cloud. That is a hard constraint, not a compliance preference.
+- **Users do not configure.** Doctors, lawyers and admin staff will not read plugin docs, fill in model endpoints or manage API keys just to do their job.
+- **Delivery is not a chat.** They need a file that can be signed, sent and archived, not an answer that still has to be reorganized by hand.
 
-运行于企业自有基础设施的企业级 AI Agent 平台。用自然语言下达任务，Agent 自主规划、调用工具，直接把结果交付成文件——全过程在企业安全边界内完成。
+So PrismClaw inverts all three: the whole stack runs on your own machines, staff open a browser and start working, and the task ends with a file. It is not a chat box — it is a delivery system that puts an agent inside a real business process.
 
-多用户与多 Agent 并行协作，会话、记忆与审计互不干扰；敏感操作须审批放行，全程可追溯。
+---
 
-一个组织一套部署：模型可对接内网推理服务，数据、记忆与审计留在自有存储；用户零安装，打开浏览器登录即用。
+## Scenarios and delivery
 
-医疗、法律、办公只是起点，更多领域共享同一个垂直大模型基座：
+The PC workbench exposes four task entries — **medical, legal, office, research**. They share one agent runtime, but they are not at the same maturity level; a visible entry does not mean a finished dedicated workbench.
+
+| Scenario | Current state | Tasks and outputs |
+| --- | --- | --- |
+| **Medical** | Reference implementation, dedicated workbench shipped | Record and course-of-illness drafting, guideline / literature / drug lookup, dosimetry comparison, follow-up plans; evidence is cited, clinical decisions stay with the physician |
+| **Legal** | Navigation and page skeleton in place, dedicated workbench in progress | Contract review and compliance check entries are visible; review deliverables await the dedicated workbench |
+| **Office** | General agent tasks | Document processing and format conversion, meeting notes and action items, workflow automation; outputs as HTML / Markdown reports, spreadsheets or files |
+| **Research** | General agent tasks | Literature review, material organization, draft writing and data analysis; results depend on the models, tools and data sources you connect |
+
+---
+
+## How a task runs
+
+1. **Describe the goal.** Write it in natural language, pick a workspace, optionally @ a file or knowledge base.
+2. **The agent plans.** It plans, retrieves, calls skills and tools, reads files, writes code and generates documents — each step visible on the left.
+3. **Preview on the right.** Not satisfied? Ask a follow-up; it edits the same artifact instead of starting over.
+4. **Take it away.** Download the file. For sensitive actions (sending externally, writing to a system, bulk changes) it stops and waits for approval.
 
 <table>
   <tr>
     <td width="50%" valign="top">
-      <h4>医疗 AI</h4>
-      融合权威医学指南与循证文献库，构建专业医学知识底座。辅助医生诊疗决策，提供有循证依据的临床支持。
+      <img src="./docs/website/assets/readme/pc-index2.png" alt="PrismClaw conversation view: task trace on the left, live HTML artifact preview on the right" width="100%">
+      <p align="center"><sub>Conversation · task trace on the left, artifact preview on the right</sub></p>
     </td>
     <td width="50%" valign="top">
-      <h4>法律 AI</h4>
-      覆盖法规检索、合同审查与案例分析全链路，提供精准法律意见与合规审查，构建完整法律技能生态。
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <h4>办公 AI</h4>
-      智能文档处理、会议摘要生成与工作流自动化，全面提升协作效率。支持 IM 对话与多模态交互。
-    </td>
-    <td width="50%" valign="top">
-      <h4>更多领域，值得探索</h4>
-      同一套垂直大模型基座与技能体系，可按行业快速扩展——金融、制造、政务……下一个领域，由你定义。
+      <img src="./docs/website/assets/readme/pc-knowledge.png" alt="PrismClaw medical knowledge base: literature, guideline and drug search; the captured environment has no literature data" width="100%">
+      <p align="center"><sub>Medical knowledge base · search entry; no literature data in the captured environment</sub></p>
     </td>
   </tr>
 </table>
 
 ---
 
-## 说一句话，换一份可交付文件
+## What we deliberately don't do
 
-输入框里写清目标，Agent 自主规划步骤、调用技能与工具；产出物在右侧实时预览，确认后直接下载。
+### No user-installed extensions
 
-<img src="./docs/website/assets/readme/pc-index.png" alt="PrismClaw PC 工作台：对话输入框、工作区选择，以及医疗、法律、科研三个场景示例" width="100%">
+Opening skills, plugins and MCP to every user sounds free, but in a real company it means version mismatches, dependency conflicts and leaked keys. Extensibility belongs to IT during acceptance, not to frontline users. Built-in capabilities are individually adapted and regression-tested; new domains ship as vetted domain packs.
 
-<p align="center"><sub>工作台 · 场景示例一键填入，工作区选择随手切换</sub></p>
+### No desktop client
 
-<img src="./docs/website/assets/readme/pc-index2.png" alt="PrismClaw 会话页：左侧任务流与追问建议，右侧实时预览生成的 HTML 宣发方案" width="100%">
+A native client is faster and closer to the OS, at the cost of installing, upgrading and troubleshooting every machine. One department with twenty PCs means twenty maintenance points. PrismClaw is browser/server: deploy once, upgrade on the server, zero install for users.
 
-<p align="center"><sub>会话 · 左侧任务流与追问建议，右侧实时预览 HTML 交付物并可直接下载</sub></p>
+### No unnecessary knobs
 
----
-
-## 双端一致体验
-
-PC 与移动端 H5 保持一致的界面与操作逻辑：登录、对话、任务、文件、自动化在两端都是熟悉的位置。亮色 / 暗色随系统自动切换，用户无需安装任何客户端。
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="./docs/website/assets/readme/mobile-light.png" alt="移动端 H5 首页（亮色）" width="320">
-    </td>
-    <td align="center" width="50%">
-      <img src="./docs/website/assets/readme/mobile-dark.png" alt="移动端 H5 首页（暗色）" width="320">
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><sub>移动端 H5 · 亮色</sub></td>
-    <td align="center"><sub>移动端 H5 · 暗色</sub></td>
-  </tr>
-</table>
+Every toggle asks the user to make one more judgment. Model selection, context assembly and skill routing stay in the backend. Users do two things: say what they want, and take what they asked for.
 
 ---
 
-## 核心能力
+## Capabilities
 
-| 能力 | 说明 |
+| Capability | What it means |
 | --- | --- |
-| **私有化部署** | 整套服务运行于企业自有基础设施，数据不落第三方；模型可对接内网自建推理服务，无需外网。 |
-| **多用户与隔离** | 内置账号体系，会话、记忆与产物按用户隔离，多人共用一套平台互不干扰。 |
-| **开箱即用** | 一条启动命令跑起全套服务；浏览器登录即用，PC 与移动端 H5 双端，用户零安装。 |
-| **五层单向架构** | `schema → engine → runtime → assembly → app` 依赖严格单向，业务边界清晰，改一处不牵一片。 |
-| **可水平扩展** | Worker 无状态，可按需横向扩容；节点异常自动接管，会话不中断。 |
-| **四层记忆 + Dreaming** | L1 工作 / L2 会话 / L3 语义 / L4 归档；空闲时自动整理沉淀，越用越懂你。 |
-| **安全治理** | 多层安全闸门、内核级沙箱、敏感数据防泄漏；敏感操作走任务级确认，全程可追溯。 |
-| **可扩展** | 技能、插件、MCP 与子代理均可插拔；新领域以分包方式接入，医疗域为参考实现。 |
+| **Private deployment** | The whole stack runs on your machines; data never reaches a third party. Models can point at an intranet OpenAI-compatible endpoint. |
+| **Multi-user isolation** | Accounts, sessions, memory and artifacts are isolated per user; one platform serves the whole organization. |
+| **Works out of the box** | One command starts the stack; browser login, PC and mobile H5, zero install. |
+| **Five-layer architecture** | `schema → engine → runtime → assembly → app` with strict one-way dependencies. |
+| **Horizontal scale** | Stateless workers, scale out on demand; a failed node is taken over automatically without dropping sessions. |
+| **Four-layer memory + Dreaming** | L1 working / L2 session / L3 semantic / L4 archive; idle-time consolidation makes the system learn your business. |
+| **Security governance** | Multiple gates, kernel-level sandbox, DLP; sensitive actions require task-level confirmation and are auditable. |
+| **Domain onboarding** | Domains are onboarded as vetted packages by IT; users configure nothing. Medical is the reference implementation. |
 
 ---
 
-## 架构
+## Deploy
+
+> Nothing to install on the client. Prepare the server and staff log in from a browser.
+
+> **Requirements:** Docker 24+ (recommended), or from source: Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 18+, Redis 7, PostgreSQL 17 (VectorChord Suite: `vchord` / `pg_tokenizer` / `vchord_bm25` / `vector`).
+
+### Option 1: Docker (recommended, single host)
+
+```bash
+# 1. Generate local configs
+cd backend/configs && for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done && cd ../..
+cp deploy/configs/mcp.prod.example.yaml deploy/configs/mcp.prod.yaml
+# Only models.yaml needs your endpoint and API key (an intranet OpenAI-compatible service works)
+
+# 2. Set deployment secrets and the admin password
+cd deploy && cp .env.example .env && ${EDITOR:-vim} .env
+
+# 3. Start (the first run builds the image)
+docker compose up -d
+```
+
+- Open `http://<server-ip>:8000` and log in with the admin account from `.env` (created on first boot).
+- Stop with `docker compose down`; logs with `docker compose logs -f prismclaw`.
+
+### Option 2: Local development from source
+
+```bash
+cd backend && uv sync && cd ..
+cd backend/configs && for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done && cd ../..
+# Edit models.yaml, server.yaml (jwt_secret), infra.yaml (Redis / PostgreSQL)
+
+./scripts/build-frontend.sh       # PC → frontend/dist
+./scripts/build-frontend-app.sh   # mobile H5 → frontend-app/dist/h5
+
+export PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID=admin
+export PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD='<set-a-strong-password>'
+./scripts/dev/start-local.sh      # backend + local static hosting (stands in for nginx)
+open http://localhost:5173
+```
+
+| Entry | URL |
+| --- | --- |
+| PC | `http://localhost:5173` |
+| Mobile H5 | `http://localhost:10086` |
+| API | `http://localhost:8000` |
+
+- Stop with `./scripts/dev/stop-local.sh`.
+- Registration and password reset depend on SMTP; without it those endpoints return 503, login is unaffected.
+- Frontend hot reload: `cd frontend && npm run dev` (point `/api` at the backend).
+
+---
+
+## Boundaries and FAQ
+
+**What it does not do:**
+
+- It does not replace HIS / EMR — it reads, organizes and drafts, but does not take over core hospital systems.
+- It does not give diagnoses — it returns cited evidence and options; the decision stays with the physician.
+- It does not send data out — models can run entirely on intranet inference.
+- It does not silently perform sensitive actions — sending, writing and bulk changes always wait for confirmation.
+
+| Question | Answer |
+| --- | --- |
+| Does it need internet access? | No. Models can use an intranet OpenAI-compatible service; retrieval and inference stay inside. |
+| What do users install? | Nothing. Open a browser and log in. |
+| Where is data stored? | Your own Redis / PostgreSQL; backup and audit remain under your control. |
+| How long is onboarding? | The first sentence after login is enough; there are no configuration options to learn. |
+
+---
+
+## Who is behind it
+
+PrismClaw is maintained by [JsonShare](https://github.com/JsonShare). The goal is an agent platform that a company can actually deploy and keep running, not another demo. The medical domain is fully open-sourced as the reference implementation; new domains reuse the same layering and onboarding path.
+
+- Found a problem or have an idea: open an [Issue](https://github.com/JsonShare/PrismClaw/issues)
+- Want to contribute: read [CONTRIBUTING.md](./CONTRIBUTING.md) first
+- Security issues: please do not disclose publicly, see [SECURITY.md](./SECURITY.md)
+
+---
+
+# Appendix
+
+## Architecture
 
 <a href="./docs/architecture/diagrams/system-architecture.html">
-  <img src="./docs/website/assets/readme/architecture.png" alt="PrismClaw 五层单向架构与数据流" width="100%">
+  <img src="./docs/website/assets/readme/architecture.png" alt="PrismClaw five-layer one-way architecture and data flow" width="100%">
 </a>
 
-五层依赖严格单向；引擎层无状态、存储独立，Worker 可按需扩容。点击上图可查看交互式架构图解。
+Dependencies flow strictly one way; the engine layer is stateless and storage is independent, so workers scale out on demand. Click the image for the interactive diagram.
 
 <details>
-<summary>分层依赖（Mermaid）</summary>
+<summary>Layer dependencies (Mermaid)</summary>
 
 ```mermaid
 graph TB
-    subgraph L4["app — 通信层"]
+    subgraph L4["app — communication layer"]
         A1[WebSocket] ~~~ A2[Auth] ~~~ A3[Gateway] ~~~ A4[HTTP Routes]
     end
-    subgraph L3["assembly — 编配层"]
-        B1[Bundle 组装<br/>Infrastructure → Runtime → Lifecycle]
+    subgraph L3["assembly — orchestration layer"]
+        B1[Bundle assembly<br/>Infrastructure → Runtime → Lifecycle]
     end
-    subgraph L2["runtime — 运行时层"]
-        C1[engine facade] ~~~ C2[记忆编排] ~~~ C3[能力刷新] ~~~ C4[ChatService]
+    subgraph L2["runtime — runtime layer"]
+        C1[engine facade] ~~~ C2[memory orchestration] ~~~ C3[capability refresh] ~~~ C4[ChatService]
     end
-    subgraph L1["engine — 引擎层（全部业务逻辑，无状态）"]
-        D1[执行引擎] ~ D2[沙箱安全] ~ D3[技能] ~ D4[插件]
-        D5[记忆] ~ D6[Dreaming] ~ D7[上下文压缩] ~ D8[MCP]
-        D9[子代理] ~ D10[工具集] ~ D11[LLM 服务] ~ D12[审查]
+    subgraph L1["engine — engine layer (all business logic, stateless)"]
+        D1[execution] ~ D2[sandbox] ~ D3[skills] ~ D4[plugins]
+        D5[memory] ~ D6[Dreaming] ~ D7[compaction] ~ D8[MCP]
+        D9[subagents] ~ D10[toolkit] ~ D11[LLM service] ~ D12[review]
     end
-    subgraph L0["schema — 契约层（零依赖）"]
-        E1[Protocol + 类型 + 配置]
+    subgraph L0["schema — contract layer (zero deps)"]
+        E1[Protocol + types + config]
     end
-    subgraph Store["有状态存储（独立于 Worker）"]
-        F1[("Redis<br/>会话 / 锁 / 消息队列 / L1")] ~ F2[("PostgreSQL<br/>L2-L4 / pgvector / 用户 / 审计")]
+    subgraph Store["Stateful storage (independent of workers)"]
+        F1[("Redis<br/>sessions / locks / queues / L1")] ~ F2[("PostgreSQL<br/>L2-L4 / VectorChord / users / audit")]
     end
 
     L4 --> L3 --> L2 --> L1 --> L0
@@ -149,147 +225,83 @@ graph TB
 
 </details>
 
----
+## Configuration
 
-## 快速开始
+Eight YAML files under `backend/configs/`, covering service, storage, models, agent and security policy:
 
-> **环境要求**：Docker 24+（推荐），或源码方式：Python 3.12+、[uv](https://docs.astral.sh/uv/)、Node.js 18+、Redis 7、PostgreSQL 17（含 pgvector）。
-
-### 方式一：Docker（推荐，单机起全套）
-
-```bash
-# 1. 生成本地配置
-cd backend/configs && for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done && cd ../..
-cp deploy/configs/mcp.prod.example.yaml deploy/configs/mcp.prod.yaml
-# 只需改 models.yaml 的模型端点与 API Key（可填内网 OpenAI 兼容服务）
-
-# 2. 填写部署密钥与管理员密码
-cd deploy && cp .env.example .env && ${EDITOR:-vim} .env
-
-# 3. 启动（首次会构建镜像）
-docker compose up -d
-```
-
-- 访问 `http://<服务器IP>:8000`，用 `.env` 里的管理员账号登录（首次启动时自动创建）。
-- 停止用 `docker compose down`，日志用 `docker compose logs -f prismclaw`。
-
-### 方式二：源码本地开发
-
-```bash
-cd backend && uv sync && cd ..
-cd backend/configs && for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done && cd ../..
-# 编辑 models.yaml、server.yaml（jwt_secret）、infra.yaml（Redis / PostgreSQL）
-
-./scripts/build-frontend.sh       # PC 端 → frontend/dist
-./scripts/build-frontend-app.sh   # 移动端 H5 → frontend-app/dist/h5
-
-export PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_ID=admin
-export PRISMCLAW_WEB_USER_BOOTSTRAP_ADMIN_PASSWORD='<设置一个强密码>'
-./scripts/dev/start-local.sh      # 后端 + 本地静态托管（模拟 nginx）
-open http://localhost:5173
-```
-
-| 本地入口 | 地址 |
+| File | Contents |
 | --- | --- |
-| PC 端 | `http://localhost:5173` |
-| 移动端 H5 | `http://localhost:10086` |
-| 后端 API | `http://localhost:8000` |
+| `server` | Listen address, runtime / workspace roots, web channel, JWT, SMTP |
+| `infra` | Redis, PostgreSQL |
+| `models` | Providers, default model, embedding / vision / speech |
+| `agent` | Iteration limits, context budget and compaction, timeouts and retries |
+| `mcp` | MCP server definitions |
+| `capabilities` | Skill / subagent / plugin paths and quotas |
+| `memory` | Four-layer memory and Dreaming curation |
+| `security` | Sandbox, filesystem, network, environment variable allowlist |
 
-- 停止用 `./scripts/dev/stop-local.sh`。
-- 注册 / 找回密码依赖 SMTP，未配置时相关接口返回 503，登录不受影响。
-- 前端热更新开发：`cd frontend && npm run dev`（`/api` 需指向后端）。
+## Deployment options
 
----
-
-## 配置
-
-`backend/configs/` 下 8 个 YAML，分别覆盖服务、存储、模型、Agent 与安全策略：
-
-| 文件 | 配置内容 |
-| --- | --- |
-| `server` | 监听、运行时 / 工作区根、Web 通道、JWT、SMTP |
-| `infra` | Redis、PostgreSQL |
-| `models` | Provider、默认模型、embedding / vision / speech |
-| `agent` | 迭代上限、上下文预算与压缩、超时重试 |
-| `mcp` | MCP Server 定义 |
-| `capabilities` | 技能 / 子代理 / 插件路径与配额 |
-| `memory` | 四层记忆与 Dreaming 策展 |
-| `security` | 沙箱、文件系统、网络、环境变量白名单 |
-
----
-
-## 部署
-
-| 形态 | 入口 | 适用 |
+| Form | Entry | Fit |
 | --- | --- | --- |
-| 单机 Docker（推荐） | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) | 一个组织、一台服务器，含 PG + Redis + Runtime-Agent |
-| 多 Worker 集群 | [`deploy/docker-compose.multi.yml`](./deploy/docker-compose.multi.yml) | Nginx + 3 Worker，active-active |
-| 源码生产 | `./scripts/start.sh`（停止 `./scripts/stop.sh`） | 只跑后端，前端由已有 nginx 托管 |
-| 本地开发 | `cd frontend && npm run dev` | 前端热更新 |
+| Single-host Docker (recommended) | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) | One org, one server, includes PG + Redis + Runtime-Agent |
+| Multi-worker cluster | [`deploy/docker-compose.multi.yml`](./deploy/docker-compose.multi.yml) | Nginx + 3 workers, active-active |
+| Source production | `./scripts/start.sh` (stop with `./scripts/stop.sh`) | Backend only; frontend served by your existing nginx |
+| Local development | `cd frontend && npm run dev` | Frontend hot reload |
 
-完整部署手册（端口、证书、备份、环境变量清单）见 [deploy/DEPLOY.md](./deploy/DEPLOY.md)。
+The full deployment guide (ports, certificates, backups, environment variables) is in [deploy/DEPLOY.md](./deploy/DEPLOY.md).
 
----
+## Tech stack
 
-## 技术栈
-
-| 维度 | 技术 |
+| Dimension | Technology |
 | --- | --- |
-| 架构 | 五层单向依赖 + 无状态 Worker + 有状态存储，active-active 扩展 |
-| 后端 | Python 3.12+、FastAPI、Pydantic 2、SQLAlchemy 2（async）、litellm |
-| 存储 | Redis 7、PostgreSQL 17（pgvector） |
-| 前端 | React 19、TypeScript 5.8、Vite 6、Tailwind CSS 4、Zustand |
-| 移动端 | Taro 4.3、React 18、SCSS |
-| 安全 | bwrap 沙箱、JWT、DLP、BreakGlass、HSM |
-| 可观测 | OpenTelemetry、Prometheus、结构化 JSON 日志 |
-| 协议 | WebSocket、OpenAI 兼容 SSE、MCP（stdio / streamable-http） |
+| Architecture | Five-layer one-way dependencies + stateless workers + stateful storage, active-active scaling |
+| Backend | Python 3.12+, FastAPI, Pydantic 2, SQLAlchemy 2 (async), litellm |
+| Storage | Redis 7, PostgreSQL 17 (VectorChord Suite) |
+| Frontend | React 19, TypeScript 5.8, Vite 6, Tailwind CSS 4, Zustand |
+| Mobile | Taro 4.3, React 18, SCSS |
+| Security | bwrap sandbox, JWT, DLP, BreakGlass, HSM |
+| Observability | OpenTelemetry, Prometheus, structured JSON logs |
+| Protocols | WebSocket, OpenAI-compatible SSE, MCP (stdio / streamable-http) |
 
----
-
-## 项目结构
+## Project layout
 
 ```
 backend/src/prismclaw/
-├── schema/       L0 契约层：Protocol + 类型 + 配置（零依赖）
-├── engine/       L1 引擎层：执行 · 安全 · 工具 · 记忆 · Dreaming · 压缩 · MCP · 子代理 · 插件
-├── runtime/      L2 运行时层：engine 门面 + 记忆编排 / 能力刷新 / ChatService
-├── assembly/     L3 编配层：Bundle 组装 + 插件编配
-├── app/          L4 通信层：WebSocket · Chat · OpenAI SSE · 网关 · 认证
-├── persistence/  存储实现：PG 记忆 / Redis 会话 / 用户 / 审计
-└── infra/        基础设施：settings · redis · db · 启动校验
+├── schema/       L0 contracts: Protocol + types + config (zero deps)
+├── engine/       L1 engine: execution · security · tools · memory · Dreaming · compaction · MCP · subagents · plugins
+├── runtime/      L2 runtime: engine facade + memory orchestration / capability refresh / ChatService
+├── assembly/     L3 assembly: bundle composition + plugin orchestration
+├── app/          L4 communication: WebSocket · Chat · OpenAI SSE · gateway · auth
+├── persistence/  Storage: PG memory / Redis sessions / users / audit
+└── infra/        Infrastructure: settings · redis · db · startup checks
 
-backend/src/subpackages/   领域分包（medical 为参考实现）
-frontend/                  PC 端 SPA（Vite + React）
-frontend-app/              移动端 H5（Taro）
-deploy/                    容器编排 · nginx · 部署文档
-scripts/                   构建 / 本地开发 / 生产启停
-docs/architecture/         架构文档与交互式图解
+backend/src/subpackages/   Domain packages (medical is the reference implementation)
+frontend/                  PC SPA (Vite + React)
+frontend-app/              Mobile H5 (Taro)
+deploy/                    Container orchestration · nginx · deployment docs
+scripts/                   Build / local dev / production lifecycle
+docs/architecture/         Architecture docs and interactive diagrams
 ```
 
----
+## Docs
 
-## 文档
+- [Architecture overview](./docs/architecture/architecture-prismclaw.md)
+- [Interactive system diagram](./docs/architecture/diagrams/system-architecture.html)
 
-- [架构设计总览](./docs/architecture/architecture-prismclaw.md)
-- [系统架构交互图](./docs/architecture/diagrams/system-architecture.html)
+Module deep dives:
 
-模块细纲：
-
-| 分类 | 模块 |
+| Area | Modules |
 | --- | --- |
-| 执行与编排 | [执行引擎](./docs/architecture/modules/01-execution-engine.md) · [运行时](./docs/architecture/modules/13-runtime-management.md) · [调度器](./docs/architecture/modules/16-scheduler.md) · [子代理](./docs/architecture/modules/09-subagent.md) |
-| 能力与集成 | [技能](./docs/architecture/modules/02-skill-system.md) · [插件](./docs/architecture/modules/03-plugin-system.md) · [MCP](./docs/architecture/modules/08-mcp-integration.md) · [工具集](./docs/architecture/modules/10-toolkit.md) |
-| 记忆与知识 | [记忆](./docs/architecture/modules/05-memory-system.md) · [Dreaming](./docs/architecture/modules/06-dream-engine.md) · [上下文压缩](./docs/architecture/modules/07-context-compression.md) · [策展器](./docs/architecture/modules/15-curator.md) |
-| 安全与通信 | [沙箱安全](./docs/architecture/modules/04-sandbox-security.md) · [Web 层](./docs/architecture/modules/12-web-layer.md) · [审查](./docs/architecture/modules/14-review-system.md) · [LLM 服务](./docs/architecture/modules/11-llm-service.md) |
+| Execution and orchestration | [Execution engine](./docs/architecture/modules/01-execution-engine.md) · [Runtime](./docs/architecture/modules/13-runtime-management.md) · [Scheduler](./docs/architecture/modules/16-scheduler.md) · [Subagents](./docs/architecture/modules/09-subagent.md) |
+| Capabilities and integration | [Skills](./docs/architecture/modules/02-skill-system.md) · [Plugins](./docs/architecture/modules/03-plugin-system.md) · [MCP](./docs/architecture/modules/08-mcp-integration.md) · [Toolkit](./docs/architecture/modules/10-toolkit.md) |
+| Memory and knowledge | [Memory](./docs/architecture/modules/05-memory-system.md) · [Dreaming](./docs/architecture/modules/06-dream-engine.md) · [Compaction](./docs/architecture/modules/07-context-compression.md) · [Curator](./docs/architecture/modules/15-curator.md) |
+| Security and communication | [Sandbox security](./docs/architecture/modules/04-sandbox-security.md) · [Web layer](./docs/architecture/modules/12-web-layer.md) · [Review](./docs/architecture/modules/14-review-system.md) · [LLM service](./docs/architecture/modules/11-llm-service.md) |
 
-- [部署手册](./deploy/DEPLOY.md) · [贡献指南](./CONTRIBUTING.md) · [安全策略](./SECURITY.md)
+## Contributing and security
 
----
+Issues and PRs are welcome; see [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow. Please report security issues privately, see [SECURITY.md](./SECURITY.md).
 
-## 贡献与安全
-
-欢迎 Issue 与 PR，开发流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)。安全漏洞请勿公开披露，上报方式见 [SECURITY.md](./SECURITY.md)。
-
-## 许可证
+## License
 
 [MIT](./LICENSE)

@@ -6,15 +6,9 @@
  */
 
 /** 工作台页面 key */
-export type WorkbenchPageKey = 'records' | 'patients' | 'literature' | 'guidelines' | 'drugs'
+export type WorkbenchPageKey = 'records' | 'patients' | 'knowledge'
 
-const PAGE_KEYS = new Set<string>([
-  'records',
-  'patients',
-  'literature',
-  'guidelines',
-  'drugs',
-])
+const PAGE_KEYS = new Set<string>(['records', 'patients', 'knowledge'])
 
 /** 判断字符串是否为合法的页面 key */
 export function isPageKey(value: string | null): value is WorkbenchPageKey {

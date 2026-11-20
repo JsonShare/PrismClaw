@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from prismclaw.schema.persistence.persistence import LockManager
+from prismclaw.schema.storage.persistence_types import LockManager
 from prismclaw.schema.storage.storage_types import SessionStore
 
 

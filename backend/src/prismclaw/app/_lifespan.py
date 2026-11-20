@@ -321,7 +321,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── 容器模式自检：assets / runtime 卷 ────────────────────────────────
     # 宿主机开发直接跳过；容器内缺失即中止，避免"服务正常但能力全空"。
     from prismclaw.infra.deployment_checks import validate_container_layout
-    from prismclaw.runtime.runtime_root import resolve_runtime_root
+    from prismclaw.infra.runtime_root import resolve_runtime_root
 
     validate_container_layout(
         assets_root=Path.home() / ".prismclaw" / "assets",
@@ -469,27 +469,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from prismclaw.schema.services.domain import DomainInfrastructureContext
 
         domain_registry = DomainRegistry()
-        # 域启用由编译产物 ENABLED_DOMAINS 决定（domains.yaml 唯一真实来源）。
-        # 生成文件缺失（未编译过）时回退空列表 = 加载所有已安装域（旧行为）。
-        # 已编译但 ENABLED_DOMAINS=[]（domains.yaml 中所有域 enabled=false）时，
-        # 语义是「明确启用 0 个域」——此时必须传 load_all_when_empty=False，
-        # 否则 load_enabled 会把空列表误判为「未指定」而加载全部已安装域，
-        # 导致 get_manifest() 去读已被编译脚本删除的 _manifest_generated.py。
-        try:
-            from prismclaw.schema.services._capability_filters_generated import (
-                ENABLED_DOMAINS,
-            )
-            compiled = True
-        except ImportError:
-            ENABLED_DOMAINS = []
-            compiled = False
-            logger.warning(
-                "_capability_filters_generated.py 缺失，回退为加载所有已安装域；"
-                "请运行 node scripts/compile/domains-registry.mjs"
-            )
-        domain_bundles = domain_registry.load_enabled(
-            list(ENABLED_DOMAINS), load_all_when_empty=not compiled
-        )
+        # 域全部通过 entry_points 钩子注册：安装即注册，核心不持有任何域名清单。
+        # settings.domains.enabled 为空 = 加载所有已发现的域；非空则按配置裁剪。
+        domain_bundles = domain_registry.load_enabled(list(settings.domains.enabled))
         infra_ctx = DomainInfrastructureContext(
             db_engine=db_engine,
             redis_client=redis_client,
@@ -551,9 +533,6 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         DomainIsolatedTool,
                         DomainIsolatedHook,
                     )
-                    from prismclaw.schema.services._capability_filters_generated import (
-                        CAPABILITY_FILTERS,
-                    )
                     return DomainRuntimeContext(
                         domain_name=domain_name,
                         tool_registry=runner_deps.tools,
@@ -563,7 +542,6 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         tool_wrapper=DomainIsolatedTool,
                         hook_wrapper=DomainIsolatedHook,
                         domain_stores=infra_bundle.domain_stores,
-                        capability_filter=CAPABILITY_FILTERS.get(domain_name),
                     )
                 domain_registry.apply_runtime(domain_bundles, _make_runtime_ctx)
                 # 将域 governance reducers 追加到 ToolGovernance

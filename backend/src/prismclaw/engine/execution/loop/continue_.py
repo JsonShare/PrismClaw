@@ -49,9 +49,9 @@ async def should_continue(
     from prismclaw.engine.foundation.runtime_util import is_abort_set
 
     if state.terminal_error is not None:
-        return Decision("TERMINATE", state.ctx.terminated_by or TerminalReason.ERROR)
+        return Decision("TERMINATE", rt.terminated_by or TerminalReason.ERROR)
 
-    # 台账绑定：内核读的是与 ctx/state 同一个 list（append 语义共享）。
+    # 台账绑定：内核读的是与 rt/state 同一个 list（append 语义共享）。
     rt.completion_state.ledger = state.ledger.evidence_ledger
     _sc_t0 = _time.monotonic()
     _gov_ms = -1.0
@@ -69,8 +69,8 @@ async def should_continue(
         )
 
     # ── 人/abort 通道：不属于资源预算，先于内核 ──
-    if state.ctx is not None and is_abort_set(state.ctx.abort_event):
-        state.ctx.terminated_by = TerminalReason.ABORTED
+    if is_abort_set(rt.abort_event):
+        rt.terminated_by = TerminalReason.ABORTED
         state.terminal_error = ErrorEvent(error_code="aborted", message="run aborted")
         return Decision("TERMINATE", TerminalReason.ABORTED)
 
@@ -85,7 +85,7 @@ async def should_continue(
         )
         _gov_t0 = _time.monotonic()
         gov = await evaluate_no_tool_governance(
-            state.ctx,
+            rt,
             response=response,
             event=_stop_event,
             kernel=rt.completion_kernel,
@@ -103,7 +103,7 @@ async def should_continue(
             state.pending_messages = list(gov.appended_messages_override)
         if gov.done_event is not None:
             state.done_event = gov.done_event
-            state.ctx.terminated_by = (
+            rt.terminated_by = (
                 TerminalReason.MAX_TOKENS
                 if state.max_tokens_hit_in_step
                 else TerminalReason.DONE

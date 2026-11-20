@@ -432,8 +432,24 @@ h1 {
   display: grid;
   gap: 40px;
 }
-.shot { margin: 0; }
+.shots__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  align-items: start;
+}
+.shot { min-width: 0; margin: 0; }
 .shot .window { box-shadow: 7px 7px 0 var(--ink); }
+.shot__link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: transform .1s linear, box-shadow .1s linear;
+}
+.shot__link:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 9px 9px 0 var(--ink);
+}
 .shot figcaption {
   margin-top: 14px;
   font-family: var(--mono);
@@ -443,6 +459,13 @@ h1 {
   color: #4a4237;
 }
 .shot figcaption b { color: var(--ink); }
+.shots__note {
+  margin: -16px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.7;
+  color: #4a4237;
+}
 
 .phone {
   position: absolute;
@@ -736,6 +759,17 @@ h2 {
 .scenario__foot span {
   padding-top: 5px;
   border-top: 2px solid var(--ink);
+}
+.scenario-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 16px 20px;
+  background: var(--paper);
+  border: var(--line) solid var(--ink);
+  border-radius: var(--r);
+  box-shadow: var(--sh-sm);
+  font-size: 13px;
+  line-height: 1.8;
 }
 
 /* ============================================================
@@ -1412,7 +1446,8 @@ h2 {
 }
 
 @media (max-width: 760px) {
-  .scenario-grid { grid-template-columns: 1fr; }
+  .scenario-grid,
+  .shots__pair { grid-template-columns: 1fr; }
 
   .stats { grid-template-columns: 1fr 1fr; }
   .stat { border-bottom: var(--line) solid var(--ink); }

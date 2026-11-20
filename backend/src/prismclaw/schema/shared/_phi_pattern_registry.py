@@ -1,8 +1,8 @@
 """Domain-specific PII/PHI pattern registry — core declares extension point, domains register patterns.
 
 Core phi_sanitizer provides universal PII patterns (phone, email, SSN, ID card, etc.).
-Domain-specific patterns (medical MRN, hospital bed, admission dates, etc.) are registered
-by domain bundles during on_build_runtime().
+Domain-specific patterns (e.g. record numbers, bed numbers, admission dates)
+are registered by domain bundles during on_build_runtime().
 
 Usage:
     from prismclaw.schema.shared._phi_pattern_registry import (
@@ -11,7 +11,7 @@ Usage:
     )
 
     # In domain bundle's on_build_runtime():
-    register_phi_patterns("medical", [
+    register_phi_patterns("my_domain", [
         ("MRN", re.compile(r'...'), "[PHI_REDACTED_MRN]"),
         ...
     ])
@@ -30,7 +30,7 @@ def register_phi_patterns(domain: str, patterns: list[PhiPatternEntry]) -> None:
     """Register domain-specific PII/PHI patterns.
 
     Args:
-        domain:   Domain key, e.g. "medical"
+        domain:   Domain key, e.g. "my_domain"
         patterns: List of (label, compiled_regex, replacement) tuples
     """
     _PATTERNS.append((domain, patterns))

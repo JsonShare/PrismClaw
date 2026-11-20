@@ -140,7 +140,7 @@ export interface ChatInputBoxProps {
   workspaceId: string; token: string | null
   /**
    * 是否启用「技能 / 专家 / 引用文件 / 附件」这一整套能力入口（➕ 菜单 + `/`、`@` 触发）。
-   * 默认 true；没有这些能力的宿主（如医疗咨询域）显式关掉，避免出现点了没反应的死控件。
+   * 默认 true；没有这些能力的宿主（如需要精简入口的域）显式关掉，避免出现点了没反应的死控件。
    */
   abilitiesEnabled?: boolean
   children?: React.ReactNode

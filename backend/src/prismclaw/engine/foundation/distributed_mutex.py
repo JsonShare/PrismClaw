@@ -24,7 +24,7 @@ import redis.exceptions
 from prismclaw.schema.shared.exceptions import LockLostError
 
 if TYPE_CHECKING:
-    from prismclaw.schema.persistence import LockManager
+    from prismclaw.schema.storage import LockManager
     from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 
 logger = logging.getLogger(__name__)

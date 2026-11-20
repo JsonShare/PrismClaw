@@ -13,12 +13,8 @@ import type {
   RecordsQueueResponse,
   UploadResponse,
   LiteratureEntry,
-  LiteratureFacets,
   GuidelineEntry,
-  GuidelineFacets,
   DrugEntry,
-  DrugFacets,
-  DrugOption,
   ConsultationEntry,
   BriefListItem,
   BriefDetail,
@@ -243,62 +239,47 @@ export async function uploadRecords(files: File[], patientId?: string): Promise<
   })
 }
 
-// ── C. 知识库三页（4 端点）────────────────────────────────────
+// ── C. 知识库（3 端点）────────────────────────────────────────
 
-/** 文献列表 + facets */
+/** 文献列表（关键词匹配中英标题） */
 export async function listLiterature(params?: {
   keyword?: string
-  category?: string
-  year?: string
   page?: number
   pageSize?: number
-}): Promise<Paged<LiteratureEntry> & { facets: LiteratureFacets }> {
+}): Promise<Paged<LiteratureEntry>> {
   const qs = new URLSearchParams()
   if (params?.keyword) qs.set('keyword', params.keyword)
-  if (params?.category) qs.set('category', params.category)
-  if (params?.year) qs.set('year', params.year)
   if (params?.page) qs.set('page', String(params.page))
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
   return request(`/api/medical/kb/literature?${qs}`)
 }
 
-/** 指南列表 + facets */
+/** 指南列表（关键词匹配中英标题 / 作者） */
 export async function listGuidelines(params?: {
   keyword?: string
-  category?: string
   sort?: string
   page?: number
   pageSize?: number
-}): Promise<Paged<GuidelineEntry> & { facets: GuidelineFacets }> {
+}): Promise<Paged<GuidelineEntry>> {
   const qs = new URLSearchParams()
   if (params?.keyword) qs.set('keyword', params.keyword)
-  if (params?.category) qs.set('category', params.category)
   if (params?.sort) qs.set('sort', params.sort)
   if (params?.page) qs.set('page', String(params.page))
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
   return request(`/api/medical/kb/guidelines?${qs}`)
 }
 
-/** 药品列表 + facets */
+/** 药品列表（目录树一次取全） */
 export async function listDrugs(params?: {
   keyword?: string
-  category?: string
-  essentialOnly?: boolean
   page?: number
   pageSize?: number
-}): Promise<Paged<DrugEntry> & { facets: DrugFacets }> {
+}): Promise<Paged<DrugEntry>> {
   const qs = new URLSearchParams()
   if (params?.keyword) qs.set('keyword', params.keyword)
-  if (params?.category) qs.set('category', params.category)
-  if (params?.essentialOnly) qs.set('essentialOnly', 'true')
   if (params?.page) qs.set('page', String(params.page))
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
   return request(`/api/medical/kb/drugs?${qs}`)
-}
-
-/** 药品轻量选项（相互作用核查下拉用） */
-export async function listDrugOptions(): Promise<DrugOption[]> {
-  return request('/api/medical/kb/drugs/options')
 }
 
 // ── D. 咨询会话（3 端点）────────────────────────────────────

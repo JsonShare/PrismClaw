@@ -73,7 +73,7 @@
 
 - Leader-only tick：只有持有 leader lock 的 worker 执行调度；两个 leader 脑裂时由 fire slot 的 CAS 兜底
 - Lock heartbeat 独立于 tick：续约周期 `min(2s, TTL/3)`（默认 TTL 5s → 约 1.67s），防止慢 tick 导致锁过期
-- 锁 value 嵌入 worker 身份：`"{worker_id}:{random}"`（随机段保唯一，CAS 语义不变）；follower 抢锁失败是设计内常态——记 **INFO** 并携带当前持锁者（`holder`，由锁 value 解析），同一持锁者只记一次、翻转/复得后再记（变化驱动），不再每秒刷 WARNING
+- 锁 value 嵌入 worker 身份：`"{worker_id}:{random}"`（随机段保唯一，CAS 语义不变）；follower 抢锁失败是设计内常态——记 **INFO** 并携带当前持锁者（`holder`，由锁 value 解析），同一持锁者只记一次、翻转/复得后再记（变化驱动），不逐 tick 刷 WARNING
 - nextFireAt 缓存：进程内缓存 + Redis pub/sub 跨 worker 失效
 - Missed-task 恢复：首次 leader tick 时检测错过的一次性任务
 - **fire_slot 必须用不含 jitter 的原始 cron `next_ts`**：`_tick()` 与 `_recover_missed()` 对同一次 fire 必须算出同一个 `run.id`；用带 jitter 的 `next_at` 会让幂等门失效
@@ -120,7 +120,7 @@
 - `won is True` → 构造 `SchedulerDispatchJob` 并 `await dispatch_enqueue(job)`
 - 入队抛异常 → `store.update_run(status="failed", error="dispatch_enqueue_failed")` + `logger.exception`；由于外层 `gather(return_exceptions=True)` 会吞异常，这个显式收口是 run 不留 `pending` 的唯一保障
 
-**Leader 选举 / 缓存失效 / 抖动**与旧版一致：
+**Leader 选举 / 缓存失效 / 抖动**：
 - `_lock_heartbeat_loop()` 续约周期 `min(2s, TTL/3)`，失败则 `_lock_token = None`，下次 tick 重新竞选
 - `_watch_invalidation_with_reconnect()` 订阅 `INVALIDATE_CHANNEL`，断线置 `_cache_dirty = True` 并指数退避重连；`_redis_ping_loop()` 30s PING 保活
 - 抖动量 = `_jitter_fraction(task_id) × jitter_fraction × interval`，上限 `jitter_cap_seconds`
@@ -196,9 +196,9 @@ await _run_chat(state, msg, app.state.web_deps.web_settings)
 
 ### 跨节点事件路由 (`app/gateway/` + `app/web/connection.py`)
 
-定时任务在节点 B 执行、用户 UI 连在节点 A 时，帧必须跨节点送达。补齐的是既有
-`AffinityRegistry / ForwardPublisher / ForwardConsumer / GatewayRouter` 断点，
-不是定时任务专用层，对所有 chat 生效：
+定时任务在节点 B 执行、用户 UI 连在节点 A 时，帧必须跨节点送达。该链路复用既有
+`AffinityRegistry / ForwardPublisher / ForwardConsumer / GatewayRouter`，
+对全部 chat 生效，不是定时任务专用层：
 
 | 组件 | 职责 |
 |------|------|
@@ -217,8 +217,8 @@ await _run_chat(state, msg, app.state.web_deps.web_settings)
 ### 与主链路一致带来的行为
 
 - 定时任务持有真实的 `session_queue`，因此引擎侧 `headless=False`：`scheduled_task` 工具与交互类工具（如 `AskUserQuestion`）在模型 tool surface 中可见，与普通会话相同
-- 不再有定时专用的 `CronToolPolicy` / `max_tool_calls_per_run` / 轮次上限 / 交付物兜底落盘；统一由核心引擎的通用机制约束
-- 不再有调度层执行超时、`status="timeout"`、`tool_calls_count`、DB 全局活跃 run 限流；`max_concurrent_*` 仅作每节点本地背压
+- 定时任务不设专用工具策略（`CronToolPolicy` / `max_tool_calls_per_run` / 轮次上限 / 交付物兜底落盘），统一由核心引擎的通用机制约束
+- 调度层不设执行超时、`status="timeout"`、`tool_calls_count` 与 DB 全局活跃 run 限流；`max_concurrent_*` 仅作每节点本地背压
 
 ## 关键数据流
 

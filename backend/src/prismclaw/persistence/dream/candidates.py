@@ -1,37 +1,21 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from prismclaw.schema.dream.dream_types import DreamCandidateKind, DreamCandidateStatus, DreamMemoryCandidate
+from prismclaw.persistence.sql_runner import apply_core_schema
+from prismclaw.schema.dream.dream_types import (
+    DreamCandidateKind,
+    DreamCandidateStatus,
+    DreamMemoryCandidate,
+)
 
 logger = logging.getLogger(__name__)
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_dream_candidates (
-    candidate_id           TEXT PRIMARY KEY,
-    session_key            TEXT NOT NULL,
-    session_id             TEXT NOT NULL,
-    kind                   TEXT NOT NULL,
-    content                TEXT NOT NULL,
-    source_entry_ids_json  JSONB NOT NULL DEFAULT '[]'::jsonb,
-    created_at             DOUBLE PRECISION NOT NULL,
-    updated_at             DOUBLE PRECISION NOT NULL,
-    status                 TEXT NOT NULL DEFAULT 'draft',
-    metadata_json          TEXT NOT NULL DEFAULT '{}'
-)
-"""
-
-_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_pc_dream_candidates_session
-ON pc_dream_candidates(session_key, status, kind, created_at DESC)
-"""
 
 _SELECT_COLUMNS = """
     candidate_id, session_key, session_id, kind, content,
@@ -63,21 +47,9 @@ class PostgresDreamCandidateStore:
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
-        self._migrated = False
-        self._init_lock = asyncio.Lock()
 
     async def _init_schema(self) -> None:
-        if self._migrated:
-            return
-        async with self._init_lock:
-            if self._migrated:
-                return
-            async with self._sf() as session:
-                conn = await session.connection()
-                await conn.execute(text(_DDL))
-                await conn.execute(text(_INDEX))
-                await session.commit()
-            self._migrated = True
+        await apply_core_schema(self._sf)
 
     async def upsert(self, candidate: DreamMemoryCandidate) -> None:
         await self._init_schema()

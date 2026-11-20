@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 
-from prismclaw.schema.persistence.persistence import RunSnapshotStore
+from prismclaw.schema.storage.persistence_types import RunSnapshotStore
 
 
 def create_run_snapshot_store(

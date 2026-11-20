@@ -6,12 +6,12 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from prismclaw.persistence.memory.embedding import EmbeddingClient
-from prismclaw.persistence.memory._schema_mixin import SchemaMixin
 from prismclaw.persistence.memory._queries_mixin import QueriesMixin
+from prismclaw.persistence.memory._repository_mixin import RepositoryMixin
+from prismclaw.persistence.memory._schema_mixin import SchemaMixin
 from prismclaw.persistence.memory._search_mixin import SearchMixin
 from prismclaw.persistence.memory._upsert_mixin import UpsertMixin
-from prismclaw.persistence.memory._repository_mixin import RepositoryMixin
+from prismclaw.persistence.memory.embedding import EmbeddingClient
 
 logger = logging.getLogger(__name__)
 
@@ -35,12 +35,9 @@ class PostgresMemoryBackend(
         self,
         engine: AsyncEngine,
         embedding: EmbeddingClient | None = None,
-        *,
-        dimensions: int | None = None,
     ) -> None:
         self._engine = engine
         self._embedding = embedding
-        self._dimensions = dimensions or (embedding.dimensions if embedding else None)
         self._async_sessionmaker = None
         self._migrated = False
         self._init_lock = asyncio.Lock()

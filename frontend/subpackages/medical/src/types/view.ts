@@ -189,35 +189,23 @@ export interface UploadResponse {
 
 // ── 知识库 ───────────────────────────────────────────────────
 
-/** facet 计数 */
-export interface FacetCount {
-  name: string
-  count: number
-}
-
-/** 文献 facets */
-export interface LiteratureFacets {
-  categories: FacetCount[]
-  years: FacetCount[]
-}
-
-/** 指南 facets */
-export interface GuidelineFacets {
-  categories: FacetCount[]
-}
-
-/** 药品 facets */
-export interface DrugFacets {
-  categories: FacetCount[]
-  essentialCount: number
-}
-
 /** 文献条目 */
 export interface LiteratureEntry {
   id: string
   title: string
+  /** 英文标题（期刊原文） */
+  titleEn: string
+  /** 中文标题 */
+  titleCn: string
+  /** 研究类型：RCT / Meta分析 / 队列研究 / 系统综述 / 综述 / 动物… */
+  studyType: string
   authors: string
   journal: string
+  /** 期刊标识标签：独家原文 / TOP期刊 / JCR Q1 / 中科院1区 */
+  journalTags: string[]
+  impactFactor: number
+  /** 发布时间（ISO 字符串，可能为空） */
+  publishedAt: string
   year: number
   category: string
   abstract: string
@@ -226,31 +214,47 @@ export interface LiteratureEntry {
   doi: string
 }
 
-/** 指南发布机构分类 */
-export type GuidelineCategory = 'NCCN指南' | 'CSCO指南' | 'ESMO指南'
-
 /** 指南条目 */
 export interface GuidelineEntry {
   id: string
   title: string
+  /** 中文标题 / 副标题 */
+  titleCn: string
+  /** 类型：指南 / 共识 / 规范 / 解读 */
+  docType: string
+  /** 作者 / 编写组 */
+  authors: string
+  /** 学科 */
+  specialty: string
+  /** 地区：国内 / 国际 / 美国 / 欧洲 / 亚太 / 加拿大 */
+  region: string
+  /** 发布时间（ISO 字符串，可能为空） */
+  publishedAt: string
   org: string
   year: number
-  cat: GuidelineCategory
+  cat: string
   ver: string
   abstract: string
   /** 核心推荐条目 */
   points: string[]
 }
 
-/** 药品分类 */
-export type DrugCategory = '化疗药物' | '靶向药物' | '免疫治疗' | '内分泌治疗' | '骨改良药物'
-
 /** 药品条目 */
 export interface DrugEntry {
   id: string
   name: string
   generic: string
-  cat: DrugCategory
+  cat: string
+  /** 西药 / 中成药 */
+  kind: string
+  /** 一级分类 */
+  atcL1: string
+  /** 二级分类 */
+  atcL2: string
+  /** 药物组 */
+  atcGroup: string
+  /** 药物组说明（多组时用于展示） */
+  atcGroupDesc: string
   dosage: string
   indications: string[]
   mechanism: string
@@ -261,24 +265,6 @@ export interface DrugEntry {
   pregnancy: string
   /** 是否国家基药 */
   essential: boolean
-}
-
-/** 药品轻量选项（相互作用核查下拉用） */
-export interface DrugOption {
-  id: string
-  name: string
-  cat: DrugCategory
-}
-
-// ── 相互作用核查 ────────────────────────────────────────────
-
-/** 相互作用核查等级 */
-export type InteractionLevel = 'high' | 'warn' | 'ok'
-
-/** 相互作用核查结果 */
-export interface InteractionResult {
-  level: InteractionLevel
-  text: string
 }
 
 // ── 咨询会话 ────────────────────────────────────────────────

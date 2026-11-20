@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from prismclaw.app.auth.auth import get_current_user
@@ -343,6 +344,35 @@ async def list_skills(
             )
         )
     return out
+
+
+@skills_router.get("/marketplace/{plugin_name}/icon")
+async def get_marketplace_icon(
+    plugin_name: str,
+    request: Request,
+    user_id: str = Depends(get_current_user),
+) -> FileResponse:
+    """返回插件自带的图标：``<asset_plugins_dir>/<plugin_name>/.plugin/icon.*``。
+
+    图标随插件包分发，核心不内置任何插件名或图片；缺失时 404，由前端回落默认图标。
+    """
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", plugin_name):
+        raise HTTPException(status_code=404, detail="icon not found")
+
+    settings_full = get_web_deps(request).settings_full
+    base = Path(settings_full.plugins.asset_plugins_dir).expanduser().resolve()
+    root = (base / plugin_name).resolve()
+    if root.parent != base:
+        raise HTTPException(status_code=404, detail="icon not found")
+
+    for ext in ("png", "svg", "jpg", "jpeg", "webp"):
+        icon = root / ".plugin" / f"icon.{ext}"
+        if icon.is_file():
+            return FileResponse(
+                icon,
+                headers={"Cache-Control": "public, max-age=3600"},
+            )
+    raise HTTPException(status_code=404, detail="icon not found")
 
 
 @skills_router.get("/{skill_name}")

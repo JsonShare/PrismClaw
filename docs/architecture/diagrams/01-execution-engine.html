@@ -173,7 +173,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">&#8943;</button>
         </div>
       </div>
-      <p class="subtitle">Agent Loop 9-step cycle &mdash; Runner &rarr; AgentLoop &rarr; Dispatch &rarr; LLM &rarr; Pre-tool Check &rarr; ToolExecution &rarr; Arbiter &rarr; ContextUpdate &rarr; TurnUpdate</p>
+      <p class="subtitle">Agent Loop 9-step cycle &mdash; Runner &rarr; AgentLoop &rarr; Dispatch &rarr; LLM &rarr; Pre-tool Check &rarr; ToolExecution &rarr; Continue &rarr; ContextUpdate &rarr; TurnUpdate</p>
     </div>
 
     <div class="diagram-container">
@@ -295,10 +295,10 @@
         <text x="460" y="388" fill="white" font-size="10" font-weight="600" text-anchor="middle">StreamingExecutor</text>
         <text x="460" y="406" fill="#94a3b8" font-size="8" text-anchor="middle">execution/dispatch/streaming_executor.py</text>
 
-        <!-- Arbiter -->
+        <!-- Terminal / Continue -->
         <rect x="600" y="365" width="220" height="55" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
-        <text x="710" y="388" fill="white" font-size="10" font-weight="600" text-anchor="middle">Arbiter</text>
-        <text x="710" y="406" fill="#94a3b8" font-size="8" text-anchor="middle">spiral detect | task mutation</text>
+        <text x="710" y="388" fill="white" font-size="10" font-weight="600" text-anchor="middle">Terminal / Continue</text>
+        <text x="710" y="406" fill="#94a3b8" font-size="8" text-anchor="middle">terminal effects | mutation eval</text>
 
         <!-- Governance -->
         <rect x="850" y="365" width="150" height="55" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
@@ -354,7 +354,7 @@
         <line x1="160" y1="626" x2="160" y2="650" stroke="#64748b" stroke-width="1"/>
         <text x="160" y="662" fill="#64748b" font-size="7" text-anchor="middle">agent_loop.py</text>
         <text x="160" y="674" fill="#64748b" font-size="7" text-anchor="middle">runner.py</text>
-        <text x="160" y="686" fill="#64748b" font-size="7" text-anchor="middle">arbiter.py</text>
+        <text x="160" y="686" fill="#64748b" font-size="7" text-anchor="middle">terminal.py</text>
         <text x="160" y="698" fill="#64748b" font-size="7" text-anchor="middle">types.py</text>
 
         <line x1="300" y1="626" x2="300" y2="650" stroke="#64748b" stroke-width="1"/>
@@ -420,12 +420,12 @@
       <div class="card">
         <div class="card-header">
           <div class="card-dot rose"></div>
-          <h3>Arbiter &amp; Governance</h3>
+          <h3>Terminal &amp; Governance</h3>
         </div>
         <ul>
-          <li>&#8226; Path-aware recovery limits via RunContext</li>
-          <li>&#8226; Multi-path spiral detection</li>
-          <li>&#8226; Structural arbitration: task mutation eval</li>
+          <li>&#8226; Recovery chain via RecoveryPolicy (LoopRuntime)</li>
+          <li>&#8226; Terminal side effects: block / snapshot / review telemetry</li>
+          <li>&#8226; Structural arbitration: task mutation eval (task_persistence)</li>
           <li>&#8226; No-tool turn governance: restart/done/confirm/repair</li>
         </ul>
       </div>

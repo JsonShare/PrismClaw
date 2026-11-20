@@ -5,16 +5,14 @@
  *
  * 路由来源：
  *   - 系统侧栏点击子项 → 宿主经 page / pageNonce 下发意图（见 DomainSection）
- *   - 刷新 / 浏览器前进后退 → 域内 URL（?mw_page=&mw_patient=）自行解析
+ *   - 刷新 / 浏览器前进后退 → 域内 URL（?domain=medical&page=&mw_patient=）自行解析
  *   - 域切页后通过 reportDomainPage 回报，侧栏据此高亮
  */
 
 import { useEffect } from 'react'
 import { reportDomainPage } from '@/domains/nav-bus'
 import { useWorkbenchNav } from '../navigation/useWorkbenchNav'
-import { DrugsPage } from '../pages/DrugsPage'
-import { GuidelinesPage } from '../pages/GuidelinesPage'
-import { LiteraturePage } from '../pages/LiteraturePage'
+import { KnowledgePage } from '../pages/KnowledgePage'
 import { MedicalRecordsPage } from '../pages/MedicalRecordsPage'
 import { PatientDetailPage } from '../pages/PatientDetailPage'
 import { PatientsPage } from '../pages/PatientsPage'
@@ -49,12 +47,8 @@ export function MedicalWorkbenchApp({ page, pageNonce }: MedicalWorkbenchAppProp
             <MedicalRecordsPage onOpenPatient={openPatient} />
           ) : route.page === 'patients' ? (
             <PatientsPage onOpenPatient={openPatient} />
-          ) : route.page === 'literature' ? (
-            <LiteraturePage />
-          ) : route.page === 'guidelines' ? (
-            <GuidelinesPage />
           ) : (
-            <DrugsPage />
+            <KnowledgePage />
           )}
         </main>
 

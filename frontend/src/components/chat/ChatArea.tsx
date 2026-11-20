@@ -1127,22 +1127,6 @@ export default function ChatArea({
               )}
           </ChatInputBox>
 
-            <div className="mt-2 flex items-center">
-              <ServerWorkspaceManager
-                workspaceId={workspaceId}
-                workspaces={workspaces}
-                isLoading={isWorkspacesLoading}
-                onSelectWorkspace={onSelectWorkspace}
-                onCreateWorkspace={onCreateServerWorkspace}
-                onUploadFiles={handleUploadServerFiles}
-                onRemoveWorkspace={onRemoveServerWorkspace}
-              />
-              <div className="flex-1 min-w-0 ml-1 flex items-center justify-end">
-                {uploadTasks.length > 0 && (
-                  <UploadTicker tasks={uploadTasks} onClick={() => setUploadQueueOpen(true)} />
-                )}
-              </div>
-            </div>
         </div>
       </div>
 

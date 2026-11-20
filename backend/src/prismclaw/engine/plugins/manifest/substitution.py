@@ -3,7 +3,7 @@
 Single source of truth for replacing ``${VAR}`` placeholders in plugin-owned
 content (skill bodies, command bodies, hook commands). Variable *names* follow
 the reference implementation's ecosystem convention so plugins ported from it
-(e.g. ``legal-chineselaw``) work unmodified — most importantly
+(e.g. ``my-plugin``) work unmodified — most importantly
 ``${PRISMCLAW_PLUGIN_ROOT}``, which plugin content uses to reference files shipped
 alongside the plugin.
 

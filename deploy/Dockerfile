@@ -88,6 +88,8 @@ COPY --from=builder /install /usr/local
 
 # Application source — 镜像仓库 backend/ 布局，使 resolve_project_root() markers 一致
 COPY backend/src/ ./backend/src/
+# 表结构 SQL：应用启动时按域执行 /app/deploy/sql
+COPY deploy/sql/ ./deploy/sql/
 # 静态能力权威源：启动时 sync_prismclaw_home() 读它，同步到 ~/.prismclaw/assets。
 # 不打进镜像 → assets 为空、技能/插件/子代理全部不可用（启动会直接抛错）。
 COPY backend/.prismclaw/ ./backend/.prismclaw/

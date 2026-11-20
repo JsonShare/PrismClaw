@@ -7,7 +7,7 @@
           base_url / api_key / llm_provider 挂在【服务商】上，
           display_name / modalities / context_window / max_output_tokens 挂在【模型】上。
 
-为什么凭据挂在服务商而不是模型：下游业务域（medical 等）直接用核心 LLM 客户端
+为什么凭据挂在服务商而不是模型：下游业务域直接用核心 LLM 客户端
 （其 `default_model` 由本文件的 `default_model` 同步而来），核心再交给
 `resolve_credentials()` 按模型名反查服务商拿 base_url/api_key。
 所以凭据必须落在服务商上才能被解析到。

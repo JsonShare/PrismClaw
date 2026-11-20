@@ -40,7 +40,9 @@ def _build_reference_text(*, block_id: str, source: str, text: str, path: Path) 
         f"source: {source}\n"
         f"size: {len(text)} chars\n"
         f"preview: {preview}\n"
-        f"[完整内容已归档至：{relative_path}] 请用 read 工具查看完整内容。\n"
+        f"[完整内容已归档至：{relative_path}]\n"
+        f"读取方式：read 工具直接用路径 {relative_path}；"
+        f"bash 工具用 cat $PRISMCLAW_CONTEXT_BLOCKS_DIR/{path.name}\n"
     )
 
 

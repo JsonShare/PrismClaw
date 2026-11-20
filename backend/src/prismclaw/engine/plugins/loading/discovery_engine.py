@@ -11,13 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.plugins.registry.identity import (
-    BUILTIN_SOURCE,
-    LOCAL_SOURCE,
-    PluginID,
-    SESSION_SOURCE,
-)
 from prismclaw.engine.plugins.ingest.path_remap import parse_remap_rules
+from prismclaw.engine.plugins.loading.dependency import verify_and_demote
 from prismclaw.engine.plugins.loading.install_store import InstalledPluginsStore
 from prismclaw.engine.plugins.loading.load_result import (
     LoadedPlugin,
@@ -30,17 +25,19 @@ from prismclaw.engine.plugins.loading.load_strategy import (
     PluginLoadStrategy,
 )
 from prismclaw.engine.plugins.loading.merge import merge_plugin_sources
-from prismclaw.engine.plugins.loading.dependency import verify_and_demote
+from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
+from prismclaw.engine.plugins.registry.identity import (
+    BUILTIN_SOURCE,
+    LOCAL_SOURCE,
+    SESSION_SOURCE,
+    PluginID,
+)
 from prismclaw.engine.plugins.trust import (
     is_source_allowed_by_policy,
     is_source_trusted_for_load,
 )
 
 logger = logging.getLogger(__name__)
-
-# 市场级与插件级清单同名，统一为 ``.plugin/plugin.json``；市场清单以声明
-# ``plugins`` 数组区分。
-MANIFEST_REL_PATH = Path(".plugin") / "plugin.json"
 
 
 def read_market_manifest(entry: Path) -> dict[str, Any] | None:

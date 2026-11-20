@@ -39,7 +39,7 @@ MCP（Model Context Protocol）集成模块负责将外部 MCP 服务器桥接�
 
 ## 核心组件
 
-### MCPClientManager（`engine/integrations/mcp/client_manager.py`）
+### MCPClientManager（`engine/mcp/client_manager.py`）
 
 MCP 服务器生命周期管理器，每个 PrismClaw 进程一个实例。
 
@@ -56,14 +56,14 @@ MCP 服务器生命周期管理器，每个 PrismClaw 进程一个实例。
   - `ready: asyncio.Event` — 就绪事件
 - **架构不变量**：`prismclaw.engine.*` 不得直接导入此模块，通过 `deps.mcp_death_handler` 和 `external_tool_registrar` 回调解耦
 
-### PrismClawClientSessionGroup（`engine/integrations/mcp/client_manager.py`）
+### PrismClawClientSessionGroup（`engine/mcp/client_manager.py`）
 
 SDK ClientSessionGroup 的子类，修复 `__aexit__` 双重关闭问题。
 
 - 修复：只关闭 `_exit_stack`（owner 模式）或只关闭 `_session_exit_stacks`（非 owner 模式）
 - 关闭后清理 `_sessions`、`_tool_to_session`、`_tools`、`_resources`、`_prompts`
 
-### MCPToolAdapter（`engine/integrations/mcp/adapter.py`）
+### MCPToolAdapter（`engine/mcp/adapter.py`）
 
 MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
 
@@ -88,7 +88,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   - 运行时观察：`_note_result()` → `runtime_observer.note_tool_result()`
 - **校验**：remote_tool.name 不允许包含 `:`（与命名空间分隔符冲突）
 
-### ConfigMixin（`engine/integrations/mcp/_mixin_config.py`）
+### ConfigMixin（`engine/mcp/_mixin_config.py`）
 
 配置与遥测 Mixin。
 
@@ -104,7 +104,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   - `_enabled_servers()` — 获取已启用服务器列表
   - `_get_lock()` — 获取 per-server 异步锁
 
-### ConnectionMixin（`engine/integrations/mcp/_mixin_connection.py`）
+### ConnectionMixin（`engine/mcp/_mixin_connection.py`）
 
 连接管理 Mixin。
 
@@ -123,7 +123,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   6. 构建适配器 + 注册
 - **stderr 捕获**：`_open_stderr_capture()` / `_read_stderr_tail()` — 子进程错误诊断
 
-### LifecycleMixin（`engine/integrations/mcp/_mixin_lifecycle.py`）
+### LifecycleMixin（`engine/mcp/_mixin_lifecycle.py`）
 
 生命周期 Mixin。
 
@@ -136,7 +136,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
 - **启动摘要**：`_log_startup_summary()` — 连接/失败/禁用/工具总数
 - **工具数警告**：`_TOOL_COUNT_WARN_THRESHOLD = 100` — 超过时警告 prompt budget 压力
 
-### RegistryMixin（`engine/integrations/mcp/_mixin_registry.py`）
+### RegistryMixin（`engine/mcp/_mixin_registry.py`）
 
 注册表与查询 Mixin。
 
@@ -152,7 +152,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   - `connection_summary()` — 连接摘要统计
 - **日志脱敏**：`_redact_logs()` — 脱敏环境变量/参数/header 值
 
-### AdapterMixin（`engine/integrations/mcp/_mixin_adapter.py`）
+### AdapterMixin（`engine/mcp/_mixin_adapter.py`）
 
 适配器构建 Mixin。
 
@@ -160,7 +160,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   - 遍历 `_group.tools`，匹配 session → 构建 MCPToolAdapter
   - 跳过含 `:` 的工具名（ValueError catch）
 
-### DeclarativeMCPManager（`engine/integrations/mcp/_declarative.py`）
+### DeclarativeMCPManager（`engine/mcp/_declarative.py`）
 
 纯声明式 MCP 管理器，仅提供状态查询，不实际连接。
 
@@ -168,7 +168,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
 - **适用场景**：远程 MCP 服务器（由外部平台管理连接）
 - **支持接口**：attach_and_register（空操作）、list_servers、get_status、connection_summary、is_ready、restart_server（始终失败）、get_logs（空）、shutdown（空）
 
-### CompositeMCPManager（`engine/integrations/mcp/_composite.py`）
+### CompositeMCPManager（`engine/mcp/_composite.py`）
 
 复合 MCP 管理器，聚合多个子管理器。
 
@@ -196,7 +196,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
 - **Fail-Closed**：未注册 server → 返回 False
 - **匹配顺序**：全局白名单 → server-specific 白名单 → 未指定 server 时扫描所有已注册域名
 
-### McpSettings / McpServerConfig（`engine/integrations/mcp/settings.py` + `schema/services/mcp_settings.py`）
+### McpSettings / McpServerConfig（`engine/mcp/settings.py` + `schema/services/mcp_settings.py`）
 
 MCP 配置模型。
 
@@ -216,7 +216,7 @@ MCP 配置模型。
 - **环境变量解析**：`_substitute_env_placeholder()` — `{env:VAR_NAME}` 占位符
   - resolved / literal / missing-env-var 三种状态
 
-### _types（`engine/integrations/mcp/_types.py`）
+### _types（`engine/mcp/_types.py`）
 
 MCP 类型定义。
 

@@ -5,9 +5,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from prismclaw.engine.compression.cache_block_packing import (
-        PromptCacheRuntimeContract,
-    )
     from prismclaw.engine.compression.orchestrator import CompressionOrchestrator
     from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
     from prismclaw.engine.execution.handoff.supervisor import HandoffSupervisor
@@ -55,12 +52,13 @@ from prismclaw.schema.agent.callbacks import AgentCallbacks
 from prismclaw.schema.agent.types import AgentDeps
 from prismclaw.schema.config.config import AgentRunConfig
 from prismclaw.schema.llm.types import LLMClient
-from prismclaw.schema.persistence.persistence import PersistenceContextProtocol, RunSnapshotStore
 from prismclaw.schema.services.env_types import ExecutionEnv
 from prismclaw.schema.services.lock import LockManagerProtocol
 from prismclaw.schema.services.session_queue import SessionQueueProtocol
 from prismclaw.schema.services.task_protocol import TaskManagerProtocol
+from prismclaw.schema.storage.persistence_types import PersistenceContextProtocol, RunSnapshotStore
 from prismclaw.schema.storage.storage_types import SessionStore, WorkspaceStore
+
 
 def _lazy_ctx_engine():
     from prismclaw.engine.compression.context_engine import DefaultContextEngine
@@ -80,10 +78,6 @@ def _lazy_compressor():
         prepare_query_turn_from_static_context,
     )
     return CompressionOrchestrator(prepare_turn_callable=prepare_query_turn_from_static_context)
-
-def _lazy_prompt_cache():
-    from prismclaw.engine.compression.cache_block_packing import DefaultPromptCacheRuntimeContract
-    return DefaultPromptCacheRuntimeContract()
 
 
 class ExecutionRuntimePorts:
@@ -353,9 +347,6 @@ class AgentRunnerDeps:
     # lives on ``RunSnapshot.compression_runtime`` instead of instance memory.
     session_compressor: CompressionOrchestrator = field(
         default_factory=_lazy_compressor
-    )
-    prompt_cache_runtime_contract: PromptCacheRuntimeContract = field(
-        default_factory=_lazy_prompt_cache
     )
     # Per-result LLM summarization callback.
     # When set, result_compaction uses this instead of character truncation.

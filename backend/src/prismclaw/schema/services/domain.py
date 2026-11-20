@@ -1,17 +1,17 @@
 """业务域模块接入平台的统一协议。
 
-DomainBundle 是业务域（医疗/法律/Office）接入 PrismClaw 的标准协议：
+DomainBundle 是业务域（如垂直行业包、自建 agent）接入 PrismClaw 的统一协议：
 一个域模块通过实现此协议，向平台注册工具、钩子、治理规则、持久化存储和路由。
+域模块只通过 entry_points（组名 ``prismclaw.domains``）发现并注册，
+核心不持有任何具体域名的清单。
 
 依赖方向：engine/assembly → schema（Protocol 定义在 schema，实现在 engine/assembly）
 """
 from __future__ import annotations
 
-import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol, runtime_checkable
-
-logger = logging.getLogger(__name__)
+from typing import Any, Protocol, runtime_checkable
 
 
 @dataclass
@@ -49,7 +49,7 @@ class DomainManifest:
     - 工作台模式：menus >= 2 项 → 侧边栏一级入口 → 左侧内嵌二级菜单 + 右侧功能页
     - 独立功能模式：menus 为空或仅 1 项 → 侧边栏一级入口 → 全屏渲染功能页面，不显示左侧菜单
 
-    path 始终指向工作台/功能页面路由，如 "/medical" 或 "/legal"。
+    path 始终指向工作台/功能页面路由，如 "/my-domain"。
     """
     key: str
     label: str
@@ -127,7 +127,6 @@ class DomainRuntimeContext:
         tool_wrapper: Any = None,
         hook_wrapper: Any = None,
         domain_stores: dict[str, Any] | None = None,
-        capability_filter: dict[str, dict[str, bool]] | None = None,
     ) -> None:
         self._domain_name = domain_name
         self._tool_registry = tool_registry
@@ -138,9 +137,6 @@ class DomainRuntimeContext:
         self._tool_wrapper = tool_wrapper
         self._hook_wrapper = hook_wrapper
         self._domain_stores = domain_stores or {}
-        # 能力开关：{"tools": {name: bool}, "skills": {name: bool}}
-        # 未列出 = 默认启用（opt-out）；由 domains.yaml 编译产物注入
-        self._capability_filter = capability_filter
         # 暂存
         self._pending_tools: list[Any] = []
         self._pending_hooks: list[tuple[Any, Any]] = []
@@ -159,16 +155,7 @@ class DomainRuntimeContext:
         return self._domain_stores
 
     def register_tool(self, tool: Any) -> None:
-        """暂存工具注册（commit 时生效）。
-
-        若 capability_filter 标记该工具为 disabled，跳过注册（不入 pending）。
-        未在 filter 中列出的工具默认启用。
-        """
-        if self._capability_filter:
-            tools_filter = self._capability_filter.get("tools", {})
-            if not tools_filter.get(tool.name, True):
-                logger.info("工具 %s 被开关关闭，跳过注册", tool.name)
-                return
+        """暂存工具注册（commit 时生效）。"""
         self._pending_tools.append(tool)
 
     def register_hook(self, event: Any, handler: Any) -> None:
@@ -184,15 +171,7 @@ class DomainRuntimeContext:
 
         域通过此方法将 SKILL.md 解析后的 SkillManifest 注入平台技能目录。
         commit 时写入 _skill_provider 的动态技能表，下次 list_skills 即可见。
-
-        若 capability_filter 标记该技能为 disabled，跳过注册。
-        未在 filter 中列出的技能默认启用。
         """
-        if self._capability_filter:
-            skills_filter = self._capability_filter.get("skills", {})
-            if not skills_filter.get(skill_manifest.name, True):
-                logger.info("技能 %s 被开关关闭，跳过注册", skill_manifest.name)
-                return
         self._pending_skills.append(skill_manifest)
 
     def defer_registry_cleanup(self, cleanup_fn: Callable[[], None]) -> None:
@@ -324,7 +303,7 @@ class DomainLifecycleContext:
 class DomainBundle(Protocol):
     """业务域模块接入平台的统一协议。
 
-    一个业务域（如 medical / legal / office / 自建 agent）通过实现此 Protocol，
+    一个业务域（如自建 agent、垂直行业包）通过实现此 Protocol，
     向 PrismClaw 注册：
     - 持久化存储（on_build_infrastructure）
     - 工具、钩子、治理规则（on_build_runtime）
@@ -333,17 +312,17 @@ class DomainBundle(Protocol):
     - 长任务 store（task_store 可选属性 → Registry 自动接 emitter）
 
     通过 entry_points(group="prismclaw.domains") 发现，
-    配置 domains.enabled 启用。
+    由 settings.domains.enabled 裁剪（空 = 加载全部已安装域）。
     """
 
     name: str
-    """域名标识：medical / legal / office"""
+    """域名标识（域包自定义，核心不预设取值）"""
 
     required_core_version: str
     """核心版本约束，如 ">=0.1.0,<2.0.0" """
 
     depends_on: list[str]
-    """依赖的其他域，如 ["legal"] """
+    """依赖的其他域，如 ["base_domain"] """
 
     task_store: Any | None = None
     """可选：域长任务 store 实例（需继承 StatusEmitterMixin）。
@@ -352,8 +331,10 @@ class DomainBundle(Protocol):
     （web_deps 可用时），域 bundle 无需手写接线代码。不声明则不接。
     """
 
-    def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
-        """基础设施构建时调用 — 注册持久化存储"""
+    def on_build_infrastructure(
+        self, ctx: DomainInfrastructureContext
+    ) -> Awaitable[None] | None:
+        """基础设施构建时调用 — 注册持久化存储，支持同步或异步实现。"""
         ...
 
     def on_build_runtime(self, ctx: DomainRuntimeContext) -> None:

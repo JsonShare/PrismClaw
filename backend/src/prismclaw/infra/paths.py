@@ -12,7 +12,7 @@
     目录展开的 **唯一出口**：root 去重、相对目录拼接、exists 判定、布局诊断只在此
     发生一次；各发现器只消费 layout 给出的 location，不再各自拼 ``root / dir``。
   * 本模块只处理"项目级"路径。用户级 / 工作区级路径（workspaces.json、previews/、
-    edits/、spills/ 等）保持在各自调用点，不在这里过度抽象，避免多租户串数据。
+    edits/、spills/ 等）保持在各自调用点，不在这里过度抽象，避免多用户串数据。
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from prismclaw.schema.shared.root_set import RootSet
 # 向上探测源码树时，命中任一标记即视为项目根
 # 三目录重构后：主 pyproject.toml / 源码 / 配置均位于 backend/ 下，
 # 用 backend/ 前缀标记确保只在仓库根命中，避免在域分包自身 pyproject.toml
-# 处误判（如 backend/src/subpackages/medical/pyproject.toml）。
+# 处误判（如 backend/src/subpackages/my_domain/pyproject.toml）。
 _ROOT_MARKERS: tuple[str, ...] = (
     "backend/pyproject.toml",
     "backend/src/prismclaw/__init__.py",

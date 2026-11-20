@@ -42,5 +42,4 @@ export const PHASE_OVERRIDE_PROTECTED_STATES = new Set([
   'awaiting_risk_confirmation',
   'blocked',
   'completed',
-  'reviewing',
 ])

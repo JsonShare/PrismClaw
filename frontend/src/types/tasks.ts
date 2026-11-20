@@ -29,7 +29,7 @@ export interface ActiveMiningSnapshot {
 /** domain_task.updated 帧的 data */
 export interface DomainTaskEventPayload {
   task_id: number
-  kind: string  // 域命名空间：bundle.name（legal / medical / 自建 agent）
+  kind: string  // 域命名空间：bundle.name（由域包自定义）
   workspace_id: string
   status: string
   stage: string | null

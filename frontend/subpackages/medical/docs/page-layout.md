@@ -39,10 +39,19 @@
 
 页面 key 与分组标签都在 `scripts/compile/domains.yaml`，核心侧栏据此平铺：
 
-- **临床业务**：`records`（智能病历）、`patients`（患者管理）
-- **知识库**：`literature`（文献知识库）、`guidelines`（指南知识库）、`drugs`（药品知识库）
+- **临床业务**：`records`（智能病历）、`patients`（患者管理）、`knowledge`（医学知识库）
 
-路由状态由 `useWorkbenchNav` 持有，同步到 URL（`?mw_page=&mw_patient=`）。
+`knowledge` 是单页三 Tab：顶部统一搜索框 + `文献 / 指南 / 药品` 三个 Tab，
+Tab 同步到 `?mw_kb=`（`literature` / `guidelines` / `drugs`，缺省文献）。
+三个内容区为 `features/kb/` 下独立组件，按设计稿各自渲染：
+
+- `LiteratureFeed`：最新精选流（研究类型 + 中英标题 + 期刊标签 + IF + 相对时间），筛选芯片由数据生成
+- `GuidelineFeed`：最新精选流 + 学科 Tab（学科取自数据），类型/地区筛选芯片
+- `DrugCatalog`：西药/中成药 → 一级分类 → 二级分类 → 药物组 三栏目录，检索时第三栏切换为扁平结果
+
+行 / 药名点击展开摘要或说明书要点，不再使用旧的 facet + 阅读器三栏布局。
+
+路由状态由 `useWorkbenchNav` 持有，同步到 URL（`?domain=medical&page=&mw_patient=`）。
 宿主通过 `page` / `pageNonce` 下发跳转意图（`pageNonce` 自增表示一次新意图，
 重复点击同一项可重置到该页顶层），域切页后调 `reportDomainPage` 回报，侧栏据此高亮。
 

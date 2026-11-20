@@ -97,16 +97,13 @@ class TaskRuntimeState(BaseModel):
     session_id: str
     workspace_id: str | None = None
     state: Literal[
-        "intaking",
         "awaiting_confirmation",
         "awaiting_risk_confirmation",
         "executing",
-        "reviewing",
-        "resuming",
         "completed",
         "blocked",
     ]
-    entry_resolution_status: Literal["pending", "ready", "failed"] = "ready"
+    entry_resolution_status: Literal["ready", "failed"] = "ready"
     state_version: int = 1
     latest_review_decision_id: str | None = None
     pending_confirmation_reason: str | None = None

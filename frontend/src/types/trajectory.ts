@@ -141,12 +141,9 @@ export interface TaskRuntimeStateRecord {
   session_id: string
   workspace_id?: string | null
   state:
-    | 'intaking'
     | 'awaiting_confirmation'
     | 'awaiting_risk_confirmation'
     | 'executing'
-    | 'reviewing'
-    | 'resuming'
     | 'completed'
     | 'blocked'
   state_version: number

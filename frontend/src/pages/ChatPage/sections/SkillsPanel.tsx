@@ -4,13 +4,10 @@ import {
   Store, Headphones, Award, FileText,
   PenLine, Clapperboard, Rocket, Presentation, CalendarRange, Wallet, Film,
   Plane, GraduationCap, BarChart3, ShoppingBag, ShieldCheck, Target, BookOpen, Bot,
-  Scale, Briefcase, Building2, Users, Lock, Package, Landmark, Cpu,
-  HeartPulse, Database, FlaskConical, Sparkles, Activity, Lightbulb, Puzzle,
+  Cpu, Database, FlaskConical, Lock, Puzzle,
   type LucideIcon,
 } from 'lucide-react'
 import SkillDetailModal from '../../../components/modals/SkillDetailModal'
-import legalPluginIcon from '../../../images/plugin_icon/legal-chineselaw.png'
-import medicalPluginIcon from '../../../images/plugin_icon/medical-healthcare.png'
 import { apiUrl } from '../../../lib/system-adapter'
 import { useAuth } from '../../../context/AuthContext'
 import { useUiStore } from '../../../stores/ui'
@@ -51,7 +48,7 @@ function skillBaseName(skill: Skill): string {
   return idx > 0 ? skill.id.slice(idx + 1) : skill.id
 }
 
-/** 将插件 ID 格式化为可读标题："medical-clinical" → "Medical Clinical" */
+/** 将插件 ID 格式化为可读标题："my-plugin" → "My Plugin" */
 function formatPluginName(name: string): string {
   return name
     .split(/[-_\s]+/)
@@ -62,24 +59,15 @@ function formatPluginName(name: string): string {
 
 /**
  * 专家（插件）卡片缩略图标：按插件 ID + 描述派生。
- * 规则自上而下匹配，越具体的领域越靠前；无匹配时回落 Puzzle。
+ * 只使用与领域无关的能力语义；无匹配时回落 Puzzle。
  */
 const EXPERT_ICON_RULES: Array<[RegExp, LucideIcon]> = [
-  [/(ai-|-ai|agent|人工智能)/, Cpu],
-  [/(commercial|contract|deal|vendor|nda|renewal|合同)/, Briefcase],
-  [/(corporate|company|board|公司|治理)/, Building2],
-  [/(employment|labor|hiring|leave|劳动|用工)/, Users],
-  [/(intellectual|patent|trademark|copyright|invention|ip-legal|\bip\b|知识产权)/, Lightbulb],
-  [/(privacy|security|compliance|privilege|隐私|合规)/, Lock],
-  [/(product|launch|marketing|产品)/, Package],
-  [/(regulatory|policy|监管|政策)/, Landmark],
-  [/(clinical|medical|patient|drug|prescription|healthcare|临床|医疗)/, HeartPulse],
-  [/(informatics|fhir|数据|信息学)/, Database],
-  [/(research|science|mining|science|科研|研究)/, FlaskConical],
-  [/(wellness|健康)/, Sparkles],
-  [/(operations|ops|运营)/, Activity],
-  [/(litigation|court|law|clinic|student|诉讼|法)/, Scale],
-  [/(legal|法律)/, Scale],
+  [/(agent|assistant|助手|智能体|人工智能)/, Cpu],
+  [/(data|database|数据|信息)/, Database],
+  [/(research|science|科研|研究)/, FlaskConical],
+  [/(security|privacy|compliance|安全|隐私|合规)/, Lock],
+  [/(analysis|analy|分析)/, BarChart3],
+  [/(document|report|文档|报告)/, FileText],
 ]
 
 function expertVisualFor(name: string, desc: string): { Icon: LucideIcon } {
@@ -91,24 +79,13 @@ function expertVisualFor(name: string, desc: string): { Icon: LucideIcon } {
 }
 
 /**
- * 领域配色：图标语义 → 主色（深色用于图形，亮色用于底纹）。
- * 固定映射而非散列，保证「法律=藏蓝、医疗=绛红、科研=墨绿」等语义稳定。
+ * 图标配色：同一语义图标保持稳定主色（深色用于图形，亮色用于底纹）。
  */
 const EXPERT_TINTS = new Map<LucideIcon, [string, string]>([
-  [Scale, ['#1E3A5F', '#3E6D99']],
-  [HeartPulse, ['#8C1D40', '#C2527A']],
   [FlaskConical, ['#1F5139', '#3E8A63']],
-  [Briefcase, ['#8A5A16', '#C08A33']],
   [Cpu, ['#3B3A8C', '#6A68D8']],
-  [Users, ['#6B3F8C', '#9B6BC4']],
   [Lock, ['#3F4A5A', '#66788F']],
-  [Building2, ['#5A4635', '#8A6B52']],
-  [Landmark, ['#4A4128', '#7A6B3F']],
-  [Package, ['#7A4A12', '#B47A2C']],
   [Database, ['#1F4F66', '#3D8AA8']],
-  [Lightbulb, ['#7A5A0A', '#B08A1E']],
-  [Activity, ['#0F5947', '#2C8A70']],
-  [Sparkles, ['#7A2E63', '#B05A93']],
   [GraduationCap, ['#28406B', '#4C719F']],
 ])
 
@@ -142,36 +119,43 @@ function ExpertIconTile({ name, Icon, size = 36 }: { name: string; Icon: LucideI
   )
 }
 
-/**
- * 插件图标：文件名与插件目录名一致（images/plugin_icon/<plugin>.png）。
- * 未收录的插件回落为 ExpertIconTile 的默认 Lucide 图标。
- */
-const PLUGIN_ICONS: Record<string, string> = {
-  'legal-chineselaw': legalPluginIcon,
-  'medical-healthcare': medicalPluginIcon,
+/** 插件包图标地址：图标随插件包分发（<plugin>/.plugin/icon.*），缺失时前端回落默认图标块。 */
+function marketplaceIconUrl(marketplace: string | null): string | null {
+  return marketplace
+    ? apiUrl(`/api/skills/marketplace/${encodeURIComponent(marketplace)}/icon`)
+    : null
 }
 
-function pluginIconOf(name: string): string | null {
-  return PLUGIN_ICONS[name] ?? PLUGIN_ICONS[name.toLowerCase()] ?? null
-}
-
-/** 专家图标：优先用插件同名图标，找不到时用默认图标块。 */
-function ExpertAvatar({ name, Icon, size = 36 }: { name: string; Icon: LucideIcon; size?: number }) {
-  const src = pluginIconOf(name)
-  if (!src) return <ExpertIconTile name={name} Icon={Icon} size={size} />
-  return (
-    <img
-      src={src}
-      alt=""
-      aria-hidden
-      className="shrink-0 object-cover bg-[var(--c-surface)]"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size >= 48 ? 12 : 10,
-      }}
-    />
-  )
+/** 专家图标：优先用插件包自带图标，加载失败或缺失时回落默认图标块。 */
+function ExpertAvatar({
+  name,
+  Icon,
+  size = 36,
+  iconUrl,
+}: {
+  name: string
+  Icon: LucideIcon
+  size?: number
+  iconUrl?: string | null
+}) {
+  const [failed, setFailed] = useState(false)
+  if (iconUrl && !failed) {
+    return (
+      <img
+        src={iconUrl}
+        alt=""
+        aria-hidden
+        onError={() => setFailed(true)}
+        className="shrink-0 object-cover bg-[var(--c-surface)]"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size >= 48 ? 12 : 10,
+        }}
+      />
+    )
+  }
+  return <ExpertIconTile name={name} Icon={Icon} size={size} />
 }
 
 /** 专家卡片正文与能力标签（分类优先，缺失时退回技能名）。 */
@@ -233,7 +217,7 @@ const GENERIC_PLUGIN_ROOTS = new Set(['plugins', 'skills', '.prismclaw', '.claud
 
 /**
  * 从技能的 location（绝对路径，形如 .../{marketplace}/{plugin}/skills/{skill}/SKILL.md）
- * 推导其所属的插件市场目录（外层分组，如 "legal-chineselaw"）。
+ * 推导其所属的插件市场目录（外层分组，如 "my-marketplace"）。
  *
  * 市场清单形式的插件目录结构为 `~/.prismclaw/assets/plugins/{marketplace}/{plugin}/skills/...`，
  * 故取「插件同名目录」上一级作为市场目录；若上一级是通用根目录（直接扫描安装的非市场插件），
@@ -691,7 +675,7 @@ export default function SkillsPanel() {
         className="app-card group h-full w-full px-5 py-5 flex flex-col gap-3.5 text-left rounded-[var(--radius-card)] cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/40"
       >
         <span className="flex items-start gap-3.5 min-w-0">
-          <ExpertAvatar name={pg.name} Icon={Icon} />
+          <ExpertAvatar name={pg.name} Icon={Icon} iconUrl={marketplaceIconUrl(pg.marketplace)} />
 
           <span className="flex items-start gap-2 flex-1 min-w-0">
             <span className="block flex-1 min-w-0">
@@ -907,9 +891,15 @@ export default function SkillsPanel() {
             {(() => {
               const detailMeta = expertCardMeta(selectedPluginSkills)
               const { Icon } = expertVisualFor(selectedPlugin ?? '', detailMeta.description)
+              const detailMarketplace = marketplaceDirOf(selectedPluginSkills[0])
               return (
                 <div className="mb-7 flex items-start gap-4">
-                  <ExpertAvatar name={selectedPlugin ?? ''} Icon={Icon} size={60} />
+                  <ExpertAvatar
+                    name={selectedPlugin ?? ''}
+                    Icon={Icon}
+                    size={60}
+                    iconUrl={marketplaceIconUrl(detailMarketplace)}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <h2

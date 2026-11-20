@@ -220,7 +220,7 @@ class LoadedPlugin:
     native_hooks: list[Any] = field(default_factory=list)
     # 安装路径
     install_path: str | None = None
-    # v5 渐进式披露：所属 marketplace 名称（如 medical-healthcare）
+    # v5 渐进式披露：所属 marketplace 名称（如 my-marketplace）
     # 子插件通过 porting_context 传递 marketplace_name，非 marketplace 插件为 None。
     marketplace_name: str | None = None
     # v5 渐进式披露：所属 marketplace 描述（来自市场级 plugin.json 的 description）

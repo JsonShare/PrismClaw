@@ -56,7 +56,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">&#8943;</button>
         </div>
       </div>
-      <p class="subtitle">Discovery &rarr; Load &rarr; Ingest &rarr; Activate lifecycle &mdash; 3 dialects, trust hierarchy, hook system with circuit breaker</p>
+      <p class="subtitle">Discovery &rarr; Load &rarr; Ingest &rarr; Activate lifecycle &mdash; 2 dialects, trust hierarchy, hook system with circuit breaker</p>
     </div>
 
     <div class="diagram-container">
@@ -109,31 +109,25 @@
         <text x="959" y="133" fill="white" font-size="11" font-weight="600" text-anchor="middle">PluginActivator</text>
         <text x="959" y="155" fill="#94a3b8" font-size="8" text-anchor="middle">install&#8594;load&#8594;activate</text>
 
-        <!-- Load Strategies (3 types) -->
+        <!-- Load Strategies (2 types) -->
         <rect x="80" y="200" width="940" height="70" rx="8" fill="rgba(15, 23, 42, 0.3)" stroke="#1e293b" stroke-width="1"/>
         <text x="100" y="220" fill="#94a3b8" font-size="10" font-weight="600">Load Strategies</text>
 
-        <rect x="100" y="230" width="270" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
-        <text x="235" y="249" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">NativePython (main.py / importlib)</text>
+        <rect x="100" y="230" width="420" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="310" y="249" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">NativePython (main.py / importlib)</text>
 
-        <rect x="390" y="230" width="270" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
-        <text x="525" y="249" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">Declarative (plugin.json)</text>
-
-        <rect x="680" y="230" width="270" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
-        <text x="815" y="249" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">Trae (.trae-plugin/plugin.json)</text>
+        <rect x="580" y="230" width="420" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="790" y="249" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">Declarative (plugin.json)</text>
 
         <!-- Dialect handling -->
         <rect x="80" y="295" width="940" height="70" rx="8" fill="rgba(15, 23, 42, 0.3)" stroke="#1e293b" stroke-width="1"/>
         <text x="100" y="315" fill="#94a3b8" font-size="10" font-weight="600">Ingest Dialects (source dir never modified)</text>
 
-        <rect x="100" y="325" width="270" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
-        <text x="235" y="344" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">CANONICAL &#8594; direct copy</text>
+        <rect x="100" y="325" width="420" height="30" rx="4" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="310" y="344" fill="#34d399" font-size="9" font-weight="500" text-anchor="middle">CANONICAL &#8594; direct copy</text>
 
-        <rect x="390" y="325" width="270" height="30" rx="4" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
-        <text x="525" y="344" fill="#fbbf24" font-size="9" font-weight="500" text-anchor="middle">TRAE &#8594; copy + canonical manifest</text>
-
-        <rect x="680" y="325" width="270" height="30" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
-        <text x="815" y="344" fill="#fb7185" font-size="9" font-weight="500" text-anchor="middle">BARE_SKILLS &#8594; copy + synth manifest</text>
+        <rect x="580" y="325" width="420" height="30" rx="4" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="790" y="344" fill="#fb7185" font-size="9" font-weight="500" text-anchor="middle">BARE_SKILLS &#8594; copy + synth manifest</text>
 
         <!-- Registry -->
         <rect x="80" y="395" width="440" height="100" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
@@ -220,8 +214,8 @@
         </div>
         <ul>
           <li>&#8226; 4-phase: Discovery &#8594; Load &#8594; Ingest &#8594; Activate</li>
-          <li>&#8226; 3 load strategies: NativePython / Declarative / Trae</li>
-          <li>&#8226; 3 dialects: CANONICAL / TRAE / BARE_SKILLS</li>
+          <li>&#8226; 2 load strategies: NativePython / Declarative</li>
+          <li>&#8226; 2 dialects: CANONICAL / BARE_SKILLS</li>
           <li>&#8226; Source dir never modified; canonical copy output</li>
         </ul>
       </div>

@@ -42,7 +42,7 @@ interface NavGroup {
 
 /**
  * 把所有业务域的菜单项按 group 拍平成一维分组列表。
- * 顺序由 domains.yaml 的声明顺序决定（医疗的临床业务/知识库 → 法律的法律合同），
+ * 顺序由 domains.yaml 的声明顺序决定（各域声明的菜单分组顺序），
  * 每个分组在侧栏里都是一个平级块，块与块之间用发丝线分割。
  */
 function buildNavGroups(): NavGroup[] {
@@ -81,11 +81,10 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
 
   const handleMainItemClick = (key: typeof MAIN_MENU_ITEMS[number]['key']) => {
     if (key === 'chat') {
-      if (activeSection === 'chat') {
-        onNewSession()
-      } else {
-        onNavigate('chat')
-      }
+      // "新任务" 的语义是始终开启新会话：无论当前在哪个 section（chat / domain / files …），
+      // 都必须清空 activeConvId 让页面回到 landing home。之前在非 chat section 只切 section
+      // 不清 convId，导致旧会话被意外复用（用户以为点了新任务，看到的却是上次的任务）。
+      onNewSession()
       return
     }
     onNavigate(key)
@@ -134,7 +133,7 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
           <HairlineDivider />
           <div className="min-h-0 overflow-y-auto overscroll-contain max-h-[42vh] flex flex-col gap-1">
             {navGroups.map((group, groupIndex) => {
-              // 只有「换域」时才画线：医疗的 临床业务→知识库 属于同一域，靠统一间距衔接
+              // 只有「换域」时才画线：同一域内的多个菜单分组靠统一间距衔接
               const startNewDomain =
                 groupIndex > 0 && navGroups[groupIndex - 1].domainKey !== group.domainKey
               return (

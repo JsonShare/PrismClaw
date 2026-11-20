@@ -7,7 +7,8 @@ frontend/.vite/
 frontend-app/node_modules/
 frontend-app/dist/
 backend/tests/
-deploy/
+deploy/*
+!deploy/sql/
 docs/
 mcp_servers/
 .pytest_cache/
@@ -28,6 +29,6 @@ backend/.prismclaw/**/.work/
 backend/.prismclaw/**/.bash_state/
 backend/.prismclaw/**/.assets-migrated-v1
 
-# 真实配置含密钥，禁止进入构建上下文（deploy/ 已整目录排除）
+# 真实配置含密钥，禁止进入构建上下文（deploy/ 除 sql/ 外整目录排除）
 backend/configs/*.yaml
 !backend/configs/*.example.yaml

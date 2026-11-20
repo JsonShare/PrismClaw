@@ -12,7 +12,7 @@ class PluginSettings(BaseSettings):
     asset_plugins_dir: str = Field("~/.prismclaw/assets/plugins")
 
     # Store specific configurations for individual plugins (e.g., API keys, feature flags)
-    # The key is the plugin namespace (e.g., 'commercial-legal'), and the value is a dict of options.
+    # The key is the plugin namespace (e.g., 'my-plugin'), and the value is a dict of options.
     plugin_configs: dict[str, dict[str, Any]] = Field(
         default_factory=dict
     )

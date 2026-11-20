@@ -13,7 +13,6 @@ class EmbeddingSettings(BaseSettings):
     api_key: str = Field("")
     base_url: str = Field("")
     llm_provider: str | None = Field(default=None)
-    dimensions: int = 4096
 
     model_config = SettingsConfigDict(
         env_prefix="PRISMCLAW_EMBEDDING_",

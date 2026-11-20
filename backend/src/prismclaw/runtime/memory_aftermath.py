@@ -204,11 +204,15 @@ class DefaultMemoryAftermathBoundary:
             )
 
     async def _flush_chat_facts(self, session_id: str) -> None:
-        """Session-end batched extraction over the buffered chat turns.
+        """Session-end batched extraction + independent validator over buffered turns.
 
-        One LLM call per session (budget-gated by MIN_CHAT_TURNS_FOR_EXTRACTION);
-        facts persist via the memorize store() path with a low initial
-        confidence. Buffer is cleared regardless of outcome.
+        两次 LLM 调用：
+          1. extract_chat_facts —— 从对话里提取候选记忆
+          2. validate_facts     —— 独立审查每个候选的主语归属/证据来源/自包含性
+
+        rejected 的直接丢弃，flagged 的降 confidence 存，pass 的正常存。
+        每次写入都记 pc_memory_validation_events（审计污染率）。
+        Buffer is cleared regardless of outcome.
         """
         turns = self._chat_turn_buffer.pop(session_id, None)
         if not turns:
@@ -219,27 +223,49 @@ class DefaultMemoryAftermathBoundary:
             from prismclaw.engine.memory.capture import (
                 MIN_CHAT_TURNS_FOR_EXTRACTION,
                 extract_chat_facts,
-                store_chat_facts,
+                validate_facts,
+                store_validated_chat_facts,
             )
 
             if len(turns) < MIN_CHAT_TURNS_FOR_EXTRACTION:
                 return
             session_key = derive_memory_session_key(session_id)
+
+            # ── Call 1: Extractor ──────────────────────────────────────
             facts = await extract_chat_facts(self._llm_client, turns)
-            if facts:
-                stored = await store_chat_facts(
-                    self._memory_store,
-                    session_key=session_key,
-                    session_id=session_id,
-                    facts=facts,
-                    gateway=self._memory_gateway,
-                )
+            if not facts:
                 logger.info(
-                    "[SDD-A4] chat fact extraction: session=%s turns=%d facts=%d",
-                    session_id,
-                    len(turns),
-                    stored,
+                    "[SDD-A4] chat fact extraction: session=%s turns=%d → 0 facts",
+                    session_id, len(turns),
                 )
+                return
+
+            # ── Call 2: Validator（独立 LLM，fresh perspective）────────
+            validation_results = await validate_facts(
+                self._llm_client, turns, facts
+            )
+
+            # ── Store（validator 结果覆盖 confidence + rejected 丢弃）─
+            stored = await store_validated_chat_facts(
+                self._memory_store,
+                session_key=session_key,
+                session_id=session_id,
+                facts=facts,
+                validation_results=validation_results,
+                gateway=self._memory_gateway,
+                validation_ledger=self._validation_ledger,
+            )
+
+            # 审计日志：通过/标记/拒绝 各多少条
+            pass_count = sum(1 for v in validation_results if v["validation_label"] == "pass")
+            flag_count = sum(1 for v in validation_results if v["validation_label"] == "flagged")
+            reject_count = sum(1 for v in validation_results if v["validation_label"] == "rejected")
+            logger.info(
+                "[SDD-A8] chat fact pipeline: session=%s turns=%d "
+                "extracted=%d pass=%d flagged=%d rejected=%d stored=%d",
+                session_id, len(turns), len(facts),
+                pass_count, flag_count, reject_count, stored,
+            )
 
             # 关系抽取（在 chat_facts 之后触发，数据源是 turns 而非 facts）
             if self._edge_store is not None:

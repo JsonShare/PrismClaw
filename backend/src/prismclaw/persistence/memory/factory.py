@@ -20,7 +20,6 @@ def _build_embedding_client(embedding_settings: EmbeddingSettings):
         model=embedding_settings.model,
         api_key=embedding_settings.api_key,
         api_base=embedding_settings.base_url,
-        dimensions=embedding_settings.dimensions,
         llm_provider=embedding_settings.llm_provider,
     )
 
@@ -60,10 +59,6 @@ def create_memory_store(
             max_chars=memory_settings.l1_max_chars,
             ttl_seconds=memory_settings.l1_ttl_seconds,
         ),
-        l2=PostgresMemoryBackend(
-            engine,
-            embedding,
-            dimensions=embedding_settings.dimensions,
-        ),
+        l2=PostgresMemoryBackend(engine, embedding),
         notary=notary,
     )

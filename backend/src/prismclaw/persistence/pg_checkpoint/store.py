@@ -1,31 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-
-logger = logging.getLogger(__name__)
-
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_run_snapshots (
-    run_id          VARCHAR PRIMARY KEY,
-    session_id      VARCHAR NOT NULL,
-    payload         JSONB NOT NULL DEFAULT '{}'::jsonb,
-    created_at      DOUBLE PRECISION NOT NULL,
-    updated_at      DOUBLE PRECISION NOT NULL
-)
-"""
-
-_INDEX = """
-CREATE INDEX IF NOT EXISTS idx_pc_run_snapshots_session
-ON pc_run_snapshots (session_id, updated_at DESC)
-"""
+from prismclaw.persistence.sql_runner import apply_core_schema
 
 _UPSERT = """
 INSERT INTO pc_run_snapshots (
@@ -59,20 +40,9 @@ class PostgresRunSnapshotStore:
     ) -> None:
         self._session_factory = session_factory
         self._payload_parser = payload_parser
-        self._migrated = False
-        self._init_lock = asyncio.Lock()
 
     async def _init_schema(self) -> None:
-        if self._migrated:
-            return
-        async with self._init_lock:
-            if self._migrated:
-                return
-            async with self._session_factory() as session:
-                async with session.begin():
-                    await session.execute(text(_DDL))
-                    await session.execute(text(_INDEX))
-            self._migrated = True
+        await apply_core_schema(self._session_factory)
 
     async def save(self, snapshot: Any) -> None:
         await self._init_schema()

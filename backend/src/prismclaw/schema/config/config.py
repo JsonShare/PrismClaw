@@ -473,8 +473,8 @@ class RunLoopTuningConfig(BaseModel):
 
     # run 级终态唯一由 CompletionKernel 裁决（预算 / 完成契约 / 恢复熔断）。
     # 工具循环阶梯（doom-loop 签名冻结）只产引导，不终止。
-    # arbiter_recovery_chain_limit 是 RecoveryPolicy 的恢复熔断上限。
-    arbiter_recovery_chain_limit: int = Field(
+    # recovery_chain_limit 是 RecoveryPolicy 的恢复熔断上限。
+    recovery_chain_limit: int = Field(
         default=3,
         description="Max consecutive recovery turns before fatal.",
     )

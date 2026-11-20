@@ -13,31 +13,94 @@ from prismclaw.schema.services.env_types import CommandResult
 from prismclaw.schema.content.workspace import SandboxTier
 
 
+# ─── BashTool description & parameters 生成函数 ─────────────────────
+
+def _bash_description() -> str:
+    """给 LLM 的 bash tool 描述（~350 tokens）。
+
+    只放 LLM **最容易猜错、其他地方不会告诉它**的事实。
+    parameters 里的字段 description 已经覆盖了超时/后台细节，这里不重复。
+    """
+    return (
+        "Execute a bash command, return stdout+stderr with exit_code.\n"
+        "\n"
+        "**Shell model** (do not assume otherwise):\n"
+        "  • Each call spawns a fresh `bash -c`. State does NOT persist.\n"
+        "  • Every call auto-runs this prefix before your command:\n"
+        "      export PRISMCLAW_WORKSPACE=<workspace_root>\n"
+        "      cd sessions/<session_id>/\n"
+        "      export PRISMCLAW_CONTEXT_BLOCKS_DIR=$PWD/context_blocks\n"
+        "      export PRISMCLAW_OUTPUT_DIR=$PWD/outputs\n"
+        "      export PRISMCLAW_UPLOADS_DIR=$PWD/inbox\n"
+        "  • So CWD is always the session root at call start.\n"
+        "\n"
+        "**Reading archived context blocks** — when a block-ref tag says\n"
+        "`[完整内容已归档至：context_blocks/cb_xxx.txt]`, run:\n"
+        "  cat $PRISMCLAW_CONTEXT_BLOCKS_DIR/cb_xxx.txt\n"
+        "NOT `cat $PRISMCLAW_WORKSPACE/context_blocks/...` (workspace root has no\n"
+        "context_blocks dir).\n"
+        "\n"
+        "**Output format**: [stdout]<newline>...<newline>[stderr]<newline>..."
+        "<newline>[exit_code=N]. Non-zero exit = tool error — read stderr before\n"
+        "retrying.\n"
+        "\n"
+        "**DO NOT**: hardcode `/home/...` or `$HOME/...` absolute paths; run\n"
+        "interactive commands (vim, top, less); assume pip/npm are globally\n"
+        "available."
+    )
+
+
+def _bash_parameters() -> dict[str, Any]:
+    """Bash tool JSON Schema parameters.
+
+    极简策略：command 必填 + 可选调优。注意：不支持 workdir 参数——CWD
+    由系统自动 cd 到 session 根，LLM 传了也会被 additionalProperties
+    忽略（不 reject）。
+    """
+    return {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": (
+                    "Shell command to execute. Use `&&` to chain steps. "
+                    "Relative paths resolve to the session root."
+                ),
+            },
+            "description": {
+                "type": "string",
+                "description": (
+                    "1-sentence explanation of what this command does. "
+                    "Read by humans reviewing the execution trace."
+                ),
+            },
+            "blocking_budget_ms": {
+                "type": "number",
+                "description": (
+                    "How long to wait synchronously before detaching "
+                    "(max 15000ms, default 15000). After this the process "
+                    "continues in background; a PID is returned."
+                ),
+            },
+            "timeout_seconds": {
+                "type": "number",
+                "description": (
+                    "Hard kill timeout for background processes, in seconds "
+                    "(default 120). Ignored when the command finishes within "
+                    "blocking_budget_ms."
+                ),
+            },
+        },
+        "required": ["command"],
+    }
+
+
 # ─── BashTool ─────────────────────────────────────────────────────────
 
 class BashTool:
     name = "bash"
-    description = "在工作区中执行 shell 命令，返回 stdout 与 stderr。注意：这是持久会话，环境变量与后台进程会跨调用保留。"
-    parameters: dict[str, Any] = {
-        "type": "object",
-        "properties": {
-            "command": {"type": "string", "description": "要执行的 shell 命令"},
-            "description": {
-                "type": "string",
-                "description": "简要说明该命令的作用（供人工审阅）",
-            },
-            "blocking_budget_ms": {
-                "type": "number",
-                "description": "同步等待的时长（最大 15000ms）。超过后任务会转入后台。",
-            },
-            "timeout_seconds": {
-                "type": "number",
-                "description": "后台任务的硬超时，单位秒（默认 120）",
-            },
-        },
-        "required": ["command"],
-        "additionalProperties": False,
-    }
+    description = _bash_description()
+    parameters: dict[str, Any] = _bash_parameters()
     side_effect = True
     tool_class = "write"
     effect_class = "unknown_effect"
@@ -86,7 +149,7 @@ class BashTool:
         #           → NODE_PATH += <dir>/node_modules（require() 自动发现）
         # 两种环境互不干扰（site-packages ≠ node_modules），可共存同一 <dir>。
         import re as _re
-        from prismclaw.runtime.runtime_root import resolve_runtime_root as _resolve_runtime_root
+        from prismclaw.infra.runtime_root import resolve_runtime_root as _resolve_runtime_root
         from prismclaw.engine.toolkit.builtin.file_helpers import session_root as _session_root
         _raw_skill = getattr(context, "active_skill_name", None) or "_default"
         _skill_safe = _re.sub(r"[^\w.\-]", "_", _raw_skill)[:64] or "_default"

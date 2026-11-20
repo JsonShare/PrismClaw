@@ -1,43 +1,10 @@
 from __future__ import annotations
 
-import asyncio
-
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from prismclaw.persistence.sql_runner import apply_core_schema
 from prismclaw.schema.dream.dream_types import DreamSessionState
-
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_dream_states (
-    session_key                       TEXT PRIMARY KEY,
-    dream_pending                     BOOLEAN NOT NULL DEFAULT FALSE,
-    memory_dirty_score                INTEGER NOT NULL DEFAULT 0,
-    last_activity_at                  DOUBLE PRECISION NOT NULL DEFAULT 0,
-    last_light_at                     DOUBLE PRECISION,
-    last_deep_at                      DOUBLE PRECISION,
-    last_rem_at                       DOUBLE PRECISION,
-    dream_batch_id                    TEXT,
-    dream_lock_owner                  TEXT,
-    light_pending                     BOOLEAN NOT NULL DEFAULT FALSE,
-    nightly_pending                   BOOLEAN NOT NULL DEFAULT FALSE,
-    last_nightly_window_started_at    DOUBLE PRECISION,
-    compile_cursor                    TEXT,
-    last_compile_started_at           DOUBLE PRECISION,
-    last_compile_finished_at          DOUBLE PRECISION,
-    publish_watermark_at              DOUBLE PRECISION,
-    last_compiled_candidate_count     INTEGER NOT NULL DEFAULT 0,
-    last_published_memory_count       INTEGER NOT NULL DEFAULT 0,
-    last_gate_rejected_entries        INTEGER NOT NULL DEFAULT 0,
-    last_compile_status               TEXT,
-    last_enqueue_activity_at          DOUBLE PRECISION,
-    last_enqueue_activity_status      TEXT,
-    last_enqueue_activity_detail      TEXT,
-    last_enqueue_nightly_at           DOUBLE PRECISION,
-    last_enqueue_nightly_status       TEXT,
-    last_enqueue_nightly_detail       TEXT
-)
-"""
 
 _SELECT_COLUMNS = """
     session_key, dream_pending, memory_dirty_score, last_activity_at,
@@ -104,20 +71,9 @@ class PostgresDreamStateStore:
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
-        self._migrated = False
-        self._init_lock = asyncio.Lock()
 
     async def _init_schema(self) -> None:
-        if self._migrated:
-            return
-        async with self._init_lock:
-            if self._migrated:
-                return
-            async with self._sf() as session:
-                conn = await session.connection()
-                await conn.execute(text(_DDL))
-                await session.commit()
-            self._migrated = True
+        await apply_core_schema(self._sf)
 
     async def get(self, session_key: str) -> DreamSessionState | None:
         await self._init_schema()

@@ -1,95 +1,41 @@
-# PrismClaw 业务域配置 — 唯一真实来源 (Single Source of Truth)
+# PrismClaw 业务域注册表 —— 唯一真实来源
 #
-# 本文件是域元数据的唯一注册中心：
-#   - 编译时：domains-registry.mjs 读取此文件，生成前端/后端/部署产物
-#   - 运行时：后端 bundle.py 从生成的 manifest 加载，前端从后端 API 获取
-#
-# 私有化部署裁剪：
-#   1. 将不需要的域 enabled 改为 false
-#   2. 或 Docker 构建时：docker build --build-arg PRISMCLAW_DOMAINS=medical
-#
-# 新增域只需在此文件添加一个条目，然后在对应目录创建代码即可。
+# 编译：node scripts/compile/domains-registry.mjs
+#   产出前端侧栏 / 懒加载映射、各域 _manifest_generated.py、能力开关表与部署 env。
+# 裁剪：把 enabled 改为 false，或构建时传 PRISMCLAW_DOMAINS=medical。
+# 新增：在 domains 下加条目，并在 backend/src/subpackages/<域> 与 frontend/subpackages/<域> 建分包。
 
 domains:
   medical:
     enabled: true
-
-    # ── 基本描述 ──
     label: 医疗工作台
-    # icon 使用 FontAwesome 图标名（后端 manifest 返回，供未来的图标渲染使用）
-    icon: stethoscope
-    # 工作台路由
-    path: /medical
-    # 域内当前页的 URL 参数名（核心据此把 ?mw_page=... 还原成医疗分区，无需认识具体域）
-    url_param: mw_page
 
-    # ── 包发现 ──
-    # Python entry_point（pyproject.toml 中注册）
-    entry_point: subpackages.medical.integration.bundle:MedicalBundle
-    # 后端源码路径
     backend_path: backend/src/subpackages/medical
-
-    # ── 前端分包 ──
-    # 前端分包路径（相对于 frontend/）
     frontend_path: subpackages/medical
-    # React.lazy 动态导入路径（Vite alias @domains → frontend subpackages/）
+    # React.lazy 动态导入（Vite alias @domains → frontend/subpackages）
     lazy_import: "@domains/medical/MedicalWorkbenchPage"
     lazy_export: MedicalWorkbenchPage
 
-    # ── 工作台菜单（menus >= 2 时在系统左侧栏按 group 分组平铺） ──
-    # group     ：侧栏分组标签，同组菜单按声明顺序连排；未声明则归入无标签分组。
-    # icon      ：逻辑图标名，仅写入后端 manifest（协议字段，供其他端使用）。
-    # icon_asset：前端侧栏图片，路径相对本域前端分包（frontend/subpackages/<域>/），
-    #             建议 24×24 单色透明底 SVG/PNG。构建期以 ?url 引入并哈希，
-    #             侧栏用 CSS mask 渲染，会跟随文字颜色（普通/悬停/选中自动变色）。
-    # 渲染位置：核心侧栏（SidebarNav），域内不再渲染自有侧栏。
+    # group：侧栏分组；icon_asset：侧栏图标（相对前端分包，构建期哈希，CSS mask 跟随文字颜色）
     menus:
       - key: records
         label: 智能病历
-        icon: file-text
-        icon_asset: assets/icons/records.svg
         group: 临床业务
+        icon_asset: assets/icons/records.svg
       - key: patients
         label: 患者管理
-        icon: users
-        icon_asset: assets/icons/patients.svg
         group: 临床业务
-      - key: literature
-        label: 文献知识库
-        icon: book-open
-        icon_asset: assets/icons/literature.svg
-        group: 知识库
-      - key: guidelines
-        label: 指南知识库
-        icon: compass
-        icon_asset: assets/icons/guidelines.svg
-        group: 知识库
-      - key: drugs
-        label: 药品知识库
-        icon: pill
-        icon_asset: assets/icons/drugs.svg
-        group: 知识库
+        icon_asset: assets/icons/patients.svg
+      - key: knowledge
+        label: 医学知识库
+        group: 临床业务
+        icon_asset: assets/icons/knowledge.svg
 
-    # ── 前端页面路由 ──
-    # 患者详情为工作台内部状态（URL 同步 ?mw_patient=<id>），不再单独挂路由。
-    pages:
-      - key: workbench
-        path: /medical
-        js_asset: domains/medical
-
-  # ── 法律域 ──
   legal:
     enabled: true
-
     label: 法律工作台
-    icon: gavel
-    path: /legal
-    # 域内当前页的 URL 参数名（核心据此把 ?lw_page=... 还原成法律分区）
-    url_param: lw_page
 
-    entry_point: subpackages.legal.integration.bundle:LegalBundle
     backend_path: backend/src/subpackages/legal
-
     frontend_path: subpackages/legal
     lazy_import: "@domains/legal/LegalWorkbenchPage"
     lazy_export: LegalWorkbenchPage
@@ -97,16 +43,9 @@ domains:
     menus:
       - key: contract
         label: 合同审查
-        icon: file-check
-        icon_asset: assets/icons/contract.svg
         group: 法律合同
+        icon_asset: assets/icons/contract.svg
       - key: compliance
         label: 合规检查
-        icon: shield-check
-        icon_asset: assets/icons/compliance.svg
         group: 法律合同
-
-    pages:
-      - key: workbench
-        path: /legal
-        js_asset: domains/legal
+        icon_asset: assets/icons/compliance.svg

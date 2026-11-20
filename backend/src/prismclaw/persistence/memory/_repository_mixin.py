@@ -725,7 +725,7 @@ class RepositoryMixin(_PostgresBackendBase):
                 str(row[0]), str(row[1] or ""), row[2], row[3], row[4]
             )
             if stored_hash is None:
-                continue  # E2 上线前的旧条目，无 content_hash
+                continue  # 无 content_hash 的条目跳过校验
             expected = hashlib.sha256(
                 f"{eid}\n{content}\n{entity_key}\n{scope}".encode()
             ).hexdigest()

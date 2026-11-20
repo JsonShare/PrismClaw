@@ -112,14 +112,9 @@ HTTP 通信层，工具与 Runtime-Agent 之间的桥梁：
 - 生产环境禁用：`PRISMCLAW_DEPLOYMENT_ENV=production` 时 `_assert_non_production()` 抛错
 - 归档操作为 no-op（进程内模式不支持 Docker）
 
-> **已移除（2026-11）**：`container_backend.py`、`container_manager.py`、
-> `firecracker_backend.py`、`prewarm_pool.py`、`proxy_ha.py`、`template.py`、
-> `builtin_templates.py`、`resource_tiers.py`、`local_transport.py` 全仓零调用方，
-> 已整体删除。生产部署固定为 compose 静态声明 `runtime-agent-default` /
-> `runtime-agent-restricted` 两个服务，由 `PRISMCLAW_RUNTIME_AGENT_URLS` 路由；
-> 不再有按工作区动态创建容器的路径。ContainerBackend / WorkspaceContainerManager /
-> PreWarmPool / ResourceTiers / SandboxTemplate / ProxyHA 各节描述的是已删除实现，
-> 故一并移除。
+> **部署形态**：生产环境由 compose 静态声明 `runtime-agent-default` /
+> `runtime-agent-restricted` 两个服务，经 `PRISMCLAW_RUNTIME_AGENT_URLS` 路由；
+> 不按工作区动态创建容器。
 
 ### Runtime Mode (`mode.py`)
 

@@ -1,7 +1,7 @@
 """P10-SEC-03：RedisConsentStore — 跨实例共享的同意存储。
 
 替代 ConsentGate 默认的 InMemoryConsentStore，使 B/S 多实例部署下
-同意记录可在所有 worker 间共享（医疗/法律 PHI 场景强制要求）。
+同意记录可在所有 worker 间共享（敏感数据场景强制要求）。
 
 存储模型：
   每条同意记录存为 Redis key：

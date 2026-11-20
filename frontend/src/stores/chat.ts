@@ -577,18 +577,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   hydrateRun: (convId, run) =>
     set((state) => {
       const base = ensureConv(state.convStates, convId)
-      // 防复活守卫：run.snapshot 帧在收尾前生成，可能在 chat.done 之后
-      // 才被处理（WS 队列/在途）。若无此守卫，迟到的旧快照会把已定稿的会话
-      // 重新拉回流式态——执行过程 timeline 作为独立流式块复活到已定稿
-      // assistant 消息下方（执行过程与文字层次错乱的直接来源）。仅拦「定稿
-      // 后极短窗口内」的帧；若 run 仍在活跃期（done 属误判/未送达），后端
-      // 周期快照下一帧即自愈。
-      if (
-        !base.isStreaming &&
-        base.lastSettledAt !== null &&
-        Date.now() - base.lastSettledAt < 1500
-      ) {
-        return {}
+      // 守卫判据（OR 短路）：
+      //   A) 时间窗口：定稿后 <1.5s 内的帧一律不接 —— 兜底 run.snapshot 迟到；
+      //   B) 内容收敛：authority 层最后一条是完整 assistant（有正文、非 interrupted）
+      //      → run 已定稿，不管 run_state 说什么都不应复活 —— 堵住 sync 竞态。
+      if (!base.isStreaming) {
+        // A) 时间窗口兜底
+        const settledRecent =
+          base.lastSettledAt !== null &&
+          Date.now() - base.lastSettledAt < 1500
+        // B) 内容收敛检查 —— 权威层最后一条是完整 assistant
+        const lastMsg = base.messages[base.messages.length - 1]
+        const contentText =
+          typeof lastMsg?.content === 'string'
+            ? lastMsg.content.trim()
+            : Array.isArray(lastMsg?.content)
+              ? (lastMsg.content as unknown[]).length > 0
+                ? '[blocks]'
+                : ''
+              : ''
+        const isConverged =
+          lastMsg?.role === 'assistant' &&
+          contentText.length > 0 &&
+          !lastMsg.metadata?.interrupted
+        if (settledRecent || isConverged) {
+          return {}
+        }
       }
       const phase: HeartbeatPayload | null = run.phase
         ? { state: run.phase as HeartbeatPayload['state'], elapsedS: 0 }

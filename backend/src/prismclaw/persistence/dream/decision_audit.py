@@ -1,31 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from prismclaw.persistence.sql_runner import apply_core_schema
 from prismclaw.schema.dream.dream_types import DreamDecisionAuditRecord
-
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS pc_dream_decision_audit (
-    decision_id        TEXT PRIMARY KEY,
-    batch_id           TEXT NOT NULL,
-    session_key        TEXT NOT NULL,
-    record_id          TEXT NOT NULL,
-    target_id          TEXT NOT NULL,
-    action             TEXT NOT NULL,
-    reason             TEXT NOT NULL,
-    health_status      TEXT NOT NULL,
-    rollout_percentage INTEGER NOT NULL DEFAULT 0,
-    trigger            TEXT NOT NULL,
-    dry_run            BOOLEAN NOT NULL DEFAULT FALSE,
-    applied            BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at         DOUBLE PRECISION NOT NULL
-)
-"""
 
 
 class PostgresDreamDecisionAuditStore:
@@ -33,20 +14,9 @@ class PostgresDreamDecisionAuditStore:
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._sf = session_factory
-        self._migrated = False
-        self._init_lock = asyncio.Lock()
 
     async def _init_schema(self) -> None:
-        if self._migrated:
-            return
-        async with self._init_lock:
-            if self._migrated:
-                return
-            async with self._sf() as session:
-                conn = await session.connection()
-                await conn.execute(text(_DDL))
-                await session.commit()
-            self._migrated = True
+        await apply_core_schema(self._sf)
 
     async def record(self, entry: DreamDecisionAuditRecord) -> None:
         await self._init_schema()

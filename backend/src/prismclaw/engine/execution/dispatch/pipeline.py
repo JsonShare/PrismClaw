@@ -34,7 +34,7 @@ from prismclaw.engine.foundation.runtime_util import (
 )
 from prismclaw.schema.llm.tool_call_types import ToolCallBuffer
 from prismclaw.engine.execution.loop.housekeeping import _heartbeat_decision, _log_exec_phase
-from prismclaw.engine.execution.loop.arbiter import RunContext
+from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.trajectory.bus_context import LLMMetricsSnapshot, trajectory_runtime
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.content.streaming import ErrorEvent, HeartbeatEvent, ReasoningChunk, TextChunk
@@ -97,7 +97,7 @@ LLMStreamOutcome = LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStream
 @dataclass
 class PipelineParams:
     """Parameters needed by ``call_llm_stream`` that are derived from the
-    outer loop state but are NOT stored on ``RunContext``.
+    outer loop state but are NOT stored on ``LoopRuntime``.
     """
 
     prepared_turn: Any
@@ -130,7 +130,7 @@ class _OutcomeHolder:
 # ---------------------------------------------------------------------------
 
 async def call_llm_stream_with_outcome(
-    ctx: RunContext,
+    rt: LoopRuntime,
     params: PipelineParams,
     *,
     _outcome: _OutcomeHolder,
@@ -145,14 +145,14 @@ async def call_llm_stream_with_outcome(
     finishes.  The caller creates an ``_OutcomeHolder`` and passes it in::
 
         oh = _OutcomeHolder()
-        async for event in call_llm_stream_with_outcome(ctx, params, _outcome=oh):
+        async for event in call_llm_stream_with_outcome(rt, params, _outcome=oh):
             yield event
         outcome = oh.outcome  # LLMStreamResult / LLMStreamError / ...
     """
-    deps = ctx.deps
-    request = ctx.request
-    tree = ctx.tree
-    snapshot = ctx.snapshot
+    deps = rt.deps
+    request = rt.request
+    tree = rt.tree
+    snapshot = rt.snapshot
     abort_event = params.abort_event
 
     _llm_start = time.monotonic()
@@ -187,7 +187,7 @@ async def call_llm_stream_with_outcome(
             _log_exec_phase(
                 conv_id=request.session_id,
                 phase="waiting_llm",
-                iteration=ctx.iteration,
+                iteration=rt.iteration,
                 elapsed_s=time.monotonic() - params.run_started,
             )
             stream_iter = deps.llm.stream(
@@ -222,7 +222,7 @@ async def call_llm_stream_with_outcome(
                     logger.info(
                         "runner abort during LLM stream: conv_id=%s, iteration=%s, text_parts=%d",
                         request.session_id,
-                        ctx.iteration,
+                        rt.iteration,
                         len(text_parts),
                     )
                     _outcome.outcome = LLMStreamError(
@@ -279,7 +279,7 @@ async def call_llm_stream_with_outcome(
                     _log_exec_phase(
                         conv_id=request.session_id,
                         phase="generating",
-                        iteration=ctx.iteration,
+                        iteration=rt.iteration,
                         elapsed_s=time.monotonic() - params.run_started,
                     )
                 _hb_last_chunk_at = time.monotonic()

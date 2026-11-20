@@ -26,10 +26,6 @@ def _repo_root_from_settings_module() -> Path | None:
         return None
 
 
-def _repo_bundled_skill_candidates(repo_root: Path) -> list[Path]:
-    return []
-
-
 # 模块化配置：锚点文件（server.yaml）同目录下按此顺序加载并深度合并（后者覆盖前者）。
 # 每个模块文件以顶层键为根，例如 infra.yaml 直接写 redis/storage 两段。
 _MODULE_CONFIG_FILES = (
@@ -134,7 +130,7 @@ def config_file_owner(top_key: str) -> Path:
 
 
 def find_config_file() -> Path | None:
-    override = (os.getenv("PRISMCLAW_CONFIG_FILE") or os.getenv("PRISMCLAW_CONFIG_PATH") or "").strip()
+    override = (os.getenv("PRISMCLAW_CONFIG_FILE") or "").strip()
     if override:
         p = Path(override).expanduser()
         if p.is_file():

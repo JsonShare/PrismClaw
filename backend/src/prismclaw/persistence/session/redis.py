@@ -19,7 +19,7 @@ from prismclaw.schema.session import (
     _repair_parent_chain,
 )
 from prismclaw.persistence.lock.redis import LockAcquireError
-from prismclaw.schema.persistence.persistence import LockManager
+from prismclaw.schema.storage.persistence_types import LockManager
 from prismclaw.persistence.session.base import emit_commit_metrics, _generate_session_id
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ class RedisSessionStore:
         sid = tree.header.id
         hdr_json = tree.header.model_dump_json()
         # events 永不过期（TTL=-1），与 event_seq 对齐；source of truth 必须永久保留
-        async with self._client.pipeline(transaction=False) as pipe:
+        async with self._client.pipeline(transaction=True) as pipe:
             pipe.set(self._hdr_key(sid), hdr_json, ex=self._ttl)
             pipe.expire(self._entries_key(sid), self._ttl)
             pipe.expire(self._order_key(sid), self._ttl)
@@ -342,15 +342,15 @@ class RedisSessionStore:
         """
         seq_key = self._event_seq_key(session_id)
 
-        for event in events:
-            next_seq = await self._client.incr(seq_key)
-            event.seq = int(next_seq)
-
         async with self._client.pipeline(transaction=True) as pipe:
+            for _ in events:
+                pipe.incr(seq_key)
             for event in events:
                 pipe.rpush(self._events_key(session_id), event.model_dump_json())
-            # events 永不过期（TTL=-1），与 event_seq 对齐
-            await pipe.execute()
+            results = await pipe.execute()
+
+        for i, event in enumerate(events):
+            event.seq = int(results[i])
 
     async def _apply_projections_from_events(self, session_id: str, events: list[SessionEvent]) -> None:
         """Apply projection updates derived from event data.
@@ -424,7 +424,7 @@ class RedisSessionStore:
 
         hdr_raw = await self._client.get(self._hdr_key(session_id))
 
-        async with self._client.pipeline(transaction=False) as pipe:
+        async with self._client.pipeline(transaction=True) as pipe:
             if entries_to_add:
                 pipe.hset(self._entries_key(session_id), mapping=dict(entries_to_add))
                 pipe.rpush(self._order_key(session_id), *order_ids)
@@ -466,7 +466,7 @@ class RedisSessionStore:
 
     async def set_current_session_id(self, session_key: str, session_id: str) -> None:
         score = time.time() * 1000
-        async with self._client.pipeline(transaction=False) as pipe:
+        async with self._client.pipeline(transaction=True) as pipe:
             pipe.set(self._skey_current_key(session_key), session_id)
             pipe.zadd(self._skey_history_key(session_key), {session_id: score})
             await pipe.execute()
@@ -612,7 +612,7 @@ class RedisSessionStore:
                     updates.append((i, msg_count))
 
             if updates:
-                async with self._client.pipeline(transaction=False) as pipe:
+                async with self._client.pipeline(transaction=True) as pipe:
                     for i, new_count in updates:
                         hdr_raw = hdr_raw_list[i]
                         if hdr_raw is None:
@@ -642,7 +642,7 @@ class RedisSessionStore:
         )
         await self.append_event(event)
 
-        async with self._client.pipeline(transaction=False) as pipe:
+        async with self._client.pipeline(transaction=True) as pipe:
             pipe.delete(self._hdr_key(session_id))
             pipe.delete(self._entries_key(session_id))
             pipe.delete(self._order_key(session_id))

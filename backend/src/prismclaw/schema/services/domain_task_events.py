@@ -1,7 +1,7 @@
 """域任务状态事件 → 平台广播端口的通用适配器。
 
 把 StatusEmitterMixin 发出的事件 dict 转成 DomainTaskEmitter.broadcast 调用。
-域命名空间由 kind 参数化（legal / medical / 自建 agent），
+域命名空间由 kind 参数化（每个域或自建 agent 独立），
 workspace → user 映射由 store._build_status_event 在事件里携带 workspace_id，
 adapter 直接用它当 user_id（resolve_user_workspace 默认恒等映射）。
 
@@ -28,7 +28,7 @@ def make_status_listener(
 
     Args:
         emitter: DomainTaskEmitter 协议实现
-        kind: 域命名空间标识（bundle.name 值，如 legal / medical / my_agent）
+        kind: 域命名空间标识（bundle.name 值，如 my_domain / my_agent）
     """
 
     async def on_status_event(event: dict[str, Any]) -> None:

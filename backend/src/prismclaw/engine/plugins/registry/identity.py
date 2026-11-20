@@ -10,7 +10,7 @@ from functools import total_ordering
 
 # PluginID / 插件名的合法字符集正则
 PLUGIN_ID_PATTERN = re.compile(r"^[a-z0-9][-a-z0-9._]*@[a-z0-9][-a-z0-9._]*$", re.IGNORECASE)
-NAME_PATTERN = re.compile(r"^[a-z0-9][-a-z0-9._]*$", re.IGNORECASE)
+NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{1,62}$")
 
 BUILTIN_SOURCE = "builtin"
 MARKETPLACE_SOURCE = "marketplace"

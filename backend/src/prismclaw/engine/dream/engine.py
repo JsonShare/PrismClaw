@@ -233,7 +233,7 @@ class DreamEngine:
         Light Sleep: 
         - Scan L1 (Redis) for entries older than `light_sleep_threshold_s`.
         - Deduplicate them via LLM.
-        - Promote valid facts to L2 (SQLite/Postgres).
+        - Promote valid facts to L2 (PostgreSQL).
         """
         logger.info("[%s] Entering Light Sleep", session_key)
         # SDD B3: tiers replace the legacy LLM consolidation. Light tier is
@@ -318,8 +318,9 @@ class DreamEngine:
             for action in actions:
                 fact_body = action.get("consolidated_fact")
                 context_prefix = action.get("context", "")
-                fact_type = normalize_type(action.get("type"))
-                if fact_type not in CANONICAL_TYPES:
+                try:
+                    fact_type = normalize_type(action.get("type"))
+                except ValueError:
                     fact_type = "fact"  # LLM 边界：未知词归入 fact
                 orig_ids = action.get("original_ids", [])
                 if not fact_body:

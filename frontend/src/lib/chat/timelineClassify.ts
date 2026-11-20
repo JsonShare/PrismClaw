@@ -10,9 +10,8 @@ import type { TimelineNode } from '../../types'
  *        按 server__search / server:search 名称模式识别）
  *   历史会话中可能出现已下线的内置名 web_search / web_fetch / web_extract。
  *   其余（bash/write/edit/read/glob/grep/skill_search/todo_write/agent_spawn…）
- *   一律归「操作」。后端无文献类 agent 工具（文献检索是 /api/medical
- *   页面级 REST 能力，不进 timeline）——literature 分支为未来 MCP /
- *   医疗工具预留的名称模式，当前常规会话不会命中。
+ *   一律归「操作」。后端无文献类 agent 工具——literature 分支为未来 MCP
+ *   检索工具预留的名称模式，当前常规会话不会命中。
  * ──────────────────────────────────────────────────────────────────────────── */
 
 const LITERATURE_TOOL_RE = /literature|pubmed|guideline_search|drug_search/

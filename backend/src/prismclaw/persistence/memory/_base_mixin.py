@@ -22,7 +22,6 @@ class _PostgresBackendBase:
     # Set in PostgresMemoryBackend.__init__
     _engine: Any
     _embedding: EmbeddingClient | None
-    _dimensions: int | None
     _async_sessionmaker: async_sessionmaker[AsyncSession] | None
     _migrated: bool
     _init_lock: Any  # asyncio.Lock

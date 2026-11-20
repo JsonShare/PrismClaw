@@ -40,9 +40,9 @@ async def stream_llm(
     _remaining_run = _remaining_run_seconds(rt.run_deadline_s, rt.run_started)
 
     if _remaining_run is not None and _remaining_run <= 0:
-        state.ctx.terminated_by = TerminalReason.TIMEOUT
-        from prismclaw.engine.execution.loop.arbiter import mark_task_blocked
-        await mark_task_blocked(state.ctx, "timeout")
+        rt.terminated_by = TerminalReason.TIMEOUT
+        from prismclaw.engine.execution.loop.terminal import mark_task_blocked
+        await mark_task_blocked(rt, "timeout")
         _timeout_error = ErrorEvent(error_code="timeout", message="run exceeded run_seconds")
         state.llm_outcome = LLMStreamError(error_event=_timeout_error)
         return
@@ -132,7 +132,7 @@ async def stream_llm(
         is_last_turn=_ctrl.is_last_turn,
     )
     holder = _OutcomeHolder()
-    async for event in call_llm_stream_with_outcome(state.ctx, _pipeline_params, _outcome=holder):
+    async for event in call_llm_stream_with_outcome(rt, _pipeline_params, _outcome=holder):
         yield event
     state.llm_outcome = holder.outcome
 

@@ -32,7 +32,12 @@ class MemoryTool:
         "密钥与凭据永不写入。\n"
         "save 的 type 决定存储层：procedure 存 L3（工作流），其余存 L2（事实/偏好）；"
         "archive 需 entry_id（记忆中以 [type|id] 展示）与原因。\n"
-        "需在当前会话至少成功执行过一次工具后才能使用。"
+        "\n"
+        "⚠️ Never Infer 敏感属性约束："
+        "健康状态、法律状态、政治/宗教/种族、财务状况、个人身份这些敏感属性，"
+        "**只有用户明确说自己/他人患有/使用/是 X 时才能存成 fact**。"
+        "如果用户只是询问、讨论、帮朋友问 X，绝对禁止存成 fact——"
+        "可存成 preference（用户关注 X 主题）或 observation（讨论过 X）。"
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -104,48 +109,36 @@ class MemoryTool:
     # ── shared guard ───────────────────────────────────────────────────
 
     async def _load_active_session(self, context: ToolContext) -> tuple[Any, str | None]:
-        """Load the session tree and enforce the non-error-tool-use guard.
+        """Load the session tree. 唯一 guard：会话必须存在（有地方写）。
 
-        Returns ``(tree, None)`` on success or ``(None, reason)`` on failure.
+        历史上曾要求「必须有至少一次成功的工具执行」才能写记忆——设计初衷是
+        防止 agent 在未验证内容时就写，避免幻觉污染记忆库。但这个假设不成立：
+
+        1. LLM 第一轮回答就需要写记忆（用户偏好/关键事实），等工具执行过就晚了；
+        2. 调了工具但工具报错，这个 guard 反而会错误放行；
+        3. memory.save 本身就是 LLM 的自主决策——存不存、存什么由模型对自己负责，
+           这是 tool description 里已经明确的契约，不需要额外硬性门槛。
+
+        SDD D8 已废止：`_has_non_error_tool_use` 整个移除，仅保留 session 存在检查。
         """
         try:
             tree = await self._session_store.load(context.session_id)
         except Exception as exc:
             return None, f"加载会话失败：{exc}"
         if tree is None:
-            return None, "需要本会话中已有工具执行记录（会话不存在）"
-        if not self._has_non_error_tool_use(tree):
-            return None, "需要本会话中至少有一次成功的工具执行"
+            return None, "会话不存在，无法写入记忆"
         return tree, None
-
-    @staticmethod
-    def _has_non_error_tool_use(tree) -> bool:
-        """是否存在至少一次「成功」的工具执行。
-
-        SDD D8：任何 role=="tool" 条目（含 error 结果）都算成功的旧语义
-        让报错工具调用也能触发记忆写入；现在依据 MessageEntry.is_error
-        （工具执行循环在 ToolResult.is_error 时置位）排除失败执行。
-        """
-        for entry in tree.entries.values():
-            if (
-                isinstance(entry, MessageEntry)
-                and entry.role == "tool"
-                and not entry.is_error
-            ):
-                return True
-        return False
 
     # ── save ───────────────────────────────────────────────────────────
 
     async def _save(self, call_id: str, args: dict[str, Any], context: ToolContext) -> ToolResult:
         content = args.get("content")
-        # SDD D7: type 走受控词表（归一 + 未知词拒绝），默认 fact。
-        entry_type = normalize_type(args.get("type", "fact"))
-        if entry_type not in CANONICAL_TYPES:
-            allowed = ", ".join(sorted(CANONICAL_TYPES))
-            return error_result(
-                call_id, f"memory：'type' 必须是受控词表之一（{allowed}），实际为 {args.get('type')!r}"
-            )
+        # SDD D7: normalize_type 现在直接 raise（非兼容变更），单点把关。
+        # memory_tools 不再重复 CANONICAL_TYPES check——normalize_type 已经校验。
+        try:
+            entry_type = normalize_type(args.get("type", "fact"))
+        except ValueError as exc:
+            return error_result(call_id, f"memory：{exc}")
 
         if not isinstance(content, str) or not content.strip():
             return error_result(call_id, "memory：'content' 必须是非空字符串")

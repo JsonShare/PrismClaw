@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 import mcp.types as mcp_types
 
-from prismclaw.engine.integrations.mcp.adapter import MCPToolAdapter
+from prismclaw.engine.mcp.adapter import MCPToolAdapter
 from prismclaw.schema.services.mcp_settings import McpServerConfig
 
 

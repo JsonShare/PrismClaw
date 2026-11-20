@@ -3,7 +3,7 @@
  *
  * 设计取舍：
  *   - 不引入 react-router：域页面是懒加载进 ChatPage 的单个组件，挂不了独立路由树
- *   - URL 用 query 参数同步（?mw_page=&mw_patient=），刷新可保持当前视图
+ *   - URL 用 query 参数同步（?domain=medical&page=&mw_patient=），刷新可保持当前视图
  *   - 视图切换走 pushState，因此浏览器前进/后退可用；
  *     页面内「返回」按钮优先 history.back()，无历史时回退到患者列表
  *   - 二级菜单已平铺到系统侧栏：外部通过 page / pageNonce 下发跳转意图，
@@ -20,7 +20,8 @@ export interface WorkbenchRoute {
   patientId: string | null
 }
 
-const PARAM_PAGE = 'mw_page'
+const PARAM_DOMAIN = 'domain'
+const PARAM_PAGE = 'page'
 const PARAM_PATIENT = 'mw_patient'
 
 const DEFAULT_ROUTE: WorkbenchRoute = { page: 'records', patientId: null }
@@ -38,6 +39,7 @@ let consumedIntentNonce = -1
 function parseRoute(): WorkbenchRoute {
   if (typeof window === 'undefined') return DEFAULT_ROUTE
   const params = new URLSearchParams(window.location.search)
+  if (params.get(PARAM_DOMAIN) !== 'medical') return DEFAULT_ROUTE
   const page = params.get(PARAM_PAGE)
   if (!isPageKey(page)) return DEFAULT_ROUTE
 
@@ -46,11 +48,13 @@ function parseRoute(): WorkbenchRoute {
   return { page, patientId }
 }
 
-/** 把路由序列化回 URL（保留其他既有 query 参数，并清掉法律域的 lw_page） */
+/** 把路由序列化回 URL（保留其他既有 query 参数） */
 function toUrl(route: WorkbenchRoute): string {
   const url = new URL(window.location.href)
+  url.searchParams.set(PARAM_DOMAIN, 'medical')
   url.searchParams.set(PARAM_PAGE, route.page)
-  url.searchParams.delete('lw_page')
+  // 知识库 Tab 参数只属于 knowledge 页；离开时清掉，避免 URL 残留
+  if (route.page !== 'knowledge') url.searchParams.delete('mw_kb')
   if (route.patientId === null) url.searchParams.delete(PARAM_PATIENT)
   else url.searchParams.set(PARAM_PATIENT, String(route.patientId))
   return url.toString()

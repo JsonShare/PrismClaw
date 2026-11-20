@@ -170,15 +170,9 @@
   transform: translateY(-2px);
   box-shadow: var(--c-login-card-shadow-hover);
 }
-.domain-card .d-icon { width: 28px; height: 28px; flex-shrink: 0; }
+.domain-card .d-icon { width: 28px; height: 28px; flex-shrink: 0; color: var(--c-accent); }
 .domain-card h3 { font-size: var(--fs-md); font-weight: 600; color: var(--c-text); letter-spacing: -.1px; line-height: 1.3; }
 .domain-card p { font-size: var(--fs-sm); line-height: 1.75; color: var(--c-text-secondary); }
-
-/* 领域卡图标统一为品牌色，去掉四色高饱和，降低模板感 */
-.domain-medical .d-icon,
-.domain-legal   .d-icon,
-.domain-office  .d-icon,
-.domain-base    .d-icon { color: var(--c-accent); }
 
 .login-domain-card {
   background: var(--c-login-card-bg);

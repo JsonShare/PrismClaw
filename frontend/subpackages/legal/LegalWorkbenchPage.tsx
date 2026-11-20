@@ -5,8 +5,8 @@
  * lazy_export 为 `LegalWorkbenchPage` —— 本文件必须保持在分包根目录，不可移入 src/。
  *
  * 二级菜单（合同审查 / 合规检查）已平铺到系统左侧栏，
- * 本骨架接受宿主下发的 page 并回显，同时同步到 URL（?lw_page=），
- * 使子页可深链、刷新不丢当前页。切换域时清掉医疗域的 mw_page，避免地址栏残留。
+ * 本骨架接受宿主下发的 page 并回显，同时同步到 URL（?domain=legal&page=），
+ * 使子页可深链、刷新不丢当前页。切换域时写入本域 domain，并清掉医疗域的详情参数。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -17,8 +17,8 @@ const MENU_LABELS: Record<string, string> = {
   compliance: '合规检查',
 }
 
-const PARAM_PAGE = 'lw_page'
-const PARAM_OTHER = 'mw_page'
+const PARAM_DOMAIN = 'domain'
+const PARAM_PAGE = 'page'
 const DEFAULT_PAGE = 'contract'
 
 function isPageKey(value: string | null): value is string {
@@ -27,17 +27,18 @@ function isPageKey(value: string | null): value is string {
 
 function parsePage(): string | null {
   if (typeof window === 'undefined') return null
-  const value = new URLSearchParams(window.location.search).get(PARAM_PAGE)
+  const params = new URLSearchParams(window.location.search)
+  if (params.get(PARAM_DOMAIN) !== 'legal') return null
+  const value = params.get(PARAM_PAGE)
   return isPageKey(value) ? value : null
 }
 
-/** 写入 URL：设置本域参数，并清掉医疗域参数（避免跨域切换时残留） */
+/** 写入 URL：标记本域并记录当前页，同时清掉医疗域的详情参数 */
 function syncUrl(page: string): void {
   const url = new URL(window.location.href)
+  url.searchParams.set(PARAM_DOMAIN, 'legal')
   url.searchParams.set(PARAM_PAGE, page)
-  url.searchParams.delete(PARAM_OTHER)
-  // 医疗的详情态参数也要清：只清 mw_page 会留下 mw_patient，
-  // 下次进入医疗域时会被 parseRoute 当成有效详情 id 读出来。
+  // 医疗的详情态参数要清：否则下次进入医疗域时会被 parseRoute 当成有效详情 id 读出来。
   url.searchParams.delete('mw_patient')
   window.history.replaceState(null, '', url.toString())
 }

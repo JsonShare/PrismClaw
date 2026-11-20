@@ -82,7 +82,7 @@
   - `get_session_state()` — 获取会话状态
   - `set_result_compaction_config()` — 设置结果压缩配置
   - `set_session_store()` — 设置会话存储
-- **构造方式**：`DefaultContextEngine` 直接实例化（`ContextEngineBuilder` / `DIContainer` 已移除，见 `context_engine.py` 头注释），子服务由 `build_context_service_bundle()` 一次组装
+- **构造方式**：`DefaultContextEngine` 直接实例化，子服务由 `build_context_service_bundle()` 一次组装
 
 ### ContextServiceBundle（`engine/compression/context_bundle.py`）
 

@@ -77,8 +77,7 @@ def _unique_dest(dest: Path) -> Path:
     文件（如两页报告的连续截图 `image.png` + `image.png`），后者会静默覆盖
     前者——两个文件最终落到同一条 ``path``，前端据此回填的 ``source_path``
     也相同，导致图片预览「无法切换」、模型识别「两张一样」（都只读到被覆盖
-    的那一张）。medical/persistence/storage.py 的 ``save_upload_bytes`` 已有
-    相同先例（同名加序号）。序号加在扩展名前（`image (1).png`），既不改扩展
+    的那一张）。域包的 ``save_upload_bytes`` 已有相同先例（同名加序号）。序号加在扩展名前（`image (1).png`），既不改扩展
     名语义，也不影响 ``split_rel_path`` 的路径安全约束。
     """
     if not dest.exists():

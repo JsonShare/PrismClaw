@@ -39,7 +39,7 @@ class BwrapBinaryNotFound(RuntimeError):
 def _resolve_runtime_root() -> Path | None:
     """解析 runtime 卷根；不可用时返回 None（沙箱仍可运行，只是没有技能包）。"""
     try:
-        from prismclaw.runtime.runtime_root import resolve_runtime_root
+        from prismclaw.infra.runtime_root import resolve_runtime_root
 
         return resolve_runtime_root()
     except Exception:

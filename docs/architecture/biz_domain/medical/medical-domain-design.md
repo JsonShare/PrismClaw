@@ -15,495 +15,271 @@
 
 ### 1.1 功能总览
 
-医疗域分为 **5 个核心功能**，质子治疗相关内容融入智能病历作为肿瘤专科子模块：
+医疗域分为 **3 个菜单入口（智能病历 / 患者管理 / 医学知识库）**，其中知识库内含文献/指南/药品三个 Tab；医学翻译仅作为 Agent 工具，不占菜单。
 
 | 菜单名 | 页面路由 | 工具名 | REST 端点 | Agent 执行内容 |
 |---|---|---|---|---|
-| 智能病历 | `/medical/smart-record` | `smart_medical_record` | `POST /api/medical/records/organize` | 解析文件 → 结构化肿瘤病历（TNM分期/IHC/基因检测/化疗方案/放疗记录/irAE/靶向匹配/**质子适应症评估**) |
-| 医学翻译 | `/medical/translate` | `medical_translate` | `POST /api/medical/translate` | 中英互译 + 肿瘤学/放射医学术语对齐 |
-| 搜指南 | `/medical/guideline` | `search_guideline` | `POST /api/medical/guideline/search` | 语义检索 NCCN/CSCO/质子适应症指南 + 摘要生成 |
-| 搜药品 | `/medical/drug` | `search_drug` | `POST /api/medical/drug/search` | 肿瘤药品信息 + 化疗方案模板 + CYP3A4相互作用 + 靶向药-突变匹配 |
-| 搜文献 | `/medical/literature` | `search_literature` | `POST /api/medical/literature/search` | 语义检索文献 + 年会追踪 + 临床试验 + GRADE分级 |
+| 智能病历 | `?domain=medical&page=records` | `smart_medical_record` | `POST /api/medical/records/upload` | 上传文件入队 → 后台解析 → 结构化字段 + AI 摘要；支持待归属队列与重新解析 |
+| 患者管理 | `?domain=medical&page=patients` | `read_patient_profile` / `read_patient_reports` / `read_raw_report` | `GET /api/medical/patients` | 患者列表 / 统计 / 详情 / 报告；详情页内置 AI 咨询（三个只读工具供 Agent 取数） |
+| 医学翻译 | 无独立入口 | `medical_translate` | —（仅 Agent 工具） | 中英互译 + 肿瘤学/放射医学术语对齐 |
+| 医学知识库 · 搜指南 | `?domain=medical&page=knowledge&mw_kb=guidelines` | `search_guideline` | `GET /api/medical/kb/guidelines` | 检索真实导入的 NCCN / CSCO / 中华医学会指南，返回机构、学科、版本、摘要与核心推荐 |
+| 医学知识库 · 搜药品 | `?domain=medical&page=knowledge&mw_kb=drugs` | `search_drug` | `GET /api/medical/kb/drugs` | 按药名/通用名检索说明书（适应症/禁忌/不良反应/相互作用） |
+| 医学知识库 · 搜文献 | `?domain=medical&page=knowledge&mw_kb=literature` | `search_literature` | `GET /api/medical/kb/literature` | 检索知识库中的权威期刊文献（中英标题、研究类型、期刊、影响因子） |
 
-> **关于质子治疗**：模拟定位、治疗计划计算、剂量验证、设备QA是物理/工程流程，依赖专业TPS软件和实际设备，不属于AI智能助手的能力范围。AI只做**适应症评估**（检索指南+推理判断）和**信息管理**（治疗记录整理、随访模板生成），这些融入智能病历的肿瘤专科子模块。
+> 三个检索工具均通过 `KbStore` 读 `pc_medical_kb_*` 真表，不持内置数据集；知识库为只读共享数据，三个 Tab 同属一个页面 `KnowledgePage`。
+
+> **关于肿瘤专科能力**：本域不提供 TNM 分期自动提取、化疗方案模板、靶向药-突变匹配、质子适应症评估（无 `chemo_protocol` / `targeted_match` / `proton_eligibility` 工具）。模拟定位、治疗计划计算、剂量验证、设备 QA 属于物理/工程流程，明确不在 AI 能力范围内。
 
 ---
 
 ### 1.2 各功能详细设计
 
-#### 1.2.1 智能病历（肿瘤专科扩展）
+#### 1.2.1 智能病历
 
-**REST API**
+**REST API（异步解析流水线）**
 
 ```
-POST /api/medical/records/organize
-Content-Type: multipart/form-data
-
-请求：
-  files: UploadFile[]    — 上传的医学文件（JPG/PNG/PDF/TXT/DOCX）
-  specialty: str = "oncology"  — 可选：专科类型，默认肿瘤
+POST /api/medical/records/upload     multipart/form-data  → 202
+  files: UploadFile[]     上传文件（PDF / JPG / PNG / TXT / DOCX）
+  patientId: string?      页内上传时带上，直接归属该患者
 
 响应：
-{
-  "session_id": "med_rec_abc123",
-  "record": {
-    "chief_complaint": "右肺上叶占位伴咳嗽2月余",
-    "present_illness": "患者2月前体检发现右肺上叶占位...",
-    "past_history": "高血压病史5年，规律服药...",
-    "physical_examination": "PS评分 1分，KPS 90分...",
-    "auxiliary_examination": "胸部CT示右肺上叶3.2cm占位...",
+  { "reportIds": ["r_01H...", "r_01H..."] }
 
-    "── 肿瘤专科字段 ──": "",
-    "tnm_staging": {
-      "t": "T2a", "n": "N0", "m": "M0",
-      "stage": "IB", "edition": "AJCC 8th",
-      "basis": "胸部CT+PET-CT+头颅MRI"
-    },
-    "pathology": {
-      "type": "非小细胞肺癌",
-      "subtype": "腺癌",
-      "grade": "中分化",
-      "ihc": { "TTF-1": "+", "Napsin-A": "+", "P40": "-", "Ki-67": "25%" },
-      "molecular": {
-        "EGFR": "19del",
-        "ALK": "阴性",
-        "ROS1": "阴性",
-        "PD-L1 TPS": "60%"
-      }
-    },
-    "treatment_plan": {
-      "intention": "根治性",
-      "modalities": ["手术", "辅助化疗", "免疫治疗"],
-      "chemo_protocol": {
-        "name": "培美曲塞+顺铂",
-        "cycles_planned": 4,
-        "dose": { "pemetrexed": "500mg/m² d1", "cisplatin": "75mg/m² d1" },
-        "cycle_length": "21天"
-      },
-      "targeted_therapy": {
-        "drug": "奥希替尼",
-        "indication": "EGFR 19del阳性",
-        "dose": "80mg qd"
-      }
-    },
-    "performance_status": { "ecog": 1, "kps": 90 },
-    "comorbidity_scores": { "charlson": 2 },
-
-    "── 既往治疗记录 ──": "",
-    "prior_treatments": [
-      {
-        "type": "化疗",
-        "regimen": "培美曲塞+顺铂",
-        "start_date": "2025-03-15",
-        "end_date": "2025-06-20",
-        "cycles_completed": 4,
-        "best_response": "PR",
-        "toxicity": { "grade3": ["中性粒细胞减少"], "grade2": ["恶心"] },
-        "dose_modifications": "第3周期顺铂减量25%"
-      }
-    ],
-    "irae_records": [],
-    "radiation_records": [],
-
-    "── 质子治疗信息 ──": "",
-    "proton_eligibility": {
-      "indication_level": "conditional",    // "strong" | "conditional" | "investigational" | "not_indicated"
-      "indication_basis": [
-        "局部晚期NSCLC，质子治疗可降低正常肺组织剂量",
-        "NCCN NSCLC指南：质子治疗为Conditional适应症"
-      ],
-      "guideline_refs": [
-        { "source": "NCCN NSCLC V5.2025", "recommendation": "特定情况下可考虑质子治疗" },
-        { "source": "ASTRO Model Policy", "recommendation": "Conditional适应症" }
-      ],
-      "special_considerations": ["需进一步影像评估确定OAR距离"]
-    }
-  },
-  "files_processed": 3,
-  "warnings": ["免疫组化部分标记物结果待补充", "基因检测仅覆盖8基因面板"]
-}
+GET  /api/medical/records/?keyword=&reportType=&status=&page=1&pageSize=6
+GET  /api/medical/records/queue                 解析队列（悬浮层轮询）
+GET  /api/medical/records/inbox                 待归属报告
+POST /api/medical/records/{id}/assign           { patientId }
+POST /api/medical/records/{id}/reparse          → 202
+GET  /api/medical/records/{id}/attachments/{i}  原件预览
 ```
 
-**Agent 执行内容**
+单份报告视图模型（`report_to_vm`）主要字段：
 
-1. 调用 `smart_medical_record` 工具提取文件内容（OCR / 文本提取）
-2. 按肿瘤专科病历结构整理：主诉 → 现病史 → 既往史 → 体格检查(含PS评分) → 辅助检查 → TNM分期 → 病理(含IHC/分子检测) → 治疗方案 → 既往治疗记录
-3. 自动提取并填充 TNM 分期（依据 AJCC 8版标准）
-4. 自动匹配化疗方案模板（基于病理类型+分期+PS评分）
-5. 自动匹配靶向药-基因突变对（基于分子检测结果）
-6. **质子治疗适应症评估**（基于诊断+部位+年龄，检索指南判定适应症等级，附指南依据）
-7. 诊断需标注置信度；信息不完整段标注"信息不足"
-8. PHI 信息由 `PhiRedactHook` 钩子自动脱敏
-
-**肿瘤病历结构 vs 通用病历结构对比**
-
-| 字段 | 通用病历 | 肿瘤专科病历（新增/扩展） |
-|---|---|---|
-| 主诉/现病史/既往史 | ✓ | ✓ |
-| 体格检查 | ✓ | ✓（+ ECOG/KPS 评分） |
-| 辅助检查 | ✓ | ✓（+ 影像分期依据） |
-| TNM 分期 | ✗ | ✓（T/N/M/Stage/Edition/Basis） |
-| 病理 | ✗ | ✓（类型/亚型/分级/IHC/分子检测） |
-| 治疗方案 | 简要文字 | ✓（意图/模式/化疗方案模板/靶向药/免疫） |
-| 既往治疗记录 | ✗ | ✓（方案/周期/疗效/毒性/减量） |
-| irAE 记录 | ✗ | ✓（CTCAE分级/处理/转归） |
-| 放疗记录 | ✗ | ✓（靶区/剂量/技术） |
-| 合并症评分 | ✗ | ✓（Charlson指数） |
-| 质子适应症评估 | ✗ | ✓（适应症等级/指南依据/特殊注意事项） |
-
-**现有插件能力映射**
-
-| 能力 | 来源 | 说明 |
-|---|---|---|
-| 文件上传 + OCR | 系统 `RunRequest.files` + `smart_medical_record` 工具 | 支持 JPG/PNG/PDF/TXT/DOCX |
-| 结构化整理 | Agent + 智能病历 SKILL.md | 肿瘤专科 SKILL.md 定义行为规范 |
-| TNM 分期提取 | `smart_medical_record` 工具扩展 | 内置 AJCC 8版分期规则 |
-| 化疗方案匹配 | `chemo_protocol` 工具 | 基于病理+分期+PS查询方案模板库 |
-| 靶向药-突变匹配 | `targeted_match` 工具 | 基于分子检测结果匹配NCCN推荐 |
-| 质子适应症评估 | `proton_eligibility` 工具 | 基于诊断+部位+年龄检索指南判定适应症等级 |
-| PHI 脱敏 | `PhiRedactHook` 钩子 | PRE_TOOL 钩子，仅对医疗域工具生效 |
-| 结果持久化 | `MedicalStore` | 存入 `pc_medical_records` + `pc_oncology_staging` + `pc_oncology_treatments` |
-
----
-
-#### 1.2.2 医学翻译（肿瘤学/放射医学扩展）
-
-**REST API**
-
-```
-POST /api/medical/translate
-Content-Type: application/json
-
-请求：
-{
-  "text": "非小细胞肺癌EGFR突变阳性患者一线推荐奥希替尼",
-  "direction": "zh2en",           // "zh2en" | "en2zh"
-  "specialty": "oncology"         // 可选："oncology" | "radiation_oncology" | "general"
-}
-
-响应：
-{
-  "session_id": "med_trn_def456",
-  "translated_text": "First-line osimertinib is recommended for EGFR mutation-positive non-small cell lung cancer patients",
-  "terms": [
-    { "source": "非小细胞肺癌", "target": "non-small cell lung cancer (NSCLC)", "domain": "oncology" },
-    { "source": "EGFR突变阳性", "target": "EGFR mutation-positive", "domain": "molecular_oncology" },
-    { "source": "奥希替尼", "target": "osimertinib", "domain": "pharmacology" },
-    { "source": "一线推荐", "target": "first-line recommendation", "domain": "guideline" }
-  ]
-}
-```
-
-**肿瘤学/放射医学核心术语库**
-
-| 中文 | 英文 | 领域 |
-|---|---|---|
-| 非小细胞肺癌 | NSCLC (non-small cell lung cancer) | 肿瘤学 |
-| 小细胞肺癌 | SCLC (small cell lung cancer) | 肿瘤学 |
-| 免疫组化 | IHC (immunohistochemistry) | 病理学 |
-| 程序性死亡受体 | PD-1 (programmed death-1) | 免疫肿瘤学 |
-| 程序性死亡配体 | PD-L1 (programmed death-ligand 1) | 免疫肿瘤学 |
-| 相对生物学效应 | RBE (relative biological effectiveness) | 放射医学 |
-| 扩展布拉格峰 | SOBP (spread-out Bragg peak) | 质子治疗 |
-| 笔形束扫描 | PBS (pencil beam scanning) | 质子治疗 |
-| 调强质子治疗 | IMPT (intensity-modulated proton therapy) | 质子治疗 |
-| 危及器官 | OAR (organ at risk) | 放射医学 |
-| 临床靶区 | CTV (clinical target volume) | 放射医学 |
-| 计划靶区 | PTV (planning target volume) | 放射医学 |
-
-**Agent 执行内容**
-
-1. 调用 `medical_translate` 工具查询术语库，获取肿瘤学/放射医学术语对照
-2. Agent 基于术语对照执行翻译，确保专业术语精确对齐
-3. 输出翻译文本 + 术语对照表
-
----
-
-#### 1.2.3 搜指南（NCCN/CSCO/质子适应症扩展）
-
-**REST API**
-
-```
-POST /api/medical/guideline/search
-Content-Type: application/json
-
-请求：
-{
-  "query": "EGFR突变阳性NSCLC一线治疗",
-  "specialty": "oncology",         // 可选
-  "guideline_source": "nccn",      // 可选："nccn" | "csco" | "esmo" | "asco" | "proton_indication" | "all"
-  "category": "treatment",         // 可选："treatment" | "staging" | "follow_up" | "supportive_care"
-  "limit": 5
-}
-
-响应：
-{
-  "session_id": "med_gln_789",
-  "results": [
-    {
-      "title": "NCCN Non-Small Cell Lung Cancer (Version 5.2025)",
-      "summary": "EGFR exon 19 del/L858R阳性：一线推荐奥希替尼(Category 1)...",
-      "source": "NCCN",
-      "version": "5.2025",
-      "category_evidence": "Category 1",
-      "year": 2025,
-      "confidence": 0.95,
-      "url": "https://..."
-    },
-    {
-      "title": "CSCO 非小细胞肺癌诊疗指南（2025版）",
-      "summary": "EGFR敏感突变：I级推荐奥希替尼...",
-      "source": "CSCO",
-      "version": "2025",
-      "category_evidence": "I级推荐",
-      "year": 2025,
-      "confidence": 0.92,
-      "url": "https://..."
-    }
-  ],
-  "total": 3
-}
-```
-
-**指南检索特有工作流**
-
-| 场景 | 检索策略 | 示例 |
-|---|---|---|
-| NCCN 指南 | 版本号 + Category分级 + 证据类型 | "NSCLC V5.2025, Category 1" |
-| CSCO 指南 | 推荐分级（I/II/III级）+ 证据级别 | "I级推荐，1A类证据" |
-| 质子治疗适应症 | 指南来源 + 适应症等级 | "NCCN推荐儿童实体瘤质子治疗" |
-| 随访指南 | 术后/放化疗后随访时间点 | "NSCLC术后随访：前2年每6月CT" |
-| 支持治疗 | 骨改良药物/G-CSF/止吐 | "高致吐方案止吐推荐" |
-
-**Agent 执行内容**
-
-1. 调用 `search_guideline` 工具检索指南数据库
-2. Agent 对返回结果生成摘要，提炼与查询相关的关键推荐
-3. NCCN 指南标注 Category 分级（1/2A/2B/3），CSCO 指南标注推荐分级
-4. 质子适应症指南标注适应症等级
-5. 按置信度和证据级别排序输出
-
----
-
-#### 1.2.4 搜药品（肿瘤药品扩展）
-
-**REST API**
-
-```
-POST /api/medical/drug/search
-Content-Type: application/json
-
-请求：
-{
-  "drug_name": "奥希替尼",
-  "query_type": "interaction"      // "info" | "interaction" | "dosage" | "protocol" | "target_match"
-}
-
-响应（query_type = "info"）：
-{
-  "session_id": "med_drg_012",
-  "drug_info": {
-    "generic_name": "奥希替尼",
-    "brand_names": ["泰瑞沙", "Tagrisso"],
-    "category": "第三代表皮生长因子受体酪氨酸激酶抑制剂(EGFR-TKI)",
-    "indication": "EGFR T790M突变阳性NSCLC/EGFR敏感突变一线",
-    "mechanism": "不可逆结合EGFR T790M及敏感突变...",
-    "molecular_target": "EGFR",
-    "required_mutation": ["EGFR 19del", "EGFR L858R", "EGFR T790M"],
-    "contraindications": "...",
-    "adverse_reactions": "...",
-    "dosage": "80mg qd, 口服",
-    "interactions": [
-      { "drug": "CYP3A4强诱导剂(如利福平)", "severity": "high", "description": "降低奥希替尼血药浓度", "mechanism": "CYP3A4代谢" },
-      { "drug": "CYP3A4强抑制剂(如伊曲康唑)", "severity": "medium", "description": "升高奥希替尼血药浓度", "mechanism": "CYP3A4代谢" }
-    ]
-  }
-}
-
-响应（query_type = "protocol"）：
-{
-  "session_id": "med_drg_013",
-  "protocols": [
-    {
-      "name": "培美曲塞+顺铂+帕博利珠单抗",
-      "indication": "非鳞NSCLC一线（PD-L1 TPS<50%或阴性）",
-      "source": "NCCN NSCLC V5.2025",
-      "category": "Category 1",
-      "drugs": [
-        { "name": "培美曲塞", "dose": "500mg/m² d1", "route": "IV" },
-        { "name": "顺铂", "dose": "75mg/m² d1", "route": "IV" },
-        { "name": "帕博利珠单抗", "dose": "200mg d1", "route": "IV" }
-      ],
-      "cycle_length": "21天",
-      "cycles": 4,
-      "premedication": ["地塞米松4mg bid ×3天(培美曲塞前1天起)", "维生素B12 1000μg IM q9w", "叶酸400μg qd"],
-      "dose_modifications": [...],
-      "monitoring": ["血常规q周期", "肝肾功能q周期", "甲状腺功能q3周期"]
-    }
-  ]
-}
-
-响应（query_type = "target_match"）：
-{
-  "session_id": "med_drg_014",
-  "matches": [
-    {
-      "mutation": "EGFR 19del",
-      "drug": "奥希替尼",
-      "line": "一线",
-      "evidence_level": "Category 1",
-      "guideline": "NCCN NSCLC V5.2025",
-      "notes": "优于一代TKI(FLAURA研究)"
-    },
-    {
-      "mutation": "EGFR 19del",
-      "drug": "埃克替尼/吉非替尼/厄洛替尼",
-      "line": "一线(替代)",
-      "evidence_level": "Category 1",
-      "guideline": "NCCN NSCLC V5.2025",
-      "notes": "奥希替尼为优选"
-    }
-  ]
-}
-```
-
-**肿瘤药品特有维度**
-
-| 维度 | 说明 | 示例 |
-|---|---|---|
-| 药品分类 | 化疗/靶向/免疫/支持治疗 | 培美曲塞(化疗)、奥希替尼(靶向)、帕博利珠单抗(免疫) |
-| 分子靶点 | 靶向药需标注作用靶点 | EGFR、ALK、ROS1、BRAF、HER2、KRAS G12C |
-| 必需基因检测 | 靶向药使用前必需的检测 | 奥希替尼→EGFR突变; 克唑替尼→ALK融合 |
-| 化疗方案模板 | 多药联合方案+剂量+周期+预处理 | 培美曲塞+顺铂方案含预处理要求 |
-| CYP3A4 相互作用 | 肿瘤药代谢途径关键交互 | 奥希替尼经CYP3A4代谢，避免强诱导剂 |
-| 剂量调整规则 | 基于毒性的减量方案 | 3级中性粒细胞减少→下一周期减量25% |
-
-**Agent 执行内容**
-
-1. 调用 `search_drug` 工具查询药品数据库
-2. 根据 `query_type` 聚焦返回：
-   - `info`：基本信息 + 分子靶点 + 必需检测 + CYP3A4相互作用
-   - `interaction`：药物相互作用（聚焦CYP酶系）
-   - `dosage`：用法用量 + 特殊人群调整
-   - `protocol`：化疗方案模板（多药联合+剂量+周期+预处理+监测）
-   - `target_match`：靶向药-基因突变匹配（基于NCCN推荐）
-3. 相互作用分析标注 CYP3A4 代谢途径和严重程度
-
----
-
-#### 1.2.5 搜文献（肿瘤文献扩展）
-
-**REST API**
-
-```
-POST /api/medical/literature/search
-Content-Type: application/json
-
-请求：
-{
-  "query": "osimertinib first-line NSCLC EGFR",
-  "year_from": 2020,
-  "year_to": 2025,
-  "study_type": "rct",            // 可选："rct" | "meta" | "cohort" | "case_series" | "all"
-  "conference": "asco_2025",      // 可选："asco_2025" | "esmo_2025" | "wclc_2025" | "all"
-  "limit": 10
-}
-
-响应：
-{
-  "session_id": "med_lit_345",
-  "results": [
-    {
-      "title": "FLAURA: Osimertinib vs Comparator EGFR-TKI as First-Line Treatment...",
-      "authors": "Soria JC, et al.",
-      "journal": "New England Journal of Medicine",
-      "year": 2018,
-      "doi": "10.1056/NEJMoa1713137",
-      "abstract": "Objective: To compare osimertinib with gefitinib or erlotinib...",
-      "study_type": "rct",
-      "phase": "III",
-      "grade": "A",
-      "confidence": 0.95,
-      "is_conference_abstract": false
-    },
-    {
-      "title": "LAURA: Osimertinib after chemoradiotherapy in EGFR-mutated NSCLC (ASCO 2025)",
-      "authors": "Lu S, et al.",
-      "conference": "ASCO 2025",
-      "year": 2025,
-      "abstract": "Background: LAURA evaluated osimertinib as consolidation...",
-      "study_type": "rct",
-      "phase": "III",
-      "grade": "B",
-      "confidence": 0.85,
-      "is_conference_abstract": true
-    }
-  ],
-  "total": 7
-}
-```
-
-**肿瘤文献检索特有维度**
-
-| 维度 | 说明 |
+| 字段 | 说明 |
 |---|---|
-| 研究类型 | RCT / Meta分析 / 队列研究 / 病例系列 |
-| 临床试验阶段 | I/II/III期 |
-| GRADE 证据分级 | A(高质量)/B(中等)/C(低)/D(极低) |
-| 年会追踪 | ASCO/ESMO/WCLC/AACR 最新摘要 |
-| 预后评分 | KPS/ECOG/Charlson 相关研究 |
+| `id` / `patientId` / `fileName` / `fileType` / `mimeType` | 基础元信息 |
+| `status` / `progress` / `retryCount` / `errorMessage` | 解析生命周期（排队中 / 解析中 / 已解析 / 失败） |
+| `rawText` | OCR / 文本层抽取结果 |
+| `visitDate` / `department` / `diagnosis` / `hospitalName` / `doctorName` | 从原文抽取的就诊信息 |
+| `narrativeJson` / `labsJson` / `medicationsJson` / `tagsJson` | 结构化字段（JSONB） |
+| `summary` | AI 摘要 |
+| `attachmentsJson` | 多页/多图归组 |
+| `patientNameRaw` / `matchReason` | 未归属时的指派线索（exact / ambiguous / no_match） |
+
+**处理链路**
+
+1. `upload` 落 `pc_medical_patient_reports`（`create_by` = 当前用户，`patient_id` 可空），立即返回 202
+2. `BackgroundTasks` 执行 `_run_parse_then_maybe_analysis`：解析（文本层 / OCR / 视觉模型）→ 写结构化字段与摘要 → 状态置完成
+3. 解析成功且已归属患者时，自动触发 `pc_medical_briefs` 分析流水线；分析失败不影响解析结果
+4. 前端 `ParseQueueFloat` 轮询 `/queue` 展示进度；`/inbox` 提供人工指派兜底
+
+**与 Agent 的关系**
+
+`smart_medical_record` 工具仍保留：在对话里上传文件时由 Agent 调用完成解析与结构化，与页面上传共用同一 `MedicalStore`，写入同一张表。
+
+#### 1.2.2 医学翻译
+
+**无独立 REST 端点、无独立页面**，仅注册为 Agent 工具 `medical_translate`：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `text` | string | 必填，待翻译文本 |
+| `direction` | string | `zh2en` / `en2zh` |
+| `specialty` | string | 可选，`oncology` / `radiation_oncology` / `general` |
+
+术语对照（如 NSCLC / IHC / PD-L1 / RBE / SOBT / IMPT / OAR / CTV / PTV）由工具内术语表提供，Agent 基于术语对照完成翻译并输出中英对照表。
+
+
+#### 1.2.3 搜指南（医学知识库 Tab）
+
+**REST API**（只读列表，前端单页三 Tab 之一）
+
+```
+GET /api/medical/kb/guidelines
+Authorization: Bearer <jwt>
+
+查询参数：
+  keyword    string  检索关键词，匹配 title / title_cn / authors（如「胃癌」）
+  category   string  分类筛选（"全部" 或具体类别）
+  sort       string  排序："year"（默认，按发布时间倒序）| "name"
+  page       int     页码，默认 1
+  pageSize   int     每页条数，默认 8（上限 100）
+
+响应：
+{
+  "items": [
+    {
+      "id": "nccn-gastric-2026",
+      "title": "NCCN Clinical Practice Guidelines in Oncology: Gastric Cancer",
+      "titleCn": "胃癌",
+      "docType": "指南",
+      "authors": "NCCN Gastric Cancer Panel",
+      "specialty": "消化肿瘤",
+      "region": "NCCN",
+      "org": "NCCN",
+      "year": 2026,
+      "ver": "Version 4.2026",
+      "cat": "治疗",
+      "abstract": "Overview 段落（PDF 解析所得）",
+      "points": ["核心推荐 1", "核心推荐 2"],
+      "publishedAt": "2026-01-15T00:00:00+00:00"
+    }
+  ],
+  "total": 9,
+  "page": 1,
+  "pageSize": 8
+}
+```
+
+数据来源唯一：`pc_medical_kb_guidelines`，由 `backend/tools/ingest_guidelines.py` 解析真实 PDF 写入（`source='import:pdf'`），不在种子模块中维护任何虚构指南。
+
+**Agent 工具** `search_guideline`
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `query` | string | 必填，疾病名 / 指南名 / 发布机构 |
+| `year_from` / `year_to` | int | 可选，发表年份区间（在工具内二次过滤） |
+| `limit` | int | 默认 10 |
+
+工具经 `KbStore.list_guidelines()` 读真实表，返回 `title` / `title_cn` / `organization` / `doc_type` / `specialty` / `region` / `year` / `version` / `authors` / `summary` / `key_recommendations`。
 
 **Agent 执行内容**
 
-1. 调用 `search_literature` 工具检索文献数据库
+1. 调用 `search_guideline` 检索知识库中的真实指南
+2. Agent 基于返回的摘要与核心推荐组织回答，并注明机构、版本与年份
+3. 指南内容不足以回答时如实说明，不臆造推荐等级
+
+---
+
+#### 1.2.4 搜药品（医学知识库 Tab）
+
+**REST API**（只读列表）
+
+```
+GET /api/medical/kb/drugs
+Authorization: Bearer <jwt>
+
+查询参数：
+  keyword        string  药名 / 通用名（如「奥希替尼」或「Osimertinib」）
+  category       string  分类筛选（"全部" 或具体类别）
+  essentialOnly  bool    仅国家基本药物，默认 false
+  page           int     默认 1
+  pageSize       int     默认 8（目录场景上限 500，一次取全）
+
+响应：
+{
+  "items": [
+    {
+      "id": "osimertinib",
+      "name": "奥希替尼",
+      "generic": "Osimertinib (Tagrisso)",
+      "cat": "抗肿瘤药和免疫机能调节药",
+      "kind": "西药",
+      "atcL1": "抗肿瘤药和免疫机能调节药",
+      "atcL2": "靶向药物",
+      "atcGroup": "EGFR-TKI",
+      "atcGroupDesc": "表皮生长因子受体酪氨酸激酶抑制剂",
+      "dosage": "80mg po qd",
+      "indications": ["EGFR突变NSCLC一线", "T790M耐药后", "术后辅助"],
+      "mechanism": "第三代EGFR-TKI，不可逆抑制EGFR敏感突变和T790M耐药突变。",
+      "sideEffects": ["皮疹", "腹泻", "甲沟炎"],
+      "contraindications": ["QTc间期延长"],
+      "interactions": [...],
+      "pregnancy": "D",
+      "essential": false
+    }
+  ],
+  "total": 92,
+  "page": 1,
+  "pageSize": 8
+}
+```
+
+前端 `DrugCatalog` 一次取全（`pageSize=500`）后在内存组树：西药/中成药 → 一级分类 → 二级分类 → 药物组；输入关键词时第三栏切换为扁平搜索结果。
+
+**Agent 工具** `search_drug`
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `query` | string | 必填，药名或通用名（商品名与通用名都可命中） |
+| `action` | string | `info`（默认，用法用量/机制/妊娠分级）/ `indication`（适应症/禁忌/不良反应）/ `interaction`（相互作用） |
+| `limit` | int | 默认 10 |
+
+工具经 `KbStore.list_drugs()` 读 `pc_medical_kb_drugs`。
+
+---
+
+#### 1.2.5 搜文献（医学知识库 Tab）
+
+**REST API**（只读列表）
+
+```
+GET /api/medical/kb/literature
+Authorization: Bearer <jwt>
+
+查询参数：
+  keyword   string  检索关键词，匹配 title / title_en / title_cn
+  category  string  分类筛选（"全部" 或具体类别）
+  year      int     年份筛选（可选）
+  page      int     默认 1
+  pageSize  int     默认 8（上限 100）
+
+响应：
+{
+  "items": [
+    {
+      "id": "101056nejmoa2500123",
+      "title": "Melanoma Prevention Among Children of Melanoma Survivors",
+      "titleEn": "Melanoma Prevention Among Children of Melanoma Survivors",
+      "titleCn": "黑色素瘤幸存者子女的黑色素瘤预防",
+      "studyType": "RCT",
+      "authors": "Landi MT, et al.",
+      "journal": "N Engl J Med",
+      "journalTags": ["独家原文", "TOP期刊", "JCR Q1", "中科院1区"],
+      "impactFactor": 96.2,
+      "publishedAt": "2026-11-19T00:00:00+00:00",
+      "year": 2025,
+      "category": "黑色素瘤",
+      "abstract": "...",
+      "keywords": ["黑色素瘤", "预防", "筛查"],
+      "citations": 18,
+      "doi": "10.1056/NEJMoa2500123"
+    }
+  ],
+  "total": 12,
+  "page": 1,
+  "pageSize": 8
+}
+```
+
+数据来源：`persistence/seeds/kb.py` 的 `_LITERATURE_SEEDS`（12 条真实期刊文献），由 `backend/tools/seed_kb.py` 幂等灌入。
+
+**Agent 工具** `search_literature`
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `query` | string | 必填，疾病名 / 药物名 / 研究主题 |
+| `year_from` / `year_to` | int | 可选，发表年份区间 |
+| `limit` | int | 默认 10 |
+
+工具经 `KbStore.list_literatures()` 读 `pc_medical_kb_literatures`，返回 `title` / `title_cn` / `authors` / `journal` / `journal_tags` / `impact_factor` / `study_type` / `year` / `published_at` / `doi` / `abstract`。
+
+**Agent 执行内容**
+
+1. 调用 `search_literature` 工具检索文献库
 2. Agent 对返回文献生成中文摘要，提炼研究目的、方法、结论
-3. 自动标注研究类型、临床阶段、GRADE 分级
-4. 年会摘要标注会议来源
-5. 按相关度、证据等级、时效性排序
+3. 标注研究类型、期刊与影响因子；命中年会摘要时标注会议来源
+4. 库内无匹配文献时如实反馈"知识库暂无相关文献"
 
 ---
 
-### 1.3 质子适应症评估（智能病历子模块）
+### 1.3 域 Agent 会话机制
 
-质子治疗相关内容不作为独立功能，而是融入智能病历的肿瘤专科子模块。AI 只做适应症评估和信息管理，不做物理/工程流程。
-
-**AI 能做 vs 不能做**
-
-| AI 能做 | AI 不能做（需专业设备/软件） |
-|---|---|
-| 适应症等级判定（检索NCCN/ASTRO指南+推理） | 模拟定位（CT模拟/MRI融合/4D-CT） |
-| 指南依据匹配与引用 | 治疗计划计算（IMPT/PBS参数优化/SOBP设计） |
-| 禁忌症筛查 | 剂量验证（RBE校正/输出因子测量） |
-| 治疗记录整理与结构化存储 | 计划审核（DVH评估/鲁棒性分析） |
-| 随访模板生成 | 治疗实施（IGRT/体位验证） |
-| RBE/SOBP/PBS/IMPT 概念解释 | 设备QA（日常/周度/月度/年度） |
-
-**质子治疗适应症分级**
-
-| 等级 | 定义 | 典型适应症 |
-|---|---|---|
-| Strong | 指南明确推荐，医保覆盖 | 儿童实体瘤、眼部黑色素瘤、颅底脊索瘤/软骨肉瘤 |
-| Conditional | 有证据支持，需个体化评估 | 局部晚期前列腺癌、头颈部癌(降低毒性)、再程放疗 |
-| Investigational | 临床研究阶段 | 乳腺癌(降低心脏毒性)、肝癌、胰腺癌 |
-| Not Indicated | 不推荐或禁忌 | 常规可光子治疗且无特别优势的部位 |
-
-**触发时机**：智能病历整理时，若 `specialty="oncology"` 且病历中涉及放疗相关内容，自动执行质子适应症评估，将评估结果写入 `proton_eligibility` 字段。
-
-### 1.4 域 Agent 会话机制
-
-执行模型参见 domain-bundle-design.md §执行模型。医疗域通过 `DomainLifecycleContext.chat_service` 创建带域技能的 Agent 会话：
-
-```python
-chat_service = ctx.chat_service
-result = await chat_service.create_session(
-    domain="medical",
-    message="请整理这些文件为结构化肿瘤病历",
-    files=files,
-    skill_hint="智能病历",
-)
-```
+执行模型参见 domain-bundle-design.md §执行模型。患者详情页的 AI 咨询通过 `POST /api/medical/consultations/` 创建会话（登记到 `pc_medical_consultations`），`SESSION_START` 钩子 `ConsultationContextHook` 注入该患者报告清单摘要；Agent 只能经 `read_patient_profile` / `read_patient_reports` / `read_raw_report` 三个只读工具取数，不直接拼 SQL。
 
 ---
+
 
 ## 二、UI 设计
 
@@ -511,7 +287,7 @@ result = await chat_service.create_session(
 
 ### 2.1 侧边栏与工作台入口
 
-启用医疗域后，侧边栏新增**一级入口**，点击进入医疗工作台（内嵌二级菜单 + 功能页面）：
+启用医疗域后，侧边栏出现**一级入口**，其下平铺二级菜单（由 `scripts/compile/domains.yaml` 的 `group` 驱动，核心侧栏渲染）：
 
 ```
 ┌──────────┐
@@ -520,684 +296,321 @@ result = await chat_service.create_session(
 │ 自动化    │  ← 固定
 │ 产出物    │  ← 固定
 │──────────│
-│ 🏥 医疗   │  ← 点击进入医疗工作台（非展开子菜单）
+│ 🏥 医疗工作台
+│    临床业务
+│      智能病历
+│      患者管理
+│      医学知识库
 └──────────┘
 ```
 
-### 2.2 医疗工作台页面（MedicalWorkbenchPage）
+### 2.2 医疗工作台页面（MedicalWorkbenchApp）
 
-工作台是一个完整的工作空间，左侧内嵌二级菜单，右侧展示对应功能页面：
+医疗域只渲染**内容区**单列，域内不设自己的侧栏/抽屉：
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  🏥 医疗工作台                                                    │
-│  ─────────────────────────────────────────────────────────────── │
-│                                                                  │
-│  ┌──────────┐  ┌──────────────────────────────────────────────┐  │
-│  │          │  │                                              │  │
-│  │ 智能病历  │  │  ← 当前选中的功能页面内容                      │  │
-│  │ 医学翻译  │  │     默认展示"智能病历"                         │  │
-│  │ 搜指南    │  │                                              │  │
-│  │ 搜药品    │  │                                              │  │
-│  │ 搜文献    │  │                                              │  │
-│  │          │  │                                              │  │
-│  └──────────┘  └──────────────────────────────────────────────┘  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  MedicalWorkbenchApp                                         │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  main（mw-cq 容器查询上下文，内部滚动）                  │  │
+│  │                                                        │  │
+│  │  当前页面：智能病历 / 患者管理 / 医学知识库 / 患者详情    │  │
+│  │                                                        │  │
+│  └────────────────────────────────────────────────────────┘  │
+│  ParseQueueFloat（右下角解析队列浮层）                        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 **布局规范**
 
 | 区域 | 样式 |
 |---|---|
-| 工作台容器 | `flex-1 overflow-hidden flex min-w-[950px]` |
-| 左侧菜单栏 | `w-[200px] shrink-0 border-r border-[var(--c-border)] px-3 py-4 flex flex-col gap-1` |
-| 菜单项 | `px-3 py-2.5 rounded-lg text-[var(--fs-body)] cursor-pointer`，选中 `bg-[var(--c-surface-2)] text-[var(--c-accent)]`，hover `bg-[var(--c-surface-2)]/50` |
-| 右侧内容区 | `flex-1 overflow-y-auto`，承载各功能页面 |
-| 菜单来源 | `DomainManifest.menus` → 动态渲染，不硬编码 |
+| 外层容器 | `relative h-full w-full flex flex-col p-3 sm:p-4 lg:p-5 min-h-0 overflow-hidden` |
+| `<main>` | `mw-cq flex-1 min-w-0 min-h-0 overflow-y-auto mw-scroll` |
+| 解析队列浮层 | `<ParseQueueFloat />`，`createPortal` 到 body，固定右下角 |
 
 **交互流程**
 
-1. 用户点击侧边栏"医疗" → 路由到 `/medical` → 渲染 `MedicalWorkbenchPage`
-2. 工作台默认选中第一个菜单项（智能病历），右侧展示对应功能页面
-3. 点击左侧菜单项 → 右侧切换功能页面，不跳路由（单页 Tab 模式）
-4. 每个功能页面的内部交互逻辑不变
+1. 侧栏点击子项 → 宿主经 `page` / `pageNonce` 下发跳转意图 → 域内切页
+2. 刷新 / 前后翻页 → 域内 URL（`?domain=medical&page=&mw_patient=&mw_kb=`）自行解析
+3. 域切页后调 `reportDomainPage` 回报，侧栏据此高亮
 
 **路由设计**
 
-| 路由 | 页面 | 说明 |
+| 路由 | 页面组件 | 说明 |
 |---|---|---|
-| `/medical` | `MedicalWorkbenchPage` | 工作台入口，默认显示智能病历 |
-| `/medical?tab=translate` | `MedicalWorkbenchPage` | 工作台，显示医学翻译 |
-| `/medical?tab=guideline` | `MedicalWorkbenchPage` | 工作台，显示搜指南 |
-| `/medical?tab=drug` | `MedicalWorkbenchPage` | 工作台，显示搜药品 |
-| `/medical?tab=literature` | `MedicalWorkbenchPage` | 工作台，显示搜文献 |
+| `?domain=medical&page=records` | `MedicalRecordsPage` | 默认页；三栏：患者选择 / 报告列表 / 报告详情 |
+| `?domain=medical&page=patients` | `PatientsPage` | 患者管理列表 |
+| `?domain=medical&page=knowledge&mw_kb=literature` | `KnowledgePage` | 医学知识库 · 搜文献（缺省 Tab） |
+| `?domain=medical&page=knowledge&mw_kb=guidelines` | `KnowledgePage` | 医学知识库 · 搜指南 |
+| `?domain=medical&page=knowledge&mw_kb=drugs` | `KnowledgePage` | 医学知识库 · 搜药品 |
+| `?domain=medical&page=records&mw_patient=P0001` | `PatientDetailPage` | 患者详情（两栏：档案 / AI 咨询），不在侧栏导航中 |
 
-### 2.3 智能病历页面（SmartRecordPage）
+> 医学翻译没有独立页面：`medical_translate` 仅作为 Agent 工具注册，供对话内调用。
 
-**页面结构**
+### 2.3 智能病历页面（MedicalRecordsPage）
+
+三栏 + 右下角全局解析队列浮层：
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  智能病历 · 肿瘤专科                                           │
-│  上传文件，AI 自动整理成结构化肿瘤病历                            │
-│  ─────────────────────────────────────────────────────────── │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │                                                        │  │
-│  │    📎 拖拽上传或点击选择文件                             │  │
-│  │       支持 JPG、PNG、PDF、TXT、DOCX                     │  │
-│  │                                                        │  │
-│  └────────────────────────────────────────────────────────┘  │
-│                                                              │
-│  已上传：                                                     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐       │
-│  │📄 门诊记录│ │🖼️ CT扫描 │ │🧬 基因检测│ │📋 病理报告│       │
-│  │  PDF 2.1MB│ │ DICOM 12MB│ │  PDF 0.5MB│ │  PDF 1.2MB│       │
-│  │       ✕  │ │       ✕  │ │       ✕  │ │       ✕  │       │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘       │
-│                                                              │
-│  [整理病历]                                                   │
-│                                                              │
-│  ── 结构化肿瘤病历 ──────────────────────────────────────────  │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │  主诉：右肺上叶占位伴咳嗽2月余                            │  │
-│  │  现病史：患者2月前体检发现右肺上叶占位...                  │  │
-│  │  既往史：高血压病史5年，规律服药...                        │  │
-│  │  体格检查：PS评分 ECOG 1分，KPS 90分                     │  │
-│  │  辅助检查：胸部CT示右肺上叶3.2cm占位...                   │  │
-│  │                                                          │  │
-│  │  ── TNM 分期 ──────────────────────────────             │  │
-│  │  T2a N0 M0 → Stage IB（AJCC 8th）                       │  │
-│  │  分期依据：胸部CT + PET-CT + 头颅MRI                     │  │
-│  │                                                          │  │
-│  │  ── 病理 ──────────────────────────────                 │  │
-│  │  类型：非小细胞肺癌-腺癌（中分化）                         │  │
-│  │  免疫组化：TTF-1(+) Napsin-A(+) P40(-) Ki-67(25%)       │  │
-│  │  分子检测：EGFR 19del(+) ALK(-) PD-L1 TPS 60%            │  │
-│  │                                                          │  │
-│  │  ── 治疗方案 ──────────────────────────────             │  │
-│  │  意图：根治性                                             │  │
-│  │  模式：手术 + 辅助化疗 + 靶向治疗                          │  │
-│  │  靶向药：奥希替尼 80mg qd（EGFR 19del阳性）              │  │
-│  │  化疗方案：培美曲塞500mg/m² + 顺铂75mg/m² d1 q21d ×4    │  │
-│  │                                                          │  │
-│  │  ⚠️ 警告：免疫组化部分标记待补充；基因检测仅8基因面板     │  │
-│  │                                                          │  │
-│  │  ── 质子治疗适应症评估 ──────────────────────────        │  │
-│  │  🟡 Conditional（有条件适应症）                          │  │
-│  │  依据：局部晚期NSCLC，质子可降低正常肺组织剂量            │  │
-│  │  指南：NCCN NSCLC V5.2025 / ASTRO Model Policy          │  │
-│  │  注意：需进一步影像评估确定OAR距离                        │  │
-│  └────────────────────────────────────────────────────────┘  │
-│  [复制] [导出PDF] [发送到对话]                                 │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  患者选择（可按姓名/病历号检索）      │  报告列表（筛选 + 分页）        │
+│  ┌──────────────────────┐  ┌──────────────────────────────────────┐ │
+│  │ ● 张**  P0001        │  │ [全部][门诊][住院][影像][病理]        │ │
+│  │ ● 李**  P0002        │  │ ──────────────────────────────────  │ │
+│  │ ○ 未归属（inbox 3）   │  │ 2026-11-18 胸部CT  已解析  摘要…     │ │
+│  └──────────────────────┘  │ 2026-11-17 病理报告 解析中 62%       │ │
+│                            └──────────────────────────────────────┘ │
+│                              │ 报告详情（结构化字段 / 附件 / 摘要）  │ │
+└──────────────────────────────────────────────────────────────────────┘
+                                                        ┌───────────┐
+                                                        │ 解析队列 2 │
+                                                        └───────────┘
 ```
 
 **交互流程**
 
-1. 用户拖拽或点击上传医学文件 → 文件列表实时显示（图标按类型区分：门诊记录📄/影像🖼️/基因检测🧬/病理报告📋）
-2. 点击"整理病历" → `POST /api/medical/records/organize` → 显示加载态
-3. 返回结构化肿瘤病历 → 展示结果卡片（含 TNM 分期、病理、治疗方案等专有区块）
-4. 底部操作："复制"剪贴板复制、"导出PDF"调用浏览器打印、"发送到对话"调用 `setActiveSection('chat')` + `setPendingComposerPrefill()`
+1. `UploadModal` 上传 → `POST /records/upload` 返回 `reportIds`，条目以「排队中」进入列表与队列浮层
+2. `ParseQueueFloat` 轮询 `GET /records/queue`，展示进度环与失败原因，支持重试
+3. AI 无法判定归属的报告进入 `InboxSlideOut`（`GET /records/inbox`），由医生 `POST /{id}/assign` 指派患者
+4. 点击报告行 → `ReportDetailModal`：结构化叙事 / 检验 / 用药、AI 摘要、附件预览（`GET /{id}/attachments/{index}`）、重新解析
+5. 报告解析完成且已归属患者 → 自动触发摘要分析，可在 `features/briefs` 中查看与重新分析
 
-### 2.4 医学翻译页面（MedicalTranslatePage）
+
+### 2.4 医学知识库页面（KnowledgePage）
+
+单页三 Tab（文献 / 指南 / 药品），Tab 状态同步到 `?mw_kb=`，刷新或分享可回到同一 Tab。
 
 **页面结构**
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│  医学翻译                                             │
-│  中英肿瘤学/放射医学术语专业翻译                        │
-│  ─────────────────────────────────────────────────── │
+│  ┌────────────────────────────────────────┐ [→]     │
+│  │  海量医学文献任意搜…                     │         │
+│  └────────────────────────────────────────┘         │
 │                                                      │
-│  [中 → 英]  [英 → 中]                                 │
+│   📄 搜文献      📋 搜指南      💊 搜药品             │
+│   ───────                                            │
 │                                                      │
-│  专科领域：[肿瘤学 ▾]  ← 可选：肿瘤学/放射医学/通用      │
+│  最新精选        内科学 肿瘤学 心血管 …      [⇅]      │
 │                                                      │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  输入原文...                                     │  │
-│  │  支持 Drag & Drop 文本文件                       │  │
-│  └────────────────────────────────────────────────┘  │
-│                                                      │
-│  [翻译]                                               │
-│                                                      │
-│  ── 翻译结果 ──────────────────────────────────────  │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  First-line osimertinib is recommended for      │  │
-│  │  EGFR mutation-positive NSCLC patients          │  │
-│  │                                                │  │
-│  │  ── 术语对照 ──────────────────────────────    │  │
-│  │  非小细胞肺癌     →  NSCLC (non-small cell...)  │  │
-│  │  EGFR突变阳性    →  EGFR mutation-positive     │  │
-│  │  奥希替尼        →  osimertinib                 │  │
-│  │  一线推荐        →  first-line recommendation   │  │
-│  └────────────────────────────────────────────────┘  │
-│  [复制] [发送到对话]                                    │
-│                                                      │
+│  [N Engl J Med] [JAMA] [RCT] [Meta分析]  ← 筛选芯片   │
+│  ──────────────────────────────────────────────────  │
+│  RCT   Melanoma Prevention Among Children of …       │
+│        黑色素瘤幸存者子女的黑色素瘤预防                 │
+│        Ⓝ N Engl J Med · 独家原文 · IF 96.2   1天前   │
+│  ──────────────────────────────────────────────────  │
+│  RCT   Tislelizumab plus chemotherapy as first-line  │
+│        …                                             │
 └──────────────────────────────────────────────────────┘
 ```
 
-**交互流程**
+**三个 Tab 的实现**
 
-1. 选择翻译方向（中→英 / 英→中）+ 选择专科领域
-2. 输入或拖拽文本 → 点击"翻译" → `POST /api/medical/translate`
-3. 展示翻译文本 + 术语对照表（肿瘤学/放射医学术语高亮标注）
-4. "复制"剪贴板、"发送到对话"跳转聊天预填
-
-### 2.5 搜指南页面（SearchGuidelinePage）
-
-**页面结构**
-
-```
-┌──────────────────────────────────────────────────────┐
-│  搜指南                                               │
-│  语义检索 NCCN/CSCO/质子适应症指南                      │
-│  ─────────────────────────────────────────────────── │
-│                                                      │
-│  ┌──────────────────────────────────┐  [搜索]        │
-│  │  输入关键词或描述...               │               │
-│  └──────────────────────────────────┘               │
-│                                                      │
-│  指南来源：[全部 ▾]  分类：[全部 ▾]                      │
-│  来源选项：NCCN / CSCO / ESMO / ASCO / 质子适应症      │
-│  分类选项：治疗 / 分期 / 随访 / 支持治疗                  │
-│                                                      │
-│  搜索结果（3条）                                       │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  📋 NCCN NSCLC (Version 5.2025)                 │  │
-│  │  EGFR exon 19 del/L858R阳性：一线推荐奥希替尼     │  │
-│  │  Category 1 · 2025 · 置信度 95%                  │  │
-│  │  [查看详情] [发送到对话]                          │  │
-│  └────────────────────────────────────────────────┘  │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  📋 CSCO 非小细胞肺癌诊疗指南（2025版）            │  │
-│  │  EGFR敏感突变：I级推荐奥希替尼...                 │  │
-│  │  I级推荐 · 2025 · 置信度 92%                     │  │
-│  │  [查看详情] [发送到对话]                          │  │
-│  └────────────────────────────────────────────────┘  │
-│                                                      │
-└──────────────────────────────────────────────────────┘
-```
+| Tab | `?mw_kb=` | 组件 | 布局 |
+|---|---|---|---|
+| 搜文献 | `literature`（缺省） | `features/kb/LiteratureFeed` | 「最新精选」行流：研究类型 + 英文标题 / 中文标题 / 期刊徽标与标识标签 / IF + 相对时间；筛选芯片由数据生成 |
+| 搜指南 | `guidelines` | `features/kb/GuidelineFeed` | 「最新精选」+ 学科 Tab（学科取自数据）+ 类型/地区筛选芯片 + 排序切换 |
+| 搜药品 | `drugs` | `features/kb/DrugCatalog` | 西药/中成药 → 一级分类 → 二级分类 → 药物组 三栏目录；检索时第三栏切换为扁平结果 |
 
 **交互流程**
 
-1. 输入关键词 → 可选筛选指南来源和分类 → 搜索
-2. 展示搜索结果卡片（标注指南来源版本、Category/推荐分级、证据级别）
-3. "查看详情"展开完整摘要 / "发送到对话"跳转聊天预填
+1. 顶部统一检索框输入关键词 → 300ms 防抖后按当前 Tab 调对应 `/api/medical/kb/*` 端点
+2. 点击 Tab → 清空关键词、写入 `?mw_kb=`、切换到对应内容区
+3. 点击指南/文献行 → 行内展开摘要与核心推荐；点击药名 → 行内展开说明书要点
+4. 筛选芯片与学科 Tab 均为客户端过滤当前已取数据，不追加请求
 
-### 2.6 搜药品页面（SearchDrugPage）
-
-**页面结构**
-
-```
-┌──────────────────────────────────────────────────────┐
-│  搜药品                                               │
-│  查询肿瘤药品、化疗方案、靶向药-突变匹配                 │
-│  ─────────────────────────────────────────────────── │
-│                                                      │
-│  ┌──────────────────────────────────┐               │
-│  │  输入药品名称或基因突变...         │               │
-│  └──────────────────────────────────┘               │
-│                                                      │
-│  查询类型：[基本信息] [用法用量] [相互作用] [化疗方案] [靶向匹配] │
-│                                                      │
-│  [搜索]                                               │
-│                                                      │
-│  ── 药品信息 ──────────────────────────────────────  │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  奥希替尼 (Tagrisso/泰瑞沙)                     │  │
-│  │  第三代 EGFR-TKI                                │  │
-│  │  分子靶点：EGFR                                 │  │
-│  │  必需检测：EGFR 19del / L858R / T790M           │  │
-│  │                                                  │  │
-│  │  ── CYP3A4 相互作用 ──────────────────────      │  │
-│  │  🔴 利福平(CYP3A4强诱导剂) — 降低血药浓度(高风险)│  │
-│  │  🟡 伊曲康唑(CYP3A4强抑制剂) — 升高血药浓度(中) │  │
-│  └────────────────────────────────────────────────┘  │
-│  [复制] [发送到对话]                                    │
-│                                                      │
-└──────────────────────────────────────────────────────┘
-```
-
-**交互流程**
-
-1. 输入药品名或基因突变 → 选择查询类型（新增"化疗方案"和"靶向匹配"）
-2. 展示药品信息卡片
-3. 化疗方案模式下展示多药联合方案详情（剂量/周期/预处理/监测）
-4. 靶向匹配模式下展示突变-药物对照表（基于NCCN推荐）
-5. 相互作用分析以 CYP3A4 代谢途径彩色标注
-
-### 2.7 搜文献页面（SearchLiteraturePage）
-
-**页面结构**
-
-```
-┌──────────────────────────────────────────────────────┐
-│  搜文献                                               │
-│  语义检索肿瘤学文献，AI 生成摘要 + GRADE 分级           │
-│  ─────────────────────────────────────────────────── │
-│                                                      │
-│  ┌──────────────────────────────────┐  [搜索]        │
-│  │  输入关键词或描述...               │               │
-│  └──────────────────────────────────┘               │
-│                                                      │
-│  筛选：年份 [2020] — [2025]                            │
-│  研究类型：[全部 ▾]  年会：[全部 ▾]                      │
-│  类型选项：RCT / Meta分析 / 队列 / 病例系列             │
-│  年会选项：ASCO 2025 / ESMO 2025 / WCLC 2025          │
-│                                                      │
-│  搜索结果（7条）                                       │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  📄 FLAURA: Osimertinib vs Comparator...        │  │
-│  │  Soria JC, et al. · NEJM · 2018 · Phase III    │  │
-│  │  Objective: To compare osimertinib with...      │  │
-│  │  GRADE A · RCT · 置信度 95%                     │  │
-│  │  [查看详情] [发送到对话]                          │  │
-│  └────────────────────────────────────────────────┘  │
-│  ┌────────────────────────────────────────────────┐  │
-│  │  🎤 LAURA: Osimertinib after CRT... (ASCO 2025)│  │
-│  │  Lu S, et al. · ASCO 2025 · Phase III          │  │
-│  │  GRADE B · RCT · 置信度 85%                     │  │
-│  │  [查看详情] [发送到对话]                          │  │
-│  └────────────────────────────────────────────────┘  │
-│                                                      │
-└──────────────────────────────────────────────────────┘
-```
-
-**交互流程**
-
-1. 输入关键词 → 可选设置年份范围/研究类型/年会筛选 → 搜索
-2. 展示文献结果卡片（标注研究类型、临床阶段、GRADE 分级）
-3. 年会摘要标注会议来源和年份
-4. "查看详情"展开完整摘要 / DOI 链接外链 / "发送到对话"
+> 知识库为 `KnowledgePage` 单页三 Tab（文献 / 指南 / 药品），facet 筛选与阅读器在同页内展开，不设独立搜索页。医学翻译不设独立页面，`medical_translate` 仅作为 Agent 工具。
 
 ---
 
 ## 三、表设计
 
-### 3.1 完整 DDL
+### 3.1 表清单（7 表 + 1 视图）
+
+DDL 真相源：`deploy/sql/init_medical.sql`；SQLAlchemy 表定义：`models/tables.py`。全部 `CREATE TABLE IF NOT EXISTS`；按未上线标准不保留补列迁移。
+
+| 表名 | 用途 | 关键列 |
+|---|---|---|
+| `pc_medical_patients` | 患者档案 + 画像 | `id`(varchar PK) / `name` / `birth_date` / `id_number_masked` / `id_number_hash` / `phone_hash` / `primary_diagnosis` / `tnm_stage` / `ecog_score` / `vitals_json` / `biomarkers_json` / `medications_json` / `labs_json` / `tags_json` |
+| `pc_medical_patient_reports` | 统一临床文档表（含解析队列） | `id` / `patient_id`(可空) / `report_type` / `file_path` / `attachments_json` / `patient_name_raw` / `match_reason` / `status` / `progress` / `raw_text` / `narrative_json` / `labs_json` / `medications_json` / `summary` / `started_at` / `finished_at` |
+| `pc_medical_consultations` | 患者 AI 咨询会话登记 | `session_id`(unique) / `patient_id` / `doctor_id` / `title` / `created_at` |
+| `pc_medical_kb_literatures` | 知识库 · 文献 | `title` / `title_en` / `title_cn` / `study_type` / `journal` / `journal_tags_json` / `impact_factor` / `published_at` / `doi` / `source` |
+| `pc_medical_kb_guidelines` | 知识库 · 指南 | `title` / `title_cn` / `doc_type` / `authors` / `specialty` / `region` / `org` / `version` / `year` / `abstract` / `points_json` / `source` |
+| `pc_medical_kb_drugs` | 知识库 · 药品 | `name` / `generic_name` / `drug_kind` / `atc_l1` / `atc_l2` / `atc_group` / `dosage` / `indications_json` / `mechanism` / `side_effects_json` / `contraindications_json` / `interactions_json` / `pregnancy_grade` / `is_essential` |
+| `pc_medical_briefs` | 病历摘要（分析管线产出） | `patient_id` / `report_ids_json` / `status` / `version` / `sections_json` / `citations_json` / `audit_result_json` |
+| `v_patient_timeline`（视图） | 患者时间线 | `patient_id` / `event_id` / `event_type` / `event_date` / `title` / `detail` |
+
+统一审计列（除 `consultations` 与视图）：`create_at` / `create_by` / `update_at` / `update_by` / `is_deleted`。
 
 ```sql
--- ============================================================
--- 医疗域数据表（subpackages.medical）
--- 命名规范：pc_medical_* / pc_oncology_* / pc_proton_* 前缀
--- Advisory Lock Key 区间：742200-742299
--- ============================================================
-
--- 患者信息表
-CREATE TABLE IF NOT EXISTS pc_medical_patients (
-    id              SERIAL PRIMARY KEY,
-    patient_code    VARCHAR(64)  NOT NULL UNIQUE,   -- 患者编码（系统生成）
-    name_hash       VARCHAR(128),                    -- 姓名哈希（PHI 脱敏）
-    gender          VARCHAR(8),                      -- 性别
-    birth_year      INT,                             -- 出生年份（仅存年份，不存完整日期）
-    workspace_id    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+-- 示例：知识库 · 指南（deploy/sql/init_medical.sql）
+CREATE TABLE IF NOT EXISTS pc_medical_kb_guidelines (
+    id          VARCHAR(64) PRIMARY KEY,
+    title       VARCHAR(512) NOT NULL,
+    title_cn    VARCHAR(512) DEFAULT '',
+    doc_type    VARCHAR(16)  DEFAULT '',
+    authors     VARCHAR(512) DEFAULT '',
+    specialty   VARCHAR(64)  DEFAULT '',
+    region      VARCHAR(16)  DEFAULT '',
+    published_at TIMESTAMPTZ,
+    org         VARCHAR(32)  DEFAULT '',
+    category    VARCHAR(32)  DEFAULT '',
+    year        INTEGER,
+    version     VARCHAR(32)  DEFAULT '',
+    abstract    TEXT         DEFAULT '',
+    points_json JSONB        DEFAULT '[]',
+    source      VARCHAR(32)  DEFAULT 'seed',   -- 指南实际写入值为 'import:pdf'
+    create_at   TIMESTAMPTZ  DEFAULT NOW(),
+    create_by   VARCHAR(64)  DEFAULT 'default',
+    update_at   TIMESTAMPTZ  DEFAULT NOW(),
+    update_by   VARCHAR(64)  DEFAULT 'default',
+    is_deleted  SMALLINT     DEFAULT 0
 );
-
-CREATE INDEX IF NOT EXISTS idx_medical_patients_workspace ON pc_medical_patients(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_medical_patients_code      ON pc_medical_patients(patient_code);
-
--- 病历记录表
-CREATE TABLE IF NOT EXISTS pc_medical_records (
-    id              SERIAL PRIMARY KEY,
-    session_id      VARCHAR(64)  NOT NULL,           -- Agent 会话 ID
-    patient_id      INT          REFERENCES pc_medical_patients(id),
-    workspace_id    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    specialty       VARCHAR(32)  NOT NULL DEFAULT 'oncology',  -- "oncology" | "general"
-    files           JSONB        NOT NULL DEFAULT '[]',  -- 上传文件元数据列表
-    record          JSONB,                              -- 结构化病历（通用字段）
-    oncology_detail JSONB,                              -- 肿瘤专科详情（TNM/病理/治疗方案/irAE等）
-    status          VARCHAR(16)  NOT NULL DEFAULT 'pending',  -- pending / completed / failed
-    error_message   TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_medical_records_session    ON pc_medical_records(session_id);
-CREATE INDEX IF NOT EXISTS idx_medical_records_patient    ON pc_medical_records(patient_id);
-CREATE INDEX IF NOT EXISTS idx_medical_records_workspace  ON pc_medical_records(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_medical_records_specialty  ON pc_medical_records(specialty);
-CREATE INDEX IF NOT EXISTS idx_medical_records_status     ON pc_medical_records(status);
-
--- 肿瘤分期表（含质子适应症评估）
-CREATE TABLE IF NOT EXISTS pc_oncology_staging (
-    id              SERIAL PRIMARY KEY,
-    record_id       INT          NOT NULL REFERENCES pc_medical_records(id) ON DELETE CASCADE,
-    patient_id      INT          NOT NULL REFERENCES pc_medical_patients(id),
-    workspace_id    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    cancer_type     VARCHAR(128) NOT NULL,            -- "非小细胞肺癌"
-    tnm_t           VARCHAR(16),                      -- "T2a"
-    tnm_n           VARCHAR(16),                      -- "N0"
-    tnm_m           VARCHAR(16),                      -- "M0"
-    stage           VARCHAR(16),                      -- "IB"
-    staging_system  VARCHAR(32)  DEFAULT 'AJCC_8th',  -- 分期系统版本
-    staging_basis   TEXT,                              -- 分期依据
-    pathology_type  VARCHAR(128),                      -- 病理类型
-    pathology_sub   VARCHAR(128),                      -- 病理亚型
-    ihc_markers     JSONB        DEFAULT '{}',         -- 免疫组化标记
-    molecular_test  JSONB        DEFAULT '{}',         -- 分子检测结果
-    performance_status JSONB     DEFAULT '{}',         -- ECOG/KPS
-
-    -- 质子适应症评估（智能病历子模块，仅AI可执行的判断）
-    proton_indication_level  VARCHAR(32),              -- "strong" | "conditional" | "investigational" | "not_indicated" | NULL(未评估)
-    proton_indication_basis  JSONB        DEFAULT '[]', -- 适应症依据列表
-    proton_guideline_refs    JSONB        DEFAULT '[]', -- 指南参考
-    proton_special_considerations JSONB  DEFAULT '[]', -- 特殊注意事项
-
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_oncology_staging_record   ON pc_oncology_staging(record_id);
-CREATE INDEX IF NOT EXISTS idx_oncology_staging_patient  ON pc_oncology_staging(patient_id);
-CREATE INDEX IF NOT EXISTS idx_oncology_staging_cancer   ON pc_oncology_staging(cancer_type);
-CREATE INDEX IF NOT EXISTS idx_oncology_staging_workspace ON pc_oncology_staging(workspace_id);
-
--- 肿瘤治疗记录表
-CREATE TABLE IF NOT EXISTS pc_oncology_treatments (
-    id              SERIAL PRIMARY KEY,
-    patient_id      INT          NOT NULL REFERENCES pc_medical_patients(id),
-    workspace_id    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    treatment_type  VARCHAR(32)  NOT NULL,            -- "chemo" | "targeted" | "immunotherapy" | "radiation" | "surgery" | "proton"
-    regimen_name    VARCHAR(256),                     -- 方案名称 "培美曲塞+顺铂"
-    intention       VARCHAR(32),                      -- "curative" | "palliative" | "adjuvant" | "neoadjuvant"
-    start_date      DATE,
-    end_date        DATE,
-    cycles_planned  INT,                              -- 计划周期数
-    cycles_completed INT,                             -- 完成周期数
-    drugs           JSONB        DEFAULT '[]',         -- 药物列表[{name, dose, route}]
-    best_response   VARCHAR(16),                      -- "CR" | "PR" | "SD" | "PD"
-    toxicity        JSONB        DEFAULT '[]',         -- 毒性记录[{grade, description}]
-    dose_modifications TEXT,                           -- 减量/延迟说明
-    molecular_target VARCHAR(64),                     -- 靶点（靶向药）
-    required_mutation VARCHAR(128),                   -- 必需突变（靶向药）
-    status          VARCHAR(16)  NOT NULL DEFAULT 'planned',  -- planned / ongoing / completed / discontinued
-    notes           TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_oncology_treatments_patient    ON pc_oncology_treatments(patient_id);
-CREATE INDEX IF NOT EXISTS idx_oncology_treatments_type       ON pc_oncology_treatments(treatment_type);
-CREATE INDEX IF NOT EXISTS idx_oncology_treatments_workspace  ON pc_oncology_treatments(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_oncology_treatments_status     ON pc_oncology_treatments(status);
-
--- 搜索记录表（搜指南 / 搜药品 / 搜文献 通用）
-CREATE TABLE IF NOT EXISTS pc_medical_searches (
-    id              SERIAL PRIMARY KEY,
-    session_id      VARCHAR(64)  NOT NULL,
-    workspace_id    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    query           TEXT         NOT NULL,
-    category        VARCHAR(32)  NOT NULL,           -- "guideline" / "drug" / "literature"
-    filters         JSONB        NOT NULL DEFAULT '{}',
-    result          JSONB,
-    result_count    INT          DEFAULT 0,
-    status          VARCHAR(16)  NOT NULL DEFAULT 'pending',
-    error_message   TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_medical_searches_session   ON pc_medical_searches(session_id);
-CREATE INDEX IF NOT EXISTS idx_medical_searches_workspace ON pc_medical_searches(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_medical_searches_category  ON pc_medical_searches(category);
-CREATE INDEX IF NOT EXISTS idx_medical_searches_status    ON pc_medical_searches(status);
-
--- 翻译记录表
-CREATE TABLE IF NOT EXISTS pc_medical_translations (
-    id              SERIAL PRIMARY KEY,
-    session_id      VARCHAR(64)  NOT NULL,
-    workspace_id    VARCHAR(64)  NOT NULL DEFAULT 'default',
-    source_text     TEXT         NOT NULL,
-    direction       VARCHAR(8)   NOT NULL,           -- "zh2en" / "en2zh"
-    specialty       VARCHAR(64),                     -- "oncology" / "radiation_oncology" / "general"
-    translated_text TEXT,
-    terms           JSONB        NOT NULL DEFAULT '[]',
-    status          VARCHAR(16)  NOT NULL DEFAULT 'pending',
-    error_message   TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_medical_translations_session   ON pc_medical_translations(session_id);
-CREATE INDEX IF NOT EXISTS idx_medical_translations_workspace ON pc_medical_translations(workspace_id);
-CREATE INDEX IF NOT EXISTS idx_medical_translations_status    ON pc_medical_translations(status);
-
--- 文件关联表（病历与上传文件的多对多关系）
-CREATE TABLE IF NOT EXISTS pc_medical_record_files (
-    id              SERIAL PRIMARY KEY,
-    record_id       INT          NOT NULL REFERENCES pc_medical_records(id) ON DELETE CASCADE,
-    file_name       VARCHAR(256) NOT NULL,
-    file_type       VARCHAR(16),                      -- "pdf" / "jpg" / "png" / "txt" / "docx" / "dicom"
-    file_size       BIGINT,
-    storage_path    TEXT,
-    ocr_text        TEXT,
-    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_medical_record_files_record ON pc_medical_record_files(record_id);
+CREATE INDEX IF NOT EXISTS ix_pc_medical_kb_guidelines_category   ON pc_medical_kb_guidelines (category);
+CREATE INDEX IF NOT EXISTS ix_pc_medical_kb_guidelines_year       ON pc_medical_kb_guidelines (year);
+CREATE INDEX IF NOT EXISTS ix_pc_medical_kb_guidelines_is_deleted ON pc_medical_kb_guidelines (is_deleted);
 ```
 
 ### 3.2 表关系说明
 
 ```
-pc_medical_patients  1──N  pc_medical_records
-pc_medical_patients  1──N  pc_oncology_staging
-pc_medical_patients  1──N  pc_oncology_treatments
-pc_medical_records   1──1  pc_oncology_staging  （含质子适应症评估）
-pc_medical_records   1──N  pc_medical_record_files
-pc_medical_searches       （独立，按 category 区分指南/药品/文献）
-pc_medical_translations   （独立）
+pc_medical_patients     1──N  pc_medical_patient_reports   （patient_id 可空：先入库后归属）
+pc_medical_patients     1──N  pc_medical_consultations
+pc_medical_patients     1──N  pc_medical_briefs
+pc_medical_patient_reports 1──N pc_medical_briefs          （经 report_ids_json 弱关联）
+pc_medical_kb_literatures / kb_guidelines / kb_drugs       （独立只读共享数据，无外键）
+v_patient_timeline                                         （由 patient_reports 派生）
 ```
 
-### 3.3 Advisory Lock Key 分配
+### 3.3 表结构位置
 
-| 子系统 | Lock Key | 区间 |
-|--------|----------|------|
-| 医疗基础表(patients/records/files) | 742200 | 742200 |
-| 肿瘤专科表(staging含质子适应症/treatments) | 742201 | 742201 |
-| 搜索/翻译表 | 742202 | 742202 |
+DDL 统一放在 `deploy/sql/init_medical.sql`；域激活时由 `ensure_medical_schema()` 调用通用执行器创建，执行器按文件持有 advisory lock，语句保持 `IF NOT EXISTS` 幂等。
 
-### 3.4 幂等迁移
+### 3.4 初始化入口
 
 ```python
-# persistence/ensure_schema.py
-from sqlalchemy.ext.asyncio import AsyncEngine
-
-_ONCOLOGY_LOCK_KEY = 742201
-
+# persistence/schema.py
 async def ensure_medical_schema(engine: AsyncEngine) -> None:
-    """幂等建表 — IF NOT EXISTS 保证可重复执行"""
-    async with engine.begin() as conn:
-        # 基础表（lock 742200）
-        await conn.execute(text("SELECT pg_advisory_xact_lock(742200)"))
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_medical_patients ( ... )""")
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_medical_records ( ... )""")
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_medical_record_files ( ... )""")
-        # ... 索引同理
-
-    async with engine.begin() as conn:
-        # 肿瘤专科表（lock 742201，含质子适应症评估字段）
-        await conn.execute(text("SELECT pg_advisory_xact_lock(742201)"))
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_oncology_staging ( ... )""")
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_oncology_treatments ( ... )""")
-        # ... 索引同理
-
-    async with engine.begin() as conn:
-        # 搜索/翻译表（lock 742202）
-        await conn.execute(text("SELECT pg_advisory_xact_lock(742202)"))
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_medical_searches ( ... )""")
-        await conn.execute("""CREATE TABLE IF NOT EXISTS pc_medical_translations ( ... )""")
-        # ... 索引同理
+    await apply_domain_schema(engine, "medical")
 ```
 
+在 `on_build_infrastructure` 中调用一次；失败仅记录日志，不阻断域加载。
+
 ---
+
 
 ## 四、MedicalBundle 实现设计
 
 ### 4.1 包结构
 
 ```
-subpackages.medical/
+subpackages/medical/
   pyproject.toml
-  src/subpackages.medical/
-    __init__.py
-    bundle.py                            # MedicalBundle
+  _manifest_generated.py                 # 侧栏菜单 / 页面入口声明
+  _protocols.py                          # ToolContext + text_result / error_result
+  api/                                   # REST 路由（on_build_lifecycle 注册）
+    records.py                           # 上传 / 队列 / 结构化病历
+    patients.py                          # 患者档案与列表
+    kb.py                                # 知识库三列表：literature / guidelines / drugs
+    consultations.py                     # 患者 AI 咨询会话
+    briefs.py                            # 病历摘要
+  tools/                                 # Agent 工具（on_build_runtime 注册，共 8 个）
+    smart_medical_record.py              # 病历文件解析 + 结构化
+    medical_translate.py                 # 医学术语翻译
+    search_guideline.py                  # 指南检索 → KbStore
+    search_drug.py                       # 药品检索 → KbStore
+    search_literature.py                 # 文献检索 → KbStore
+    read_patient_profile.py              # 只读：患者画像
+    read_patient_reports.py              # 只读：报告清单
+    read_raw_report.py                   # 只读：报告原文
+  persistence/
+    medical_store.py                     # 患者 / 报告 / 队列 / 咨询
+    kb_store.py                          # 知识库三表（KbStore）
+    brief_store.py                       # 摘要
+    schema.py                            # ensure_medical_schema（委托通用 SQL 执行器）
+    storage.py                           # 上传文件落盘
+    seeds/kb.py                          # 文献 12 条 + 药品 92 条种子
+    seeds/patients.py                    # 患者演示数据
+  services/                              # 解析 / 分析 / 患者业务编排
+  domain/                                # hooks（PHI 脱敏、咨询上下文）、governance（HIPAA）、parsing、analysis
+  integration/bundle.py                  # MedicalBundle（唯一集成点）
 
-    tools/                               # Agent 可调用的外部能力
-      smart_medical_record.py            # 病历文件解析（OCR/文本提取）+ 肿瘤专科结构化
-      medical_translate.py               # 翻译辅助（术语库查询，含肿瘤学/放射医学）
-      search_guideline.py                # 指南数据库检索（NCCN/CSCO/质子适应症）
-      search_drug.py                     # 药品数据库检索（含化疗方案/靶向匹配/CYP3A4）
-      search_literature.py               # 文献数据库检索（含GRADE/年会/临床试验）
-      chemo_protocol.py                  # 化疗方案模板查询
-      targeted_match.py                  # 靶向药-基因突变匹配
-      proton_eligibility.py              # 质子治疗适应症评估（仅AI可执行的判断）
+backend/tools/                           # 运维脚本（非运行时）
+  seed_kb.py                             # 幂等回填文献 / 药品
+  ingest_guidelines.py                   # 解析真实 PDF 并写入指南表（source='import:pdf'）
 
-    hooks/
-      phi_redact.py                      # PHI 条件脱敏（仅医疗域工具）
-
-    governance/
-      hipaa.py                           # HIPAA 合规 Reducer
-
-    routes/
-      __init__.py
-      agent.py                           # 域 Agent 会话管理
-      record.py                          # 智能病历页面 API
-      translate.py                       # 医学翻译页面 API
-      guideline.py                       # 搜指南页面 API
-      drug.py                            # 搜药品页面 API
-      literature.py                      # 搜文献页面 API
-
-    persistence/
-      medical_store.py                   # 病历/检索结果存储
-      oncology_store.py                  # 肿瘤专科数据存储（分期/治疗/质子适应症）
-      ensure_schema.py                   # 数据库迁移（幂等，3组advisory lock）
-
-    skills/
-      智能病历.SKILL.md                   # 定义 Agent 如何整理肿瘤专科病历
-      医学翻译.SKILL.md                   # 定义 Agent 如何做肿瘤学术语翻译
-      搜指南.SKILL.md                     # 定义 Agent 如何检索NCCN/CSCO指南
-      搜药品.SKILL.md                     # 定义 Agent 如何查询肿瘤药品/方案/靶向匹配
-      搜文献.SKILL.md                     # 定义 Agent 如何检索肿瘤文献
-
-  web/                                   # 前端
-    src/
-      MedicalWorkbenchPage.tsx           # 医疗工作台（左侧菜单+右侧功能页面）
-      SmartRecordPage.tsx
-      MedicalTranslatePage.tsx
-      SearchGuidelinePage.tsx
-      SearchDrugPage.tsx
-      SearchLiteraturePage.tsx
-      components/
-        FileUploader.tsx
-        RecordCard.tsx
-        OncologyDetailCard.tsx          # 肿瘤专科详情（TNM/病理/方案/质子适应症）
-        TermTable.tsx
-        SearchResults.tsx
-        ResultCard.tsx
+frontend/subpackages/medical/src/
+  app/MedicalWorkbenchApp.tsx            # 域内容区外壳（导航已在系统侧栏）
+  pages/
+    MedicalRecordsPage.tsx               # 智能病历（三栏）
+    PatientsPage.tsx                     # 患者管理
+    PatientDetailPage.tsx                # 患者详情（档案 + AI 咨询两栏）
+    KnowledgePage.tsx                    # 医学知识库（单页三 Tab）
+  features/kb/                           # LiteratureFeed / GuidelineFeed / DrugCatalog / ChipsRow
+  features/records/                      # 上传、报告列表、详情、解析队列浮层
+  api/client.ts                          # 薄封装，直接返回 camelCase 视图模型
+  types/view.ts                          # 前端视图类型
 ```
+
+> 目录结构：钩子与治理在 `domain/hooks`、`domain/governance`，路由在 `api/`，无独立 `skills/` 目录（域技能通过 `configs/medical.json` 与运行时注册表达）。
 
 ### 4.2 Bundle 实现
 
 ```python
-# bundle.py
-from prismclaw.schema.services.domain import (
-    DomainBundle, DomainInfrastructureContext,
-    DomainRuntimeContext, DomainLifecycleContext,
-    DomainManifest, MenuEntry,
-)
-from prismclaw.engine.hooks import HookEvent
-
-
+# integration/bundle.py（节选，仅展示三阶段注册骨架）
 class MedicalBundle:
     name = "medical"
-    required_core_version = ">=0.1.0"
+    required_core_version = ">=0.1.0,<2.0.0"
     depends_on: list[str] = []
+    task_store: Any | None = None
 
-    def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
-        from .persistence.medical_store import MedicalStore
-        from .persistence.oncology_store import OncologyStore
-        from .persistence.ensure_schema import ensure_medical_schema
-        import asyncio
+    async def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
+        from ..persistence.medical_store import MedicalStore
+        from ..persistence.kb_store import KbStore
+        from ..persistence.brief_store import BriefStore
+        from ..persistence.schema import ensure_medical_schema
 
-        store = MedicalStore(ctx.db_engine)
-        ctx.register_store("medical", store)
-
-        oncology_store = OncologyStore(ctx.db_engine)
-        ctx.register_store("oncology", oncology_store)
-
-        asyncio.get_event_loop().run_until_complete(
-            ensure_medical_schema(ctx.db_engine)
-        )
+        ctx.register_store("medical", MedicalStore(ctx.db_engine))
+        ctx.register_store("medical_kb", KbStore(ctx.db_engine))
+        ctx.register_store("medical_briefs", BriefStore(ctx.db_engine))
+        await ensure_medical_schema(ctx.db_engine)
 
     def on_build_runtime(self, ctx: DomainRuntimeContext) -> None:
-        # 核心工具 — 5 个基础 + 3 个肿瘤专科（含质子适应症评估）
-        from .tools.smart_medical_record import SmartMedicalRecordTool
-        from .tools.medical_translate import MedicalTranslateTool
-        from .tools.search_guideline import SearchGuidelineTool
-        from .tools.search_drug import SearchDrugTool
-        from .tools.search_literature import SearchLiteratureTool
-        from .tools.chemo_protocol import ChemoProtocolTool
-        from .tools.targeted_match import TargetedMatchTool
-        from .tools.proton_eligibility import ProtonEligibilityTool
+        self._register_tools(ctx)
+        self._register_hooks(ctx)
+        self._register_governance(ctx)
+        self._register_domain_extensions(ctx)
+        ctx.commit()
 
-        ctx.register_tool(SmartMedicalRecordTool())
-        ctx.register_tool(MedicalTranslateTool())
-        ctx.register_tool(SearchGuidelineTool())
-        ctx.register_tool(SearchDrugTool())
-        ctx.register_tool(SearchLiteratureTool())
-        ctx.register_tool(ChemoProtocolTool())
-        ctx.register_tool(TargetedMatchTool())
-        ctx.register_tool(ProtonEligibilityTool())
+    def _register_tools(self, ctx: DomainRuntimeContext) -> None:
+        """注册 8 个工具；知识库三工具注入 KbStore，病历与只读工具注入 MedicalStore。"""
+        medical_store = ctx.domain_stores.get("medical")
+        kb_store = ctx.domain_stores.get("medical_kb")
 
-        # 钩子 — PHI 脱敏（仅对医疗域工具生效）
-        from .hooks.phi_redact import PhiRedactHook
-        ctx.register_hook(HookEvent.PRE_TOOL, PhiRedactHook())
-
-        # 治理 — HIPAA 合规
-        from .governance.hipaa import HipaaReducer
-        ctx.register_governance(HipaaReducer())
-
-        # 技能 — 肿瘤专科 SKILL.md
-        from pathlib import Path
-        skills_dir = Path(__file__).parent / "skills"
-        for skill_file in skills_dir.glob("*.SKILL.md"):
-            ctx.register_skill(str(skill_file))
+        record_tool = SmartMedicalRecordTool(); record_tool.store = medical_store
+        guideline_tool = SearchGuidelineTool();  guideline_tool.kb_store = kb_store
+        drug_tool = SearchDrugTool();            drug_tool.kb_store = kb_store
+        literature_tool = SearchLiteratureTool(); literature_tool.kb_store = kb_store
+        # reports / raw_report / profile 三个只读工具同样注入 medical_store
+        ...
 
     def on_build_lifecycle(self, ctx: DomainLifecycleContext) -> None:
-        from .routes.agent import router as agent_router
-        from .routes.record import router as record_router
-        from .routes.translate import router as translate_router
-        from .routes.guideline import router as guideline_router
-        from .routes.drug import router as drug_router
-        from .routes.literature import router as literature_router
+        from ..api.records import router as records_router
+        from ..api.patients import router as patients_router
+        from ..api.kb import router as kb_router
+        from ..api.consultations import router as consultations_router
+        from ..api.briefs import router as briefs_router
 
-        ctx.register_route(agent_router)
-        ctx.register_route(record_router)
-        ctx.register_route(translate_router)
-        ctx.register_route(guideline_router)
-        ctx.register_route(drug_router)
-        ctx.register_route(literature_router)
+        ctx.register_route(records_router, "/api/medical/records")
+        ctx.register_route(patients_router, "/api/medical/patients")
+        ctx.register_route(kb_router, "/api/medical/kb")
+        ctx.register_route(consultations_router, "/api/medical/consultations")
+        ctx.register_route(briefs_router, "/api/medical/briefs")
 
     def get_manifest(self) -> DomainManifest:
-        return DomainManifest(
-            key="medical",
-            label="医疗",
-            icon="stethoscope",
-            path="/medical",                    # 工作台路由，不再平铺子路由
-            menus=[
-                MenuEntry(key="record", label="智能病历", icon="file-text"),
-                MenuEntry(key="translate", label="医学翻译", icon="languages"),
-                MenuEntry(key="guideline", label="搜指南", icon="book-open"),
-                MenuEntry(key="drug", label="搜药品", icon="pill"),
-                MenuEntry(key="literature", label="搜文献", icon="search"),
-            ],
-        )
+        from .._manifest_generated import MANIFEST   # 由 domains.yaml 生成
+        return MANIFEST
 ```
 
 ### 4.3 入口点注册
@@ -1207,404 +620,187 @@ class MedicalBundle:
 [project]
 name = "prismclaw-medical"
 version = "0.1.0"
-dependencies = ["prismclaw>=0.1.0,<2.0.0", "packaging>=21.0"]
+dependencies = ["prismclaw>=0.1.0,<2.0.0"]
 
 [project.entry-points."prismclaw.domains"]
 medical = "subpackages.medical.integration.bundle:MedicalBundle"
 ```
 
+`_manifest_generated.py` 由 `scripts/compile/domains-registry.mjs` 从 `domains.yaml` 生成，声明 3 个二级菜单（智能病历 / 患者管理 / 医学知识库，同属 `临床业务` 分组）与 1 个页面入口 `/medical`。**该文件请勿手改。**
+
 ### 4.4 REST 路由实现
 
-#### 域 Agent 会话路由
+路由分 5 组，全部在 `api/` 下，prefix 由 Bundle 的 `register_route` 指定：
+
+| 文件 | 前缀 | 端点 |
+|---|---|---|
+| `api/records.py` | `/api/medical/records` | `POST /upload`(202) · `GET /` · `GET /inbox` · `GET /queue` · `POST /{id}/reparse` · `POST /{id}/assign` · `GET /{id}/attachments/{index}` |
+| `api/patients.py` | `/api/medical/patients` | `POST /` · `GET /` · `GET /stats` · `GET /{id}` · `GET /{id}/reports` · `PATCH /{id}/reports/{report_id}` |
+| `api/kb.py` | `/api/medical/kb` | `GET /literature` · `GET /guidelines` · `GET /drugs`（均 `keyword` + `page` + `pageSize`，直出 camelCase VM） |
+| `api/consultations.py` | `/api/medical/consultations` | `POST /` · `GET /` · `GET /{session_id}` |
+| `api/briefs.py` | `/api/medical/briefs` | `GET /` · `GET /{id}` · `POST /` · `POST /{id}/reanalyze` · `DELETE /{id}` |
 
 ```python
-# routes/agent.py
-from fastapi import APIRouter
-from prismclaw.schema.agent.run_request import RunRequest
+# api/kb.py
+router = APIRouter(tags=["medical-kb"])
 
-router = APIRouter(prefix="/api/medical/agent", tags=["medical"])
-
-@router.post("/run")
-async def run_medical_agent(request: RunRequest):
-    """创建医疗域 Agent 会话并执行"""
-    chat_service = request._chat_service  # 通过依赖注入获取
-    result = await chat_service.create_session(
-        domain="medical",
-        message=request.message,
-        files=request.files,
-        skill_hint=request.skill_hint,
-    )
-    return result
-```
-
-#### 页面功能 API（薄包装）
-
-```python
-# routes/record.py
-from fastapi import APIRouter, UploadFile, File
-
-router = APIRouter(prefix="/api/medical/records", tags=["medical"])
-
-@router.post("/organize")
-async def organize_record(
-    files: list[UploadFile] = File(...),
-    specialty: str = "oncology",
+@router.get("/guidelines")
+async def list_guidelines(
+    keyword: str = "",
+    page: int = 1,
+    page_size: int = Query(8, alias="pageSize"),
+    store: KbStore = Depends(get_kb_store),
 ):
-    """智能病历 — 通过 Agent 执行"""
-    chat_service = ...  # 从 DomainLifecycleContext 注入
-    result = await chat_service.create_session(
-        domain="medical",
-        message=f"请整理这些文件为结构化{'肿瘤' if specialty == 'oncology' else ''}病历",
-        files=files,
-        skill_hint="智能病历",
-    )
-    return result
+    """指南列表 — 直出 camelCase 视图模型。"""
+    result = await store.list_guidelines(keyword=keyword, page=page, page_size=page_size)
+    return {
+        "items": [guideline_to_vm(g) for g in result["items"]],
+        "total": result["total"],
+        "page": page,
+        "pageSize": page_size,
+    }
 ```
+
+> 知识库无写接口：数据由 `tools/seed_kb.py`（文献/药品）与 `tools/ingest_guidelines.py`（指南 PDF）离线写入，前端只读。
 
 ### 4.5 工具实现示例
 
 ```python
-# tools/targeted_match.py
-from prismclaw.schema.tools import ToolResult
-
-class TargetedMatchTool:
-    name = "targeted_match"
-    description = "基于基因突变结果匹配靶向药物（NCCN推荐）"
-    parameters = {
+# tools/search_guideline.py
+@dataclass
+class SearchGuidelineTool:
+    name: str = "search_guideline"
+    description: str = "临床指南检索工具 — 检索知识库中的 NCCN / CSCO / 中华医学会等临床实践指南"
+    parameters: dict[str, Any] = field(default_factory=lambda: {
         "type": "object",
         "properties": {
-            "mutation": {"type": "string", "description": "基因突变名称，如 EGFR 19del"},
-            "cancer_type": {"type": "string", "description": "肿瘤类型，如 非小细胞肺癌"},
-            "line": {"type": "string", "enum": ["first", "second", "later"], "description": "治疗线数"}
+            "query": {"type": "string", "description": "疾病名 / 指南名 / 发布机构"},
+            "year_from": {"type": "integer", "description": "起始年份（含）"},
+            "year_to": {"type": "integer", "description": "结束年份（含）"},
+            "limit": {"type": "integer", "description": "返回结果数量上限", "default": 10},
         },
-        "required": ["mutation", "cancer_type"]
-    }
-    tool_class = "read"
-    side_effect = False
-    effect_class = "unknown"
+        "required": ["query"],
+    })
+    tool_class: str = "read"
+    side_effect: bool = False
+    effect_class: str = "search"
 
-    async def execute(self, args: dict, context) -> ToolResult:
-        mutation = args["mutation"]
-        cancer_type = args["cancer_type"]
-        line = args.get("line", "first")
-        result = await self._query_match(mutation, cancer_type, line)
-        return ToolResult(output=result)
+    kb_store: Any = None   # 由 bundle 注入
 
-    async def _query_match(self, mutation: str, cancer_type: str, line: str) -> str:
-        # 查询靶向药-突变匹配数据库
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+        call_id = args.get("_call_id", "")
+        if self.kb_store is None:
+            return error_result(call_id, "KbStore 未注入，无法检索指南")
+        page = await self.kb_store.list_guidelines(
+            keyword=args.get("query", ""), page=1, page_size=max(limit * 5, 50)
+        )
+        # 按 year_from / year_to 二次过滤后取前 limit 条
         ...
+        return text_result(call_id, json.dumps(payload, ensure_ascii=False))
 ```
+
+`search_drug` / `search_literature` 结构相同，分别调 `KbStore.list_drugs()` / `list_literatures()`，不持任何内置数据集。
+
+### 4.6 PHI 脱敏钩子
 
 ```python
-# tools/chemo_protocol.py
-from prismclaw.schema.tools import ToolResult
+# domain/hooks/phi_redact.py
+class PHIRedactHook(HookHandler):
+    @property
+    def name(self) -> str: return "phi_redact"
 
-class ChemoProtocolTool:
-    name = "chemo_protocol"
-    description = "查询化疗方案模板（剂量/周期/预处理/监测）"
-    parameters = {
-        "type": "object",
-        "properties": {
-            "protocol_name": {"type": "string", "description": "方案名称，如 培美曲塞+顺铂"},
-            "cancer_type": {"type": "string", "description": "肿瘤类型"},
-            "stage": {"type": "string", "description": "分期"}
-        },
-        "required": ["cancer_type"]
-    }
-    tool_class = "read"
-    side_effect = False
-    effect_class = "unknown"
+    @property
+    def event(self) -> str: return "pre_tool"
 
-    async def execute(self, args: dict, context) -> ToolResult:
-        result = await self._query_protocol(args)
-        return ToolResult(output=result)
-
-    async def _query_protocol(self, args: dict) -> str:
-        # 查询化疗方案模板数据库
-        ...
+    async def execute(self, context: HookContext) -> HookResult:
+        tool_name = context.tool_name or ""
+        if not any(tool_name.startswith(p) for p in MEDICAL_TOOL_PREFIXES):
+            return HookResult.success()
+        redacted = self._redact_phi(context.tool_input)
+        if redacted is None:
+            return HookResult.success()
+        return HookResult(outcome=HookOutcome.SUCCESS, updated_input=redacted,
+                          additional_context="[PHI脱敏] 已对工具参数中的受保护健康信息进行脱敏处理")
 ```
 
-```python
-# tools/proton_eligibility.py
-from prismclaw.schema.tools import ToolResult
+生效前缀取 `config/settings.py` 的 `MEDICAL_TOOL_PREFIXES`（`smart_medical_record` / `medical_translate` / `search_guideline` / `search_drug` / `search_literature`），脱敏模式见 `domain/governance/phi_patterns.py`（身份证号、手机号、姓名、病历号）。
 
-class ProtonEligibilityTool:
-    """质子治疗适应症评估 — 仅做AI可执行的判断（指南检索+推理），不做物理/工程流程"""
-    name = "proton_eligibility"
-    description = "评估质子治疗适应症等级（基于NCCN/ASTRO指南），仅做信息判断不做治疗计划"
-    parameters = {
-        "type": "object",
-        "properties": {
-            "diagnosis": {"type": "string", "description": "诊断，如 室管膜瘤"},
-            "age": {"type": "integer", "description": "患者年龄"},
-            "tumor_site": {"type": "string", "description": "肿瘤部位"},
-            "prior_radiation": {"type": "boolean", "description": "是否既往放疗"}
-        },
-        "required": ["diagnosis", "age", "tumor_site"]
-    }
-    tool_class = "read"
-    side_effect = False
-    effect_class = "unknown"
-
-    async def execute(self, args: dict, context) -> ToolResult:
-        result = await self._assess(args)
-        return ToolResult(output=result)
-
-    async def _assess(self, args: dict) -> str:
-        # 适应症评估逻辑：检索指南数据库 + 推理判定适应症等级
-        # 返回：indication_level + indication_basis + guideline_refs + special_considerations
-        # 不涉及：治疗计划/剂量计算/QA等物理流程
-        ...
-        ...
-```
-
-### 4.6 PHI 脱敏钩子（扩展肿瘤专科）
-
-```python
-# hooks/phi_redact.py
-class PhiRedactHook:
-    """PHI 脱敏 — 只对医疗域注册的工具生效"""
-
-    _MEDICAL_TOOL_PREFIXES = (
-        "smart_medical_record", "medical_translate",
-        "search_guideline", "search_drug", "search_literature",
-        "chemo_protocol", "targeted_match", "proton_eligibility",
-    )
-
-    # 肿瘤专科 PHI 敏感字段
-    _ONCOLOGY_PHI_FIELDS = (
-        "patient_name", "id_number", "phone", "address",
-        "medical_record_number", "insurance_number",
-    )
-
-    async def execute(self, context) -> HookResult:
-        tool_name = getattr(context, "tool_name", "")
-        if not any(tool_name.startswith(p) for p in self._MEDICAL_TOOL_PREFIXES):
-            return HookResult(passed=True)
-        return self._redact_phi(context)
-
-    def _redact_phi(self, context) -> HookResult:
-        # PHI 脱敏逻辑：姓名 → ***、身份证号 → ***、电话 → *** 等
-        # 肿瘤专科：患者编码系统生成，不存储明文姓名
-        ...
-```
-
----
 
 ## 五、前端组件设计
 
-### 5.1 页面组件
+### 5.1 路由与导航
 
-#### SmartRecordPage.tsx
+域内无路由库，导航状态由 `navigation/useWorkbenchNav` 统一管理，来源有三：
 
-```tsx
-import { useState, useCallback } from 'react'
-import { Upload, FileText, Copy, Send, Download, Dna, Scan } from 'lucide-react'
-import { PrimaryButton } from './ui/PrimaryButton'
-import { SecondaryButton } from './ui/SecondaryButton'
-import { useUiStore } from '../stores'
-import { FileUploader } from './components/FileUploader'
-import { RecordCard } from './components/RecordCard'
-import { OncologyDetailCard } from './components/OncologyDetailCard'
+1. 系统侧栏点击子项 → 宿主经 `page` / `pageNonce` 下发
+2. 刷新 / 浏览器前进后退 → 解析 URL `?domain=medical&page=&mw_patient=&mw_kb=`
+3. 域内交互（如点击患者行）→ `openPatient(patientId)`
 
-interface UploadedFile {
-  name: string
-  type: string
-  size: number
-  file: File
-}
-
-interface StructuredRecord {
-  chief_complaint: string
-  present_illness: string
-  past_history: string
-  physical_examination: string
-  auxiliary_examination: string
-  diagnosis: { name: string; confidence: number }[]
-  treatment_plan: string
-}
-
-interface OncologyDetail {
-  tnm_staging: { t: string; n: string; m: string; stage: string; edition: string; basis: string }
-  pathology: { type: string; subtype: string; grade: string; ihc: Record<string, string>; molecular: Record<string, string> }
-  treatment_plan: {
-    intention: string
-    modalities: string[]
-    chemo_protocol?: { name: string; cycles_planned: number; dose: Record<string, string>; cycle_length: string }
-    targeted_therapy?: { drug: string; indication: string; dose: string }
-  }
-  performance_status: { ecog: number; kps: number }
-}
-
-export default function SmartRecordPage() {
-  const [files, setFiles] = useState<UploadedFile[]>([])
-  const [record, setRecord] = useState<StructuredRecord | null>(null)
-  const [oncologyDetail, setOncologyDetail] = useState<OncologyDetail | null>(null)
-  const [loading, setLoading] = useState(false)
-  const setActiveSection = useUiStore((s) => s.setActiveSection)
-  const setPendingComposerPrefill = useUiStore((s) => s.setPendingComposerPrefill)
-
-  const handleOrganize = useCallback(async () => {
-    setLoading(true)
-    const formData = new FormData()
-    files.forEach(f => formData.append('files', f.file))
-    formData.append('specialty', 'oncology')
-    const res = await fetch('/api/medical/records/organize', { method: 'POST', body: formData })
-    const data = await res.json()
-    setRecord(data.record)
-    setOncologyDetail(data.oncology_detail)
-    setLoading(false)
-  }, [files])
-
-  return (
-    <div className="flex-1 overflow-hidden flex flex-col min-w-[950px]">
-      <div className="px-8 pt-7 pb-5 shrink-0 max-w-[1200px] mx-auto w-full">
-        <h1 className="text-[var(--fs-title)] font-semibold text-[var(--c-text)]">智能病历 · 肿瘤专科</h1>
-        <p className="text-[var(--fs-body)] text-[var(--c-text-secondary)] mt-1">
-          上传文件，AI 自动整理成结构化肿瘤病历
-        </p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-8 py-6 max-w-[1200px] mx-auto w-full">
-        <FileUploader onUpload={handleUpload} />
-
-        {files.length > 0 && (
-          <div className="flex gap-3 mt-4 flex-wrap">
-            {files.map((f, i) => (
-              <FileCard key={i} file={f} onRemove={() => removeFile(i)} />
-            ))}
-          </div>
-        )}
-
-        <div className="mt-4">
-          <PrimaryButton
-            className="h-10 px-6 rounded-lg font-semibold"
-            disabled={files.length === 0 || loading}
-            onClick={handleOrganize}
-          >
-            {loading ? 'AI 整理中...' : '整理病历'}
-          </PrimaryButton>
-        </div>
-
-        {record && (
-          <div className="mt-6">
-            <RecordCard record={record} />
-            {oncologyDetail && <OncologyDetailCard detail={oncologyDetail} />}
-            <div className="flex gap-3 mt-4">
-              <SecondaryButton className="h-9 px-4 rounded-lg font-medium" onClick={handleCopy}>
-                <Copy className="w-4 h-4 mr-1.5" /> 复制
-              </SecondaryButton>
-              <SecondaryButton className="h-9 px-4 rounded-lg font-medium" onClick={handleExportPdf}>
-                <Download className="w-4 h-4 mr-1.5" /> 导出PDF
-              </SecondaryButton>
-              <SecondaryButton className="h-9 px-4 rounded-lg font-medium" onClick={handleSendToChat}>
-                <Send className="w-4 h-4 mr-1.5" /> 发送到对话
-              </SecondaryButton>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+```ts
+// navigation/nav-config.ts（页面键与默认值）
+export const PAGES = ['records', 'patients', 'knowledge'] as const
+export const KB_TABS = ['literature', 'guidelines', 'drugs'] as const
+export const DEFAULT_PAGE = 'records'
+export const DEFAULT_KB_TAB = 'literature'
 ```
 
-### 5.2 肿瘤专科子组件
+`app/MedicalWorkbenchApp.tsx` 按 `route.page` 分发：
 
-#### OncologyDetailCard.tsx
+| 状态 | 渲染 |
+|---|---|
+| `isPatientDetail` | `<PatientDetailPage patientId onBack />` |
+| `records` | `<MedicalRecordsPage onOpenPatient />` |
+| `patients` | `<PatientsPage onOpenPatient />` |
+| `knowledge` | `<KnowledgePage />` |
 
-```tsx
-interface Props {
-  detail: {
-    tnm_staging: { t: string; n: string; m: string; stage: string; edition: string; basis: string }
-    pathology: { type: string; subtype: string; grade: string; ihc: Record<string, string>; molecular: Record<string, string> }
-    treatment_plan: {
-      intention: string
-      modalities: string[]
-      chemo_protocol?: { name: string; cycles_planned: number; dose: Record<string, string>; cycle_length: string }
-      targeted_therapy?: { drug: string; indication: string; dose: string }
-    }
-    performance_status: { ecog: number; kps: number }
-    proton_eligibility?: {
-      indication_level: 'strong' | 'conditional' | 'investigational' | 'not_indicated'
-      indication_basis: string[]
-      guideline_refs: { source: string; recommendation: string }[]
-      special_considerations: string[]
-    }
-  }
-}
+切页后调 `reportDomainPage('medical', route.page)` 回报系统侧栏做高亮。
 
-/** 肿瘤专科详情卡片
- *  样式：glass-card px-6 py-5，分 TNM/病理/治疗方案/质子适应症 四大区块
- *  TNM：分期结果 text-[var(--c-accent)] font-bold font-mono
- *  IHC/分子：标签组 inline-flex gap-2 flex-wrap
- *  化疗方案：key-value 布局
- *  靶向药：匹配标记 bg-[var(--c-success)]/10
- *  质子适应症：等级徽章(Strong绿/Conditional黄/Investigational蓝) + 依据列表 + 指南引用
- */
-export function OncologyDetailCard({ detail }: Props) { ... }
-```
+### 5.2 智能病历（MedicalRecordsPage）
 
-### 5.3 路由注册
+三栏：患者选择 / 报告列表 / 报告详情，配套全局解析队列浮层。
 
-前端路由注册 1 个工作台页面：
+| 组件 | 职责 |
+|---|---|
+| `features/records/UploadModal` | 上传文件 → `POST /api/medical/records/upload`（202 入队） |
+| `features/records/InboxSlideOut` | 待归属报告抽屉（`GET /inbox`），支持指派给患者 |
+| `features/records/AssignDrawer` | 指派抽屉：选定患者后 `POST /{id}/assign` |
+| `features/records/ReportArchive` | 已归档报告区（按就诊时间分组） |
+| `features/records/ReportBrowser` | 报告列表 + 筛选 + 分页（`GET /`，`PagePager`） |
+| `features/records/ReportDetailModal` | 报告详情：结构化字段、附件预览、重新解析 |
+| `features/records/AttachmentViewer` | 原件预览（`GET /{id}/attachments/{index}`） |
+| `features/records/StructuredData` | 解析后的结构化字段展示 |
+| `features/records/ParseQueueFloat` | 右下角悬浮队列（`GET /queue`，轮询） |
+| `features/briefs/*` | 病历摘要生成、引用弹窗、列表侧板 |
 
-```tsx
-import MedicalWorkbenchPage from './MedicalWorkbenchPage'
+### 5.3 患者管理（PatientsPage / PatientDetailPage）
 
-{ path: '/medical', component: MedicalWorkbenchPage }
-```
+| 组件 | 职责 |
+|---|---|
+| `features/patients/PatientStatsRow` | 顶部统计条（`GET /patients/stats`） |
+| `features/patients/PatientFilterBar` | 关键词 / 病种 / 状态筛选 |
+| `features/patients/PatientTable` | 患者表格，行点击进入详情 |
+| `features/patients/PatientDetailView` | 详情页骨架（档案 + 咨询两栏） |
+| `features/patients/PatientIdentityBanner` | 详情页身份横幅 |
+| `features/patients/MedicalSummary` | 病史概要 |
+| `features/patients/ProgressRing` | 治疗进度环 |
+| `features/consultation/MedicalChatArea` | 详情页 AI 咨询区（`/api/medical/consultations`） |
+| `features/consultation/useConsultationChat` | 会话状态与流式消息 |
 
-工作台内部通过 `?tab=` 查询参数切换功能页面，不注册独立子路由。
+> 本域不设 `SmartRecordPage` / `OncologyDetailCard` / `MedicalWorkbenchPage`：工作台由上述真实页面组件组合而成。
 
-### 5.4 MedicalWorkbenchPage 组件
+### 5.4 医学知识库（KnowledgePage）
 
-```tsx
-import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+单页三 Tab，`features/kb/` 下三个内容组件 + 一个通用芯片组件：
 
-const TABS = [
-  { key: 'record', label: '智能病历', icon: FileText, component: SmartRecordPage },
-  { key: 'translate', label: '医学翻译', icon: Languages, component: MedicalTranslatePage },
-  { key: 'guideline', label: '搜指南', icon: BookOpen, component: SearchGuidelinePage },
-  { key: 'drug', label: '搜药品', icon: Pill, component: SearchDrugPage },
-  { key: 'literature', label: '搜文献', icon: Search, component: SearchLiteraturePage },
-]
+| 组件 | 数据源 | 布局 |
+|---|---|---|
+| `LiteratureFeed` | `GET /kb/literature` | 搜索框 + 最新精选 + 分类芯片 + 行流（研究类型 / 中英标题 / 期刊徽标 / IF / 相对时间） |
+| `GuidelineFeed` | `GET /kb/guidelines` | 最新精选 + 学科 Tab + 类型/地区芯片 + 排序（年份 / 名称） |
+| `DrugCatalog` | `GET /kb/drugs?pageSize=500` | 西药/中成药 → 一级分类 → 二级分类 → 药物组三栏；检索时第三栏转扁平结果 |
+| `ChipsRow` | — | 通用筛选芯片行（单选/多选、可清除）；`kb-utils.ts` 提供去重与相对时间格式化 |
 
-export default function MedicalWorkbenchPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const activeTab = searchParams.get('tab') || 'record'
-  const ActiveComponent = TABS.find(t => t.key === activeTab)?.component ?? SmartRecordPage
+`api/client.ts` 只做薄封装，直接返回 `types/view.ts` 中的 camelCase 视图模型（`LiteratureEntry` / `GuidelineEntry` / `DrugEntry`），不做字段重映射。
 
-  return (
-    <div className="flex-1 overflow-hidden flex min-w-[950px]">
-      {/* 左侧内嵌菜单 */}
-      <nav className="w-[200px] shrink-0 border-r border-[var(--c-border)] px-3 py-4 flex flex-col gap-1">
-        {TABS.map(tab => (
-          <button
-            key={tab.key}
-            className={`px-3 py-2.5 rounded-lg text-[var(--fs-body)] cursor-pointer text-left
-              ${activeTab === tab.key
-                ? 'bg-[var(--c-surface-2)] text-[var(--c-accent)]'
-                : 'text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-2)]/50'}`}
-            onClick={() => setSearchParams({ tab: tab.key })}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-      {/* 右侧功能页面 */}
-      <div className="flex-1 overflow-y-auto">
-        <ActiveComponent />
-      </div>
-    </div>
-  )
-}
-```
-
-侧边栏菜单通过 `GET /api/domains/manifests` 动态渲染，无需手动配置。
-
----
 
 ## 六、安全设计
 
@@ -1621,67 +817,73 @@ export default function MedicalWorkbenchPage() {
 | 基因检测结果 | 加密存储 | 正常展示（非PHI） |
 | TNM分期 | 正常存储 | 正常展示（非PHI） |
 
-### 6.2 质子适应症评估安全验证
+### 6.2 医疗内容安全
 
 | 验证项 | 触发时机 | 验证内容 |
 |---|---|---|
-| 适应症等级校验 | 质子治疗记录写入时 | 评估结果必须来自 `proton_eligibility` 工具，不能人工修改等级 |
-| RBE 不确定性提示 | 展示适应症评估结果时 | 提示 RBE=1.1 为常规值，临床实际可能 1.0-1.3，需结合临床判断 |
-| 评估数据来源审计 | 每次适应症评估 | 记录评估依据的指南版本和引用，确保可追溯 |
+| 强制免责声明 | 每次涉及用药/剂量/禁忌的回答 | 由 `_disclaimer_registry` 注册的 `medical` 规则注入，任何置信度都附加 |
+| 证据推断 | Agent 输出证据结论前 | `domain/analysis/evidence.py` 的 `medical_evidence_inferencer` 标注证据强度 |
+| 敏感扩展拦截 | 文件路由阶段 | `.dcm` / `.dicom` / `.hl7` / `.nii` / `.phi` / `.emr` / `.ehr` 走敏感通道 |
+| 咨询上下文隔离 | 会话启动 | `ConsultationContextHook`（SESSION_START）只注入该患者报告清单摘要 |
 
 ### 6.3 HIPAA 治理 Reducer
 
 ```python
-# governance/hipaa.py
-class HipaaReducer:
-    """HIPAA 合规治理 — 限制医疗域工具的使用范围"""
+# domain/governance/hipaa.py
+class HIPAAReducer:
+    """HIPAA 合规治理 — 限制医疗域工具的使用范围。"""
 
-    name = "hipaa_compliance"
-
-    def reduce(self, tool_name: str, args: dict, context) -> dict | None:
-        # 1. 限制 PHI 数据导出（禁止将包含 PHI 的结果写入非医疗域文件）
-        # 2. 限制外部 API 调用（医疗数据不得发送至未授权端点）
-        # 3. 审计记录（所有 PHI 访问记入审计日志）
-        ...
+    # reduce() 约束：
+    # 1. 禁止含 PHI 的工具结果写入非医疗域文件
+    # 2. 医疗数据不得发送到未授权外部端点
+    # 3. 所有 PHI 访问记入审计日志
 ```
 
+治理规则、证据推断器、敏感扩展与 PHI 模式均在 `on_build_runtime` 中注册，并通过 `ctx.defer_registry_cleanup` 在域卸载时反注册。
+
 ---
+
 
 ## 七、与系统现有能力的映射
 
 ### 7.1 工具能力映射
 
-| 医疗域工具 | 系统现有能力 | 扩展内容 |
+| 医疗域工具（8 个） | 系统现有能力 | 数据来源 |
 |---|---|---|
-| `smart_medical_record` | 系统 `RunRequest.files` + OCR | 新增：肿瘤专科结构化模板 |
-| `medical_translate` | 系统翻译能力 | 新增：肿瘤学/放射医学术语库 |
-| `search_guideline` | 系统 `WebSearch`/`WebFetch` | 新增：NCCN/CSCO/质子适应症结构化检索 |
-| `search_drug` | 系统 `WebSearch`/`WebFetch` | 新增：化疗方案模板 + 靶向匹配 + CYP3A4 |
-| `search_literature` | 系统 `WebSearch`/`WebFetch` | 新增：GRADE分级 + 年会追踪 + 临床试验 |
-| `chemo_protocol` | 无 | **新建**：化疗方案模板库 |
-| `targeted_match` | 无 | **新建**：靶向药-突变匹配库 |
-| `proton_eligibility` | 无 | **新建**：质子治疗适应症评估（仅AI可执行的判断） |
+| `smart_medical_record` | `RunRequest.files` + OCR + 结构化抽取 | `MedicalStore`（写入报告） |
+| `medical_translate` | 通用翻译能力 | 无（模型能力） |
+| `search_guideline` | `WebSearch` / `WebFetch`（可选外部补充） | `KbStore.list_guidelines()` |
+| `search_drug` | 同上 | `KbStore.list_drugs()` |
+| `search_literature` | 同上 | `KbStore.list_literatures()` |
+| `read_patient_profile` | 无（新建） | `MedicalStore` |
+| `read_patient_reports` | 无（新建） | `MedicalStore` |
+| `read_raw_report` | 无（新建） | `MedicalStore` |
+
+后三个为患者 AI 咨询的只读工具，避免 Agent 直接拼 SQL。不设 `chemo_protocol` / `targeted_match` / `proton_eligibility` 三个肿瘤专科工具。
 
 ### 7.2 数据表映射
 
-| 表名 | 对应系统现有表 | 说明 |
-|---|---|---|
-| `pc_medical_patients` | 无（新建） | 患者信息，PHI脱敏 |
-| `pc_medical_records` | 无（新建） | 病历记录，含 `oncology_detail` JSONB |
-| `pc_oncology_staging` | 无（新建） | 肿瘤分期+质子适应症评估，独立表支持分期查询 |
-| `pc_oncology_treatments` | 无（新建） | 肿瘤治疗记录，支持化疗/靶向/免疫/放疗 |
-| `pc_medical_searches` | 无（新建） | 搜索记录，通用表 |
-| `pc_medical_translations` | 无（新建） | 翻译记录 |
-| `pc_medical_record_files` | 无（新建） | 文件关联 |
+| 表名 | 说明 |
+|---|---|
+| `pc_medical_patients` | 患者档案，PHI 脱敏（`*_masked` + `*_hash`） |
+| `pc_medical_patient_reports` | 报告 / 解析队列 / 结构化结果（`patient_id` 可空，支持先上传后归属） |
+| `pc_medical_consultations` | 患者 AI 咨询会话登记 |
+| `pc_medical_briefs` | 病历摘要 |
+| `pc_medical_kb_literatures` | 文献 12 条（种子） |
+| `pc_medical_kb_guidelines` | 指南 22 条（PDF 导入） |
+| `pc_medical_kb_drugs` | 药品 92 条（种子） |
+
+> `pc_medical_records` / `pc_oncology_staging` / `pc_oncology_treatments` / `pc_medical_searches` / `pc_medical_translations` / `pc_medical_record_files` 不单独建表：对应信息由 `pc_medical_patient_reports` 的 JSONB 字段（`narrative_json` / `labs_json` / `medications_json`）承载。
 
 ---
 
-## 八、实施优先级
+## 八、实施进度
 
-| 阶段 | 功能 | 依赖 | 理由 |
-|---|---|---|---|
-| P0 | 智能病历（肿瘤专科+质子适应症评估） | 无 | 核心功能，其他功能均依赖病历数据 |
-| P0 | 搜药品（含化疗方案+靶向匹配） | 无 | 肿瘤治疗核心工具 |
-| P1 | 搜指南（NCCN/CSCO） | 无 | 临床决策支持 |
-| P1 | 搜文献（GRADE/年会） | 无 | 证据检索 |
-| P1 | 医学翻译（肿瘤学/放射医学） | 无 | 辅助功能 |
+| 阶段 | 功能 | 状态 |
+|---|---|---|
+| P0 | 智能病历（上传 / 解析队列 / 结构化 / 摘要） | 已实现 |
+| P0 | 患者管理（列表 / 统计 / 详情 / AI 咨询） | 已实现 |
+| P0 | 医学知识库 · 搜药品（92 条真实说明书） | 已实现 |
+| P1 | 医学知识库 · 搜指南（22 条真实 PDF 导入） | 已实现 |
+| P1 | 医学知识库 · 搜文献（12 条真实期刊文献） | 已实现 |
+| P1 | 医学翻译（仅 Agent 工具，无独立页面） | 已实现 |

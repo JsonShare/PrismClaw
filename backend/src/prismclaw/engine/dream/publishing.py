@@ -19,9 +19,10 @@ def build_publishable_memory(
     payload = dict(extracted)
     if overrides:
         payload.update(overrides)
-    memory_type = normalize_type(payload.get("type"))
-    if memory_type not in CANONICAL_TYPES:
-        memory_type = "fact"
+    try:
+        memory_type = normalize_type(payload.get("type"))
+    except ValueError:
+        memory_type = "fact"  # LLM 边界：未知词归入 fact
     # 层由 type 派生，与写入侧（memory 工具）保持同一规则。
     layer = "L3" if memory_type == "procedure" else "L2"
     supersedes_raw = payload.get("supersedes")
@@ -153,7 +154,10 @@ def normalize_steps(raw: Any) -> list[str]:
 def infer_memory_kind(raw: Any, *, layer: str, type_: Any) -> str:
     if isinstance(raw, str) and raw.strip():
         return raw.strip().lower()
-    type_text = normalize_type(type_)
+    try:
+        type_text = normalize_type(type_)
+    except ValueError:
+        type_text = "fact"
     if layer == "L3" or type_text == "procedure":
         return "procedure"
     if type_text in {"preference", "constraint"}:

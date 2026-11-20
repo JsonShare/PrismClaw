@@ -1,11 +1,5 @@
-"""医疗域配置 — 集中管理常量、锁键、工具前缀。"""
+"""医疗域配置 — 集中管理工具前缀等常量。"""
 
-from .settings import (
-    ADVISORY_LOCK_KEYS,
-    MEDICAL_TOOL_PREFIXES,
-)
+from .settings import MEDICAL_TOOL_PREFIXES
 
-__all__ = [
-    "ADVISORY_LOCK_KEYS",
-    "MEDICAL_TOOL_PREFIXES",
-]
+__all__ = ["MEDICAL_TOOL_PREFIXES"]

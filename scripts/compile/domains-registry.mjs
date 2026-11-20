@@ -9,11 +9,11 @@
  *    - DOMAIN_LABEL_MAP: key → 降级标签
  *    - DOMAIN_NAV_MAP: key → 侧栏导航项（标签 / 分组 / 顺序）
  *
- * 2. 后端 manifest 片段：各域 _manifest.generated.py
+ * 2. 后端 manifest 片段：各域 _manifest_generated.py
  *    - 每个域一个文件，bundle.py 的 get_manifest() 直接返回
  *
  * 3. Shell 变量：scripts/compile/out/.domains.env
- *    - PRISMCLAW_ENABLED_DOMAINS / PRISMCLAW_BACKEND_PATHS
+ *    - PRISMCLAW_BACKEND_PATHS
  *    - 供 Makefile / Dockerfile / build-frontend.sh 使用
  *
  * 用法：
@@ -188,15 +188,6 @@ function generateLazyMapTs(enabledDomains) {
   lines.push('}')
   lines.push('')
 
-  // 域深链参数 —— 核心据此把 ?<param>=... 还原成对应分区，避免在核心硬编码域名
-  lines.push('// 域深链参数 — 键为域 key，值为域内当前页的 query 参数名')
-  lines.push('export const DOMAIN_URL_PARAM_MAP: Record<string, string> = {')
-  for (const d of enabledDomains) {
-    lines.push(`  ${d.key}: '${d.url_param || ''}',`)
-  }
-  lines.push('}')
-  lines.push('')
-
   // 域左侧栏导航项 —— 分组标签 + 顺序 + 图标均来自 domains.yaml，核心侧栏据此平铺渲染
   lines.push('// 域左侧栏导航项 — 顺序 / 分组 / 图标来自 domains.yaml（核心侧栏平铺渲染）')
   lines.push('export const DOMAIN_NAV_MAP: Record<string, { key: string; label: string; group: string; icon: string }[]> = {')
@@ -233,8 +224,8 @@ function generateManifestPy(domain) {
     'MANIFEST = DomainManifest(',
     `    key="${domain.key}",`,
     `    label="${domain.label}",`,
-    `    icon="${domain.icon}",`,
-    `    path="${domain.path}",`,
+    `    icon="${domain.icon || ''}",`,
+    `    path="${domain.path || ''}",`,
     `    menus=[`,
     ...menusLines,
     '    ],',
@@ -244,49 +235,6 @@ function generateManifestPy(domain) {
     ')',
     '',
   ].join('\n')
-}
-
-// ── 生成能力开关聚合表 _capability_filters_generated.py ──
-
-function generateCapabilityFilterPy(allDomains, enabledKeys) {
-  const enabledList = enabledKeys.map(k => `"${k}"`).join(', ')
-  const lines = [
-    '"""自动生成 — 由 scripts/compile/domains-registry.mjs 从 domains.yaml 生成。',
-    '域启用列表 + 能力开关聚合表 | ⚠ 请勿手动修改！"""',
-    '',
-    '# 编译期裁剪后的启用域列表（domains.yaml enabled，可被 PRISMCLAW_DOMAINS override）。',
-    '# 后端 _lifespan 据此调用 domain_registry.load_enabled(...)，安装不再等于启用。',
-    `ENABLED_DOMAINS = [${enabledList}]`,
-    '',
-    '# 每域能力开关：{"tools": {name: bool}, "skills": {name: bool}}',
-    '# 未列出的工具/技能默认启用（opt-out）；此处仅记录 domains.yaml 中显式声明的项。',
-    '# 遍历所有声明过的域（含禁用域）：显式声明的 false 不因域被禁用/override 而丢失。',
-    'CAPABILITY_FILTERS = {',
-  ]
-  for (const [key, d] of Object.entries(allDomains)) {
-    const hasTools = Array.isArray(d.tools) && d.tools.length > 0
-    const hasSkills = Array.isArray(d.skills) && d.skills.length > 0
-    if (!hasTools && !hasSkills) continue
-    lines.push(`  "${key}": {`)
-    if (hasTools) {
-      lines.push('    "tools": {')
-      for (const t of d.tools) {
-        lines.push(`      "${t.name}": ${t.enabled === false ? 'False' : 'True'},`)
-      }
-      lines.push('    },')
-    }
-    if (hasSkills) {
-      lines.push('    "skills": {')
-      for (const s of d.skills) {
-        lines.push(`      "${s.name}": ${s.enabled === false ? 'False' : 'True'},`)
-      }
-      lines.push('    },')
-    }
-    lines.push('  },')
-  }
-  lines.push('}')
-  lines.push('')
-  return lines.join('\n')
 }
 
 // ── 主流程 ──
@@ -352,26 +300,19 @@ function main() {
     }
   }
 
-  // ── 产物 3: 启用域列表 + 能力开关聚合表（核心层，遍历所有声明过的域） ──
-  const capFilterPath = resolve(PROJECT_ROOT, 'backend/src/prismclaw/schema/services/_capability_filters_generated.py')
-  mkdirSync(dirname(capFilterPath), { recursive: true })
-  writeFileSync(capFilterPath, generateCapabilityFilterPy(domains, enabledDomains.map(d => d.key)), 'utf8')
-  console.log('✓ [核心] Generated:', capFilterPath)
-
-  // ── 产物 4: Shell 变量 ──
+  // ── 产物 3: Shell 变量 ──
   const backendPaths = enabledDomains
     .map(d => d.backend_path || `backend/src/prismclaw_${d.key}`)
   const envPath = resolve(__dirname, 'out/.domains.env')
   mkdirSync(dirname(envPath), { recursive: true })
   const envLines = [
     '# 自动生成 — 由 scripts/compile/domains-registry.mjs 生成',
-    `PRISMCLAW_ENABLED_DOMAINS="${enabledDomains.map(d => d.key).join(',')}"`,
     `PRISMCLAW_BACKEND_PATHS="${backendPaths.join(',')}"`,
   ]
   writeFileSync(envPath, envLines.join('\n') + '\n', 'utf8')
   console.log('✓ [部署] Generated:', envPath)
 
-  console.log(`\n  ${enabledDomains.length} domain(s) → 4 categories of artifacts generated`)
+  console.log(`\n  ${enabledDomains.length} domain(s) → 3 categories of artifacts generated`)
 }
 
 main()

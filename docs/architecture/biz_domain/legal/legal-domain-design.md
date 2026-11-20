@@ -503,6 +503,10 @@ legal-chineselaw 已有 **12 个子域插件、20+ 命令、7 个工作流**，L
 
 ### 3.1 完整 DDL
 
+> **实现状态：以下 DDL 为设计稿，尚未落地。** `deploy/sql/init_legal.sql` 当前只有注释、不创建任何对象；`backend/src/subpackages/legal/` 仅有 `integration/`（Bundle 装配），不存在 `persistence/`，全仓无任何 `pc_legal_*` 引用。落地时需把本节 DDL 移入 `init_legal.sql` 并补 `persistence/` 层。
+>
+> 落地前置：`idx_legal_parties_name_trgm` 依赖 `pg_trgm` 扩展，需在本文件或核心 SQL 中补 `CREATE EXTENSION IF NOT EXISTS pg_trgm`；`gen_random_uuid()` 由 PostgreSQL 13+ 内置，无需额外扩展。
+
 ```sql
 -- ============================================================
 -- pc_legal_parties — 当事人表
@@ -785,7 +789,7 @@ class LegalBundle:
             key="legal",
             label="法律",
             icon="scale",
-            path="/legal",                       # 工作台路由，不再平铺子路由
+            path="/legal",                       # 工作台路由，不平铺子路由
             menus=[
                 MenuEntry(key="cases", label="案件管理", icon="folder-open"),
                 MenuEntry(key="track", label="案件跟踪", icon="activity"),

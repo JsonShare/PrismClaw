@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from prismclaw.engine.integrations.mcp.client_manager import _is_unfilled_placeholder
+from prismclaw.engine.mcp.client_manager import _is_unfilled_placeholder
 
 
 def test_detects_angle_bracket_prose_placeholder():
@@ -29,8 +29,8 @@ def test_placeholder_env_marks_server_disabled_without_spawn():
     import asyncio
     from unittest.mock import patch
 
-    from prismclaw.engine.integrations.mcp.client_manager import MCPClientManager
-    from prismclaw.engine.integrations.mcp.settings import McpServerConfig
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
+    from prismclaw.engine.mcp.settings import McpServerConfig
 
     async def run():
         from collections import defaultdict, deque

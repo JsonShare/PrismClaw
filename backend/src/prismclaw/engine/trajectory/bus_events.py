@@ -96,7 +96,7 @@ class SessionTurnFinished(BaseModel):
     to the old flush_to_redis on turn exit).
 
     `terminated_by` carries the final turn-end reason from agent_loop's
-    state.ctx.terminated_by (closed vocabulary: ``TerminalReason``).
+    rt.terminated_by (closed vocabulary: ``TerminalReason``).
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str

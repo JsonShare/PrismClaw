@@ -4,7 +4,7 @@
 
 ## 职责概述
 
-插件系统为 PrismClaw 提供可扩展的能力注册与生命周期管理。支持三种插件方言（Canonical / Trae / BARE_SKILLS），通过信任层级实现安全门控，通过 Hook 系统实现行为拦截与注入，通过 Circuit Breaker 保护系统免受故障插件影响。
+插件系统为 PrismClaw 提供可扩展的能力注册与生命周期管理。支持两种插件方言（Canonical / BARE_SKILLS），通过信任层级实现安全门控，通过 Hook 系统实现行为拦截与注入，通过 Circuit Breaker 保护系统免受故障插件影响。
 
 ## 架构总览
 
@@ -20,12 +20,12 @@
 │                             │                                    │
 │  ┌──────────────────────────▼───────────────────────────────┐   │
 │  │  PluginLoadOrchestrator: 三源并行加载 + 合并               │   │
-│  │  LoadStrategy: NativePython / Declarative / Trae           │   │
+│  │  LoadStrategy: NativePython / Declarative                  │   │
 │  └──────────────────────────┬───────────────────────────────┘   │
 │                             │                                    │
 │  ┌──────────────────────────▼───────────────────────────────┐   │
 │  │  Ingest Pipeline: detect dialect → convert → canonical    │   │
-│  │  CANONICAL / TRAE / BARE_SKILLS → 规范化副本              │   │
+│  │  CANONICAL / BARE_SKILLS → 规范化副本                     │   │
 │  └──────────────────────────┬───────────────────────────────┘   │
 │                             │                                    │
 │  ┌──────────────────────────▼───────────────────────────────┐   │
@@ -225,7 +225,6 @@ CLOSED (正常) → OPEN (熔断) → HALF_OPEN (尝试恢复) → CLOSED
 | 方言 | 处理 |
 |------|------|
 | `CANONICAL` | 直接复制 |
-| `TRAE` | 复制 + 生成 canonical manifest |
 | `BARE_SKILLS` | 复制 + 合成最小 manifest |
 | `UNKNOWN` | 抛出 `IngestError` |
 
@@ -237,11 +236,10 @@ CLOSED (正常) → OPEN (熔断) → HALF_OPEN (尝试恢复) → CLOSED
 
 | 策略 | 识别条件 | 加载方式 |
 |------|---------|---------|
-| `DeclarativePluginLoadStrategy` | `.plugin/plugin.json` 或 `plugin.json` | 声明式加载 |
+| `DeclarativePluginLoadStrategy` | `.plugin/plugin.json` | 声明式加载 |
 | `NativePythonPluginLoadStrategy` | `main.py` | importlib 动态加载 + SDK 全局状态收集 |
-| `TraePluginLoadStrategy` | `.trae-plugin/plugin.json` | 内存转换为 canonical 后声明式加载 |
 
-**`default_strategies()`** — 默认策略列表顺序：NativePython → Declarative → Trae
+**`default_strategies()`** — 默认策略列表顺序：NativePython → Declarative
 
 **v5 渐进式披露：** 技能加载时只解析 frontmatter（`body=""`），content pipeline 参数暂存到 `pipeline_context`，body 按 `SkillRuntime._ensure_body_loaded()` 按需加载。
 
@@ -301,13 +299,12 @@ Handler.execute(HookContext) → HookResult
 ```
 source_dir
     ↓
-detect_dialect() → PluginDialect (CANONICAL / TRAE / BARE_SKILLS / UNKNOWN)
+detect_dialect() → PluginDialect (CANONICAL / BARE_SKILLS / UNKNOWN)
     ↓
 shutil.copytree() — 物化副本（源目录不修改）
     ↓
 按方言处理：
     CANONICAL → 直接可用
-    TRAE → write_canonical_manifest()
     BARE_SKILLS → _write_bare_skills_manifest()
     ↓
 IngestResult (source / output_dir / manifest_path / dialect)
@@ -342,7 +339,7 @@ plugins/
   ├── hooks/factory.py → hooks/handlers.py, hooks/schema.py
   ├── hooks/handlers.py → hooks/schema.py, manifest/substitution.py
   ├── hooks/circuit_breaker.py → (standalone)
-  ├── ingest/pipeline.py → ingest/detect.py, ingest/trae_convert.py
+  ├── ingest/pipeline.py → ingest/detect.py
   ├── loading/load_strategy.py → manifest/manifest.py, loading/_declarative_load.py,
   │                               loading/_manifest_parse.py, loading/agent_loader.py
   └── manifest/manifest.py → registry/identity.py

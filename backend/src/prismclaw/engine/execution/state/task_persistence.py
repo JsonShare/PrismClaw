@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from prismclaw.engine.execution.checkpoint import (
@@ -14,6 +15,7 @@ from prismclaw.engine.execution.checkpoint import (
     ToolEffectRecord,
     evaluate_resume_decision,
 )
+from prismclaw.engine.foundation.evidence_classify import is_recovery_probe_evidence
 from prismclaw.schema.agent.task_runtime import EvidenceRecord, ReviewDecisionRecord, TaskMutation, TaskRuntimeState
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.content.compaction import DecisionLedgerEvent
@@ -35,6 +37,83 @@ from prismclaw.engine.execution.dispatch.turn_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class MutationDecision:
+    accepted: bool
+    reason_code: str
+    error_message: str | None = None
+
+
+def evaluate_task_mutation(
+    mutation: TaskMutation,
+    *,
+    task_runtime: TaskRuntimeState,
+    evidence_records: list[EvidenceRecord] | None = None,
+    review_decision: ReviewDecisionRecord | None = None,
+) -> MutationDecision:
+    """结构性仲裁：并发版本 / entry 就绪 / review 记录 / 恢复探针。
+
+    完成证据门禁的唯一权威是完成申报受理（``control.completion``，
+    准则逐条评估）；这里不重复实现证据检查。
+    """
+    if mutation.task_id != task_runtime.task_id:
+        return MutationDecision(
+            accepted=False,
+            reason_code="mutation_task_mismatch",
+            error_message=(
+                f"变更的 task_id={mutation.task_id!r} 与"
+                f"运行时的 task_id={task_runtime.task_id!r} 不一致"
+            ),
+        )
+    if mutation.expected_state_version != task_runtime.state_version:
+        return MutationDecision(
+            accepted=False,
+            reason_code="mutation_version_conflict",
+            error_message=(
+                f"变更期望的 state_version={mutation.expected_state_version}，"
+                f"但运行时为 {task_runtime.state_version}"
+            ),
+        )
+
+    if (
+        task_runtime.entry_resolution_status != "ready"
+        and mutation.mutation_type != "task.block"
+    ):
+        return MutationDecision(
+            accepted=False,
+            reason_code=f"entry_resolution_{task_runtime.entry_resolution_status}",
+            error_message=(
+                "任务条目尚未就绪；在条目解析成功前，运行时变更被阻断"
+            ),
+        )
+
+    if mutation.mutation_type == "task.review.record":
+        if review_decision is None:
+            return MutationDecision(
+                accepted=False,
+                reason_code="review_decision_missing",
+                error_message="review 变更需要结构化的审查决策",
+            )
+        return MutationDecision(accepted=True, reason_code="ok")
+
+    if mutation.mutation_type == "task.resume_probe_completed":
+        probe_records = [
+            record
+            for record in (evidence_records or [])
+            if record.task_id == task_runtime.task_id
+            and is_recovery_probe_evidence(record)
+        ]
+        if not probe_records:
+            return MutationDecision(
+                accepted=False,
+                reason_code="recovery_probe_required",
+                error_message="恢复任务需要恢复探针证据",
+            )
+        return MutationDecision(accepted=True, reason_code="ok")
+
+    return MutationDecision(accepted=True, reason_code="ok")
 
 
 def _register_entry(tree: SessionTree, entry: CustomEntry) -> None:
@@ -275,7 +354,6 @@ def _apply_task_mutation_to_runtime(
         updated_runtime.state = "executing"
         updated_runtime.pending_confirmation_reason = None
     elif mutation.mutation_type == "task.review.record" and review_record is not None:
-        updated_runtime.state = "reviewing"
         updated_runtime.latest_review_decision_id = review_record.decision_id
         updated_runtime.checkpoint_cursor = review_record.decision_id
     elif mutation.mutation_type == "task.resume_probe_completed":
@@ -304,8 +382,6 @@ async def _evaluate_and_apply_task_mutation(
     evidence_records: list[EvidenceRecord],
     review_record: ReviewDecisionRecord | None = None,
 ) -> tuple[TaskRuntimeState, bool, str]:
-    from prismclaw.engine.execution.loop.arbiter import evaluate_task_mutation
-
     decision = evaluate_task_mutation(
         mutation,
         task_runtime=task_runtime,

@@ -184,18 +184,6 @@ def _render_subagent_result_handover(envelope: SubagentResultEnvelope) -> str:
             # 领域扩展（泛化渲染，保留域名前缀避免歧义）
             for key, value in ev.domain_extensions.items():
                 ev_line += f" [{key}={value}]"
-            # deprecated: 旧域字段兜底
-            if not ev.domain_extensions:
-                if ev.evidence_level:
-                    ev_line += f" [evidence:{ev.evidence_level}]"
-                if ev.recommendation_grade:
-                    ev_line += f" [grade:{ev.recommendation_grade}]"
-                if ev.legal_source_type:
-                    ev_line += f" [legal:{ev.legal_source_type}]"
-                if ev.legal_effective_date:
-                    ev_line += f" effective:{ev.legal_effective_date}"
-                if ev.legal_status:
-                    ev_line += f" ({ev.legal_status})"
             lines.append(ev_line)
     if envelope.confidence_assessment:
         lines.append(f"confidence: {envelope.confidence_assessment}")

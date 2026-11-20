@@ -14,14 +14,14 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    select,
-    insert,
-    update,
     func,
+    insert,
+    select,
+    update,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from ..models.tables import briefs, BRIEF_COLUMNS, patient_reports
+from ..models.tables import BRIEF_COLUMNS, briefs, patient_reports
 from .helpers import row_to_dict
 
 logger = logging.getLogger(__name__)

@@ -10,11 +10,11 @@ from functools import partial
 from typing import Any
 
 from prismclaw.engine.execution.loop import continue_ as _continue
-from prismclaw.engine.execution.loop import prepare as _prepare
 from prismclaw.engine.execution.loop import stream as _stream
 from prismclaw.engine.execution.loop import terminal as _terminal
 from prismclaw.engine.execution.loop import tools as _tools
-from prismclaw.engine.execution.loop.runtime import build_runtime
+from prismclaw.engine.execution.loop import turn_prepare as _prepare
+from prismclaw.engine.execution.loop.runtime import LoopRuntime, build_runtime
 from prismclaw.engine.execution.loop.types import (
     ExecutePort,
     LoopConfig,
@@ -26,54 +26,9 @@ from prismclaw.engine.execution.loop.types import (
 logger = logging.getLogger(__name__)
 
 
-def build_loop_config(
-    deps: Any,
-    request: Any,
-    recovery: Any,
-    state_machine: Any,
-    tool_loop_state: Any,
-    run_state: Any,
-    initial_task_spec: Any,
-    retry_counts: Any,
-    response_policy: Any,
-    *,
-    pipeline: Any = None,
-    tool_ctx: Any = None,
-    tool_workspace_path: Any = None,
-    effective_model: str | None = None,
-    abort_event: Any = None,
-    run_deadline_s: float = 0.0,
-    run_started: float = 0.0,
-    task_runtime: Any = None,
-    snapshot: Any = None,
-    tree: Any = None,
-    traj_scope: Any = None,
-    attachment_guidance: str | None = None,
-) -> LoopConfig:
-    """组装 LoopConfig：装配 Runtime，再把 stage 函数绑定为端口。"""
-    rt = build_runtime(
-        deps=deps,
-        request=request,
-        recovery=recovery,
-        state_machine=state_machine,
-        tool_loop_state=tool_loop_state,
-        run_state=run_state,
-        initial_task_spec=initial_task_spec,
-        retry_counts=retry_counts,
-        response_policy=response_policy,
-        pipeline=pipeline,
-        tool_ctx=tool_ctx,
-        tool_workspace_path=tool_workspace_path,
-        effective_model=effective_model,
-        abort_event=abort_event,
-        run_deadline_s=run_deadline_s,
-        run_started=run_started,
-        task_runtime=task_runtime,
-        snapshot=snapshot,
-        tree=tree,
-        traj_scope=traj_scope,
-        attachment_guidance=attachment_guidance,
-    )
+def build_loop_config(rt: LoopRuntime) -> LoopConfig:
+    """组装 LoopConfig：原地装配 Runtime，再把 stage 函数绑定为端口。"""
+    build_runtime(rt)
 
     # persist_turn 不消费 state；端口签名首参是 state，用薄适配丢弃。
     async def _persist_denied(

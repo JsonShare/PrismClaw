@@ -46,7 +46,7 @@ def _reviewer(root: Path) -> CompletionReviewer:
 
 
 def _runtime() -> TaskRuntimeState:
-    return TaskRuntimeState(task_id="s:t1", session_id="s1", state="reviewing")
+    return TaskRuntimeState(task_id="s:t1", session_id="s1", state="executing")
 
 
 # ── 契约构建分支测试 ──────────────────────────────────────────────────────────

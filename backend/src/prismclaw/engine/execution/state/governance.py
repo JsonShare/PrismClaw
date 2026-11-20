@@ -21,7 +21,8 @@ from prismclaw.engine.execution.control.completion import (
     build_review_record,
 )
 from prismclaw.engine.execution.control.kernel import Decision, CompletionKernel, TerminalReason
-from prismclaw.engine.execution.loop.arbiter import RunContext, record_review_outcome
+from prismclaw.engine.execution.loop.runtime import LoopRuntime
+from prismclaw.engine.execution.loop.terminal import record_review_outcome
 from prismclaw.engine.execution.state.task_persistence import (
     _new_task_mutation,
     _build_runtime_mutation_patch,
@@ -107,7 +108,7 @@ def _build_goal_drive_prompt(
 # ---------------------------------------------------------------------------
 
 async def evaluate_no_tool_governance(
-    ctx: RunContext,
+    rt: LoopRuntime,
     *,
     response: Any,
     event: Any,
@@ -138,14 +139,14 @@ async def evaluate_no_tool_governance(
     from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
     from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.engine.execution.checkpoint import ResumeBoundary
-    from prismclaw.engine.execution.loop.arbiter import persist_snapshot_fn
+    from prismclaw.engine.execution.loop.terminal import persist_snapshot_fn
 
-    deps = ctx.deps
-    request = ctx.request
-    tree = ctx.tree
-    snapshot = ctx.snapshot
-    task_runtime = ctx.task_runtime
-    evidence_ledger = ctx.evidence_ledger  # 引用语义：append 直接修改 ctx 上的同一个 list
+    deps = rt.deps
+    request = rt.request
+    tree = rt.tree
+    snapshot = rt.snapshot
+    task_runtime = rt.task_runtime
+    evidence_ledger = rt.evidence_ledger  # 引用语义：append 直接修改 rt 上的同一个 list
 
     decision_no_tool = decide_no_tool_turn(
         response=response,
@@ -199,7 +200,7 @@ async def evaluate_no_tool_governance(
     # ── 3. 完成内核的唯一裁决 ──
     # blocked 申报意图在工具回合写入、在此一次性消费；内核负责判定它是
     # 否成立（未尝试即申报会被拒绝并计入 repairs）。
-    tool_ctx = ctx._tool_ctx
+    tool_ctx = rt.tool_ctx
     block_intent = getattr(tool_ctx, "goal_block_intent", None)
     if block_intent is not None:
         tool_ctx.goal_block_intent = None
@@ -211,7 +212,7 @@ async def evaluate_no_tool_governance(
     _gov_p_t0 = time.monotonic()
     if review is not None:
         task_runtime, review_evidence_ids = await _persist_review_record(
-            ctx,
+            rt,
             task_runtime=task_runtime,
             review=review,
             evidence_ledger=evidence_ledger,
@@ -297,11 +298,11 @@ async def evaluate_no_tool_governance(
         raise RuntimeError(
             f"completion mutation rejected after review: {completion_reason}"
         )
-    ctx.task_runtime = task_runtime
+    rt.task_runtime = task_runtime
     run_state.current_phase = "finalize_turn"
     _set_resume_boundary(snapshot, boundary=ResumeBoundary.AFTER_TURN_FINALIZE)
     _gov_p_t0 = time.monotonic()
-    await persist_snapshot_fn(ctx)
+    await persist_snapshot_fn(rt)
     _snapshot_ms = (time.monotonic() - _gov_p_t0) * 1000
     _gov_p_t0 = time.monotonic()
     done_event = await complete_no_tool_turn(
@@ -350,7 +351,7 @@ async def evaluate_no_tool_governance(
 # ---------------------------------------------------------------------------
 
 async def _persist_review_record(
-    ctx: RunContext,
+    rt: LoopRuntime,
     *,
     task_runtime: Any,
     review: Any,
@@ -358,7 +359,7 @@ async def _persist_review_record(
 ) -> tuple[Any, list[str]]:
     """把准则评估结果写成 review mutation（审计留痕），返回 (任务运行时, 证据 id)。"""
     review_record = build_review_record(task_runtime=task_runtime, result=review)
-    record_review_outcome(ctx, review_record)
+    record_review_outcome(rt, review_record)
     review_mutation = _new_task_mutation(
         task_runtime,
         actor_kind="review",
@@ -367,9 +368,9 @@ async def _persist_review_record(
         evidence_ids=list(review_record.evidence_ids),
     )
     task_runtime, applied, reason = await _evaluate_and_apply_task_mutation(
-        deps=ctx.deps,
-        tree=ctx.tree,
-        snapshot=ctx.snapshot,
+        deps=rt.deps,
+        tree=rt.tree,
+        snapshot=rt.snapshot,
         task_runtime=task_runtime,
         mutation=review_mutation,
         evidence_records=evidence_ledger,
@@ -377,8 +378,8 @@ async def _persist_review_record(
     )
     if not applied:
         raise RuntimeError(f"completion review mutation rejected: {reason}")
-    # NOTE: ctx._tool_ctx.task_runtime 是 ParallelTaskExtras（引擎级运行时容器，
+    # NOTE: rt.tool_ctx.task_runtime 是 ParallelTaskExtras（引擎级运行时容器，
     # 持有 parallel_task_store），不得覆写为 TaskRuntimeState。
-    ctx.task_runtime = task_runtime
+    rt.task_runtime = task_runtime
     return task_runtime, list(review_record.evidence_ids)
 

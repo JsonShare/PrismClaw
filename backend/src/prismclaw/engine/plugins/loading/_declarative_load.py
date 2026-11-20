@@ -287,8 +287,8 @@ def _substitute_mcp_server_configs(
     return substituted
 
 
-# 单次技能激活注入 PLUGIN.md 的 token 上限兜底值。域包（法律/医疗等）的
-# PLUGIN.md 动辄上万 token，全量注入会挤占上下文并淹没当前任务。
+# 单次技能激活注入 PLUGIN.md 的 token 上限兜底值。域包的大型 PLUGIN.md
+# 动辄上万 token，全量注入会挤占上下文并淹没当前任务。
 # 实际取值由 ``subcaps.plugin_persona`` 决定，本常量仅作读取失败时的回落。
 _PLUGIN_INSTRUCTIONS_TOKEN_BUDGET = 2000
 
@@ -518,10 +518,8 @@ def _build_manifest_and_capability(
 
     全程操作 pydantic ``PluginManifest`` model 对象，不经过 raw dict。
 
-    ``manifest_override``：方言无关化入口。canonical 策略传 None，由
-    ``_resolve_canonical_manifest`` 从 ``install_path`` 读 ``plugin.json``；
-    方言策略（如 ``.trae-plugin``）先把自身清单转换为 canonical 形态再传入，
-    本函数之后的 skills/agents/commands/变量替换等处理对两者完全一致。
+    ``manifest_override``：可选的预解析清单；为 None 时由
+    ``_resolve_canonical_manifest`` 从 ``install_path`` 读 ``plugin.json``。
 
     ``remap_rules``：插件自身或所属 marketplace 声明的路径重映射规则，
     在变量替换前作用于正文。核心不内置任何插件特定路径——规则完全来自
@@ -760,13 +758,12 @@ async def _load_declarative_plugin(
     dialect: str,
     skill_scanner: Any | None = None,
 ) -> tuple[LoadedPlugin | None, list[PluginError]]:
-    """声明式插件加载核心（canonical 与方言策略共享）。
+    """声明式插件加载核心。
 
     把 ``_build_manifest_and_capability`` 的同步文件 I/O offload 到线程（让
     ``_load_group`` 的插件级 gather 获得真实并发、不阻塞事件循环），再用其
-    结构化产物组装 ``LoadedPlugin``。canonical 策略传 ``manifest_override=None``
-    （由 ``_resolve_canonical_manifest`` 读盘）；方言策略先把自身清单转换为
-    canonical 形态再经 ``manifest_override`` 注入。``dialect`` 仅用于日志。
+    结构化产物组装 ``LoadedPlugin``。``manifest_override`` 为 None 时由
+    ``_resolve_canonical_manifest`` 读盘；``dialect`` 仅用于日志。
 
     ``porting_context``：marketplace 级 porting 上下文（``remap_rules`` +
     ``marketplace_name``），由发现引擎从市场级 plugin.json 通用解析。据此派生
@@ -790,8 +787,8 @@ async def _load_declarative_plugin(
         marketplace_name = porting_context.get("marketplace_name")
         marketplace_description = porting_context.get("marketplace_description")
         if isinstance(marketplace_name, str) and marketplace_name:
-            # 共享数据目录以 marketplace 名为键，跨子插件一致（如 legal 的
-            # 跨领域 matter 与 company-profile）。复用 data_dir 的 sanitize。
+            # 共享数据目录以 marketplace 名为键，跨子插件一致（同一域包内的
+            # 跨领域数据）。复用 data_dir 的 sanitize。
             marketplace_data_dir = get_plugin_data_dir(
                 resolve_data_base_dir(data_base_dir), marketplace_name
             )

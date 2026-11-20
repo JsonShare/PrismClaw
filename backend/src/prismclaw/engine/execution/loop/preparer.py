@@ -4,7 +4,7 @@
 RunPreparer.prepare()，返回判别类型 PrepareResult：
 
 - EarlyExit：hook 阻断 / bootstrap 错误 / 确认拒绝等早期退出，携带事件流
-- PreparedRun：正常启动完成，所有字段有确定初始值，杜绝 finally 的 NameError
+- LoopRuntime：正常启动完成，run 级状态全部落在唯一容器上
 
 调用方只需 isinstance 判别，不再需要 try/except NameError 守护。
 """
@@ -14,7 +14,7 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,6 @@ from prismclaw.engine.compression.preservation import (
 )
 from prismclaw.engine.execution.checkpoint import (
     ResumeBoundary,
-    RunSnapshot,
     RunStateMachine,
     evaluate_resume_decision,
     is_recovery_probe_resumable,
@@ -41,11 +40,6 @@ from prismclaw.engine.execution.loop._bootstrap_helpers import (
     _build_task_runtime_from_spec,
     _build_workspace_state_evidence,
 )
-from prismclaw.engine.execution.loop.arbiter import (
-    RunContext,
-    mark_task_blocked,
-    persist_snapshot_fn,
-)
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.loop.entry_runtime import (
     EntryRuntimeBootstrapError,
@@ -53,15 +47,18 @@ from prismclaw.engine.execution.loop.entry_runtime import (
 )
 from prismclaw.engine.execution.loop.ownership import (
     _claim_run_ownership,
+    _release_run_ownership,
     _restore_task_spec_from_snapshot,
     _RunOwnershipLease,
     _takeover_run_ownership,
 )
 from prismclaw.engine.execution.loop.pending_queue import PendingMessageQueue
-from prismclaw.engine.execution.loop.trajectory_scope import (
-    TrajectoryScope,
-    setup_trajectory_early,
+from prismclaw.engine.execution.loop.runtime import LoopRuntime
+from prismclaw.engine.execution.loop.terminal import (
+    mark_task_blocked,
+    persist_snapshot_fn,
 )
+from prismclaw.engine.execution.loop.trajectory_scope import setup_trajectory_early
 from prismclaw.engine.execution.loop.tree_writer import (
     _append,
     _persist_task_runtime_snapshot,
@@ -111,7 +108,7 @@ from prismclaw.schema.config.config import WorkspaceConfig
 from prismclaw.schema.content.streaming import ErrorEvent
 from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState
-from prismclaw.schema.session.types import SessionTree, generate_entry_id, now_iso
+from prismclaw.schema.session.types import generate_entry_id, now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -122,71 +119,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class EarlyExit:
-    """Hook 阻断等早期退出路径，携带待 yield 的事件流 + teardown 所需状态。"""
+    """早期退出路径：携带待 yield 的事件流 + 已初始化的 run 容器。"""
     events: AsyncIterator[Any]
-    # teardown 需要的状态（EarlyExit 路径已做了部分初始化）
-    ctx: RunContext | None = None
-    tree: SessionTree | None = None
-    snapshot: RunSnapshot | None = None
-    tool_ctx: ToolContext | None = None
-    ownership_lease: _RunOwnershipLease | None = None
-    profiler: TurnProfiler | None = None
-    active_skill_invocation: SkillInvocationState | None = None
-    initial_task_spec: Any = None
-    iteration: int = 0
+    runtime: LoopRuntime
 
 
-@dataclass
-class PreparedRun:
-    """run_agent_stream 启动阶段的确定性产物。所有字段均有确定初始值。"""
-
-    # ── 核心对象 ──
-    tree: SessionTree | None = None
-    snapshot: RunSnapshot | None = None
-    task_runtime: Any = None
-    initial_task_spec: Any = None
-
-    # ── 状态标记（全部有默认值，杜绝 NameError）──
-    terminated_by: TerminalReason = TerminalReason.DONE
-    iteration: int = 0
-
-    # ── 运行时上下文 ──
-    ctx: RunContext | None = None
-    tool_ctx: ToolContext | None = None
-    active_skill_invocation: SkillInvocationState | None = None
-    ownership_lease: _RunOwnershipLease | None = None
-
-    # ── 附件决策（guidance 由 runner 读取）──
-    attachment_decision: Any = None
-
-    # ── 轨迹 ──
-    traj_scope: TrajectoryScope | None = None
-
-    # ── 性能 ──
-    profiler: TurnProfiler | None = None
-    # 回合级计时聚合（loop 结束后由 runner 回填，仅供 teardown 汇总）
-    perf: Any = None
-
-    # ── 早期 exit 仍需的状态 ──
-    recovery: RecoveryPolicy | None = None
-    state_machine: RunStateMachine | None = None
-    effective_model: str | None = None
-    run_state: Any = None
-    evidence_ledger: list[Any] = field(default_factory=list)
-    pending_messages: list[Any] = field(default_factory=list)
-    prompt_cache_runtime: Any = None
-    total_input_tokens: int = 0
-    total_output_tokens: int = 0
-    total_cache_creation_tokens: int = 0
-    total_cache_read_tokens: int = 0
-
-    # ── 运行时标记（loop 后 sync-back 用）──
-    latest_review_decision: Any = None
-    llm_start_monotonic: float = 0.0
-
-
-# 联合类型：调用方 isinstance(EarlyExit | PreparedRun) 判别
-PrepareResult = EarlyExit | PreparedRun
+# 联合类型：调用方 isinstance(EarlyExit | LoopRuntime) 判别
+PrepareResult = EarlyExit | LoopRuntime
 
 
 # ---------------------------------------------------------------------------
@@ -224,16 +163,30 @@ class RunPreparer:
         """执行启动路径判定，返回 PrepareResult。
 
         - EarlyExit：hook 阻断等早期退出，调用方直接 yield events
-        - PreparedRun：正常启动完成，调用方进入主循环
+        - LoopRuntime：正常启动完成，调用方进入主循环
         """
+        self._rt = LoopRuntime(
+            deps=self._deps,
+            request=self._request,
+            abort_event=self._control.abort_event,
+            run_deadline_s=float(self._deps.config.budget.hard_s),
+            run_started=time.monotonic(),
+            terminated_by=TerminalReason.DONE,
+        )
+        try:
+            return await self._prepare()
+        except BaseException:
+            # ownership 可能在 _prepare 中途获取：异常时立即释放，
+            # 不依赖调用方（runner 在 prepare 抛错时不会进入 teardown）。
+            await _release_run_ownership(self._rt.ownership_lease, self._deps)
+            raise
+
+    async def _prepare(self) -> PrepareResult:
         request = self._request
         deps = self._deps
         resolved_ws_path = self._tool_workspace_path
         abort_event = self._control.abort_event
-
-        run_deadline_s = float(deps.config.budget.hard_s)
-        run_started = time.monotonic()
-        terminated_by = TerminalReason.DONE
+        rt = self._rt
 
         # 早期退出（hook 阻断等）可能发生在这些对象构造之前：统一预置为
         # None，EarlyExit 直接携带，不再用 `in dir()` 探测变量是否已绑定。
@@ -246,18 +199,8 @@ class RunPreparer:
             session_id=request.session_id,
             request_id=request.request_id,
         )
-        hotpath = HotPathTelemetry(profiler=profiler)
-
-        # ── RunContext ──
-        ctx = RunContext(
-            deps=deps,
-            request=request,
-            abort_event=abort_event,
-            hotpath=hotpath,
-            terminated_by=terminated_by,
-            run_deadline_s=run_deadline_s,
-            run_started=run_started,
-        )
+        rt.profiler = profiler
+        rt.hotpath = HotPathTelemetry(profiler=profiler)
 
         tree = await ensure_session(
             deps,
@@ -266,9 +209,8 @@ class RunPreparer:
             agent_id=request.agent_id,
         )
         snapshot = load_run_snapshot_for_tree(tree)
-        ctx.tree = tree
-        ctx.snapshot = snapshot
-        prompt_cache_runtime = deps.prompt_cache_runtime_contract
+        rt.tree = tree
+        rt.snapshot = snapshot
         active_skill_invocation = snapshot.invoked_skill_state.active_invocation
         recovery_mode = bool(request.recovery_run_id)
         recovered_task_spec = _restore_task_spec_from_snapshot(snapshot) if recovery_mode else None
@@ -278,7 +220,7 @@ class RunPreparer:
         existing_task_spec = _restore_task_spec_from_snapshot(snapshot)
         # 证据台账提前加载：放弃确认时需要为旧任务写 task.block 记录。
         evidence_ledger = tree.get_evidence_ledger()
-        ctx.evidence_ledger = evidence_ledger
+        rt.evidence_ledger = evidence_ledger
 
         if recovery_mode:
             if snapshot.run_state.run_id != request.recovery_run_id:
@@ -377,8 +319,8 @@ class RunPreparer:
                         or hook_result.stop_reason
                         or "提示构建被插件钩子阻断"
                     )
-                    await mark_task_blocked(ctx, block_reason)
-                    task_runtime = ctx.task_runtime
+                    await mark_task_blocked(rt, block_reason)
+                    task_runtime = rt.task_runtime
                     done_event = await complete_no_tool_turn(
                         deps=deps,
                         request=request,
@@ -390,16 +332,13 @@ class RunPreparer:
                         response_text=f"[plugin hook] {block_reason}",
                         usage_totals={},
                     )
+                    rt.active_skill_invocation = active_skill_invocation
+                    rt.initial_task_spec = initial_task_spec
                     # ── EarlyExit path #1: Hook block ──
                     return EarlyExit(
-                    events=_single_event_iter(done_event),
-                    ctx=ctx,
-                    tree=tree,
-                    snapshot=snapshot,
-                    profiler=profiler,
-                    active_skill_invocation=active_skill_invocation,
-                    initial_task_spec=initial_task_spec,
-                )
+                        events=_single_event_iter(done_event),
+                        runtime=rt,
+                    )
 
             request.request_id = request.request_id or f"req_{generate_entry_id(set())}"
 
@@ -515,22 +454,20 @@ class RunPreparer:
             if task_runtime is not None and task_runtime.task_id == initial_task_spec.task_id:
                 failed_runtime = task_runtime.model_copy(
                     update={
+                        "state": "blocked",
                         "entry_resolution_status": "failed",
                         "updated_at_epoch_ms": int(time.time() * 1000),
                     }
                 )
                 await _persist_task_runtime_snapshot(deps, tree, task_runtime=failed_runtime)
             # ── EarlyExit path #2: Bootstrap error ──
+            rt.active_skill_invocation = active_skill_invocation
+            rt.initial_task_spec = initial_task_spec
             return EarlyExit(
                 events=_single_event_iter(
                     ErrorEvent(error_code=exc.error_code, message=exc.user_message)
                 ),
-                ctx=ctx,
-                tree=tree,
-                snapshot=snapshot,
-                profiler=profiler,
-                active_skill_invocation=active_skill_invocation,
-                initial_task_spec=initial_task_spec,
+                runtime=rt,
             )
 
         if task_runtime is None or task_runtime.task_id != initial_task_spec.task_id:
@@ -543,7 +480,6 @@ class RunPreparer:
                 task_spec=initial_task_spec,
                 workspace_id=request.workspace_id,
                 prior_runtime=task_runtime,
-                entry_resolution_status="ready",
             )
 
         run_state = snapshot.run_state
@@ -579,6 +515,8 @@ class RunPreparer:
                     getattr(exc, "reason_code", "snapshot_persist_failed"),
                 )
                 # ── EarlyExit path #3: Persist failure ──
+                rt.active_skill_invocation = active_skill_invocation
+                rt.initial_task_spec = initial_task_spec
                 return EarlyExit(
                     events=_single_event_iter(
                         ErrorEvent(
@@ -586,12 +524,7 @@ class RunPreparer:
                             message="入口运行时引导失败",
                         )
                     ),
-                    ctx=ctx,
-                    tree=tree,
-                    snapshot=snapshot,
-                    profiler=profiler,
-                    active_skill_invocation=active_skill_invocation,
-                    initial_task_spec=initial_task_spec,
+                    runtime=rt,
                 )
             # ── Preflight probe ──
             preflight_probe_event = None
@@ -727,12 +660,8 @@ class RunPreparer:
                 preflight_probe=initial_task_spec.preflight_probe,
             )
             task_runtime = task_runtime.model_copy(
-                update={
-                    "state": "resuming",
-                    "pending_confirmation_reason": None,
-                }
+                update={"pending_confirmation_reason": None}
             )
-            await _persist_task_runtime_snapshot(deps, tree, task_runtime=task_runtime)
             recovery_probe_evidence = _build_recovery_probe_evidence(
                 task_runtime=task_runtime,
             )
@@ -839,10 +768,10 @@ class RunPreparer:
         # 恢复链载体（初始值取自 run_state.recovery_state，内核与压缩重启
         # 共用同一份链）。
         recovery = RecoveryPolicy(
-            limit=int(deps.config.run_loop.arbiter_recovery_chain_limit),
+            limit=int(deps.config.run_loop.recovery_chain_limit),
             chain=run_state.recovery_state.chain,
         )
-        ctx.recovery = recovery
+        rt.recovery = recovery
 
         confirmation_messages = [{"role": "user", "content": request.user_message}]
 
@@ -871,7 +800,7 @@ class RunPreparer:
                     evidence_records=evidence_ledger,
                 )
                 _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
-                await persist_snapshot_fn(ctx)
+                await persist_snapshot_fn(rt)
                 done_event = await complete_no_tool_turn(
                     deps=deps,
                     request=request,
@@ -882,16 +811,13 @@ class RunPreparer:
                     usage_totals={},
                 )
                 # ── EarlyExit path #4: Confirmation deny ──
+                rt.tool_ctx = tool_ctx
+                rt.ownership_lease = ownership_lease
+                rt.active_skill_invocation = active_skill_invocation
+                rt.initial_task_spec = initial_task_spec
                 return EarlyExit(
                     events=_single_event_iter(done_event),
-                    ctx=ctx,
-                    tree=tree,
-                    snapshot=snapshot,
-                    tool_ctx=tool_ctx,
-                    ownership_lease=ownership_lease,
-                    profiler=profiler,
-                    active_skill_invocation=active_skill_invocation,
-                    initial_task_spec=initial_task_spec,
+                    runtime=rt,
                 )
 
             # approve：确认可能跨越多轮，落库前重跑工作区校验。
@@ -950,7 +876,7 @@ class RunPreparer:
                     evidence_records=evidence_ledger,
                 )
                 _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
-                await persist_snapshot_fn(ctx)
+                await persist_snapshot_fn(rt)
                 done_event = await complete_no_tool_turn(
                     deps=deps,
                     request=request,
@@ -960,16 +886,13 @@ class RunPreparer:
                     response_text=blocked_reason,
                     usage_totals={},
                 )
+                rt.tool_ctx = tool_ctx
+                rt.ownership_lease = ownership_lease
+                rt.active_skill_invocation = active_skill_invocation
+                rt.initial_task_spec = initial_task_spec
                 return EarlyExit(
                     events=_single_event_iter(done_event),
-                    ctx=ctx,
-                    tree=tree,
-                    snapshot=snapshot,
-                    tool_ctx=tool_ctx,
-                    ownership_lease=ownership_lease,
-                    profiler=profiler,
-                    active_skill_invocation=active_skill_invocation,
-                    initial_task_spec=initial_task_spec,
+                    runtime=rt,
                 )
 
             # ready / degraded 均放行；degraded 的事实已记入 probe_event。
@@ -992,7 +915,7 @@ class RunPreparer:
 
         elif task_runtime.state == "awaiting_risk_confirmation":
             _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
-            await persist_snapshot_fn(ctx)
+            await persist_snapshot_fn(rt)
             done_event = await complete_no_tool_turn(
                 deps=deps,
                 request=request,
@@ -1004,20 +927,17 @@ class RunPreparer:
                 usage_totals={},
             )
             # ── EarlyExit path #6: Awaiting risk confirmation ──
+            rt.tool_ctx = tool_ctx
+            rt.ownership_lease = ownership_lease
+            rt.active_skill_invocation = active_skill_invocation
+            rt.initial_task_spec = initial_task_spec
             return EarlyExit(
                 events=_single_event_iter(done_event),
-                ctx=ctx,
-                tree=tree,
-                snapshot=snapshot,
-                tool_ctx=tool_ctx,
-                ownership_lease=ownership_lease,
-                profiler=profiler,
-                active_skill_invocation=active_skill_invocation,
-                initial_task_spec=initial_task_spec,
+                runtime=rt,
             )
 
         _set_resume_boundary(snapshot, boundary=ResumeBoundary.BEFORE_MODEL_CALL)
-        await persist_snapshot_fn(ctx)
+        await persist_snapshot_fn(rt)
 
         if recovery_mode:
             ownership_lease = await _takeover_run_ownership(
@@ -1042,7 +962,6 @@ class RunPreparer:
             session_id=request.session_id,
             sandbox_policy=request.sandbox_policy,
             abort=abort_event,
-            tenant_id=getattr(request.user_profile, 'tenant_id', None) if getattr(request, 'user_profile', None) else None,
             user_id=request.user_id,
             user_profile=request.user_profile,
             request_id=request.request_id,
@@ -1249,55 +1168,36 @@ class RunPreparer:
             snapshot=snapshot,
             tool_ctx=tool_ctx,
         )
-        ctx._tool_ctx = tool_ctx
-        ctx._tool_workspace_path = resolved_ws_path
+        rt.tool_ctx = tool_ctx
+        rt.tool_workspace_path = resolved_ws_path
 
         # ── State machine ──
-        state_machine = RunStateMachine(run_state)
-        iteration = run_state.loop_state.steps_spent
-        total_output_tokens = snapshot.total_output_tokens if isinstance(snapshot.total_output_tokens, int) else 0
-        total_cache_creation_tokens = snapshot.total_cache_creation_tokens if isinstance(snapshot.total_cache_creation_tokens, int) else 0
+        rt.state_machine = RunStateMachine(run_state)
+        rt.run_state = run_state
+        rt.iteration = run_state.loop_state.steps_spent
 
         _pending_queue = PendingMessageQueue()
 
         for _hook_ctx in hook_context_injections:
             _pending_queue.append(SystemReminderProjection.text_reminder(_hook_ctx))
+        rt.pending_messages = _pending_queue.snapshot() or []
 
         # ── Trajectory setup_main ──
         _traj_scope.setup_main(request)
+        rt.traj_scope = _traj_scope
 
-        ctx.task_runtime = task_runtime
-        ctx.iteration = iteration
-
-        # ── Construct PreparedRun ──
-        return PreparedRun(
-            tree=tree,
-            snapshot=snapshot,
-            task_runtime=task_runtime,
-            initial_task_spec=initial_task_spec,
-            terminated_by=terminated_by,
-            iteration=iteration,
-            ctx=ctx,
-            tool_ctx=tool_ctx,
-            active_skill_invocation=active_skill_invocation,
-            ownership_lease=ownership_lease,
-            attachment_decision=attachment_decision,
-            traj_scope=_traj_scope,
-            profiler=profiler,
-            recovery=recovery,
-            state_machine=state_machine,
-            effective_model=effective_model,
-            run_state=run_state,
-            evidence_ledger=evidence_ledger,
-            pending_messages=_pending_queue.snapshot() or [],
-            prompt_cache_runtime=prompt_cache_runtime,
-            total_input_tokens=0,
-            total_output_tokens=total_output_tokens,
-            total_cache_creation_tokens=total_cache_creation_tokens,
-            total_cache_read_tokens=0,
-            latest_review_decision=latest_review_decision,
-            llm_start_monotonic=0.0,
+        rt.task_runtime = task_runtime
+        rt.initial_task_spec = initial_task_spec
+        rt.tool_ctx = tool_ctx
+        rt.active_skill_invocation = active_skill_invocation
+        rt.ownership_lease = ownership_lease
+        rt.recovery = recovery
+        rt.effective_model = effective_model
+        rt.latest_review_decision = latest_review_decision
+        rt.attachment_guidance = (
+            attachment_decision.attachment_guidance if attachment_decision else None
         )
+        return rt
 
     # ── Private helpers for skill/plugin activation ──
 
@@ -1336,7 +1236,7 @@ class RunPreparer:
 
         # skill_name 只承载真实技能名。若本次只有插件（无真实技能），
         # skill_names 为空——绝不能回退成 ordered[0].skill_name，
-        # 那会把 ``_plugin:legal`` 这种内部伪技能名经 active_skill_name
+        # 那会把 ``_plugin:<name>`` 这种内部伪技能名经 active_skill_name
         # 渲染进 system prompt（R2 断言：prompt 不得出现 `_plugin:`）。
         return ordered[0].model_copy(update={
             "skill_name": ", ".join(skill_names),
@@ -1455,8 +1355,8 @@ class RunPreparer:
         _requested = list(dict.fromkeys(n for n in request.designated_plugins if n))
 
         # 本轮显式 @ 了插件 → 替换语义。``_plugin:`` 记录只增不减，
-        # 不清理会让「@ 过的插件」永久保持解锁（先 @legal 再 @fin，
-        # 下一轮不 @ 时 legal 仍被解锁）。因此先剔除不在本轮 chip 里的旧记录。
+        # 不清理会让「@ 过的插件」永久保持解锁（先 @A 再 @B，
+        # 下一轮不 @ 时 A 仍被解锁）。因此先剔除不在本轮 chip 里的旧记录。
         _requested_set = set(_requested)
         for _key in [
             k for k in snapshot.invoked_skill_state.skills

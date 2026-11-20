@@ -15,37 +15,11 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from prismclaw.engine.plugins.loading._declarative_load import _load_declarative_plugin
 from prismclaw.engine.plugins.loading.agent_loader import PluginAgentLoader
-from prismclaw.engine.plugins.registry.identity import PluginID
 from prismclaw.engine.plugins.loading.load_result import LoadedPlugin, PluginError
-from prismclaw.engine.plugins.manifest import (
-    parse_manifest,
-)
-
-# 从拆分子模块重新导出，保持外部引用兼容
-from prismclaw.engine.plugins.loading._manifest_parse import (  # noqa: F401
-    _coerce_string_list,
-    _load_json_file,
-    _resolve_canonical_manifest,
-    _parse_user_config_schema,
-    _sensitive_user_config_keys,
-    _resolve_user_config,
-    _resolve_relative_paths,
-    _dedupe_hook_groups,
-    _validate_hook_command_paths,
-    _extract_script_path_from_command,
-    _merge_hook_config,
-)
-from prismclaw.engine.plugins.loading._declarative_load import (  # noqa: F401
-    _load_declared_commands,
-    _load_output_styles,
-    _apply_content_pipeline,
-    _load_mcp_servers,
-    _substitute_mcp_server_configs,
-    _load_plugin_instructions,
-    _build_manifest_and_capability,
-    _load_declarative_plugin,
-)
+from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
+from prismclaw.engine.plugins.registry.identity import PluginID
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +73,7 @@ class DeclarativePluginLoadStrategy(PluginLoadStrategy):
     def can_handle(self, install_path: Path) -> bool:
         if not install_path.is_dir():
             return False
-        return (install_path / ".plugin" / "plugin.json").exists() or (
-            install_path / "plugin.json"
-        ).exists()
+        return (install_path / MANIFEST_REL_PATH).exists()
 
     async def load(
         self,
@@ -205,67 +177,6 @@ class NativePythonPluginLoadStrategy(PluginLoadStrategy):
         return loaded, errors
 
 
-class TraePluginLoadStrategy(PluginLoadStrategy):
-    """加载 ``.trae-plugin`` 方言插件（加载期内存适配，Route B）。
-
-    Trae 方言把清单放在 ``.trae-plugin/plugin.json``，并多出一个仅供市场展示
-    的 ``interface`` 块。本策略在加载期把它**内存转换**为 canonical 形态后交给
-    与 ``DeclarativePluginLoadStrategy`` 共享的 ``_load_declarative_plugin``——
-    不产生磁盘副本、不需任何手工步骤，插件直接从源目录零手改加载。转换失败
-    （如缺 ``name``）经共享核心的异常路径产出 ``manifest_parse_error``。
-    """
-
-    def __init__(
-        self,
-        *,
-        agent_loader: PluginAgentLoader,
-        data_base_dir: Path | None = None,
-        skill_scanner: Any | None = None,
-    ) -> None:
-        self._agent_loader = agent_loader
-        self._data_base_dir = data_base_dir
-        self._skill_scanner = skill_scanner
-
-    def can_handle(self, install_path: Path) -> bool:
-        if not install_path.is_dir():
-            return False
-        return (install_path / ".trae-plugin" / "plugin.json").exists()
-
-    async def load(
-        self,
-        plugin_id: PluginID,
-        install_path: Path,
-        *,
-        enabled: bool = True,
-        plugin_configs: dict[str, dict[str, Any]] | None = None,
-        data_base_dir: Path | None = None,
-        porting_context: dict[str, Any] | None = None,
-    ) -> tuple[LoadedPlugin | None, list[PluginError]]:
-        from prismclaw.engine.plugins.ingest.trae_convert import (
-            convert_trae_manifest,
-        )
-
-        effective_data_base_dir = (
-            data_base_dir if data_base_dir is not None else self._data_base_dir
-        )
-        trae_manifest = _load_json_file(install_path / ".trae-plugin" / "plugin.json")
-        if not isinstance(trae_manifest, dict):
-            raise ValueError(".trae-plugin/plugin.json must be a JSON object")
-        canonical_manifest = parse_manifest(convert_trae_manifest(trae_manifest))
-        return await _load_declarative_plugin(
-            plugin_id,
-            install_path,
-            enabled=enabled,
-            plugin_options=(plugin_configs or {}).get(plugin_id.name, {}),
-            agent_loader=self._agent_loader,
-            data_base_dir=effective_data_base_dir,
-            manifest_override=canonical_manifest,
-            porting_context=porting_context,
-            dialect="trae",
-            skill_scanner=self._skill_scanner,
-        )
-
-
 def default_strategies(
     *,
     agent_loader: PluginAgentLoader,
@@ -274,6 +185,9 @@ def default_strategies(
 ) -> list[PluginLoadStrategy]:
     return [
         NativePythonPluginLoadStrategy(),
-        DeclarativePluginLoadStrategy(agent_loader=agent_loader, data_base_dir=data_base_dir, skill_scanner=skill_scanner),
-        TraePluginLoadStrategy(agent_loader=agent_loader, data_base_dir=data_base_dir, skill_scanner=skill_scanner),
+        DeclarativePluginLoadStrategy(
+            agent_loader=agent_loader,
+            data_base_dir=data_base_dir,
+            skill_scanner=skill_scanner,
+        ),
     ]
