@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronRight, Clock, CornerDownRight, Copy, Download, FileText, Loader2, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
 import type { ContentBlock, FileBlock, FileChange, ImageBlock, Message } from '../../types'
-import MarkdownRenderer, {
-  StreamingMarkdown,
-} from './MarkdownRenderer'
+import MarkdownRenderer, { RichMarkdown } from './MarkdownRenderer'
 import { renderMarkdownToHtml } from '../../lib/render/markdown-export'
 import SystemMessage from './SystemMessage'
 import ErrorBubble from './ErrorBubble'
@@ -1070,11 +1068,11 @@ export default function MessageBubble({
                     />
                   )}
                   {displayText.length > 0 ? (
-                    isStreaming ? (
-                      <StreamingMarkdown key={`streaming-${message.id}`} content={displayText} className="break-words px-1" />
-                    ) : (
-                      <MarkdownRenderer key={`final-${message.id}`} content={displayText} className="break-words px-1" />
-                    )
+                    // 流式与终态用同一个组件、同一个 key：切换时只改 streaming 参数，
+                    // 避免整棵 Markdown DOM 卸载重建（代码块重新高亮、整段闪烁跳动）。
+                    <div className="break-words px-1">
+                      <RichMarkdown key={`msg-${message.id}`} content={displayText} streaming={isStreaming} />
+                    </div>
                   ) : null}
 
                 {!isStreaming && (renderedAttachments.length > 0 || displayOutputFiles.length > 0) ? (
@@ -1337,7 +1335,7 @@ export default function MessageBubble({
                                      hover:bg-[var(--c-surface-2)]/60 hover:shadow-[var(--shadow-hover)] active:scale-[0.995] transition-all cursor-pointer
                                      disabled:opacity-60 disabled:cursor-default"
                         >
-                          <span className="text-[length:var(--fs-sm)] text-[var(--c-text)]">{q}</span>
+                          <span className="text-[length:var(--fs-md)] leading-relaxed text-[var(--c-text)]">{q}</span>
                           <ChevronRight size={14} className="text-[var(--c-text-secondary)]/60 shrink-0" />
                         </button>
                       ))}

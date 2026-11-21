@@ -961,7 +961,7 @@ export default function ChatArea({
       <div
         ref={scrollerRef}
         onScroll={scroll.handleScroll}
-        className="chat-scroller flex-1 overflow-y-auto px-4 py-6 md:px-8 md:py-10"
+        className="chat-scroller flex-1 overflow-y-auto px-4 pt-6 pb-16 md:px-8 md:pt-10 md:pb-24"
       >
         <div className="mx-auto w-full" style={{ maxWidth: chatWidth }}>
           {isLoadingHistory && items.length === 0 && (

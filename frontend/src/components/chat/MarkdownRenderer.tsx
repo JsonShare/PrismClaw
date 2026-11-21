@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import rehypeRaw from 'rehype-raw';
 import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, FileText, Lightbulb, Maximize2, Minus, Plus, RotateCcw, Search, X, XCircle } from 'lucide-react';
 import { createHighlighterCore } from '@shikijs/core';
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript';
@@ -22,7 +23,7 @@ import sqlLanguage from '@shikijs/langs/sql';
 import tsxLanguage from '@shikijs/langs/tsx';
 import typescriptLanguage from '@shikijs/langs/typescript';
 import yamlLanguage from '@shikijs/langs/yaml';
-import { hasUnclosedMarkdownFence, markStreamRevealTail, MD_EMOJI_IFRAME_CSS, normalizeDataSpec, normalizeMarkdownTables, normalizePreviewSpec, replaceEmojiIconsInHtml, rehypeEmojiIcons, rehypeTableLabels, remarkCjkStrong, splitStreamingMarkdown } from '../../lib/chat/markdown-utils';
+import { hasUnclosedMarkdownFence, markStreamRevealTail, MD_EMOJI_IFRAME_CSS, normalizeDataSpec, normalizeMarkdownTables, normalizePreviewSpec, rehypeEmojiIcons, rehypeSafeHtml, rehypeSemanticAlerts, rehypeTableLabels, remarkCjkStrong, replaceEmojiIconsInHtml, splitStreamingMarkdown } from '../../lib/chat/markdown-utils';
 // @ts-ignore
 import { STREAM_REVEAL_ANIMATION_MS } from '../../stream-reveal.mjs';
 import 'katex/dist/katex.min.css';
@@ -46,6 +47,33 @@ const LazyPdfDocument = React.lazy(() => import('react-pdf').then((module) => ({
 // @ts-ignore - optional dependency
 const LazyPdfPage = React.lazy(() => import('react-pdf').then((module) => ({ default: module.Page })));
 
+/*
+ * GitHub 主题的 keyword 红（亮 #d73a49 / 暗 #ff7b72）与产品的语义色 danger
+ * (#D92426) 同属红色系：代码里的 def/async/return 会被读成「报错」。
+ * 这里只做换色，不改主题结构 —— 关键字转紫、常量/变量转蓝，红只留给错误提示。
+ */
+const SHIKI_COLOR_OVERRIDES: Record<string, string> = {
+  // 亮色：keyword / storage 红 → 紫，variable 橙 → 蓝
+  '#d73a49': '#8250df',
+  '#e36209': '#0550ae',
+  // 暗色：keyword / storage 红 → 紫，variable 橙 → 蓝
+  '#f97583': '#b392f0',
+  '#ffab70': '#79c0ff',
+};
+
+function retintTheme(theme: any) {
+  const clone = JSON.parse(JSON.stringify(theme));
+  const walk = (node: any) => {
+    if (!node || typeof node !== 'object') return;
+    if (typeof node.foreground === 'string') {
+      node.foreground = SHIKI_COLOR_OVERRIDES[node.foreground.toLowerCase()] || node.foreground;
+    }
+    for (const value of Object.values(node)) walk(value);
+  };
+  walk(clone.tokenColors);
+  return clone;
+}
+
 let shikiHighlighterPromise: Promise<any> | null = null;
 
 const SHIKI_LANGUAGES: Partial<Record<string, any>> = {
@@ -67,7 +95,7 @@ const SHIKI_LANGUAGES: Partial<Record<string, any>> = {
 async function highlightedCodeHtml(code: string, requestedLanguage: string) {
   if (!shikiHighlighterPromise) {
     shikiHighlighterPromise = createHighlighterCore({
-      themes: [githubLight, githubDark],
+      themes: [retintTheme(githubLight), retintTheme(githubDark)],
       langs: Object.values(SHIKI_LANGUAGES),
       engine: createJavaScriptRegexEngine(),
     });
@@ -233,16 +261,30 @@ function CopyButton({ value }: { value: string }) {
   }}>{copied ? <Check size={15} /> : <Copy size={15} />}</IconButton>;
 }
 
+// 高亮结果缓存：流式结束时的组件重建不应触发异步重新高亮（会先回落纯文本再替换，肉眼可见闪烁）
+const SHIKI_HTML_CACHE = new Map<string, string>();
+const SHIKI_HTML_CACHE_LIMIT = 200;
+
 function CodeBlock({ code, language }: { code: string; language: string }) {
-  const [html, setHtml] = useState('');
+  const cacheKey = `${language}\u0000${code}`;
+  const [html, setHtml] = useState(() => SHIKI_HTML_CACHE.get(cacheKey) ?? '');
   useEffect(() => {
+    const cached = SHIKI_HTML_CACHE.get(cacheKey);
+    if (cached) {
+      setHtml(cached);
+      return;
+    }
     let cancelled = false;
-    void highlightedCodeHtml(code, language).then((value) => { if (!cancelled) setHtml(value); }).catch((error) => {
+    void highlightedCodeHtml(code, language).then((value) => {
+      if (SHIKI_HTML_CACHE.size > SHIKI_HTML_CACHE_LIMIT) SHIKI_HTML_CACHE.clear();
+      SHIKI_HTML_CACHE.set(cacheKey, value);
+      if (!cancelled) setHtml(value);
+    }).catch((error) => {
       console.warn('Shiki highlighting failed:', error);
       if (!cancelled) setHtml('');
     });
     return () => { cancelled = true; };
-  }, [code, language]);
+  }, [cacheKey, code, language]);
   return <RichFrame title={language || 'text'} actions={<CopyButton value={code} />} className="rich-code-frame">
     {html ? <div className="rich-shiki" dangerouslySetInnerHTML={{ __html: html }} /> : <pre className="rich-code-fallback"><code>{code}</code></pre>}
   </RichFrame>;
@@ -700,8 +742,10 @@ const MarkdownTable = memo(function MarkdownTable({ children, node }: { children
 const MarkdownChunk = memo(function MarkdownChunk({ content, context, depth, streaming, streamReveal }: { content: string; context: PreviewContext; depth: number; streaming: boolean; streamReveal?: StreamRevealMeta }) {
   const incompleteFence = streaming && hasUnclosedMarkdownFence(content);
   const rehypePlugins = streamReveal?.appendedGraphemes
-    ? [rehypeKatex, rehypeEmojiIcons, [rehypeStreamRevealTail, streamReveal], rehypeTableLabels]
-    : [rehypeKatex, rehypeEmojiIcons, rehypeTableLabels];
+    // rehypeRaw 把正文里的 HTML 解析成真实节点，rehypeSafeHtml 紧随其后做白名单过滤，
+    // rehypeSemanticAlerts 再把 > [!NOTE] 一类引用转成语义色 callout
+    ? [rehypeRaw, rehypeSafeHtml, rehypeSemanticAlerts, rehypeKatex, rehypeEmojiIcons, [rehypeStreamRevealTail, streamReveal], rehypeTableLabels]
+    : [rehypeRaw, rehypeSafeHtml, rehypeSemanticAlerts, rehypeKatex, rehypeEmojiIcons, rehypeTableLabels];
   return <ReactMarkdown
     // remark-gfm 默认 singleTilde: true，会把 "1~2 袋，一日 1~2 次" 里的
     // 两个单波浪号配对当删除线，中间大段文字被划掉。关闭 singleTilde 后
@@ -713,15 +757,7 @@ const MarkdownChunk = memo(function MarkdownChunk({ content, context, depth, str
     ]}
     rehypePlugins={rehypePlugins as any}
     components={{
-      // 安全 HTML 过滤：只允许白名单标签，其余以纯文本渲染
-      html: ({ node, children }: any) => {
-        const tag: string = node?.tagName?.toLowerCase() ?? ''
-        const ALLOWED = ['details', 'summary', 'br', 'hr', 'sub', 'sup', 'kbd', 'mark']
-        if (ALLOWED.includes(tag)) {
-          return React.createElement(tag, node?.properties ?? {}, children)
-        }
-        return <>{children}</>
-      },
+      // 原始 HTML 已由 rehypeRaw 解析成真实节点、rehypeSafeHtml 做白名单过滤
       table: MarkdownTable,
       a: ({ href, children, ...props }) => {
         const safe = typeof href === 'string' && /^(https?:|mailto:)/i.test(href);
@@ -782,9 +818,5 @@ export function RichMarkdown({ content, streaming = false, streamReveal, threadI
 // PrismClaw compatibility wrappers
 export default function MarkdownRenderer(props: { content: string; className?: string; streaming?: boolean }) {
   return <div className={props.className}><RichMarkdown content={props.content} streaming={props.streaming} /></div>;
-}
-
-export function StreamingMarkdown(props: { content: string; className?: string }) {
-  return <div className={props.className}><RichMarkdown content={props.content} streaming /></div>;
 }
 

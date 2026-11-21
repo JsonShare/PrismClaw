@@ -112,108 +112,24 @@ code, pre {
   background: transparent;
 }
 
-/* ── .markdown-content：独立 markdown 内容容器（用于 SkillDetailModal、ReasoningBlock 等） ── */
+/* ── .markdown-content：仅作为外层 className 包装（SkillDetailModal 等）──
+   真正的排版容器永远是内层 .markdown-message（RichMarkdown 的根节点），
+   排版样式只保留一套，避免两套规则互相覆盖导致行为不一致。 */
 .markdown-content {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
   min-width: 0;
   color: var(--c-text);
-  font-size: 14px;
-  line-height: 1.85;
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
-
-.markdown-content > * { margin: 0; }
-.markdown-content p { margin: 0; line-height: inherit; }
 
 /* strikethrough 已在 remarkGfm 层关闭（`{ strikethrough: false }`），
    ~~...~~ 会原样显示为波浪号包裹的文字内容。
    这里的 del 样式保留兜底（如果以后 markdown 渲染器变了）。 */
-.markdown-content del {
+.markdown-content del,
+.markdown-message del {
   color: var(--c-text-tertiary);
   text-decoration: line-through;
   text-decoration-thickness: 1px;
   text-decoration-color: var(--c-text-tertiary);
   text-decoration-style: solid;
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3,
-.markdown-content h4 {
-  margin: 4px 0 0;
-  color: var(--c-text);
-  line-height: 1.35;
-  font-weight: 750;
-}
-.markdown-content h1 { font-size: 20px; }
-.markdown-content h2 { font-size: 17px; }
-.markdown-content h3 { font-size: 15px; }
-.markdown-content h4 { font-size: 14px; }
-
-.markdown-content ul,
-.markdown-content ol {
-  display: grid;
-  gap: 5px;
-  padding-left: 20px;
-}
-.markdown-content li { padding-left: 2px; }
-
-.markdown-content table {
-  width: 100%;
-  table-layout: fixed;
-  border-collapse: collapse;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  font-size: 13px;
-}
-.markdown-content th,
-.markdown-content td {
-  border-bottom: 1px solid var(--c-border);
-  padding: 8px 10px;
-  text-align: left;
-  vertical-align: top;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-.markdown-content th {
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  font-weight: 700;
-}
-.markdown-content tr:last-child td { border-bottom: 0; }
-
-.markdown-content code {
-  border: 1px solid var(--c-border);
-  border-radius: 5px;
-  padding: 1px 5px;
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  font-size: .92em;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.markdown-content pre {
-  overflow: auto;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  padding: 12px;
-  background: var(--c-surface-2);
-  white-space: pre;
-}
-.markdown-content pre code {
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-
-.markdown-content blockquote {
-  margin: 0;
-  border-left: 3px solid var(--c-border);
-  padding-left: 12px;
-  color: var(--c-text-secondary);
 }
 
 .markdown-content hr,
@@ -227,24 +143,52 @@ code, pre {
     var(--c-border) 50%,
     transparent 100%
   );
-  opacity: 0.4;
+  opacity: 0.75;
 }
 
 /* ── .markdown-message：聊天消息容器 ── */
 .markdown-message {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
+  /* ── 排版规范（正文基准 15px）────────────────────────────────
+     字号阶梯：正文 15 → h4 15 → h3 16 → h2 17 → h1 19
+     代码 12.5 → 表格 14 / 表头 12.5
+     比例：h1/正文 1.27，标题只比正文大半档，层级主要靠字重与间距 */
+  --md-body: 15px;
+  --md-h1: 19px;
+  --md-h2: 17px;
+  --md-h3: 16px;
+  --md-h4: 15px;
+  --md-h5: 14px;
+  --md-h6: 13px;
+  --md-table: 14px;
+  --md-table-head: 12.5px;
+  --md-code: 13px;
+
+  display: block;
   min-width: 0;
-  color: var(--c-text);
-  font-size: 14px;
-  line-height: 1.85;
+  /* 正文比标题浅一档，层级不只靠字号/字重 */
+  color: color-mix(in srgb, var(--c-text) 90%, var(--c-surface));
+  font-size: var(--md-body);
+  line-height: 1.8;
+  /* 中文与英文/数字之间自动加 1/8 em 空隙（Chrome 120+）：
+     这是中文长文「精致感」最有效的一步，不用手动敲空格。 */
+  text-autospace: normal;
+  text-spacing-trim: normal;
+  font-variant-numeric: tabular-nums;
   white-space: normal;
   overflow-wrap: anywhere;
 }
 
+/* 基础节奏：相邻块 14px；标题靠更大的上间距拉开层级。 */
 .markdown-message > * { margin: 0; }
-.markdown-message p { margin: 0; line-height: inherit; }
+.markdown-message > * + * { margin-top: 14px; }
+.markdown-message > h1 { margin-top: 26px; }
+.markdown-message > h2 { margin-top: 22px; }
+.markdown-message > h3 { margin-top: 19px; }
+.markdown-message > h4,
+.markdown-message > h5,
+.markdown-message > h6 { margin-top: 16px; }
+/* 标题与其正文贴紧，避免标题浮在真空里 */
+.markdown-message > :is(h1, h2, h3, h4, h5, h6) + * { margin-top: 10px; }
 
 /* ── 状态表情 → 软底线性图标（仅渲染层替换，消息原文不变）── */
 .md-emoji {
@@ -268,57 +212,129 @@ code, pre {
 .md-emoji[data-tone="info"]    { --md-emoji-color: var(--c-info); }
 .md-emoji[data-tone="violet"]  { --md-emoji-color: var(--c-violet); }
 
-.markdown-message h1,
-.markdown-message h2,
-.markdown-message h3 {
-  margin: 4px 0 0;
+.markdown-message :is(h1, h2, h3, h4, h5, h6) {
   color: var(--c-text);
   line-height: 1.35;
-  font-weight: 750;
+  /* 苹方只有 300/400/500/600 四档字重：写 650/700 会触发浏览器合成加粗，
+     中文笔画密集时边缘发虚。统一封顶到 600。 */
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
-.markdown-message h1 { font-size: 20px; }
-.markdown-message h2 { font-size: 17px; }
-.markdown-message h3 { font-size: 15px; }
+/* 标题与正文的比值控制在 1.0–1.27：
+   正文 15px 时 h1 19 / h2 17 / h3 16，层级主要靠字重 + 上间距 + 锚点。 */
+.markdown-message h1 { font-size: var(--md-h1); }
+.markdown-message h2 { font-size: var(--md-h2); }
+.markdown-message h3 { font-size: var(--md-h3); }
+.markdown-message h4 { font-size: var(--md-h4); }
+.markdown-message h5 { font-size: var(--md-h5); font-weight: 500; color: var(--c-text-secondary); }
+.markdown-message h6 { font-size: var(--md-h6); font-weight: 500; color: var(--c-text-secondary); }
 
+/* 正文加粗同样不能超过 600，否则又是合成加粗 */
+.markdown-message :is(strong, b) { font-weight: 600; }
+
+/* h1 用底部细线收束整篇；h2 用 accent 短条做视觉锚点 */
+.markdown-message > h1 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--c-border);
+}
+.markdown-message > h2 {
+  position: relative;
+  padding-left: 13px;
+}
+.markdown-message > h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.16em;
+  width: 3px;
+  height: 1.02em;
+  border-radius: 2px;
+  /* 装饰用色只取 58% accent：整页唯一强调色留给链接，标题条不抢视线 */
+  background: color-mix(in srgb, var(--c-accent) 58%, var(--c-surface));
+}
+
+/* ── 列表 ──
+   Tailwind v4 preflight 会统一 `list-style: none`，这里必须显式恢复，
+   否则圆点和 1./2. 编号全部消失（只剩 20px 缩进）。
+   另外不能用 display:grid：grid item 的 ::marker 不可靠，且无法表达
+   「项间距」与「嵌套间距」的差异。 */
 .markdown-message ul,
 .markdown-message ol {
-  display: grid;
-  gap: 5px;
-  padding-left: 20px;
+  display: block;
+  padding-left: 1.75em;
+  /* 不在这里写 margin: 0：它的特异性(0,1,1)会盖掉「相邻块 12px」的节奏规则，
+     导致列表紧贴上一段/上一张表。直接子级的 0 由 .markdown-message > * 负责。 */
 }
-.markdown-message li { padding-left: 2px; }
+.markdown-message li { margin: 0; padding-left: 0.15em; }
+/* 项间距：多行长条目需要更大的呼吸感 */
+.markdown-message li + li { margin-top: 12px; }
+.markdown-message li > ul,
+.markdown-message li > ol { margin: 8px 0 0; padding-left: 1.5em; }
+/* 结构内的引用不参与块间距 */
+.markdown-message li blockquote,
+.markdown-message blockquote blockquote { margin: 0; }
+
+.markdown-message ul { list-style-type: disc; }
+.markdown-message ul ul { list-style-type: circle; }
+.markdown-message ul ul ul { list-style-type: square; }
+.markdown-message ol { list-style-type: decimal; }
+
+.markdown-message li::marker { color: color-mix(in srgb, var(--c-text) 42%, transparent); }
+.markdown-message ol > li::marker {
+  color: color-mix(in srgb, var(--c-text) 62%, transparent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* GFM 任务列表：去掉符号，保留勾选框 */
+.markdown-message li.task-list-item { list-style: none; padding-left: 0; }
+.markdown-message li.task-list-item > input[type='checkbox'] {
+  margin-right: 6px;
+  vertical-align: -1px;
+  accent-color: var(--c-accent);
+}
 
 .markdown-message table {
   width: 100%;
-  table-layout: fixed;
   border-collapse: collapse;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  font-size: 13px;
+  border: 0;
+  font-size: var(--md-table);
+  font-variant-numeric: tabular-nums;
 }
 .markdown-message th,
 .markdown-message td {
   border-bottom: 1px solid var(--c-border);
-  padding: 8px 10px;
+  padding: 8px 12px;
   text-align: left;
   vertical-align: top;
   word-break: break-word;
-  overflow-wrap: anywhere;
 }
 .markdown-message th {
-  color: var(--c-text);
-  background: var(--c-surface-2);
-  font-weight: 700;
+  color: var(--c-text-secondary);
+  background: color-mix(in srgb, var(--c-text) 6%, var(--c-surface));
+  font-size: var(--md-table-head);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+/* 首列做行标签：字重略高一档，扫读时先定位「这是哪一行」 */
+.markdown-message :is(th, td):first-child { font-weight: 500; }
+/* 列分隔线：多列时不再「串行」 */
+.markdown-message .markdown-table-scroll :is(th, td):not(:last-child) {
+  border-right: 1px solid color-mix(in srgb, var(--c-border) 55%, transparent);
 }
 .markdown-message tr:last-child td { border-bottom: 0; }
 
+/* 行内 code 去掉边框：中文长句里每个 1px 小盒子都会显得碎，
+   只留底色 + 更小的圆角，观感更接近正文的一部分。 */
 .markdown-message code {
-  border: 1px solid var(--c-border);
-  border-radius: 5px;
+  border: 0;
+  border-radius: 4px;
   padding: 1px 5px;
   color: var(--c-text);
-  background: var(--c-surface-2);
+  background: color-mix(in srgb, var(--c-text) 6%, var(--c-surface));
   font-size: .92em;
+  line-height: 1.45;
+  vertical-align: baseline;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -327,8 +343,14 @@ code, pre {
   border: 1px solid var(--c-border);
   border-radius: 8px;
   padding: 12px;
-  background: var(--c-surface-2);
+  background: color-mix(in srgb, var(--c-text) 2.5%, var(--c-surface));
+  font-size: var(--md-code);
+  line-height: 1.55;
   white-space: pre;
+  /* 全局 text-autospace 会在 CJK 与拉丁字符之间插入 1/8em：
+     实测同一行代码宽度 126.11px vs 119.61px（+5.4%），等宽网格被插空打断。
+     代码块必须关掉自动间距，缩进与注释对齐才可信。 */
+  text-autospace: no-autospace;
 }
 .markdown-message pre code {
   border: 0;
@@ -337,28 +359,124 @@ code, pre {
 }
 
 .markdown-message blockquote {
-  margin: 0;
-  border-left: 3px solid var(--c-border);
-  padding-left: 12px;
+  /* 不写 margin: 0：它会以 0,1,1 特异性盖掉「相邻块 12px」的节奏规则，
+     导致引用块紧贴上一张表格（真实缺陷）。直接子级由 .markdown-message > * 归零。 */
+  /* 竖线是对比度载体：--c-border-strong 与底色只有 1.2:1，几乎不可见；
+     --c-text-tertiary 只有 2.8:1 仍不达标；--c-text-secondary 在深浅主题
+     下分别为 5.4:1 / 7:1，满足非文本元素 3:1 门槛且不至于像正文一样重。 */
+  border-left: 3px solid var(--c-text-secondary);
+  border-radius: 0 6px 6px 0;
+  padding: 8px 12px;
+  color: var(--c-text-secondary);
+  /* 底色统一用中性灰（正文色混合），不再带蓝调 */
+  background: color-mix(in srgb, var(--c-text) 4%, var(--c-surface));
+}
+.markdown-message blockquote > * { margin: 0; }
+.markdown-message blockquote > * + * { margin-top: 10px; }
+
+/* ── 语义 callout：> [!NOTE] / [!TIP] / [!WARNING] ──
+   竖线与底色都取语义色，正文仍用主文字色保证可读性 */
+.markdown-message blockquote[data-alert] {
+  --alert: var(--c-info);
+  border-left-color: var(--alert);
+  background: color-mix(in srgb, var(--alert) 7%, var(--c-surface));
+  color: color-mix(in srgb, var(--c-text) 88%, var(--alert));
+}
+.markdown-message blockquote[data-alert='success'] { --alert: var(--c-success); }
+.markdown-message blockquote[data-alert='warning'] { --alert: var(--c-warning); }
+
+/* ── 语义标记：正文/表格里可用的行内小标签 ──
+   用法：<span class="md-ok">可用</span> / md-warn / md-info */
+.markdown-message :is(.md-ok, .md-warn, .md-info) {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.05em 0.5em;
+  font-size: 0.88em;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.markdown-message .md-ok { color: var(--c-success); background: var(--c-success-soft); }
+.markdown-message .md-warn { color: var(--c-warning); background: var(--c-warning-soft); }
+.markdown-message .md-info { color: var(--c-info); background: var(--c-info-soft); }
+
+/* 松列表项 / 引用块里的多段落，不能让它们粘成一段 */
+.markdown-message li > p { margin: 0; }
+.markdown-message li > p + p { margin-top: 12px; }
+
+/* ── 链接 ── preflight 把 text-decoration 置为 inherit，必须显式恢复下划线 */
+.markdown-message a {
+  color: var(--c-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in srgb, var(--c-accent) 45%, transparent);
+  text-underline-offset: 2px;
+}
+.markdown-message a:hover { text-decoration-color: currentColor; }
+
+/* ── 其他内联元素 ── */
+.markdown-message > img,
+.markdown-message p > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 4px 0;
+  border-radius: 8px;
+}
+.markdown-message mark {
+  padding: 0 .2em;
+  border-radius: 3px;
+  background: var(--c-warning-soft);
+  color: inherit;
+}
+.markdown-message kbd {
+  display: inline-block;
+  padding: .05em .45em;
+  border: 1px solid var(--c-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--c-text) 6%, var(--c-surface));
+  font-family: var(--font-mono);
+  font-size: .85em;
+  line-height: 1.5;
+}
+.markdown-message details {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.markdown-message summary {
+  cursor: pointer;
   color: var(--c-text-secondary);
 }
+.markdown-message details[open] > summary { margin-bottom: 8px; }
+.markdown-message details > * + * { margin-top: 8px; }
+/* 正文内联 HTML 的白名单标签 */
+.markdown-message sub,
+.markdown-message sup { font-size: .75em; line-height: 0; }
+.markdown-message abbr[title] { text-decoration: underline dotted; cursor: help; }
+.markdown-message u { text-underline-offset: 3px; }
+.markdown-message ins { text-decoration-color: var(--c-success, var(--c-accent)); }
 
 .rich-markdown {
   --rich-text: var(--c-text);
   --rich-muted: var(--c-text-secondary);
   --rich-surface: var(--c-surface);
-  --rich-raised: var(--c-surface-2);
+  /* 卡片抬升层用中性灰，而不是带蓝调的 surface-2 */
+  --rich-raised: color-mix(in srgb, var(--c-text) 6%, var(--c-surface));
   --rich-border: var(--c-border);
   --rich-accent: var(--c-accent);
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 14px;
   min-width: 0;
 }
 
+/* 暗色下正文页与卡片几乎同色（#161B22 vs #1B1E24），阶差只有 1.04:1。
+   只抬高 markdown 局部变量，不动全局 token，避免影响侧栏等其它区域。 */
+[data-theme='dark'] .rich-markdown {
+  --rich-surface: #171A20;
+  --rich-raised: #1F232B;
+}
+
 .rich-markdown > * { min-width: 0; }
-.rich-markdown h4 { margin: 4px 0 0; color: var(--rich-text); font-size: 14px; line-height: 1.35; font-weight: 650; }
-.rich-markdown a { color: var(--rich-accent); text-underline-offset: 2px; }
 .rich-markdown input[type='checkbox'] { accent-color: var(--rich-accent); }
 .rich-markdown .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: 3px 0; }
 
@@ -398,15 +516,19 @@ code, pre {
   opacity: 1;
 }
 
+/* 表格改成「编辑排版」式：不画完整卡片外框，只用上下两条横线收边，
+   列分隔线降到很淡，避免整块看起来像控件。 */
 .markdown-message .markdown-table-scroll {
   width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
-  border: 1px solid var(--rich-border);
-  border-radius: 8px;
-  background: var(--rich-surface);
+  border: 0;
+  border-top: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  border-radius: 0;
+  background: transparent;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--c-border) 55%, transparent) transparent;
 }
@@ -470,8 +592,10 @@ code, pre {
 .markdown-message .markdown-table-scroll td[align='right'] { text-align: right; }
 
 /* 斑马纹 + 行悬停：长表格里更容易跟住一行 */
+/* 斑马纹 + 行悬停：长表格里更容易跟住一行。
+   与表头同为中性灰（正文色混合），避免出现「表头淡蓝、隔行灰」两种色系。 */
 .markdown-message .markdown-table-scroll tbody tr:nth-child(even) {
-  background: color-mix(in srgb, var(--c-surface-2) 55%, transparent);
+  background: color-mix(in srgb, var(--c-text) 3%, var(--c-surface));
 }
 .markdown-message .markdown-table-scroll tbody tr:hover {
   background: color-mix(in srgb, var(--c-accent) 7%, transparent);
@@ -569,19 +693,61 @@ code, pre {
   background: var(--rich-surface);
 }
 
+/* ── 代码卡片 ──
+   旧版是三根横线 + 灰头带 + 语言胶囊 + 一层不可见阴影，本质是把「窗口」的
+   所有零件都画了一遍；但浅色下代码底与页面同为 #FCFCFC（对比 1.00），零件
+   再全也没有材质。现在的做法相反：给代码区一层自己的底色，头部彻底退成
+   透明，只留左上角一行小字做标识。 */
+.rich-code-frame {
+  /* 冷蓝边框(#D7DDE6)会让卡片读成输入框；代码卡用中性 9% 文字色描边 */
+  border-color: color-mix(in srgb, var(--c-text) 9%, transparent);
+}
+.rich-code-frame > .rich-frame-header {
+  min-height: 30px;
+  border-bottom: 0;
+  /* 与代码体左内边距对齐：旧版 10px vs 16px 差 6px，语言标签和代码不同轴 */
+  padding: 0 6px 0 16px;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--c-text) 62%, var(--c-surface));
+}
+
 .rich-frame-header {
   display: flex;
-  min-height: 35px;
+  min-height: 34px;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   border-bottom: 1px solid var(--rich-border);
-  padding: 0 7px 0 11px;
+  padding: 0 6px 0 10px;
   color: var(--rich-muted);
   background: var(--rich-raised);
   font-size: 11px;
   font-weight: 650;
   text-transform: none;
+}
+
+/* 语言标签不做胶囊：填充底色 + 圆角会让它看起来像可点击控件，
+   紧挨着真正的复制按钮时，头部出现两个「按钮」而只有一个能用。 */
+.rich-code-frame > .rich-frame-header > span:first-child {
+  display: inline-flex;
+  min-height: 0;
+  align-items: center;
+  border-radius: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: lowercase;
+}
+/* 30px 的头部里放 27px 按钮只剩 1.5px 边距，按钮会贴边；收一档 */
+.rich-code-frame .rich-icon-button {
+  width: 24px;
+  height: 24px;
 }
 
 .rich-frame-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; }
@@ -606,6 +772,24 @@ code, pre {
 .rich-code-frame .rich-frame-body,
 .rich-diff-frame .rich-frame-body { overflow-x: auto; }
 
+/* 横向滚动条收敛成细条，避免默认粗条压住最后一行代码 */
+.rich-code-frame .rich-frame-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--rich-text) 20%, transparent) transparent;
+}
+.rich-code-frame .rich-frame-body::-webkit-scrollbar { height: 8px; }
+.rich-code-frame .rich-frame-body::-webkit-scrollbar-track { background: transparent; }
+.rich-code-frame .rich-frame-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--rich-text) 18%, transparent);
+  background-clip: content-box;
+}
+.rich-code-frame .rich-frame-body:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--rich-text) 30%, transparent);
+  background-clip: content-box;
+}
+
 .rich-html-render-frame .rich-frame-body { overflow: auto; }
 
 .rich-shiki pre,
@@ -614,16 +798,51 @@ code, pre {
   margin: 0;
   border: 0;
   border-radius: 0;
-  padding: 13px 14px;
-  background: var(--rich-surface) !important;
+  padding: 12px 16px;
+  /* 一层自己的中性底：旧版直接复用 --rich-surface，浅色下等于页面底色
+     (#FCFCFC vs #FCFCFC，1.00)，卡片只剩一根边框，读起来像输入框。
+     2.5% 只做「一层薄雾」：亮色 ≈#F6F7F7，暗色 ≈#1B1E23。 */
+  background: color-mix(in srgb, var(--c-text) 2.5%, var(--rich-surface)) !important;
   font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.62;
+  font-size: var(--md-code, 13px);
+  /* 1.72 @12.5px = 21.5px 行距，x-height 只有 9px，行间空白比字还大；
+     代码的精确感来自「密而齐」，1.55 与主流编辑器一致。 */
+  line-height: 1.55;
   tab-size: 2;
   white-space: pre;
+  text-autospace: no-autospace;
   overflow-x: auto;
 }
 .rich-shiki code { display: block; border: 0; padding: 0; background: transparent; font-size: inherit; }
+
+/* 代码块内部必须复位行内 code 的换行规则：
+   .markdown-message code 设了 white-space: pre-wrap / word-break: break-word，
+   而 .rich-shiki code 未声明这两条 → 长代码行会被强制换行并从 token 中间断词，
+   pre 的 overflow-x:auto 永远不生效。 */
+.rich-shiki pre code,
+.markdown-message .rich-code-fallback code {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Shiki 双主题：codeToHtml 把浅色写在每个 token 的**内联 style** 上
+   （color:#24292e; --shiki-dark:#e1e4e8），普通声明赢不了内联样式，
+   必须 !important，否则深色主题下 token 仍是浅色配色，压在深底上不可读。 */
+[data-theme='dark'] .rich-shiki pre,
+[data-theme='dark'] .rich-shiki pre span {
+  color: var(--shiki-dark, var(--c-text)) !important;
+}
+
+/* 暗色代码底由上面的 color-mix + --rich-surface(#171A20) 自动得出，
+   不再单独写死 surface-3，避免亮暗两套用不同公式。 */
 
 .rich-diff-frame [data-diffs] { --diffs-font-size: 12px; --diffs-line-height: 1.55; }
 .rich-json-frame .rich-frame-body { max-height: 420px; overflow: auto; padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; }
@@ -741,7 +960,7 @@ code, pre {
   --rich-text: var(--c-text);
   --rich-muted: var(--c-text-secondary);
   --rich-surface: var(--c-surface);
-  --rich-raised: var(--c-surface-2);
+  --rich-raised: color-mix(in srgb, var(--c-text) 6%, var(--c-surface));
   --rich-border: var(--c-border);
   --rich-accent: var(--c-accent);
   display: grid;
@@ -788,14 +1007,6 @@ code, pre {
   .rich-fullscreen-backdrop { padding: 8px; }
   .rich-fullscreen { width: 100%; height: 100%; }
 }
-
-/* Reasoning variant — scoped override */
-.markdown-content.markdown-content--reasoning {
-  font-size: 13px;
-  line-height: 1.6;
-}
-.markdown-content.markdown-content--reasoning > *:first-child { margin-top: 0 !important; }
-.markdown-content.markdown-content--reasoning > *:last-child { margin-bottom: 0 !important; }
 
 @keyframes typing-dot {
   0%, 100% {
@@ -878,7 +1089,7 @@ code, pre {
   background: var(--c-text-secondary);
 }
 
-/* ── Markdown 排版统一由 .markdown-content 选择器定义（上方），chat-area 不再覆盖 ── */
+/* ── Markdown 排版统一由 .markdown-message 定义（上方），chat-area 不再覆盖 ── */
 
 /* ───────── 材质原语：画布只有一层，浮层才抬起 ─────────
    颜色 / 阴影由主题层给（theme/light.css、theme/dark.css），
@@ -1248,60 +1459,3 @@ button.app-card {
    @file-viewer/react 使用 Shadow DOM 隔离，
    内部样式通过 ::part() / CSS tokens 定制，外部选择器不穿透。 */
 
-/* ── Reasoning 变体：思考区容器使用 markdown-content--reasoning 时，
-      对默认 .markdown-content 的大字号/大间距做"瘦身覆盖"——
-      保留 table / task-list / dl 全部语义样式，
-      只把块级间距、标题大小、正文文本颜色往"淡色小字"方向收窄，
-      与 ReasoningBlock 原先 reasoning-markdown 的浅灰斜体视觉保持一致。 */
-.markdown-content.markdown-content--reasoning {
-  font-size: var(--fs-sm) !important;
-  line-height: 1.65 !important;
-  color: var(--c-text-secondary);
-}
-.markdown-content.markdown-content--reasoning > *:first-child { margin-top: 0 !important; }
-.markdown-content.markdown-content--reasoning > *:last-child  { margin-bottom: 0 !important; }
-
-.markdown-content.markdown-content--reasoning p,
-.markdown-content.markdown-content--reasoning li,
-.markdown-content.markdown-content--reasoning dd {
-  font-size: var(--fs-sm) !important;
-  line-height: 1.65 !important;
-}
-
-.markdown-content.markdown-content--reasoning > ul,
-.markdown-content.markdown-content--reasoning > ol,
-.markdown-content.markdown-content--reasoning > p,
-.markdown-content.markdown-content--reasoning > blockquote,
-.markdown-content.markdown-content--reasoning > pre,
-.markdown-content.markdown-content--reasoning > dl,
-.markdown-content.markdown-content--reasoning > figure,
-.markdown-content.markdown-content--reasoning > table,
-.markdown-content.markdown-content--reasoning > hr {
-  margin-top: 0.55em !important;
-  margin-bottom: 0.55em !important;
-}
-
-.markdown-content.markdown-content--reasoning h1 { font-size: 1.05em !important; margin: 0.9em 0 0.4em !important; }
-.markdown-content.markdown-content--reasoning h2 { font-size: 1.00em !important; margin: 0.8em 0 0.35em !important; }
-.markdown-content.markdown-content--reasoning h3 { font-size: 0.98em !important; margin: 0.7em 0 0.3em !important; }
-.markdown-content.markdown-content--reasoning h4,
-.markdown-content.markdown-content--reasoning h5,
-.markdown-content.markdown-content--reasoning h6 { font-size: 0.96em !important; margin: 0.6em 0 0.25em !important; }
-
-/* 思考区表格同样瘦身，避免过大外框留白 */
-.markdown-content.markdown-content--reasoning table {
-  margin: 0.8em 0 !important;
-  border-radius: 8px !important;
-}
-.markdown-content.markdown-content--reasoning th,
-.markdown-content.markdown-content--reasoning td {
-  padding: 0.5em 0.7em !important;
-  font-size: var(--fs-sm) !important;
-}
-
-/* 思考区 code block：去掉默认 shadow，让浅灰盒更贴合思考区整体淡色 */
-.markdown-content.markdown-content--reasoning [data-code-block] pre {
-  box-shadow: none !important;
-  border-radius: 6px !important;
-  font-size: var(--fs-sm) !important;
-}

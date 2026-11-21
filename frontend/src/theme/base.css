@@ -324,7 +324,7 @@
   white-space: pre;
 }
 
-/* Shiki 单例高亮输出样式由 index.css 的 .markdown-content .rich-shiki 规则统一管理 */
+/* Shiki 单例高亮输出样式由 index.css 的 .rich-shiki 系列规则统一管理 */
 
 /* ============================================================
    聊天滚动控制 · 流式输出指示器动画

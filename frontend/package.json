@@ -59,6 +59,7 @@
     "react-pdf": "^10.4.1",
     "recharts": "^3.10.1",
     "rehype-katex": "^7.0.1",
+    "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "write-excel-file": "^4.1.1",

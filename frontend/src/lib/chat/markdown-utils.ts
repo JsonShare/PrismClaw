@@ -29,13 +29,16 @@ export function hasUnclosedMarkdownFence(content: string): boolean {
   return Boolean(fence);
 }
 
+const LIST_LINE_RE = /^\s{0,3}(?:[-*+]|\d{1,9}[.)])\s/;
+
 export function splitStreamingMarkdown(content: string, streaming = false): string[] {
   if (!streaming) return [content];
   const lines = content.match(/.*(?:\n|$)/g)?.filter(Boolean) || [content];
   const chunks: string[] = [];
   let current = '';
   let fence = '';
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     current += line;
     const marker = fenceMarker(line);
     if (marker) {
@@ -47,10 +50,17 @@ export function splitStreamingMarkdown(content: string, streaming = false): stri
       }
       continue;
     }
-    if (!fence && /^\s*$/.test(line) && current.trim()) {
-      chunks.push(current);
-      current = '';
-    }
+    if (fence || !/^\s*$/.test(line) || !current.trim()) continue;
+
+    // 空行边界：只有「上一个非空行」和「下一个非空行」都不属于列表语境时才切块。
+    // 否则一个松列表（项之间有空行）会被切成多个 <ol>，编号从 1 重新开始。
+    const prev = lines.slice(0, index).reverse().find((row) => row.trim()) || '';
+    const next = lines.slice(index + 1).find((row) => row.trim()) || '';
+    const continuesList = LIST_LINE_RE.test(prev) || LIST_LINE_RE.test(next) || /^\s{2,}\S/.test(next);
+    if (continuesList) continue;
+
+    chunks.push(current);
+    current = '';
   }
   if (current) chunks.push(current);
   return chunks.length ? chunks : [''];
@@ -446,6 +456,153 @@ export function rehypeTableLabels() {
     const visit = (node: any) => {
       if (node?.tagName === 'table') annotate(node);
       if (Array.isArray(node?.children)) node.children.forEach(visit);
+    };
+    visit(tree);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 正文内联 HTML 白名单（配合 rehype-raw 使用）
+// 模型输出视为不可信内容：只放行排版类标签，属性仅保留 class/title/href
+// 和受限的 color；script/style/iframe/img 等直接丢弃，其余未知标签解包保文字。
+// ---------------------------------------------------------------------------
+
+// 必须包含所有「Markdown 语法会生成的结构标签」：白名单里没有的标签会被解包成纯文本，
+// 导致表格/列表/引用/标题这些由 markdown 本身产生的元素一并失去语义。
+const SAFE_HTML_TAGS = new Set([
+  'a', 'abbr', 'b', 'br', 'cite', 'code', 'del', 'details', 'div', 'em', 'hr', 'i',
+  'ins', 'kbd', 'mark', 'p', 'q', 's', 'small', 'span', 'strong', 'sub', 'summary', 'sup', 'u',
+  // 结构标签（由 markdown 生成，不是模型手写 HTML）
+  'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'pre',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'figure', 'figcaption',
+]);
+const DROP_HTML_TAGS = new Set([
+  'script', 'style', 'iframe', 'object', 'embed', 'link', 'meta', 'base', 'form',
+  'button', 'textarea', 'select', 'option', 'svg', 'math', 'video', 'audio', 'canvas',
+  'template', 'noscript', 'img', 'picture', 'source', 'frame', 'frameset',
+]);
+const HTML_COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d+)\s*)?\)|[a-z]{3,20})$/i;
+const HTML_CLASS_RE = /^[a-z0-9_-]{1,40}$/i;
+const HTML_HREF_RE = /^(https?:|mailto:)/i;
+const HTML_STYLE_PROPS = new Set(['color', 'background-color']);
+
+function sanitizeHtmlColor(value: unknown): string {
+  const color = typeof value === 'string' ? value.trim() : '';
+  return color && HTML_COLOR_RE.test(color) ? color : '';
+}
+
+function sanitizeHtmlStyle(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const kept: string[] = [];
+  for (const declaration of value.split(';')) {
+    const index = declaration.indexOf(':');
+    if (index < 0) continue;
+    const prop = declaration.slice(0, index).trim().toLowerCase();
+    const val = declaration.slice(index + 1).trim().toLowerCase();
+    if (!HTML_STYLE_PROPS.has(prop)) continue;
+    if (!HTML_COLOR_RE.test(val)) continue;
+    kept.push(`${prop}: ${val}`);
+  }
+  return kept.join('; ');
+}
+
+function sanitizeHtmlProperties(raw: any): Record<string, unknown> {
+  const props = raw || {};
+  const out: Record<string, unknown> = {};
+  const classes = (Array.isArray(props.className) ? props.className : String(props.className || '').split(/\s+/))
+    .map((item: unknown) => String(item))
+    .filter((item: string) => HTML_CLASS_RE.test(item))
+    .slice(0, 4);
+  if (classes.length) out.className = classes;
+  if (typeof props.title === 'string' && props.title.length <= 200) out.title = props.title;
+  const href = typeof props.href === 'string' ? props.href.trim() : '';
+  if (href && HTML_HREF_RE.test(href)) out.href = href;
+  const style = sanitizeHtmlStyle(props.style);
+  const color = sanitizeHtmlColor(props.color);
+  const merged = [style, color ? `color: ${color}` : ''].filter(Boolean).join('; ');
+  if (merged) out.style = merged;
+  // GFM 表格对齐、有序列表起始序号都是语法自带的属性，不能一并剥掉
+  if (typeof props.start === 'number' && props.start >= 0) out.start = Math.min(9999, props.start);
+  if (typeof props.align === 'string' && /^(left|center|right)$/.test(props.align)) out.align = props.align;
+  return out;
+}
+
+export function rehypeSafeHtml() {
+  return (tree: any) => {
+    const visit = (node: any) => {
+      if (!Array.isArray(node?.children)) return;
+      const next: any[] = [];
+      for (const child of node.children) {
+        if (child?.type !== 'element') {
+          visit(child);
+          next.push(child);
+          continue;
+        }
+        const tag = String(child.tagName || '').toLowerCase();
+        if (DROP_HTML_TAGS.has(tag)) continue;
+        // <font color="red"> → <span style="color: red">
+        if (tag === 'font') {
+          const color = sanitizeHtmlColor(child.properties?.color);
+          child.tagName = 'span';
+          child.properties = color ? { style: `color: ${color}` } : {};
+          visit(child);
+          next.push(child);
+          continue;
+        }
+        if (!SAFE_HTML_TAGS.has(tag)) {
+          // GFM 任务列表的勾选框：只放行 checkbox，其余表单控件一律丢弃
+          if (tag === 'input') {
+            if (String(child.properties?.type || '').toLowerCase() !== 'checkbox') continue;
+            child.properties = {
+              type: 'checkbox',
+              disabled: true,
+              ...(child.properties?.checked ? { checked: true } : {}),
+            };
+            next.push(child);
+            continue;
+          }
+          visit(child);
+          next.push(...(child.children || []));
+          continue;
+        }
+        child.properties = sanitizeHtmlProperties(child.properties);
+        visit(child);
+        next.push(child);
+      }
+      node.children = next;
+    };
+    visit(tree);
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 语义提示块：> [!NOTE] / [!TIP] / [!WARNING] … → 带语义色的 callout
+// 只在 rehypeSafeHtml 之后运行，避免 data-alert 被白名单过滤掉。
+// ---------------------------------------------------------------------------
+
+const ALERT_KINDS: Record<string, 'info' | 'success' | 'warning'> = {
+  note: 'info', info: 'info', important: 'info',
+  tip: 'success', success: 'success',
+  warning: 'warning', caution: 'warning', danger: 'warning',
+};
+
+export function rehypeSemanticAlerts() {
+  return (tree: any) => {
+    const visit = (node: any) => {
+      if (!Array.isArray(node?.children)) return;
+      for (const child of node.children) {
+        if (child?.type === 'element' && String(child.tagName || '').toLowerCase() === 'blockquote') {
+          const paragraph = child.children?.find((item: any) => item?.type === 'element' && item.tagName === 'p');
+          const text = paragraph?.children?.find((item: any) => item?.type === 'text');
+          const matched = typeof text?.value === 'string' ? /^\s*\[!(\w+)\]\s*/.exec(text.value) : null;
+          const kind = matched ? ALERT_KINDS[matched[1].toLowerCase()] : undefined;
+          if (kind && matched) {
+            text.value = text.value.slice(matched[0].length);
+            child.properties = { ...(child.properties || {}), 'data-alert': kind };
+          }
+        }
+        visit(child);
+      }
     };
     visit(tree);
   };

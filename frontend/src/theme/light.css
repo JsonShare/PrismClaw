@@ -70,6 +70,8 @@
   --c-error: #D12224;
   --c-danger-soft: rgba(209, 34, 36, 0.10);
   --c-success-soft: rgba(26, 127, 55, 0.10);
+  --c-warning-soft: rgba(154, 103, 0, 0.10);
+  --c-info-soft: rgba(26, 111, 212, 0.10);
   --c-accent-soft: rgba(44, 89, 188, 0.10);
   --c-info: #1A6FD4;                    /* 提示类表情图标 */
   --c-violet: #7A4DD6;                  /* 文件类表情图标 */
@@ -177,11 +179,7 @@
   color: var(--c-text);
 }
 
-/* 引用块 */
-[data-theme="light"] .markdown-content blockquote {
-  background-color: var(--c-surface-2);
-  border-left-color: var(--c-border-strong);
-}
+/* 引用块底色已由 index.css 的 .markdown-message blockquote 统一处理（深浅主题通用） */
 
 
 /* 单色 UI 图标纯黑；彩色文件类型图标保持原色 */

@@ -270,11 +270,11 @@ export default function EmptyStateSuggestions({onPick}: Props) {
                                                 type="button"
                                                 onClick={() => onPick(item)}
                                                 className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-left
-                                   text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]
+                                   text-[length:var(--fs-md)] leading-[1.6] text-[var(--c-text-secondary)]
                                    hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)]
                                    transition-colors cursor-pointer"
                                             >
-                                                <span className="line-clamp-1 flex-1">{item}</span>
+                                                <span className="line-clamp-2 flex-1">{item}</span>
                                                 <ChevronRight size={14} className="shrink-0 opacity-0 group-hover/tip:opacity-100 transition-opacity"/>
                                             </button>
                                             {/* Tooltip —— 系统级极简浮层（100% 对齐设计令牌，零自定义调色，零花样装饰）：
@@ -295,7 +295,7 @@ export default function EmptyStateSuggestions({onPick}: Props) {
                   bg-[var(--tt-bg)]
                   dark:[--tt-bg:var(--c-surface-3)]
                   px-4.5 py-3.5
-                  text-[length:var(--fs-sm)] leading-[1.7] text-[var(--c-text)]
+                  text-[length:var(--fs-md)] leading-[1.7] text-[var(--c-text)]
                   shadow-[0_0_0_1px_rgba(17,24,39,0.04),0_2px_8px_-2px_rgba(0,0,0,0.04)]
                   dark:shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_8px_20px_-12px_rgba(0,0,0,0.45)]
                   opacity-0 translate-y-2 group-hover/tip:opacity-100 group-hover/tip:translate-y-0
