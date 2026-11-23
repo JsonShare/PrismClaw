@@ -107,16 +107,16 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
               key={key}
               type="button"
               onClick={() => handleMainItemClick(key)}
-              // 图标列用 1.25rem 而非 20px：根字号是 15px（--fs-md），
-              // Tailwind 的 w-5 也是 1.25rem=18.75px；写死 20px 会多出 1.25px 余量，
-              // 导致下方二级菜单的 pl-10 对不齐主菜单文字。统一用 rem 后两者严格同轴。
+              // 图标列用 1.25rem 而非 20px：根字号是 14px（--fs-md），
+              // 1.25rem = 17.5px，与业务域菜单的图标列同宽、始终同轴；
+              // 图标本身固定 16px（不随根字号缩放），与业务域菜单的 16px 图标一致。
               className={`sidebar-nav-row grid grid-cols-[1.25rem_1fr] items-center gap-2 px-3 py-2.5 text-[length:var(--fs-sm)] font-medium text-left transition-colors duration-150 cursor-pointer mx-3 w-[calc(100%-1.5rem)] rounded-[var(--radius-control)] ${
                 active
                   ? 'is-active'
                   : 'text-[var(--c-text)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)]'
               }`}
             >
-              <img src={img} alt={label} className="w-5 h-5 justify-self-start app-icon" />
+              <img src={img} alt={label} className="h-[16px] w-[16px] justify-self-center app-icon" />
               <span>{label}</span>
             </button>
           )
@@ -140,8 +140,8 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
                 <Fragment key={`${group.domainKey}:${group.label || '__ungrouped'}`}>
                   {startNewDomain && <HairlineDivider className="mx-3" />}
 
-                  {/* 分组标签：11px/600 + 字距 + 灰字，弱化到「分区标签」层级 */}
-                  <div className="mx-3 flex h-6 items-center px-3 text-[11px] font-semibold tracking-[0.08em] text-[var(--c-text-tertiary)]">
+                  {/* 分组标签：12px/600 + 字距 + 灰字，弱化到「分区标签」层级 */}
+                  <div className="mx-3 flex h-6 items-center px-3 text-[length:var(--fs-xs)] font-semibold tracking-[0.08em] text-[var(--c-text-tertiary)]">
                     <span className="truncate">{group.label}</span>
                   </div>
 

@@ -58,11 +58,13 @@
   --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.16),
     0 0 0 1px rgba(120, 160, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.45);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 :root,
 page {
+  /* 状态栏/刘海高度：H5 由 env() 提供，小程序在 app.ts 里写入精确值 */
+  --safe-top: env(safe-area-inset-top, 0px);
+
   --primary: #2c59bc;
   --primary-pressed: #002fa7;
   --primary-soft: #e9eef9;
@@ -120,7 +122,6 @@ page {
   --glass-elevation-soft: inset 0 1px 0 rgba(255, 255, 255, 0.88),
     0 0 0 1px rgba(70, 100, 160, 0.05), 0 8px 22px rgba(35, 55, 95, 0.08);
 
-  --shadow-sm: 0 1px 2px rgba(31, 35, 40, 0.05);
 }
 
 .theme-dark {
@@ -184,7 +185,44 @@ $radius-xl: 20px; // 大浮层、对话框、搜索胶囊
 $radius-2xl: 24px; // 底部弹层
 $radius-pill: 999px; // 胶囊：切换器、标签、圆形按钮
 
-$shadow-sm: var(--shadow-sm);
+/* 字号阶梯：9 档，4pt 基线。行高与字号成对固定，局部不得改写。
+   聊天长文单独用 $fs-body-lg / $lh-body-lg（15 / 26）。 */
+$fs-display: 28px; // 首页 Hero、登录标题
+$fs-h1: 22px; // 页面主标题
+$fs-h2: 18px; // 模块标题、弹框标题
+$fs-h3: 16px; // 卡片标题、列表主信息、输入框
+$fs-body-lg: 15px; // 聊天正文、主要说明
+$fs-body: 14px; // 通用正文、按钮文字
+$fs-body-sm: 13px; // 卡片描述、次要信息
+$fs-caption: 12px; // 时间、元信息
+$fs-micro: 11px; // 标签、角标，系统最小字号
+
+$lh-display: 36px;
+$lh-h1: 30px;
+$lh-h2: 26px;
+$lh-h3: 24px;
+$lh-body-lg: 24px;
+$lh-body: 22px;
+$lh-body-sm: 20px;
+$lh-caption: 18px;
+$lh-micro: 16px;
+
+/* 间距：只用 4 的倍数；页面左右留白恒为 $sp-4（16） */
+$sp-1: 4px;
+$sp-2: 8px;
+$sp-3: 12px;
+$sp-4: 16px;
+$sp-5: 20px;
+$sp-6: 24px;
+$sp-8: 32px;
+
+/* 触控与控件高度：列表行 52，主按钮 44，小按钮 36，chip 32 */
+$hit-list: 52px;
+$hit-primary: 44px;
+$hit-small: 36px;
+$hit-chip: 32px;
+/* 顶栏内容区高度；安全区（状态栏）另由 env(safe-area-inset-top) 叠加 */
+$header-h: 44px;
 
 $font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'HarmonyOS Sans SC',
   'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;

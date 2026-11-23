@@ -403,7 +403,7 @@ export function SettingsPage({
           <div className="max-w-[840px] mx-auto px-8 py-8">
             {/* 页面标题 */}
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-[length:var(--fs-xl)] font-bold text-[var(--c-text)]">{activeLabel}</h1>
+              <h1 className="text-[length:var(--fs-xl)] font-semibold text-[var(--c-text)]">{activeLabel}</h1>
             </div>
 
             {/* 内容区 */}

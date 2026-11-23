@@ -9,6 +9,7 @@ page {
   height: 100%;
   background: $bg;
   font-family: $font;
+  font-size: $fs-body;
   color: $text;
   -webkit-font-smoothing: antialiased;
 }
@@ -20,15 +21,20 @@ body {
   padding: 0;
   background: $bg;
   font-family: $font;
+  font-size: $fs-body;
   color: $text;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
+/* Taro H5 会往 documentElement 写内联根字号（当前 20.8px，按 designWidth 换算，
+   且 resize 时重算）。内联样式优先级最高，改 html 规则无效，因此在 #app 上
+   截断继承链——漏设字号的元素从 14 起步，而不是被放大到 20.8。 */
 #app,
 .taro_router,
 .taro_page {
   height: 100%;
+  font-size: $fs-body;
 }
 
 /* Taro 运行时给 .taro_page 注入白底 + 页级 overflow-y: scroll（<style> 在应用样式之后插入），
@@ -116,7 +122,7 @@ textarea {
   justify-content: center;
 }
 .header-title {
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 600;
   letter-spacing: -0.1px;
   color: #111316;
@@ -127,7 +133,7 @@ textarea {
 }
 .header-sub {
   margin-top: 1px;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
   display: flex;
   align-items: center;
@@ -135,13 +141,13 @@ textarea {
   gap: 3px;
 }
 .header-spacer {
-  width: 34px;
+  width: $hit-primary;
   flex: 0 0 auto;
 }
 
 .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: $hit-primary;
+  height: $hit-primary;
   flex: 0 0 auto;
   border-radius: $radius-pill;
   display: flex;
@@ -151,8 +157,8 @@ textarea {
   position: relative;
 }
 .icon-btn.is-bare {
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
 }
 
 .app-body {
@@ -172,40 +178,6 @@ textarea {
 
 /* ── 首页 ─────────────────────────────────────────────── */
 
-.home.home-start {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  min-height: 0;
-}
-
-.home-hero {
-  padding: 72px 22px 0;
-}
-.home-title {
-  display: block;
-  margin: 0;
-  font-size: 30px;
-  line-height: 1.3;
-  font-weight: 650;
-  letter-spacing: -0.9px;
-}
-.home-title-line {
-  display: block;
-}
-
-.home-dock {
-  margin-top: auto;
-  padding: 0 12px 12px;
-}
-
-.home-input {
-  display: block;
-  padding: 10px;
-  border-radius: $radius-xl;
-  background: $surface-3;
-}
 
 /* ── 输入区 ───────────────────────────────────────────── */
 
@@ -236,14 +208,9 @@ textarea {
   gap: 2px;
 }
 .composer-tools-left,
-.composer-tools-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
 .tool-btn {
-  width: 32px;
-  height: 32px;
+  width: $hit-small;
+  height: $hit-small;
   flex: 0 0 auto;
   border-radius: 50%;
   display: flex;
@@ -293,7 +260,7 @@ textarea {
 .composer-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   padding: 0 0 8px;
 }
 .composer-chip {
@@ -301,8 +268,8 @@ textarea {
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  height: 28px;
-  padding: 0 8px 0 8px;
+  height: $hit-chip;
+  padding: 0 $sp-2;
   border-radius: 8px;
   background: rgba(240, 247, 255, 0.9);
   color: #111316;
@@ -321,7 +288,7 @@ textarea {
   flex: 0 0 auto;
 }
 .composer-chip-text {
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -339,7 +306,7 @@ textarea {
 .composer-attachments-track {
   display: inline-flex;
   align-items: stretch;
-  gap: 10px;
+  gap: 8px;
   min-width: 100%;
   box-sizing: border-box;
   padding: 12px 12px 4px 8px;
@@ -363,7 +330,7 @@ textarea {
 }
 .composer-attachment-image {
   display: block;
-  border-radius: 11px;
+  border-radius: $radius-sm;
 }
 .composer-attachment.is-file {
   display: flex;
@@ -390,8 +357,8 @@ textarea {
 .composer-attachment-ext {
   overflow: hidden;
   color: #ffffff;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: $fs-body-lg;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -406,7 +373,7 @@ textarea {
   display: block;
   overflow: hidden;
   color: $text;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -414,7 +381,7 @@ textarea {
 .composer-attachment-meta {
   overflow: hidden;
   color: $text-3;
-  font-size: 10px;
+  font-size: $fs-micro;
   line-height: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -450,12 +417,12 @@ textarea {
   padding: 2px 8px;
   border-radius: $radius-pill;
   background: $surface-3;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
 }
 
 .msg-stopped Text {
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
 }
 
@@ -481,7 +448,7 @@ textarea {
 .add-sheet {
   display: flex;
   flex-direction: column;
-  padding: 18px 18px calc(14px + env(safe-area-inset-bottom));
+  padding: $sp-4 $sp-4 calc(14px + env(safe-area-inset-bottom));
   border-radius: 28px 28px 0 0;
   border-top: 1px solid $glass-border;
   background: $glass-sheet;
@@ -498,7 +465,7 @@ textarea {
   height: 34px;
 }
 .add-title {
-  font-size: 18px;
+  font-size: $fs-h2;
   font-weight: 600;
   color: $text;
 }
@@ -519,7 +486,7 @@ textarea {
 }
 .add-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin-top: 22px;
 }
 .add-action {
@@ -528,7 +495,7 @@ textarea {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   height: 96px;
   border: 1px solid $glass-border;
   border-radius: 12px;
@@ -539,7 +506,7 @@ textarea {
   background: $hover;
 }
 .add-action-label {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   color: $text;
 }
 .add-divider {
@@ -555,7 +522,7 @@ textarea {
 }
 .add-link-label {
   flex: 1;
-  font-size: 17px;
+  font-size: $fs-h3;
   color: $text;
 }
 
@@ -564,7 +531,7 @@ textarea {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* 技能与专家列表：分区标题 + 图标条目 */
@@ -586,11 +553,11 @@ textarea {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  height: 56px;
-  padding: 4px 18px 0;
+  height: $hit-list;
+  padding: 4px $sp-4 0;
 }
 .library-title {
-  font-size: 17px;
+  font-size: $fs-h3;
   font-weight: 600;
   line-height: 24px;
   color: $text;
@@ -627,7 +594,7 @@ textarea {
   min-width: 0;
   // 撑满搜索条高度，内层 .weui-input 的 100% 才有参照，文字才会垂直居中
   align-self: stretch;
-  font-size: 14px;
+  font-size: $fs-h3;
   color: $text;
 }
 /* 专家 / 技能页签：两段式玻璃分段控件 */
@@ -648,7 +615,7 @@ textarea {
   justify-content: center;
   height: 32px;
   border-radius: 7px;
-  font-size: 13.5px;
+  font-size: $fs-body-sm;
   line-height: 18px;
   color: $text-sub;
   transition: background 150ms $ease, color 150ms $ease;
@@ -664,12 +631,12 @@ textarea {
   min-height: 0;
 }
 .library-body {
-  padding: 12px 18px 8px;
+  padding: $sp-3 $sp-4 $sp-2;
 }
 .library-hint {
   padding: 28px 0;
   text-align: center;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   color: $text-3;
 }
 .library-row {
@@ -688,13 +655,13 @@ textarea {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: $radius-md;
   background: $glass-soft;
 }
 .library-emoji {
-  font-size: 23px;
+  font-size: $fs-h1;
   line-height: 1;
 }
 .library-main {
@@ -703,7 +670,7 @@ textarea {
 }
 .library-label {
   display: block;
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 500;
   line-height: 22px;
   color: $text;
@@ -714,7 +681,7 @@ textarea {
 .library-desc {
   display: block;
   margin-top: 3px;
-  font-size: 12px;
+  font-size: $fs-caption;
   line-height: 18px;
   color: $text-3;
   overflow: hidden;
@@ -737,18 +704,18 @@ textarea {
 }
 .library-footer {
   flex: 0 0 auto;
-  padding: 10px 18px calc(14px + env(safe-area-inset-bottom));
+  padding: 10px $sp-4 calc(14px + env(safe-area-inset-bottom));
   background: transparent;
 }
 .library-collapse {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 42px;
+  height: $hit-primary;
   border-radius: $radius-pill;
   background: #17191c;
   color: #ffffff;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 500;
 }
 .library-collapse:active {
@@ -775,8 +742,8 @@ textarea {
 
 .msg {
   display: flex;
-  gap: 10px;
-  padding: 0 16px 0 18px;
+  gap: 8px;
+  padding: 0 $sp-4;
   margin-bottom: 20px;
 }
 .msg-ai {
@@ -787,9 +754,9 @@ textarea {
   min-width: 0;
 }
 .msg-text {
-  font-size: 16px;
-  line-height: 1.75;
-  color: #111316;
+  font-size: $fs-body-lg;
+  line-height: $lh-h2;
+  color: $text;
 }
 
 .msg-me {
@@ -830,12 +797,12 @@ textarea {
 .bubble-me {
   display: block;
   max-width: 78%;
-  padding: 11px 16px;
-  border-radius: 14px;
+  padding: 11px $sp-4;
+  border-radius: $radius-lg;
   background: #f2f5fa;
   color: #111316;
-  font-size: 16px;
-  line-height: 1.35;
+  font-size: $fs-body-lg;
+  line-height: $lh-body-lg;
   box-shadow: none;
   white-space: pre-wrap;
 }
@@ -873,22 +840,13 @@ textarea {
 }
 .file-name {
   display: block;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.caret {
-  display: inline-block;
-  width: 2px;
-  height: 13px;
-  margin-left: 2px;
-  background: $primary;
-  vertical-align: -2px;
-  animation: caret 0.9s steps(2) infinite;
-}
 
 .chat-hint {
   margin: 0 16px 10px;
@@ -896,11 +854,11 @@ textarea {
   border-radius: $radius-md;
   background: $surface-trans;
   border: 1px dashed $border;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 .chat-hint-text {
   flex: 1;
@@ -950,13 +908,13 @@ textarea {
 .clarify-question {
   flex: 1;
   min-width: 0;
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 500;
   line-height: 1.5;
   color: #111316;
 }
 .clarify-multi {
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 400;
   color: $text-3;
 }
@@ -982,7 +940,7 @@ textarea {
 .clarify-pager {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .clarify-pager-arrow {
   display: flex;
@@ -1000,7 +958,7 @@ textarea {
 }
 .clarify-pager-text {
   min-width: 34px;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   color: #4b5057;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -1030,7 +988,7 @@ textarea {
   opacity: 0.5;
 }
 .clarify-skip-text {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   line-height: 1;
   color: #111316;
 }
@@ -1062,7 +1020,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   padding: 0 4px 8px;
-  font-size: 11.5px;
+  font-size: $fs-caption;
   color: $text-3;
   letter-spacing: 0.3px;
 }
@@ -1076,17 +1034,17 @@ textarea {
 .task-top {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 .task-name {
   display: block;
-  font-size: 14px;
-  font-weight: 650;
+  font-size: $fs-body;
+  font-weight: 600;
   letter-spacing: -0.1px;
 }
 .task-desc {
   display: -webkit-box;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-sub;
   line-height: 1.55;
   margin-top: 4px;
@@ -1095,7 +1053,7 @@ textarea {
   overflow: hidden;
 }
 .task-badge {
-  font-size: 10px;
+  font-size: $fs-micro;
   padding: 3px 7px;
   border-radius: $radius-pill;
   background: $surface-2;
@@ -1115,20 +1073,20 @@ textarea {
 .task-foot {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid $hairline;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
 }
 .task-foot .task-actions {
   margin-left: auto;
   display: flex;
-  gap: 6px;
+  gap: 4px;
 }
 .mini-btn {
-  font-size: 11.5px;
+  font-size: $fs-caption;
   padding: 5px 10px;
   border-radius: $radius-sm;
   border: 1px solid $border;
@@ -1155,13 +1113,13 @@ textarea {
 .login-origin-tip {
   display: block;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
 }
 
 .run-time {
   display: block;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   font-weight: 600;
 }
 
@@ -1173,13 +1131,13 @@ textarea {
 .task-detail-actions .mini-btn {
   flex: 1;
   height: 34px;
-  font-size: 12px;
+  font-size: $fs-caption;
 }
 .detail-note {
   display: block;
   margin: 14px 2px 0;
   text-align: center;
-  font-size: 10.5px;
+  font-size: $fs-micro;
   line-height: 1.65;
   color: $text-3;
 }
@@ -1217,7 +1175,7 @@ textarea {
 /* ── 空状态 ───────────────────────────────────────────── */
 
 .empty {
-  padding: 24px 30px;
+  padding: $sp-6 $sp-4;
   min-height: 58vh;
   display: flex;
   flex-direction: column;
@@ -1232,12 +1190,12 @@ textarea {
   margin-bottom: 16px;
 }
 .empty-title {
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 600;
   color: $text-sub;
 }
 .empty-desc {
-  font-size: 11.5px;
+  font-size: $fs-caption;
   color: $text-3;
   margin-top: 6px;
   line-height: 1.6;
@@ -1253,19 +1211,20 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 9px;
+  gap: 8px;
   margin-top: 20px;
   width: 100%;
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 15px;
+  gap: $sp-2;
+  height: $hit-chip;
+  padding: 0 $sp-3;
   border-radius: $radius-pill;
   background: $glass-card;
   border: 1px solid $glass-border;
-  font-size: 13.5px;
+  font-size: $fs-body-sm;
   color: $text;
   box-shadow: $glass-elevation-soft;
 }
@@ -1285,7 +1244,7 @@ textarea {
 .list-row {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   width: 100%;
   padding: 13px 4px;
   border-bottom: 1px solid $hairline;
@@ -1308,8 +1267,8 @@ textarea {
 }
 .list-title {
   display: block;
-  font-size: 13.5px;
-  font-weight: 550;
+  font-size: $fs-body-sm;
+  font-weight: 500;
 }
 .list-chev {
   display: flex;
@@ -1323,7 +1282,7 @@ textarea {
   flex: 1;
   min-height: 100vh;
   min-height: 100dvh;
-  padding: 26px 24px 30px;
+  padding: 26px $sp-4 $sp-6;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1334,7 +1293,7 @@ textarea {
   /* 上下 auto 与 .login-agree 的 margin-top:auto 均分剩余空间，
      表单区垂直居中；无剩余空间时 auto 折叠为 0，不会裁切内容 */
   margin: auto 0 22px;
-  font-size: 24px;
+  font-size: $fs-h1;
   font-weight: 600;
   letter-spacing: -0.6px;
 }
@@ -1343,7 +1302,7 @@ textarea {
 }
 .field-label {
   display: block;
-  font-size: 11.5px;
+  font-size: $fs-caption;
   color: $text-sub;
   margin-bottom: 6px;
   padding-left: 2px;
@@ -1360,19 +1319,20 @@ textarea {
   padding-left: 0;
 }
 .login-assist {
-  font-size: 11.5px;
+  font-size: $fs-caption;
   color: $primary;
   padding: 2px 0 2px 8px;
 }
 .field-input {
   width: 100%;
-  height: 46px;
+  height: $hit-primary;
   border-radius: $radius-md;
   border: 1px solid $border;
   background: $surface;
   padding: 0 14px;
   font-family: $font;
-  font-size: 14px;
+  /* 16px 是 iOS Safari 的免缩放阈值：低于它聚焦时页面会被自动放大 */
+  font-size: $fs-h3;
   color: $text;
   outline: 0;
 }
@@ -1382,7 +1342,7 @@ textarea {
   justify-content: center;
   gap: 2px;
   margin-top: 14px;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 .login-agree {
@@ -1391,7 +1351,7 @@ textarea {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
 }
 .login-check-box {
   width: 16px;
@@ -1411,17 +1371,17 @@ textarea {
   border-color: $primary;
 }
 .login-agree-text {
-  font-size: 11px;
+  font-size: $fs-micro;
   line-height: 18px;
   color: $text-3;
 }
 .primary-btn {
   width: 100%;
-  height: 46px;
+  height: $hit-primary;
   border-radius: $radius-md;
   background: $primary;
   color: #fff;
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 600;
   margin-top: 6px;
   box-shadow: 0 10px 24px rgba(44, 89, 188, 0.25);
@@ -1454,38 +1414,6 @@ textarea {
     opacity: 1;
   }
 }
-@keyframes slideRight {
-  from {
-    transform: translateX(-16px);
-    opacity: 0.6;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-@keyframes blink {
-  0%,
-  80%,
-  100% {
-    opacity: 0.25;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 1;
-    transform: translateY(-2px);
-  }
-}
-@keyframes caret {
-  0%,
-  49% {
-    opacity: 1;
-  }
-  50%,
-  100% {
-    opacity: 0;
-  }
-}
 
 .reveal {
   animation: rise 220ms $ease both;
@@ -1511,25 +1439,25 @@ body,
 /* ── 顶栏 ─────────────────────────────────────────────── */
 
 .header-title {
-  font-size: 17px;
+  font-size: $fs-h3;
   font-weight: 600;
   letter-spacing: 0;
   color: $text;
 }
 .header-sub {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
   letter-spacing: 0;
   text-transform: none;
 }
 .header-spacer {
-  width: 36px;
+  width: $hit-primary;
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: $hit-primary;
+  height: $hit-primary;
   border-radius: $radius-pill;
   border: 0;
   background: transparent;
@@ -1540,82 +1468,14 @@ body,
   background: rgba(25, 27, 31, 0.06);
 }
 .icon-btn.is-bare {
-  width: 32px;
-  height: 32px;
+  width: $hit-small;
+  height: $hit-small;
   border: 0;
   background: transparent;
 }
 
 /* ── 首页 ─────────────────────────────────────────────── */
 
-.home-hero {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0 16px 24px;
-}
-.home-greeting {
-  display: block;
-  margin-bottom: 14px;
-  font-size: 13px;
-  color: $text-3;
-}
-.home-title {
-  font-size: 28px;
-  line-height: 1.38;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-  color: $text;
-}
-.home-title-line {
-  display: block;
-}
-.home-sub {
-  display: block;
-  margin-top: 10px;
-  font-size: 12px;
-  color: $text-3;
-}
-
-.home-suggest {
-  margin-top: 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.suggest-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 13px 14px;
-  border: 1px solid $glass-border;
-  border-radius: $radius-md;
-  background: $glass-card;
-}
-.suggest-row:active {
-  background: $hover;
-}
-.suggest-row-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 13.5px;
-  color: $text;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.home-dock {
-  padding: 0 16px 12px;
-}
-.home-input {
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-}
 
 /* ── 输入区 ───────────────────────────────────────────── */
 
@@ -1664,15 +1524,15 @@ body,
   padding: 0;
   border: 0;
   background: transparent;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
   letter-spacing: 0;
 }
 
 .group {
   /* 玻璃拟态：分组卡用磨砂面，不做模糊（列表性能优先） */
-  margin: 0 16px 14px;
-  padding: 2px 14px;
+  margin: 0 $sp-4 14px;
+  padding: 2px $sp-4;
   border: 1px solid $glass-border;
   border-radius: $radius-lg;
   background: $glass-card;
@@ -1683,15 +1543,9 @@ body,
   background: $surface-3;
 }
 .list-title {
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 500;
   letter-spacing: 0;
-}
-.list-sub {
-  font-size: 11px;
-  color: $text-3;
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 /* ── 登录 / 表单 ─────────────────────────────────────── */
@@ -1700,40 +1554,40 @@ body,
   background: transparent;
 }
 .login-title {
-  font-size: 26px;
+  font-size: $fs-display;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: $lh-display;
   letter-spacing: 0;
   color: $text;
 }
 .login-error {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-top: 10px;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $danger;
 }
 .field-label {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-sub;
   letter-spacing: 0;
   text-transform: none;
 }
 .field-input {
-  height: 46px;
+  height: $hit-primary;
   padding: 0 12px;
   border: 1px solid $border;
   border-radius: $radius-md;
   background: $surface-2;
 }
 .primary-btn {
-  height: 46px;
+  height: $hit-primary;
   border-radius: $radius-md;
   background: $primary;
   box-shadow: none;
-  font-size: 15px;
-  font-weight: 500;
+  font-size: $fs-body;
+  font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
   transition: background-color 150ms $ease;
@@ -1770,7 +1624,7 @@ body,
 /* ── 定时任务 ─────────────────────────────────────────── */
 
 .task-card {
-  padding: 14px;
+  padding: $sp-4;
   margin-bottom: 10px;
   border: 1px solid $glass-border;
   border-radius: $radius-lg;
@@ -1779,23 +1633,23 @@ body,
   animation: rise 320ms $ease both;
 }
 .task-name {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 500;
 }
 .task-badge,
 .mini-btn {
-  font-size: 11px;
+  font-size: $fs-micro;
   letter-spacing: 0;
   text-transform: none;
   border-radius: $radius-sm;
 }
 .task-foot {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 .section-label {
   padding: 0 0 8px;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   font-weight: 500;
   color: $text;
   letter-spacing: 0;
@@ -1815,7 +1669,7 @@ body,
   border-radius: $radius-sm;
   background: $glass-card;
   box-shadow: $glass-elevation-soft;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   padding: 10px 14px;
   transition: background-color 150ms $ease;
 }
@@ -1823,12 +1677,12 @@ body,
   background: $hover;
 }
 .empty-title {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 600;
   color: $text;
 }
 .empty-desc {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -1838,8 +1692,8 @@ body,
 
 /* 顶栏与内容同处一层底色，不做独立玻璃带，避免割裂 */
 .app-header {
-  height: 52px;
-  padding: 0 12px;
+  height: $header-h;
+  padding: 0 $sp-3;
 }
 .icon-btn {
   border-radius: $radius-pill;
@@ -1849,29 +1703,13 @@ body,
 }
 
 /* 首页 · 建议改为轻量标签 */
-.home-greeting {
-  margin-bottom: 10px;
-  font-size: 13px;
-  color: $text-3;
-}
-.home-title {
-  font-size: 26px;
-  line-height: 1.4;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-}
-.home-sub {
-  margin-top: 8px;
-  font-size: 12px;
-  color: $text-3;
-}
 /* 输入区 · 单行胶囊（对齐设计稿：磨砂玻璃面、无边框、全圆角、两侧描边圆钮） */
 .composer-card,
 .composer-card.is-flat,
 .composer-card.is-voice {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-height: 52px;
   padding: 0 9px;
   border: 0;
@@ -1885,8 +1723,8 @@ body,
     box-shadow 0.18s ease;
 }
 .composer-round {
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -1931,13 +1769,13 @@ body,
   flex: 1;
   min-width: 0;
   padding: 0;
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
   color: $text;
 }
 .composer-textarea .taro-textarea {
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
   color: $text;
 }
 .composer-placeholder {
@@ -1954,8 +1792,8 @@ body,
 }
 .composer-textarea .taro-textarea {
   font-family: inherit;
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
   color: $text;
   background: transparent;
   padding: 0;
@@ -2000,7 +1838,7 @@ body,
 .workspace-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   max-width: 170px;
   height: 28px;
   margin-right: 0;
@@ -2008,7 +1846,7 @@ body,
   border: 0;
   border-radius: $radius-pill;
   background: transparent;
-  font-size: 12px;
+  font-size: $fs-caption;
   letter-spacing: 0;
   text-transform: none;
   color: $text-sub;
@@ -2018,7 +1856,7 @@ body,
   color: $text;
 }
 .workspace-btn-text {
-  font-size: 12.5px;
+  font-size: $fs-caption;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2048,9 +1886,9 @@ body,
   border: 0;
   border-radius: 0;
   background: transparent;
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* 文件图标：对齐 PC 的 8px 圆角 */
@@ -2075,7 +1913,7 @@ body,
   color: $text;
 }
 .list-title {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 500;
   color: $text;
 }
@@ -2085,9 +1923,6 @@ body,
    ============================================================ */
 
 /* 工作目录独立成行，收进一枚悬浮玻璃胶囊 */
-.home-dock {
-  padding: 0 16px 16px;
-}
 .dock-tools {
   display: inline-flex;
   align-items: center;
@@ -2116,18 +1951,18 @@ body,
   pointer-events: none;
 }
 
-/* 输入框随内容增高，超过约 6 行后在框内滚动，避免压到底部按钮栏 */
+/* 输入框 1–6 行自适应（16 / 24，上限 160），超出后在框内滚动，不挤压底部按钮栏 */
 .composer-textarea {
   height: auto;
-  min-height: 24px;
-  max-height: 132px;
+  min-height: $lh-h3;
+  max-height: 160px;
   padding: 0;
   overflow: hidden;
 }
 .composer-textarea .taro-textarea {
   height: auto;
-  min-height: 24px;
-  max-height: 132px;
+  min-height: $lh-h3;
+  max-height: 160px;
   overflow-y: auto;
 }
 .composer-textarea::-webkit-scrollbar,
@@ -2142,7 +1977,7 @@ body,
    ============================================================ */
 
 .me-body {
-  padding: 4px 16px 20px;
+  padding: 4px $sp-4 $sp-5;
 }
 
 /* 身份区：居中黑色圆形头像 + 用户名 */
@@ -2161,7 +1996,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
+  font-size: $fs-display;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -2172,7 +2007,7 @@ body,
   margin-top: 16px;
 }
 .me-name {
-  font-size: 19px;
+  font-size: $fs-h2;
   font-weight: 600;
   color: $text;
   letter-spacing: -0.2px;
@@ -2180,15 +2015,15 @@ body,
 
 /* 菜单分组 */
 .me-group {
-  margin-top: 16px;
-  padding: 0 14px;
+  margin-top: $sp-4;
+  padding: 0 $sp-4;
   border: 1px solid $glass-border;
   border-radius: $radius-lg;
   background: $glass-card;
   box-shadow: $glass-elevation-soft;
 }
 .me-group .list-row {
-  gap: 14px;
+  gap: 12px;
   padding: 16px 0;
 }
 .me-group .list-ico {
@@ -2201,7 +2036,7 @@ body,
 }
 .me-group .list-title {
   flex: 1;
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 500;
   color: $text;
 }
@@ -2209,7 +2044,7 @@ body,
 .me-group .list-value {
   flex: 0 0 auto;
   max-width: 45%;
-  font-size: 14px;
+  font-size: $fs-body;
   color: $text-3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2224,7 +2059,7 @@ body,
   background: transparent;
 }
 .me-logout {
-  height: 50px;
+  height: $hit-list;
   border: 1px solid $glass-border;
   border-radius: $radius-lg;
   background: $glass-card;
@@ -2232,7 +2067,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: $fs-h3;
   color: $text;
 }
 
@@ -2248,7 +2083,7 @@ body,
   align-items: center;
   justify-content: center;
   height: 44px;
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 600;
   letter-spacing: 0.5px;
   color: #111316;
@@ -2268,11 +2103,11 @@ body,
   padding: 2px 16px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .auto-card {
-  padding: 18px 18px 14px;
+  padding: $sp-4 $sp-4 14px;
   border: 1px solid $glass-border;
   border-radius: $radius-lg;
   background: $glass-card;
@@ -2286,7 +2121,7 @@ body,
 }
 
 .auto-title {
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 600;
   letter-spacing: -0.2px;
   color: $text;
@@ -2302,7 +2137,7 @@ body,
   border-radius: $radius-xs;
   background: $surface-3;
   color: $text-sub;
-  font-size: 11px;
+  font-size: $fs-micro;
   line-height: 19px;
 }
 .auto-tag.is-error {
@@ -2335,7 +2170,7 @@ body,
 
 .auto-desc {
   margin-top: 10px;
-  font-size: 13.5px;
+  font-size: $fs-body-sm;
   line-height: 1.6;
   color: $text-sub;
   overflow: hidden;
@@ -2353,12 +2188,12 @@ body,
 .auto-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding-top: 11px;
 }
 
 .auto-schedule {
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -2437,7 +2272,7 @@ body,
 }
 
 .tl-time {
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 600;
   letter-spacing: -0.2px;
   color: $text;
@@ -2451,8 +2286,8 @@ body,
   border-radius: $radius-xs;
   background: $surface-2;
   color: $text-sub;
-  font-size: 11px;
-  line-height: 20px;
+  font-size: $fs-micro;
+  line-height: $lh-body-sm;
 }
 .tl-badge.is-success {
   background: $success-soft;
@@ -2462,7 +2297,7 @@ body,
 .tl-summary {
   display: block;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 1.5;
   color: $text-sub;
 }
@@ -2476,12 +2311,12 @@ body,
 .tl-foot {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding-top: 11px;
 }
 
 .tl-duration {
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -2493,7 +2328,7 @@ body,
   border-radius: $radius-sm;
   display: flex;
   align-items: center;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text;
 }
 
@@ -2525,7 +2360,7 @@ body,
   box-shadow: $glass-elevation;
   backdrop-filter: blur($glass-blur-strong);
   -webkit-backdrop-filter: blur($glass-blur-strong);
-  padding: 24px 22px 18px;
+  padding: $sp-6 $sp-5 $sp-4;
   animation: dlgPop 220ms $ease;
 }
 
@@ -2546,9 +2381,9 @@ body,
 
 .dlg-title {
   display: block;
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1.4;
+  font-size: $fs-h3;
+  font-weight: 600;
+  line-height: $lh-h3;
   color: $text;
   letter-spacing: -0.1px;
 }
@@ -2556,7 +2391,7 @@ body,
 .dlg-desc {
   display: block;
   margin-top: 8px;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 1.65;
   color: $text-sub;
 }
@@ -2572,18 +2407,18 @@ body,
 .dlg-label {
   display: block;
   margin-bottom: 7px;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-sub;
 }
 
 .dlg-input {
   width: 100%;
-  height: 40px;
-  padding: 0 12px;
+  height: $hit-primary;
+  padding: 0 $sp-3;
   border: 1px solid $border;
   border-radius: $radius-md;
   background: $surface-2;
-  font-size: 14px;
+  font-size: $fs-h3;
   color: $text;
 }
 
@@ -2601,7 +2436,7 @@ body,
   background: $glass-soft;
   display: flex;
   align-items: center;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text-sub;
 
   &.is-on {
@@ -2615,15 +2450,15 @@ body,
 .dlg-error {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin-top: 10px;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $danger;
 }
 
 .dlg-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin-top: 20px;
 
   &.is-single .dlg-btn {
@@ -2633,14 +2468,14 @@ body,
 
 .dlg-btn {
   flex: 1;
-  height: 42px;
+  height: $hit-primary;
   border: 1px solid $glass-border;
   border-radius: $radius-md;
   background: $glass-soft;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 600;
   color: $text;
   transition: transform 160ms $ease, opacity 160ms $ease;
@@ -2694,7 +2529,7 @@ body,
   display: block;
   padding: 2px 8px 10px;
   text-align: center;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -2706,12 +2541,12 @@ body,
 }
 
 .dlg-sheet-item {
-  height: 52px;
+  height: $hit-list;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  font-size: 15px;
+  gap: 4px;
+  font-size: $fs-body-lg;
   color: $text;
   border-bottom: 1px solid $hairline;
 
@@ -2729,7 +2564,7 @@ body,
 }
 
 .dlg-sheet-cancel {
-  height: 52px;
+  height: $hit-list;
   margin-top: 8px;
   border: 1px solid $glass-border;
   border-radius: $radius-md;
@@ -2737,7 +2572,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 500;
   color: $text;
 
@@ -2776,30 +2611,23 @@ body,
 }
 
 .empty-action {
-  height: 40px;
-  margin-top: 18px;
-  padding: 0 18px;
+  height: $hit-primary;
+  margin-top: $sp-4;
+  padding: 0 $sp-4;
   border-radius: $radius-md;
   background: $primary;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 
   text {
-    font-size: 14px;
+    font-size: $fs-body;
     font-weight: 600;
     color: #fff;
   }
 }
 
 /* 四入口图标来自 PC 端 PNG，深色下统一反白 */
-.theme-dark .quick-img {
-  filter: brightness(0) invert(1);
-  opacity: 0.82;
-}
-.theme-dark .quick-item.is-active .quick-img {
-  opacity: 1;
-}
 
 /* 深色下的输入控件：避免原生 textarea 的白色底 */
 .theme-dark {
@@ -2818,7 +2646,7 @@ body,
 .dlg-textarea {
   height: 76px;
   padding: 10px 12px;
-  line-height: 20px;
+  line-height: $lh-body-sm;
   text-align: left;
 }
 
@@ -2843,7 +2671,7 @@ body,
 .files-input {
   flex: 1;
   height: 100%;
-  font-size: 14px;
+  font-size: $fs-h3;
   color: $text;
 }
 
@@ -2864,13 +2692,13 @@ body,
 .files-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   height: 36px;
   padding: 0 12px;
   border: 1px solid $glass-border;
   border-radius: $radius-sm;
   background: $glass-card;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 1;
   color: $text;
 }
@@ -2922,10 +2750,10 @@ body,
 .files-menu-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   padding: 9px 10px;
   border-radius: $radius-sm;
-  font-size: 13.5px;
+  font-size: $fs-body-sm;
   color: $text;
 }
 .files-menu-item.is-on {
@@ -2940,21 +2768,21 @@ body,
 }
 
 .files-count {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
 .files-group-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 14px 18px 6px;
+  gap: 4px;
+  padding: 14px $sp-4 6px;
 }
 
 .files-group-title {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   font-weight: 600;
   color: $text-sub;
   overflow: hidden;
@@ -2964,7 +2792,7 @@ body,
 
 .files-group-count {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -2990,8 +2818,8 @@ body,
 
 .file-name {
   display: block;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: $fs-body;
+  line-height: $lh-body-sm;
   font-weight: 500;
   color: $text;
   overflow: hidden;
@@ -3002,7 +2830,7 @@ body,
 .file-meta {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: $fs-caption;
   line-height: 17px;
   color: $text-3;
   overflow: hidden;
@@ -3012,8 +2840,8 @@ body,
 
 /* 我的文件：图 2 扁平行（无卡片、无分隔线） */
 .files-list .file-row {
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 12px;
+  padding: $sp-4;
   border: 0;
   border-radius: $radius-md;
   background: transparent;
@@ -3037,7 +2865,7 @@ body,
 }
 
 .files-list .file-name {
-  font-size: 16.5px;
+  font-size: $fs-h3;
   line-height: 23px;
   font-weight: 500;
   color: $text;
@@ -3045,7 +2873,7 @@ body,
 .files-list .file-meta {
   display: block;
   margin-top: 4px;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   line-height: 17px;
   color: $text-3;
 }
@@ -3099,7 +2927,7 @@ body,
   width: min(75vw, 360px);
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-top);
   border-right: 1px solid $glass-border;
   background: $glass-sheet;
   box-shadow: 10px 0 40px rgba(15, 18, 24, 0.18);
@@ -3124,18 +2952,18 @@ body,
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 10px 20px 18px;
+  padding: 10px $sp-4 $sp-5;
 }
 
 .at-entry {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 48px;
+  gap: 12px;
+  min-height: $hit-list;
   border-radius: $radius-md;
 
   text {
-    font-size: 17px;
+    font-size: $fs-h3;
     line-height: 24px;
     font-weight: 500;
     letter-spacing: -0.2px;
@@ -3161,7 +2989,7 @@ body,
 .at-section {
   flex: 0 0 auto;
   min-height: 30px;
-  padding: 4px 20px 0;
+  padding: 4px $sp-4 0;
 }
 
 .at-sort {
@@ -3170,7 +2998,7 @@ body,
   gap: 3px;
 
   text {
-    font-size: 12.5px;
+    font-size: $fs-caption;
     line-height: 18px;
     font-weight: 500;
     color: $text-sub;
@@ -3185,9 +3013,9 @@ body,
 
 .at-group-title {
   display: block;
-  padding: 16px 20px 8px;
-  font-size: 13px;
-  line-height: 20px;
+  padding: $sp-4 $sp-4 $sp-2;
+  font-size: $fs-body-sm;
+  line-height: $lh-body-sm;
   font-weight: 500;
   color: $text-3;
 }
@@ -3199,33 +3027,38 @@ body,
 .at-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 64px;
-  padding: 10px 20px;
+  gap: $sp-3;
+  min-height: $hit-list;
+  padding: $sp-2 $sp-4;
 }
 
 .at-row:active {
   background: $hover;
 }
 
+/* 任务历史左侧图标：视觉 36，改为柔和底色圆，不再用描边抢视线；
+   行高仍是 52，触控热区不变 */
 .at-chip {
   position: relative;
   flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  border: 1px solid $border;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: transparent;
+  background: $hover;
   display: grid;
   place-items: center;
+}
+/* 纯黑底上 7% 白几乎看不出来，暗色单独抬一档 */
+.theme-dark .at-chip {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .at-status-dot {
   position: absolute;
-  top: -2px;
-  right: -2px;
-  width: 12px;
-  height: 12px;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 9px;
   border: 2px solid $surface;
   border-radius: 50%;
   background: $success;
@@ -3240,7 +3073,7 @@ body,
 }
 
 .at-name {
-  font-size: 16px;
+  font-size: $fs-h3;
   line-height: 22px;
   font-weight: 500;
   letter-spacing: -0.2px;
@@ -3256,15 +3089,15 @@ body,
   min-width: 0;
 
   text {
-    font-size: 12px;
-    line-height: 17px;
+    font-size: $fs-caption;
+    line-height: $lh-micro;
     color: $text-3;
   }
 }
 
 .at-time {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: $fs-caption;
   line-height: 17px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -3272,12 +3105,12 @@ body,
 }
 
 .at-empty {
-  padding: 64px 24px;
+  padding: 64px $sp-4;
   text-align: center;
 
   text {
-    font-size: 13px;
-    line-height: 20px;
+    font-size: $fs-body-sm;
+    line-height: $lh-body-sm;
     color: $text-3;
   }
 }
@@ -3289,7 +3122,7 @@ body,
   min-height: 44px;
   margin: 2px 16px 10px;
   border-radius: $radius-md;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -3303,7 +3136,7 @@ body,
   align-items: center;
   gap: 12px;
   min-height: 62px;
-  padding: 8px 20px calc(8px + env(safe-area-inset-bottom));
+  padding: $sp-2 $sp-4 calc(#{$sp-2} + env(safe-area-inset-bottom));
   border-top: 1px solid $hairline;
   background: $surface-trans;
   backdrop-filter: blur(16px);
@@ -3320,7 +3153,7 @@ body,
   background: $text;
 
   text {
-    font-size: 16px;
+    font-size: $fs-h3;
     line-height: 1;
     font-weight: 600;
     color: $surface;
@@ -3337,7 +3170,7 @@ body,
 
 .at-profile-name {
   overflow: hidden;
-  font-size: 16px;
+  font-size: $fs-h3;
   line-height: 22px;
   font-weight: 600;
   color: $text;
@@ -3346,7 +3179,7 @@ body,
 }
 
 .at-profile-sub {
-  font-size: 12px;
+  font-size: $fs-caption;
   line-height: 17px;
   color: $text-3;
 }
@@ -3385,7 +3218,7 @@ body,
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  padding: 20px 18px 16px;
+  padding: $sp-5 $sp-4 $sp-4;
   border-bottom: 1px solid $hairline;
 }
 
@@ -3394,21 +3227,21 @@ body,
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .tf-title {
   display: block;
-  font-size: 22px;
-  line-height: 28px;
-  font-weight: 700;
+  font-size: $fs-h1;
+  line-height: $lh-h1;
+  font-weight: 600;
   letter-spacing: -0.3px;
   color: $text;
 }
 
 .tf-sub {
   display: block;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   line-height: 18px;
   color: $text-sub;
 }
@@ -3427,7 +3260,7 @@ body,
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 18px 18px 24px;
+  padding: $sp-4 $sp-4 $sp-6;
 }
 
 .tf-field + .tf-field {
@@ -3442,31 +3275,31 @@ body,
 }
 
 .tf-name {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 600;
   color: $text;
 }
 
 .tf-req {
-  font-size: 14px;
+  font-size: $fs-body;
   line-height: 1;
   color: $danger;
 }
 
 .tf-count {
   margin-left: auto;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
 .tf-input {
   width: 100%;
-  height: 48px;
+  height: $hit-primary;
   padding: 0 14px;
   border: 1px solid $border;
   border-radius: $radius-sm;
   background: $surface-2;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   color: $text;
   box-sizing: border-box;
 }
@@ -3490,7 +3323,7 @@ body,
   gap: 8px;
 
   text {
-    font-size: 15px;
+    font-size: $fs-body-lg;
     color: $text;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3517,7 +3350,7 @@ body,
 
 .tf-unit {
   flex: 0 0 auto;
-  font-size: 14px;
+  font-size: $fs-body;
   color: $text-sub;
 }
 
@@ -3539,7 +3372,7 @@ body,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  padding: $sp-3 $sp-4 calc(#{$sp-3} + env(safe-area-inset-bottom));
   border-top: 1px solid $glass-border;
   background: $glass-soft;
   backdrop-filter: blur($glass-blur);
@@ -3548,8 +3381,8 @@ body,
 
 .tf-note {
   flex: 1;
-  font-size: 11.5px;
-  line-height: 16px;
+  font-size: $fs-caption;
+  line-height: $lh-micro;
   color: $text-3;
 }
 
@@ -3561,18 +3394,18 @@ body,
 }
 
 .tf-btn {
-  height: 40px;
-  padding: 0 16px;
+  height: $hit-primary;
+  padding: 0 $sp-4;
   border-radius: $radius-md;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 600;
   color: $text-sub;
 
   text {
-    font-size: 15px;
+    font-size: $fs-body-lg;
     font-weight: 600;
     color: inherit;
   }
@@ -3599,16 +3432,16 @@ body,
   padding: 7px 16px;
   background: $surface-2;
   color: $warning;
-  font-size: 12px;
+  font-size: $fs-caption;
 }
 
 .chat-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   padding: 28px 16px;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   color: $text-3;
 }
 .chat-retry {
@@ -3621,7 +3454,7 @@ body,
   padding: 6px 12px;
   border-radius: $radius-pill;
   background: $surface-2;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-sub;
 }
 
@@ -3629,11 +3462,6 @@ body,
   color: $text-3;
 }
 
-.composer-tools-left {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
 
 .msg-error {
   padding: 10px 12px;
@@ -3641,7 +3469,7 @@ body,
   border-radius: $radius-md;
   background: $danger-soft;
   color: $danger;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 1.55;
 }
 
@@ -3656,8 +3484,8 @@ body,
   gap: 3px;
   margin: 0 0 10px;
   padding: 2px 0;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: $fs-body-sm;
+  line-height: $lh-body-sm;
   color: #8b93a3;
 }
 .exec-trigger-text {
@@ -3723,10 +3551,10 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  height: 48px;
+  height: $header-h;
 }
 .exec-sheet-title {
-  font-size: 17px;
+  font-size: $fs-h3;
   font-weight: 600;
   line-height: 24px;
   color: #111316;
@@ -3755,9 +3583,9 @@ body,
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 48px;
-  padding: 0 20px;
+  gap: $sp-3;
+  min-height: $hit-list;
+  padding: 0 $sp-4;
 }
 /* 步骤之间的虚线连接（设计图里从图标底部连到下一项图标顶部） */
 .exec-item-wrap + .exec-item-wrap .exec-item::before,
@@ -3799,7 +3627,7 @@ body,
 .exec-item-text {
   flex: 1;
   min-width: 0;
-  font-size: 16px;
+  font-size: $fs-h3;
   line-height: 1.5;
   color: #111316;
   white-space: nowrap;
@@ -3823,7 +3651,7 @@ body,
 .exec-detail {
   display: block;
   font-family: $font-mono;
-  font-size: 11.5px;
+  font-size: $fs-caption;
   line-height: 1.65;
   color: $text-sub;
   white-space: pre-wrap;
@@ -3853,49 +3681,62 @@ body,
   }
 }
 
-/* Markdown */
+/* Markdown · 聊天长文独立字阶
+   正文 15 / 26；标题 18 / 16 / 15 / 14 / 13 / 12，与正文最多差 3px，
+   层级靠字重与上间距拉开，避免「标题贼大、正文很小」。 */
 .md {
-  font-size: 16px;
-  line-height: 1.75;
-  color: #111316;
+  font-size: $fs-body-lg;
+  line-height: $lh-h2;
+  color: $text;
+  word-break: break-word;
 }
 .md-paragraph {
   display: block;
   white-space: pre-wrap;
   word-break: break-word;
-  margin: 0 0 8px;
+  margin: 0 0 $sp-2;
 }
 .md-paragraph:last-child {
   margin-bottom: 0;
 }
 /* 流式分块：每块是独立 .md，末段间距不能被 :last-child 吃掉，否则块间黏连 */
 .md-chunked .md-paragraph:last-child {
-  margin-bottom: 8px;
+  margin-bottom: $sp-2;
 }
 .md-heading {
   display: block;
   font-weight: 600;
-  margin: 23px 0 8px;
+  margin: $sp-6 0 $sp-2;
+}
+.md-heading:first-child {
+  margin-top: 0;
 }
 .md-h1 {
-  font-size: 17px;
+  font-size: $fs-h2;
+  line-height: $lh-h2;
 }
 .md-h2 {
-  font-size: 16px;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
 }
-.md-h3,
+.md-h3 {
+  font-size: $fs-body-lg;
+  line-height: $lh-body-lg;
+}
 .md-h4 {
-  font-size: 16px;
+  font-size: $fs-body;
+  line-height: $lh-body;
 }
 .md-strong {
   font-weight: 600;
 }
+/* 行内 code 取正文的 0.8em：随正文缩放，长句里不会把行高顶开 */
 .md-code {
   padding: 1px 5px;
   border-radius: $radius-xs;
   background: $surface-2;
   font-family: $font-mono;
-  font-size: 12px;
+  font-size: 0.8em;
   color: $text;
 }
 .md-link {
@@ -3927,7 +3768,7 @@ body,
 .rich-frame-title {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: $fs-caption;
   font-weight: 600;
   color: $text-sub;
   overflow: hidden;
@@ -3939,8 +3780,8 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
   border-radius: $radius-xs;
 }
 .rich-frame-action:active {
@@ -3958,7 +3799,7 @@ body,
   background: $surface-2;
 }
 .rich-pending-text {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 
@@ -3979,7 +3820,7 @@ body,
 }
 .rich-code-lang {
   font-family: $font-mono;
-  font-size: 10px;
+  font-size: $fs-micro;
   letter-spacing: 0.4px;
   color: $text-3;
 }
@@ -3995,7 +3836,7 @@ body,
   background: $hover;
 }
 .rich-code-copy-text {
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
 }
 .rich-code-body {
@@ -4005,8 +3846,8 @@ body,
   margin: 0;
   padding: 10px 12px;
   font-family: $font-mono;
-  font-size: 11.5px;
-  line-height: 1.65;
+  font-size: $fs-caption;
+  line-height: 1.6;
   color: $text;
   white-space: pre;
 }
@@ -4120,12 +3961,12 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 52px;
-  padding: 0 6px 0 16px;
+  height: $hit-list;
+  padding: 0 6px 0 $sp-4;
   border-bottom: 1px solid $hairline;
 }
 .rich-fullscreen-title {
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 600;
   color: $text;
 }
@@ -4143,7 +3984,7 @@ body,
 .rich-gallery {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   padding: 8px;
 }
 .rich-gallery-image {
@@ -4154,7 +3995,7 @@ body,
 .rich-file-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid $hairline;
 }
@@ -4181,19 +4022,19 @@ body,
   flex-direction: column;
 }
 .rich-file-name {
-  font-size: 13px;
+  font-size: $fs-body-sm;
   color: $text;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rich-file-sub {
-  font-size: 11px;
+  font-size: $fs-micro;
   color: $text-3;
 }
 .rich-file-action {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $primary;
 }
 
@@ -4220,7 +4061,7 @@ body,
   min-width: 96px;
   max-width: 240px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: $fs-caption;
   line-height: 1.5;
   color: $text;
   border-right: 1px solid $hairline;
@@ -4246,7 +4087,7 @@ body,
 }
 .md-math-raw {
   font-family: $font-mono;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-sub;
 }
 .md-math-raw.is-block {
@@ -4257,13 +4098,13 @@ body,
   font-size: 1.05em;
 }
 .md-list {
-  margin: 0 0 8px;
+  margin: 0 0 $sp-2;
   padding-left: 0;
 }
 .md-list-item {
   display: flex;
   gap: 0;
-  margin-bottom: 4px;
+  margin-bottom: $sp-1;
 }
 .md-list-dot {
   flex: 0 0 auto;
@@ -4275,9 +4116,9 @@ body,
 }
 .md-list-mark {
   flex: 0 0 auto;
-  font-size: 16px;
-  line-height: 28px;
-  color: #111316;
+  font-size: $fs-body-lg;
+  line-height: $lh-h2;
+  color: $text;
   min-width: 18px;
 }
 .md-list-text {
@@ -4285,11 +4126,12 @@ body,
   min-width: 0;
 }
 .md-quote {
-  margin: 0 0 8px;
-  padding: 6px 10px;
+  margin: 0 0 $sp-2;
+  padding: $sp-2 $sp-3;
   border-left: 2px solid $border-strong;
   color: $text-sub;
-  font-size: 13px;
+  font-size: $fs-body;
+  line-height: $lh-body;
 }
 
 /* 输出文件 */
@@ -4297,7 +4139,7 @@ body,
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 .msg-output {
   display: flex;
@@ -4314,7 +4156,7 @@ body,
 .msg-output-name {
   flex: 1;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text;
   white-space: nowrap;
   overflow: hidden;
@@ -4322,13 +4164,13 @@ body,
 }
 .msg-output-action {
   flex: 0 0 auto;
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $primary;
   font-weight: 600;
 }
 .msg-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   margin-top: 12px;
 }
 .msg-act {
@@ -4355,7 +4197,7 @@ body,
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 15px;
+  gap: 16px;
   margin-top: 20px;
 }
 .msg-followup {
@@ -4374,15 +4216,12 @@ body,
   background: $hover;
 }
 .msg-followup-text {
-  font-size: 15.5px;
+  font-size: $fs-body-lg;
   line-height: 1.45;
   color: $text;
 }
 
 /* 澄清选择 */
-.clarify-item {
-  padding: 0 0 10px;
-}
 .clarify-options {
   display: flex;
   flex-direction: column;
@@ -4393,7 +4232,7 @@ body,
   display: flex;
   flex-direction: row;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
   padding: 12px 14px;
   border: 1px solid $glass-border;
   border-radius: 12px;
@@ -4441,7 +4280,7 @@ body,
   gap: 2px;
 }
 .clarify-option-label {
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 500;
   color: $text;
   line-height: 1.4;
@@ -4450,28 +4289,14 @@ body,
   color: $primary;
 }
 .clarify-option-desc {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
   line-height: 1.5;
-}
-.clarify-input {
-  margin-top: 8px;
-  padding: 8px 11px;
-  border: 1px solid $glass-border;
-  border-radius: $radius-md;
-  background: $glass-soft;
-  font-size: 13px;
-  color: $text;
-  min-height: 36px;
 }
 
 /* ============ 交互与渲染修复层（深度复查补充） ============ */
 
 /* 输入工具区：左侧占满，发送按钮始终贴右 */
-.composer-tools-left {
-  flex: 1;
-  min-width: 0;
-}
 .composer-tools .send-btn {
   margin-left: auto;
 }
@@ -4480,7 +4305,7 @@ body,
 .msg-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   margin-bottom: 7px;
 }
 .msg-chip {
@@ -4488,8 +4313,8 @@ body,
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  height: 28px;
-  padding: 0 9px;
+  height: $hit-chip;
+  padding: 0 $sp-2;
   border: 1px solid rgba(206, 224, 250, 0.9);
   border-radius: 8px;
   background: rgba(240, 247, 255, 0.95);
@@ -4498,7 +4323,7 @@ body,
 .msg-chip-text {
   max-width: 190px;
   overflow: hidden;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4515,7 +4340,7 @@ body,
 .msg-files {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   margin-top: 7px;
 }
 .msg-file {
@@ -4530,7 +4355,7 @@ body,
 .msg-file-name {
   flex: 1;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   color: $text;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4538,13 +4363,13 @@ body,
 }
 .msg-file-action {
   flex: 0 0 auto;
-  font-size: 11.5px;
+  font-size: $fs-caption;
   color: $primary;
 }
 .msg-images {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   margin-top: 8px;
 }
 .msg-image {
@@ -4561,7 +4386,7 @@ body,
   align-items: center;
   gap: 8px;
   padding: 0;
-  font-size: 14px;
+  font-size: $fs-body;
   line-height: 1.5;
   color: $text-3;
 }
@@ -4597,9 +4422,9 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  margin-left: -20px;
+  width: 44px;
+  height: 44px;
+  margin-left: -22px;
   border: 1px solid $glass-border;
   border-radius: 50%;
   background: $glass-card;
@@ -4633,8 +4458,8 @@ body,
 .header-menu-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 50px;
+  gap: $sp-3;
+  height: $hit-list;
   padding: 0 14px;
   border-radius: $radius-md;
 }
@@ -4642,7 +4467,7 @@ body,
   background: $hover;
 }
 .header-menu-text {
-  font-size: 16px;
+  font-size: $fs-h3;
   color: $text;
 }
 .header-menu-text.is-danger {
@@ -4657,7 +4482,7 @@ body,
 
 /* Markdown 表格与分隔线 */
 .md-table-wrap {
-  margin: 8px 0;
+  margin: $sp-2 0;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -4672,6 +4497,7 @@ body,
   display: flex;
   border-top: 1px solid $border;
 }
+/* 每列至少 88：列多时整表横向滚动，而不是把列压成窄条 */
 .md-tr:first-child {
   border-top: none;
 }
@@ -4680,10 +4506,10 @@ body,
 }
 .md-td {
   flex: 1;
-  min-width: 78px;
-  padding: 7px 9px;
-  font-size: 12.5px;
-  line-height: 1.55;
+  min-width: 88px;
+  padding: $sp-2 $sp-3;
+  font-size: $fs-caption;
+  line-height: $lh-caption;
   color: $text;
   border-left: 1px solid $border;
   word-break: break-word;
@@ -4704,7 +4530,7 @@ body,
 .tf-warn {
   display: block;
   margin-top: 7px;
-  font-size: 11.5px;
+  font-size: $fs-caption;
   line-height: 1.6;
   color: $warning;
 }
@@ -4712,7 +4538,7 @@ body,
   color: $text-sub;
   background: $surface-2;
   font-family: $font-mono;
-  font-size: 12px;
+  font-size: $fs-caption;
 }
 
 /* 运行中的状态 */
@@ -4747,7 +4573,7 @@ body,
   padding: 0 2px;
 }
 .files-error-text {
-  font-size: 11.5px;
+  font-size: $fs-caption;
   color: $danger;
 }
 
@@ -4784,9 +4610,6 @@ body,
 .composer-wrap {
   padding-bottom: calc(12px + env(safe-area-inset-bottom));
 }
-.home-dock {
-  padding-bottom: calc(16px + env(safe-area-inset-bottom));
-}
 /* 澄清卡提交后禁用，避免重复发送 */
 .clarify-btn.is-disabled {
   opacity: 0.55;
@@ -4810,13 +4633,13 @@ body,
 
 /* ── 安全区：刘海屏与底部手势条 ─────────────────────── */
 .app-header {
-  height: calc(52px + env(safe-area-inset-top));
-  padding-top: env(safe-area-inset-top);
+  height: calc(#{$header-h} + var(--safe-top));
+  padding-top: var(--safe-top);
   box-sizing: border-box;
 }
 
 .login {
-  padding-top: calc(26px + env(safe-area-inset-top));
+  padding-top: calc(26px + var(--safe-top));
   padding-bottom: calc(30px + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
@@ -4892,8 +4715,8 @@ body,
 }
 
 .at-section-title {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: $fs-body;
+  line-height: $lh-body-sm;
   font-weight: 600;
   color: $text;
 }
@@ -4915,10 +4738,6 @@ body,
 }
 
 /* 可点击状态提示 */
-.home-sub.is-action {
-  color: $warning;
-  text-decoration: underline;
-}
 
 /* ── 按压反馈：统一过渡，避免生硬切换 ───────────────── */
 .at-entry,
@@ -5039,9 +4858,6 @@ body,
 .clarify-btn,
 .section-label-right,
 .files-error-text,
-.home-sub.is-action {
-  cursor: pointer;
-}
 
 /* ── 小字号辅助文字的对比度统一 ─────────────────────── */
 .at-time,
@@ -5086,15 +4902,15 @@ body,
   z-index: 900;
   display: flex;
   flex-direction: column;
-  padding-top: env(safe-area-inset-top);
+  padding-top: var(--safe-top);
   background: $bg;
 }
 .fp-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: $sp-2;
   flex: 0 0 auto;
-  height: 52px;
+  height: $hit-list;
   padding: 0 8px;
   border-bottom: 1px solid $hairline;
 }
@@ -5116,7 +4932,7 @@ body,
 .fp-title {
   flex: 1;
   min-width: 0;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 600;
   color: $text;
   overflow: hidden;
@@ -5144,7 +4960,7 @@ body,
 .fp-code {
   display: block;
   font-family: $font-mono;
-  font-size: 12.5px;
+  font-size: $fs-caption;
   line-height: 1.7;
   color: $text;
   white-space: pre-wrap;
@@ -5153,7 +4969,7 @@ body,
 .fp-state {
   padding: 48px 16px;
   text-align: center;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   color: $text-3;
 }
 .fp-fallback {
@@ -5162,25 +4978,25 @@ body,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 32px;
+  gap: $sp-2;
+  padding: $sp-8;
 }
 .fp-fallback-title {
-  font-size: 14px;
+  font-size: $fs-body;
   font-weight: 600;
   color: $text;
 }
 .fp-fallback-desc {
-  font-size: 12px;
+  font-size: $fs-caption;
   color: $text-3;
 }
 .fp-fallback-btn {
-  margin-top: 8px;
-  padding: 10px 22px;
+  margin-top: $sp-2;
+  padding: 10px $sp-5;
   border-radius: $radius-pill;
   background: $primary;
   color: #ffffff;
-  font-size: 14px;
+  font-size: $fs-body;
 }
 
 /* ── 减少动态效果偏好 ────────────────────────────────── */
@@ -5248,13 +5064,13 @@ body,
 .nt-hero {
   position: relative;
   flex: 0 0 auto;
-  padding: 54px 18px 0;
+  padding: 54px $sp-4 0;
 }
 .nt-hero-title {
   position: relative;
-  font-size: 28px;
-  line-height: 38.5px;
-  font-weight: 700;
+  font-size: $fs-display;
+  line-height: $lh-display;
+  font-weight: 600;
   letter-spacing: -0.5px;
   color: #0d0d10;
 }
@@ -5282,7 +5098,7 @@ body,
   cursor: pointer;
 }
 .nt-shuffle-text {
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 18px;
   color: #7e858f;
 }
@@ -5293,13 +5109,13 @@ body,
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  padding: 34px 18px 0;
+  padding: 34px $sp-4 0;
 }
 .nt-card {
   height: 133px;
-  padding: 15px 16px;
+  padding: $sp-4;
   border: 1px solid $glass-border;
-  border-radius: 14px;
+  border-radius: $radius-lg;
   background: $glass-card;
   box-shadow: $glass-elevation-soft;
   overflow: hidden;
@@ -5316,16 +5132,16 @@ body,
 .nt-card-title {
   display: block;
   margin-top: 6px;
-  font-size: 16px;
+  font-size: $fs-h3;
   line-height: 22px;
-  font-weight: 700;
+  font-weight: 600;
   color: $text;
 }
 .nt-card-desc {
   display: -webkit-box;
   margin-top: 2px;
   overflow: hidden;
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 18px;
   color: $text-3;
   -webkit-line-clamp: 2;
@@ -5333,8 +5149,7 @@ body,
 }
 
 .theme-dark .nt-card-desc,
-.theme-dark .nt-shuffle-text,
-.theme-dark .nt-note {
+.theme-dark .nt-shuffle-text {
   color: #a6b0c0;
 }
 
@@ -5346,17 +5161,7 @@ body,
 /* ── 底部输入与注记 ───────────────────────────────────── */
 .nt-dock {
   flex: 0 0 auto;
-  padding: 0 18px calc(16px + var(--safe-bottom, env(safe-area-inset-bottom)));
-}
-.nt-note {
-  display: block;
-  flex: 0 0 auto;
-  margin-top: 12px;
-  margin-bottom: 16px;
-  text-align: center;
-  font-size: 10px;
-  line-height: 14px;
-  color: #b8bcc4;
+  padding: 0 $sp-4 calc(#{$sp-4} + var(--safe-bottom, env(safe-area-inset-bottom)));
 }
 
 /* ── Composer · 扁平胶囊与展开卡 ─────────────────────── */
@@ -5379,8 +5184,8 @@ body,
     box-shadow 0.18s ease;
 }
 .composer-card.is-flat .composer-round {
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
   border: 2px solid #111316;
   border-radius: 50%;
   background: transparent;
@@ -5393,18 +5198,18 @@ body,
 .composer-card.is-flat .composer-textarea {
   flex: 1;
   min-width: 0;
-  min-height: 22px;
-  max-height: 22px;
+  min-height: $lh-h3;
+  max-height: $lh-h3;
   padding: 0;
-  font-size: 17px;
-  line-height: 22px;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
   overflow: hidden;
 }
 .composer-card.is-flat .composer-textarea .taro-textarea {
-  min-height: 22px;
-  max-height: 22px;
-  font-size: 17px;
-  line-height: 22px;
+  min-height: $lh-h3;
+  max-height: $lh-h3;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
 }
 .composer-card.is-flat .composer-placeholder,
 .composer-card.is-flat .composer-textarea::placeholder {
@@ -5422,8 +5227,8 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
   transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
 }
 .composer-flat-icon.is-audio {
@@ -5432,8 +5237,8 @@ body,
 }
 /* 展开态与收起态保持同一个 30px 语音圆，不因附件或输入状态缩小 */
 .composer-card.is-flat.is-expanded .composer-flat-icon.is-audio {
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
   margin: 0;
 }
 .composer-flat-icon:active {
@@ -5483,7 +5288,7 @@ body,
   align-items: center;
   justify-content: center;
   height: auto;
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 600;
   letter-spacing: 0;
   color: #111316;
@@ -5494,7 +5299,7 @@ body,
 .voice-hold.is-flat:active {
   transform: scale(0.97);
   background: rgba(17, 20, 26, 0.04);
-  border-radius: 18px;
+  border-radius: $radius-lg;
 }
 
 .composer-flat-foot {
@@ -5505,17 +5310,9 @@ body,
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
+  gap: 4px 8px;
   flex: 1;
   min-width: 0;
-}
-.composer-input-chips {
-  flex: 0 0 auto;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
 }
 /* 附件候选区与输入行之间的分隔线 */
 .composer-divider {
@@ -5543,7 +5340,7 @@ body,
   gap: 0;
   height: auto;
   min-height: 0;
-  padding: 14px 12px 12px;
+  padding: $sp-3;
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(17, 32, 70, 0.06);
   transition: border-radius 0.18s cubic-bezier(0.4, 0, 0.2, 1),
@@ -5563,19 +5360,19 @@ body,
   justify-content: center;
   min-width: 80px;
   height: auto;
-  min-height: 34px;
-  max-height: 96px;
+  min-height: $lh-h3;
+  max-height: 160px;
   margin: 0;
-  font-size: 17px;
-  line-height: 24px;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
   overflow-y: auto;
 }
 .composer-card.is-flat.is-expanded .composer-textarea .taro-textarea {
   height: auto;
-  min-height: 34px;
-  max-height: 96px;
-  font-size: 17px;
-  line-height: 24px;
+  min-height: $lh-h3;
+  max-height: 160px;
+  font-size: $fs-h3;
+  line-height: $lh-h3;
   overflow-y: auto;
 }
 .composer-card.is-flat.is-expanded .composer-flat-foot {
@@ -5595,7 +5392,7 @@ body,
 .composer-card.is-flat.has-attachments {
   height: auto;
   min-height: 0;
-  padding: 14px 12px 12px;
+  padding: $sp-3;
 }
 
 .theme-dark .composer-card.is-flat .composer-round,
@@ -5665,7 +5462,7 @@ body,
   box-shadow: 0 6px 18px rgba(52, 70, 150, 0.12);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  font-size: 16px;
+  font-size: $fs-h3;
   font-weight: 500;
   letter-spacing: 0.5px;
   color: #3d4454;
@@ -5702,7 +5499,7 @@ body,
   right: 0;
   top: 40px;
   text-align: center;
-  font-size: 15px;
+  font-size: $fs-body-lg;
   font-weight: 500;
   letter-spacing: 3px;
   color: #ffffff;
@@ -5711,7 +5508,7 @@ body,
 }
 .voice-release.is-error {
   letter-spacing: 0.5px;
-  font-size: 14px;
+  font-size: $fs-body;
   animation: none;
   background: rgba(255, 255, 255, 0.18);
   border-radius: 8px;
@@ -5731,7 +5528,7 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
 }
 /* 声波柱：高度由录音音量驱动，静默时收成一排小点 */
 .voice-bar {
@@ -5747,11 +5544,11 @@ body,
 /* 会话页沿用 .page 的玻璃底（淡色渐变 + 柔光），不再覆盖为纯白，
    否则底部输入框、浮层的 backdrop-filter 无可透出的底层，玻璃质感会消失 */
 .page.chat-page .app-header {
-  height: calc(44px + env(safe-area-inset-top));
-  padding-top: env(safe-area-inset-top);
+  height: calc(#{$header-h} + var(--safe-top));
+  padding-top: var(--safe-top);
 }
 .page.chat-page .header-title {
-  font-size: 16px;
+  font-size: $fs-h3;
   color: #111316;
 }
 .page.chat-page.theme-dark .header-title,
@@ -5783,7 +5580,7 @@ body,
   padding: 0;
 }
 .ref-row-text {
-  font-size: 13px;
+  font-size: $fs-body-sm;
   line-height: 18px;
   color: #a9aebb;
 }
@@ -5799,8 +5596,8 @@ body,
   margin-top: 12px;
 }
 .live-status .thinking {
-  gap: 10px;
-  font-size: 13px;
+  gap: 8px;
+  font-size: $fs-body-sm;
   color: #9aa1ad;
 }
 .live-status .thinking-icon {
@@ -5811,13 +5608,13 @@ body,
 /* 会话底部输入区：与咨询页同款胶囊 + AI 注记 */
 .chat-dock {
   flex: 0 0 auto;
-  padding: 8px 19px calc(8px + var(--safe-bottom, env(safe-area-inset-bottom)));
+  padding: $sp-2 $sp-4 calc(#{$sp-2} + var(--safe-bottom, env(safe-area-inset-bottom)));
 }
 .chat-note {
   display: block;
   margin-top: 6px;
   text-align: center;
-  font-size: 10px;
+  font-size: $fs-micro;
   line-height: 14px;
   color: #c3c9d5;
 }
@@ -5828,8 +5625,8 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: $hit-small;
+  height: $hit-small;
   margin-left: 0;
   border-radius: 50%;
   background: #111316;

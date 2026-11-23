@@ -11,11 +11,10 @@ export default defineAppConfig({
     'pages/login/index'
   ],
   window: {
+    // 顶栏自绘（状态栏高度由 AppHeader 内联），只保留下拉背景与标题兜底
     backgroundTextStyle: 'light',
-    navigationBarBackgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
     navigationBarTitleText: 'PrismClaw',
-    navigationBarTextStyle: 'black',
-    navigationStyle: 'custom',
-    backgroundColor: '#FFFFFF'
+    navigationStyle: 'custom'
   }
 })

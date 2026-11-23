@@ -156,7 +156,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
               {props.rightProcessOpen && (
                 <div className={rightRailBodyClass}>
                   {props.subagentsForPanel.length === 0 && props.runningToolCallsForPanel.length === 0 && !props.isStreaming && !props.isQueued && !props.liveTaskRuntime ? (
-                    <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed opacity-60">
+                    <div className="text-[length:var(--fs-xs)] text-[var(--c-text-secondary)] leading-relaxed">
                       查看任务的运行状态
                     </div>
                   ) : (
@@ -188,7 +188,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
                             <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)]">
                               队列等待{props.queuePosition > 0 ? `（第 ${props.queuePosition} 位）` : ''}
                             </div>
-                            <div className="mt-0.5 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]/72">
+                            <div className="mt-0.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]">
                               等待执行…
                             </div>
                           </div>
@@ -211,7 +211,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
                               <div className="text-[length:var(--fs-sm)] font-semibold text-[var(--c-text)] truncate">
                                 {tc.name}
                               </div>
-                              <div className="mt-0.5 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]/66 truncate">
+                              <div className="mt-0.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)] truncate">
                                 {props.formatToolProgressText(tc)}
                               </div>
                             </div>
@@ -239,7 +239,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
               {props.rightFilesOpen && (
                 <div className={rightRailBodyClass}>
                   {props.panelTaskOutputFiles.length === 0 ? (
-                    <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed opacity-60">
+                    <div className="text-[length:var(--fs-xs)] text-[var(--c-text-secondary)] leading-relaxed">
                       查看和打开任务产出的文件
                     </div>
                   ) : (
@@ -301,7 +301,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
               {props.rightCallsOpen && (
                 <div className="px-4 pb-4 pt-0 space-y-4">
                   {props.toolNamesForPanel.length === 0 && props.skillsForPanel.length === 0 ? (
-                    <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed opacity-60">
+                    <div className="text-[length:var(--fs-xs)] text-[var(--c-text-secondary)] leading-relaxed">
                       根据实际执行展示调用能力
                     </div>
                   ) : (
@@ -368,7 +368,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
                     onClick={() => props.setTrajectoryOpen(true)}
                     className="w-full flex items-center gap-1.5 py-2 text-left transition-colors hover:bg-[var(--c-surface-2)] rounded-[var(--radius-control)]"
                   >
-                    <span className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]/70">
+                    <span className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">
                       查看轨迹面板
                     </span>
                     <img

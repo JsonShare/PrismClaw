@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>PrismClaw · Mobile Design System v1.0</title>
+<title>PrismClaw · Mobile Design System v2.0</title>
 <style>
   :root {
     --bg: #ebeef2;
@@ -82,9 +82,9 @@
     width: 30px; height: 30px; border-radius: 9px;
     background: var(--text); color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-size: 13px; font-weight: 700; letter-spacing: -.5px;
+    font-size: 13px; font-weight: 600; letter-spacing: -.5px;
   }
-  .brand-name { font-size: 14px; font-weight: 650; letter-spacing: -.2px; }
+  .brand-name { font-size: 14px; font-weight: 600; letter-spacing: -.2px; }
   .brand-sub { font-size: 10.5px; color: var(--muted); letter-spacing: .3px; }
 
   .nav { display: flex; flex-direction: column; gap: 2px; }
@@ -127,7 +127,7 @@
   .eyebrow::before { content: ""; width: 18px; height: 1px; background: var(--muted); }
   h1 {
     margin: 0 0 14px; font-size: 44px; line-height: 1.1;
-    font-weight: 700; letter-spacing: -1.6px;
+    font-weight: 600; letter-spacing: -1.6px;
   }
   .hero p { max-width: 720px; margin: 0; font-size: 15px; line-height: 1.75; color: var(--sub); }
   .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 24px; }
@@ -147,11 +147,11 @@
     flex: 0 0 auto; font-family: var(--mono); font-size: 11px; color: var(--primary);
     background: var(--primary-soft); border-radius: 6px; padding: 3px 7px; line-height: 1.2;
   }
-  .sec h2 { margin: 0; font-size: 27px; line-height: 1.2; letter-spacing: -.7px; font-weight: 650; }
+  .sec h2 { margin: 0; font-size: 27px; line-height: 1.2; letter-spacing: -.7px; font-weight: 600; }
   .sec-desc { max-width: 760px; margin: 10px 0 30px; font-size: 13.5px; color: var(--sub); line-height: 1.75; }
 
-  h3 { margin: 36px 0 14px; font-size: 15px; font-weight: 650; letter-spacing: -.15px; }
-  h4 { margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+  h3 { margin: 36px 0 14px; font-size: 15px; font-weight: 600; letter-spacing: -.15px; }
+  h4 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
   .note {
     margin: 18px 0 0; padding: 13px 16px; border-radius: 12px;
     background: rgba(253, 251, 247, .6); border: 1px solid var(--line);
@@ -219,8 +219,8 @@
   .type-sample { min-width: 0; }
   .type-sample .cn { display: block; color: var(--text); }
   .type-sample .en { display: block; margin-top: 4px; color: var(--muted); font-size: 11.5px; }
-  .t-display { font-size: 28px; line-height: 36px; font-weight: 700; letter-spacing: -.5px; }
-  .t-h1 { font-size: 22px; line-height: 30px; font-weight: 650; letter-spacing: -.3px; }
+  .t-display { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.5px; }
+  .t-h1 { font-size: 22px; line-height: 30px; font-weight: 600; letter-spacing: -.3px; }
   .t-h2 { font-size: 18px; line-height: 26px; font-weight: 600; letter-spacing: -.2px; }
   .t-h3 { font-size: 16px; line-height: 24px; font-weight: 600; letter-spacing: -.1px; }
   .t-body-lg { font-size: 15px; line-height: 24px; font-weight: 400; }
@@ -352,7 +352,7 @@
   .dialog {
     width: 100%; max-width: 320px; background: var(--surface);
     border-radius: var(--r-modal); box-shadow: var(--shadow-lg);
-    padding: 24px 22px 18px; animation: popIn .22s var(--ease);
+    padding: 24px 20px 16px; animation: popIn .22s var(--ease);
   }
   .dialog h3 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -.2px; }
   .dialog p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.65; color: var(--sub); }
@@ -481,7 +481,7 @@
     #icon-grid { grid-template-columns: repeat(8, minmax(0, 1fr)); }
   }
   @media (max-width: 720px) {
-    .wrap { padding: 28px 18px 64px; }
+    .wrap { padding: 28px 16px 64px; }
     h1 { font-size: 28px; letter-spacing: -.9px; }
     .g2, .g3, .g4, .g5 { grid-template-columns: 1fr 1fr; }
     .type-row { grid-template-columns: 1fr; gap: 8px; }
@@ -551,7 +551,7 @@
       <div class="nav-label">规范目录</div>
       <a href="#overview" class="active"><span class="idx">00</span>概览与原则</a>
       <a href="#color"><span class="idx">01</span>颜色系统</a>
-      <a href="#type"><span class="idx">02</span>字体系统</a>
+      <a href="#type"><span class="idx">02</span>排版系统</a>
       <a href="#icon"><span class="idx">03</span>图标规范</a>
       <a href="#modal"><span class="idx">04</span>弹框规范</a>
       <a href="#feedback"><span class="idx">05</span>反馈与状态</a>
@@ -560,8 +560,8 @@
     </nav>
 
     <div class="side-foot">
-      <div class="meta-line"><span>版本</span><b>v1.0</b></div>
-      <div class="meta-line"><span>更新</span><b>2026-11-09</b></div>
+      <div class="meta-line"><span>版本</span><b>v2.0</b></div>
+      <div class="meta-line"><span>更新</span><b>2026-11-23</b></div>
       <div class="meta-line"><span>平台</span><b>iOS / Android / 小程序</b></div>
       <button class="side-btn" onclick="window.print()">打印 / 导出 PDF</button>
     </div>
@@ -571,7 +571,7 @@
     <div class="wrap">
 
       <header class="hero" id="overview">
-        <div class="eyebrow">Design Standard · v1.0</div>
+        <div class="eyebrow">Design Standard · v2.0</div>
         <h1>移动端设计系统<br />与交互标准</h1>
         <p>面向 PrismClaw 移动端的标准化设计交付物。统一颜色、字体、图标、弹框与反馈状态，确保所有交互场景遵循同一套设计语言。</p>
         <div class="hero-meta">
@@ -628,52 +628,52 @@
 
       <!-- ── 02 字体 ───────────────────────────────────── -->
       <section class="sec" id="type">
-        <div class="sec-head"><span class="sec-no">02</span><h2>字体系统</h2></div>
-        <p class="sec-desc">以 4pt 为基线建立 9 级字阶。中文优先 PingFang SC / HarmonyOS Sans SC；数字与代码使用等宽字体并开启 tabular-nums，保证数据对齐。</p>
+        <div class="sec-head"><span class="sec-no">02</span><h2>排版系统</h2></div>
+        <p class="sec-desc">以 4pt 为基线建立 9 级字阶，字号与行高成对固定为 <code>$fs-*</code> / <code>$lh-*</code> 令牌。中文优先 PingFang SC / HarmonyOS Sans SC，字重封顶 600；数字与代码使用等宽字体并开启 tabular-nums，保证数据对齐。</p>
 
         <div class="panel">
           <div class="type-row">
-            <div class="type-meta"><b>display / 28</b><span>28 / 36 · 700<br />字距 -0.5</span></div>
-            <div class="type-sample"><span class="cn t-display">随时聊聊，从这里开始</span><span class="en">用于首页问候、空状态大标题，单屏仅一处</span></div>
+            <div class="type-meta"><b>display / 28</b><span>28 / 36 · 600<br />字距 -0.5</span></div>
+            <div class="type-sample"><span class="cn t-display">随时聊聊，从这里开始</span><span class="en">首页 Hero、登录标题，单屏仅一处</span></div>
           </div>
           <div class="type-row">
-            <div class="type-meta"><b>h1 / 22</b><span>22 / 30 · 650<br />字距 -0.3</span></div>
+            <div class="type-meta"><b>h1 / 22</b><span>22 / 30 · 600<br />字距 -0.3</span></div>
             <div class="type-sample"><span class="cn t-h1">全部任务</span><span class="en">页面主标题，配合返回与右侧操作</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>h2 / 18</b><span>18 / 26 · 600<br />字距 -0.2</span></div>
-            <div class="type-sample"><span class="cn t-h2">运行记录</span><span class="en">模块标题、弹框标题（移动端可降至 17）</span></div>
+            <div class="type-sample"><span class="cn t-h2">运行记录</span><span class="en">模块标题、弹框标题；聊天正文也取 15 / 26 这一对</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>h3 / 16</b><span>16 / 24 · 600<br />字距 -0.1</span></div>
-            <div class="type-sample"><span class="cn t-h3">门诊随访名单汇总</span><span class="en">卡片标题、列表主信息、时间轴标题</span></div>
+            <div class="type-sample"><span class="cn t-h3">门诊随访名单汇总</span><span class="en">卡片标题、列表主信息、输入框文字</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>body-lg / 15</b><span>15 / 24 · 400<br />字距 0</span></div>
-            <div class="type-sample"><span class="cn t-body-lg">我先合并 3 个院区的门诊病历导出表，再按质控标准逐条核对。</span><span class="en">聊天正文、主要说明文字</span></div>
+            <div class="type-sample"><span class="cn t-body-lg">我先合并 3 个院区的门诊病历导出表，再按质控标准逐条核对。</span><span class="en">主要说明文字；聊天长文用 15 / 26</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>body / 14</b><span>14 / 22 · 400<br />字距 0</span></div>
-            <div class="type-sample"><span class="cn t-body">该任务由服务器端调度执行，与普通会话共用同一份任务定义。</span><span class="en">通用正文、表单值、按钮文字</span></div>
+            <div class="type-sample"><span class="cn t-body">该任务由服务器端调度执行，与普通会话共用同一份任务定义。</span><span class="en">通用正文、表单值</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>body-sm / 13</b><span>13 / 20 · 400<br />字距 0</span></div>
-            <div class="type-sample"><span class="cn t-body-sm">合同原文为 90 天，标准模板为 30 天。你的选择会作为回复发送给 AI。</span><span class="en">卡片描述、弹框说明、次要信息</span></div>
+            <div class="type-sample"><span class="cn t-body-sm">合同原文为 90 天，标准模板为 30 天。</span><span class="en">卡片描述、弹框说明、次要信息</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>caption / 12</b><span>12 / 18 · 400<br />字距 0</span></div>
-            <div class="type-sample"><span class="cn t-caption">今天 08:31 · 耗时 42s</span><span class="en">时间、元信息、输入提示</span></div>
+            <div class="type-sample"><span class="cn t-caption">今天 08:31 · 耗时 42s</span><span class="en">时间、元信息、表格与代码</span></div>
           </div>
           <div class="type-row">
             <div class="type-meta"><b>micro / 11</b><span>11 / 16 · 500<br />字距 0.1</span></div>
             <div class="type-sample"><span class="cn t-micro">每天 08:30 · 已暂停</span><span class="en">标签、角标、状态徽标，系统最小字号</span></div>
           </div>
           <div class="type-row">
-            <div class="type-meta"><b>button / 14</b><span>14 / 20 · 600<br />字距 0</span></div>
-            <div class="type-sample"><span class="cn t-button">通过并继续</span><span class="en">主按钮；小按钮使用 12.5 / 18 · 600</span></div>
+            <div class="type-meta"><b>button / 14</b><span>14 / 22 · 600<br />字距 0</span></div>
+            <div class="type-sample"><span class="cn t-button">通过并继续</span><span class="en">主按钮文字，与 body 同级</span></div>
           </div>
           <div class="type-row">
-            <div class="type-meta"><b>mono / 12</b><span>12 / 18 · 400<br />tabular-nums</span></div>
+            <div class="type-meta"><b>mono / 12</b><span>12 / 19 · 400<br />tabular-nums</span></div>
             <div class="type-sample"><span class="cn t-mono">$ groupby(['store','week']).sum()</span><span class="en">代码、命令、金额与指标对齐</span></div>
           </div>
         </div>
@@ -685,17 +685,17 @@
             <ul class="rule-list">
               <li><b>400：</b>正文、说明、长文本。</li>
               <li><b>500：</b>辅助强调、标签、次级按钮。</li>
-              <li><b>600：</b>标题、卡片标题、按钮、弹框标题。</li>
-              <li><b>700：</b>仅用于 display 与数字强调。</li>
+              <li><b>600：</b>标题、卡片标题、按钮、弹框标题，字重上限。</li>
+              <li>中文系统字体（PingFang SC / HarmonyOS Sans SC）只有 300/400/500/600 四档，写 650 / 700 会触发合成加粗，笔画密集处发虚，因此整站封顶 600。</li>
             </ul>
           </div>
           <div class="panel">
             <h4>行高</h4>
             <ul class="rule-list">
-              <li>标题行高为字号的 1.3–1.4 倍。</li>
-              <li>正文行高 1.55–1.7 倍，中文长文取 1.7。</li>
-              <li>单行控件（按钮、标签）使用固定行高，垂直居中。</li>
-              <li>同一区块内行高统一，禁止 1.2 与 1.7 混排。</li>
+              <li>行高与字号成对固定（见上表右列），用 <code>$lh-*</code> 令牌引用，不写小数倍率。</li>
+              <li>标题 36 / 30 / 26 / 24；正文 24 / 22 / 20；小字 18 / 16。</li>
+              <li>中文长文（聊天正文）单独用 15 / 26，比通用正文更舒展。</li>
+              <li>单行控件（按钮、标签）固定高度 + 居中，不靠行高撑。</li>
             </ul>
           </div>
           <div class="panel">
@@ -706,6 +706,79 @@
               <li>数字使用 <code>font-variant-numeric: tabular-nums</code>。</li>
               <li>不通过缩放字号适配窄屏，改为截断或换行。</li>
             </ul>
+          </div>
+        </div>
+        <h3>间距</h3>
+        <div class="panel">
+          <div class="tbl-wrap" style="border:0">
+            <table>
+              <thead><tr><th style="width:22%">令牌</th><th style="width:16%">值</th><th>用途</th></tr></thead>
+              <tbody>
+                <tr><td><code>$sp-1</code></td><td>4</td><td>图标与文字、标签内边距的最小间隙</td></tr>
+                <tr><td><code>$sp-2</code></td><td>8</td><td>行内元素间距、段落间距</td></tr>
+                <tr><td><code>$sp-3</code></td><td>12</td><td>卡片之间、列表内元素</td></tr>
+                <tr><td><code>$sp-4</code></td><td>16</td><td>页面左右留白、卡片内边距</td></tr>
+                <tr><td><code>$sp-5</code></td><td>20</td><td>弹层内边距、模块之间</td></tr>
+                <tr><td><code>$sp-6</code></td><td>24</td><td>大区块之间、标题上间距</td></tr>
+                <tr><td><code>$sp-8</code></td><td>32</td><td>Hero 与内容区的分界</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note" style="margin-top:14px">间距只取 4 的倍数。页面左右留白恒为 16，不再出现 18 / 20 / 22 混用；卡片内 16，卡片之间 12，模块之间 24。</div>
+        </div>
+
+        <h3>控件高度与触控</h3>
+        <div class="panel">
+          <div class="tbl-wrap" style="border:0">
+            <table>
+              <thead><tr><th style="width:26%">元素</th><th style="width:18%">尺寸</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><b>顶栏</b></td><td><code>44 + 状态栏</code></td><td>内容区 44，外加 <code>--safe-top</code>；不再写死 52</td></tr>
+                <tr><td><b>图标按钮</b></td><td><code>44 × 44</code></td><td>顶栏与输入区的主图标；视觉图标 20–24</td></tr>
+                <tr><td><b>小图标按钮</b></td><td><code>36 × 36</code></td><td>输入区附件、开关等次级操作</td></tr>
+                <tr><td><b>列表行</b></td><td><code>52</code></td><td>菜单、任务、文件、设置项</td></tr>
+                <tr><td><b>主按钮</b></td><td><code>44</code></td><td>登录、提交、弹框确认</td></tr>
+                <tr><td><b>标签 chip</b></td><td><code>32</code></td><td>视觉高度 32；外层补足 44 命中区</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note" style="margin-top:14px">触控命中区不小于 44（列表行 52），相邻可点元素间距不小于 8；禁止只用 hover 承载信息。</div>
+        </div>
+
+        <h3>输入区</h3>
+        <div class="grid g2">
+          <div class="panel">
+            <h4>尺寸</h4>
+            <ul class="rule-list">
+              <li>文字 16 / 24，1–6 行自适应，上限 160px。</li>
+              <li>超过上限在框内滚动，不挤压底部操作栏。</li>
+              <li>收起态单行 58 高；展开态自适应，圆角 10。</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4>键盘与回车</h4>
+            <ul class="rule-list">
+              <li>回车换行，发送只走发送键——手机上误触回车即发送的代价太高。</li>
+              <li>键盘弹起用 <code>--kb</code> 把输入区顶到键盘上方，页面高度不变。</li>
+              <li>键盘弹起时 <code>--safe-bottom</code> 置 0，避免重复留白。</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>聊天正文</h3>
+        <div class="panel">
+          <div class="tbl-wrap" style="border:0">
+            <table>
+              <thead><tr><th style="width:26%">元素</th><th style="width:22%">字号 / 行高</th><th>说明</th></tr></thead>
+              <tbody>
+                <tr><td><b>正文</b></td><td><code>15 / 26</code></td><td>比通用正文大半档，长文更舒展</td></tr>
+                <tr><td><b>h1 / h2 / h3</b></td><td><code>18 / 16 / 15</code></td><td>与正文最多差 3px，层级靠字重与上间距</td></tr>
+                <tr><td><b>h4 / h5 / h6</b></td><td><code>14 / 13 / 12</code></td><td>依次递减，不放大</td></tr>
+                <tr><td><b>行内 code</b></td><td><code>0.8em</code></td><td>随正文缩放，长句里不顶开行高</td></tr>
+                <tr><td><b>代码块</b></td><td><code>12 / 19</code></td><td>等宽字体，关闭自动中西文间距</td></tr>
+                <tr><td><b>表格</b></td><td><code>12 / 18</code></td><td>列宽最小 88；≥4 列横向滚动，不压缩列</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -1051,7 +1124,10 @@
             <thead><tr><th style="width:24%">令牌</th><th style="width:22%">值</th><th>代码位置</th></tr></thead>
             <tbody>
               <tr><td><b>颜色</b></td><td><code>$primary / $success / $warning / $danger</code></td><td><code>src/styles/tokens.scss</code></td></tr>
-              <tr><td><b>字体</b></td><td><code>$font / $font-mono</code> + 字阶</td><td>字阶以组件类落地；新增 <code>.t-*</code> 工具类或 SCSS mixin</td></tr>
+              <tr><td><b>字体</b></td><td><code>$font / $font-mono</code></td><td><code>tokens.scss</code></td></tr>
+              <tr><td><b>字阶</b></td><td><code>$fs-display … $fs-micro</code>（9 档）<br /><code>$lh-display … $lh-micro</code></td><td><code>tokens.scss</code>；字号与行高成对引用，禁止写裸 px</td></tr>
+              <tr><td><b>间距</b></td><td><code>$sp-1 … $sp-8</code></td><td><code>tokens.scss</code>；只取 4 的倍数</td></tr>
+              <tr><td><b>控件</b></td><td><code>$header-h / $hit-list / $hit-primary / $hit-small / $hit-chip</code></td><td><code>tokens.scss</code>；44 / 52 / 36 / 32</td></tr>
               <tr><td><b>圆角</b></td><td><code>$radius-control / sm / md / card / lg / pill</code></td><td><code>tokens.scss</code>；弹框新增 <code>$radius-modal: 24px</code></td></tr>
               <tr><td><b>阴影</b></td><td><code>$shadow-sm / md / lg</code></td><td><code>tokens.scss</code>；弹框使用 lg，卡片使用描边</td></tr>
               <tr><td><b>动效</b></td><td><code>$ease: cubic-bezier(.2,.8,.2,1)</code></td><td>全局统一；弹框/Sheet/Toast 时长见 04 节</td></tr>
@@ -1062,7 +1138,8 @@
         <h3>交付验收清单</h3>
         <div class="checklist">
           <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>颜色令牌与使用规则已定义，含对比度基线</span></div>
-          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>9 级字阶、字重、行高与截断规则已定义</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>9 级字阶、行高、字重（封顶 600）与截断规则已定义</span></div>
+          <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>间距、控件高度与触控命中区已收敛为令牌</span></div>
           <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>图标网格、线宽、尺寸与场景已定义</span></div>
           <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>7 类弹框的结构、尺寸、动效与行为已定义</span></div>
           <div class="check done"><span class="box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><use href="#i-check"/></svg></span><span>9 类反馈状态与出现位置已定义</span></div>
@@ -1078,8 +1155,8 @@
       </section>
 
       <footer class="foot">
-        <span>PrismClaw · Mobile Design System v1.0</span>
-        <span>基础令牌来源：tokens.scss · 最后更新 2026-11-09</span>
+        <span>PrismClaw · Mobile Design System v2.0</span>
+        <span>基础令牌来源：tokens.scss · 最后更新 2026-11-23</span>
       </footer>
     </div>
   </main>

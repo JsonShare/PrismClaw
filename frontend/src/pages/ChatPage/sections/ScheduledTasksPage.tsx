@@ -772,7 +772,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
           >
             <div className="px-8 pt-6 pb-5 flex items-start justify-between border-b border-[var(--c-border)]/60">
               <div className="space-y-1">
-                <div className="text-[length:var(--fs-xl)] font-bold text-[var(--c-text)] tracking-tight">
+                <div className="text-[length:var(--fs-xl)] font-semibold text-[var(--c-text)] tracking-tight">
                   {isEditingJob ? '编辑任务' : '创建新任务'}
                 </div>
                 <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">

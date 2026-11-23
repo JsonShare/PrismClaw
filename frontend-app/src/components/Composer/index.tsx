@@ -71,6 +71,10 @@ function fileBadge(extension: string): string {
   return FILE_BADGE[extension] || extension.charAt(0).toUpperCase()
 }
 
+/** 输入框行高与最大高度，与 global.scss 的 .composer-textarea 保持一致 */
+const INPUT_LINE_H = 24
+const INPUT_MAX_H = 160
+
 function fileSize(size: number): string {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
@@ -450,7 +454,8 @@ export default function Composer({
   // 首页扁平形态：聚焦、已有文字或待选附件时展开成白色大卡片
   const expanded = flat && !voiceMode && (focused || draft.trim().length > 0 || files.length > 0 || chips.length > 0)
   const attachmentsInside = flat && files.length > 0
-  // H5 下 Taro 给 textarea 写死内联高度，长文本会裁掉半行，这里按内容手动撑高（最多 4 行）
+  // H5 下 Taro 给 textarea 写死内联高度，长文本会裁掉半行，这里按内容手动撑高
+  // 1–6 行自适应（16 / 24），上限 160px，超出后在框内滚动
   const cardRef = useRef<any>(null)
   const syncTextareaHeight = useCallback(() => {
     if (process.env.TARO_ENV !== 'h5') return
@@ -459,9 +464,9 @@ export default function Composer({
     if (!el) return
     el.style.height = 'auto'
     // 空内容时按一行行高兜底：浏览器在 auto 测量下会返回双倍行高，占位文字会掉到上半行
-    const next = el.value.trim() ? Math.min(el.scrollHeight, 96) : 24
+    const next = el.value.trim() ? Math.min(el.scrollHeight, INPUT_MAX_H) : INPUT_LINE_H
     el.style.height = `${next}px`
-    el.style.overflowY = el.scrollHeight > 96 ? 'auto' : 'hidden'
+    el.style.overflowY = el.scrollHeight > INPUT_MAX_H ? 'auto' : 'hidden'
   }, [])
 
   useEffect(() => {
@@ -588,7 +593,6 @@ export default function Composer({
                     value={draft}
                     maxlength={-1}
                     autoHeight={expanded}
-                    confirmType='send'
                     placeholder={expanded ? expandedPlaceholder || placeholder : placeholder}
                     placeholderClass='composer-placeholder'
                     onInput={(event) => {
@@ -597,7 +601,6 @@ export default function Composer({
                     }}
                     onFocus={handleFocus}
                     onBlur={handleBlur}
-                    onConfirm={handleSend}
                   />
                 </View>
                 <View className='composer-flat-foot'>
@@ -654,13 +657,11 @@ export default function Composer({
                   value={draft}
                   autoHeight
                   maxlength={-1}
-                  confirmType='send'
                   placeholder={placeholder}
                   placeholderClass='composer-placeholder'
                   onInput={(event) => setDraft(composerKey, event.detail.value)}
                   onFocus={handleFocus}
                   onBlur={handleBlur}
-                  onConfirm={handleSend}
                 />
               )}
 

@@ -47,18 +47,14 @@ function App({ children }: PropsWithChildren<any>) {
     }
   }, [])
 
-  // 默认跟随系统：监听系统外观变化
+  // 默认跟随系统：H5 用 prefers-color-scheme，小程序用 Taro.onThemeChange
   useEffect(() => {
     if (process.env.TARO_ENV === 'h5' && typeof window !== 'undefined' && window.matchMedia) {
       const mq = window.matchMedia('(prefers-color-scheme: dark)')
       const onChange = () => setSystemTheme(mq.matches ? 'dark' : 'light')
       onChange()
-      if (mq.addEventListener) mq.addEventListener('change', onChange)
-      else mq.addListener(onChange)
-      return () => {
-        if (mq.removeEventListener) mq.removeEventListener('change', onChange)
-        else mq.removeListener(onChange)
-      }
+      mq.addEventListener('change', onChange)
+      return () => mq.removeEventListener('change', onChange)
     }
     setSystemTheme(systemTheme())
     Taro.onThemeChange((res) => setSystemTheme(res.theme === 'dark' ? 'dark' : 'light'))

@@ -23,7 +23,7 @@ const MAX_HEIGHT = 400
 
 function minHeightOf(el: HTMLElement): number {
   const cs = getComputedStyle(el)
-  const fontSize = parseFloat(cs.fontSize) || 15
+  const fontSize = parseFloat(cs.fontSize) || 14
   const lineHeight = parseFloat(cs.lineHeight) || fontSize * 1.5
   const padding = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
   return Math.round(padding + lineHeight * MIN_LINES)

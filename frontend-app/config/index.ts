@@ -6,7 +6,6 @@ import prodConfig from './prod'
 export default defineConfig<'webpack5'>(async (merge) => {
   const baseConfig: UserConfigExport<'webpack5'> = {
     projectName: 'prismclaw-taro',
-    date: '2026-11-9',
     designWidth: 390,
     deviceRatio: {
       390: 750 / 390,
@@ -14,7 +13,6 @@ export default defineConfig<'webpack5'>(async (merge) => {
     },
     sourceRoot: 'src',
     outputRoot: `dist/${process.env.TARO_ENV || 'h5'}`,
-    plugins: [],
     defineConstants: {},
     copy: {
       patterns: [],
@@ -30,17 +28,8 @@ export default defineConfig<'webpack5'>(async (merge) => {
     },
     mini: {
       postcss: {
-        pxtransform: {
-          enable: true,
-          config: {}
-        },
-        cssModules: {
-          enable: false,
-          config: {
-            namingPattern: 'module',
-            generateScopedName: '[name]__[local]___[hash:base64:5]'
-          }
-        }
+        pxtransform: { enable: true },
+        cssModules: { enable: false }
       }
     },
     h5: {
@@ -66,21 +55,9 @@ export default defineConfig<'webpack5'>(async (merge) => {
       },
       postcss: {
         // H5 端保留 CSS px（原型的 390 设计稿 1:1），不做 rem 缩放
-        pxtransform: {
-          enable: false,
-          config: {}
-        },
-        autoprefixer: {
-          enable: true,
-          config: {}
-        },
-        cssModules: {
-          enable: false,
-          config: {
-            namingPattern: 'module',
-            generateScopedName: '[name]__[local]___[hash:base64:5]'
-          }
-        }
+        pxtransform: { enable: false },
+        autoprefixer: { enable: true },
+        cssModules: { enable: false }
       }
     }
   }

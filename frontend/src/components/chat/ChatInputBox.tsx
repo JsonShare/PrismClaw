@@ -496,7 +496,7 @@ export default function ChatInputBox({
         <div className="absolute inset-0 rounded-[var(--radius-card)] bg-[var(--c-accent)]/10 backdrop-blur-[2px] grid place-items-center pointer-events-none z-20">
           <div className="flex flex-col items-center gap-2">
             <div className="w-12 h-12 rounded-[var(--radius-card)] bg-[var(--c-btn-primary-bg)] text-[var(--c-btn-primary-fg)] grid place-items-center shadow-lg animate-bounce"><Plus size={24} /></div>
-            <span className="text-[length:var(--fs-md)] font-bold text-[var(--c-accent)]">松开以添加附件</span>
+            <span className="text-[length:var(--fs-md)] font-semibold text-[var(--c-accent)]">松开以添加附件</span>
           </div>
         </div>
       ) : (

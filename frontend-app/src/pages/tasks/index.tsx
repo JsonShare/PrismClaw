@@ -289,9 +289,9 @@ export default function Tasks() {
                   <View className='at-chip'>
                     <Icon
                       name={row.kind === 'scheduled' ? 'clock' : 'message'}
-                      size={19}
+                      size={17}
                       color='#1F232B'
-                      strokeWidth={1.7}
+                      strokeWidth={1.8}
                     />
                     {row.kind === 'scheduled' && row.task?.enabled ? <View className='at-status-dot' /> : null}
                   </View>

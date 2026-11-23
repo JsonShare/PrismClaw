@@ -258,7 +258,7 @@ export default function EmptyStateSuggestions({onPick}: Props) {
                             >
                                 <div className="flex items-center gap-2.5 mb-3">
                                     <div className={`w-8 h-8 rounded-[var(--radius-md)] flex items-center justify-center bg-[var(--c-accent-soft)] text-[var(--c-accent)]`}>
-                                        <Icon size={16}/>
+                                        <Icon size={20}/>
                                     </div>
                                     <div className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)]">{group.type}</div>
                                 </div>

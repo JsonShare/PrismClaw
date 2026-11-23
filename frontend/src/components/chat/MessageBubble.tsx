@@ -93,7 +93,7 @@ function formatDuration(ms: number): string {
 
 /**
  * 导出专属 CSS（从 index.css 中 .markdown-content 规则 1:1 抄底）。
- * 所有 var(--c-xxx) 替换为亮色主题硬编码值（见 web/src/theme/light.css）。
+ * 所有 var(--c-xxx) 替换为亮色主题硬编码值（见 frontend/src/theme/light.css）。
  */
 function buildExportCss(): string {
   return `

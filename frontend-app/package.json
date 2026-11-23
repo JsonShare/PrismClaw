@@ -3,11 +3,6 @@
   "version": "0.9.2",
   "private": true,
   "description": "PrismClaw Mobile · Taro 4 + React 18 + TypeScript 跨端原型",
-  "templateInfo": {
-    "name": "default",
-    "typescript": true,
-    "css": "sass"
-  },
   "scripts": {
     "build:weapp": "taro build --type weapp",
     "build:h5": "taro build --type h5",
@@ -15,9 +10,10 @@
     "dev:h5": "npm run build:h5 -- --watch"
   },
   "browserslist": [
-    "last 3 versions",
-    "Android >= 4.1",
-    "ios >= 8"
+    "iOS >= 15",
+    "Chrome >= 100",
+    "last 2 versions",
+    "not dead"
   ],
   "dependencies": {
     "@babel/runtime": "^7.24.4",
