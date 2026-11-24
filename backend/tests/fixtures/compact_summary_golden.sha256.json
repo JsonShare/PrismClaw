@@ -1,0 +1,24 @@
+{
+  "system": {
+    "sha256": "b48e1a8465a0dc02d1bb76ee1d0c56d7169b05825a76f524d9692e134b72020a",
+    "bytes": 3262,
+    "sha256_stripped": "d5d35a41f5ed7b19d8161aca9da57655de5300522aaed894f0c6345f74e2ef4e",
+    "stripped_chars": 1325
+  },
+  "user": {
+    "sha256": "3bee3ecadad2a21d6cacdcfccdfd31d2098bdd84175b64d685a483b09e3d0742",
+    "bytes": 565
+  },
+  "captured_after_commit": "d5dd635",
+  "purpose": "mechanism golden, capture before step3",
+  "fixed_messages": [
+    {
+      "role": "user",
+      "content": "请帮我分析这份合同的风险点。"
+    },
+    {
+      "role": "assistant",
+      "content": "好的，我来逐条分析。"
+    }
+  ]
+}
