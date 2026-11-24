@@ -94,32 +94,18 @@ def inject_no_tools_preamble(
 
 
 def _resolve_no_tools_preamble_enabled(config: CompactionConfig | None) -> bool:
-    """Resolve the ``FLAG_NO_TOOLS_PREAMBLE``-equivalent flag from
-    the runtime config.  Defaults to on.  Accepts a few attribute
-    names so it tolerates older config objects and Pydantic models.
+    """Resolve the no-tools preamble flag from ``config.history.preamble_no_tools``.
+
+    Defaults to True when ``config`` or its ``history`` block is missing, so
+    callers that build ``SummaryEngine`` without config still get the guard.
     """
     if config is None:
         return True
-    for name in (
-        "preamble_no_tools",
-        "no_tools_preamble",
-        "enable_no_tools_preamble",
-    ):
-        val = getattr(config, name, None)
-        if isinstance(val, bool):
-            return val
-    # Restructured: preamble_no_tools now lives under the history sub-block.
     history = getattr(config, "history", None)
-    if history is not None:
-        for name in (
-            "preamble_no_tools",
-            "no_tools_preamble",
-            "enable_no_tools_preamble",
-        ):
-            val = getattr(history, name, None)
-            if isinstance(val, bool):
-                return val
-    return True
+    if history is None:
+        return True
+    val = getattr(history, "preamble_no_tools", None)
+    return val if isinstance(val, bool) else True
 
 
 # ──────────────────────────── 9-Section Prompt ────────────────────────────
