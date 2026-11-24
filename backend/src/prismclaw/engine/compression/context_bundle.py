@@ -101,7 +101,7 @@ def build_context_service_bundle(
         compaction_timeout_s=compaction_timeout_s,
         chunk_token_budget=chunk_token_budget,
         # SDD context-governance W11: forward the compaction config so the
-        # configured 10-section template (incl. the W8 "user-stated facts"
+        # configured 11-section template (incl. the W8 "user-stated facts"
         # carry-forward section) is used instead of the hard-coded fallback
         # prompt when the LLM summarizer is wired.
         compaction_config=compaction_config,

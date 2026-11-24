@@ -108,7 +108,7 @@ def _resolve_no_tools_preamble_enabled(config: CompactionConfig | None) -> bool:
     return val if isinstance(val, bool) else True
 
 
-# ──────────────────────────── 9-Section Prompt ────────────────────────────
+# ──────────────────────────── 11-Section Prompt ───────────────────────────
 
 
 # Regular expression used by ``strip_analysis_block`` to remove
@@ -129,7 +129,7 @@ _METRIC_COMPACT_OUTPUT_TOKENS = "compact.output_tokens"
 def strip_analysis_block(text: str) -> str:
     """Remove the draft ``<analysis>...</analysis>`` block.
 
-    The 9-section prompt asks the LLM to first reason privately in
+    The 11-section prompt asks the LLM to first reason privately in
     an ``<analysis>`` block and then emit the structured
     ``<summary>``.  The analysis is for the model's benefit; we do
     not want to store it (it bloats the summary) or bill tokens for
@@ -207,7 +207,7 @@ def _resolve_prompt_template(
 def resolve_compact_prompt(compaction_config: CompactionConfig | None) -> str | None:
     """Resolve the active summarization system prompt.
 
-    Returns the 9-section template when ``cfg.history.prompt.enabled``
+    Returns the 11-section template when ``cfg.history.prompt.enabled``
     is True (default); returns None when the feature is disabled so
     callers can fall back to ``HARDENED_SUMMARIZER_SYSTEM_PROMPT``.
 

@@ -214,10 +214,10 @@ def sanity_check_token_estimate(tokens_before: int, tokens_after: int | None) ->
     return tokens_after
 
 
-# ──────────────────────────── 9-Section Carry-Forward ────────────────────────────
+# ──────────────────────────── 11-Section Carry-Forward ───────────────────────────
 
 
-# Matches numbered section headers like "7. Pending Tasks" in the 9-section
+# Matches numbered section headers like "7. Pending Tasks" in the 11-section
 # compact-summary format.  Handles optional markdown bold (**7. ...**) and
 # multi-word titles.
 _SECTION_HEADER_RE = re.compile(
@@ -234,7 +234,7 @@ _VOIDED_MARKERS = frozenset({"voided", "superseded", "cancelled", "retracted", "
 
 
 def extract_sections(text: str) -> dict[int, str]:
-    """Extract numbered sections from a 9-section compaction summary.
+    """Extract numbered sections from an 11-section compaction summary.
 
     Returns a mapping ``{section_number: section_content}`` where
     *section_content* includes the header line and all body text up to

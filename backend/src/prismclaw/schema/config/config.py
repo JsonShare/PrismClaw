@@ -166,8 +166,10 @@ class PerResultSummaryConfig(BaseModel):
 class CompactPromptConfig(BaseModel):
     """压缩摘要模板配置。
 
-    内置 9 章节默认模板（主请求 / 关键技术概念 / 关键文件与产出 /
-    错误与修复 / 问题解决过程 / 用户消息 / 待办 / 当前工作 / 可选下一步）；
+    内置 11 章节默认模板（主要请求与意图 / 关键领域概念与术语 /
+    关键资料、文件与产出 / 错误与修复 / 问题解决过程 / 用户关键原话 /
+    待办任务 / 当前工作 / 可选的下一步 / 用户陈述的事实与约束 /
+    已失效/作废的需求）；
     运营可通过 template 字段覆写为领域专用模板。
     strip_analysis_block 控制是否移除 LLM 输出中的 <analysis> 草稿块。
     """
@@ -175,7 +177,7 @@ class CompactPromptConfig(BaseModel):
     template: str | None = Field(
         default=None,
         description=(
-            "9-section summarization prompt. Override to use a domain-specific prompt. "
+            "11-section summarization prompt. Override to use a domain-specific prompt. "
             "None reads the bundled prompts/compact_summary.md."
         ),
     )
@@ -190,7 +192,7 @@ class CompactPromptConfig(BaseModel):
         default=True,
         description=(
             "Feature flag. When False, the legacy short summarization "
-            "prompt is used instead of the 9-section default."
+            "prompt is used instead of the 11-section default."
         ),
     )
 
@@ -242,7 +244,7 @@ class HistoryCompactionConfig(BaseModel):
     )
     prompt: CompactPromptConfig = Field(
         default_factory=lambda: CompactPromptConfig(),
-        description="9 章节压缩摘要模板配置。覆写可使用领域专用模板；None 时使用内置默认模板。",
+        description="11 章节压缩摘要模板配置。覆写可使用领域专用模板；None 时使用内置默认模板。",
     )
     preamble_no_tools: bool = Field(
         default=True,
