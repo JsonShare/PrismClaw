@@ -2,22 +2,35 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-from prismclaw.schema.services.plugins import PluginReloadSummary
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+    from prismclaw.schema.shared import ProjectCapabilityLayout
+
+from prismclaw.app.web.deps import WebDeps
 from prismclaw.assembly.plugins.plugin_lifecycle import (
     PluginLifecycleManager,
     PluginRuntimeBundle,
 )
-from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.assembly.runtime_coordinator import (
     apply_app_runtime_bundle,
     build_plugin_reload_runtime_bundle,
+)
+from prismclaw.assembly.runtime_coordinator import (
     clear_workspace_runner_deps_cache as _clear_workspace_runner_deps_cache,
+)
+from prismclaw.assembly.runtime_coordinator import (
     get_app_workspace_extension_manager as _get_app_workspace_extension_manager,
+)
+from prismclaw.assembly.runtime_coordinator import (
     get_app_workspace_runner_deps as _get_app_workspace_runner_deps,
 )
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.infra.settings import Settings
+from prismclaw.schema.services.plugins import PluginReloadSummary
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +49,7 @@ def sync_plugin_lifecycle_settings(
 
 
 def sync_app_plugin_lifecycle_settings(
-    app: Any,
+    app: FastAPI,
     settings: Settings,
     *,
     invalidate: bool = True,
@@ -54,7 +67,7 @@ def sync_app_plugin_lifecycle_settings(
 
 
 def apply_app_settings(
-    app: Any,
+    app: FastAPI,
     settings: Settings,
     *,
     invalidate_plugin_runtime: bool = True,
@@ -80,8 +93,8 @@ def apply_app_settings(
 
 
 def apply_app_runtime_state(
-    app: Any,
-    runner_deps: Any,
+    app: FastAPI,
+    runner_deps: AgentRunnerDeps,
     *,
     settings: Settings | None = None,
     clear_workspace_cache: bool = True,
@@ -99,20 +112,23 @@ def apply_app_runtime_state(
 
 
 def build_app_web_deps(
-    app: Any,
+    app: FastAPI,
     *,
     settings: Settings | None = None,
-    runner_deps: Any | None = None,
-) -> Any | None:
+    runner_deps: AgentRunnerDeps | None = None,
+) -> WebDeps | None:
     _state = getattr(app, "state", None)
     fn = getattr(_state, "build_web_deps_fn", None)
-    if fn is None:
+    if not callable(fn):
         raise RuntimeError("app.state.build_web_deps_fn is not configured")
-    return fn(
+    built: object = fn(
         app,
         settings=settings,
         runner_deps=runner_deps,
     )
+    if built is not None and not isinstance(built, WebDeps):
+        raise RuntimeError("app.state.build_web_deps_fn 返回了非 WebDeps 对象")
+    return built
 
 
 async def reload_plugin_runtime(
@@ -142,7 +158,7 @@ async def reload_plugin_runtime(
 
 
 async def reload_app_plugin_runtime(
-    app: Any,
+    app: FastAPI,
     *,
     settings: Settings | None = None,
 ) -> PluginReloadSummary:
@@ -162,11 +178,11 @@ async def reload_app_plugin_runtime(
 
 
 def get_app_workspace_runner_deps(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
-) -> Any | None:
+) -> AgentRunnerDeps | None:
     return _get_app_workspace_runner_deps(
         app,
         user_id=user_id,
@@ -175,12 +191,12 @@ def get_app_workspace_runner_deps(
 
 
 async def get_app_workspace_runner_deps_async(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
     wait_for_ready: bool = True,
-) -> Any | None:
+) -> AgentRunnerDeps | None:
     from prismclaw.assembly.runtime_coordinator import (
         get_app_workspace_runner_deps_async as _impl,
     )
@@ -194,11 +210,11 @@ async def get_app_workspace_runner_deps_async(
 
 
 def get_app_workspace_extension_manager(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
-) -> Any | None:
+) -> ExtensionManager | None:
     return _get_app_workspace_extension_manager(
         app,
         user_id=user_id,
@@ -207,12 +223,12 @@ def get_app_workspace_extension_manager(
 
 
 async def get_app_workspace_extension_manager_async(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
     wait_for_ready: bool = True,
-) -> Any | None:
+) -> ExtensionManager | None:
     from prismclaw.assembly.runtime_coordinator import (
         get_app_workspace_extension_manager_async as _impl,
     )
@@ -231,7 +247,7 @@ def _apply_bundle_to_runner_deps(
     *,
     settings: Settings,
     workspace_path: Path,
-    capability_layout: Any = None,
+    capability_layout: ProjectCapabilityLayout | None = None,
 ) -> None:
     """把重建后的 bundle 重新应用到 deps 上，并触发能力刷新。
 
@@ -247,15 +263,22 @@ def _apply_bundle_to_runner_deps(
     deps.plugin.extension_manager = bundle.extension_manager
     deps.skill_provider = bundle.skill_provider
     deps.hook_dispatcher = bundle.hook_dispatcher
-    if bundle.runtime_mcp_manager is not None or getattr(deps.plugin, "runtime_mcp_manager", None) is None:
+    if (
+        bundle.runtime_mcp_manager is not None
+        or getattr(deps.plugin, "runtime_mcp_manager", None) is None
+    ):
         deps.plugin.runtime_mcp_manager = bundle.runtime_mcp_manager
 
     # project_root 只在 capability_layout 也没有时才作为兜底
-    fallback_project_root = getattr(
-        deps.plugin.lifecycle_manager,
-        "_project_root",
-        None,
-    ) if capability_layout is None else None
+    fallback_project_root = (
+        getattr(
+            deps.plugin.lifecycle_manager,
+            "_project_root",
+            None,
+        )
+        if capability_layout is None
+        else None
+    )
 
     _ = refresh_runner_capabilities(
         deps,
@@ -271,7 +294,7 @@ def _apply_bundle_to_runner_deps(
 
 async def _shutdown_replaced_runtime_mcp_manager(
     lifecycle: PluginLifecycleManager,
-    runtime_mcp_manager: Any,
+    runtime_mcp_manager: object,
 ) -> None:
     if runtime_mcp_manager is None:
         return

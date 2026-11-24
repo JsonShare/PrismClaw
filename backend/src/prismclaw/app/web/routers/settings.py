@@ -14,6 +14,7 @@ from prismclaw.app.web.deps import get_web_deps
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class WebSettingsResponse(BaseModel):
     runtime_mode: dict[str, Any] | None = None
     email_verification_enabled: bool = False
@@ -37,7 +38,9 @@ async def get_web_settings(request: Request) -> WebSettingsResponse:
     runtime_mode = web_deps.runtime_mode_snapshot
     return WebSettingsResponse(
         runtime_mode=runtime_mode if isinstance(runtime_mode, dict) else None,
-        email_verification_enabled=bool(web_settings.smtp.enabled and web_deps.user_repository is not None),
+        email_verification_enabled=bool(
+            web_settings.smtp.enabled and web_deps.user_repository is not None
+        ),
     )
 
 

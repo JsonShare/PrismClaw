@@ -34,10 +34,10 @@ Design constraints:
     * Deterministic: rules apply in declaration order, single pass — a rewritten
       ``${...}`` placeholder is never re-scanned.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 __all__ = [
     "PathRemapRule",
@@ -98,7 +98,7 @@ def apply_path_remap(content: str, rules: list[PathRemapRule]) -> str:
     return result
 
 
-def parse_remap_rules(config: Any) -> list[PathRemapRule]:
+def parse_remap_rules(config: object) -> list[PathRemapRule]:
     """Parse a ``porting.remap`` declaration into :class:`PathRemapRule` objects.
 
     Accepts the raw value of a manifest's ``porting.remap`` key: a list of

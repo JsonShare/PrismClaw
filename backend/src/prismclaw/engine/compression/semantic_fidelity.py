@@ -5,7 +5,11 @@ import re
 from typing import Any
 
 from prismclaw.schema.content.compaction import CompressionValidationResult
-from prismclaw.schema.content.preservation import PreservationContract, PreservationItem, SemanticCapsule
+from prismclaw.schema.content.preservation import (
+    PreservationContract,
+    PreservationItem,
+    SemanticCapsule,
+)
 
 _IDENTIFIER_RE = re.compile(r"(?:[A-Za-z0-9_/.-]+\.[A-Za-z0-9_]+|[A-Fa-f0-9]{7,40})")
 
@@ -35,14 +39,16 @@ def build_preservation_contract(
             or ident.startswith("www.")
             or ident.startswith("http")
         )
-        invariants.append(PreservationItem(kind="identifier", content=ident, required=not is_reference))
+        invariants.append(
+            PreservationItem(kind="identifier", content=ident, required=not is_reference)
+        )
     contract_payload = "|".join([scope, source_id or "", source_text[:120], str(len(invariants))])
     contract_id = f"pc_{hashlib.sha1(contract_payload.encode('utf-8')).hexdigest()[:12]}"
     return PreservationContract(
         contract_id=contract_id,
-        scope=scope,  # type: ignore[arg-type]
+        scope=scope,
         source_id=source_id,
-        loss_budget=loss_budget,  # type: ignore[arg-type]
+        loss_budget=loss_budget,
         invariants=_dedupe_items(invariants),
         source_refs=[ref for ref in (source_refs or []) if isinstance(ref, str) and ref.strip()],
         notes=_build_contract_notes(scope=scope, state_updates=payload, invariants=invariants),
@@ -71,11 +77,13 @@ def build_semantic_capsule(
     )
     return SemanticCapsule(
         capsule_id=f"sc_{hashlib.sha1(capsule_payload.encode('utf-8')).hexdigest()[:12]}",
-        capsule_type=capsule_type,  # type: ignore[arg-type]
+        capsule_type=capsule_type,
         summary_text=summary_text,
         preserved_invariants=preserved,
-        source_span_refs=[ref for ref in (source_span_refs or []) if isinstance(ref, str) and ref.strip()],
-        loss_classification=loss_classification,  # type: ignore[arg-type]
+        source_span_refs=[
+            ref for ref in (source_span_refs or []) if isinstance(ref, str) and ref.strip()
+        ],
+        loss_classification=loss_classification,
         recovery_handle=dict(recovery_handle or {}),
         metadata=dict(metadata or {}),
     )
@@ -85,7 +93,9 @@ def validate_semantic_capsule(
     contract: PreservationContract,
     capsule: SemanticCapsule,
 ) -> CompressionValidationResult:
-    required = [item.content for item in contract.invariants if item.required and item.content.strip()]
+    required = [
+        item.content for item in contract.invariants if item.required and item.content.strip()
+    ]
     preserved = set(capsule.preserved_invariants)
     missing = [item for item in required if item not in preserved]
     warnings: list[str] = []
@@ -165,9 +175,10 @@ def _detect_preserved_invariants(
         if item.kind == "identifier" and target in summary_text:
             preserved.append(target)
             continue
-        if item.kind in {"fact", "constraint", "decision", "question"}:
-            if normalized in recovery_text or normalized in source_normalized:
-                preserved.append(target)
+        if item.kind in {"fact", "constraint", "decision", "question"} and (
+            normalized in recovery_text or normalized in source_normalized
+        ):
+            preserved.append(target)
     return list(dict.fromkeys(preserved))
 
 

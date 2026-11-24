@@ -3,6 +3,7 @@
 * ``ArtifactScanner`` 是产物事实的唯一来源，只做 stat / 枚举。
 * ``record_tool_evidence`` 只认「成功 + 声明路径真实变更」，不看工具名类别。
 """
+
 from __future__ import annotations
 
 import os
@@ -131,13 +132,13 @@ def test_record_tool_evidence_sub_agent_origin(tmp_path: Path):
     assert record.wrote_paths == []
 
 
-def test_scan_outputs_scope_keys_are_root_relative(tmp_path: Path):
+def test_scan_outbox_scope_keys_are_root_relative(tmp_path: Path):
     workspace = tmp_path / "ws"
-    outputs = workspace / "outputs"
-    outputs.mkdir(parents=True)
-    (outputs / "x.md").write_text("x", encoding="utf-8")
+    outbox = workspace / "outbox"
+    outbox.mkdir(parents=True)
+    (outbox / "x.md").write_text("x", encoding="utf-8")
     (workspace / "root.md").write_text("root", encoding="utf-8")
 
     scanner = ArtifactScanner(workspace)
-    snapshot = scanner.scan(Scope(kind="workspace", root=str(workspace), prefixes=("outputs",)))
-    assert set(snapshot) == {"outputs/x.md"}
+    snapshot = scanner.scan(Scope(kind="workspace", root=str(workspace), prefixes=("outbox",)))
+    assert set(snapshot) == {"outbox/x.md"}

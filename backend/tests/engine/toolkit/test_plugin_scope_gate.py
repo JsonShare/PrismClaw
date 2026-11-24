@@ -4,6 +4,7 @@
 不变量：未激活插件的一切能力都不可达；``tool_scope is None`` 表示无插件上下文，
 不做任何限制（headless / 测试 / 装配未就绪）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,9 +32,7 @@ from prismclaw.schema.content.content_types import ToolResult
 
 
 def _ctx(scope: frozenset[str] | None) -> ToolContext:
-    return ToolContext(
-        workspace_id="w", workspace_path=Path("/tmp"), tool_scope=scope
-    )
+    return ToolContext(workspace_id="w", workspace_path=Path("/tmp"), tool_scope=scope)
 
 
 class _PluginTool:
@@ -66,8 +65,7 @@ def registry() -> ToolRegistry:
 
 def _calls(*names: str) -> list[dict]:
     return [
-        {"id": str(i + 1), "function": {"name": n, "arguments": "{}"}}
-        for i, n in enumerate(names)
+        {"id": str(i + 1), "function": {"name": n, "arguments": "{}"}} for i, n in enumerate(names)
     ]
 
 
@@ -101,9 +99,7 @@ def test_none_scope_disables_gating(registry):
 
 
 def test_mixed_batch_denies_only_out_of_scope(registry):
-    legal, core = _run(
-        registry, _calls("legal__search", "core_read"), frozenset()
-    )
+    legal, core = _run(registry, _calls("legal__search", "core_read"), frozenset())
     assert legal.is_error and "tool_scope_denied:legal" in legal.content[0].text
     assert not core.is_error
 
@@ -112,9 +108,7 @@ def test_mixed_batch_denies_only_out_of_scope(registry):
 
 
 def test_allowed_tools_cannot_unlock_other_plugin(registry):
-    kept = normalize_registry_tool_names(
-        registry, ["legal:search"], tool_scope=frozenset({"fin"})
-    )
+    kept = normalize_registry_tool_names(registry, ["legal:search"], tool_scope=frozenset({"fin"}))
     assert kept == set()
 
 
@@ -126,9 +120,7 @@ def test_allowed_tools_keeps_in_scope(registry):
 
 
 def test_allowed_tools_unfiltered_without_scope(registry):
-    kept = normalize_registry_tool_names(
-        registry, ["legal:search"], tool_scope=None
-    )
+    kept = normalize_registry_tool_names(registry, ["legal:search"], tool_scope=None)
     assert kept == {"legal:search"}
 
 
@@ -145,9 +137,7 @@ class _Counter(HookHandler):
 
 
 def _dispatch(dispatcher, scope):
-    asyncio.run(
-        dispatcher.dispatch(HookEvent.POST_TOOL, {}, active_plugins=scope)
-    )
+    asyncio.run(dispatcher.dispatch(HookEvent.POST_TOOL, {}, active_plugins=scope))
 
 
 def test_inactive_plugin_hook_skipped():
@@ -197,14 +187,23 @@ def discovery() -> SubagentDiscoveryRuntime:
     return SubagentDiscoveryRuntime(capability_catalog=catalog)
 
 
+def _plugin_names(discovery, scope) -> set[str]:
+    return {agent.name for agent, is_core in discovery._candidates(scope) if not is_core}
+
+
 def test_plugin_agents_filtered_by_scope(discovery):
-    names = [e.name for e in discovery._plugin_agents(frozenset({"legal"}))]
-    assert names == ["a"]
+    assert _plugin_names(discovery, frozenset({"legal"})) == {"a"}
 
 
 def test_plugin_agents_empty_scope(discovery):
-    assert discovery._plugin_agents(frozenset()) == []
+    assert _plugin_names(discovery, frozenset()) == set()
 
 
 def test_plugin_agents_unfiltered_without_scope(discovery):
-    assert {e.name for e in discovery._plugin_agents(None)} == {"a", "b"}
+    assert _plugin_names(discovery, None) == {"a", "b"}
+
+
+def test_core_agent_never_filtered_by_scope(discovery):
+    """核心子代理不受插件作用域约束，始终是检索兜底（D7）。"""
+    core_names = {agent.name for agent, is_core in discovery._candidates(frozenset()) if is_core}
+    assert core_names == {"core"}

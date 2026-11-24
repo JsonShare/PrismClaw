@@ -3,6 +3,7 @@
 定期执行 Ed25519 / HMAC 密钥轮换 + 过期密钥清理。
 支持 APScheduler / systemd timer / K8s CronJob 调度。
 """
+
 from __future__ import annotations
 
 import logging
@@ -11,8 +12,8 @@ import time
 from typing import Any
 
 from prismclaw.engine.security.crypto.hsm_signer import (
-    LocalEd25519Signer,
     KeyRotationJob,
+    LocalEd25519Signer,
     SignerProtocol,
 )
 

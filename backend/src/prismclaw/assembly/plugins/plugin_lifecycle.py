@@ -10,12 +10,18 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.infra.paths import build_project_capability_layout
 from prismclaw.infra.settings import Settings
 from prismclaw.infra.task_manager import TaskManager
 from prismclaw.schema.shared import CapabilityKind, ProjectCapabilityLayout
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+    from prismclaw.engine.hooks import HookDispatcher
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
+    from prismclaw.schema.services.mcp_settings import McpServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +49,7 @@ class PluginLifecycleManager:
         project_root: Path | str | None,
         additional_project_roots: list[Path | str] | None = None,
         task_manager: TaskManager | None = None,
-        base_mcp_manager: Any = None,
+        base_mcp_manager: MCPClientManager | None = None,
         capability_layout: ProjectCapabilityLayout | None = None,
     ) -> None:
         self._settings = settings
@@ -64,7 +70,11 @@ class PluginLifecycleManager:
             return self._injected_layout
         if self._cached_layout is None:
             self._cached_layout = build_project_capability_layout(
-                primary=self._project_root,
+                primary=(
+                    Path(self._project_root)
+                    if isinstance(self._project_root, str)
+                    else self._project_root
+                ),
                 additional=self._additional_project_roots,
                 skills_dir=self._settings.skills.workspace_skills_dir,
                 extra_skills_dirs=(self._settings.skills.asset_skills_dir,),
@@ -106,20 +116,24 @@ class PluginLifecycleManager:
         self._generation += 1
         self._bundle = None
 
-    def update_settings(self, settings: Settings, *, invalidate: bool = True) -> None:
+    def update_settings(self, settings: object, *, invalidate: bool = True) -> None:
+        # schema 层的 PluginLifecycleProtocol 只声明「接受一个设置对象」，
+        # 这里收窄回具体 Settings；非 Settings 直接忽略（fail-closed）。
+        if not isinstance(settings, Settings):
+            return
         self._settings = settings
         # 目录契约来自 settings，settings 变更后缓存布局需重建（注入布局不受影响）。
         self._cached_layout = None
         if invalidate:
             self.invalidate()
 
-    def _build_extension_manager(self) -> Any:
+    def _build_extension_manager(self) -> ExtensionManager:
         """v4：创建空 ExtensionManager（无 loader 注册）。"""
         from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
 
         return ExtensionManager()
 
-    def _build_hook_dispatcher(self, extension_manager: Any) -> Any:
+    def _build_hook_dispatcher(self, extension_manager: ExtensionManager) -> HookDispatcher:
         from prismclaw.engine.hooks import HookDispatcher
 
         hook_dispatcher = HookDispatcher()
@@ -127,8 +141,8 @@ class PluginLifecycleManager:
         return hook_dispatcher
 
     def _apply_user_mcp_overrides(
-        self, plugin_name: str, server_name: str, config: Any
-    ) -> Any:
+        self, plugin_name: str, server_name: str, config: McpServerConfig
+    ) -> McpServerConfig:
         """用 ``mcp.plugin_overrides`` 的同名条目补充插件 MCP server 的凭据。
 
         插件 ``mcp.json`` 位于仓库权威目录（容器内只读），OAuth token / API
@@ -153,7 +167,7 @@ class PluginLifecycleManager:
             merged.enabled = override.enabled
         return merged
 
-    def _build_runtime_mcp_manager(self, extension_manager: Any) -> Any:
+    def _build_runtime_mcp_manager(self, extension_manager: ExtensionManager) -> object:
         from prismclaw.engine.mcp.client_manager import (
             CompositeMCPManager,
             DeclarativeMCPManager,
@@ -189,8 +203,8 @@ class PluginLifecycleManager:
                                 )
                             )
                             continue
-                    plugin_servers[f"{plugin_name}.{server_name}"] = (
-                        self._apply_user_mcp_overrides(plugin_name, server_name, config)
+                    plugin_servers[f"{plugin_name}.{server_name}"] = self._apply_user_mcp_overrides(
+                        plugin_name, server_name, config
                     )
 
                 if not plugin_servers:
@@ -207,6 +221,7 @@ class PluginLifecycleManager:
                 if sandbox_policy is None:
                     from prismclaw.engine.security.sandbox.state import resolve_sandbox_state
                     from prismclaw.schema.config.config import SandboxConfig
+
                     try:
                         sandbox_policy = resolve_sandbox_state(SandboxConfig(enforce=True)).policy
                     except Exception:
@@ -215,10 +230,10 @@ class PluginLifecycleManager:
                 plugin_manager.start_background()
                 plugin_mcp_managers.append(plugin_manager)
 
-        composite_managers = (
-            ([self._base_mcp_manager] if self._base_mcp_manager is not None else [])
-            + plugin_mcp_managers
-        )
+        composite_managers: list[MCPClientManager | DeclarativeMCPManager] = []
+        if self._base_mcp_manager is not None:
+            composite_managers.append(self._base_mcp_manager)
+        composite_managers.extend(plugin_mcp_managers)
         if declarative_plugin_mcp_statuses:
             composite_managers.append(DeclarativeMCPManager(declarative_plugin_mcp_statuses))
         return CompositeMCPManager(composite_managers) if composite_managers else None
@@ -242,9 +257,7 @@ class PluginLifecycleManager:
         from prismclaw.assembly.plugins.load_wiring import assemble_plugin_load_result
         from prismclaw.engine.plugins.trust import resolve_workspace_trusted
 
-        workspace_trusted = resolve_workspace_trusted(
-            self._workspace_default, self._settings
-        )
+        workspace_trusted = resolve_workspace_trusted(self._workspace_default, self._settings)
         load_result = await assemble_plugin_load_result(
             directory_sources=dir_sources,
             settings=self._settings,
@@ -264,4 +277,3 @@ class PluginLifecycleManager:
             runtime_mcp_manager=self._build_runtime_mcp_manager(extension_manager),
             capability_layout=layout,
         )
-

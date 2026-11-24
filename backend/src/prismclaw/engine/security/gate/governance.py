@@ -21,11 +21,12 @@ logger = logging.getLogger(__name__)
 
 # ── interceptor (原 gate/interceptor.py) ────────────────────────────────────
 
-class GovernanceException(Exception):
+
+class GovernanceError(Exception):
     pass
 
 
-class CircuitBreakerException(GovernanceException):
+class CircuitBreakerError(GovernanceError):
     pass
 
 
@@ -35,7 +36,7 @@ class SemanticFirewall:
     the semantic intent of the prompt, rather than relying on brittle regex matching.
     """
 
-    def __init__(self, llm_client: Any = None) -> None:
+    def __init__(self, llm_client: object = None) -> None:
         self._llm_client = llm_client
 
     async def check_intent(self, prompt: str) -> str | None:
@@ -64,7 +65,7 @@ class ContextValidatorChain:
     Applies Semantic Firewall transformations if necessary.
     """
 
-    def __init__(self, token_budget: int | None = None, llm_client: Any = None) -> None:
+    def __init__(self, token_budget: int | None = None, llm_client: object = None) -> None:
         self.token_budget = token_budget
         self._firewall = SemanticFirewall(llm_client)
 
@@ -100,7 +101,7 @@ class ContextValidatorChain:
             )
             if optional_tokens == 0:
                 return
-            raise CircuitBreakerException(
+            raise CircuitBreakerError(
                 f"上下文组装超出预算：估算 {estimated_tokens} tokens，预算为 {self.token_budget}"
             )
 
@@ -117,6 +118,7 @@ def _is_required_state_anchor(block: ContextBlock) -> bool:
 
 
 # ── governance 构建函数 ─────────────────────────────────────────────────────
+
 
 async def build_initial_task_spec(
     *,
@@ -145,12 +147,37 @@ async def build_initial_task_spec(
 
 # 写操作动词：中文按子串匹配；英文按词边界匹配（避免 "address" 命中 "add"）。
 _WRITE_VERBS_CJK = {
-    "改", "修改", "编辑", "写", "创建", "实现", "重构", "重写", "新增",
-    "添加", "删除", "移除", "修复", "更新", "变更", "替换",
+    "改",
+    "修改",
+    "编辑",
+    "写",
+    "创建",
+    "实现",
+    "重构",
+    "重写",
+    "新增",
+    "添加",
+    "删除",
+    "移除",
+    "修复",
+    "更新",
+    "变更",
+    "替换",
 }
 _WRITE_VERBS_EN = {
-    "fix", "edit", "write", "create", "implement", "refactor", "add",
-    "delete", "remove", "update", "change", "replace", "modify",
+    "fix",
+    "edit",
+    "write",
+    "create",
+    "implement",
+    "refactor",
+    "add",
+    "delete",
+    "remove",
+    "update",
+    "change",
+    "replace",
+    "modify",
 }
 _WRITE_VERBS_EN_RE = re.compile(
     r"\b(?:" + "|".join(sorted(_WRITE_VERBS_EN)) + r")\b",
@@ -169,7 +196,7 @@ def assess_turn(*, user_message: str, task_spec: TaskSpec) -> TurnAssessment:
     """单轮任务评估：纯规则，零 LLM 调用。
 
     信号全部来自 TaskSpec（preflight_probe / turn_index / goal）与本轮用户消息，
-    输出 simple / moderate / complex，驱动管道步骤跳过与 fast_path。
+    输出 simple / moderate / complex，驱动 ``TurnPlanner`` 的重管道开关。
     """
     preflight = task_spec.preflight_probe
     signals: list[str] = []
@@ -260,9 +287,6 @@ def _normalize_goal(text: str) -> str:
     if len(compact) <= 180:
         return compact
     return compact[:177].rstrip() + "..."
-
-
-
 
 
 def _count_user_turns(tree: SessionTree) -> int:

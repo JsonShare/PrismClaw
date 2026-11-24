@@ -9,12 +9,13 @@ a single sub-agent execution run. Unlike the stateless
 - Resource cleanup via ``finally`` block
 - (Future) transcript persistence for resumption
 """
+
 from __future__ import annotations
 
 import logging
 
-from prismclaw.engine.subagent.core._lifecycle_mixin import LifecycleMixin
 from prismclaw.engine.subagent.core._context_mixin import ContextMixin
+from prismclaw.engine.subagent.core._lifecycle_mixin import LifecycleMixin
 from prismclaw.engine.subagent.core._loop_mixin import LoopMixin
 
 logger = logging.getLogger(__name__)

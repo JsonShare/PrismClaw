@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Any, Literal, Self
 
 from prismclaw.engine.subagent.core.contract import (
@@ -11,6 +12,7 @@ from prismclaw.schema.agent.data_types import ContentBlock
 from prismclaw.schema.agent.session import AgentMessageDict
 from prismclaw.schema.content.subagent import SubagentContextSnapshot
 from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.session.projection import SessionProjectionEngine
 from prismclaw.schema.session.types import (
     SUBAGENT_TOOL_EFFECT_CUSTOM_TYPE,
     CustomEntry,
@@ -105,19 +107,17 @@ class SubagentPersistence:
                 if isinstance(entry, MessageEntry) and entry.role in {"user", "assistant"}
             ]
             for source in inheritable[-max_inherit_messages:]:
-                metadata = dict(source.metadata or {})
-                metadata.update({"kind": "inherited", "source_entry_id": source.id})
+                inherited_metadata = dict(source.metadata or {})
+                inherited_metadata.update({"kind": "inherited", "source_entry_id": source.id})
                 entry = source.model_copy(deep=True)
                 # 父会话的 tool 结果不会一并继承；若保留 tool_calls，会生成
                 # 「assistant 带 tool_calls 但缺少对应 tool 消息」的非法序列。
-                entry = entry.model_copy(
-                    update={"tool_calls": None, "tool_call_id": None}
-                )
+                entry = entry.model_copy(update={"tool_calls": None, "tool_call_id": None})
                 entry.id = generate_entry_id(existing_ids)
                 existing_ids.add(entry.id)
                 entry.parent_id = entries[-1].id if entries else self.tree.leaf_id
                 entry.seq = 0
-                entry.metadata = metadata
+                entry.metadata = inherited_metadata
                 entries.append(entry)
 
         snapshot = (
@@ -147,16 +147,15 @@ class SubagentPersistence:
     async def refresh(self) -> None:
         tree = await self._session_store.load(self.child_session_id)
         if tree is None:
-            raise ValueError(
-                f"subagent child session {self.child_session_id!r} was not found"
-            )
+            raise ValueError(f"subagent child session {self.child_session_id!r} was not found")
         self.tree = tree
 
     async def commit_entries(
         self,
-        entries: list[MessageEntry | CustomEntry],
+        entries: Sequence[MessageEntry | CustomEntry],
     ) -> list[MessageEntry | CustomEntry]:
         """Commit a linear entry batch and update the in-memory child projection."""
+        entries = list(entries)
         events = []
         parent_id = self.tree.leaf_id
         for entry in entries:
@@ -321,7 +320,7 @@ class SubagentPersistence:
         return entry
 
     def rebuild_model_messages(self) -> list[AgentMessageDict]:
-        return self.tree.build_runtime_messages()
+        return SessionProjectionEngine(self.tree).messages.build_runtime_messages()
 
     def get_unacked_user_messages(self) -> list[MessageEntry]:
         acked: set[str] = set()

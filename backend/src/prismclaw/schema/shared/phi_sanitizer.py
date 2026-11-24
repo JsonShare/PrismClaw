@@ -9,6 +9,7 @@
 
 性能目标：P99 ≤ 5ms/1KB 文本。
 """
+
 from __future__ import annotations
 
 import re
@@ -19,109 +20,155 @@ from prismclaw.schema.shared._phi_pattern_registry import get_domain_phi_pattern
 
 _CORE_PII_PATTERNS: list[tuple[str, re.Pattern[str], str]] = [
     # 1. 姓名：通用前缀（姓名/Name），其余前缀由域 bundle 注册
-    ("NAME", re.compile(
-        r'(?:姓名)[：:]\s*[\u4e00-\u9fff]{2,4}'
-        r'|'
-        r'(?:Name)\s*[:：]\s*[A-Z][a-z]+\s+[A-Z][a-z]+',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_NAME]"),
-
+    (
+        "NAME",
+        re.compile(
+            r"(?:姓名)[：:]\s*[\u4e00-\u9fff]{2,4}"
+            r"|"
+            r"(?:Name)\s*[:：]\s*[A-Z][a-z]+\s+[A-Z][a-z]+",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_NAME]",
+    ),
     # 2. SSN
-    ("SSN", re.compile(
-        r'(?:SSN|Social Security|社保号|身份证号|身份證號|社保卡号)[-\s:]?\d{3}[-\s]?\d{2}[-\s]?\d{4}\b'
-    ), "[PHI_REDACTED_SSN]"),
-
+    (
+        "SSN",
+        re.compile(
+            r"(?:SSN|Social Security|社保号|身份证号|身份證號|社保卡号)"
+            r"[-\s:]?\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"
+        ),
+        "[PHI_REDACTED_SSN]",
+    ),
     # 3. 出生日期
-    ("DOB", re.compile(
-        r'(?:出生日期|生日|DOB|Date of Birth|Birth Date|Birthdate)[：:]\s*'
-        r'\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_DOB]"),
-
+    (
+        "DOB",
+        re.compile(
+            r"(?:出生日期|生日|DOB|Date of Birth|Birth Date|Birthdate)[：:]\s*"
+            r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_DOB]",
+    ),
     # 4. 电话号码
-    ("PHONE", re.compile(
-        r'\b1[3-9]\d{9}\b'
-        r'|'
-        r'\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b'
-        r'|'
-        r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'
-        r'|'
-        r'(?:电话|手机|联系方式|Phone|Tel|Mobile)[：:]\s*[\d\-\s+]{7,20}',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_PHONE]"),
-
+    (
+        "PHONE",
+        re.compile(
+            r"\b1[3-9]\d{9}\b"
+            r"|"
+            r"\b\(\d{3}\)\s*\d{3}[-.]?\d{4}\b"
+            r"|"
+            r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b"
+            r"|"
+            r"(?:电话|手机|联系方式|Phone|Tel|Mobile)[：:]\s*[\d\-\s+]{7,20}",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_PHONE]",
+    ),
     # 5. FAX 传真号码
-    ("FAX", re.compile(
-        r'(?:传真|传真号|传真号码|Fax|Fax Number|FAX)[-\s：:]*[\d\-\s+]{7,20}',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_FAX]"),
-
+    (
+        "FAX",
+        re.compile(
+            r"(?:传真|传真号|传真号码|Fax|Fax Number|FAX)[-\s：:]*[\d\-\s+]{7,20}", re.IGNORECASE
+        ),
+        "[PHI_REDACTED_FAX]",
+    ),
     # 6. 邮箱地址
-    ("EMAIL", re.compile(
-        r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-    ), "[PHI_REDACTED_EMAIL]"),
-
+    (
+        "EMAIL",
+        re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+        "[PHI_REDACTED_EMAIL]",
+    ),
     # 7. 地址
-    ("ADDRESS", re.compile(
-        r'(?:地址|住址|Address|Addr)[：:]\s*[\u4e00-\u9fff\w\s\d号楼\d号]{5,100}'
-        r'|'
-        r'\b\d+\s+[A-Z][a-z]+\s+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct)\.?\s*,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_ADDRESS]"),
-
+    (
+        "ADDRESS",
+        re.compile(
+            r"(?:地址|住址|Address|Addr)[：:]\s*[\u4e00-\u9fff\w\s\d号楼\d号]{5,100}"
+            r"|"
+            r"\b\d+\s+[A-Z][a-z]+\s+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Road|Rd|Lane|Ln|Drive|Dr|Court|Ct)\.?\s*,?\s*[A-Z]{2}\s+\d{5}(?:-\d{4})?\b",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_ADDRESS]",
+    ),
     # 8. 身份证号
-    ("ID_CARD", re.compile(
-        r'\b(?:身份证|身份证号|ID Card|ID Number)[：:]\s*\d{15}(\d{2}[0-9Xx])?\b'
-        r'|'
-        r'\b\d{17}[\dXx]\b'
-    ), "[PHI_REDACTED_ID_CARD]"),
-
+    (
+        "ID_CARD",
+        re.compile(
+            r"\b(?:身份证|身份证号|ID Card|ID Number)[：:]\s*\d{15}(\d{2}[0-9Xx])?\b"
+            r"|"
+            r"\b\d{17}[\dXx]\b"
+        ),
+        "[PHI_REDACTED_ID_CARD]",
+    ),
     # 9. 年龄≥89
-    ("AGE_89", re.compile(
-        r'(?:年龄|Age)[：:]\s*(?:9[0-9]|\d{3,})\s*(?:岁|years|yrs?)?'
-        r'|'
-        r'\b年龄[：:]\s*89岁?\b',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_AGE]"),
-
+    (
+        "AGE_89",
+        re.compile(
+            r"(?:年龄|Age)[：:]\s*(?:9[0-9]|\d{3,})\s*(?:岁|years|yrs?)?"
+            r"|"
+            r"\b年龄[：:]\s*89岁?\b",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_AGE]",
+    ),
     # 10. 车牌号
-    ("PLATE", re.compile(
-        r'(?:车牌号|车牌|License Plate|Plate No)[：:]\s*[\u4e00-\u9fff][A-Z][A-Z0-9]{5,6}'
-        r'|'
-        r'\b[\u4e00-\u9fff][A-Z][A-Z0-9]{5,6}\b'
-    ), "[PHI_REDACTED_PLATE]"),
-
+    (
+        "PLATE",
+        re.compile(
+            r"(?:车牌号|车牌|License Plate|Plate No)[：:]\s*[\u4e00-\u9fff][A-Z][A-Z0-9]{5,6}"
+            r"|"
+            r"\b[\u4e00-\u9fff][A-Z][A-Z0-9]{5,6}\b"
+        ),
+        "[PHI_REDACTED_PLATE]",
+    ),
     # 11. 设备ID
-    ("DEVICE", re.compile(
-        r'(?:设备ID|设备编号|Device ID|Device SN|Serial Number)[：:]\s*[A-Za-z0-9\-_]{4,30}'
-    ), "[PHI_REDACTED_DEVICE]"),
-
+    (
+        "DEVICE",
+        re.compile(
+            r"(?:设备ID|设备编号|Device ID|Device SN|Serial Number)[：:]\s*[A-Za-z0-9\-_]{4,30}"
+        ),
+        "[PHI_REDACTED_DEVICE]",
+    ),
     # 12. IP 地址
-    ("IP", re.compile(
-        r'\b(?!10\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})'
-        r'(?!192\.168\.\d{1,3}\.\d{1,3})(?!127\.\d{1,3}\.\d{1,3}\.\d{1,3})'
-        r'(?:\d{1,3}\.){3}\d{1,3}\b'
-    ), "[PHI_REDACTED_IP]"),
-
+    (
+        "IP",
+        re.compile(
+            r"\b(?!10\.\d{1,3}\.\d{1,3}\.\d{1,3})(?!172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})"
+            r"(?!192\.168\.\d{1,3}\.\d{1,3})(?!127\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+            r"(?:\d{1,3}\.){3}\d{1,3}\b"
+        ),
+        "[PHI_REDACTED_IP]",
+    ),
     # 13. 生物标识
-    ("BIOMETRIC", re.compile(
-        r'(?:指纹|虹膜|面部识别|声纹|DNA|Fingerprint|Iris|Facial Recognition|Voiceprint|Biometric)[：:]\s*[A-Za-z0-9\-_=+/]{4,100}',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_BIOMETRIC]"),
-
+    (
+        "BIOMETRIC",
+        re.compile(
+            r"(?:指纹|虹膜|面部识别|声纹|DNA|Fingerprint|Iris|Facial Recognition"
+            r"|Voiceprint|Biometric)[：:]\s*[A-Za-z0-9\-_=+/]{4,100}",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_BIOMETRIC]",
+    ),
     # 14. 银行账号/卡号
-    ("BANK_ACCOUNT", re.compile(
-        r'(?:银行账号|银行卡号|账户号|卡号|Bank Account|Account Number|Card Number|IBAN|SWIFT)[-\s：:]*[\d]{8,34}'
-        r'|'
-        r'\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_BANK_ACCOUNT]"),
-
+    (
+        "BANK_ACCOUNT",
+        re.compile(
+            r"(?:银行账号|银行卡号|账户号|卡号|Bank Account|Account Number"
+            r"|Card Number|IBAN|SWIFT)[-\s：:]*[\d]{8,34}"
+            r"|"
+            r"\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_BANK_ACCOUNT]",
+    ),
     # 15. 照片/图像 base64 嵌入
-    ("PHOTO_HASH", re.compile(
-        r'(?:data:image/(?:png|jpeg|jpg|gif|webp|bmp);base64,)[A-Za-z0-9+/=]{100,}',
-        re.IGNORECASE
-    ), "[PHI_REDACTED_PHOTO_HASH]"),
+    (
+        "PHOTO_HASH",
+        re.compile(
+            r"(?:data:image/(?:png|jpeg|jpg|gif|webp|bmp);base64,)[A-Za-z0-9+/=]{100,}",
+            re.IGNORECASE,
+        ),
+        "[PHI_REDACTED_PHOTO_HASH]",
+    ),
 ]
 
 

@@ -10,10 +10,10 @@ is idempotent, a re-click recovers cleanly.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import tempfile
-
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -42,9 +42,7 @@ def materialize_file(workspace_path: Path, path: str, content: bytes | None) -> 
             os.fsync(f.fileno())
         os.replace(tmp_name, full)
     except OSError:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         logger.error("materializer.write_failed", exc_info=True)
         raise

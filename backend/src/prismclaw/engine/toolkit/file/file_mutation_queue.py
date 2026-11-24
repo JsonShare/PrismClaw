@@ -4,21 +4,20 @@ Provides in-process serialization of write/edit operations targeting the
 same file. Cross-process safety relies on atomic write (write-to-temp +
 rename) combined with read_epoch optimistic concurrency checks.
 """
+
 from __future__ import annotations
 
 import asyncio
 import os
 from collections.abc import Awaitable, Callable
-from typing import Any
-
 
 _mutation_queues: dict[str, asyncio.Lock] = {}
 
 
-async def with_file_mutation_queue(
+async def with_file_mutation_queue[T](
     file_path: str,
-    fn: Callable[[], Awaitable[Any]],
-) -> Any:
+    fn: Callable[[], Awaitable[T]],
+) -> T:
     """Execute fn while holding a per-file lock.
 
     Uses workspace-relative path normalization (not os.path.realpath) to

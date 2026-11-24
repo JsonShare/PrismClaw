@@ -1,10 +1,11 @@
 """插件安装状态持久化。"""
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -17,7 +18,7 @@ _INSTALLED_FILE_VERSION = 1
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class InstalledPlugin(BaseModel):

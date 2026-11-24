@@ -18,19 +18,20 @@ import hashlib
 import logging
 import threading
 from pathlib import Path
+from typing import Any
 
 from prismclaw.engine.review.content_store import (
     ContentRef,
     FileSystemContentStore,
 )
-from prismclaw.schema.agent.review_errors import (
-    ReconcileConflict,
-    ReviewSetNotFound,
-)
 from prismclaw.engine.review.events import ReviewDecision, ReviewEvent
 from prismclaw.engine.review.materializer import materialize_file
 from prismclaw.engine.review.reconcile import ReconcileState, reconcile
 from prismclaw.engine.review.review_set import ReviewSet
+from prismclaw.schema.agent.review_errors import (
+    ReconcileConflictError,
+    ReviewSetNotFoundError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,28 +79,34 @@ class ReviewRegistry:
             if path not in rs.baseline:
                 base_ref = self._content.put(before_content) if before_content is not None else None
                 rs.snapshot_baseline(path, base_ref.ref if base_ref is not None else None)
-                self._append(ReviewEvent(
-                    review_set_id=rs.id, kind="baseline",
-                    payload={"path": path, "content_ref": base_ref.ref if base_ref else None},
-                ))
+                self._append(
+                    ReviewEvent(
+                        review_set_id=rs.id,
+                        kind="baseline",
+                        payload={"path": path, "content_ref": base_ref.ref if base_ref else None},
+                    )
+                )
             after_ref = self._content.put(after_content)
             rs.record_revision(path, after_ref.ref, after_ref.sha256)
-            self._append(ReviewEvent(
-                review_set_id=rs.id, kind="revision",
-                payload={
-                    "path": path,
-                    "content_ref": after_ref.ref,
-                    "sha256": after_ref.sha256,
-                    "session_id": session_id,
-                    "tool_call_id": tool_call_id,
-                    "is_binary": is_binary,
-                },
-            ))
+            self._append(
+                ReviewEvent(
+                    review_set_id=rs.id,
+                    kind="revision",
+                    payload={
+                        "path": path,
+                        "content_ref": after_ref.ref,
+                        "sha256": after_ref.sha256,
+                        "session_id": session_id,
+                        "tool_call_id": tool_call_id,
+                        "is_binary": is_binary,
+                    },
+                )
+            )
 
-    def reject_path(self, conversation_id: str, path: str, force: bool = False) -> dict:
+    def reject_path(self, conversation_id: str, path: str, force: bool = False) -> dict[str, Any]:
         """Reject one file: return it to its recorded baseline.
 
-        Raises ReconcileConflict if the live file drifted and ``force`` is False.
+        Raises ReconcileConflictError if the live file drifted and ``force`` is False.
         A new file (baseline None) is deleted.
         """
         with self._lock:
@@ -108,7 +115,7 @@ class ReviewRegistry:
             current = self._current_sha(path)
             state = reconcile(current, expected)
             if state is ReconcileState.DRIFTED and not force:
-                raise ReconcileConflict(path, current, expected)
+                raise ReconcileConflictError(path, current, expected)
 
             base_ref = rs.baseline_ref(path)
             if base_ref is None:
@@ -120,39 +127,51 @@ class ReviewRegistry:
                 reverted_sha = base_ref.split("/")[-1]
 
             rs.set_decision(path, "rejected")
-            self._append(ReviewEvent(
-                review_set_id=rs.id, kind="decision",
-                payload={"path": path, "decision": "rejected"},
-            ))
-            self._append(ReviewEvent(
-                review_set_id=rs.id, kind="materialized",
-                payload={"path": path, "action": "reject", "sha256": reverted_sha},
-            ))
+            self._append(
+                ReviewEvent(
+                    review_set_id=rs.id,
+                    kind="decision",
+                    payload={"path": path, "decision": "rejected"},
+                )
+            )
+            self._append(
+                ReviewEvent(
+                    review_set_id=rs.id,
+                    kind="materialized",
+                    payload={"path": path, "action": "reject", "sha256": reverted_sha},
+                )
+            )
             return {"status": "ok", "path": path, "before_sha": reverted_sha}
 
     def confirm_path(self, conversation_id: str, path: str) -> None:
         with self._lock:
             rs = self._require(conversation_id)
             rs.set_decision(path, "accepted")
-            self._append(ReviewEvent(
-                review_set_id=rs.id, kind="decision",
-                payload={"path": path, "decision": "accepted"},
-            ))
+            self._append(
+                ReviewEvent(
+                    review_set_id=rs.id,
+                    kind="decision",
+                    payload={"path": path, "decision": "accepted"},
+                )
+            )
 
     def set_decision(self, conversation_id: str, path: str, decision: ReviewDecision) -> None:
         with self._lock:
             rs = self._require(conversation_id)
             rs.set_decision(path, decision)
-            self._append(ReviewEvent(
-                review_set_id=rs.id, kind="decision",
-                payload={"path": path, "decision": decision},
-            ))
+            self._append(
+                ReviewEvent(
+                    review_set_id=rs.id,
+                    kind="decision",
+                    payload={"path": path, "decision": decision},
+                )
+            )
 
     # -- internals -------------------------------------------------------
     def _require(self, conversation_id: str) -> ReviewSet:
         rs = self.get_or_open(conversation_id)
         if not rs.baseline and not rs.head:
-            raise ReviewSetNotFound(f"no review set for conversation {conversation_id}")
+            raise ReviewSetNotFoundError(f"no review set for conversation {conversation_id}")
         return rs
 
     def _current_sha(self, path: str) -> str | None:

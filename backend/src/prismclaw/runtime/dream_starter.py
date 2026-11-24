@@ -1,24 +1,34 @@
 """Dream dispatch 启动服务 — 从 wiring/bundles/runtime.py 迁出"""
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable, NamedTuple
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prismclaw.assembly.bundles_data import AppInfrastructureBundle
+    from prismclaw.engine.dream.dispatch.dispatch import DreamDispatchConsumer
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.infra.settings import Settings
+
 
 class DreamStartResult(NamedTuple):
-    dream_dispatch_consumer: Any = None
-    dream_dispatch_health_task_id: Any = None
+    dream_dispatch_consumer: DreamDispatchConsumer | None = None
+    dream_dispatch_health_task_id: str | None = None
 
 
 async def start_dream_dispatch_if_available(
     *,
-    app: Any,
-    runner_deps: Any,
-    infra: Any,
-    settings: Any,
-    dream_health_loop: Callable[..., Awaitable[None]],
+    app: FastAPI,
+    runner_deps: AgentRunnerDeps,
+    infra: AppInfrastructureBundle,
+    settings: Settings,
+    dream_health_loop: Callable[..., Coroutine[Any, Any, None]],
     dream_health_interval_s: float,
 ) -> DreamStartResult:
     """启动 dream dispatch consumer 和 health loop（如果配置启用且前置条件满足）"""
@@ -27,7 +37,7 @@ async def start_dream_dispatch_if_available(
     dream_dispatch_consumer = None
     dream_dispatch_health_task_id = None
 
-    dream_boundary = getattr(runner_deps.dream, "boundary", None) if runner_deps.dream else None
+    dream_boundary = runner_deps.dream.boundary
     process_job = getattr(dream_boundary, "run_dispatched_job", None)
     if callable(process_job) and infra.dream_dispatch_queue is not None:
         dream_dispatch_consumer = DreamDispatchConsumer(

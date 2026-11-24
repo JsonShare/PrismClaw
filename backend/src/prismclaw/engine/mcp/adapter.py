@@ -36,15 +36,15 @@ import anyio
 import mcp.types as mcp_types
 from mcp.shared.exceptions import MCPError
 
-from prismclaw.schema.shared.exceptions import MCPServerDeadError
 from prismclaw.engine.mcp.settings import McpServerConfig
-from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.agent.data_types import ImageBlock, TextBlock
 from prismclaw.schema.content.content_types import (
     FileChangeEntry,
     ReferenceArtifact,
+    ToolResult,
     UiArtifact,
 )
+from prismclaw.schema.shared.exceptions import MCPServerDeadError
 
 if TYPE_CHECKING:
     from mcp.client.session_group import ClientSessionGroup
@@ -91,15 +91,15 @@ def _derive_tool_class(
 
 
 def _convert_content_block(
-    block: Any,
+    block: mcp_types.ContentBlock,
 ) -> TextBlock | ImageBlock:
     if isinstance(block, mcp_types.TextContent):
         return TextBlock(text=block.text)
     if isinstance(block, mcp_types.ImageContent):
-        return ImageBlock(data=block.data, mime_type=block.mimeType)
+        return ImageBlock(data=block.data, mime_type=block.mime_type)
     if isinstance(block, mcp_types.AudioContent):
         size = len(block.data) if block.data else 0
-        return TextBlock(text=f"[audio: {size} bytes, {block.mimeType}]")
+        return TextBlock(text=f"[audio: {size} bytes, {block.mime_type}]")
     if isinstance(block, mcp_types.EmbeddedResource):
         uri = getattr(getattr(block, "resource", None), "uri", "<unknown>")
         return TextBlock(text=f"[resource: {uri}]")
@@ -151,24 +151,22 @@ class MCPToolAdapter:
         self.tool_class = _derive_tool_class(self.server_config, self.remote_tool.annotations)
         self.side_effect = self.tool_class != "read"
         self.is_concurrency_safe = self.tool_class == "read"
-        self.deferred = self.server_config.deferred  # default True; core servers (e.g. web-search) opt out
+        self.deferred = (
+            self.server_config.deferred
+        )  # default True; core servers (e.g. web-search) opt out
         self._sdk_key = self.sdk_key
 
-    async def execute(self, args: dict[str, Any], context: Any) -> ToolResult:
+    async def execute(self, args: dict[str, Any], context: object) -> ToolResult:
         call_id = getattr(context, "tool_call_id", "") or ""
         timeout_s = self.server_config.call_timeout_seconds
         try:
             async with asyncio.timeout(timeout_s):
-                result: mcp_types.CallToolResult = await self.group.call_tool(
-                    self._sdk_key, args
-                )
-        except asyncio.TimeoutError:
+                result: mcp_types.CallToolResult = await self.group.call_tool(self._sdk_key, args)
+        except TimeoutError:
             self._note_result("timeout", detail=f"timed out after {timeout_s}s")
             return ToolResult(
                 tool_call_id=call_id,
-                content=[
-                    TextBlock(text=f"MCP tool {self.name!r} timed out after {timeout_s}s")
-                ],
+                content=[TextBlock(text=f"MCP tool {self.name!r} timed out after {timeout_s}s")],
                 is_error=True,
                 error_origin="external",
             )
@@ -178,9 +176,7 @@ class MCPToolAdapter:
         except OSError as exc:
             if _is_broken_pipe_oserror(exc):
                 self._note_result("server_dead", detail=f"OSError errno={exc.errno}")
-                raise MCPServerDeadError(
-                    self.server_name, f"OSError errno={exc.errno}"
-                ) from exc
+                raise MCPServerDeadError(self.server_name, f"OSError errno={exc.errno}") from exc
             self._note_result("error", detail=f"OSError: {exc}")
             return ToolResult(
                 tool_call_id=call_id,
@@ -227,7 +223,9 @@ class MCPToolAdapter:
                 )
 
         # mcp SDK v1 把 CallToolResult.is_error 改成 isError（camelCase），加兼容读取
-        _result_is_error = bool(getattr(result, "is_error", None) or getattr(result, "isError", False))
+        _result_is_error = bool(
+            getattr(result, "is_error", None) or getattr(result, "isError", False)
+        )
         tool_result = ToolResult(
             tool_call_id=call_id,
             content=blocks or [TextBlock(text="")],

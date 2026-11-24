@@ -14,6 +14,7 @@
 
 进度写入用 update_report，user_id 一律 "system"：后台任务没有用户上下文。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -64,8 +65,7 @@ async def run_parse_pipeline(
     ocr_sem / llm_sem 为 None 时行为不变（向后兼容）。
     """
     try:
-        await _run(store, report_id, llm=llm, vision=vision,
-                   ocr_sem=ocr_sem, llm_sem=llm_sem)
+        await _run(store, report_id, llm=llm, vision=vision, ocr_sem=ocr_sem, llm_sem=llm_sem)
     except Exception as exc:  # noqa: BLE001
         logger.exception("病历解析失败 report_id=%s", report_id)
         await _fail(store, report_id, f"{type(exc).__name__}: {exc}")
@@ -100,7 +100,11 @@ async def _run(
         await _advance(store, report_id, ReportStatus.OCR.value, ocr_progress)
 
     raw_text, err = await extract_mod.extract_text(
-        data, filename, ocr=ocr, ocr_sem=_ocr_sem, on_page_done=_on_page_done,
+        data,
+        filename,
+        ocr=ocr,
+        ocr_sem=_ocr_sem,
+        on_page_done=_on_page_done,
     )
     if err:
         await _fail(store, report_id, err)
@@ -128,7 +132,10 @@ async def _run(
     meta = normalize_metadata(meta_raw or {})
     logger.info(
         "报告 %s 元数据：type=%s date=%s patient=%s",
-        report_id, meta["report_type"], meta["visit_date"], meta["patient_name"],
+        report_id,
+        meta["report_type"],
+        meta["visit_date"],
+        meta["patient_name"],
     )
 
     # ── 阶段 3：临床结构化（失败降级为空，保住原文）
@@ -144,9 +151,7 @@ async def _run(
 
     # ── 阶段 4：患者归属
     await _advance(store, report_id, ReportStatus.EXTRACT.value, 90)
-    candidates = await store.list_patient_candidates(
-        create_by=str(row.get("create_by") or "")
-    )
+    candidates = await store.list_patient_candidates(create_by=str(row.get("create_by") or ""))
     # 患者姓名：LLM 提取优先，为空时从文件名补充
     patient_name = meta["patient_name"]
     if not patient_name:
@@ -161,7 +166,9 @@ async def _run(
         age=meta["patient_age"],
     )
     logger.info(
-        "报告 %s 归属判定：%s (%s)", report_id, matched["reason"],
+        "报告 %s 归属判定：%s (%s)",
+        report_id,
+        matched["reason"],
         MATCH_REASON_TEXT.get(matched["reason"], ""),
     )
 
@@ -260,11 +267,13 @@ async def _fail(store: MedicalStore, report_id: str, reason: str) -> None:
 
 async def _finish(store: MedicalStore, report_id: str, patch: dict[str, Any]) -> None:
     patch = dict(patch)
-    patch.update({
-        "status": ReportStatus.PARSED.value,
-        "progress": 100,
-        "error_message": "",
-        "retry_count": 0,
-        "finished_at": datetime.utcnow(),
-    })
+    patch.update(
+        {
+            "status": ReportStatus.PARSED.value,
+            "progress": 100,
+            "error_message": "",
+            "retry_count": 0,
+            "finished_at": datetime.utcnow(),
+        }
+    )
     await store.update_report(report_id, patch, user_id="system")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from prismclaw.engine.mcp.settings import (
     _substitute_env_placeholder,
@@ -28,7 +27,7 @@ def _is_unfilled_placeholder(value: str) -> bool:
     return bool(text) and bool(_UNFILLED_PLACEHOLDER_RE.match(text))
 
 
-def _render_prompt_result_text(result: Any) -> str:
+def _render_prompt_result_text(result: object) -> str:
     """Render an MCP ``GetPromptResult`` into plain instruction text.
 
     Concatenates the text content of every prompt message; non-text content
@@ -56,5 +55,5 @@ class _ToolRegistryProto:
     methods MCPClientManager actually calls on the registry.
     """
 
-    def register(self, adapter: Any) -> None: ...
+    def register(self, adapter: object) -> None: ...
     def unregister(self, name: str) -> None: ...

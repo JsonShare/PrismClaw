@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Literal
+
 try:
     from typing import Self
 except ImportError:
-    from typing_extensions import Self
+    from typing import Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -16,7 +17,9 @@ logger = logging.getLogger(__name__)
 # The old dual-copy cycle is resolved by making _preservation_rules.py
 # a pure-constants module with no internal imports.
 try:
-    from prismclaw.engine.compression._preservation_rules import IDENTIFIER_PRESERVATION_INSTRUCTIONS
+    from prismclaw.engine.compression._preservation_rules import (
+        IDENTIFIER_PRESERVATION_INSTRUCTIONS,
+    )
 except ImportError:
     # Schema layer may load before engine layer in some test/CLI paths
     IDENTIFIER_PRESERVATION_INSTRUCTIONS = (
@@ -39,7 +42,9 @@ class TimeoutConfig(BaseModel):
     )
     tool_seconds: float = Field(
         default=120.0,
-        description="Default per-tool execution cap when tool does not declare its own. 0 disables.",
+        description=(
+            "Default per-tool execution cap when tool does not declare its own. 0 disables."
+        ),
     )
 
 
@@ -76,23 +81,31 @@ class SoftBudgetConfig(BaseModel):
         default=0.9,
         ge=0.0,
         le=1.0,
-        description="Soft warning threshold. Above this ratio, a budget warning is injected into the next turn.",
+        description=(
+            "Soft warning threshold. Above this ratio, a budget warning is injected into the next "
+            "turn."
+        ),
     )
     terminate_ratio: float = Field(
         default=0.95,
         ge=0.0,
         le=1.0,
-        description="Hard soft-degrade threshold. Above this ratio, the turn must wrap instead of starting new work.",
+        description=(
+            "Hard soft-degrade threshold. Above this ratio, the turn must wrap instead of starting "
+            "new work."
+        ),
     )
     warning_template: str = Field(
         default=(
-            "<budget_warning ratio=\"{ratio:.0%}\">\n"
+            '<budget_warning ratio="{ratio:.0%}">\n'
             "你已使用有效上下文窗口的 {ratio:.0%}。"
             "请完成当前步骤，返回结果后停止。"
             "不要开始新的探索；除非绝对必要，不要调用更多工具。\n"
             "</budget_warning>"
         ),
-        description="Template rendered into the system message when the warning threshold is crossed.",
+        description=(
+            "Template rendered into the system message when the warning threshold is crossed."
+        ),
     )
 
     @model_validator(mode="after")
@@ -163,7 +176,10 @@ class PerResultSummaryConfig(BaseModel):
     threshold_chars: int = Field(
         default=8_000,
         ge=1,
-        description="Only invoke the per-result summarizer when the raw result is at least this many characters.",
+        description=(
+            "Only invoke the per-result summarizer when the raw result is at least this many "
+            "characters."
+        ),
     )
     excluded_tools: tuple[str, ...] = Field(
         default=("Bash",),
@@ -210,7 +226,10 @@ class CompactPromptConfig(BaseModel):
     )
     strip_analysis_block: bool = Field(
         default=True,
-        description="If True, the <analysis>...</analysis> block is removed from the LLM output before storage.",
+        description=(
+            "If True, the <analysis>...</analysis> block is removed from the LLM output before "
+            "storage."
+        ),
     )
     enabled: bool = Field(
         default=True,
@@ -267,9 +286,12 @@ class HistoryCompactionConfig(BaseModel):
     summary_output_token_cap: int = Field(
         default=20_000,
         ge=1,
-        description="Cap on the output reservation subtracted from the model's advertised context window when computing the effective budget.",
+        description=(
+            "Cap on the output reservation subtracted from the model's advertised context window "
+            "when computing the effective budget."
+        ),
     )
-    prompt: "CompactPromptConfig" = Field(
+    prompt: CompactPromptConfig = Field(
         default_factory=lambda: CompactPromptConfig(),
         description="9 章节压缩摘要模板配置。覆写可使用领域专用模板；None 时使用内置默认模板。",
     )
@@ -281,15 +303,15 @@ class HistoryCompactionConfig(BaseModel):
         default=3,
         ge=1,
         description="Predictive compaction: how many turns ahead to project. "
-                    "When recent history growth suggests the trigger budget will be "
-                    "reached within this horizon, compaction is initiated proactively.",
+        "When recent history growth suggests the trigger budget will be "
+        "reached within this horizon, compaction is initiated proactively.",
     )
     predictive_min_samples: int = Field(
         default=4,
         ge=2,
         description="Predictive compaction: minimum history_tokens snapshots required "
-                    "before prediction is attempted. Prevents premature triggers from "
-                    "insufficient data.",
+        "before prediction is attempted. Prevents premature triggers from "
+        "insufficient data.",
     )
 
 
@@ -302,15 +324,21 @@ class ToolResultCompactionConfig(BaseModel):
         default=8000,
         ge=1,
         description="Per-result inline char cap. Single source of truth for result truncation; "
-                    "per-tool max_output_chars attribute still overrides when present.",
+        "per-tool max_output_chars attribute still overrides when present.",
     )
     aggregate_char_budget: int | None = Field(
         default=None,
-        description="Explicit aggregate char budget for all tool results in one turn. None derives from context.budget.dynamic_zone_tokens.",
+        description=(
+            "Explicit aggregate char budget for all tool results in one turn. None derives from "
+            "context.budget.dynamic_zone_tokens."
+        ),
     )
-    per_result_summary: "PerResultSummaryConfig" = Field(
+    per_result_summary: PerResultSummaryConfig = Field(
         default_factory=lambda: PerResultSummaryConfig(),
-        description="Per-result LLM summarization thresholds. Closes the per-result character-truncation gray zone.",
+        description=(
+            "Per-result LLM summarization thresholds. Closes the per-result character-truncation "
+            "gray zone."
+        ),
     )
 
 
@@ -321,13 +349,19 @@ class ContextBlockBudgetConfig(BaseModel):
 
     chars: int | None = Field(
         default=None,
-        description="Explicit aggregate char budget for context blocks. None derives from the current token budget.",
+        description=(
+            "Explicit aggregate char budget for context blocks. None derives from the current "
+            "token budget."
+        ),
     )
     ratio: float = Field(
         default=0.6,
         ge=0.0,
         le=1.0,
-        description="Share of dynamic token budget reserved for context blocks when no explicit chars budget is provided.",
+        description=(
+            "Share of dynamic token budget reserved for context blocks when no explicit chars "
+            "budget is provided."
+        ),
     )
 
 
@@ -343,15 +377,21 @@ class CompactionSafetyConfig(BaseModel):
     )
     enable_autocompact_breaker: bool = Field(
         default=FLAG_AUTOCOMPACT_BREAKER_DEFAULT,
-        description="Kill switch. Default on. When False, do not enforce the consecutive-failure breaker; compaction is retried indefinitely.",
+        description=(
+            "Kill switch. Default on. When False, do not enforce the consecutive-failure breaker; "
+            "compaction is retried indefinitely."
+        ),
     )
-    soft_budget: "SoftBudgetConfig" = Field(
+    soft_budget: SoftBudgetConfig = Field(
         default_factory=lambda: SoftBudgetConfig(),
         description="软降级阈值配置。默认 90% 警告 / 95% 强制收尾。",
     )
     enable_soft_budget: bool = Field(
         default=FLAG_SOFT_BUDGET_DEFAULT,
-        description="Kill switch. Default on. When False, do not inject soft-budget warnings or escalate at the terminate ratio.",
+        description=(
+            "Kill switch. Default on. When False, do not inject soft-budget warnings or escalate "
+            "at the terminate ratio."
+        ),
     )
 
 
@@ -373,21 +413,23 @@ class CompactionConfig(BaseModel):
     )
     timeout_seconds: float = Field(
         default=900.0,
-        description="Safety timeout for a compaction attempt (mirrors timeouts.compaction_seconds).",
+        description=(
+            "Safety timeout for a compaction attempt (mirrors timeouts.compaction_seconds)."
+        ),
     )
-    history: "HistoryCompactionConfig" = Field(
+    history: HistoryCompactionConfig = Field(
         default_factory=lambda: HistoryCompactionConfig(),
         description="Whole-conversation history compaction settings.",
     )
-    tool_results: "ToolResultCompactionConfig" = Field(
+    tool_results: ToolResultCompactionConfig = Field(
         default_factory=lambda: ToolResultCompactionConfig(),
         description="Per-result + aggregate tool-result trimming (incl. disk persistence).",
     )
-    context_blocks: "ContextBlockBudgetConfig" = Field(
+    context_blocks: ContextBlockBudgetConfig = Field(
         default_factory=lambda: ContextBlockBudgetConfig(),
         description="Retrieval / document context-block budget.",
     )
-    safety: "CompactionSafetyConfig" = Field(
+    safety: CompactionSafetyConfig = Field(
         default_factory=lambda: CompactionSafetyConfig(),
         description="Circuit breaker, soft budget, and dynamic-budget governance.",
     )
@@ -405,7 +447,10 @@ class CompactionConfig(BaseModel):
         0.75,
         ge=0.0,
         le=1.0,
-        description="预测性压缩触发比例（占 history_budget）；90% 紧急阀与 100% 硬上限见 predict_compaction_trigger。",
+        description=(
+            "预测性压缩触发比例（占 history_budget）；90% 紧急阀与 100% 硬上限见 "
+            "predict_compaction_trigger。"
+        ),
     )
     chunk_token_budget: int = Field(
         8000,
@@ -524,12 +569,14 @@ class ContextBudgetConfig(BaseModel):
     )
     dynamic_zone_tokens: int = Field(
         default=4096,
-        description="Budget for user message injection area (working_memory, memory_context, etc.).",
+        description=(
+            "Budget for user message injection area (working_memory, memory_context, etc.)."
+        ),
     )
     output_reserve_tokens: int | None = Field(
         default=16_384,
         description="Tokens reserved for LLM output. Covers model max_output; "
-                    "None falls back to the active model's max_output_tokens.",
+        "None falls back to the active model's max_output_tokens.",
     )
     subcaps: SubcapsSettings = Field(default_factory=SubcapsSettings)
     # History-budget floor (SDD W15) — 原为模块级常量，现外置为配置字段。
@@ -537,15 +584,19 @@ class ContextBudgetConfig(BaseModel):
     history_floor_divisor: int = Field(4, ge=1)
 
     @model_validator(mode="after")
-    def _validate_zones(self) -> "ContextBudgetConfig":
+    def _validate_zones(self) -> ContextBudgetConfig:
         """固定分区之和不得超过窗口（分区溢出与显式预留溢出一并校验）。"""
         zones = self.system_zone_tokens + self.dynamic_zone_tokens
         if zones > self.window_tokens:
             raise ValueError(
-                f"context.budget zones ({zones}) exceed window_tokens ({self.window_tokens}): "
-                f"system_zone={self.system_zone_tokens} + dynamic_zone={self.dynamic_zone_tokens} = {zones}"
+                f"context.budget zones ({zones}) exceed window_tokens "
+                f"({self.window_tokens}): system_zone={self.system_zone_tokens} + "
+                f"dynamic_zone={self.dynamic_zone_tokens} = {zones}"
             )
-        if self.output_reserve_tokens is not None and zones + self.output_reserve_tokens > self.window_tokens:
+        if (
+            self.output_reserve_tokens is not None
+            and zones + self.output_reserve_tokens > self.window_tokens
+        ):
             total = zones + self.output_reserve_tokens
             raise ValueError(
                 f"context.budget zones ({total}) exceed window_tokens ({self.window_tokens}): "
@@ -586,9 +637,14 @@ class ContextBudgetConfig(BaseModel):
                 "tools_wire=%d). Compaction stays enabled but is more aggressive "
                 "than configured. Rebalance window_tokens/zones/reserve or shrink "
                 "the tool registry.",
-                floor, reserve, uncapped, remaining,
-                self.window_tokens, self.system_zone_tokens,
-                self.dynamic_zone_tokens, tools_wire_tokens,
+                floor,
+                reserve,
+                uncapped,
+                remaining,
+                self.window_tokens,
+                self.system_zone_tokens,
+                self.dynamic_zone_tokens,
+                tools_wire_tokens,
             )
             return floor
         return uncapped
@@ -631,6 +687,7 @@ class VisionConfig(BaseModel):
 
 class CuratorConfig(BaseModel):
     """Curator lifecycle management config."""
+
     model_config = {"populate_by_name": True}
     enabled: bool = True
     check_interval_seconds: int = Field(3600)
@@ -651,6 +708,7 @@ class CuratorConfig(BaseModel):
 
 class DreamConfig(BaseModel):
     """Dream consolidation config."""
+
     model_config = {"populate_by_name": True}
     enabled: bool = True
     idle_check_interval_seconds: int = Field(300)
@@ -678,6 +736,7 @@ class DreamConfig(BaseModel):
 
 class AffinityConfig(BaseModel):
     """Session affinity config."""
+
     model_config = {"populate_by_name": True}
     enabled: bool = False
     ttl_seconds: int = 300
@@ -723,6 +782,7 @@ class SubAgentConfig(BaseModel):
 
 class SandboxFilesystemRule(BaseModel):
     """Sandbox default filesystem access rules."""
+
     model_config = {"populate_by_name": True}
     allow_write: list[str] = Field(default_factory=list)
     deny_read: list[str] = Field(default_factory=list)
@@ -731,6 +791,7 @@ class SandboxFilesystemRule(BaseModel):
 
 class SandboxNetworkRule(BaseModel):
     """Sandbox default network access rules."""
+
     model_config = {"populate_by_name": True}
     allowed_domains: list[str] = Field(default_factory=list)
     denied_domains: list[str] = Field(
@@ -767,9 +828,7 @@ class RunBudgetConfig(BaseModel):
     hard_s 与 tool_calls 计算。
     """
 
-    steps: int = Field(
-        default=50, ge=1, description="Max LLM steps (stream_llm calls) per run."
-    )
+    steps: int = Field(default=50, ge=1, description="Max LLM steps (stream_llm calls) per run.")
     tool_calls: int = Field(
         default=24,
         ge=1,

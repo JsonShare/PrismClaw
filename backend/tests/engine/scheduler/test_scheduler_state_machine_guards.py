@@ -4,6 +4,7 @@
 范式降级后「读后即 ACK / 无租约 / 无执行超时 / 触发幂等」这些契约即使被删掉
 也不会有运行时报错，因此用真实源码文本 + 最小运行时探针把它们钉住。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -72,9 +73,7 @@ class _InMemoryStore:
     def __init__(self) -> None:
         self.runs: dict[str, dict] = {}
 
-    async def add_run(
-        self, run: ScheduledTaskRun, *, fired_task_id: str, fired_at: float
-    ) -> bool:
+    async def add_run(self, run: ScheduledTaskRun, *, fired_task_id: str, fired_at: float) -> bool:
         if run.id in self.runs:
             return False
         self.runs[run.id] = {"status": "pending"}
@@ -137,9 +136,7 @@ class _FakeSessionStore:
         agent_id: str,
         title: str,
     ) -> SimpleNamespace:
-        return SimpleNamespace(
-            header=SimpleNamespace(id=_generate_session_id(session_key))
-        )
+        return SimpleNamespace(header=SimpleNamespace(id=_generate_session_id(session_key)))
 
 
 def _engine(store: object, enqueue: object) -> SchedulerEngine:
@@ -202,9 +199,11 @@ def test_cron_fire_slot_is_raw_timestamp_not_jittered() -> None:
     eng = _engine(_InMemoryStore(), _noop_enqueue)
     raw = eng._cron_fire_timestamp(task)
     anchor = task.last_fired_at or task.created_at
-    recovered = croniter(
-        task.cron_expr, datetime.fromtimestamp(anchor).astimezone()
-    ).get_next(datetime).timestamp()
+    recovered = (
+        croniter(task.cron_expr, datetime.fromtimestamp(anchor).astimezone())
+        .get_next(datetime)
+        .timestamp()
+    )
     jittered = eng._compute_next_fire(task)
     assert raw == recovered
     assert raw != jittered

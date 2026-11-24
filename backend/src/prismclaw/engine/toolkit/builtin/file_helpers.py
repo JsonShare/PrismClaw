@@ -4,7 +4,12 @@ import difflib
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.toolkit.builtin.shared_tool_helpers import require_runtime, ws_kind, ws_root, sha256hex
+from prismclaw.engine.toolkit.builtin.shared_tool_helpers import (
+    require_runtime,
+    sha256hex,
+    ws_kind,
+    ws_root,
+)
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 
 
@@ -16,7 +21,9 @@ def session_root(ctx: ToolContext) -> Path | None:
     if not sid or not uid or not wid:
         return None
     from prismclaw.infra.workspace_paths import resolve_session_dir
+
     return resolve_session_dir(uid, wid, sid)
+
 
 # ─── Constants ────────────────────────────────────────────────────────
 
@@ -38,15 +45,33 @@ _BASH_STREAM_TAIL_CHARS = 4_000
 _READ_DEFAULT_PAGE_LINES = 2000
 
 # 二进制/Office 文件不能用文本 write/edit 生成：真 .docx/.xlsx/.pptx 是 zip 二进制、
-# .pdf 是二进制流；用 utf-8 文本写入只会产出「假文件」（内容是纯文本、后缀却是 .docx），
-# 前端 Office 预览按 OOXML(zip) 解析时必然失败（JSZip: "Can't find end of central
-# directory"）。硬拦截，把 Agent 导向正规路径：
+# .pdf 是二进制流、.odt/.ods/.odp/.epub/.ofd 是 zip 容器、.rtf 是带控制字的转义流、
+# .mhtml 是 MIME multipart；用 utf-8 文本写入只会产出「假文件」（内容是纯文本、
+# 后缀却是 .docx），前端预览按二进制解析时必然失败。
+# 硬拦截，把 Agent 导向正规路径：
 #   - 新建 .docx/.xlsx/.pptx → 使用已安装的 office 文件技能，或通过 bash 编程生成
 #   - 修改已存在的 office 文件 → read 工具读取 + bash 脚本编程修改
-_TEXT_WRITE_BLOCKED_EXTENSIONS = (".docx", ".xlsx", ".pptx", ".pdf", ".doc", ".xls", ".ppt")
+_TEXT_WRITE_BLOCKED_EXTENSIONS = (
+    ".docx",
+    ".xlsx",
+    ".pptx",
+    ".pdf",
+    ".doc",
+    ".xls",
+    ".ppt",
+    ".odt",
+    ".ods",
+    ".odp",
+    ".epub",
+    ".ofd",
+    ".rtf",
+    ".mhtml",
+    ".mht",
+)
 
 
 # ─── Binary write guard ──────────────────────────────────────────────
+
 
 def _blocked_binary_extension(path: str) -> str | None:
     """返回被拦截的二进制/Office 后缀（小写，含点），否则 None。"""
@@ -60,12 +85,12 @@ def _blocked_binary_extension(path: str) -> str | None:
 def _binary_write_guidance(verb: str, ext: str) -> str:
     """统一的拦截错误文案，指向办公技能或通用编程方式。"""
     return (
-        f"{verb}：拒绝把纯文本写入 '{ext}' 文件。真正的 "
-        f"{ext} 是二进制文档（Office 文件采用 zip/OOXML 结构），在此写入 "
-        f"UTF-8 文本会生成损坏的文件，既无法打开也无法预览。正确做法：\n"
+        f"{verb}：拒绝把纯文本写入 '{ext}' 文件。真正的 {ext} 是二进制文档"
+        f"（Office/ODF/EPUB 等采用 zip 容器结构），在此写入 UTF-8 文本会生成"
+        f"损坏的文件，既无法打开也无法预览。正确做法：\n"
         f"  • 新建 .docx/.xlsx/.pptx：使用已安装的办公文件技能"
         f"（如 docx、pptx、excel-analysis），或通过 bash 工具以编程方式生成。\n"
-        f"  • 修改已有的 .docx/.xlsx/.pptx：先用 read 工具读取，"
+        f"  • 修改已有的二进制文档：先用 read 工具读取，"
         f"再通过 bash 或 Python 脚本以编程方式编辑。\n"
         f"  • 若只需要纯文本/Markdown 交付物，请改用文本后缀（.md/.txt）写入。"
     )
@@ -87,19 +112,56 @@ _sha256hex = sha256hex
 
 _KIND_BY_EXT: dict[str, str] = {
     # code
-    ".py": "code", ".js": "code", ".ts": "code", ".tsx": "code", ".jsx": "code",
-    ".java": "code", ".go": "code", ".rs": "code", ".c": "code", ".cpp": "code",
-    ".h": "code", ".hpp": "code", ".cs": "code", ".rb": "code", ".php": "code",
-    ".sh": "code", ".sql": "code", ".html": "code", ".css": "code", ".scss": "code",
-    ".less": "code", ".vue": "code", ".swift": "code", ".kt": "code", ".m": "code",
-    ".r": "code", ".lua": "code", ".pl": "code", ".scala": "code", ".dart": "code",
+    ".py": "code",
+    ".js": "code",
+    ".ts": "code",
+    ".tsx": "code",
+    ".jsx": "code",
+    ".java": "code",
+    ".go": "code",
+    ".rs": "code",
+    ".c": "code",
+    ".cpp": "code",
+    ".h": "code",
+    ".hpp": "code",
+    ".cs": "code",
+    ".rb": "code",
+    ".php": "code",
+    ".sh": "code",
+    ".sql": "code",
+    ".html": "code",
+    ".css": "code",
+    ".scss": "code",
+    ".less": "code",
+    ".vue": "code",
+    ".swift": "code",
+    ".kt": "code",
+    ".m": "code",
+    ".r": "code",
+    ".lua": "code",
+    ".pl": "code",
+    ".scala": "code",
+    ".dart": "code",
     # config
-    ".json": "config", ".yaml": "config", ".yml": "config", ".toml": "config",
-    ".ini": "config", ".cfg": "config", ".conf": "config", ".env": "config",
-    ".xml": "config", ".properties": "config", ".lock": "config",
+    ".json": "config",
+    ".yaml": "config",
+    ".yml": "config",
+    ".toml": "config",
+    ".ini": "config",
+    ".cfg": "config",
+    ".conf": "config",
+    ".env": "config",
+    ".xml": "config",
+    ".properties": "config",
+    ".lock": "config",
     # text
-    ".md": "text", ".txt": "text", ".log": "text", ".csv": "text", ".rst": "text",
-    ".tex": "text", ".adoc": "text",
+    ".md": "text",
+    ".txt": "text",
+    ".log": "text",
+    ".csv": "text",
+    ".rst": "text",
+    ".tex": "text",
+    ".adoc": "text",
 }
 
 
@@ -107,9 +169,9 @@ def _infer_file_change_kind(path: str) -> str:
     return _KIND_BY_EXT.get(Path(path).suffix.lower(), "text")
 
 
-_MAX_HUNKS = 200          # 超过此数截断 equal hunks
-_MAX_EQUAL_LINES = 3       # 截断时每个 equal hunk 保留的上下文行数
-_MAX_TOTAL_LINES = 5000    # 超过此总行数强制截断
+_MAX_HUNKS = 200  # 超过此数截断 equal hunks
+_MAX_EQUAL_LINES = 3  # 截断时每个 equal hunk 保留的上下文行数
+_MAX_TOTAL_LINES = 5000  # 超过此总行数强制截断
 
 
 def build_file_change(
@@ -141,15 +203,15 @@ def build_file_change(
             raw_hunks.append({"type": "equal", "lines": old_lines[i1:i2]})
         elif tag == "delete":
             raw_hunks.append({"type": "delete", "lines": old_lines[i1:i2]})
-            deletions += (i2 - i1)
+            deletions += i2 - i1
         elif tag == "insert":
             raw_hunks.append({"type": "insert", "lines": new_lines[j1:j2]})
-            insertions += (j2 - j1)
+            insertions += j2 - j1
         else:  # 'replace' -> show deletion then insertion
             raw_hunks.append({"type": "delete", "lines": old_lines[i1:i2]})
             raw_hunks.append({"type": "insert", "lines": new_lines[j1:j2]})
-            deletions += (i2 - i1)
-            insertions += (j2 - j1)
+            deletions += i2 - i1
+            insertions += j2 - j1
 
     # P0-c: 大文件截断 — 超过阈值时折叠 equal hunks，仅保留少量上下文
     truncated = False
@@ -170,10 +232,12 @@ def build_file_change(
                     head = lines[:_MAX_EQUAL_LINES]
                     tail = lines[-_MAX_EQUAL_LINES:]
                     hunks.append({"type": "equal", "lines": head})
-                    hunks.append({
-                        "type": "equal",
-                        "lines": [f"… {len(lines) - 2 * _MAX_EQUAL_LINES} lines folded …"],
-                    })
+                    hunks.append(
+                        {
+                            "type": "equal",
+                            "lines": [f"… {len(lines) - 2 * _MAX_EQUAL_LINES} lines folded …"],
+                        }
+                    )
                     hunks.append({"type": "equal", "lines": tail})
         # 再次检查，如果仍然过长就只保留变更 hunks + 1 行上下文
         if sum(len(h["lines"]) for h in hunks) > _MAX_TOTAL_LINES:

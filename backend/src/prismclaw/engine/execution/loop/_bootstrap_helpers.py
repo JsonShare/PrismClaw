@@ -24,6 +24,7 @@ from prismclaw.schema.session.types import SessionTree
 # Session-tree helpers
 # ---------------------------------------------------------------------------
 
+
 def _user_message_count(tree: SessionTree) -> int:
     """1-based user-message counter over tree.order (turn 语义).
 
@@ -65,15 +66,13 @@ def _tool_args_for_call(tree: SessionTree, tool_call_id: str | None) -> str | No
                 tc_dict = tc if isinstance(tc, dict) else tc.model_dump()
                 if tc_dict.get("id") != tool_call_id:
                     continue
-                args = (
-                    tc_dict.get("arguments")
-                    or (tc_dict.get("function") or {}).get("arguments")
-                )
+                args = tc_dict.get("arguments") or (tc_dict.get("function") or {}).get("arguments")
                 if args is None:
                     return None
                 if isinstance(args, str):
                     return args or None
                 import json as _json
+
                 return _json.dumps(args, ensure_ascii=False, default=str)
             except Exception:
                 continue
@@ -83,6 +82,7 @@ def _tool_args_for_call(tree: SessionTree, tool_call_id: str | None) -> str | No
 # ---------------------------------------------------------------------------
 # Task-runtime construction
 # ---------------------------------------------------------------------------
+
 
 def _build_task_runtime_from_spec(
     *,
@@ -95,8 +95,7 @@ def _build_task_runtime_from_spec(
     )
     updated_at_epoch_ms = int(time.time() * 1000)
     requires_risk_confirmation = task_spec.risk_level == "high" or bool(
-        task_spec.preflight_probe is not None
-        and task_spec.preflight_probe.baseline_risk == "high"
+        task_spec.preflight_probe is not None and task_spec.preflight_probe.baseline_risk == "high"
     )
     runtime_state: Literal["awaiting_risk_confirmation", "executing"] = (
         "awaiting_risk_confirmation" if requires_risk_confirmation else "executing"
@@ -126,6 +125,7 @@ def _build_task_runtime_from_spec(
 # ---------------------------------------------------------------------------
 # Evidence builders (pure — only data transformation, no I/O)
 # ---------------------------------------------------------------------------
+
 
 def _build_recovery_probe_evidence(
     *,

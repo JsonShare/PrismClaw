@@ -11,6 +11,7 @@ Architecture:
 - Compression happens AFTER truncation (truncation is the hard cap; compression
   is semantic reduction within that cap)
 """
+
 from __future__ import annotations
 
 import re
@@ -18,9 +19,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from prismclaw.schema.content.content_types import ToolResult
-from prismclaw.schema.agent.data_types import ContentBlock, TextBlock
 from prismclaw.engine.toolkit.registry.tool_classification import is_search_intent_tool
+from prismclaw.schema.agent.data_types import ContentBlock, TextBlock
+from prismclaw.schema.content.content_types import ToolResult
 
 # ---------------------------------------------------------------------------
 # Rule definitions
@@ -58,9 +59,7 @@ class CompressionRule:
             return False
         if self.argv_pattern and not re.search(self.argv_pattern, argv):
             return False
-        if self.stdout_pattern and not re.search(self.stdout_pattern, stdout):
-            return False
-        return True
+        return not (self.stdout_pattern and not re.search(self.stdout_pattern, stdout))
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -266,7 +265,7 @@ class CompressionStats:
 def compress_tool_result(
     result: ToolResult,
     tool_name: str,
-    tool_args: dict | str | None = None,
+    tool_args: dict[str, Any] | str | None = None,
     *,
     rules: tuple[CompressionRule, ...] = BUILTIN_RULES,
     enabled: bool = True,
@@ -280,7 +279,8 @@ def compress_tool_result(
     if isinstance(tool_args, str):
         argv = tool_args
     elif isinstance(tool_args, dict):
-        argv = tool_args.get("command", tool_args.get("cmd", ""))
+        raw_argv = tool_args.get("command", tool_args.get("cmd", ""))
+        argv = raw_argv if isinstance(raw_argv, str) else ""
 
     text_blocks_text = ""
     for block in result.content:
@@ -305,9 +305,7 @@ def compress_tool_result(
         if isinstance(block, TextBlock):
             compressed = block.text
             for rule in matched_rules:
-                stats.rules_matched.append(
-                    f"{rule.tool_name}:{rule.argv_pattern or '*'}"
-                )
+                stats.rules_matched.append(f"{rule.tool_name}:{rule.argv_pattern or '*'}")
                 for strategy in rule.strategies:
                     before = compressed
                     compressed = apply_strategy(compressed, rule, strategy)

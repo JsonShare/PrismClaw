@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from prismclaw.schema.session.types import SessionTree
 from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.session.types import CompactionEntry
+from prismclaw.schema.session.types import CompactionEntry, SessionTree
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ def _resolve_reinject_budgets() -> tuple[int, int]:
     """
     try:
         from prismclaw.infra.settings import load_settings
+
         settings = load_settings()
         return (
             int(settings.agent.context.compaction.reinject_max_files),
@@ -87,19 +88,23 @@ def build_file_reinjection_messages(
                 head,
             ]
             if tail and len(content) > head_chars + tail_chars:
-                parts.extend([
+                parts.extend(
+                    [
+                        "",
+                        f"……（中间省略 {len(content) - head_chars - tail_chars} 字符）",
+                        "",
+                        "--- 尾部 ---",
+                        tail,
+                    ]
+                )
+            parts.extend(
+                [
                     "",
-                    f"……（中间省略 {len(content) - head_chars - tail_chars} 字符）",
-                    "",
-                    "--- 尾部 ---",
-                    tail,
-                ])
-            parts.extend([
-                "",
-                f"[如需读取特定片段：请用 read 工具并传入 offset/limit 参数，"
-                f"或用 grep 检索模式。"
-                f"示例：read(file_path=\"{file_path}\", offset=100, limit=50)]",
-            ])
+                    f"[如需读取特定片段：请用 read 工具并传入 offset/limit 参数，"
+                    f"或用 grep 检索模式。"
+                    f'示例：read(file_path="{file_path}", offset=100, limit=50)]',
+                ]
+            )
             body = "\n".join(parts)
             tokens = file_tokens
         else:

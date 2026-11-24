@@ -1,10 +1,13 @@
 """Bundle protocols for Dream, Plugin, and Persistence components."""
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
 
 # ── Dream bundle ──
+
 
 @runtime_checkable
 class DreamReviewServiceProtocol(Protocol):
@@ -20,7 +23,8 @@ class DreamBoundaryProtocol(Protocol):
 @runtime_checkable
 class DreamAdminOpsProtocol(Protocol):
     async def trigger(self, session_id: str, phase: str) -> None: ...
-    async def status(self, session_id: str) -> dict: ...
+    async def status(self, session_id: str) -> dict[str, Any]: ...
+    async def get_dispatch_status(self) -> dict[str, object]: ...
 
 
 @runtime_checkable
@@ -32,6 +36,7 @@ class DreamComponents(Protocol):
 
 # ── Plugin bundle ──
 
+
 @runtime_checkable
 class ExtensionManagerProtocol(Protocol):
     async def load(self, path: str) -> None: ...
@@ -40,14 +45,14 @@ class ExtensionManagerProtocol(Protocol):
 
 @runtime_checkable
 class MCPManagerProtocol(Protocol):
-    async def start(self, config: dict) -> None: ...
+    async def start(self, config: dict[str, Any]) -> None: ...
     async def stop(self, name: str) -> None: ...
 
 
 @runtime_checkable
 class PluginLifecycleProtocol(Protocol):
-    async def initialize(self, settings: Any) -> None: ...
-    async def get_bundle(self) -> Any: ...
+    def update_settings(self, settings: object, *, invalidate: bool = True) -> None: ...
+    async def get_bundle(self) -> object: ...
 
 
 @runtime_checkable
@@ -59,10 +64,11 @@ class PluginComponents(Protocol):
 
 # ── Persistence bundle ──
 
+
 @runtime_checkable
 class RunSnapshotStoreProtocol(Protocol):
-    async def save(self, session_id: str, snapshot: dict) -> None: ...
-    async def load(self, session_id: str) -> dict | None: ...
+    async def save(self, session_id: str, snapshot: dict[str, Any]) -> None: ...
+    async def load(self, session_id: str) -> dict[str, Any] | None: ...
 
 
 @runtime_checkable
@@ -72,13 +78,7 @@ class RunOwnershipStoreProtocol(Protocol):
 
 
 @runtime_checkable
-class TrajectoryPersistenceProtocol(Protocol):
-    async def persist(self, session_id: str, cells: list[Any]) -> None: ...
-    async def query(self, session_id: str) -> list[Any]: ...
-
-
-@runtime_checkable
 class PersistenceComponents(Protocol):
     run_snapshot_store: RunSnapshotStoreProtocol
     run_ownership_store: RunOwnershipStoreProtocol
-    trajectory_persistence: TrajectoryPersistenceProtocol
+    trajectory_persistence: TrajectoryPersistence

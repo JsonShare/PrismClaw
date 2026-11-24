@@ -1,31 +1,51 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
 from prismclaw.engine.compression.result_compaction import (
     ResultCompactionTurn,
     compact_tool_results_for_turn_async,
 )
-from prismclaw.schema.session import REPLACEMENT_DECISION_CUSTOM_TYPE
-from prismclaw.schema.content import replacement_decision_from_artifact
 from prismclaw.engine.execution.dispatch.execution_entry import execute_tool_calls
+from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
 from prismclaw.engine.execution.output.tool_result_rendering import tool_result_to_llm_content
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
 from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.content.compaction import CompactionArtifact
 from prismclaw.schema.content.content_types import ToolResult
+from prismclaw.schema.content.replacement_store import replacement_decision_from_artifact
 from prismclaw.schema.content.streaming import ToolCallEnd
+from prismclaw.schema.session import REPLACEMENT_DECISION_CUSTOM_TYPE
 from prismclaw.schema.session.projection import SessionProjectionEngine
-from prismclaw.schema.session.types import CustomEntry, EXTRACT_EVIDENCE_CUSTOM_TYPE, HANDOFF_REQUEST_CUSTOM_TYPE, RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE, SEARCH_EVIDENCE_CUSTOM_TYPE, generate_entry_id, now_iso
+from prismclaw.schema.session.types import (
+    EXTRACT_EVIDENCE_CUSTOM_TYPE,
+    HANDOFF_REQUEST_CUSTOM_TYPE,
+    RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE,
+    SEARCH_EVIDENCE_CUSTOM_TYPE,
+    CustomEntry,
+    SessionTree,
+    generate_entry_id,
+    now_iso,
+)
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.handoff.supervisor import (
+        CapExceededInfo,
+        HandoffDispatchExtras,
+    )
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.security.gate.types import SubagentProgressSink
+    from prismclaw.schema.agent.types import RunRequest
 
 logger = logging.getLogger(__name__)
 
 
-def _session_working_dir(tool_ctx: Any) -> str | None:
+def _session_working_dir(tool_ctx: ToolContext) -> str | None:
     """tool_ctx 是 ToolContext（有 workspace_path + session_id）。
 
     context_blocks / tool_results 持久化路径：
@@ -44,6 +64,7 @@ def _session_working_dir(tool_ctx: Any) -> str | None:
     if not ws or not sid:
         return str(ws) if ws else None
     from prismclaw.infra.workspace_paths import ensure_session_layout
+
     return str(ensure_session_layout(Path(ws), sid))
 
 
@@ -72,9 +93,9 @@ def _tool_result_compaction_artifact(result: ToolResult) -> CompactionArtifact |
 @dataclass
 class HandoffDispatchPlan:
     tool_calls: list[dict[str, Any]]
-    resolved_dispatch_extras_by_call_id: dict[str, Any]
+    resolved_dispatch_extras_by_call_id: dict[str, HandoffDispatchExtras]
     cap_exceeded_call_ids: dict[str, str]
-    cap_exceeded_info_by_call: dict[str, Any]
+    cap_exceeded_info_by_call: dict[str, CapExceededInfo]
 
 
 @dataclass
@@ -86,19 +107,19 @@ class ToolExecutionArtifacts:
 
 @dataclass
 class ToolResultPersistenceProjection:
-    entries: list[Any]
+    entries: list[MessageEntry | CustomEntry]
     events: list[ToolCallEnd]
 
 
 async def plan_handoff_dispatch(
     *,
-    deps: Any,
-    request: Any,
+    deps: AgentRunnerDeps,
+    request: RunRequest,
     tool_calls: list[dict[str, Any]],
-    ) -> HandoffDispatchPlan:
-    resolved_dispatch_extras_by_call_id: dict[str, Any] = {}
+) -> HandoffDispatchPlan:
+    resolved_dispatch_extras_by_call_id: dict[str, HandoffDispatchExtras] = {}
     cap_exceeded_call_ids: dict[str, str] = {}
-    cap_exceeded_info_by_call: dict[str, Any] = {}
+    cap_exceeded_info_by_call: dict[str, CapExceededInfo] = {}
 
     if deps.handoff_supervisor is not None:
         deps.handoff_supervisor.increment_turn(request.session_id)
@@ -138,7 +159,7 @@ async def plan_handoff_dispatch(
     )
 
 
-def _dispatch_extras_transport_dict(dispatch_extras: Any) -> dict[str, Any]:
+def _dispatch_extras_transport_dict(dispatch_extras: HandoffDispatchExtras) -> dict[str, Any]:
     per_call: dict[str, Any] = {
         "handoff_chain_id": dispatch_extras.handoff_chain_id,
         "handoff_hop_index": dispatch_extras.handoff_hop_index,
@@ -163,10 +184,10 @@ def _dispatch_extras_transport_dict(dispatch_extras: Any) -> dict[str, Any]:
 
 async def apply_handoff_dispatch_plan(
     *,
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
     handoff_plan: HandoffDispatchPlan,
-    subagent_progress_sink: Any,
-    emit_cap_exceeded_progress: Any,
+    subagent_progress_sink: SubagentProgressSink | None,
+    emit_cap_exceeded_progress: Callable[..., Awaitable[None]],
 ) -> None:
     if handoff_plan.resolved_dispatch_extras_by_call_id:
         tool_ctx.pending_handoff_dispatch_extras = {
@@ -186,16 +207,17 @@ async def apply_handoff_dispatch_plan(
 
 async def execute_tool_calls_with_handoff(
     *,
-    deps: Any,
-    request: Any,
+    deps: AgentRunnerDeps,
+    request: RunRequest,
     tool_calls: list[dict[str, Any]],
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
     cap_exceeded_call_ids: dict[str, str],
     finish_reason: str | None = None,
 ) -> ToolExecutionArtifacts:
     # 截断保护（对齐 Pi P5 防御性编程）
     if finish_reason == "length" and tool_calls:
         from prismclaw.engine.execution.dispatch.truncation import fail_truncated_tool_calls
+
         return fail_truncated_tool_calls(
             tool_calls=tool_calls,
             session_id=getattr(request, "session_id", "?"),
@@ -250,8 +272,8 @@ async def execute_tool_calls_with_handoff(
 
 async def postprocess_tool_results(
     *,
-    deps: Any,
-    tool_ctx: Any,
+    deps: AgentRunnerDeps,
+    tool_ctx: ToolContext,
     execution_artifacts: ToolExecutionArtifacts,
 ) -> ToolExecutionArtifacts:
     _apply_error_fatigue(
@@ -283,14 +305,14 @@ async def postprocess_tool_results(
 
 def project_tool_result_entries(
     *,
-    tree: Any,
+    tree: SessionTree,
     tool_calls: list[dict[str, Any]],
     results: list[ToolResult],
     compaction_turn: ResultCompactionTurn | None = None,
     current_step_id: str | None = None,
 ) -> ToolResultPersistenceProjection:
     events: list[ToolCallEnd] = []
-    entries: list[Any] = []
+    entries: list[MessageEntry | CustomEntry] = []
     replacement_decisions = (
         compaction_turn.replacement_state.latest_by_source_id()
         if compaction_turn is not None
@@ -327,9 +349,7 @@ def project_tool_result_entries(
             parent_id = handoff_entry.id
         reference_artifact = result.reference_artifact
         search_evidence = (
-            reference_artifact.search_evidence
-            if reference_artifact is not None
-            else None
+            reference_artifact.search_evidence if reference_artifact is not None else None
         )
         if isinstance(search_evidence, dict):
             evidence_entry = CustomEntry(
@@ -345,13 +365,10 @@ def project_tool_result_entries(
             entry_ids.add(evidence_entry.id)
             entries.append(evidence_entry)
             parent_id = evidence_entry.id
-        if (
-            reference_artifact is not None
-            and (
-                reference_artifact.extract_result_count is not None
-                or reference_artifact.extract_source is not None
-                or reference_artifact.extract_cached is not None
-            )
+        if reference_artifact is not None and (
+            reference_artifact.extract_result_count is not None
+            or reference_artifact.extract_source is not None
+            or reference_artifact.extract_cached is not None
         ):
             extract_entry = CustomEntry(
                 id=generate_entry_id(entry_ids),
@@ -391,7 +408,9 @@ def project_tool_result_entries(
             entry_ids.add(reference_entry.id)
             entries.append(reference_entry)
             parent_id = reference_entry.id
-            replacement_decision = replacement_decisions.get(result.tool_call_id or call.get("id", ""))
+            replacement_decision = replacement_decisions.get(
+                result.tool_call_id or call.get("id", "")
+            )
             if replacement_decision is None:
                 replacement_decision = replacement_decision_from_artifact(artifact)
             if replacement_decision is not None:
@@ -401,7 +420,10 @@ def project_tool_result_entries(
                     if existing_state is not None
                     else None
                 )
-                if existing is None or existing.stable_payload() != replacement_decision.stable_payload():
+                if (
+                    existing is None
+                    or existing.stable_payload() != replacement_decision.stable_payload()
+                ):
                     replacement_entry = CustomEntry(
                         id=generate_entry_id(entry_ids),
                         parent_id=tool_entry.id,
@@ -412,13 +434,15 @@ def project_tool_result_entries(
                     entry_ids.add(replacement_entry.id)
                     entries.append(replacement_entry)
                     parent_id = replacement_entry.id
-        events.append(ToolCallEnd(tool_call_id=call.get("id", ""), result=result, step_id=current_step_id))
+        events.append(
+            ToolCallEnd(tool_call_id=call.get("id", ""), result=result, step_id=current_step_id)
+        )
     return ToolResultPersistenceProjection(entries=entries, events=events)
 
 
 async def persist_projected_tool_result_entries(
     *,
-    append_entry: Any,
+    append_entry: Callable[[MessageEntry | CustomEntry], Awaitable[None]],
     projection: ToolResultPersistenceProjection,
 ) -> list[ToolCallEnd]:
     for entry in projection.entries:
@@ -429,7 +453,7 @@ async def persist_projected_tool_result_entries(
 def _apply_error_fatigue(
     tool_calls: list[dict[str, Any]],
     results: list[ToolResult],
-    tool_ctx: Any,
+    tool_ctx: ToolContext,
 ) -> None:
     if not tool_ctx.error_fatigue_tracker:
         tool_ctx.error_fatigue_tracker = {}
@@ -442,16 +466,16 @@ def _apply_error_fatigue(
             error_text = "".join(
                 block.text for block in result.content if isinstance(block, TextBlock)
             )
-            fingerprint = (tool_name, hash(error_text[:100]))
+            fingerprint = f"{tool_name}:{hash(error_text[:100])}"
             tracker[fingerprint] = tracker.get(fingerprint, 0) + 1
             if tracker[fingerprint] >= 3 and not fatigue_triggered:
                 # V3 Refactoring: Instead of destroying the original error output,
-                # we append a gentle Critic Subagent Advisory. This preserves the 
+                # we append a gentle Critic Subagent Advisory. This preserves the
                 # model's autonomy and the actual error trace for debugging.
                 result.content.append(
                     TextBlock(
                         text=(
-                            "\n\n<subagent_advisory type=\"critic\">\n"
+                            '\n\n<subagent_advisory type="critic">\n'
                             "观察：我注意到我们已连续 3 次遇到完全相同的错误，"
                             "可能陷入了循环。建议暂停当前方案，"
                             "重新检查项目状态或依赖，并尝试不同的策略。\n"
@@ -461,6 +485,6 @@ def _apply_error_fatigue(
                 )
                 fatigue_triggered = True
         else:
-            keys_to_remove = [key for key in tracker.keys() if key[0] == tool_name]
+            keys_to_remove = [key for key in tracker if key[0] == tool_name]
             for key in keys_to_remove:
                 del tracker[key]

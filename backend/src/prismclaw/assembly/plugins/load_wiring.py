@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from prismclaw.engine.plugins.loading.discovery_engine import PluginLoadResult
+    from prismclaw.engine.plugins.loading.install_store import InstalledPluginsStore
+    from prismclaw.infra.settings import Settings
 
 
 async def assemble_plugin_load_result(
     *,
-    install_store: Any | None = None,
+    install_store: InstalledPluginsStore | None = None,
     directory_sources: list[Any] | None = None,
-    settings: Any | None = None,
+    settings: Settings | None = None,
     workspace_trusted: bool = True,
     data_base_dir: Path | None = None,
-) -> Any:
+) -> PluginLoadResult:
+    from prismclaw.assembly.plugins.agent_manifest_loader import DefaultPluginAgentLoader
     from prismclaw.engine.plugins.loading.discovery_engine import (
         PluginDiscoveryEngine,
         PluginLoadOrchestrator,
@@ -19,7 +25,6 @@ async def assemble_plugin_load_result(
     from prismclaw.engine.plugins.loading.install_store import InstalledPluginsStore
     from prismclaw.engine.plugins.loading.load_strategy import default_strategies
     from prismclaw.runtime.skills.discovery import _scan_skills_directory_frontmatter_only
-    from prismclaw.assembly.plugins.agent_manifest_loader import DefaultPluginAgentLoader
 
     managed_names: set[str] | None = None
     blocked_sources: set[str] | None = None
@@ -70,4 +75,3 @@ async def assemble_plugin_load_result(
         data_base_dir=data_base_dir,
     )
     return await orchestrator.assemble_plugin_load_result(workspace_trusted=workspace_trusted)
-

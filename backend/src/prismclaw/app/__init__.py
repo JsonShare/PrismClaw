@@ -1,4 +1,5 @@
 """PrismClaw application layer — FastAPI assembly, routing, lifecycle."""
+
 from __future__ import annotations
 
 import logging
@@ -8,19 +9,18 @@ from fastapi import FastAPI, Request
 
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
+from prismclaw.app._health import build_health_endpoint
+from prismclaw.app._lifespan import _lifespan
+from prismclaw.app._middleware import (
+    _install_metrics,
+    _install_rate_limiter,
+    _install_security_headers,
+    _install_tracing,
+)
 from prismclaw.infra.logging_setup import install_logging
 from prismclaw.infra.paths import resolve_project_root
 from prismclaw.infra.settings import load_settings
 from prismclaw.schema.storage.storage_types import SessionStore
-
-from prismclaw.app._lifespan import _lifespan
-from prismclaw.app._middleware import (
-    _install_security_headers,
-    _install_rate_limiter,
-    _install_tracing,
-    _install_metrics,
-)
-from prismclaw.app._health import build_health_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,10 @@ install_logging(
 
 
 async def get_session_store(request: Request) -> SessionStore:
-    return request.app.state.session_store
+    session_store = getattr(request.app.state, "session_store", None)
+    if not isinstance(session_store, SessionStore):
+        raise RuntimeError("app.state.session_store 未初始化")
+    return session_store
 
 
 def create_app() -> FastAPI:
@@ -52,8 +55,8 @@ def create_app() -> FastAPI:
 
         from prismclaw.app.auth.auth_routes import auth_router
         from prismclaw.app.web.routers.openai_compat import openai_router
-        from prismclaw.app.web.routes import web_router
         from prismclaw.app.web.routers.scheduled_tasks import scheduler_router
+        from prismclaw.app.web.routes import web_router
         from prismclaw.app.web.websocket.websocket import ws_router
 
         # Expose Prometheus /metrics BEFORE the SPA catch-all mount so the exact
@@ -81,7 +84,6 @@ def create_app() -> FastAPI:
 
         spa_dir = resolve_project_root() / "frontend" / "dist"
         if spa_dir.is_dir():
-            _install_metrics(app)
             from prismclaw.app.web.spa import SPAStaticFiles
 
             app.mount("/", SPAStaticFiles(directory=str(spa_dir), html=True), name="spa")

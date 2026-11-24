@@ -4,6 +4,7 @@ engine 层用 ``ParallelTaskExtras`` 持有 parallel_task_store；
 schema 层的 ``TaskRuntimeState`` 是持久化快照，由循环上下文（``ctx.task_runtime``）
 持有，不得写入 ``ToolContext.task_runtime``。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

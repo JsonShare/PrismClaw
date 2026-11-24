@@ -3,13 +3,14 @@ from __future__ import annotations
 import logging
 from os import PathLike
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.security.gate.governance import build_initial_task_spec
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.session.types import SessionTree
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.schema.agent.types import RunRequest
 
@@ -18,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 async def _apply_fresh_governance_fields(
     *,
-    deps: "AgentRunnerDeps",
-    request: "RunRequest",
+    deps: AgentRunnerDeps,
+    request: RunRequest,
     tree: SessionTree,
     tool_workspace_path: str | PathLike[str] | None,
 ) -> TaskSpec:
@@ -62,7 +63,7 @@ async def _apply_fresh_governance_fields(
 def _route_skill_hints(
     *,
     user_message: str,
-    capability_catalog: Any,
+    capability_catalog: CapabilityCatalogService | None,
     workspace_path: str | PathLike[str] | None,
 ) -> tuple[str, ...]:
     """检索当前任务消息，产出 top-3 候选技能的"名称 — 描述"提示行。

@@ -3,14 +3,12 @@
 Moved from engine.services.chat_assistant_service to break
 delivery → engine dependency (G2).
 """
+
 from __future__ import annotations
 
 
 def _looks_like_chinese_text(text: str) -> bool:
-    for ch in text:
-        if "\u4e00" <= ch <= "\u9fff":
-            return True
-    return False
+    return any("一" <= ch <= "鿿" for ch in text)
 
 
 def _parse_json_string_list(raw: str, *, max_items: int) -> list[str]:
@@ -24,6 +22,7 @@ def _parse_json_string_list(raw: str, *, max_items: int) -> list[str]:
     payload = text[start : end + 1]
     try:
         import json
+
         data = json.loads(payload)
     except Exception:
         return []

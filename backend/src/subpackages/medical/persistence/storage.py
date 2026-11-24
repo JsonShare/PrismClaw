@@ -15,6 +15,7 @@
 
 只做一件事：把上传字节落到稳定路径并返回该路径。不做 OCR、不做分类。
 """
+
 from __future__ import annotations
 
 import re

@@ -10,23 +10,32 @@
 
 全部带 Depends(get_current_user) 鉴权。
 """
+
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from prismclaw.app.auth.auth import get_current_user
 
 from ..models.view_models import patient_to_vm, report_to_vm
 from ..persistence.helpers import get_medical_store
 from ..services.patient_service import (
-    list_patients as _list_patients,
+    correct_report as _correct_report,
+)
+from ..services.patient_service import (
+    create_patient as _create_patient,
+)
+from ..services.patient_service import (
     get_patient_detail,
     get_patient_stats,
+)
+from ..services.patient_service import (
     list_patient_reports as _list_patient_reports,
-    correct_report as _correct_report,
-    create_patient as _create_patient,
+)
+from ..services.patient_service import (
+    list_patients as _list_patients,
 )
 
 router = APIRouter(tags=["medical-patients"])
@@ -35,8 +44,8 @@ router = APIRouter(tags=["medical-patients"])
 @router.post("/")
 async def create_patient(
     http_request: Request,
-    payload: dict[str, Any] = Body(..., description="name 必填；idType / idNumber 可选"),
-    user_id: str = Depends(get_current_user),
+    payload: Annotated[dict[str, Any], Body(..., description="name 必填；idType / idNumber 可选")],
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> dict:
     """新建患者档案。仅写入 create_by = 当前用户（行级归属）。
 
@@ -66,14 +75,18 @@ async def list_patients(
     gender: str = Query("", description="性别筛选"),
     risk: str = Query("", description="风险等级筛选"),
     page: int = Query(1, ge=1),
-    pageSize: int = Query(8, ge=1, le=100),
+    page_size: int = Query(8, ge=1, le=100, alias="pageSize"),
     http_request: Request = None,
     user_id: str = Depends(get_current_user),
 ) -> dict:
     """患者分页列表（按 create_by = 当前用户 过滤）。"""
     store = get_medical_store(http_request)
     result = await _list_patients(
-        store, keyword=keyword, page=page, page_size=pageSize, create_by=user_id,
+        store,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        create_by=user_id,
     )
     result["items"] = [patient_to_vm(p) for p in result["items"]]
     return result
@@ -108,13 +121,17 @@ async def list_patient_reports(
     patient_id: str,
     http_request: Request,
     page: int = Query(1, ge=1),
-    pageSize: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
     user_id: str = Depends(get_current_user),
 ) -> dict:
     """患者报告解析卡列表（服务端分页，仅当前用户的患者）。"""
     store = get_medical_store(http_request)
     result = await _list_patient_reports(
-        store, patient_id, page=page, page_size=pageSize, user_id=user_id,
+        store,
+        patient_id,
+        page=page,
+        page_size=page_size,
+        user_id=user_id,
     )
     if result is None:
         raise HTTPException(status_code=403, detail="无权访问该患者")
@@ -127,13 +144,19 @@ async def correct_patient_report(
     patient_id: str,
     report_id: str,
     http_request: Request,
-    patch: dict[str, Any] = Body(..., description="可修正字段：narrative / summary / rawText"),
-    user_id: str = Depends(get_current_user),
+    patch: Annotated[
+        dict[str, Any], Body(..., description="可修正字段：narrative / summary / rawText")
+    ],
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> dict:
     """医生修正报告内容。仅可改 create_by = 当前用户的患者名下的报告。"""
     store = get_medical_store(http_request)
     updated = await _correct_report(
-        store, patient_id, report_id, patch, user_id=user_id,
+        store,
+        patient_id,
+        report_id,
+        patch,
+        user_id=user_id,
     )
     if updated is None:
         raise HTTPException(status_code=403, detail="无权访问该患者")

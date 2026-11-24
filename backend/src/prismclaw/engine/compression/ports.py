@@ -8,7 +8,7 @@ execution 层在 bootstrap 时注入实现，禁止 compression 反向 import。
   TaskCompactionPolicy / PromptCacheRuntimeState / InvokedSkillState 等）
   通过 TYPE_CHECKING 引入，runtime 不依赖；
 - runtime 行为所需 execution 能力（get_effective_context_window、
-  CircuitBreakerException、HookEvent/HookOutcome、persist_*、
+  CircuitBreakerError、HookEvent/HookOutcome、persist_*、
   compress_tool_result、ContextValidatorChain、persist_run_snapshot 等）
   通过 ports 方法调用，避免 compression 层 import execution.*；
 - execution 层在 bootstrap 中实现 ExecutionRuntimePorts 并注入到
@@ -17,10 +17,24 @@ execution 层在 bootstrap 时注入实现，禁止 compression 反向 import。
 依赖方向（单向，禁止反向）：
     schema ← foundation/state ← compression.ports ← compression.* ← execution ← assembly/app
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from prismclaw.engine.execution.checkpoint import RunSnapshot
+    from prismclaw.engine.execution.output.output_compressor import CompressionStats
+    from prismclaw.engine.hooks import CompactionContext
+    from prismclaw.engine.security.gate.governance import ContextValidatorChain
+    from prismclaw.schema.content.compaction import CompactResult
+    from prismclaw.schema.content.content_types import ContentBlock, ToolResult
+    from prismclaw.schema.session import SessionTree
+    from prismclaw.schema.storage.persistence_types import RunSnapshotStore
+    from prismclaw.schema.storage.storage_types import SessionStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +44,7 @@ class HookInvocationResult:
     把 plugins.hooks.schema.HookOutcome 枚举收敛为字符串，避免
     compression 层 import plugins 模块。
     """
+
     outcome: str  # "SUCCESS" | "BLOCKING"
     system_message: str | None = None
 
@@ -63,9 +78,9 @@ class ContextRuntimePorts(Protocol):
         self,
         *,
         tool_use_id: str,
-        content: Any,
+        content: list[ContentBlock],
         reason: str,
-        working_dir: Any | None,
+        working_dir: str | Path | None,
         tool_name: str,
     ) -> str | None:
         """sync 版本的工具结果落盘；返回 <persisted-output> 引用文本。"""
@@ -79,7 +94,7 @@ class ContextRuntimePorts(Protocol):
         source: str,
         content: str,
         reason: str,
-        working_dir: Any | None = None,
+        working_dir: str | Path | None = None,
     ) -> str | None:
         """将 context block 落盘并返回引用文本。"""
         ...
@@ -87,10 +102,10 @@ class ContextRuntimePorts(Protocol):
     # ── execution.output.output_compressor ──
     def compress_tool_result(
         self,
-        content: Any,
+        content: ToolResult,
         tool_name: str | None = None,
-        tool_args: Any = None,
-    ) -> tuple[Any, Any]:
+        tool_args: dict[str, object] | str | None = None,
+    ) -> tuple[ToolResult, CompressionStats]:
         """压缩工具结果；返回 (compacted_result, stats)。
 
         stats 含 .lossy / .saved_chars 字段。"""
@@ -105,14 +120,14 @@ class ContextRuntimePorts(Protocol):
         agent_id: str,
         message_count: int,
         tokens_before: int,
-    ) -> Any:
+    ) -> CompactionContext:
         """构造 hooks.CompactionContext dataclass 实例。
 
         compression 不再 import hooks.CompactionContext，统一通过此方法
         在 execution 端构造。"""
         ...
 
-    def notify_before_compaction(self, ctx: Any) -> Any:
+    async def notify_before_compaction(self, ctx: CompactionContext) -> None:
         """进程内 AgentHook 迭代：广播 before_compaction。
 
         委托给 hook_registry.notify_before_compaction(ctx)；registry
@@ -120,7 +135,7 @@ class ContextRuntimePorts(Protocol):
         是两条独立 hook 通道，统一收敛到 ports 边界。"""
         ...
 
-    def notify_after_compaction(self, ctx: Any, result: Any) -> Any:
+    async def notify_after_compaction(self, ctx: CompactionContext, result: CompactResult) -> None:
         """进程内 AgentHook 迭代：广播 after_compaction。
 
         委托给 hook_registry.notify_after_compaction(ctx, result)；
@@ -131,7 +146,7 @@ class ContextRuntimePorts(Protocol):
         self,
         *,
         event: str,  # "PRE_COMPACT" | "POST_COMPACT"
-        ctx: Any,
+        ctx: CompactionContext,
         payload: dict[str, Any] | None = None,
     ) -> HookInvocationResult | None:
         """调用 hook dispatcher 触发 PRE_COMPACT / POST_COMPACT 事件。
@@ -144,25 +159,25 @@ class ContextRuntimePorts(Protocol):
 
     # ── security.gate.governance ──
     def raise_circuit_breaker(self, *, message: str) -> None:
-        """抛出 CircuitBreakerException。
+        """抛出 CircuitBreakerError。
 
-        compression 不再 import CircuitBreakerException，统一通过此方法
+        compression 不再 import CircuitBreakerError，统一通过此方法
         在 execution 端抛出。调用方先本地 breaker.is_open(threshold)
         判定，再调用此方法抛出。"""
         ...
 
-    def get_context_validator_chain(self) -> Any:
+    def get_context_validator_chain(self) -> ContextValidatorChain:
         """返回 ContextValidatorChain 实例，供 AssembleCoordinator 使用。"""
         ...
 
     # ── execution.checkpoint ──
     async def persist_run_snapshot(
         self,
-        session_store: Any,
-        tree: Any,
-        snapshot: Any,
+        session_store: SessionStore,
+        tree: SessionTree,
+        snapshot: RunSnapshot,
         *,
-        snapshot_store: Any | None = None,
+        snapshot_store: RunSnapshotStore | None = None,
     ) -> None:
         """持久化 RunSnapshot（preservation.cleanup_on_terminal_exit 使用）。"""
         ...

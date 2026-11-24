@@ -19,7 +19,7 @@ from prismclaw.schema.content.compaction import CompactResult
 # 保留理由: 周期性提醒与 _RULES 的通用原则互补，不重复
 
 _NUDGE_TEXT = (
-    "<nudge>可考虑使用 `memory` 工具（action=\"save\"）将重要事实或工作流"
+    '<nudge>可考虑使用 `memory` 工具（action="save"）将重要事实或工作流'
     "持久化，供后续会话使用。</nudge>"
 )
 

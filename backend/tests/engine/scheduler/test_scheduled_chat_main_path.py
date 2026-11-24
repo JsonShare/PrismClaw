@@ -16,6 +16,7 @@
 装配函数 `_run_scheduled_chat` 定义在 `_lifespan` 闭包内部、无法直接 import，
 因此用 AST 从**真实源码**抽出执行（而不是手写复刻），源码改动会立刻被测试感知。
 """
+
 from __future__ import annotations
 
 import ast
@@ -37,9 +38,7 @@ from prismclaw.schema.session.ids import build_web_session_key
 
 _chat_runner = importlib.import_module("prismclaw.app.web.chat.chat_runner")
 
-_LIFESPAN_SRC = (
-    Path(__file__).resolve().parents[3] / "src/prismclaw/app/_lifespan.py"
-)
+_LIFESPAN_SRC = Path(__file__).resolve().parents[3] / "src/prismclaw/app/_lifespan.py"
 _CONV_ID = "web:u1:default:s:abc123"
 _INSTRUCTION = "整理今日AI新闻"
 
@@ -69,9 +68,7 @@ class _FakeStore:
         self.statuses: list[tuple[str, str, dict]] = []
         self.conversations: list[tuple[str, str]] = []
         self.notifications: list[tuple[str, dict]] = []
-        self.task = SimpleNamespace(
-            consecutive_failures=consecutive_failures, enabled=True
-        )
+        self.task = SimpleNamespace(consecutive_failures=consecutive_failures, enabled=True)
 
     async def update_run(self, run_id: str, **kw) -> None:
         self.runs.setdefault(run_id, {}).update(kw)
@@ -173,9 +170,7 @@ async def test_executor_marks_failure_and_disables_after_consecutive_limit():
 
     assert store.runs["r1"]["status"] == "failed"
     assert any(status == "disabled" for _, status, _ in store.statuses)
-    assert any(
-        evt == "scheduled_task.disabled" for evt, _ in store.notifications
-    )
+    assert any(evt == "scheduled_task.disabled" for evt, _ in store.notifications)
 
 
 def test_created_session_id_satisfies_web_chat_contract():
@@ -204,8 +199,7 @@ def _load_real_scheduled_chat():
     nodes = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.AsyncFunctionDef)
-        and node.name == "_run_scheduled_chat"
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_run_scheduled_chat"
     ]
     assert len(nodes) == 1, (
         f"{_LIFESPAN_SRC}: expected exactly one _run_scheduled_chat, "
@@ -232,17 +226,13 @@ async def _drive_virtual_socket(monkeypatch, peers_before, peers_after=None):
     async def fake_run_chat(state, msg) -> None:
         captured.update(state=state, msg=msg)
         for i in range(2):
-            _seq, ok = await send_event(
-                state, "chat.delta", msg.conversation_id, {"i": i}
-            )
+            _seq, ok = await send_event(state, "chat.delta", msg.conversation_id, {"i": i})
             sent.append(ok)
         if peers_after:
             for peer in peers_after:
                 registry.connect("u1", peer)
         for i in range(2, 4):
-            _seq, ok = await send_event(
-                state, "chat.delta", msg.conversation_id, {"i": i}
-            )
+            _seq, ok = await send_event(state, "chat.delta", msg.conversation_id, {"i": i})
             sent.append(ok)
         _seq, ok = await send_event(
             state,
@@ -324,9 +314,7 @@ async def test_dead_virtual_socket_would_be_treated_as_ws_failure():
     state = ConnectionState(
         ws=SimpleNamespace(
             app=SimpleNamespace(
-                state=SimpleNamespace(
-                    web_deps=SimpleNamespace(connection_registry=registry)
-                )
+                state=SimpleNamespace(web_deps=SimpleNamespace(connection_registry=registry))
             ),
             send_json=dead,
         ),

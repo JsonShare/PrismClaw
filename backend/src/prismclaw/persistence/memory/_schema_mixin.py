@@ -1,4 +1,5 @@
 """PostgreSQL 记忆后端 schema 初始化。"""
+
 from __future__ import annotations
 
 import logging
@@ -20,9 +21,7 @@ class SchemaMixin(_PostgresBackendBase):
             if self._migrated:
                 return
 
-            self._async_sessionmaker = async_sessionmaker(
-                self._engine, expire_on_commit=False
-            )
+            self._async_sessionmaker = async_sessionmaker(self._engine, expire_on_commit=False)
             await apply_core_schema(self._engine)
             self._migrated = True
             logger.info("PostgreSQL 后端 schema 初始化完成")

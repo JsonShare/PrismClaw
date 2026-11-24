@@ -10,53 +10,20 @@ Each projector encapsulates a specific read-path concern:
 - ReplacementProjector: replacement decision queries
 - HistoryCompactionProjector: compaction artifact queries
 """
+
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from prismclaw.schema.content.replacement_state import ReplacementDecisionState
+from pydantic import BaseModel
 
-logger = logging.getLogger(__name__)
-
-# P3-FUS-01: L3 压缩摘要渲染前脱敏
-from prismclaw.schema.shared.sanitize_injection import sanitize_before_context_injection
-
-from prismclaw.schema.content import (
-    CompactionArtifact,
-    parse_compaction_artifact,
-)
+from prismclaw.schema.agent.data_types import ContentBlock
 from prismclaw.schema.agent.session import (
     AgentMessageDict,
     SessionContextState,
     SystemReminderProjection,
-)
-from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.schema.session import (
-    CompactionEntry,
-    CustomEntry,
-    EVIDENCE_LEDGER_CUSTOM_TYPE,
-    EXTRACT_EVIDENCE_CUSTOM_TYPE,
-    FORK_TASK_PROJECTION_CUSTOM_TYPE,
-    HANDOFF_REQUEST_CUSTOM_TYPE,
-    MessageEntry,
-    REVIEW_DECISION_CUSTOM_TYPE,
-    SEARCH_EVIDENCE_CUSTOM_TYPE,
-    SESSION_MEMORY_CUSTOM_TYPE,
-    SESSION_STATE_CUSTOM_TYPE,
-    SessionEntry,
-    SessionTree,
-    TASK_MUTATION_CUSTOM_TYPE,
-    TASK_RUNTIME_CUSTOM_TYPE,
-    TASK_SPEC_CUSTOM_TYPE,
-    _collect_custom_models,
-    _collect_turn_runtime_metrics_snapshots,
-    _effective_fork_task_projection_entries,
-    _find_latest_custom_model,
-    _history_compaction_reduction,
-    _latest_custom_entry_index,
-    _message_entry_to_dict,
+    TurnRuntimeMetricsSnapshot,
 )
 from prismclaw.schema.agent.task_runtime import (
     EvidenceRecord,
@@ -64,6 +31,36 @@ from prismclaw.schema.agent.task_runtime import (
     TaskMutation,
     TaskRuntimeState,
 )
+from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.content.compaction import (
+    CompactionArtifact,
+    parse_compaction_artifact,
+)
+from prismclaw.schema.content.replacement_state import ReplacementDecisionState
+from prismclaw.schema.session.types import (
+    EVIDENCE_LEDGER_CUSTOM_TYPE,
+    EXTRACT_EVIDENCE_CUSTOM_TYPE,
+    FORK_TASK_PROJECTION_CUSTOM_TYPE,
+    HANDOFF_REQUEST_CUSTOM_TYPE,
+    REVIEW_DECISION_CUSTOM_TYPE,
+    SEARCH_EVIDENCE_CUSTOM_TYPE,
+    SESSION_MEMORY_CUSTOM_TYPE,
+    SESSION_STATE_CUSTOM_TYPE,
+    TASK_MUTATION_CUSTOM_TYPE,
+    TASK_RUNTIME_CUSTOM_TYPE,
+    TASK_SPEC_CUSTOM_TYPE,
+    TURN_RUNTIME_METRICS_CUSTOM_TYPE,
+    CompactionEntry,
+    CustomEntry,
+    MessageEntry,
+    SessionEntry,
+    SessionTree,
+)
+from prismclaw.schema.shared.sanitize_injection import sanitize_before_context_injection
+
+logger = logging.getLogger(__name__)
+
+# P3-FUS-01: L3 压缩摘要渲染前脱敏
 
 
 class MessageProjector:
@@ -101,9 +98,11 @@ class MessageProjector:
         for entry in reversed(branch):
             if not isinstance(entry, CompactionEntry):
                 continue
-            return [SystemReminderProjection.history_compaction_summary(
-                summary_text=self._render_summary_with_source_ref(entry),
-                entry_id=entry.id)]
+            return [
+                SystemReminderProjection.history_compaction_summary(
+                    summary_text=self._render_summary_with_source_ref(entry), entry_id=entry.id
+                )
+            ]
         return []
 
     @staticmethod
@@ -120,8 +119,13 @@ class MessageProjector:
         if not head or not tail:
             # boundary 缺失 → 摘要无法附带回读范围，LLM 将无法 read_compaction_source 回读原始数据。
             logger.warning(
-                "compaction summary rendered without read-back boundary: entry_id=%s head=%s tail=%s",
-                entry.id, bool(head), bool(tail),
+                (
+                    "compaction summary rendered without read-back "
+                    "boundary: entry_id=%s head=%s tail=%s"
+                ),
+                entry.id,
+                bool(head),
+                bool(tail),
             )
             # P3-FUS-01: 压缩摘要渲染前 Safe Harbor 脱敏
             sanitized, _ = sanitize_before_context_injection(
@@ -144,19 +148,27 @@ class TaskProjection:
         self._tree = tree
 
     def get_latest_task_runtime(self) -> TaskRuntimeState | None:
-        return _find_latest_custom_model(self._tree.get_branch(), TASK_RUNTIME_CUSTOM_TYPE, TaskRuntimeState)
+        return _find_latest_custom_model(
+            self._tree.get_branch(), TASK_RUNTIME_CUSTOM_TYPE, TaskRuntimeState
+        )
 
     def get_latest_task_spec(self) -> TaskSpec | None:
         return _find_latest_custom_model(self._tree.get_branch(), TASK_SPEC_CUSTOM_TYPE, TaskSpec)
 
     def get_evidence_ledger(self) -> list[EvidenceRecord]:
-        return _collect_custom_models(self._tree.get_branch(), EVIDENCE_LEDGER_CUSTOM_TYPE, EvidenceRecord)
+        return _collect_custom_models(
+            self._tree.get_branch(), EVIDENCE_LEDGER_CUSTOM_TYPE, EvidenceRecord
+        )
 
     def get_latest_review_decision(self) -> ReviewDecisionRecord | None:
-        return _find_latest_custom_model(self._tree.get_branch(), REVIEW_DECISION_CUSTOM_TYPE, ReviewDecisionRecord)
+        return _find_latest_custom_model(
+            self._tree.get_branch(), REVIEW_DECISION_CUSTOM_TYPE, ReviewDecisionRecord
+        )
 
     def get_task_mutations(self) -> list[TaskMutation]:
-        return _collect_custom_models(self._tree.get_branch(), TASK_MUTATION_CUSTOM_TYPE, TaskMutation)
+        return _collect_custom_models(
+            self._tree.get_branch(), TASK_MUTATION_CUSTOM_TYPE, TaskMutation
+        )
 
 
 class ForkTaskProjector:
@@ -222,9 +234,18 @@ class HandoffProjector:
         fork_attention = ForkTaskProjector(self._tree).get_attention()
         if latest_handoff is None and fork_attention is None:
             return None
-        latest_handoff_index = _latest_custom_entry_index(self._tree, custom_type=HANDOFF_REQUEST_CUSTOM_TYPE)
-        latest_fork_index = _latest_custom_entry_index(self._tree, custom_type=FORK_TASK_PROJECTION_CUSTOM_TYPE)
-        if latest_handoff is not None and (fork_attention is None or latest_handoff_index is None or latest_fork_index is None or latest_handoff_index >= latest_fork_index):
+        latest_handoff_index = _latest_custom_entry_index(
+            self._tree, custom_type=HANDOFF_REQUEST_CUSTOM_TYPE
+        )
+        latest_fork_index = _latest_custom_entry_index(
+            self._tree, custom_type=FORK_TASK_PROJECTION_CUSTOM_TYPE
+        )
+        if latest_handoff is not None and (
+            fork_attention is None
+            or latest_handoff_index is None
+            or latest_fork_index is None
+            or latest_handoff_index >= latest_fork_index
+        ):
             attention: dict[str, Any] = {"kind": "handoff", "recommended_reason": "handoff_request"}
             target = latest_handoff.get("target")
             if isinstance(target, str) and target:
@@ -250,8 +271,9 @@ class CacheProjector:
     def __init__(self, tree: SessionTree) -> None:
         self._tree = tree
 
-    def get_turn_metrics_snapshots(self) -> list[Any]:
+    def get_turn_metrics_snapshots(self) -> list[TurnRuntimeMetricsSnapshot]:
         return _collect_turn_runtime_metrics_snapshots(self._tree.get_branch())
+
 
 class SearchProjector:
     def __init__(self, tree: SessionTree) -> None:
@@ -260,7 +282,10 @@ class SearchProjector:
     def get_search_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for entry in self._tree.get_branch():
-            if not isinstance(entry, CustomEntry) or entry.custom_type != SEARCH_EVIDENCE_CUSTOM_TYPE:
+            if (
+                not isinstance(entry, CustomEntry)
+                or entry.custom_type != SEARCH_EVIDENCE_CUSTOM_TYPE
+            ):
                 continue
             if isinstance(entry.data, dict):
                 entries.append(dict(entry.data))
@@ -285,7 +310,10 @@ class SearchProjector:
     def get_current_search_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for entry in self.get_current_branch():
-            if not isinstance(entry, CustomEntry) or entry.custom_type != SEARCH_EVIDENCE_CUSTOM_TYPE:
+            if (
+                not isinstance(entry, CustomEntry)
+                or entry.custom_type != SEARCH_EVIDENCE_CUSTOM_TYPE
+            ):
                 continue
             if isinstance(entry.data, dict):
                 entries.append(dict(entry.data))
@@ -298,7 +326,10 @@ class SearchProjector:
     def get_extract_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for entry in self._tree.get_branch():
-            if not isinstance(entry, CustomEntry) or entry.custom_type != EXTRACT_EVIDENCE_CUSTOM_TYPE:
+            if (
+                not isinstance(entry, CustomEntry)
+                or entry.custom_type != EXTRACT_EVIDENCE_CUSTOM_TYPE
+            ):
                 continue
             if isinstance(entry.data, dict):
                 entries.append(dict(entry.data))
@@ -311,7 +342,10 @@ class SearchProjector:
     def get_current_extract_entries(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
         for entry in self.get_current_branch():
-            if not isinstance(entry, CustomEntry) or entry.custom_type != EXTRACT_EVIDENCE_CUSTOM_TYPE:
+            if (
+                not isinstance(entry, CustomEntry)
+                or entry.custom_type != EXTRACT_EVIDENCE_CUSTOM_TYPE
+            ):
                 continue
             if isinstance(entry.data, dict):
                 entries.append(dict(entry.data))
@@ -327,11 +361,14 @@ class ReplacementProjector:
         self._tree = tree
 
     def get_state(self) -> ReplacementDecisionState:
-        from prismclaw.schema.content import collect_replacement_decision_state
+        from prismclaw.schema.content.replacement_store import collect_replacement_decision_state
+
         state = collect_replacement_decision_state(self._tree.get_branch())
         logger.debug(
             "ReplacementProjector.get_state: tree_id=%s decisions=%d digest=%s",
-            getattr(self._tree, "session_id", "?"), state.decision_count(), state.state_digest(),
+            getattr(self._tree, "session_id", "?"),
+            state.decision_count(),
+            state.state_digest(),
         )
         return state
 
@@ -402,9 +439,7 @@ def _build_fork_task_projection_summary(
         "completed_count": sum(
             1 for entry in effective_entries if entry.get("fork_status") == "completed"
         ),
-        "error_count": sum(
-            1 for entry in effective_entries if entry.get("fork_status") == "error"
-        ),
+        "error_count": sum(1 for entry in effective_entries if entry.get("fork_status") == "error"),
     }
     latest = entries[-1]
     task_id = latest.get("task_id")
@@ -449,3 +484,184 @@ def _build_fork_task_attention(
             "recommended_reason": "latest_result",
         }
     return None
+
+
+def _effective_fork_task_projection_entries(
+    entries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    effective_reversed: list[dict[str, Any]] = []
+    seen_task_ids: set[str] = set()
+    for entry in reversed(entries):
+        task_id = entry.get("task_id")
+        if isinstance(task_id, str) and task_id:
+            if task_id in seen_task_ids:
+                continue
+            seen_task_ids.add(task_id)
+        effective_reversed.append(dict(entry))
+    effective_reversed.reverse()
+    return effective_reversed
+
+
+def _latest_custom_entry_index(
+    tree: SessionTree,
+    *,
+    custom_type: str,
+) -> int | None:
+    branch = tree.get_branch()
+    for index in range(len(branch) - 1, -1, -1):
+        entry = branch[index]
+        if isinstance(entry, CustomEntry) and entry.custom_type == custom_type:
+            return index
+    return None
+
+
+def _message_entry_to_dict(
+    entry: MessageEntry,
+    *,
+    content_override: str | list[ContentBlock] | None = None,
+) -> AgentMessageDict:
+    content: Any
+    if content_override is not None:
+        entry_content = content_override
+    elif entry.enriched_content is not None:
+        entry_content = entry.enriched_content
+    else:
+        entry_content = entry.content
+    if entry.role == "tool" and isinstance(entry_content, str):
+        content = [{"type": "text", "text": entry_content}]
+    elif isinstance(entry_content, list):
+        content = _content_blocks_to_llm(entry_content)
+    else:
+        content = entry_content
+    msg: AgentMessageDict = {
+        "role": entry.role,
+        "content": content,
+        "__entry_id__": entry.id,
+    }
+    if entry.tool_calls:
+        msg["tool_calls"] = entry.tool_calls
+    if entry.tool_call_id:
+        msg["tool_call_id"] = entry.tool_call_id
+    return msg
+
+
+def _collect_custom_models[TModel: BaseModel](
+    branch: list[SessionEntry],
+    custom_type: str,
+    model_cls: type[TModel],
+) -> list[TModel]:
+    models: list[TModel] = []
+    for entry in branch:
+        if not isinstance(entry, CustomEntry) or entry.custom_type != custom_type:
+            continue
+        if not isinstance(entry.data, dict):
+            continue
+        try:
+            models.append(model_cls.model_validate(entry.data))
+        except Exception:
+            continue
+    return models
+
+
+def _find_latest_custom_model[TModel: BaseModel](
+    branch: list[SessionEntry],
+    custom_type: str,
+    model_cls: type[TModel],
+) -> TModel | None:
+    for entry in reversed(branch):
+        if not isinstance(entry, CustomEntry) or entry.custom_type != custom_type:
+            continue
+        if not isinstance(entry.data, dict):
+            continue
+        try:
+            return model_cls.model_validate(entry.data)
+        except Exception:
+            continue
+    return None
+
+
+def _collect_turn_runtime_metrics_snapshots(
+    branch: list[SessionEntry],
+) -> list[TurnRuntimeMetricsSnapshot]:
+    snapshots: list[TurnRuntimeMetricsSnapshot] = []
+    for entry in branch:
+        if (
+            not isinstance(entry, CustomEntry)
+            or entry.custom_type != TURN_RUNTIME_METRICS_CUSTOM_TYPE
+        ):
+            continue
+        snapshot = _coerce_turn_runtime_metrics_snapshot(entry.data)
+        if snapshot is not None:
+            snapshots.append(snapshot)
+    return snapshots
+
+
+def _coerce_turn_runtime_metrics_snapshot(data: object) -> TurnRuntimeMetricsSnapshot | None:
+    if not isinstance(data, dict):
+        return None
+    dynamic_payload = data.get("dynamic_payload")
+    input_tokens = data.get("input_tokens")
+    cache_read_tokens = data.get("cache_read_tokens")
+    result_payload_reduction = data.get("result_payload_reduction")
+    if not isinstance(dynamic_payload, int):
+        return None
+    if not isinstance(input_tokens, int):
+        return None
+    if not isinstance(cache_read_tokens, int):
+        return None
+    if not isinstance(result_payload_reduction, int):
+        return None
+    snapshot = TurnRuntimeMetricsSnapshot(
+        dynamic_payload=dynamic_payload,
+        input_tokens=input_tokens,
+        cache_read_tokens=cache_read_tokens,
+        result_payload_reduction=result_payload_reduction,
+    )
+    return snapshot
+
+
+def _history_compaction_reduction(entry: CompactionEntry) -> int:
+    tokens_before = entry.tokens_before if entry.tokens_before > 0 else 0
+    tokens_after: int | None = None
+    details = entry.details or {}
+    raw_tokens_after = details.get("tokens_after")
+    if isinstance(raw_tokens_after, int):
+        tokens_after = raw_tokens_after
+    elif isinstance(raw_tokens_after, float):
+        tokens_after = int(raw_tokens_after)
+    if tokens_after is None:
+        return 0
+    return max(0, tokens_before - max(0, tokens_after))
+
+
+def _content_blocks_to_llm(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
+    from prismclaw.schema.content.content_types import FileBlock, ImageBlock, TextBlock
+    from prismclaw.schema.shared.utils import file_reference_text
+
+    result: list[dict[str, Any]] = []
+    for block in blocks:
+        if isinstance(block, ImageBlock):
+            result.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
+                }
+            )
+        elif isinstance(block, TextBlock):
+            if not block.text or not block.text.strip():
+                continue
+            result.append({"type": "text", "text": block.text})
+        elif isinstance(block, FileBlock):
+            if not block.path or not block.path.strip():
+                continue
+            result.append(
+                {
+                    "type": "text",
+                    "text": file_reference_text(
+                        block.path.strip(),
+                        name=block.name,
+                        mime_type=block.mime_type,
+                    ),
+                }
+            )
+    return result

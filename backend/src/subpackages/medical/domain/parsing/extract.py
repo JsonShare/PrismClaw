@@ -9,13 +9,15 @@
 OCR 由调用方注入（``ocr(image_bytes, mime) -> str``），本模块不持有模型客户端，
 因此是纯函数式的、可单测的：没有 OCR 也能验证分派与降级路径。
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import logging
 import re
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 # 文本层低于这个字符数就认为「抽不到东西」，转 OCR
 PDF_TEXT_MIN_CHARS = 120
@@ -77,20 +79,24 @@ def _looks_like_text(text: str) -> bool:
 
 
 def _pdf_text_layer(data: bytes) -> str:
-    """取 PDF 内嵌文本层。pypdf / pdfplumber 任一可用即可。"""
+    """取 PDF 内嵌文本层。无文本层（扫描件）返回空串。"""
     try:
-        from pypdf import PdfReader
+        import pypdfium2 as pdfium
     except ImportError:
-        try:
-            from PyPDF2 import PdfReader  # type: ignore[no-redef]
-        except ImportError:
-            return ""
+        return ""
 
     try:
-        reader = PdfReader(io.BytesIO(data))
-        return "\n".join((page.extract_text() or "") for page in reader.pages)
+        doc = pdfium.PdfDocument(data)
     except Exception:
         return ""
+    try:
+        parts = [doc[i].get_textpage().get_text_bounded() or "" for i in range(len(doc))]
+        return "\n".join(parts)
+    except Exception:
+        return ""
+    finally:
+        with contextlib.suppress(Exception):
+            doc.close()
 
 
 def _docx_text(data: bytes) -> tuple[str, str]:
@@ -117,9 +123,7 @@ def _natural_sort_key(s: str) -> list:
     return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", s)]
 
 
-def _docx_images(
-    data: bytes, max_images: int = PDF_MAX_OCR_PAGES
-) -> list[tuple[bytes, str]]:
+def _docx_images(data: bytes, max_images: int = PDF_MAX_OCR_PAGES) -> list[tuple[bytes, str]]:
     """从 docx 中提取内嵌图片（word/media/ 下的 JPEG/PNG）。
 
     返回 [(图片字节, MIME 类型)]，按自然排序保证 image2 在 image10 之前。
@@ -301,7 +305,11 @@ async def extract_text(
     async def _do_ocr(images: list[bytes], mime: str) -> tuple[str, str]:
         if ocr_sem is not None:
             return await _ocr_join_parallel(
-                images, mime, ocr, ocr_sem=ocr_sem, on_page_done=on_page_done,
+                images,
+                mime,
+                ocr,
+                ocr_sem=ocr_sem,
+                on_page_done=on_page_done,
             )
         return await _ocr_join(images, mime, ocr)
 
@@ -392,11 +400,11 @@ async def _ocr_join_parallel(
     - ocr_sem 必须由调用方传入，保证同一信号量在所有协程间共享
     """
     total = len(images)
-    results: list[tuple[int, str]] = []   # (page_index, text)
-    errors: list[tuple[int, str]] = []    # (page_index, error)
+    results: list[tuple[int, str]] = []  # (page_index, text)
+    errors: list[tuple[int, str]] = []  # (page_index, error)
 
     async def _ocr_one(idx: int, img: bytes) -> None:
-        async with ocr_sem:                          # 共享信号量，在外层创建一次
+        async with ocr_sem:  # 共享信号量，在外层创建一次
             try:
                 page_text = await ocr(img, mime)
                 if page_text:

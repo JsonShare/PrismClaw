@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.persistence.sql_runner import apply_core_schema
+
+if TYPE_CHECKING:
+    from prismclaw.schema.storage.persistence_types import RunSnapshotLike
 
 _UPSERT = """
 INSERT INTO pc_run_snapshots (
@@ -36,7 +40,7 @@ class PostgresRunSnapshotStore:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         *,
-        payload_parser: Any | None = None,
+        payload_parser: Callable[[str], RunSnapshotLike | None] | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._payload_parser = payload_parser
@@ -44,7 +48,7 @@ class PostgresRunSnapshotStore:
     async def _init_schema(self) -> None:
         await apply_core_schema(self._session_factory)
 
-    async def save(self, snapshot: Any) -> None:
+    async def save(self, snapshot: RunSnapshotLike) -> None:
         await self._init_schema()
         run_id = snapshot.run_state.run_id
         session_id = snapshot.run_state.session_id
@@ -65,25 +69,21 @@ class PostgresRunSnapshotStore:
             )
             await session.commit()
 
-    async def load_latest(self, run_id: str) -> Any | None:
+    async def load_latest(self, run_id: str) -> RunSnapshotLike | None:
         await self._init_schema()
         async with self._session_factory() as session:
-            result = await session.execute(
-                text(_SELECT_BY_RUN), {"run_id": run_id}
-            )
+            result = await session.execute(text(_SELECT_BY_RUN), {"run_id": run_id})
             row = result.first()
             if row is None:
                 return None
             payload = row[0]
             return self._parse_payload(payload)
 
-    async def list_for_session(self, session_id: str) -> tuple[Any, ...]:
+    async def list_for_session(self, session_id: str) -> tuple[RunSnapshotLike, ...]:
         await self._init_schema()
         async with self._session_factory() as session:
-            result = await session.execute(
-                text(_SELECT_BY_SESSION), {"session_id": session_id}
-            )
-            snapshots: list[Any] = []
+            result = await session.execute(text(_SELECT_BY_SESSION), {"session_id": session_id})
+            snapshots: list[RunSnapshotLike] = []
             for row in result:
                 payload = row[0]
                 snapshot = self._parse_payload(payload)
@@ -91,7 +91,7 @@ class PostgresRunSnapshotStore:
                     snapshots.append(snapshot)
             return tuple(snapshots)
 
-    def _parse_payload(self, payload: Any) -> Any:
+    def _parse_payload(self, payload: object) -> RunSnapshotLike | None:
         """Parse a JSONB payload into a RunSnapshot using the injected parser."""
         if self._payload_parser is None:
             return None

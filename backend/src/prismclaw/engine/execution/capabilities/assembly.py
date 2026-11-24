@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
-logger = logging.getLogger(__name__)
-
+from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.graph_assembler import CapabilityAssembler
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.schema.agent.capability import (
     CapabilityGraph,
     CapabilityKind,
@@ -16,11 +18,15 @@ from prismclaw.schema.agent.capability import (
     SourceKind,
     TrustLevel,
 )
-from prismclaw.engine.execution.capabilities.graph_assembler import CapabilityAssembler
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
-from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+
+logger = logging.getLogger(__name__)
+
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+    from prismclaw.engine.hooks import SkillProvider
+    from prismclaw.engine.subagent.definition.registry import SubAgentRegistry
+    from prismclaw.engine.toolkit.registry.tool_runtime import Tool
     from prismclaw.schema.agent.capability import PluginCommandCapability
     from prismclaw.schema.services.skills import SkillManifest
 
@@ -28,11 +34,11 @@ if TYPE_CHECKING:
 def assemble_capability_catalog(
     *,
     workspace_path: str | Path | None = None,
-    skill_provider: Any = None,
-    extension_manager: Any = None,
-    subagent_registry: Any = None,
+    skill_provider: SkillProvider | None = None,
+    extension_manager: ExtensionManager | None = None,
+    subagent_registry: SubAgentRegistry | None = None,
     tool_registry: ToolRegistry | None = None,
-    mcp_skill_manifests_builder: Callable[[], list[Any]] | None = None,
+    mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None = None,
 ) -> CapabilityCatalogService:
     capability_graph, runtime_capabilities = _assemble_catalog_snapshot(
         tool_registry=tool_registry,
@@ -51,7 +57,7 @@ def assemble_capability_catalog(
 
 
 def _load_provider_skill_manifests(
-    skill_provider: Any,
+    skill_provider: SkillProvider | None,
     *,
     workspace_path: str | Path | None,
 ) -> list[Any]:
@@ -60,14 +66,20 @@ def _load_provider_skill_manifests(
         return []
     list_skills = getattr(skill_provider, "list_skills", None)
     if not callable(list_skills):
-        logger.warning("skill_provider has no callable list_skills (type=%s)", type(skill_provider).__name__)
+        logger.warning(
+            "skill_provider has no callable list_skills (type=%s)", type(skill_provider).__name__
+        )
         return []
     try:
         if workspace_path is not None:
             skills = list(list_skills(str(workspace_path)))
         else:
             skills = list(list_skills())
-        logger.info("skill_provider.list_skills returned %d skills (workspace_path=%s)", len(skills), workspace_path)
+        logger.info(
+            "skill_provider.list_skills returned %d skills (workspace_path=%s)",
+            len(skills),
+            workspace_path,
+        )
         return skills
     except TypeError:
         skills = list(list_skills())
@@ -128,7 +140,10 @@ def _source_ref_for_workspace_manifest(
     if (
         resolved_location is not None
         and resolved_workspace is not None
-        and (resolved_location == resolved_workspace or resolved_workspace in resolved_location.parents)
+        and (
+            resolved_location == resolved_workspace
+            or resolved_workspace in resolved_location.parents
+        )
     ):
         return _generic_source_ref(
             source_id=f"workspace:{canonical_id}",
@@ -144,7 +159,7 @@ def _source_ref_for_workspace_manifest(
     )
 
 
-def _source_ref_for_tool(tool: Any) -> PluginSourceRef:
+def _source_ref_for_tool(tool: Tool) -> PluginSourceRef:
     tool_name = getattr(tool, "name", None)
     canonical_id = tool_name if isinstance(tool_name, str) and tool_name else "unknown-tool"
     server_name = getattr(tool, "server_name", None)
@@ -190,15 +205,15 @@ def _assemble_catalog_snapshot(
     *,
     tool_registry: ToolRegistry | None,
     workspace_path: str | Path | None,
-    extension_manager: Any,
-    skill_provider: Any,
-    subagent_registry: Any,
-    mcp_skill_manifests_builder: Callable[[], list[Any]] | None = None,
+    extension_manager: ExtensionManager | None,
+    skill_provider: SkillProvider | None,
+    subagent_registry: SubAgentRegistry | None,
+    mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None = None,
 ) -> tuple[CapabilityGraph, RuntimeCapabilities]:
     assembler = CapabilityAssembler()
     nodes: list[CapabilityNode] = []
 
-    def _dump_manifest_payload(manifest: Any) -> dict[str, Any]:
+    def _dump_manifest_payload(manifest: object) -> dict[str, Any]:
         model_dump = getattr(manifest, "model_dump", None)
         if callable(model_dump):
             payload = model_dump(mode="json", exclude_none=True)
@@ -244,7 +259,9 @@ def _assemble_catalog_snapshot(
         )
 
     plugin_graphs_by_name: dict[str, CapabilityGraph] = {}
-    if extension_manager is not None and hasattr(extension_manager, "iter_plugin_capability_graphs"):
+    if extension_manager is not None and hasattr(
+        extension_manager, "iter_plugin_capability_graphs"
+    ):
         for view in extension_manager.iter_plugin_capability_graphs():
             graph = getattr(view, "graph", None)
             if not isinstance(graph, CapabilityGraph):
@@ -277,7 +294,11 @@ def _assemble_catalog_snapshot(
         type(extension_manager).__name__ if extension_manager is not None else "None",
         workspace_path,
     )
-    seen_skills = {getattr(m, "name", None) for m in skill_manifests if isinstance(getattr(m, "name", None), str)}
+    seen_skills = {
+        getattr(m, "name", None)
+        for m in skill_manifests
+        if isinstance(getattr(m, "name", None), str)
+    }
     extension_skill_fingerprints: list[str] = []
 
     for manifest in skill_manifests:
@@ -312,7 +333,8 @@ def _assemble_catalog_snapshot(
                 continue
             plugin_name = getattr(descriptor, "plugin_name", None)
             extension_skill_fingerprints.append(
-                f"plugin-skill:{plugin_name or ''}:{name}:{getattr(manifest, 'file_path', '') or ''}"
+                f"plugin-skill:{plugin_name or ''}:{name}:"
+                f"{getattr(manifest, 'file_path', '') or ''}"
             )
             nodes.append(
                 assembler.make_enabled_node(
@@ -327,10 +349,12 @@ def _assemble_catalog_snapshot(
                         "plugin_name": plugin_name,
                         "origin": getattr(descriptor, "origin", None),
                         "manifest": _dump_manifest_payload(manifest),
-                        # v5 渐进式披露：marketplace_name 用于系统提示词按包名聚合
+                        # marketplace_name 用于系统提示词按包名聚合
                         "marketplace_name": getattr(descriptor, "marketplace_name", None),
-                        # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
-                        "marketplace_description": getattr(descriptor, "marketplace_description", None),
+                        # 市场级 plugin.json 的描述，用于提示词按包聚合
+                        "marketplace_description": getattr(
+                            descriptor, "marketplace_description", None
+                        ),
                         "plugin_description": getattr(descriptor, "plugin_description", None),
                     },
                     projection_targets=("skills",),
@@ -343,10 +367,10 @@ def _assemble_catalog_snapshot(
     seen_plugin_cmds: set[tuple[str | None, str]] = set()
 
     def _pseudo_skill_manifest_for_command(
-        command: "PluginCommandCapability",
+        command: PluginCommandCapability,
         *,
         plugin_name: str | None,
-    ) -> "SkillManifest":
+    ) -> SkillManifest:
         """把 PluginCommandCapability 包装为伪 SkillManifest。
 
         commands 是原子技能（Phase 3 迁移产物），不编排子技能，
@@ -379,7 +403,9 @@ def _assemble_catalog_snapshot(
             category=category,
         )
 
-    if extension_manager is not None and hasattr(extension_manager, "iter_plugin_command_descriptors"):
+    if extension_manager is not None and hasattr(
+        extension_manager, "iter_plugin_command_descriptors"
+    ):
         for cmd_descriptor in extension_manager.iter_plugin_command_descriptors():
             capability = getattr(cmd_descriptor, "capability", None)
             if capability is None:
@@ -392,11 +418,10 @@ def _assemble_catalog_snapshot(
             if dedup_key in seen_plugin_cmds:
                 continue
             seen_plugin_cmds.add(dedup_key)
-            extension_command_fingerprints.append(
-                f"plugin-command:{plugin_name or ''}:{cmd_name}"
-            )
+            extension_command_fingerprints.append(f"plugin-command:{plugin_name or ''}:{cmd_name}")
             pseudo_manifest = _pseudo_skill_manifest_for_command(
-                capability, plugin_name=plugin_name,
+                capability,
+                plugin_name=plugin_name,
             )
             nodes.append(
                 assembler.make_enabled_node(
@@ -413,7 +438,9 @@ def _assemble_catalog_snapshot(
                         "manifest": _dump_manifest_payload(pseudo_manifest),
                         # v5 渐进式披露：command 伪 skill 也需要 marketplace 元数据
                         "marketplace_name": getattr(cmd_descriptor, "marketplace_name", None),
-                        "marketplace_description": getattr(cmd_descriptor, "marketplace_description", None),
+                        "marketplace_description": getattr(
+                            cmd_descriptor, "marketplace_description", None
+                        ),
                         "plugin_description": getattr(cmd_descriptor, "plugin_description", None),
                     },
                     projection_targets=("skills",),
@@ -432,9 +459,7 @@ def _assemble_catalog_snapshot(
                 continue
             seen_skills.add(name)
             server_name = getattr(manifest, "loaded_from", "") or ""
-            mcp_skill_fingerprints.append(
-                f"mcp-skill:{server_name}:{name}"
-            )
+            mcp_skill_fingerprints.append(f"mcp-skill:{server_name}:{name}")
             nodes.append(
                 assembler.make_enabled_node(
                     canonical_id=name,
@@ -454,7 +479,11 @@ def _assemble_catalog_snapshot(
     if subagent_registry is not None and hasattr(subagent_registry, "list_all"):
         manifests = list(subagent_registry.list_all())
     agent_manifests = _dedupe_by_name(manifests)
-    seen_agents = {getattr(m, "name", None) for m in agent_manifests if isinstance(getattr(m, "name", None), str)}
+    seen_agents = {
+        getattr(m, "name", None)
+        for m in agent_manifests
+        if isinstance(getattr(m, "name", None), str)
+    }
     extension_agent_fingerprints: list[str] = []
 
     for manifest in agent_manifests:
@@ -482,14 +511,19 @@ def _assemble_catalog_snapshot(
         )
 
     if extension_manager is not None and hasattr(extension_manager, "iter_agent_descriptors"):
-        for descriptor in extension_manager.iter_agent_descriptors():
-            manifest = getattr(descriptor, "manifest", None)
-            capability_name = getattr(descriptor, "canonical_id", None)
-            if not isinstance(capability_name, str) or not capability_name or capability_name in seen_agents:
+        for agent_descriptor in extension_manager.iter_agent_descriptors():
+            manifest = getattr(agent_descriptor, "manifest", None)
+            capability_name = getattr(agent_descriptor, "canonical_id", None)
+            if (
+                not isinstance(capability_name, str)
+                or not capability_name
+                or capability_name in seen_agents
+            ):
                 continue
-            plugin_name = getattr(descriptor, "plugin_name", None)
+            plugin_name = getattr(agent_descriptor, "plugin_name", None)
             extension_agent_fingerprints.append(
-                f"plugin-agent:{plugin_name or ''}:{capability_name}:{getattr(manifest, 'source', '') or ''}"
+                f"plugin-agent:{plugin_name or ''}:{capability_name}:"
+                f"{getattr(manifest, 'source', '') or ''}"
             )
             nodes.append(
                 assembler.make_enabled_node(
@@ -502,12 +536,14 @@ def _assemble_catalog_snapshot(
                     ),
                     metadata={
                         "plugin_name": plugin_name,
-                        "origin": getattr(descriptor, "origin", None),
+                        "origin": getattr(agent_descriptor, "origin", None),
                         "manifest": _dump_manifest_payload(manifest),
                         # v5 渐进式披露：agent 也需要 marketplace 元数据
-                        "marketplace_name": getattr(descriptor, "marketplace_name", None),
-                        "marketplace_description": getattr(descriptor, "marketplace_description", None),
-                        "plugin_description": getattr(descriptor, "plugin_description", None),
+                        "marketplace_name": getattr(agent_descriptor, "marketplace_name", None),
+                        "marketplace_description": getattr(
+                            agent_descriptor, "marketplace_description", None
+                        ),
+                        "plugin_description": getattr(agent_descriptor, "plugin_description", None),
                     },
                     projection_targets=("agents",),
                 )

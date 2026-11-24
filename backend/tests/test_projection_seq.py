@@ -4,6 +4,7 @@
 没有记录，前端拿不到"这条消息对应哪次事件"。这里锁住两条投影路径
 （Redis 写入投影 / 内存 from_events 回放）必须给出同一个 seq。
 """
+
 from __future__ import annotations
 
 import asyncio

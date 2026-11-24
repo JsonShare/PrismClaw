@@ -1,5 +1,7 @@
 """Services sub-contracts: hooks, plugins, skills, upload, env types."""
 
+from prismclaw.schema.services.auth import UserProfile, UserProfileStore
+from prismclaw.schema.services.env_types import CommandResult, ExecutionEnv, FileResult
 from prismclaw.schema.services.hooks import (
     HookContextProtocol,
     HookHandlerProtocol,
@@ -22,10 +24,8 @@ from prismclaw.schema.services.skills import (
     normalize_skill_ref,
     resolve_skill_name,
 )
-from prismclaw.schema.services.upload import UploadServiceProtocol
-from prismclaw.schema.services.env_types import CommandResult, ExecutionEnv, FileResult
-from prismclaw.schema.services.auth import UserProfile, UserProfileStore
 from prismclaw.schema.services.task_protocol import TaskManagerProtocol
+from prismclaw.schema.services.upload import UploadServiceProtocol
 
 __all__ = [
     "TaskManagerProtocol",

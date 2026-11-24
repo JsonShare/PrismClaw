@@ -1,9 +1,12 @@
 """FastAPI middleware installation helpers."""
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request
+from starlette.responses import Response
 
 from prismclaw.app._env import _is_truthy_env
 
@@ -46,7 +49,9 @@ def _install_security_headers(app: FastAPI) -> None:
     )
 
     @app.middleware("http")
-    async def _security_headers(request: Request, call_next):
+    async def _security_headers(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         response = await call_next(request)
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -77,7 +82,7 @@ def _install_rate_limiter(app: FastAPI) -> None:
         app.add_middleware(SlowAPIMiddleware)
 
         @app.exception_handler(RateLimitExceeded)
-        async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Response:
             from fastapi.responses import JSONResponse
 
             return JSONResponse(status_code=429, content={"error": "rate_limit_exceeded"})
@@ -101,12 +106,14 @@ def _install_tracing(app: FastAPI) -> None:
         # Echo the current trace context on the response (W3C traceparent) so
         # clients/log aggregators can correlate a request with its span.
         @app.middleware("http")
-        async def _traceparent_echo(request: Request, call_next):
+        async def _traceparent_echo(
+            request: Request, call_next: Callable[[Request], Awaitable[Response]]
+        ) -> Response:
             response = await call_next(request)
             span = trace.get_current_span()
             ctx = span.get_span_context()
             if ctx and ctx.trace_id:
-                tp = "00-{:032x}-{:016x}-01".format(ctx.trace_id, ctx.span_id)
+                tp = f"00-{ctx.trace_id:032x}-{ctx.span_id:016x}-01"
                 response.headers["traceparent"] = tp
             return response
     except Exception:

@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from prismclaw.schema.session import (
-    MessageEntry,
-    SessionEntry,
-    SessionEvent,
-    SessionEventType,
+from prismclaw.schema.agent.session import MessageEntry, SessionEvent, SessionEventType
+from prismclaw.schema.session.types import (
+    SessionEntry as SessionEntry,
+)
+from prismclaw.schema.session.types import (
     _event_to_message_entry,
     _parse_entry,
     now_iso,
@@ -163,9 +163,7 @@ class SessionEventLogger:
             data=data,
         )
 
-    def assistant_chunk(
-        self, session_id: str, chunk: dict[str, Any]
-    ) -> SessionEvent:
+    def assistant_chunk(self, session_id: str, chunk: dict[str, Any]) -> SessionEvent:
         return _mk(
             type=SessionEventType.ASSISTANT_CHUNK,
             session_id=session_id,
@@ -270,9 +268,7 @@ class SessionEventLogger:
             ignorable=True,
         )
 
-    def request_context(
-        self, session_id: str, context: dict[str, Any]
-    ) -> SessionEvent:
+    def request_context(self, session_id: str, context: dict[str, Any]) -> SessionEvent:
         return _mk(
             type=SessionEventType.REQUEST_CONTEXT,
             session_id=session_id,
@@ -290,9 +286,7 @@ class SessionEventLogger:
 
     # ── Session Lifecycle ──────────────────────────────────────
 
-    def session_created(
-        self, session_id: str, header: dict[str, Any]
-    ) -> SessionEvent:
+    def session_created(self, session_id: str, header: dict[str, Any]) -> SessionEvent:
         return _mk(
             type=SessionEventType.SESSION_CREATED,
             session_id=session_id,
@@ -338,49 +332,54 @@ class SessionEventLogger:
             content: Any = raw_content
         elif isinstance(raw_content, list):
             content = [
-                b.model_dump(mode="json") if hasattr(b, "model_dump") else b
-                for b in raw_content
+                b.model_dump(mode="json") if hasattr(b, "model_dump") else b for b in raw_content
             ]
         else:
             content = str(raw_content) if raw_content is not None else ""
 
         if entry.role == "user":
-            events.append(self.user_message(
-                session_id,
-                content=content,
-                entry_id=entry.id,
-                parent_id=entry.parent_id,
-                enriched_content=entry.enriched_content,
-                timestamp=entry.timestamp,
-                metadata=entry.metadata,
-                client_message_id=entry.client_message_id,
-            ))
+            events.append(
+                self.user_message(
+                    session_id,
+                    content=content,
+                    entry_id=entry.id,
+                    parent_id=entry.parent_id,
+                    enriched_content=entry.enriched_content,
+                    timestamp=entry.timestamp,
+                    metadata=entry.metadata,
+                    client_message_id=entry.client_message_id,
+                )
+            )
 
         elif entry.role == "assistant":
-            events.append(self.assistant_message(
-                session_id,
-                content=content,
-                entry_id=entry.id,
-                tool_calls=entry.tool_calls,
-                parent_id=entry.parent_id,
-                enriched_content=entry.enriched_content,
-                timestamp=entry.timestamp,
-                metadata=entry.metadata,
-            ))
+            events.append(
+                self.assistant_message(
+                    session_id,
+                    content=content,
+                    entry_id=entry.id,
+                    tool_calls=entry.tool_calls,
+                    parent_id=entry.parent_id,
+                    enriched_content=entry.enriched_content,
+                    timestamp=entry.timestamp,
+                    metadata=entry.metadata,
+                )
+            )
 
         elif entry.role == "tool":
-            events.append(self.tool_result(
-                session_id,
-                tool_call_id=entry.tool_call_id or "",
-                content=content,
-                entry_id=entry.id,
-                parent_id=entry.parent_id,
-                enriched_content=entry.enriched_content,
-                is_error=entry.is_error,
-                tool_name=entry.tool_name,
-                timestamp=entry.timestamp,
-                metadata=entry.metadata,
-            ))
+            events.append(
+                self.tool_result(
+                    session_id,
+                    tool_call_id=entry.tool_call_id or "",
+                    content=content,
+                    entry_id=entry.id,
+                    parent_id=entry.parent_id,
+                    enriched_content=entry.enriched_content,
+                    is_error=entry.is_error,
+                    tool_name=entry.tool_name,
+                    timestamp=entry.timestamp,
+                    metadata=entry.metadata,
+                )
+            )
 
         return events
 
@@ -421,7 +420,4 @@ class SessionEventLogger:
         leaf_id: str | None = None,
     ) -> list[SessionEvent]:
         """Build entry_updated events for batch non-message updates."""
-        return [
-            self.entry_updated(session_id, entry, leaf_id)
-            for entry in entries
-        ]
+        return [self.entry_updated(session_id, entry, leaf_id) for entry in entries]

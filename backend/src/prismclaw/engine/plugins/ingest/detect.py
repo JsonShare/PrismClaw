@@ -9,10 +9,11 @@ Priority:
     2. bare ``skills/`` directory                → BARE_SKILLS (wrap)
     3. otherwise                                 → UNKNOWN
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
@@ -24,7 +25,7 @@ __all__ = [
 ]
 
 
-class PluginDialect(str, Enum):
+class PluginDialect(StrEnum):
     """Recognized plugin source dialects."""
 
     CANONICAL = "canonical"

@@ -1,17 +1,20 @@
 """Phase 1 基线: history_compaction 行为契约测试。
 
 锁定不变量（重构过程必须持续通过）：
-1. CompactResult 字段结构：ok / compacted / summary / tokens_before / tokens_after / first_kept_entry_id
+1. CompactResult 字段结构：ok / compacted / summary / tokens_before /
+   tokens_after / first_kept_entry_id
 2. token 单调下降：tokens_after < tokens_before（成功路径）
 3. carry_forward_missing_sections：critical section 缺失时从 prior 摘要 append
 4. _query_messages_for_compaction：fact sheet 注入 + meta_messages 渲染顺序
 5. predict_compaction_trigger：emergency_ratio 阈值触发 + 样本不足时返回 False
 """
+
 from __future__ import annotations
 
-from prismclaw.engine.compression.history_compaction import (
-    predict_compaction_trigger,
-)
+import asyncio
+
+import pytest
+
 from prismclaw.engine.compression.compaction import (
     build_compaction,
     estimate_message_tokens,
@@ -20,11 +23,13 @@ from prismclaw.engine.compression.compaction import (
 from prismclaw.engine.compression.hardening import (
     carry_forward_missing_sections,
 )
+from prismclaw.engine.compression.history_compaction import (
+    predict_compaction_trigger,
+)
 from prismclaw.schema.content.compaction import CompactResult
 from prismclaw.schema.session.cache_types import CompressionRuntimeState
 
-
-# ──────────────────────────── 1. CompactResult 字段契约 ────────────────────────────
+# ─────────────────────────────────── 1. CompactResult 字段契约 ────────────────────────────────────
 
 
 def test_compact_result_minimal_fields():
@@ -59,7 +64,7 @@ def test_compact_result_full_fields_round_trip():
     assert result.first_kept_entry_id == "entry_5"
 
 
-# ──────────────────────────── 2. token 单调下降（build_compaction 决策） ────────────────────────────
+# ─────────────────────────── 2. token 单调下降（build_compaction 决策） ───────────────────────────
 
 
 def test_build_compaction_within_budget():
@@ -103,7 +108,7 @@ def test_find_cut_point_respects_keep_recent():
     assert cut is None or cut > 0
 
 
-# ──────────────────────────── 3. carry_forward_missing_sections 契约 ────────────────────────────
+# ───────────────────────────── 3. carry_forward_missing_sections 契约 ─────────────────────────────
 
 
 _PRIOR_SUMMARY = """\
@@ -131,9 +136,7 @@ _NEW_SUMMARY_MISSING_VOIDED_SECTION = """\
 
 def test_carry_forward_appends_voided_section_via_w12():
     """新摘要缺含 voided markers 的 section → 无条件 carry (W12)。"""
-    result = carry_forward_missing_sections(
-        _NEW_SUMMARY_MISSING_VOIDED_SECTION, _PRIOR_SUMMARY
-    )
+    result = carry_forward_missing_sections(_NEW_SUMMARY_MISSING_VOIDED_SECTION, _PRIOR_SUMMARY)
     # W12: voided section 无条件 carry
     assert "Voided Entries" in result
     assert "二甲双胍: VOID" in result
@@ -144,9 +147,7 @@ def test_carry_forward_appends_voided_section_via_w12():
 
 def test_carry_forward_appends_section_7_via_carry_forward_set():
     """新摘要缺 section 7 (carry-forward 集合) → 从 prior 摘要 append。"""
-    result = carry_forward_missing_sections(
-        _NEW_SUMMARY_MISSING_VOIDED_SECTION, _PRIOR_SUMMARY
-    )
+    result = carry_forward_missing_sections(_NEW_SUMMARY_MISSING_VOIDED_SECTION, _PRIOR_SUMMARY)
     # section 7 在 _CARRY_FORWARD_SECTION_NUMBERS = frozenset({7})
     assert "7. Pending Tasks" in result
     assert "待办事项 1" in result
@@ -166,7 +167,7 @@ def test_carry_forward_empty_new_summary():
     assert "Voided Entries" in result
 
 
-# ──────────────────────────── 4. CompressionRuntimeState 不变量 ────────────────────────────
+# ─────────────────────────────── 4. CompressionRuntimeState 不变量 ────────────────────────────────
 
 
 def test_compression_runtime_state_defaults():
@@ -190,7 +191,7 @@ def test_compression_runtime_state_mutable():
     assert state.recent_history_tokens[-1] == 3000
 
 
-# ──────────────────────────── 5. predict_compaction_trigger 契约 ────────────────────────────
+# ─────────────────────────────── 5. predict_compaction_trigger 契约 ───────────────────────────────
 
 
 def test_predict_compaction_no_samples_returns_false():
@@ -230,9 +231,7 @@ def test_predict_compaction_emergency_ratio_triggers():
 
 def test_predict_compaction_already_over_budget_returns_false():
     """current_tokens >= trigger_budget → 已超预算，由被动路径处理，predictive 返回 False。"""
-    runtime = CompressionRuntimeState(
-        recent_history_tokens=[1000, 2000, 3000, 4000, 5000]
-    )
+    runtime = CompressionRuntimeState(recent_history_tokens=[1000, 2000, 3000, 4000, 5000])
     result = predict_compaction_trigger(
         runtime=runtime,
         current_tokens=8000,
@@ -246,7 +245,7 @@ def test_predict_compaction_already_over_budget_returns_false():
     assert result is False
 
 
-# ──────────────────────────── 6. estimate_message_tokens 单调性 ────────────────────────────
+# ─────────────────────────────── 6. estimate_message_tokens 单调性 ────────────────────────────────
 
 
 def test_estimate_message_tokens_chinese_weighted():
@@ -275,3 +274,50 @@ def test_estimate_message_tokens_with_tool_calls():
     }
     tokens = estimate_message_tokens(msg)
     assert tokens > 8  # base overhead
+
+
+# ─────────────────────────────────── 7. cooldown 日志的预算事实 ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cooldown_log_does_not_claim_over_budget_when_under(caplog) -> None:
+    """history_tokens 未超硬预算时，日志不得断言 over budget。
+
+    触发阈值可能低于硬预算（pretrim_trigger_tokens），旧文案一律写
+    "over budget" 会在未超硬预算时给出假命题，误导排障方向。
+    """
+    import logging
+    from types import SimpleNamespace
+
+    from prismclaw.engine.compression.history_compaction import maybe_pretrim_history
+
+    deps = SimpleNamespace(
+        config=SimpleNamespace(
+            context=SimpleNamespace(
+                compaction=SimpleNamespace(history=SimpleNamespace(min_interval_entries=5))
+            )
+        )
+    )
+    tree = SimpleNamespace(entries={str(i): object() for i in range(2)})
+    runtime = CompressionRuntimeState(last_compaction_entry_seq=1)
+    assessment = SimpleNamespace(
+        should_compact=True, threshold_override=None, keep_recent_tokens_override=None
+    )
+
+    with caplog.at_level(logging.WARNING):
+        outcome = await maybe_pretrim_history(
+            deps=deps,
+            tree=tree,
+            request=SimpleNamespace(),
+            query_loop_state=SimpleNamespace(),
+            compression_runtime=runtime,
+            history_budget=33279,
+            history_tokens=30696,
+            abort_event=asyncio.Event(),
+            history_assessment=assessment,
+        )
+
+    assert outcome is None  # cooldown 抑制，未进入压缩
+    message = caplog.records[-1].getMessage()
+    assert "over_hard_budget=False" in message
+    assert "over budget=" not in message

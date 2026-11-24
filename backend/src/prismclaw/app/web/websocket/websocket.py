@@ -1,37 +1,68 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import secrets
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from prismclaw.app.auth.auth import verify_jwt
-from prismclaw.app.web.connection import (  # noqa: F401 – re-exports
-    ConnectionRegistry,
+from prismclaw.app.web.connection import (
+    ConnectionRegistry as ConnectionRegistry,
+)
+from prismclaw.app.web.connection import (
     ConnectionState,
     send_event,
 )
+from prismclaw.app.web.deps import get_web_deps_from_app
 from prismclaw.app.web.protocol.protocol import (
-    SERVER_CHAT_STEERING_ACK,
-    SERVER_ERROR,
-    SERVER_HELLO,
-    SERVER_PING,
-    SERVER_READY,
-    ChatAbortMessage,
-    ChatCancelMessage,
-    ChatSendMessage,
-    ChatSteerMessage,
-    IdentifyMessage,
-    PongMessage,
-    ToolClarifyMessage,
-    parse_client_message,
+    SERVER_CHAT_STEERING_ACK as SERVER_CHAT_STEERING_ACK,
 )
-from prismclaw.schema.protocol.protocol_types import PROTOCOL_VERSION, ProtocolErrorCode
+from prismclaw.app.web.protocol.protocol import (
+    SERVER_ERROR as SERVER_ERROR,
+)
+from prismclaw.app.web.protocol.protocol import (
+    SERVER_HELLO as SERVER_HELLO,
+)
+from prismclaw.app.web.protocol.protocol import (
+    SERVER_PING as SERVER_PING,
+)
+from prismclaw.app.web.protocol.protocol import (
+    SERVER_READY as SERVER_READY,
+)
+from prismclaw.app.web.protocol.protocol import (
+    ChatAbortMessage as ChatAbortMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    ChatCancelMessage as ChatCancelMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    ChatSendMessage as ChatSendMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    ChatSteerMessage as ChatSteerMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    IdentifyMessage as IdentifyMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    PongMessage as PongMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    ToolClarifyMessage as ToolClarifyMessage,
+)
+from prismclaw.app.web.protocol.protocol import (
+    parse_client_message as parse_client_message,
+)
 from prismclaw.infra.settings import WebSettings
 from prismclaw.infra.task_manager import TaskManager
+from prismclaw.schema.protocol.protocol_types import PROTOCOL_VERSION, ProtocolErrorCode
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +80,7 @@ def _get_connection_registry(websocket: WebSocket) -> ConnectionRegistry:
 
 
 async def broadcast_to_user(
-    app: Any,
+    app: FastAPI,
     user_id: str,
     event_type: str,
     data: dict[str, Any],
@@ -92,18 +123,22 @@ async def broadcast_to_user(
     router = getattr(web_deps, "gateway_router", None)
     if router is None:
         return 0
-    await router.route(
-        web_session_key(user_id), encode_forward_event(user_id, frame)
-    )
+    await router.route(web_session_key(user_id), encode_forward_event(user_id, frame))
     return 0
 
 
 def _get_settings(websocket: WebSocket) -> WebSettings:
-    return websocket.app.state.web_deps.web_settings
+    settings = get_web_deps_from_app(websocket.app).web_settings
+    if not isinstance(settings, WebSettings):
+        raise RuntimeError("web_deps.web_settings 未配置")
+    return settings
 
 
 def _get_task_manager(websocket: WebSocket) -> TaskManager:
-    return websocket.app.state.web_deps.task_manager
+    task_manager = get_web_deps_from_app(websocket.app).task_manager
+    if not isinstance(task_manager, TaskManager):
+        raise RuntimeError("web_deps.task_manager 未配置")
+    return task_manager
 
 
 @ws_router.websocket("/api/ws")
@@ -137,13 +172,19 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     parsed = parse_client_message(raw)
     if not isinstance(parsed, IdentifyMessage):
-        logger.warning("ws close 4002: first message not identify, got type=%s", raw.get("type") if isinstance(raw, dict) else type(raw).__name__)
+        logger.warning(
+            "ws close 4002: first message not identify, got type=%s",
+            raw.get("type") if isinstance(raw, dict) else type(raw).__name__,
+        )
         await websocket.close(4002, "First message must be identify")
         return
 
     user_id = verify_jwt(parsed.token, settings.jwt_secret)
     if user_id is None:
-        logger.warning("ws auth failed: token=%s... (first 20 chars)", parsed.token[:20] if parsed.token else "EMPTY")
+        logger.warning(
+            "ws auth failed: token=%s... (first 20 chars)",
+            parsed.token[:20] if parsed.token else "EMPTY",
+        )
         await websocket.close(4003, "Invalid token")
         return
 
@@ -151,7 +192,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     if parsed.protocol_version != PROTOCOL_VERSION:
         logger.warning(
             "ws version mismatch: client=%d server=%d",
-            parsed.protocol_version, PROTOCOL_VERSION,
+            parsed.protocol_version,
+            PROTOCOL_VERSION,
         )
         await websocket.close(4005, ProtocolErrorCode.VERSION_MISMATCH.value)
         return
@@ -229,17 +271,13 @@ async def _heartbeat_loop(state: ConnectionState, settings: WebSettings) -> None
                 # 里的 registry.disconnect），否则死连接会在 registry 中
                 # 悬挂到 TCP 自行拆除为止，期间持续占用
                 # max_connections_per_user 配额（表现为后续连接 4004）。
-                try:
+                with contextlib.suppress(Exception):
                     await state.ws.close(4006, "Heartbeat send failed")
-                except Exception:
-                    pass
                 return
             if time.time() - state.last_pong > settings.pong_timeout + settings.heartbeat_interval:
                 logger.warning("pong timeout for user %s, closing", state.user_id)
-                try:
+                with contextlib.suppress(Exception):
                     await state.ws.close(4006, "Pong timeout")
-                except Exception:
-                    pass
                 return
     except asyncio.CancelledError:
         return
@@ -269,28 +307,32 @@ def _register_msg_handlers(state: ConnectionState) -> None:
                     COMMAND_HANDLED,
                     try_handle_slash_command,
                 )
-                modified_msg = await try_handle_slash_command(state, msg)
-                if modified_msg is COMMAND_HANDLED:
+
+                intercepted = await try_handle_slash_command(state, msg)
+                if intercepted is COMMAND_HANDLED:
                     # Built-in command fully handled locally (reply already
                     # sent over the WS) — swallow, do not enqueue to LLM.
                     return
-                if modified_msg is not None:
-                    msg = modified_msg
+                if isinstance(intercepted, ChatSendMessage):
+                    msg = intercepted
             except Exception:
                 logger.warning("command_adapter interception failed", exc_info=True)
 
-        async def _notify_enqueue_error(exc: Exception) -> None:
+        async def _notify_enqueue_error(exc: BaseException) -> None:
             try:
                 await send_event(
                     state,
                     SERVER_ERROR,
                     conversation_id,
-                    {"code": ProtocolErrorCode.INTERNAL_ERROR.value, "message": f"{type(exc).__name__}: {exc}"},
+                    {
+                        "code": ProtocolErrorCode.INTERNAL_ERROR.value,
+                        "message": f"{type(exc).__name__}: {exc}",
+                    },
                 )
             except Exception:
                 logger.warning("ws-enqueue error notification failed", exc_info=True)
 
-        def _on_enqueue_error(exc: Exception) -> None:
+        def _on_enqueue_error(exc: BaseException) -> None:
             logger.warning("ws-enqueue failed: %s", exc)
             try:
                 task_manager.spawn(
@@ -323,6 +365,7 @@ def _register_msg_handlers(state: ConnectionState) -> None:
         # AskUserQuestion 澄清回传：直接解除引擎侧 wait_for_clarification 的
         # await（按 approval_id 提交答案），引擎同轮续跑。无需入队新消息。
         from prismclaw.app.web.chat.chat_protocol import _get_session_queue
+
         session_queue = _get_session_queue(state)
         session_queue.set_approval_decision(
             conversation_id=msg.conversation_id,

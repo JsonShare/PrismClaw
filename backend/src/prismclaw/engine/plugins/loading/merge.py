@@ -3,6 +3,7 @@
 优先级：session > marketplace > local > builtin
 managed 不可被 session 覆盖。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -44,8 +45,7 @@ def merge_plugin_sources(
                     source=plugin.source,
                     plugin=plugin.name,
                     message=(
-                        f'已忽略来自 --plugin-dir 的 "{plugin.name}" 副本：'
-                        "该插件已被托管设置锁定"
+                        f'已忽略来自 --plugin-dir 的 "{plugin.name}" 副本：该插件已被托管设置锁定'
                     ),
                 )
             )

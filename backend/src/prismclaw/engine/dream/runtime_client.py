@@ -2,11 +2,21 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import Protocol
 
 from prismclaw.engine.dream.dispatch.boundary import DreamEnqueueResult
+from prismclaw.engine.dream.dispatch.dispatch import DreamDispatchJob
 from prismclaw.schema.dream.dream import DreamStateStore
 from prismclaw.schema.dream.dream_types import DreamSessionState
+
+
+class DreamSchedulerPort(Protocol):
+    """Dream 调度端口：进程内边界通过它触发活动标记与派发执行。"""
+
+    async def mark_activity(self, session_key: str, *, dirty_delta: int = 1) -> object: ...
+    async def enqueue_nightly(self, session_key: str) -> object: ...
+    async def run_dispatched_job(self, job: DreamDispatchJob) -> bool: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +42,7 @@ class NullDreamBoundary:
             detail="dream runtime unavailable",
         )
 
-    async def run_dispatched_job(self, _job: Any) -> bool:
+    async def run_dispatched_job(self, _job: DreamDispatchJob) -> bool:
         return False
 
 
@@ -40,8 +50,8 @@ class InProcessDreamBoundary:
     def __init__(
         self,
         *,
-        scheduler: Any,
-        review_service: Any,
+        scheduler: DreamSchedulerPort | None,
+        review_service: object,
         state_store: DreamStateStore | None = None,
     ) -> None:
         self._scheduler = scheduler
@@ -154,9 +164,11 @@ class InProcessDreamBoundary:
                 state.last_enqueue_nightly_detail = result.detail
             await store.put(state)
         except Exception:
-            logger.warning("dream enqueue result record failed for %s", result.session_key, exc_info=True)
+            logger.warning(
+                "dream enqueue result record failed for %s", result.session_key, exc_info=True
+            )
 
-    async def run_dispatched_job(self, job: Any) -> bool:
+    async def run_dispatched_job(self, job: DreamDispatchJob) -> bool:
         scheduler = self._scheduler
         if scheduler is None:
             return False

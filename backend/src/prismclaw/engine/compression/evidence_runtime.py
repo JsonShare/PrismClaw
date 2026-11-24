@@ -4,7 +4,12 @@ import hashlib
 from typing import Any
 
 from prismclaw.schema.content.context import ContextBlock
-from prismclaw.schema.content.evidence import ContextGraph, ContextGraphEdge, EvidencePacket, EvidenceStrategy
+from prismclaw.schema.content.evidence import (
+    ContextGraph,
+    ContextGraphEdge,
+    EvidencePacket,
+    EvidenceStrategy,
+)
 
 
 def build_context_graph(

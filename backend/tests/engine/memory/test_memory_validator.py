@@ -12,23 +12,17 @@
 from __future__ import annotations
 
 import json
-import time
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from prismclaw.engine.memory.capture import (
-    AUTO_EXTRACTION_CONFIDENCE,
     build_extraction_prompt,
     build_validation_prompt,
-    parse_facts,
     parse_validation,
     store_validated_chat_facts,
     validate_facts,
 )
-from prismclaw.schema.memory.memory_types import MemoryEntry
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Part 1: parse_validation 单元测试
@@ -39,10 +33,17 @@ class TestParseValidation:
     """Validator LLM JSON 输出 → 结构化 per-candidate 结果。"""
 
     def test_golden_path_all_pass(self):
-        raw = json.dumps([
-            {"index": 0, "validation_label": "pass", "confidence": 0.95, "reason": "用户原话明确确认"},
-            {"index": 1, "validation_label": "pass", "confidence": 0.8, "reason": "有对话证据"},
-        ])
+        raw = json.dumps(
+            [
+                {
+                    "index": 0,
+                    "validation_label": "pass",
+                    "confidence": 0.95,
+                    "reason": "用户原话明确确认",
+                },
+                {"index": 1, "validation_label": "pass", "confidence": 0.8, "reason": "有对话证据"},
+            ]
+        )
         result = parse_validation(raw, 2)
         assert len(result) == 2
         assert result[0]["validation_label"] == "pass"
@@ -51,11 +52,23 @@ class TestParseValidation:
         assert result[1]["confidence"] == 0.8
 
     def test_golden_path_mixed(self):
-        raw = json.dumps([
-            {"index": 0, "validation_label": "rejected", "confidence": 0.0, "reason": "主语归属错误"},
-            {"index": 1, "validation_label": "flagged", "confidence": 0.35, "reason": "证据来自 assistant 转述"},
-            {"index": 2, "validation_label": "pass", "confidence": 0.9, "reason": "用户明确说"},
-        ])
+        raw = json.dumps(
+            [
+                {
+                    "index": 0,
+                    "validation_label": "rejected",
+                    "confidence": 0.0,
+                    "reason": "主语归属错误",
+                },
+                {
+                    "index": 1,
+                    "validation_label": "flagged",
+                    "confidence": 0.35,
+                    "reason": "证据来自 assistant 转述",
+                },
+                {"index": 2, "validation_label": "pass", "confidence": 0.9, "reason": "用户明确说"},
+            ]
+        )
         result = parse_validation(raw, 3)
         assert result[0]["validation_label"] == "rejected"
         assert result[1]["validation_label"] == "flagged"
@@ -74,46 +87,56 @@ class TestParseValidation:
 
     def test_missing_index_defaults_to_rejected(self):
         """Validator 只审查了部分 candidate → 没审查到的默认 rejected。"""
-        raw = json.dumps([
-            {"index": 0, "validation_label": "pass", "confidence": 0.9, "reason": "ok"},
-        ])
+        raw = json.dumps(
+            [
+                {"index": 0, "validation_label": "pass", "confidence": 0.9, "reason": "ok"},
+            ]
+        )
         result = parse_validation(raw, 3)
         assert result[0]["validation_label"] == "pass"
         assert result[1]["validation_label"] == "rejected"
         assert result[2]["validation_label"] == "rejected"
 
     def test_out_of_range_index_skipped(self):
-        raw = json.dumps([
-            {"index": 99, "validation_label": "pass", "confidence": 0.9},
-            {"index": -1, "validation_label": "pass", "confidence": 0.9},
-        ])
+        raw = json.dumps(
+            [
+                {"index": 99, "validation_label": "pass", "confidence": 0.9},
+                {"index": -1, "validation_label": "pass", "confidence": 0.9},
+            ]
+        )
         result = parse_validation(raw, 2)
         assert all(r["validation_label"] == "rejected" for r in result)
 
     def test_invalid_label_defaults_rejected(self):
-        raw = json.dumps([
-            {"index": 0, "validation_label": "maybe", "confidence": 0.5},
-        ])
+        raw = json.dumps(
+            [
+                {"index": 0, "validation_label": "maybe", "confidence": 0.5},
+            ]
+        )
         result = parse_validation(raw, 1)
         assert result[0]["validation_label"] == "rejected"
 
     def test_confidence_bounds_clamped(self):
-        raw = json.dumps([
-            {"index": 0, "validation_label": "pass", "confidence": 2.0},
-            {"index": 1, "validation_label": "flagged", "confidence": -0.5},
-        ])
+        raw = json.dumps(
+            [
+                {"index": 0, "validation_label": "pass", "confidence": 2.0},
+                {"index": 1, "validation_label": "flagged", "confidence": -0.5},
+            ]
+        )
         result = parse_validation(raw, 2)
         assert result[0]["confidence"] == 1.0
         assert result[1]["confidence"] == 0.0
 
     def test_confidence_none_uses_label_default(self):
-        raw = json.dumps([
-            {"index": 0, "validation_label": "pass"},
-            {"index": 1, "validation_label": "flagged"},
-        ])
+        raw = json.dumps(
+            [
+                {"index": 0, "validation_label": "pass"},
+                {"index": 1, "validation_label": "flagged"},
+            ]
+        )
         result = parse_validation(raw, 2)
-        assert result[0]["confidence"] == 1.0   # pass 默认 1.0
-        assert result[1]["confidence"] == 0.4   # flagged 默认 0.4
+        assert result[0]["confidence"] == 1.0  # pass 默认 1.0
+        assert result[1]["confidence"] == 0.4  # flagged 默认 0.4
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -162,7 +185,11 @@ class TestStoreValidatedChatFacts:
     async def test_rejected_not_stored(self, mock_store, facts):
         validation = [
             {"validation_label": "flagged", "confidence": 0.5, "reason": "ok"},
-            {"validation_label": "rejected", "confidence": 0.0, "reason": "主语归属错误：用户只是询问"},
+            {
+                "validation_label": "rejected",
+                "confidence": 0.0,
+                "reason": "主语归属错误：用户只是询问",
+            },
             {"validation_label": "pass", "confidence": 0.95, "reason": "用户原话确认"},
         ]
         stored = await store_validated_chat_facts(
@@ -175,10 +202,7 @@ class TestStoreValidatedChatFacts:
         assert stored == 2  # flagged + pass，rejected 被丢
         assert mock_store.store.await_count == 2
         # 验证 rejected 的那条（index 1）没被 store
-        stored_contents = [
-            call.args[1].content
-            for call in mock_store.store.await_args_list
-        ]
+        stored_contents = [call.args[1].content for call in mock_store.store.await_args_list]
         assert "用户患有糖尿病" not in stored_contents
 
     async def test_confidence_overrides_default(self, mock_store, facts):
@@ -189,14 +213,14 @@ class TestStoreValidatedChatFacts:
             {"validation_label": "pass", "confidence": 1.0, "reason": "ok"},
         ]
         await store_validated_chat_facts(
-            mock_store, session_key="sk", session_id="sid",
-            facts=facts, validation_results=validation,
+            mock_store,
+            session_key="sk",
+            session_id="sid",
+            facts=facts,
+            validation_results=validation,
         )
         assert mock_store.store.await_count == 3
-        confidences = [
-            call.args[1].confidence
-            for call in mock_store.store.await_args_list
-        ]
+        confidences = [call.args[1].confidence for call in mock_store.store.await_args_list]
         assert confidences == [0.95, 0.7, 1.0]
 
     async def test_origin_stage_reflects_label(self, mock_store, facts):
@@ -206,13 +230,13 @@ class TestStoreValidatedChatFacts:
             {"validation_label": "rejected", "confidence": 0.0, "reason": "ok"},
         ]
         await store_validated_chat_facts(
-            mock_store, session_key="sk", session_id="sid",
-            facts=facts, validation_results=validation,
+            mock_store,
+            session_key="sk",
+            session_id="sid",
+            facts=facts,
+            validation_results=validation,
         )
-        origins = [
-            call.args[1].origin_stage
-            for call in mock_store.store.await_args_list
-        ]
+        origins = [call.args[1].origin_stage for call in mock_store.store.await_args_list]
         assert origins == ["auto_validated", "auto_flagged"]
 
     async def test_validation_events_written_for_all_outcomes(self, mock_store, facts):
@@ -224,14 +248,16 @@ class TestStoreValidatedChatFacts:
             {"validation_label": "rejected", "confidence": 0.0, "reason": "ok"},
         ]
         await store_validated_chat_facts(
-            mock_store, session_key="sk", session_id="sid",
-            facts=facts, validation_results=validation,
+            mock_store,
+            session_key="sk",
+            session_id="sid",
+            facts=facts,
+            validation_results=validation,
             validation_ledger=ledger,
         )
         assert ledger.record_validation.await_count == 3
         labels = [
-            call.kwargs["validation_label"]
-            for call in ledger.record_validation.await_args_list
+            call.kwargs["validation_label"] for call in ledger.record_validation.await_args_list
         ]
         assert labels == ["pass", "flagged", "rejected"]
 
@@ -242,8 +268,11 @@ class TestStoreValidatedChatFacts:
         ]
         # Should not raise
         await store_validated_chat_facts(
-            mock_store, session_key="sk", session_id="sid",
-            facts=facts, validation_results=validation,
+            mock_store,
+            session_key="sk",
+            session_id="sid",
+            facts=facts,
+            validation_results=validation,
             validation_ledger=None,
         )
         assert mock_store.store.await_count == 1
@@ -255,8 +284,11 @@ class TestStoreValidatedChatFacts:
             # 只有 2 条，facts 有 3 条
         ]
         await store_validated_chat_facts(
-            mock_store, session_key="sk", session_id="sid",
-            facts=facts, validation_results=validation,
+            mock_store,
+            session_key="sk",
+            session_id="sid",
+            facts=facts,
+            validation_results=validation,
         )
         # 第 3 条默认 rejected → 只存了 1 条
         assert mock_store.store.await_count == 1
@@ -320,10 +352,18 @@ class TestSubjectMisattributionScenarios:
         # Validator mock（正确识别主语归属错误）
         mock_llm = AsyncMock()
         mock_llm.complete.return_value = MagicMock(
-            text=json.dumps([
-                {"index": 0, "validation_label": "rejected", "confidence": 0.0,
-                 "reason": "主语归属错误：用户只是询问二甲双胍禁忌，没有确认自己在使用或患有糖尿病"},
-            ])
+            text=json.dumps(
+                [
+                    {
+                        "index": 0,
+                        "validation_label": "rejected",
+                        "confidence": 0.0,
+                        "reason": (
+                            "主语归属错误：用户只是询问二甲双胍禁忌，没有确认自己在使用或患有糖尿病"
+                        ),
+                    },
+                ]
+            )
         )
         validation = await validate_facts(mock_llm, turns, facts)
         assert validation[0]["validation_label"] == "rejected"
@@ -339,14 +379,24 @@ class TestSubjectMisattributionScenarios:
             },
         ]
         facts = [
-            {"fact": "用户正在进行公司注册相关的法律事务", "type": "fact", "time_scope": "permanent"},
+            {
+                "fact": "用户正在进行公司注册相关的法律事务",
+                "type": "fact",
+                "time_scope": "permanent",
+            },
         ]
         mock_llm = AsyncMock()
         mock_llm.complete.return_value = MagicMock(
-            text=json.dumps([
-                {"index": 0, "validation_label": "rejected", "confidence": 0.0,
-                 "reason": "主语归属错误：用户只是询问公司法修改，不等于自己有法律事务"},
-            ])
+            text=json.dumps(
+                [
+                    {
+                        "index": 0,
+                        "validation_label": "rejected",
+                        "confidence": 0.0,
+                        "reason": "主语归属错误：用户只是询问公司法修改，不等于自己有法律事务",
+                    },
+                ]
+            )
         )
         validation = await validate_facts(mock_llm, turns, facts)
         assert validation[0]["validation_label"] == "rejected"
@@ -365,10 +415,16 @@ class TestSubjectMisattributionScenarios:
         ]
         mock_llm = AsyncMock()
         mock_llm.complete.return_value = MagicMock(
-            text=json.dumps([
-                {"index": 0, "validation_label": "pass", "confidence": 0.95,
-                 "reason": "用户原话明确确认自己有二型糖尿病"},
-            ])
+            text=json.dumps(
+                [
+                    {
+                        "index": 0,
+                        "validation_label": "pass",
+                        "confidence": 0.95,
+                        "reason": "用户原话明确确认自己有二型糖尿病",
+                    },
+                ]
+            )
         )
         validation = await validate_facts(mock_llm, turns, facts)
         assert validation[0]["validation_label"] == "pass"
@@ -376,7 +432,8 @@ class TestSubjectMisattributionScenarios:
 
     @pytest.mark.asyncio
     async def test_scenario_friend_inquiry_not_user(self):
-        """用户：帮我朋友问糖尿病 → 不能存 fact="用户患有糖尿病"，可以存 fact="用户朋友有糖尿病" 或 preference。"""
+        """用户：帮我朋友问糖尿病 → 不能存 fact="用户患有糖尿病"，
+        可以存 fact="用户朋友有糖尿病" 或 preference。"""
         turns = [
             {
                 "user": "帮我朋友问一下糖尿病的最新治疗方案",
@@ -389,12 +446,22 @@ class TestSubjectMisattributionScenarios:
         ]
         mock_llm = AsyncMock()
         mock_llm.complete.return_value = MagicMock(
-            text=json.dumps([
-                {"index": 0, "validation_label": "flagged", "confidence": 0.4,
-                 "reason": "不是用户本人的健康信息，证据来自转述"},
-                {"index": 1, "validation_label": "pass", "confidence": 0.9,
-                 "reason": "用户明确在帮朋友询问糖尿病，说明关心这个主题"},
-            ])
+            text=json.dumps(
+                [
+                    {
+                        "index": 0,
+                        "validation_label": "flagged",
+                        "confidence": 0.4,
+                        "reason": "不是用户本人的健康信息，证据来自转述",
+                    },
+                    {
+                        "index": 1,
+                        "validation_label": "pass",
+                        "confidence": 0.9,
+                        "reason": "用户明确在帮朋友询问糖尿病，说明关心这个主题",
+                    },
+                ]
+            )
         )
         validation = await validate_facts(mock_llm, turns, facts)
         assert validation[0]["validation_label"] == "flagged"
@@ -415,10 +482,16 @@ class TestSubjectMisattributionScenarios:
         ]
         mock_llm = AsyncMock()
         mock_llm.complete.return_value = MagicMock(
-            text=json.dumps([
-                {"index": 0, "validation_label": "pass", "confidence": 0.9,
-                 "reason": "用户原话明确说用 Python"},
-            ])
+            text=json.dumps(
+                [
+                    {
+                        "index": 0,
+                        "validation_label": "pass",
+                        "confidence": 0.9,
+                        "reason": "用户原话明确说用 Python",
+                    },
+                ]
+            )
         )
         validation = await validate_facts(mock_llm, turns, facts)
         assert validation[0]["validation_label"] == "pass"

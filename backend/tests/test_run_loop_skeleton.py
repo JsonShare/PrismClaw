@@ -9,6 +9,7 @@
   - 全拒回合 → persist_denied_turn 落树后续跑（冻结 escalate 只置
     嫌疑标志，不产生终态）
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -49,8 +50,8 @@ class _ScriptedLoop:
 
     def __init__(self, script: list[_FakeResponse | None]):
         self.script = list(script)
-        self.phases: list[tuple[str, int]] = []          # (phase, turn)
-        self.records: list[dict[str, Any]] = []          # record_tool_call_observation 快照
+        self.phases: list[tuple[str, int]] = []  # (phase, turn)
+        self.records: list[dict[str, Any]] = []  # record_tool_call_observation 快照
         self.state = RunLoopState()
         self.turn = 0
 
@@ -83,17 +84,22 @@ class _ScriptedLoop:
             return None
 
         async def execute_tools(
-            state: RunLoopState, response: Any, allowed_calls: list[Any],
+            state: RunLoopState,
+            response: Any,
+            allowed_calls: list[Any],
         ):
             # 记录本回合的观察快照（模拟路径 D record 的输入条件）
-            self.records.append({
-                "turn": self.turn,
-                "results_len": len(state.last_tool_results),
-                "first_result_error": (
-                    getattr(state.last_tool_results[0], "is_error", None)
-                    if state.last_tool_results else None
-                ),
-            })
+            self.records.append(
+                {
+                    "turn": self.turn,
+                    "results_len": len(state.last_tool_results),
+                    "first_result_error": (
+                        getattr(state.last_tool_results[0], "is_error", None)
+                        if state.last_tool_results
+                        else None
+                    ),
+                }
+            )
             yield  # execute_tools 是 async generator
 
         cfg = LoopConfig(
@@ -141,10 +147,12 @@ async def test_no_tool_turn_completes_via_preflight():
 
 async def test_tool_turn_runs_preflight_then_post():
     call = {"id": "c1", "function": {"name": "read", "arguments": "{}"}}
-    loop = await _drive([
-        _FakeResponse(tool_calls=[call]),
-        _FakeResponse(tool_calls=None),  # 下一回合 done
-    ])
+    loop = await _drive(
+        [
+            _FakeResponse(tool_calls=[call]),
+            _FakeResponse(tool_calls=None),  # 下一回合 done
+        ]
+    )
     phases_turn0 = [p for (p, t) in loop.phases if t == 0]
     assert phases_turn0 == ["preflight", "post"]
     # all_blocked 不应出现（无工具被拒）
@@ -161,11 +169,13 @@ async def test_last_tool_results_cleared_each_turn():
         tool_call_id = "c1"
         is_error = False
 
-    loop = _ScriptedLoop([
-        _FakeResponse(tool_calls=[call]),
-        _FakeResponse(tool_calls=[call]),
-        _FakeResponse(tool_calls=None),  # done 收束
-    ])
+    loop = _ScriptedLoop(
+        [
+            _FakeResponse(tool_calls=[call]),
+            _FakeResponse(tool_calls=[call]),
+            _FakeResponse(tool_calls=None),  # done 收束
+        ]
+    )
 
     async def execute_tools(state, response, allowed_calls):
         # 回合 0 正常产出；回合 1 模拟异常（无产出）——若骨架未清空
@@ -217,10 +227,12 @@ async def test_last_tool_results_cleared_each_turn():
 
 async def test_all_denied_persists_turn():
     call = {"id": "c1", "function": {"name": "read", "arguments": "{}"}}
-    loop = _ScriptedLoop([
-        _FakeResponse(tool_calls=[call]),
-        _FakeResponse(tool_calls=None),  # done 收束
-    ])
+    loop = _ScriptedLoop(
+        [
+            _FakeResponse(tool_calls=[call]),
+            _FakeResponse(tool_calls=None),  # done 收束
+        ]
+    )
 
     async def before_tool_call(ctx) -> BeforeToolCallResult | None:
         return BeforeToolCallResult(block=True, reason="denied by gate")
@@ -282,10 +294,12 @@ async def test_all_denied_persists_turn():
 
 async def test_hitl_waits_and_closes_timeline():
     ask_call = {"id": "c1", "function": {"name": "ask_user_question", "arguments": "{}"}}
-    loop = _ScriptedLoop([
-        _FakeResponse(tool_calls=[ask_call]),
-        _FakeResponse(tool_calls=None),  # done 收束
-    ])
+    loop = _ScriptedLoop(
+        [
+            _FakeResponse(tool_calls=[ask_call]),
+            _FakeResponse(tool_calls=None),  # done 收束
+        ]
+    )
 
     async def before_tool_call(ctx) -> BeforeToolCallResult | None:
         return None
@@ -346,8 +360,7 @@ async def test_hitl_waits_and_closes_timeline():
     # HITL 时间线闭合：wait 返回的答案经合成 ToolCallEnd 下发，
     # 前端「向用户提问」行据此落定并展示用户回答
     clarify_ends = [
-        ev for ev in events
-        if type(ev).__name__ == "ToolCallEnd" and ev.tool_call_id == "c1"
+        ev for ev in events if type(ev).__name__ == "ToolCallEnd" and ev.tool_call_id == "c1"
     ]
     assert len(clarify_ends) == 1
     assert clarify_ends[0].result.is_error is False
@@ -363,9 +376,11 @@ async def test_compression_restart_replays_pending_messages():
     否则注入永久丢失（appended 通道不落树，树重建无法恢复）。"""
     from prismclaw.engine.execution.loop.types import TurnUpdate
 
-    loop = _ScriptedLoop([
-        _FakeResponse(tool_calls=None),  # 重启后正常 done
-    ])
+    loop = _ScriptedLoop(
+        [
+            _FakeResponse(tool_calls=None),  # 重启后正常 done
+        ]
+    )
 
     replay_injections = [{"role": "user", "content": "budget warning"}]
     restart_seen: list[TurnUpdate] = []

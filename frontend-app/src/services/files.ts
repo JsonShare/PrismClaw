@@ -17,12 +17,12 @@ export interface OutputFile {
   source_session_title?: string | null
 }
 
-export interface OutputsResponse {
+export interface OutboxResponse {
   items: OutputFile[]
 }
 
-export async function listOutputs(workspaceId: string): Promise<OutputsResponse> {
-  const res = await http.get<OutputsResponse>('/api/workspaces/outputs', {
+export async function listOutputs(workspaceId: string): Promise<OutboxResponse> {
+  const res = await http.get<OutboxResponse>('/api/workspaces/outbox', {
     workspace_id: workspaceId || 'all',
   })
   return { items: Array.isArray(res?.items) ? res.items : [] }

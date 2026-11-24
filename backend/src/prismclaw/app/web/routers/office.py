@@ -19,33 +19,35 @@ from prismclaw.app.web._routes_helpers import (
     _get_store,
     _resolve_workspace_root,
 )
+from prismclaw.app.web.deps import get_web_deps
 from prismclaw.app.web.routers.office_review import (
     count_marks,
     synthesize_review_doc,
 )
-from prismclaw.schema.agent.review_errors import (
-    DocxArtifactMismatch,
-    DocxReviewEngineGap,
-    DocxSourceDrift,
-    IntegrityError,
-    OfficeBlobNotFound,
-    OfficeEditError,
-    OfficeRevertConflict,
-    ReconcileConflict,
-    ReviewSetNotFound,
-    UnsupportedDocxChange,
-    UnsupportedDocxGeometry,
-)
 from prismclaw.schema.agent.office_review import OfficeReviewProtocol
-from prismclaw.app.web.deps import get_web_deps
+from prismclaw.schema.agent.review_errors import (
+    DocxArtifactMismatchError,
+    DocxReviewEngineGapError,
+    DocxSourceDriftError,
+    IntegrityError,
+    OfficeBlobNotFoundError,
+    OfficeEditError,
+    OfficeRevertConflictError,
+    ReconcileConflictError,
+    ReviewSetNotFoundError,
+    UnsupportedDocxChangeError,
+    UnsupportedDocxGeometryError,
+)
 from prismclaw.schema.session.types import SessionTree
 
 logger = logging.getLogger(__name__)
 
 
 def _get_office_review(request: Request) -> OfficeReviewProtocol:
-    from prismclaw.app.web.deps import get_web_deps
-    return get_web_deps(request).office_review
+    office = get_web_deps(request).office_review
+    if not isinstance(office, OfficeReviewProtocol):
+        raise HTTPException(status_code=500, detail="office review service 未配置")
+    return office
 
 
 office_router = APIRouter(tags=["office"])
@@ -54,6 +56,7 @@ office_router = APIRouter(tags=["office"])
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _load_and_verify(session_id: str, user_id: str) -> SessionTree:
     store = _get_store()
@@ -69,9 +72,10 @@ async def _load_and_verify(session_id: str, user_id: str) -> SessionTree:
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class FileRevertRequest(BaseModel):
     path: str
-    force: bool = False    # override a drift conflict (out-of-band edit detected)
+    force: bool = False  # override a drift conflict (out-of-band edit detected)
 
 
 class OfficeApplyRequest(BaseModel):
@@ -82,6 +86,7 @@ class OfficeApplyRequest(BaseModel):
     replay from a frozen backup blob, edits made in later rounds are never destroyed.
     The per-change Accept/Reject UI was removed, so this endpoint only ever rejects all.
     """
+
     path: str
     details: list[dict[str, Any]] = []
 
@@ -117,8 +122,9 @@ class FileWriteContentRequest(BaseModel):
     3. Build a ``file_change`` diff payload (same shape as WriteTool metadata).
     4. Record a ``FileEditRecord`` in the tracking log (enables future rollback).
     """
+
     path: str
-    content: str   # new file content (UTF-8 text only; binary files are rejected)
+    content: str  # new file content (UTF-8 text only; binary files are rejected)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +139,7 @@ async def apply_office_edit(
     session_id: str,
     body: OfficeApplyRequest,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Reverse all tracked changes of the current ``.xlsx``/``.pptx`` file (Reject All).
 
     Delegates to the unified ``ReviewableChange`` contract via ``dispatch`` — no
@@ -143,7 +149,9 @@ async def apply_office_edit(
     """
     tree = await _load_and_verify(session_id, user_id)
     workspace_root = _resolve_workspace_root(
-        request=request, user_id=user_id, workspace_id=tree.header.workspace_id,
+        request=request,
+        user_id=user_id,
+        workspace_id=tree.header.workspace_id,
     )
 
     # Guard against path traversal (path must stay inside the workspace)
@@ -151,7 +159,9 @@ async def apply_office_edit(
     try:
         full_path.relative_to(workspace_root.resolve())
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path: outside workspace root")
+        raise HTTPException(
+            status_code=400, detail="Invalid path: outside workspace root"
+        ) from None
 
     if not full_path.exists():
         raise HTTPException(status_code=404, detail="office file not found in workspace")
@@ -171,7 +181,7 @@ async def apply_office_edit(
             current_bytes=full_path.read_bytes(),
             rejected=body.details,
         )
-    except OfficeRevertConflict as exc:
+    except OfficeRevertConflictError as exc:
         # A rejected change collided with a later edit; reversing it would
         # destroy the newer edit. 409 → the frontend asks the user to re-review.
         # Structured drift signal: can_force is False for office (no force path).
@@ -182,11 +192,11 @@ async def apply_office_edit(
                 "message": str(exc),
                 "can_force": False,
             },
-        )
+        ) from exc
     except OfficeEditError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"office apply failed: {exc}")
+        raise HTTPException(status_code=500, detail=f"office apply failed: {exc}") from exc
 
     return result
 
@@ -197,11 +207,13 @@ async def build_docx_native_review_artifact(
     session_id: str,
     body: BuildDocxReviewArtifactRequest,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Build a native tracked-changes `.docx` artifact from suggested edits."""
     tree = await _load_and_verify(session_id, user_id)
     workspace_root = _resolve_workspace_root(
-        request=request, user_id=user_id, workspace_id=tree.header.workspace_id,
+        request=request,
+        user_id=user_id,
+        workspace_id=tree.header.workspace_id,
     )
     office = _get_office_review(request)
     if office.fmt_from_path(body.path) != "docx":
@@ -217,16 +229,16 @@ async def build_docx_native_review_artifact(
             operations=body.operations,
             author=body.author,
         )
-    except UnsupportedDocxChange as exc:
+    except UnsupportedDocxChangeError as exc:
         raise HTTPException(status_code=400, detail=f"{exc.code}: {exc}") from exc
-    except UnsupportedDocxGeometry as exc:
+    except UnsupportedDocxGeometryError as exc:
         raise HTTPException(status_code=400, detail=f"{exc.code}: {exc}") from exc
-    except DocxReviewEngineGap as exc:
+    except DocxReviewEngineGapError as exc:
         raise HTTPException(status_code=500, detail=f"{exc.code}: {exc}") from exc
-    except OfficeBlobNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+    except OfficeBlobNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except OfficeEditError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @office_router.get("/sessions/{session_id}/file-docx-review-artifact/raw")
@@ -267,7 +279,7 @@ async def save_docx_native_reviewed(
     session_id: str,
     body: SaveDocxReviewedRequest,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Persist a reviewed `.docx` artifact back to the workspace file."""
     tree = await _load_and_verify(session_id, user_id)
     workspace_root = _resolve_workspace_root(
@@ -290,12 +302,12 @@ async def save_docx_native_reviewed(
             before_sha=body.before_sha,
             content_base64=body.content_base64,
         )
-    except OfficeBlobNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except (DocxArtifactMismatch, DocxSourceDrift) as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    except OfficeBlobNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (DocxArtifactMismatchError, DocxSourceDriftError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except OfficeEditError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @office_router.post("/sessions/{session_id}/office-review-html")
@@ -304,7 +316,7 @@ async def office_review_html(
     session_id: str,
     body: OfficeReviewHtmlRequest,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Synthesize the track-changes (review) document for an edited office file.
 
     Returns a TipTap JSON document whose ``insertion``/``deletion`` marks (each carrying
@@ -318,7 +330,9 @@ async def office_review_html(
     tree = await _load_and_verify(session_id, user_id)
     resolved_ws = body.workspace_id or tree.header.workspace_id
     workspace_root = _resolve_workspace_root(
-        request=request, user_id=user_id, workspace_id=resolved_ws,
+        request=request,
+        user_id=user_id,
+        workspace_id=resolved_ws,
     )
     office = _get_office_review(request)
     fmt = office.fmt_from_path(body.path)
@@ -332,7 +346,9 @@ async def office_review_html(
     try:
         full_path.relative_to(workspace_root.resolve())
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid path: outside workspace root")
+        raise HTTPException(
+            status_code=400, detail="Invalid path: outside workspace root"
+        ) from None
 
     current_bytes = full_path.read_bytes() if full_path.exists() else None
 
@@ -353,7 +369,7 @@ async def revert_file(
     session_id: str,
     body: FileRevertRequest,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """Reject a file: return it to its agent-edit *baseline* (the pre-edit state).
 
     Driven by the conversation ReviewSet, not by a single latest edit record. This
@@ -369,7 +385,9 @@ async def revert_file(
 
     # Resolve workspace_path using the same pattern as other endpoints
     workspace_root = _resolve_workspace_root(
-        request=request, user_id=user_id, workspace_id=workspace_id,
+        request=request,
+        user_id=user_id,
+        workspace_id=workspace_id,
     )
     # ``session_id`` here is the conversation the user reviews from. Sub-agent
     # edits were registered under the same conversation via parent_session_id.
@@ -381,7 +399,7 @@ async def revert_file(
             path=body.path,
             force=body.force,
         )
-    except ReconcileConflict as exc:
+    except ReconcileConflictError as exc:
         # Structured drift signal: the frontend renders a "force revert" action
         # when can_force is True (text files). Office drift returns can_force
         # False — reversing it would destroy later edits, so the user re-reviews.
@@ -389,17 +407,22 @@ async def revert_file(
             status_code=409,
             detail={
                 "code": "FILE_DRIFTED",
-                "message": f"file drifted before review: {exc.path}. Re-fetch and retry, or force=true to override.",
+                "message": (
+                    f"file drifted before review: {exc.path}. "
+                    f"Re-fetch and retry, or force=true to override."
+                ),
                 "can_force": True,
             },
-        )
+        ) from exc
     except IntegrityError as exc:
         raise HTTPException(
             status_code=422,
             detail=f"backup integrity check failed: {exc}",
-        )
-    except ReviewSetNotFound:
-        raise HTTPException(status_code=404, detail=f"No review record found for {body.path}")
+        ) from exc
+    except ReviewSetNotFoundError:
+        raise HTTPException(
+            status_code=404, detail=f"No review record found for {body.path}"
+        ) from None
 
     logger.info("file-revert.success", extra={"session_id": session_id, "path": body.path})
     return result
@@ -412,7 +435,7 @@ async def write_file_content(
     body: FileWriteContentRequest,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     """Save manually edited file content from the frontend Review/Edit mode.
 
     This is the frontend counterpart of the backend WriteTool — it allows the
@@ -424,24 +447,45 @@ async def write_file_content(
     await _load_and_verify(session_id, user_id)
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(
-        request=request, user_id=user_id, workspace_id=wid,
+        request=request,
+        user_id=user_id,
+        workspace_id=wid,
     )
     office = _get_office_review(request)
 
     # 与 get_file_raw 完全相同的目标解析逻辑，确保预览与保存指向同一文件
     targets = _candidate_file_targets(
-        workspace_root=workspace_root, raw_path=body.path,
+        workspace_root=workspace_root,
+        raw_path=body.path,
     )
     if not targets:
         raise HTTPException(status_code=400, detail="Invalid path")
     full_path = targets[0]
 
     # Guard: reject binary / office files (they need structured office:edit, not raw text)
-    _OFFICE_EXTS = {".docx", ".xlsx", ".pptx"}
-    _BINARY_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf", ".zip", ".tar", ".gz", ".bz2"}
+    # 函数内常量：仅在本地守卫用，保持大写以标明其常量性质。
+    _OFFICE_EXTS = {".docx", ".xlsx", ".pptx"}  # noqa: N806
+    _BINARY_EXTS = {  # noqa: N806
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".pdf",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".bz2",
+    }
     suffix = full_path.suffix.lower()
     if suffix in _OFFICE_EXTS:
-        raise HTTPException(status_code=400, detail="Office files (.docx/.xlsx/.pptx) cannot be edited as raw text; use office:edit instead")
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Office files (.docx/.xlsx/.pptx) cannot be "
+                "edited as raw text; use office:edit instead"
+            ),
+        )
     if suffix in _BINARY_EXTS:
         raise HTTPException(status_code=400, detail="Binary files cannot be edited as raw text")
 
@@ -452,27 +496,36 @@ async def write_file_content(
         try:
             old_text = full_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
-            raise HTTPException(status_code=400, detail="Existing file is not UTF-8 text; cannot edit as text")
+            raise HTTPException(
+                status_code=400, detail="Existing file is not UTF-8 text; cannot edit as text"
+            ) from None
         except OSError as exc:
-            raise HTTPException(status_code=500, detail=f"Failed to read existing file: {exc}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to read existing file: {exc}"
+            ) from exc
 
     # Write new content
     full_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         full_path.write_text(body.content, encoding="utf-8")
     except OSError as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to write file: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to write file: {exc}") from exc
 
     before_sha = hashlib.sha256(old_text.encode("utf-8")).hexdigest()
     # Build file_change diff payload (same shape as WriteTool metadata)
     change = get_web_deps(request).upload_fns["build_file_change"](
-        body.path, old_text, body.content,
-        before_ref="", before_sha=before_sha,
+        body.path,
+        old_text,
+        body.content,
+        before_ref="",
+        before_sha=before_sha,
     )
 
     # Register the edit into the conversation ReviewSet (baseline + head),
     # replacing the old ChangeTrackingStore FileEditRecord path.
-    before_content: bytes | None = old_text.encode("utf-8") if old_text else (None if not file_existed else b"")
+    before_content: bytes | None = (
+        old_text.encode("utf-8") if old_text else (None if not file_existed else b"")
+    )
     after_content = body.content.encode("utf-8")
     office.register_edit(
         workspace_root=str(workspace_root),
@@ -483,10 +536,13 @@ async def write_file_content(
         tool_call_id="manual_edit",
     )
 
-    logger.info("file-write-content.success", extra={
-        "session_id": session_id,
-        "path": body.path,
-    })
+    logger.info(
+        "file-write-content.success",
+        extra={
+            "session_id": session_id,
+            "path": body.path,
+        },
+    )
 
     return {
         "status": "ok",

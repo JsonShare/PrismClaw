@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from prismclaw.engine.state.turn_state import (
-    CapabilityDecisionBundle,
     CanonicalDecisionState,
+    CapabilityDecisionBundle,
     ForkPolicyDecision,
     MemoryHintPolicy,
     ProviderCapabilityProfile,
@@ -31,35 +32,33 @@ class UnsupportedStateSchemaVersionError(ValueError):
     pass
 
 
-def _coerce_string(value: Any, *, default: str = "") -> str:
+def _coerce_string(value: object, *, default: str = "") -> str:
     return value if isinstance(value, str) else default
 
 
-def _coerce_optional_string(value: Any) -> str | None:
+def _coerce_optional_string(value: object) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _coerce_int(value: Any, *, default: int = 0) -> int:
+def _coerce_int(value: object, *, default: int = 0) -> int:
     return value if isinstance(value, int) else default
 
 
-def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+def _coerce_bool(value: object, *, default: bool = False) -> bool:
     return value if isinstance(value, bool) else default
 
 
-def _coerce_string_list(value: Any) -> list[str]:
+def _coerce_string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
 
 
-def _coerce_string_map(value: Any) -> dict[str, str]:
+def _coerce_string_map(value: object) -> dict[str, str]:
     if not isinstance(value, dict):
         return {}
     return {
-        key: item
-        for key, item in value.items()
-        if isinstance(key, str) and isinstance(item, str)
+        key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)
     }
 
 
@@ -90,7 +89,7 @@ class VersionedStateRegistry:
     current_version: str
     migrations: dict[str, MigrationFn] = field(default_factory=dict)
 
-    def migrate_payload(self, payload: Any) -> Any:
+    def migrate_payload(self, payload: object) -> object:
         if not isinstance(payload, dict):
             return payload
 
@@ -258,11 +257,15 @@ def _migrate_legacy_replacement_state(payload: dict[str, Any]) -> dict[str, Any]
         }
 
     legacy_replacements = _coerce_string_map(payload)
-    return {
-        "schema_version": CURRENT_REPLACEMENT_STATE_SCHEMA_VERSION,
-        "seen_ids": sorted(legacy_replacements.keys()),
-        "replacements": legacy_replacements,
-    } if legacy_replacements else defaults
+    return (
+        {
+            "schema_version": CURRENT_REPLACEMENT_STATE_SCHEMA_VERSION,
+            "seen_ids": sorted(legacy_replacements.keys()),
+            "replacements": legacy_replacements,
+        }
+        if legacy_replacements
+        else defaults
+    )
 
 
 def _migrate_legacy_capability_decision_bundle(payload: dict[str, Any]) -> dict[str, Any]:
@@ -347,7 +350,7 @@ def _migrate_turn_state_to_current(payload: dict[str, Any]) -> dict[str, Any]:
     return current_payload
 
 
-def migrate_turn_state_substates(payload: Any) -> Any:
+def migrate_turn_state_substates(payload: object) -> object:
     if not isinstance(payload, dict):
         return payload
 
@@ -378,7 +381,7 @@ def migrate_turn_state_substates(payload: Any) -> Any:
     return migrated
 
 
-def migrate_turn_state_payload(payload: Any) -> Any:
+def migrate_turn_state_payload(payload: object) -> object:
     if not isinstance(payload, dict):
         return payload
 
@@ -418,8 +421,8 @@ def migrate_turn_state_payload(payload: Any) -> Any:
 def migrate_turn_state_substate_payload(
     *,
     field_name: str,
-    payload: Any,
-) -> Any:
+    payload: object,
+) -> object:
     if field_name == "canonical_decision_state":
         return CANONICAL_DECISION_STATE_REGISTRY.migrate_payload(payload)
     if field_name == "request_assembly_manifest":
@@ -432,7 +435,7 @@ def migrate_turn_state_substate_payload(
 def _migrate_turn_state_substate_or_default(
     *,
     field_name: str,
-    payload: Any,
+    payload: object,
     default_payload: dict[str, Any],
 ) -> dict[str, Any]:
     try:
@@ -443,10 +446,10 @@ def _migrate_turn_state_substate_or_default(
 
 
 def _migrate_or_build_capability_decision_bundle(
-    payload: Any,
+    payload: object,
     *,
-    canonical_decision_state_payload: Any,
-    request_assembly_manifest_payload: Any,
+    canonical_decision_state_payload: object,
+    request_assembly_manifest_payload: object,
 ) -> dict[str, Any]:
     canonical = CanonicalDecisionState.model_validate(
         canonical_decision_state_payload or CanonicalDecisionState().model_dump(mode="json")

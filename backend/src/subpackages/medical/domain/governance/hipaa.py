@@ -5,6 +5,7 @@
 - 最小必要原则（Minimum Necessary）验证
 - 审计日志记录
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,20 +28,24 @@ class HIPAAReducer:
 
     # PHI 敏感工具列表 — 需要额外审查
     _phi_sensitive_tools: frozenset[str] = field(
-        default_factory=lambda: frozenset({
-            "smart_medical_record",
-        }),
+        default_factory=lambda: frozenset(
+            {
+                "smart_medical_record",
+            }
+        ),
         repr=False,
     )
 
     # 只读工具列表 — 自动放行
     _read_only_tools: frozenset[str] = field(
-        default_factory=lambda: frozenset({
-            "search_guideline",
-            "search_drug",
-            "search_literature",
-            "medical_translate",
-        }),
+        default_factory=lambda: frozenset(
+            {
+                "search_guideline",
+                "search_drug",
+                "search_literature",
+                "medical_translate",
+            }
+        ),
         repr=False,
     )
 

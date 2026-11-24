@@ -8,20 +8,28 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.compression.budget_orchestrator import (
+    BudgetApplicationResult,
     BudgetOrchestrator,
 )
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
 from prismclaw.engine.compression.compaction import estimate_messages_tokens
+from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.checkpoint import SystemPromptSectionState
+from prismclaw.schema.agent.session import AgentMessageDict, TurnRuntimeMetricsSnapshot
 from prismclaw.schema.content.content_types import RuntimeControlArtifact, ToolSkillInvocation
 from prismclaw.schema.content.context import ContextBlock, ContextPackLayout, TaskProfile
-from prismclaw.engine.execution.checkpoint import SystemPromptSectionState
 from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.schema.agent.session import TurnRuntimeMetricsSnapshot
+from prismclaw.schema.llm.types import LLMUsage
+
+if TYPE_CHECKING:
+    from prismclaw.engine.compression.ports import ContextRuntimePorts
+    from prismclaw.engine.context.projection_models import PromptProjection
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +52,12 @@ _USAGE_MISSING_STREAK = 0
 # T14: Skill auto-activation
 # ---------------------------------------------------------------------------
 
+
 def _try_auto_activate_skill(
     *,
     user_message: str,
     capability_catalog: CapabilityCatalogService | None,
-    workspace_path: str,
+    workspace_path: str | None,
 ) -> RuntimeControlArtifact | None:
     """Attempt automatic skill activation from the user message.
 
@@ -76,14 +85,13 @@ def _try_auto_activate_skill(
             from prismclaw.schema.services.skills import resolve_skill_name
 
             entries = capability_catalog.list_skill_entries()
-            resolvable = [
-                type("R", (), {"name": e.name})() for e in entries
-            ]
+            resolvable = [type("R", (), {"name": e.name})() for e in entries]
             resolved = resolve_skill_name(skill_ref, resolvable)
             if resolved is not None:
                 logger.info(
                     "skill_auto_activate: gesture /%s resolved to '%s'",
-                    skill_ref, resolved,
+                    skill_ref,
+                    resolved,
                 )
                 return RuntimeControlArtifact(
                     skill_name=resolved,
@@ -98,6 +106,8 @@ def _try_auto_activate_skill(
             logger.debug("skill_auto_activate: gesture resolution failed", exc_info=True)
 
     # --- Path 2: single search match ---
+    if workspace_path is None:
+        return None
     try:
         from prismclaw.engine.execution.capabilities.discovery_runtime import SkillDiscoveryRuntime
 
@@ -132,7 +142,8 @@ def _try_auto_activate_skill(
 # T15: Runtime status injection
 # ---------------------------------------------------------------------------
 
-def _build_runtime_status_blocks(context: Any) -> list[ContextBlock]:
+
+def _build_runtime_status_blocks(context: AgentRunnerDeps) -> list[ContextBlock]:
     """Build runtime status blocks for auto-injection at turn start.
 
     Replaces the deleted jobs/task_status/follow_up_status tools by injecting
@@ -143,6 +154,7 @@ def _build_runtime_status_blocks(context: Any) -> list[ContextBlock]:
     total_tokens = 0
     try:
         from prismclaw.infra.settings import load_settings
+
         budget_cap = load_settings().agent.context.budget.subcaps.runtime_status
     except Exception:
         budget_cap = 500
@@ -150,13 +162,16 @@ def _build_runtime_status_blocks(context: Any) -> list[ContextBlock]:
     # 1. Follow-up attention items (from session_tree)
     try:
         from prismclaw.engine.subagent.runtime.follow_up import (
-            session_follow_up_snapshot,
             format_parallel_task_attention,
+            session_follow_up_snapshot,
         )
+
         session_tree = getattr(context, "session_tree", None)
         if session_tree is None:
             session_tree = getattr(
-                getattr(context, "state", None), "tree", None,
+                getattr(context, "state", None),
+                "tree",
+                None,
             )
         if session_tree is not None:
             snapshot = session_follow_up_snapshot(session_tree)
@@ -186,7 +201,9 @@ def _build_runtime_status_blocks(context: Any) -> list[ContextBlock]:
     session_state = getattr(context, "session_state", None)
     if session_state is None:
         session_state = getattr(
-            getattr(context, "state", None), "session_state", None,
+            getattr(context, "state", None),
+            "session_state",
+            None,
         )
     if session_state is not None:
         goals = getattr(session_state, "goals", [])
@@ -220,11 +237,12 @@ def _build_runtime_status_blocks(context: Any) -> list[ContextBlock]:
 # Dataclasses
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class DynamicContextResult:
     assembled_context_layout: ContextPackLayout
     task_profile: TaskProfile | None
-    projection: Any  # PromptProjection — avoid circular import
+    projection: PromptProjection
     budget_audit: Any  # BudgetAuditTrail
     system_prompt_sections: SystemPromptSectionState
 
@@ -246,11 +264,10 @@ class TurnTokenTelemetry:
 class TurnPreflightResult:
     assembled_context_layout: ContextPackLayout
     task_profile: TaskProfile | None
-    projection: Any  # PromptProjection
+    projection: PromptProjection
     packed_request: PackedLLMRequest
     request_snapshot: Any | None  # RequestAssemblySnapshot | None
     history_tokens: int
-    request_mode: str | None
     budget_audit: Any  # BudgetAuditTrail
     system_prompt_sections: SystemPromptSectionState
 
@@ -285,24 +302,23 @@ class TurnPreflightResult:
 # Pure helper functions
 # ---------------------------------------------------------------------------
 
-def _require_capability_catalog(deps: Any) -> CapabilityCatalogService:
+
+def _require_capability_catalog(deps: AgentRunnerDeps) -> CapabilityCatalogService:
     catalog = getattr(deps, "capability_catalog", None)
     if isinstance(catalog, CapabilityCatalogService):
         return catalog
-    raise RuntimeError(
-        "AgentRunnerDeps.capability_catalog is required for prompt planning"
-    )
+    raise RuntimeError("AgentRunnerDeps.capability_catalog is required for prompt planning")
 
 
 def ensure_user_message(
-    messages: list[dict[str, Any]],
+    messages: list[AgentMessageDict],
     *,
     fallback_user_message: str,
-) -> list[dict[str, Any]]:
-    if any((m or {}).get("role") == "user" for m in messages if isinstance(m, dict)):
+) -> list[AgentMessageDict]:
+    if any(m.get("role") == "user" for m in messages):
         return messages
     fallback = (fallback_user_message or "").strip() or "请继续处理用户的请求。"
-    return [*messages, {"role": "user", "content": fallback}]
+    return [*messages, AgentMessageDict(role="user", content=fallback)]
 
 
 def context_block(
@@ -319,11 +335,11 @@ def context_block(
 ) -> ContextBlock:
     return ContextBlock(
         id=name,
-        zone=zone,  # type: ignore[arg-type]
+        zone=zone,
         source=name,
         content=content,
-        stability=stability,  # type: ignore[arg-type]
-        priority=priority,  # type: ignore[arg-type]
+        stability=stability,
+        priority=priority,
         cacheable=cacheable,
         truncatable=truncatable,
         replaceable=replaceable,
@@ -339,7 +355,7 @@ def compute_turn_token_telemetry(
     *,
     turn_context_layout: ContextPackLayout,
     assembled_plan: ContextPackLayout,
-    assembled_messages: list[dict[str, Any]],
+    assembled_messages: Sequence[Mapping[str, Any]],
 ) -> TurnTokenTelemetry:
     frozen_tokens = sum(
         block.estimated_tokens for block in turn_context_layout.zone_blocks("static")
@@ -376,7 +392,7 @@ def log_turn_token_usage(
     logger_: logging.Logger,
     iteration: int,
     telemetry: TurnTokenTelemetry,
-    usage: Any,
+    usage: LLMUsage | None,
     history_budget: int,
     history_compaction_count: int = 0,
     history_compaction_reduction: int = 0,
@@ -455,7 +471,11 @@ def log_turn_token_usage(
                     "(drift +%d, %.0f%%) — components [%s] — compare with a mock "
                     "capture (scripts/eval + /tmp/mock_openai_capture.py recipe) "
                     "before it overflows the window.",
-                    input_tokens, accounted, drift, _drift_ratio * 100, _breakdown,
+                    input_tokens,
+                    accounted,
+                    drift,
+                    _drift_ratio * 100,
+                    _breakdown,
                 )
             else:
                 # 安全方向：估算偏保守，不会撑爆窗口，属于已知偏差而非故障。
@@ -464,7 +484,11 @@ def log_turn_token_usage(
                 logger_.info(
                     "token_usage over-accounted: real input %d vs accounted %d "
                     "(drift %d, %.0f%%) — components [%s] — conservative estimate.",
-                    input_tokens, accounted, drift, abs(_drift_ratio) * 100, _breakdown,
+                    input_tokens,
+                    accounted,
+                    drift,
+                    abs(_drift_ratio) * 100,
+                    _breakdown,
                 )
     else:
         # Degraded mode: no usage from the backend — sentinel cannot run.
@@ -556,16 +580,13 @@ def log_session_success_verdict(
     turn_count = len(turn_metrics_snapshots)
     first_turn = turn_metrics_snapshots[0] if turn_metrics_snapshots else None
     post_baseline_turns = turn_metrics_snapshots[1:] if len(turn_metrics_snapshots) > 1 else []
-    follow_up_turns = [
-        snapshot for snapshot in post_baseline_turns if snapshot["request_mode"] == "follow_up"
-    ]
-    follow_up_count = len(follow_up_turns)
-    baseline_dynamic_payload = (
-        int(first_turn["dynamic_payload"]) if first_turn is not None else 0
-    )
+    # 首轮之后即视为续轮：不再按轮次命名分类，只看"基线 vs 后续"的对比。
+    follow_up_count = len(post_baseline_turns)
+    baseline_dynamic_payload = int(first_turn["dynamic_payload"]) if first_turn is not None else 0
     follow_up_average_dynamic_payload = (
         round(
-            sum(int(snapshot["dynamic_payload"]) for snapshot in follow_up_turns) / follow_up_count
+            sum(int(snapshot["dynamic_payload"]) for snapshot in post_baseline_turns)
+            / follow_up_count
         )
         if follow_up_count > 0
         else 0
@@ -582,7 +603,7 @@ def log_session_success_verdict(
         _turn_cache_read_ratio(first_turn) if first_turn is not None else 0.0
     )
     follow_up_cache_read_ratio = (
-        _aggregate_cache_read_ratio(follow_up_turns) if follow_up_turns else 0.0
+        _aggregate_cache_read_ratio(post_baseline_turns) if post_baseline_turns else 0.0
     )
     cache_read_status = "not_applicable"
     if follow_up_count > 0:
@@ -594,7 +615,8 @@ def log_session_success_verdict(
 
     logger_.info(
         "session_success_verdict turns=%d follow_up_turns=%d "
-        "dynamic_payload_status=%s baseline_dynamic_payload=%d follow_up_average_dynamic_payload=%d "
+        "dynamic_payload_status=%s baseline_dynamic_payload=%d "
+        "follow_up_average_dynamic_payload=%d "
         "cache_read_status=%s baseline_cache_read_ratio=%.2f follow_up_cache_read_ratio=%.2f",
         turn_count,
         follow_up_count,
@@ -628,8 +650,8 @@ def orchestrate_context_layout_budgets(
     dynamic_budget: int,
     result_budget: int | None = None,
     working_dir: str | Path | None = None,
-    ports: Any = None,
-):
+    ports: ContextRuntimePorts | None = None,
+) -> BudgetApplicationResult:
     orchestrator = BudgetOrchestrator(working_dir=working_dir, ports=ports)
     return orchestrator.apply_context_layout_budgets(
         plan,
@@ -637,24 +659,6 @@ def orchestrate_context_layout_budgets(
         dynamic_budget=dynamic_budget,
         result_budget=result_budget,
     )
-
-
-def apply_request_mode_skeleton(
-    plan: ContextPackLayout,
-    *,
-    request_mode: str | None,
-) -> ContextPackLayout:
-    if request_mode != "cold_start":
-        return plan
-    plan.dynamic_blocks = [
-        block
-        for block in plan.dynamic_blocks
-        if not (
-            block.source == "memory_archives"
-            and block.priority in {"low", "medium"}
-        )
-    ]
-    return plan
 
 
 def build_turn_context_layout(

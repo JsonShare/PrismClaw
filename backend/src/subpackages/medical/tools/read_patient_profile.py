@@ -2,13 +2,14 @@
 
 仅在咨询会话中可用：查 consultations 域表得 patient_id。
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .._protocols import ToolContext, text_result, error_result
+from .._protocols import ToolContext, error_result, text_result
 
 
 @dataclass
@@ -22,13 +23,16 @@ class ReadPatientProfileTool:
     name: str = "read_patient_profile"
     description: str = (
         "查询当前咨询患者的画像：过敏史/用药/既往史等，逐条带 source 标记（patient=患者自报）。"
-        "不返回报告全文，要下临床结论请先用 read_patient_reports 定位再用 read_raw_report 回查原文。"
+        "不返回报告全文，要下临床结论请先用 read_patient_reports "
+        "定位再用 read_raw_report 回查原文。"
     )
-    parameters: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {},
-        "required": [],
-    })
+    parameters: dict[str, Any] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        }
+    )
     tool_class: str = "read"
     side_effect: bool = False
     effect_class: str = ""
@@ -85,7 +89,8 @@ def _calc_age(birth_date_str: str) -> int:
     if not birth_date_str:
         return 0
     try:
-        from datetime import datetime, date
+        from datetime import date, datetime
+
         bd = datetime.strptime(str(birth_date_str), "%Y-%m-%d").date()
         today = date.today()
         return today.year - bd.year - ((today.month, today.day) < (bd.month, bd.day))

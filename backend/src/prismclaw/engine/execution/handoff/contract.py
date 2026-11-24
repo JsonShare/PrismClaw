@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 HANDOFF_REQUEST_BLOCK_NAME = "HANDOFF_REQUEST"
 
 
@@ -78,9 +77,7 @@ def normalize_handoff_request_payload(
         normalized["source_skill_origin"] = payload["source_skill_origin"]
 
     if "source_preload_skills" in payload:
-        normalized["source_preload_skills"] = _coerce_skill_names(
-            payload["source_preload_skills"]
-        )
+        normalized["source_preload_skills"] = _coerce_skill_names(payload["source_preload_skills"])
 
     if "source_is_fork" in payload:
         normalized["source_is_fork"] = bool(payload["source_is_fork"])
@@ -105,9 +102,7 @@ def handoff_request_entry_from_payload(
             source_hop_index=normalized["source_hop_index"],
             source_effective_hop_index=normalized["source_effective_hop_index"],
             source_skill_origin=normalized.get("source_skill_origin"),
-            source_preload_skills=_coerce_skill_names(
-                normalized.get("source_preload_skills")
-            ),
+            source_preload_skills=_coerce_skill_names(normalized.get("source_preload_skills")),
             source_is_fork=bool(normalized.get("source_is_fork", False)),
         )
     except KeyError:
@@ -142,8 +137,7 @@ def render_handoff_request_handover(
     source_preload_skills = normalized.get("source_preload_skills")
     if isinstance(source_preload_skills, list) and source_preload_skills:
         lines.append(
-            "source_preload_skills: "
-            + ", ".join(str(item) for item in source_preload_skills)
+            "source_preload_skills: " + ", ".join(str(item) for item in source_preload_skills)
         )
     if normalized.get("source_is_fork") is True:
         lines.append("source_is_fork: true")
@@ -151,7 +145,7 @@ def render_handoff_request_handover(
     return "\n".join(lines)
 
 
-def _coerce_skill_names(raw: Any) -> list[str]:
+def _coerce_skill_names(raw: object) -> list[str]:
     if not isinstance(raw, list):
         return []
     names: list[str] = []

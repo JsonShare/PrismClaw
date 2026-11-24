@@ -9,32 +9,43 @@
 终止权威不在这里：``CompletionKernel`` 是唯一决策者，本模块不重新判断
 「是否完成」，也不再有第二套计数器。
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.execution.control.completion import (
     CompletionContract,
     build_review_record,
 )
-from prismclaw.engine.execution.control.kernel import Decision, CompletionKernel, TerminalReason
+from prismclaw.engine.execution.control.kernel import CompletionKernel, Decision, TerminalReason
 from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.execution.loop.terminal import record_review_outcome
-from prismclaw.engine.execution.state.task_persistence import (
-    _new_task_mutation,
-    _build_runtime_mutation_patch,
-    _build_task_terminal_mutation,
-    _evaluate_and_apply_task_mutation,
-    _set_resume_boundary,
-)
 from prismclaw.engine.execution.loop.tree_writer import (
     _persist_session_memory_snapshot,
 )
 from prismclaw.engine.execution.skills.skill_dispatch import _append_control_message_override
+from prismclaw.engine.execution.state.task_persistence import (
+    _build_runtime_mutation_patch,
+    _build_task_terminal_mutation,
+    _evaluate_and_apply_task_mutation,
+    _new_task_mutation,
+    _set_resume_boundary,
+)
 from prismclaw.schema.agent.session import ProjectionInputMessage, SystemReminderProjection
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.checkpoint import RunState, RunStateMachine
+    from prismclaw.engine.execution.control.completion import ReviewResult
+    from prismclaw.engine.execution.control.kernel import LoopEvent
+    from prismclaw.engine.execution.query.pre_request_pipeline import PreparedTurn
+    from prismclaw.engine.task_profile.service import TaskResponsePolicy
+    from prismclaw.schema.agent.task_runtime import EvidenceRecord, TaskRuntimeState
+    from prismclaw.schema.content.streaming import Done
+    from prismclaw.schema.llm.types import LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +53,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # No-tool turn governance result
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class NoToolGovernanceResult:
@@ -55,7 +67,7 @@ class NoToolGovernanceResult:
 
     decision: Decision
     appended_messages_override: list[ProjectionInputMessage] | None = None
-    done_event: Any = None
+    done_event: Done | None = None
     terminal_code: str | None = None
     terminal_message: str | None = None
     terminated_by: TerminalReason | None = None
@@ -107,21 +119,22 @@ def _build_goal_drive_prompt(
 # No-tool turn governance
 # ---------------------------------------------------------------------------
 
+
 async def evaluate_no_tool_governance(
     rt: LoopRuntime,
     *,
-    response: Any,
-    event: Any,
+    response: LLMResponse,
+    event: LoopEvent,
     kernel: CompletionKernel,
-    retry_counts: Any,
-    response_policy: Any,
-    state_machine: Any,
-    prepared_turn: Any,
+    retry_counts: dict[str, int],
+    response_policy: TaskResponsePolicy,
+    state_machine: RunStateMachine,
+    prepared_turn: PreparedTurn,
     total_input_tokens: int,
     total_output_tokens: int,
     total_cache_creation_tokens: int,
     total_cache_read_tokens: int,
-    run_state: Any,
+    run_state: RunState,
 ) -> NoToolGovernanceResult:
     """对无工具回合执行一次裁决。
 
@@ -131,15 +144,15 @@ async def evaluate_no_tool_governance(
     2. 空答复 / 纯推理已超上限 → ``no_response_exhausted`` 硬边界终态；
     3. 其余交内核：无契约 → ``complete_open``；有契约 → 准则逐条评估。
     """
+    from prismclaw.engine.execution.checkpoint import ResumeBoundary
     from prismclaw.engine.execution.dispatch.response_handling import (
-        decide_no_tool_turn,
-        complete_no_tool_turn,
         append_assistant_response,
+        complete_no_tool_turn,
+        decide_no_tool_turn,
     )
     from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
-    from prismclaw.engine.execution.loop.tree_writer import _append
-    from prismclaw.engine.execution.checkpoint import ResumeBoundary
     from prismclaw.engine.execution.loop.terminal import persist_snapshot_fn
+    from prismclaw.engine.execution.loop.tree_writer import _append
 
     deps = rt.deps
     request = rt.request
@@ -225,9 +238,7 @@ async def evaluate_no_tool_governance(
         if decision.code == TerminalReason.BLOCKED_DECLARED:
             code = block_intent.code if block_intent is not None else "blocked"
             message = (
-                block_intent.message
-                if block_intent is not None
-                else "模型申报阻塞且已有执行尝试。"
+                block_intent.message if block_intent is not None else "模型申报阻塞且已有执行尝试。"
             )
             logger.info(
                 "goal_blocked: code=%s repairs=%s task_id=%s",
@@ -283,21 +294,17 @@ async def evaluate_no_tool_governance(
         actor_kind="loop",
         evidence_ids=list(review_evidence_ids),
     )
-    task_runtime, completion_applied, completion_reason = (
-        await _evaluate_and_apply_task_mutation(
-            deps=deps,
-            tree=tree,
-            snapshot=snapshot,
-            task_runtime=task_runtime,
-            mutation=terminal_mutation,
-            evidence_records=evidence_ledger,
-        )
+    task_runtime, completion_applied, completion_reason = await _evaluate_and_apply_task_mutation(
+        deps=deps,
+        tree=tree,
+        snapshot=snapshot,
+        task_runtime=task_runtime,
+        mutation=terminal_mutation,
+        evidence_records=evidence_ledger,
     )
     _mutation_ms = (time.monotonic() - _gov_p_t0) * 1000
     if not completion_applied:
-        raise RuntimeError(
-            f"completion mutation rejected after review: {completion_reason}"
-        )
+        raise RuntimeError(f"completion mutation rejected after review: {completion_reason}")
     rt.task_runtime = task_runtime
     run_state.current_phase = "finalize_turn"
     _set_resume_boundary(snapshot, boundary=ResumeBoundary.AFTER_TURN_FINALIZE)
@@ -309,9 +316,10 @@ async def evaluate_no_tool_governance(
         deps=deps,
         request=request,
         tree=tree,
-        session_messages=list(
-            prepared_turn.query_loop_state.query_view.source_messages.messages
-        ),
+        session_messages=[
+            dict(message)
+            for message in prepared_turn.query_loop_state.query_view.source_messages.messages
+        ],
         append_entry=_append,
         response_text=response.text,
         usage_totals={
@@ -350,13 +358,14 @@ async def evaluate_no_tool_governance(
 # Helpers (factored out from inline closures)
 # ---------------------------------------------------------------------------
 
+
 async def _persist_review_record(
     rt: LoopRuntime,
     *,
-    task_runtime: Any,
-    review: Any,
-    evidence_ledger: list[Any],
-) -> tuple[Any, list[str]]:
+    task_runtime: TaskRuntimeState,
+    review: ReviewResult,
+    evidence_ledger: list[EvidenceRecord],
+) -> tuple[TaskRuntimeState, list[str]]:
     """把准则评估结果写成 review mutation（审计留痕），返回 (任务运行时, 证据 id)。"""
     review_record = build_review_record(task_runtime=task_runtime, result=review)
     record_review_outcome(rt, review_record)
@@ -382,4 +391,3 @@ async def _persist_review_record(
     # 持有 parallel_task_store），不得覆写为 TaskRuntimeState。
     rt.task_runtime = task_runtime
     return task_runtime, list(review_record.evidence_ids)
-

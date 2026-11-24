@@ -72,9 +72,7 @@ class WebSettings(BaseSettings):
     6 个标签即触发 4004 断连横幅反复闪烁），放宽以避免多标签场景的连接震荡。"""
     trust_proxy_headers: bool = Field(False)
 
-    cors_origins: list[str] = Field(
-        default_factory=lambda: ["http://localhost:5173"]
-    )
+    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     users: list[WebUserConfig] = Field(default_factory=list)
     smtp: SmtpSettings = Field(default_factory=lambda: SmtpSettings())
 

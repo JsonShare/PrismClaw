@@ -88,7 +88,8 @@ def _load_module_config(name: str, path: Path) -> dict[str, Any] | None:
     if Path(name).stem == "mcp":
         mcp_servers = data.get("mcpServers")
         if mcp_servers is not None:
-            mcp = dict(data.get("mcp")) if isinstance(data.get("mcp"), dict) else {}
+            raw_mcp = data.get("mcp")
+            mcp: dict[str, Any] = dict(raw_mcp) if isinstance(raw_mcp, dict) else {}
             if isinstance(mcp_servers, dict):
                 servers = dict(mcp.get("servers") or {})
                 servers.update(mcp_servers)

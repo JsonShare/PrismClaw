@@ -36,7 +36,7 @@ import { RightPanelResizer } from './RightPanelResizer'
 import { ChatSection } from './sections/ChatSection'
 import ScheduledTasksPage from './sections/ScheduledTasksPage'
 import SkillsPanel from './sections/SkillsPanel'
-import OutputsPage from './sections/OutputsPage'
+import OutboxPage from './sections/OutboxPage'
 import { DomainSection } from './sections/DomainSection'
 
 /* ---- 三栏布局：预览栏可拖拽宽度 ---- */
@@ -368,7 +368,7 @@ export default function ChatPage() {
 
   // 兜底：localStorage 残留旧 'tasks'/'settings' 等已删除 section → 自动切回 chat
   useEffect(() => {
-    const valid = new Set(['chat', 'experts', 'files', 'outputs'])
+    const valid = new Set(['chat', 'experts', 'files', 'outbox'])
     if (!valid.has(activeSection) && !activeSection.startsWith('domain:')) {
       setActiveSection('chat')
     }
@@ -496,7 +496,7 @@ export default function ChatPage() {
     history.replaceState({}, '', location.pathname)
     // section 值来自工作台跳转，仅 'chat' / 'domain:*' 合法；
     // 不合法的值静默忽略（不跳转），不报错——降级为当前页面。
-    const validSections = new Set(['chat', 'files', 'experts', 'outputs'])
+    const validSections = new Set(['chat', 'files', 'experts', 'outbox'])
     if (validSections.has(section) || section.startsWith('domain:')) {
       setActiveSection(section as Parameters<typeof setActiveSection>[0])
     }
@@ -1226,8 +1226,8 @@ export default function ChatPage() {
 
         {activeSection === 'experts' && <SkillsPanel />}
 
-        {activeSection === 'outputs' && (
-          <OutputsPage token={token} onSelectSession={handleSelectSession} />
+        {activeSection === 'outbox' && (
+          <OutboxPage token={token} onSelectSession={handleSelectSession} />
         )}
 
         {activeSection.startsWith('domain:') && (

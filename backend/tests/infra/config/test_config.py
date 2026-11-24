@@ -2,6 +2,7 @@
 
 覆盖 merge.py 和 resolver.py 的核心逻辑。
 """
+
 from __future__ import annotations
 
 import json
@@ -22,7 +23,6 @@ from prismclaw.infra.config.resolver import (
     reset_override_key,
     save_override,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # merge.py 测试
@@ -231,6 +231,7 @@ class TestGetEffectiveConfig:
         defaults_path.write_text(json.dumps(defaults), encoding="utf-8")
 
         from prismclaw.infra.config import resolver
+
         monkeypatch.setattr(resolver, "_defaults_config_path", lambda d: defaults_path)
 
         result = get_effective_config("science")
@@ -258,9 +259,9 @@ class TestGetEffectiveConfig:
         override_path.write_text(json.dumps(override_data), encoding="utf-8")
 
         from prismclaw.infra.config import resolver
+
         monkeypatch.setattr(resolver, "_defaults_config_path", lambda d: defaults_path)
-        monkeypatch.setattr(resolver, "_override_config_path",
-                            lambda d, ws, uid: override_path)
+        monkeypatch.setattr(resolver, "_override_config_path", lambda d, ws, uid: override_path)
 
         result = get_effective_config("science", workspace_id="ws", user_id="u1")
         assert result["qianfan"]["strategy"] == "round_robin"  # 覆盖
@@ -290,9 +291,9 @@ class TestGetEffectiveConfig:
         override_path.write_text(json.dumps(override_data), encoding="utf-8")
 
         from prismclaw.infra.config import resolver
+
         monkeypatch.setattr(resolver, "_defaults_config_path", lambda d: defaults_path)
-        monkeypatch.setattr(resolver, "_override_config_path",
-                            lambda d, ws, uid: override_path)
+        monkeypatch.setattr(resolver, "_override_config_path", lambda d, ws, uid: override_path)
 
         result = get_effective_config("science", workspace_id="ws", user_id="u1")
         assert "stale_key" not in result
@@ -312,9 +313,9 @@ class TestSaveOverride:
         override_path = tmp_path / "ws" / ".work" / "configs" / "science.json"
 
         from prismclaw.infra.config import resolver
+
         monkeypatch.setattr(resolver, "_defaults_config_path", lambda d: defaults_path)
-        monkeypatch.setattr(resolver, "_override_config_path",
-                            lambda d, ws, uid: override_path)
+        monkeypatch.setattr(resolver, "_override_config_path", lambda d, ws, uid: override_path)
 
         save_override("science", "ws", "u1", {"search": {"timeout": 60}})
 
@@ -333,8 +334,8 @@ class TestResetOverride:
         override_path.write_text('{"schema_version": "1.0"}', encoding="utf-8")
 
         from prismclaw.infra.config import resolver
-        monkeypatch.setattr(resolver, "_override_config_path",
-                            lambda d, ws, uid: override_path)
+
+        monkeypatch.setattr(resolver, "_override_config_path", lambda d, ws, uid: override_path)
 
         reset_override("science", "ws", "u1")
         assert not override_path.exists()
@@ -354,8 +355,8 @@ class TestResetOverrideKey:
         override_path.write_text(json.dumps(override_data), encoding="utf-8")
 
         from prismclaw.infra.config import resolver
-        monkeypatch.setattr(resolver, "_override_config_path",
-                            lambda d, ws, uid: override_path)
+
+        monkeypatch.setattr(resolver, "_override_config_path", lambda d, ws, uid: override_path)
 
         reset_override_key("science", "ws", "u1", "search.cnki")
         saved = json.loads(override_path.read_text(encoding="utf-8"))
@@ -373,8 +374,8 @@ class TestResetOverrideKey:
         override_path.write_text(json.dumps(override_data), encoding="utf-8")
 
         from prismclaw.infra.config import resolver
-        monkeypatch.setattr(resolver, "_override_config_path",
-                            lambda d, ws, uid: override_path)
+
+        monkeypatch.setattr(resolver, "_override_config_path", lambda d, ws, uid: override_path)
 
         reset_override_key("science", "ws", "u1", "search.timeout")
         assert not override_path.exists()

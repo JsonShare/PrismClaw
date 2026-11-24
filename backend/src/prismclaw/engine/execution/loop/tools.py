@@ -7,13 +7,17 @@
 
 所有运行期依赖通过 ``rt: LoopRuntime`` 显式访问。
 """
+
 from __future__ import annotations
 
 import contextlib
 import logging
 import time as _time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
 
 from prismclaw.engine.execution.loop._loop_helpers import (
     _close_orphaned_tool_calls,
@@ -21,8 +25,15 @@ from prismclaw.engine.execution.loop._loop_helpers import (
     compute_tool_signature,
 )
 from prismclaw.engine.execution.loop.runtime import LoopRuntime
-from prismclaw.engine.execution.loop.types import RunLoopState
+from prismclaw.engine.execution.loop.types import (
+    AfterToolCallContext,
+    AfterToolCallResult,
+    BeforeToolCallContext,
+    BeforeToolCallResult,
+    RunLoopState,
+)
 from prismclaw.schema.content.streaming import ErrorEvent
+from prismclaw.schema.llm.types import LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +42,11 @@ logger = logging.getLogger(__name__)
 # before_tool_call → gate_tool_call
 # ---------------------------------------------------------------------------
 
+
 async def gate_tool_call(
     rt: LoopRuntime,
-    before_ctx: Any,
-) -> Any:
+    before_ctx: BeforeToolCallContext,
+) -> BeforeToolCallResult | None:
     """工具执行前检查。
 
     1. doom-loop 冻结签名命中 → block；反复重试被冻结的调用达升级阈值
@@ -56,6 +68,8 @@ async def gate_tool_call(
 
     _bstate = before_ctx.state
     call = before_ctx.tool_call
+    if call is None:
+        return None
 
     # ── 0. 插件作用域（最便宜、最确定，故最先）──
     # tool_scope 为 None 表示无插件上下文（headless/测试/装配未就绪），不限作用域。
@@ -66,6 +80,7 @@ async def gate_tool_call(
         _owner = getattr(_tool, "plugin_name", None) if _tool is not None else None
         if _owner is not None and _owner not in _scope:
             from prismclaw.engine.execution.loop.types import BeforeToolCallResult
+
             return BeforeToolCallResult(
                 block=True,
                 reason=f"tool_scope_denied:{_owner}（该工具属于插件「{_owner}」，请先 @ 该插件）",
@@ -83,8 +98,10 @@ async def gate_tool_call(
     if frozen_outcome.action == "freeze":
         state_machine.update_tool_loop_state(tool_loop_state)
         from prismclaw.engine.execution.loop.types import BeforeToolCallResult
+
         return BeforeToolCallResult(
-            block=True, reason=frozen_outcome.guidance or "该工具调用已被死循环防护冻结",
+            block=True,
+            reason=frozen_outcome.guidance or "该工具调用已被死循环防护冻结",
         )
 
     # ── 2. pre-tool hooks ──
@@ -101,6 +118,7 @@ async def gate_tool_call(
     if call_id in _pre_tool_denied:
         reason = _pre_tool_denied.get(call_id, "blocked")
         from prismclaw.engine.execution.loop.types import BeforeToolCallResult
+
         return BeforeToolCallResult(block=True, reason=reason)
     return None
 
@@ -109,10 +127,11 @@ async def gate_tool_call(
 # after_tool_call
 # ---------------------------------------------------------------------------
 
+
 async def after_tool_call(
     rt: LoopRuntime,
-    after_ctx: Any,
-) -> Any:
+    after_ctx: AfterToolCallContext,
+) -> AfterToolCallResult | None:
     """工具执行后处理（只做观测与一次收尾提示，不做裁决）。
 
     POST_TOOL hooks 已下沉到 execute_tool_calls 逐调用派发。此处保留：
@@ -124,35 +143,33 @@ async def after_tool_call(
 
     _state = after_ctx.state
 
-    if (
-        _state is not None
-        and after_ctx.tool_calls
-        and _completion_state.contract is not None
-    ):
+    if _state is not None and after_ctx.tool_calls and _completion_state.contract is not None:
         from prismclaw.engine.execution.control.artifacts import ArtifactScanner
         from prismclaw.engine.execution.control.kernel import CompletionReviewer
 
-        _review = CompletionReviewer(
-            ArtifactScanner(rt.tool_workspace_path)
-        ).evaluate(_completion_state.contract, rt.evidence_ledger)
+        _review = CompletionReviewer(ArtifactScanner(rt.tool_workspace_path)).evaluate(
+            _completion_state.contract, rt.evidence_ledger
+        )
         if _review.accepted and not tool_loop_state.convergence_advisory_sent:
             tool_loop_state.convergence_advisory_sent = True
             state_machine.update_tool_loop_state(tool_loop_state)
             logger.info(
-                "convergence: deliverables complete at iter=%d "
-                "— injecting final-answer advisory",
+                "convergence: deliverables complete at iter=%d — injecting final-answer advisory",
                 _state.perf.llm_calls,
             )
             from prismclaw.engine.execution.loop.types import AfterToolCallResult
+
             return AfterToolCallResult(
-                inject_messages=[{
-                    "role": "user",
-                    "content": (
-                        "[系统提示：所有必需的交付物均已产出并通过校验"
-                        "（写入与完成策略证据齐全）。不要再调用任何工具，"
-                        "请立即给出最终答复。]"
-                    ),
-                }]
+                inject_messages=[
+                    {
+                        "role": "user",
+                        "content": (
+                            "[系统提示：所有必需的交付物均已产出并通过校验"
+                            "（写入与完成策略证据齐全）。不要再调用任何工具，"
+                            "请立即给出最终答复。]"
+                        ),
+                    }
+                ]
             )
     return None
 
@@ -161,11 +178,12 @@ async def after_tool_call(
 # execute_tools
 # ---------------------------------------------------------------------------
 
+
 async def execute_tools(
     rt: LoopRuntime,
     state: RunLoopState,
-    response: Any,
-    allowed_calls: list[Any],
+    response: LLMResponse,
+    allowed_calls: list[ParsedToolCall],
 ) -> AsyncIterator[Any]:
     """工具执行。B/S 架构有 handoff dispatch + subagent，因此提取为独立 callback。"""
     deps = rt.deps
@@ -242,16 +260,16 @@ async def execute_tools(
         await apply_handoff_dispatch_plan(
             tool_ctx=tool_ctx,
             handoff_plan=handoff_result,
-            subagent_progress_sink=deps.callbacks.on_subagent_progress if deps.callbacks is not None else None,
+            subagent_progress_sink=deps.callbacks.on_subagent_progress
+            if deps.callbacks is not None
+            else None,
             emit_cap_exceeded_progress=_emit_cap_exceeded_synthetic_progress,
         )
 
         # ── 1.5 Artifact baseline ──
         _artifact_scanner = ArtifactScanner(tool_workspace_path)
         _parsed_calls = parse_tool_calls(handoff_result.tool_calls)
-        _declared = tuple(
-            path for _call in _parsed_calls for path in declared_paths(_call)
-        )
+        _declared = tuple(path for _call in _parsed_calls for path in declared_paths(_call))
         _artifacts_before = _artifact_scanner.stat_paths(_declared)
 
         # ── 2. Execute tools ──
@@ -374,9 +392,14 @@ async def execute_tools(
                         _dynamic_payload += len(_t)
         _result_payload_reduction = 0
         if execution_artifacts.compaction_turn is not None:
-            _result_payload_reduction = getattr(
-                execution_artifacts.compaction_turn, "bytes_saved", 0,
-            ) or 0
+            _result_payload_reduction = (
+                getattr(
+                    execution_artifacts.compaction_turn,
+                    "bytes_saved",
+                    0,
+                )
+                or 0
+            )
         await _persist_turn_runtime_metrics(
             deps,
             tree,
@@ -388,7 +411,9 @@ async def execute_tools(
 
     except Exception as _exec_exc:
         logger.warning(
-            "execute_tools error: %s", _exec_exc, exc_info=True,
+            "execute_tools error: %s",
+            _exec_exc,
+            exc_info=True,
         )
         # Step 0 已把 assistant（含 tool_calls）落树——中途异常时
         # 尚未执行的调用必须在树层闭合配对（合成 error 结果）。

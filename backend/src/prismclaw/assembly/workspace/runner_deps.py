@@ -1,14 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import dataclasses
+from pathlib import Path
 
 from prismclaw.assembly.plugins.plugin_lifecycle import PluginLifecycleManager
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps, PluginBundle
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.infra.paths import build_project_capability_layout
 from prismclaw.infra.settings import Settings
+
+
+def _normalized(path: Path | str) -> Path:
+    """规范化路径（展开 ~ 并 resolve）。纯计算，不触盘。"""
+    return Path(path).expanduser().resolve()
 
 
 def _copy_tool_registry(base_registry: ToolRegistry) -> ToolRegistry:
@@ -46,9 +50,9 @@ async def build_workspace_scoped_runner_deps(
         None,
     )
     scoped_project_root = base_project_root if base_project_root is not None else workspace_root
-    additional_project_roots = (
+    additional_project_roots: list[Path | str] | None = (
         [workspace_root]
-        if workspace_root.resolve() != Path(scoped_project_root).expanduser().resolve()
+        if _normalized(workspace_root) != _normalized(scoped_project_root)
         else None
     )
 

@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.assembly.bundles_data import AppInfrastructureBundle
 from prismclaw.engine.runtime.mode import redis_is_required
 from prismclaw.infra.settings import Settings
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
+    from fastapi import FastAPI
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+    from prismclaw.engine.security.sandbox.policy import SandboxPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +21,7 @@ logger = logging.getLogger(__name__)
 async def build_app_infrastructure_bundle(
     *,
     settings: Settings,
-    sandbox_policy: Any,
+    sandbox_policy: SandboxPolicy,
     db_engine: AsyncEngine,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     get_client_fn: Callable[[Any], Awaitable[Any]],
@@ -34,9 +38,7 @@ async def build_app_infrastructure_bundle(
     run_ownership_factory: Callable[..., Any] | None = None,
 ) -> AppInfrastructureBundle:
     if sandbox_policy is None:
-        raise RuntimeError(
-            "build_app_infrastructure_bundle requires a resolved sandbox_policy"
-        )
+        raise RuntimeError("build_app_infrastructure_bundle requires a resolved sandbox_policy")
     redis_client = None
     try:
         redis_client = await get_client_fn(settings.redis)
@@ -55,13 +57,15 @@ async def build_app_infrastructure_bundle(
     )
     run_snapshot_store = None
     if session_factory is not None:
-        from prismclaw.persistence.pg_checkpoint.factory import create_run_snapshot_store
         from prismclaw.engine.execution.checkpoint.persistence import parse_run_snapshot_json
-        run_snapshot_store = create_run_snapshot_store(session_factory, payload_parser=parse_run_snapshot_json)
+        from prismclaw.persistence.pg_checkpoint.factory import create_run_snapshot_store
+
+        run_snapshot_store = create_run_snapshot_store(
+            session_factory, payload_parser=parse_run_snapshot_json
+        )
     run_ownership_store = None
-    if settings.affinity.enabled and redis_client is not None:
-        if run_ownership_factory is not None:
-            run_ownership_store = run_ownership_factory(redis_client, settings)
+    if settings.affinity.enabled and redis_client is not None and run_ownership_factory is not None:
+        run_ownership_store = run_ownership_factory(redis_client, settings)
     task_manager = task_manager_factory(
         default_shutdown_grace_s=float(settings.shutdown_grace_seconds),
     )
@@ -94,7 +98,7 @@ async def build_app_infrastructure_bundle(
         )
 
     workspace_store = create_workspace_store_fn(settings, redis_client=redis_client)
-    workspace_base = Path(settings.workspaces.default).expanduser()
+    workspace_base = Path(settings.workspaces.default).expanduser()  # noqa: ASYNC240 - 纯字符串
 
     memory_store = None
     if create_memory_store_fn is not None:
@@ -135,7 +139,7 @@ async def build_app_infrastructure_bundle(
     )
 
 
-def apply_app_infrastructure_bundle(app: Any, bundle: AppInfrastructureBundle) -> None:
+def apply_app_infrastructure_bundle(app: FastAPI, bundle: AppInfrastructureBundle) -> None:
     state = getattr(app, "state", None)
     if state is None:
         raise RuntimeError("app.state is not available")

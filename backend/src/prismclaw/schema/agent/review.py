@@ -3,6 +3,7 @@
 Protocol for document review/apply operations, and content-addressable
 storage types (ContentRef / ContentStore).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,7 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 
 
 class ReviewServiceProtocol(Protocol):
-    """Protocol for review operations — duck-typing compatible with engine.services.review_service."""
+    """审阅操作协议；与 engine.services.review_service 鸭子类型兼容。"""
 
     async def apply_review(
         self,

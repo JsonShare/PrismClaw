@@ -5,6 +5,7 @@
 2. CONFIG_KEY_OWNERS（顶层键 → 归属文件）与真实 YAML 顶层键 1:1；
 3. dump_document 写回后可重新加载且数据不变（ruamel 环境下同时验证注释保留）。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -69,7 +70,9 @@ def test_key_owners_cover_all_yaml_top_keys():
     merged = _merged_config()
     top_keys = set(merged)
     owners = set(CONFIG_KEY_OWNERS)
-    assert top_keys == owners, f"顶层键与归属表不一致: yaml 独有={top_keys - owners}, 表独有={owners - top_keys}"
+    assert top_keys == owners, (
+        f"顶层键与归属表不一致: yaml 独有={top_keys - owners}, 表独有={owners - top_keys}"
+    )
     for key, fname in CONFIG_KEY_OWNERS.items():
         assert (CONFIGS_DIR / fname).is_file(), f"归属文件缺失 {fname}（键 {key}）"
         doc = load_document(CONFIGS_DIR / fname)

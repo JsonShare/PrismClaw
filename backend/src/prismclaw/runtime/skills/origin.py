@@ -5,11 +5,12 @@ based on its manifest path and plugin descriptor metadata. It defines its own
 Protocol for the descriptor interface so that the skills package does not
 depend on core.services.plugins.
 """
+
 from __future__ import annotations
 
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from prismclaw.schema.agent.domains import SkillSource
 from prismclaw.schema.services.skills import SkillManifest
@@ -35,12 +36,12 @@ def _path_is_under(path: Path, root: Path) -> bool:
         return False
 
 
-def _skill_settings(settings: Any) -> Any:
+def _skill_settings(settings: object) -> object:
     nested = getattr(settings, "skills", None)
     return nested if nested is not None else settings
 
 
-def _plugin_settings(settings: Any) -> Any:
+def _plugin_settings(settings: object) -> object:
     return getattr(settings, "plugins", None)
 
 
@@ -56,7 +57,7 @@ def _capability_root(workspace_root: Path, raw: str) -> Path:
     return (workspace_root / expanded).resolve()
 
 
-def _iter_plugin_roots(workspace_root: Path, settings: Any) -> list[Path]:
+def _iter_plugin_roots(workspace_root: Path, settings: object) -> list[Path]:
     plugin_settings = _plugin_settings(settings)
     if plugin_settings is None:
         return []
@@ -71,7 +72,7 @@ def _iter_plugin_roots(workspace_root: Path, settings: Any) -> list[Path]:
 
 def _resolve_skill_descriptor(
     manifest: SkillManifest,
-    extension_manager: Any | None,
+    extension_manager: object | None,
 ) -> SkillOriginDescriptor | None:
     if extension_manager is None:
         return None
@@ -84,13 +85,13 @@ def _resolve_skill_descriptor(
     return None
 
 
-def _supports_skill_descriptor(extension_manager: Any | None) -> bool:
+def _supports_skill_descriptor(extension_manager: object | None) -> bool:
     if extension_manager is None:
         return False
     return callable(getattr(extension_manager, "get_skill_descriptor", None))
 
 
-def _iter_skill_roots(workspace_root: Path, settings: Any) -> list[Path]:
+def _iter_skill_roots(workspace_root: Path, settings: object) -> list[Path]:
     """skills 的双来源根：workspace 级 ``.work/state/skills`` + 用户级 assets/skills。"""
     skill_settings = _skill_settings(settings)
     roots: list[Path] = []
@@ -121,8 +122,8 @@ def _skill_group_parts_for_root(skill_path: Path, root: Path) -> list[str]:
 def classify_skill_origin(
     manifest: SkillManifest,
     workspace_root: Path,
-    settings: Any,
-    extension_manager: Any | None = None,
+    settings: object,
+    extension_manager: object | None = None,
 ) -> SkillSource | None:
     # MCP skills are not filesystem-backed; their origin is fixed by source.
     src = getattr(manifest, "source", None)
@@ -175,22 +176,25 @@ def classify_skill_origin(
 def is_plugin_skill(
     manifest: SkillManifest,
     workspace_root: Path,
-    settings: Any,
-    extension_manager: Any | None = None,
+    settings: object,
+    extension_manager: object | None = None,
 ) -> bool:
-    return classify_skill_origin(
-        manifest,
-        workspace_root,
-        settings,
-        extension_manager=extension_manager,
-    ) is SkillSource.PLUGIN
+    return (
+        classify_skill_origin(
+            manifest,
+            workspace_root,
+            settings,
+            extension_manager=extension_manager,
+        )
+        is SkillSource.PLUGIN
+    )
 
 
 def classify_skill_group_path(
     manifest: SkillManifest,
     workspace_root: Path,
-    settings: Any,
-    extension_manager: Any | None = None,
+    settings: object,
+    extension_manager: object | None = None,
 ) -> list[str]:
     descriptor = _resolve_skill_descriptor(manifest, extension_manager)
     if descriptor is not None and descriptor.plugin_name:
@@ -202,8 +206,7 @@ def classify_skill_group_path(
 
     plugin_roots = _iter_plugin_roots(workspace_root, settings)
     plugin_root = next((root for root in plugin_roots if _path_is_under(mp, root)), None)
-    plugin_root_hit = plugin_root is not None
-    if plugin_root_hit:
+    if plugin_root is not None:
         if descriptor is None and _supports_skill_descriptor(extension_manager):
             return []
         return _skill_group_parts_for_root(
@@ -221,8 +224,8 @@ def classify_skill_group_path(
 def classify_skill_group_label(
     manifest: SkillManifest,
     workspace_root: Path,
-    settings: Any,
-    extension_manager: Any | None = None,
+    settings: object,
+    extension_manager: object | None = None,
 ) -> str | None:
     parts = classify_skill_group_path(
         manifest,

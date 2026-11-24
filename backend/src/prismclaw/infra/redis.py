@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable
 
 import redis.asyncio as aioredis
 from redis.backoff import ExponentialBackoff
@@ -10,6 +11,19 @@ from redis.retry import Retry
 from prismclaw.infra.settings import RedisSettings
 
 logger = logging.getLogger(__name__)
+
+
+async def resolve[T](value: Awaitable[T] | T) -> T:
+    """Await ``value`` when it is awaitable, otherwise pass it through.
+
+    redis-py annotates its command methods as ``Awaitable[X] | X`` because the
+    same command classes back both the sync and async clients; an async client
+    always returns the awaitable branch at runtime.
+    """
+    if isinstance(value, Awaitable):
+        return await value
+    return value
+
 
 _RETRYABLE_ERRORS = (
     ConnectionError,
@@ -56,7 +70,7 @@ async def close_client(client: aioredis.Redis | None) -> None:
 
 async def ping(client: aioredis.Redis) -> bool:
     try:
-        return await client.ping()
+        return bool(await resolve(client.ping()))
     except Exception:
         logger.debug("Redis ping failed", exc_info=True)
         return False

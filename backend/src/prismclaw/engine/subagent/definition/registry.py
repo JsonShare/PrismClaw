@@ -13,20 +13,21 @@ own scanner rather than reusing ``discovery_helpers._scan_directory``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
+from prismclaw.engine.subagent.core.constants import MAX_FILE_BYTES
 from prismclaw.engine.subagent.definition.manifest import AgentManifest
 from prismclaw.engine.subagent.definition.parser import parse_agent_md
-from prismclaw.engine.subagent.core.constants import MAX_FILE_BYTES
+from prismclaw.schema.config.config import SubAgentConfig
 from prismclaw.schema.shared import (
     CapabilityLocation,
     _is_valid_entry_name,
     _validate_path_containment,
 )
-from prismclaw.schema.config.config import SubAgentConfig
 from prismclaw.schema.shared.exceptions import SkillParseError
 
 logger = logging.getLogger(__name__)
@@ -48,8 +49,10 @@ class _LayerScanDiagnostics:
     directory: str
     loaded_count: int
     candidates_scanned: int
-    hard_stops: tuple[dict, ...]  # each: {"reason": "...", "path": "...", "detail": "..."}
-    per_file: tuple[dict, ...]  # each: {"path": "...", "result": "ok|skip|error", ... }
+    # each: {"reason": "...", "path": "...", "detail": "..."}
+    hard_stops: tuple[dict[str, Any], ...]
+    # each: {"path": "...", "result": "ok|skip|error", ...}
+    per_file: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,10 +62,10 @@ class _FullDiagnostics:
     layers: tuple[_LayerScanDiagnostics, ...]
     merged_names: tuple[str, ...]  # final merged manifest name list (sorted)
     # 3类差异
-    name_mismatches: tuple[dict, ...]  # 类1: manifest.name 与文件 stem/namespace 不匹配
-    can_handoff_to_unknown: tuple[dict, ...]  # 类2: can_handoff_to 指向未知目标
-    allowed_tools_gaps: tuple[dict, ...]  # 类3: allowed_tools 白名单包含未注册工具名
-    registry_settings: dict  # subagent settings snapshot for report context
+    name_mismatches: tuple[dict[str, Any], ...]  # 类1: manifest.name 与文件 stem/namespace 不匹配
+    can_handoff_to_unknown: tuple[dict[str, Any], ...]  # 类2: can_handoff_to 指向未知目标
+    allowed_tools_gaps: tuple[dict[str, Any], ...]  # 类3: allowed_tools 白名单包含未注册工具名
+    registry_settings: dict[str, Any]  # subagent settings snapshot for report context
 
 
 class SubAgentRegistry:
@@ -97,9 +100,7 @@ class SubAgentRegistry:
             from prismclaw.infra.paths import build_project_capability_layout
             from prismclaw.schema.shared import CapabilityKind
 
-            primary = (
-                Path(project_root) if project_root is not None else self._workspace_path
-            )
+            primary = Path(project_root) if project_root is not None else self._workspace_path
             layout = build_project_capability_layout(
                 primary=primary,
                 additional=additional_project_roots,
@@ -148,7 +149,8 @@ class SubAgentRegistry:
         if name in self._manifests:
             logger.warning(
                 "Agent %r replaces existing agent with same canonical_id %r",
-                manifest.name, name,
+                manifest.name,
+                name,
             )
         self._manifests[name] = manifest
 
@@ -189,42 +191,42 @@ class SubAgentRegistry:
         # 直接复用 layers[*].per_file 中已经解析得到的 file_stem/manifest_name，
         # 不再对磁盘重解析。所有 result=="ok" 的 per_file 条目必然已通过
         # parse 阶段，因此 manifest_name / file_stem 字段可用。
-        name_mismatches: list[dict] = []
+        name_mismatches: list[dict[str, Any]] = []
         for layer in layers:
             for rec in layer.per_file:
                 if rec.get("result") != "ok":
                     continue
                 manifest_name = rec.get("manifest_name")
                 file_stem = rec.get("file_stem")
-                if (
-                    manifest_name is None
-                    or file_stem is None
-                    or manifest_name == file_stem
-                ):
+                if manifest_name is None or file_stem is None or manifest_name == file_stem:
                     continue
-                name_mismatches.append({
-                    "path": rec["path"],
-                    "file_stem": file_stem,
-                    "manifest_name": manifest_name,
-                    "source": layer.source,
-                })
+                name_mismatches.append(
+                    {
+                        "path": rec["path"],
+                        "file_stem": file_stem,
+                        "manifest_name": manifest_name,
+                        "source": layer.source,
+                    }
+                )
 
         # --- 类2: can_handoff_to 未知目标 ---
-        can_handoff_unknown: list[dict] = []
+        can_handoff_unknown: list[dict[str, Any]] = []
         for manifest in self._manifests.values():
             targets = manifest.can_handoff_to or []
             for target in targets:
                 if target in registered:
                     continue
                 suggestion = _closest_match(target, registered, max_dist=2)
-                can_handoff_unknown.append({
-                    "manifest": manifest.name,
-                    "unknown_target": target,
-                    "suggestion": suggestion,
-                })
+                can_handoff_unknown.append(
+                    {
+                        "manifest": manifest.name,
+                        "unknown_target": target,
+                        "suggestion": suggestion,
+                    }
+                )
 
         # --- 类3: allowed_tools 白名单缺口 ---
-        allowed_gaps: list[dict] = []
+        allowed_gaps: list[dict[str, Any]] = []
         for manifest in self._manifests.values():
             allowed = manifest.allowed_tools
             if allowed is None:
@@ -236,22 +238,23 @@ class SubAgentRegistry:
                     continue  # 允许 allowed_tools 与子代理同名（非冲突场景），跳过
                 if registered_tool_names and tool_name in tool_names:
                     continue
-                allowed_gaps.append({
-                    "manifest": manifest.name,
-                    "unknown_tool": tool_name,
-                    "suggestion": (
-                        _closest_match(tool_name, tool_names, max_dist=2)
-                        if tool_names else None
-                    ),
-                })
+                allowed_gaps.append(
+                    {
+                        "manifest": manifest.name,
+                        "unknown_tool": tool_name,
+                        "suggestion": (
+                            _closest_match(tool_name, tool_names, max_dist=2)
+                            if tool_names
+                            else None
+                        ),
+                    }
+                )
 
         settings_snapshot = {
             "enabled": getattr(self._settings, "enabled", None),
             "max_depth": getattr(self._settings, "max_depth", None),
             "handoff_enabled": getattr(self._settings, "handoff_enabled", None),
-            "max_handoff_chain_length": getattr(
-                self._settings, "max_handoff_chain_length", None
-            ),
+            "max_handoff_chain_length": getattr(self._settings, "max_handoff_chain_length", None),
         }
 
         return _FullDiagnostics(
@@ -314,7 +317,7 @@ class SubAgentRegistry:
         *,
         produce_per_file: bool,
         emit_logs: bool,
-    ) -> tuple[list[AgentManifest], int, list[dict], list[dict]]:
+    ) -> tuple[list[AgentManifest], int, list[dict[str, Any]], list[dict[str, Any]]]:
         """Single, authoritative scanner for a single discovery layer.
 
         One implementation handles both the hot path (used at registry init)
@@ -332,37 +335,43 @@ class SubAgentRegistry:
         need.
         """
         loaded: list[AgentManifest] = []
-        hard_stops: list[dict] = []
-        per_file: list[dict] = []
+        hard_stops: list[dict[str, Any]] = []
+        per_file: list[dict[str, Any]] = []
         candidates_scanned = 0
 
         if not directory.is_dir():
             if produce_per_file or not emit_logs:
-                hard_stops.append({
-                    "reason": "directory_not_found_or_not_dir",
-                    "path": str(directory),
-                    "detail": "",
-                })
+                hard_stops.append(
+                    {
+                        "reason": "directory_not_found_or_not_dir",
+                        "path": str(directory),
+                        "detail": "",
+                    }
+                )
             if emit_logs:
                 logger.debug(
                     "subagent.discovery.layer_skip reason=not_a_dir source=%s path=%s",
-                    source, directory,
+                    source,
+                    directory,
                 )
             return loaded, 0, hard_stops, per_file
 
         if emit_logs:
             logger.debug(
                 "subagent.discovery.layer_start source=%s path=%s",
-                source, directory,
+                source,
+                directory,
             )
 
         # -- Shared hard-stop + record helpers (parametrized by flags) -----
         def _record_hard_stop(reason: str, path: Path, detail: str = "") -> None:
-            hard_stops.append({
-                "reason": reason,
-                "path": str(path),
-                "detail": detail,
-            })
+            hard_stops.append(
+                {
+                    "reason": reason,
+                    "path": str(path),
+                    "detail": detail,
+                }
+            )
 
         def _log_or_record(
             level: str,
@@ -370,7 +379,7 @@ class SubAgentRegistry:
             path: Path,
             *,
             exc: BaseException | None = None,
-            **fields: Any,
+            **fields: object,
         ) -> None:
             """Unified sink: emit log line when ``emit_logs`` and append a
             per-file dict when ``produce_per_file``."""
@@ -378,17 +387,26 @@ class SubAgentRegistry:
                 if level == "warning" and exc is not None:
                     logger.warning(
                         "subagent.discovery.%s path=%s error_type=%s error=%s",
-                        reason, path, type(exc).__name__, exc,
+                        reason,
+                        path,
+                        type(exc).__name__,
+                        exc,
                     )
                 elif level == "warning":
                     extra = " ".join(f"{k}={v}" for k, v in fields.items())
                     logger.warning(
-                        "subagent.discovery.%s path=%s %s", reason, path, extra,
+                        "subagent.discovery.%s path=%s %s",
+                        reason,
+                        path,
+                        extra,
                     )
                 else:  # debug
                     extra = " ".join(f"{k}={v}" for k, v in fields.items())
                     logger.debug(
-                        "subagent.discovery.%s path=%s %s", reason, path, extra,
+                        "subagent.discovery.%s path=%s %s",
+                        reason,
+                        path,
+                        extra,
                     )
             if produce_per_file:
                 rec: dict[str, Any] = {
@@ -411,10 +429,14 @@ class SubAgentRegistry:
             if depth > 3:
                 # _iter_layer_nodes already caps depth, but belt-and-braces
                 if produce_per_file:
-                    per_file.append({
-                        "path": str(path), "result": "skip",
-                        "reason": "max_depth_exceeded", "depth": depth,
-                    })
+                    per_file.append(
+                        {
+                            "path": str(path),
+                            "result": "skip",
+                            "reason": "max_depth_exceeded",
+                            "depth": depth,
+                        }
+                    )
                 continue
 
             # Directories are just scaffolding for the BFS primitive; a
@@ -425,7 +447,10 @@ class SubAgentRegistry:
             # 1) non-.md files: skip cheaply
             if not (path.is_file() and path.suffix == ".md"):
                 _log_or_record(
-                    "debug", "non_md_file", path, result="skip",
+                    "debug",
+                    "non_md_file",
+                    path,
+                    result="skip",
                     ext=path.suffix or "",
                 )
                 continue
@@ -439,7 +464,9 @@ class SubAgentRegistry:
                     logger.warning(
                         "subagent.discovery.layer_hard_stop reason=candidate_overload "
                         "source=%s scanned=%d limit=1000 dir=%s",
-                        source, candidates_scanned, directory,
+                        source,
+                        candidates_scanned,
+                        directory,
                     )
                 break
 
@@ -454,8 +481,12 @@ class SubAgentRegistry:
                 detail = f"size={size}, max={MAX_FILE_BYTES}"
                 _record_hard_stop("file_too_large", path, detail)
                 _log_or_record(
-                    "warning", "file_too_large", path,
-                    result="error", size=size, max=MAX_FILE_BYTES,
+                    "warning",
+                    "file_too_large",
+                    path,
+                    result="error",
+                    size=size,
+                    max=MAX_FILE_BYTES,
                 )
                 continue
 
@@ -464,15 +495,19 @@ class SubAgentRegistry:
                 detail = f"root={directory}"
                 _record_hard_stop("containment_escape", path, detail)
                 _log_or_record(
-                    "warning", "containment_escape", path,
-                    result="error", detail=detail,
+                    "warning",
+                    "containment_escape",
+                    path,
+                    result="error",
+                    detail=detail,
                 )
                 continue
 
             if emit_logs:
                 logger.debug(
                     "subagent.discovery.file_parse_start path=%s size=%d",
-                    path, size,
+                    path,
+                    size,
                 )
 
             # 5) parse + optional namespace injection
@@ -484,7 +519,8 @@ class SubAgentRegistry:
                     manifest = manifest.model_copy(update={"name": ns})
             except (SkillParseError, ValueError) as exc:
                 _record_hard_stop(
-                    "parse_error", path,
+                    "parse_error",
+                    path,
                     f"{type(exc).__name__}: {exc}",
                 )
                 _log_or_record("warning", "parse_error", path, exc=exc, result="error")
@@ -496,35 +532,43 @@ class SubAgentRegistry:
                 logger.debug(
                     "subagent.discovery.file_parse_ok path=%s name=%s "
                     "namespace_applied=%s source=%s",
-                    path, manifest.name, applied, source,
+                    path,
+                    manifest.name,
+                    applied,
+                    source,
                 )
             if produce_per_file:
-                per_file.append({
-                    "path": str(path),
-                    "result": "ok",
-                    "size": size,
-                    "manifest_name": manifest.name,
-                    "file_stem": path.stem,
-                    "namespace_applied": (
-                        manifest.name != previous_name and bool(ns_parts)
-                    ),
-                })
+                per_file.append(
+                    {
+                        "path": str(path),
+                        "result": "ok",
+                        "size": size,
+                        "manifest_name": manifest.name,
+                        "file_stem": path.stem,
+                        "namespace_applied": (manifest.name != previous_name and bool(ns_parts)),
+                    }
+                )
 
         if layer_cap_hit:
             _record_hard_stop(
-                "max_files_per_layer", directory,
+                "max_files_per_layer",
+                directory,
                 f"limit={_MAX_FILES_PER_LAYER}",
             )
             if emit_logs:
                 logger.warning(
                     "subagent.discovery.layer_hard_stop reason=max_files_per_layer "
-                    "source=%s limit=%d", source, _MAX_FILES_PER_LAYER,
+                    "source=%s limit=%d",
+                    source,
+                    _MAX_FILES_PER_LAYER,
                 )
 
         if emit_logs:
             logger.debug(
                 "subagent.discovery.layer_end source=%s loaded=%d total_candidates_scanned=%d",
-                source, len(loaded), candidates_scanned,
+                source,
+                len(loaded),
+                candidates_scanned,
             )
         return loaded, candidates_scanned, hard_stops, per_file
 
@@ -532,7 +576,10 @@ class SubAgentRegistry:
     def _scan_layer_for_diagnose(directory: Path, source: str) -> _LayerScanDiagnostics:
         """Diagnose wrapper: full per-file + hard-stop detail, no logging."""
         loaded, scanned, hard_stops, per_file = SubAgentRegistry._do_scan_layer(
-            directory, source, produce_per_file=True, emit_logs=False,
+            directory,
+            source,
+            produce_per_file=True,
+            emit_logs=False,
         )
         return _LayerScanDiagnostics(
             source=source,
@@ -546,7 +593,10 @@ class SubAgentRegistry:
     def _scan_layer(self, directory: Path, source: str) -> Iterable[AgentManifest]:
         """Hot-path wrapper: manifests only, WARNING/DEBUG logging on."""
         loaded, _scanned, _hs, _pf = SubAgentRegistry._do_scan_layer(
-            directory, source, produce_per_file=False, emit_logs=True,
+            directory,
+            source,
+            produce_per_file=False,
+            emit_logs=True,
         )
         return loaded
 
@@ -568,9 +618,7 @@ def _levenshtein(a: str, b: str) -> int:
     return prev[-1]
 
 
-def _closest_match(
-    target: str, candidates: set[str], *, max_dist: int = 2
-) -> str | None:
+def _closest_match(target: str, candidates: set[str], *, max_dist: int = 2) -> str | None:
     best: str | None = None
     best_dist = max_dist + 1
     for cand in candidates:

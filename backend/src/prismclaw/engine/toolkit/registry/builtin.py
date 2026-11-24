@@ -1,31 +1,40 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
     from prismclaw.engine.execution.skills.runtime import SkillRuntime
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
+    from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+    from prismclaw.infra.settings import BuiltinToolSettings
 
-from prismclaw.engine.toolkit.registry.discovery import SkillSearchTool, ToolSearchTool
-from prismclaw.engine.toolkit.builtin.skill_activate import ActivateSkillTool
 from prismclaw.engine.toolkit.builtin.bash import BashTool
-from prismclaw.engine.toolkit.builtin.file_tools import ListDirectoryTool, ReadTool, WriteTool, EditTool
+from prismclaw.engine.toolkit.builtin.file_tools import (
+    EditTool,
+    ListDirectoryTool,
+    ReadTool,
+    WriteTool,
+)
+from prismclaw.engine.toolkit.builtin.skill_activate import ActivateSkillTool
 from prismclaw.engine.toolkit.builtin.task_tools import (
     AskUserQuestionTool,
     DeclareBlockedTool,
 )
-from prismclaw.engine.toolkit.file.workspace import WorkspaceResolver
-from prismclaw.engine.toolkit.misc.todo_write import TodoWriteTool
-from prismclaw.engine.toolkit.memory.goal_tools import GoalTool
 from prismclaw.engine.toolkit.file.present_files import PresentFilesTool
+from prismclaw.engine.toolkit.file.workspace import WorkspaceResolver
+from prismclaw.engine.toolkit.memory.goal_tools import GoalTool
+from prismclaw.engine.toolkit.misc.todo_write import TodoWriteTool
+from prismclaw.engine.toolkit.registry.discovery import SkillSearchTool, ToolSearchTool
 
 logger = logging.getLogger(__name__)
 
 
 def register_builtin_tools(
-    registry,
+    registry: ToolRegistry,
     resolver: WorkspaceResolver,
-    capability_catalog: Any = None,
+    capability_catalog: CapabilityCatalogService | None = None,
     skill_runtime: SkillRuntime | None = None,
 ) -> None:
     registry.register(BashTool())
@@ -38,7 +47,7 @@ def register_builtin_tools(
     registry.register(PresentFilesTool(resolver))
     registry.register(TodoWriteTool())
     registry.register(GoalTool())
-    
+
     if capability_catalog is not None:
         registry.register(ToolSearchTool(capability_catalog=capability_catalog))
         registry.register(SkillSearchTool(capability_catalog=capability_catalog))
@@ -52,17 +61,17 @@ def register_builtin_tools(
 
 
 def register_tier2_builtin_tools(
-    registry,
+    registry: ToolRegistry,
     resolver: WorkspaceResolver,
-    builtin_tool_settings: Any,
+    builtin_tool_settings: BuiltinToolSettings,
     *,
-    mcp_manager: Any = None,
+    mcp_manager: MCPClientManager | None = None,
 ) -> None:
     # grep/glob always registered (no conditional gating). Web search/fetch/
     # extract moved to a standalone MCP web-retrieval service, which is wired
     # in through the MCP client manager instead of builtin registration.
-    from prismclaw.engine.toolkit.file.grep import GrepTool
     from prismclaw.engine.toolkit.file.glob import GlobTool
+    from prismclaw.engine.toolkit.file.grep import GrepTool
 
     registry.register(GrepTool(resolver))
     registry.register(GlobTool(resolver))

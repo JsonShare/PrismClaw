@@ -8,9 +8,10 @@ import re
 import time
 from typing import Any
 
-from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.schema.memory.memory_types import ArchiveEntry, L4ArtifactEntry, MemoryEntry
 from prismclaw.engine.foundation.metrics import emit
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.memory.memory_types import ArchiveEntry, L4ArtifactEntry, MemoryEntry
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +41,13 @@ def reset_selector_cooldown() -> None:
     global _selector_cooldown_until
     _selector_cooldown_until = 0.0
 
+
 # SDD B4 (§5.5) ranking v2 constants.
 # Decay lambdas per day, tiered by write-time temporal scoping: entries with
 # expires_at (short_term, SDD A4) decay fast; decision-type entries never
 # decay (permanent by nature); everything else decays slowly.
-_DECAY_LAMBDA_SHORT_TERM = 0.05    # half-life ≈ 14 days
-_DECAY_LAMBDA_DEFAULT = 0.005      # half-life ≈ 139 days
+_DECAY_LAMBDA_SHORT_TERM = 0.05  # half-life ≈ 14 days
+_DECAY_LAMBDA_DEFAULT = 0.005  # half-life ≈ 139 days
 _DECAY_LAMBDA_DECISION = 0.0
 # use factor: (1 + log1p(use)) / (1 + log1p(CAP)) — saturates at 10 uses,
 # and NEVER zero: an unused entry keeps a ~0.3 baseline. A multiplicative
@@ -78,15 +80,15 @@ _SELECTOR_SYSTEM = """你是一个 AI 代理运行时的持久记忆选择器。
 
 async def select_relevant_memories(
     *,
-    llm_client: Any,
+    llm_client: LLMClient | None,
     retrieval_query: str,
-    task_profile: Any,
+    task_profile: object,
     memory_candidates: list[MemoryEntry],
     archive_candidates: list[ArchiveEntry | L4ArtifactEntry],
     max_memory: int,
     max_archives: int,
     selector_metrics: dict[str, Any] | None = None,
-    ranking_settings: Any = None,
+    ranking_settings: object = None,
 ) -> tuple[list[MemoryEntry], list[ArchiveEntry | L4ArtifactEntry]]:
     if selector_metrics is not None:
         selector_metrics["input_memory_count"] = len(memory_candidates)
@@ -117,7 +119,9 @@ async def select_relevant_memories(
                     selector_metrics["selected_archive_ids"] = []
                 logger.info(
                     "[SDD-B4] hard abstention: top composite %.3f < %.3f (%d candidates)",
-                    max(composites.values()), threshold, len(memory_candidates),
+                    max(composites.values()),
+                    threshold,
+                    len(memory_candidates),
                 )
                 return [], []
         # Position bias for the LLM selector: best-first ordering.
@@ -204,12 +208,11 @@ async def select_relevant_memories(
             timeout=_SELECTOR_LIMIT_S,
         )
         payload = _parse_selector_output(response.text)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         _start_selector_cooldown()
         emit("memory_selector_budget_exceeded", 1.0, kind="counter")
         logger.warning(
-            "memory selector budget exceeded (%.1fs, %d candidates); "
-            "falling back to heuristic",
+            "memory selector budget exceeded (%.1fs, %d candidates); falling back to heuristic",
             _SELECTOR_LIMIT_S,
             len(memory_candidates) + len(archive_candidates),
         )
@@ -223,12 +226,12 @@ async def select_relevant_memories(
 
     selected_memory_ids = set(payload.get("selected_memory_ids") or [])
     selected_archive_ids = set(payload.get("selected_archive_ids") or [])
-    selected_memories = [
-        entry for entry in memory_candidates if entry.id in selected_memory_ids
-    ][:max_memory]
-    selected_archives = [
-        entry for entry in archive_candidates if entry.id in selected_archive_ids
-    ][:max_archives]
+    selected_memories = [entry for entry in memory_candidates if entry.id in selected_memory_ids][
+        :max_memory
+    ]
+    selected_archives = [entry for entry in archive_candidates if entry.id in selected_archive_ids][
+        :max_archives
+    ]
     strategy = "llm"
     # SDD W6 (2026-08-21): 信任模型的有效空选择。旧逻辑把"模型正确判定
     # 无相关记忆"也当作失败, 用启发式全量倾倒覆盖 —— 无关提问反而注入
@@ -241,11 +244,11 @@ async def select_relevant_memories(
         logger.info(
             "[SDD-W6] selector returned empty memory selection "
             "(candidates=%d, query=%.60r) — trusted",
-            len(memory_candidates), retrieval_query,
+            len(memory_candidates),
+            retrieval_query,
         )
-    if not selected_archives and archive_candidates:
-        if selector_metrics is not None:
-            selector_metrics["selector_empty_archive_choice"] = True
+    if not selected_archives and archive_candidates and selector_metrics is not None:
+        selector_metrics["selector_empty_archive_choice"] = True
     _update_selector_metrics(
         selector_metrics,
         strategy=strategy,
@@ -259,7 +262,7 @@ async def select_relevant_memories(
 def _build_selection_prompt(
     *,
     retrieval_query: str,
-    task_profile: Any,
+    task_profile: object,
     memory_candidates: list[MemoryEntry],
     archive_candidates: list[ArchiveEntry | L4ArtifactEntry],
     max_memory: int,
@@ -269,24 +272,24 @@ def _build_selection_prompt(
     task_priority = getattr(task_profile, "priority", "balanced") or "balanced"
     memory_lines = [
         (
-            f'- id={entry.id} layer={entry.layer} type={entry.type} '
-            f'score={entry.score if entry.score is not None else "na"} '
-            f'confidence={getattr(entry, "confidence", None) if getattr(entry, "confidence", None) is not None else "na"} '
-            f'stability_score={getattr(entry, "stability_score", None) if getattr(entry, "stability_score", None) is not None else "na"} '
-            f'origin_stage={getattr(entry, "origin_stage", "na")} '
-            f'use_count={getattr(entry, "use_count", 0)} '
-            f'freshness={_freshness_bucket(getattr(entry, "updated_at", None))} '
+            f"- id={entry.id} layer={entry.layer} type={entry.type} "
+            f"score={entry.score if entry.score is not None else 'na'} "
+            f"confidence={_na(getattr(entry, 'confidence', None))} "
+            f"stability_score={_na(getattr(entry, 'stability_score', None))} "
+            f"origin_stage={getattr(entry, 'origin_stage', 'na')} "
+            f"use_count={getattr(entry, 'use_count', 0)} "
+            f"freshness={_freshness_bucket(getattr(entry, 'updated_at', None))} "
             f'content="{_clip(entry.content, _MAX_ENTRY_PREVIEW_CHARS)}"'
         )
         for entry in memory_candidates
     ]
     archive_lines = [
         (
-            f'- id={entry.id} session={entry.session_id} '
-            f'kind={getattr(entry, "artifact_kind", "session_archive")} '
-            f'similarity={entry.similarity if entry.similarity is not None else "na"} '
-            f'score={getattr(entry, "score", None) if getattr(entry, "score", None) is not None else "na"} '
-            f'freshness={_freshness_bucket(getattr(entry, "created_at", None))} '
+            f"- id={entry.id} session={entry.session_id} "
+            f"kind={getattr(entry, 'artifact_kind', 'session_archive')} "
+            f"similarity={entry.similarity if entry.similarity is not None else 'na'} "
+            f"score={_na(getattr(entry, 'score', None))} "
+            f"freshness={_freshness_bucket(getattr(entry, 'created_at', None))} "
             f'summary="{_clip(entry.summary, _MAX_ARCHIVE_PREVIEW_CHARS)}"'
         )
         for entry in archive_candidates
@@ -322,6 +325,11 @@ def _parse_selector_output(text: str) -> dict[str, Any]:
     return payload
 
 
+def _na(value: object) -> str:
+    """取值为 None 时输出 'na'，供提示词字段占位。"""
+    return "na" if value is None else str(value)
+
+
 def _clip(text: str, limit: int) -> str:
     cleaned = " ".join(text.split())
     if len(cleaned) <= limit:
@@ -331,7 +339,7 @@ def _clip(text: str, limit: int) -> str:
     return f"{cleaned[:head]} ... {cleaned[-tail:]}"
 
 
-def _freshness_bucket(timestamp: Any) -> str:
+def _freshness_bucket(timestamp: object) -> str:
     if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool):
         return "unknown"
     age_s = max(0.0, time.time() - float(timestamp))
@@ -350,7 +358,7 @@ def _heuristic_select(
     archive_candidates: list[ArchiveEntry | L4ArtifactEntry],
     max_memory: int,
     max_archives: int,
-    ranking_settings: Any = None,
+    ranking_settings: object = None,
     composites: dict[str, float] | None = None,
 ) -> tuple[list[MemoryEntry], list[ArchiveEntry | L4ArtifactEntry]]:
     if composites:
@@ -371,8 +379,7 @@ def _heuristic_select(
             reverse=True,
         )
         band_by_id = {
-            str(entry.id): _relevance_band(rank)
-            for rank, entry in enumerate(scored, start=1)
+            str(entry.id): _relevance_band(rank) for rank, entry in enumerate(scored, start=1)
         }
         ranked_memories = sorted(
             scored,
@@ -392,19 +399,19 @@ def _heuristic_select(
 # ── SDD B4 (§5.5): ranking v2 ────────────────────────────────────
 
 
-def _ranking_v2_enabled(ranking_settings: Any) -> bool:
+def _ranking_v2_enabled(ranking_settings: object) -> bool:
     return bool(getattr(ranking_settings, "ranking_v2_enabled", False))
 
 
-def _decay_applied(ranking_settings: Any) -> bool:
+def _decay_applied(ranking_settings: object) -> bool:
     return bool(getattr(ranking_settings, "ranking_decay_apply", False))
 
 
-def _abstention_hard(ranking_settings: Any) -> bool:
+def _abstention_hard(ranking_settings: object) -> bool:
     return bool(getattr(ranking_settings, "abstention_hard_enabled", False))
 
 
-def _abstention_threshold(ranking_settings: Any) -> float:
+def _abstention_threshold(ranking_settings: object) -> float:
     value = getattr(ranking_settings, "abstention_score_threshold", None)
     if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
         return float(value)
@@ -420,9 +427,7 @@ def _decay_lambda(entry: MemoryEntry) -> float:
     return _DECAY_LAMBDA_DEFAULT
 
 
-def _composite_scores(
-    candidates: list[MemoryEntry], ranking_settings: Any
-) -> dict[str, float]:
+def _composite_scores(candidates: list[MemoryEntry], ranking_settings: object) -> dict[str, float]:
     """Multiplicative composite per SDD §5.5:
 
         relevance × decay × log-capped use × confidence × expansion_bias
@@ -443,7 +448,10 @@ def _composite_scores(
     decay_applied = _decay_applied(ranking_settings)
     by_score = sorted(
         candidates,
-        key=lambda e: (_safe_float(getattr(e, "score", None)), _safe_float(getattr(e, "updated_at", None))),
+        key=lambda e: (
+            _safe_float(getattr(e, "score", None)),
+            _safe_float(getattr(e, "updated_at", None)),
+        ),
         reverse=True,
     )
     scores: dict[str, float] = {}
@@ -477,7 +485,7 @@ def _record_ranking_shadow(
     *,
     memory_candidates: list[MemoryEntry],
     composites: dict[str, float],
-    ranking_settings: Any,
+    ranking_settings: object,
     max_memory: int,
 ) -> None:
     """Uncertainty-period bookkeeping (SDD §5.5): decay counterfactual.
@@ -492,20 +500,22 @@ def _record_ranking_shadow(
     selector_metrics["top_composite"] = round(max(composites.values()), 4)
     if _decay_applied(ranking_settings):
         return
+
     # Counterfactual: recompute with decay forced on (shadow settings).
     class _ShadowSettings:
         ranking_v2_enabled = True
         ranking_decay_apply = True
 
     with_decay = _composite_scores(memory_candidates, _ShadowSettings())
-    top_ids_no_decay = sorted(composites, key=composites.get, reverse=True)[:max_memory]
-    top_ids_decay = sorted(with_decay, key=with_decay.get, reverse=True)[:max_memory]
+    top_ids_no_decay = sorted(composites, key=lambda key: composites[key], reverse=True)[
+        :max_memory
+    ]
+    top_ids_decay = sorted(with_decay, key=lambda key: with_decay[key], reverse=True)[:max_memory]
     differs = top_ids_no_decay != top_ids_decay
     selector_metrics["decay_counterfactual_differs"] = differs
     if differs:
         logger.info(
-            "[SDD-B4] decay shadow: top-%d would change with decay applied "
-            "(no-decay=%s decay=%s)",
+            "[SDD-B4] decay shadow: top-%d would change with decay applied (no-decay=%s decay=%s)",
             max_memory,
             top_ids_no_decay,
             top_ids_decay,
@@ -523,9 +533,7 @@ def _relevance_band(rank: int) -> int:
     return 0
 
 
-def _memory_rank_key(
-    entry: MemoryEntry, *, relevance_band: int
-) -> tuple[float, ...]:
+def _memory_rank_key(entry: MemoryEntry, *, relevance_band: int) -> tuple[float, ...]:
     # 首位是相关性带（SDD D5）：相关性支配选择；层级 bias 降级为同带内的
     # 次级 tie-break，不再凌驾于"与查询相关"之上。
     layer_tier = 1.0 if getattr(entry, "layer", "") == "L3" else 0.8
@@ -560,7 +568,7 @@ def _archive_rank_key(entry: ArchiveEntry | L4ArtifactEntry) -> tuple[float, ...
     return (kind_bias, retrieval_score, similarity, freshness)
 
 
-def _safe_float(value: Any) -> float:
+def _safe_float(value: object) -> float:
     if isinstance(value, bool):
         return 0.0
     if isinstance(value, (int, float)):
@@ -568,7 +576,7 @@ def _safe_float(value: Any) -> float:
     return 0.0
 
 
-def _freshness_score(timestamp: Any) -> float:
+def _freshness_score(timestamp: object) -> float:
     bucket = _freshness_bucket(timestamp)
     return {
         "fresh": 1.0,
@@ -579,7 +587,7 @@ def _freshness_score(timestamp: Any) -> float:
     }[bucket]
 
 
-def _origin_stage_bias(value: Any) -> float:
+def _origin_stage_bias(value: object) -> float:
     return {
         "online": 1.0,
         "light": 0.8,
@@ -588,7 +596,7 @@ def _origin_stage_bias(value: Any) -> float:
     }.get(str(value or "").lower(), 0.0)
 
 
-def _artifact_kind_bias(value: Any) -> float:
+def _artifact_kind_bias(value: object) -> float:
     normalized = str(value or "").strip().lower()
     return {
         "pattern": 1.0,

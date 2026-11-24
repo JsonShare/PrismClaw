@@ -4,18 +4,19 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
+from prismclaw.engine.review.registry import get_review_registry
 from prismclaw.engine.toolkit.builtin.file_helpers import (
     _READ_DEFAULT_PAGE_LINES,
-    _blocked_binary_extension,
     _binary_write_guidance,
-    build_file_change,
-    _ws_root,
-    _ws_kind,
+    _blocked_binary_extension,
     _require_runtime,
     _sha256hex,
+    _ws_kind,
+    _ws_root,
+    build_file_change,
     session_root,
 )
+from prismclaw.engine.toolkit.file.file_mutation_queue import with_file_mutation_queue
 from prismclaw.engine.toolkit.file.workspace import (
     WorkspaceBoundaryError,
     WorkspaceResolver,
@@ -23,16 +24,22 @@ from prismclaw.engine.toolkit.file.workspace import (
     is_remote_url,
     resolve_capability_command,
 )
-from prismclaw.engine.toolkit.file.file_mutation_queue import with_file_mutation_queue
-from prismclaw.engine.review.registry import get_review_registry
-from prismclaw.schema.content.content_types import FileChangeEntry, UiArtifact
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
+from prismclaw.schema.content.content_types import FileChangeEntry, ToolResult, UiArtifact
 from prismclaw.schema.content.workspace import SandboxTier
-
+from prismclaw.schema.services.env_types import FileResult
 
 # ─── ListDirectoryTool ────────────────────────────────────────────────
 
+
+def _text_or_empty(result: FileResult) -> str:
+    """把 read_text 的 content 统一收敛为 str（非文本内容视为空）。"""
+    content = result.content
+    return content if isinstance(content, str) else ""
+
+
 def _is_uncreated_session_dir(raw_path: str, session_dir: Path | None) -> bool:
-    """路径是否为尚未创建的标准会话私有目录（inbox/outputs/...）。
+    """路径是否为尚未创建的标准会话私有目录（inbox/outbox/...）。
 
     这些目录按需创建；对读取方而言「不存在」等价于空目录，不应报错。
     放在同步函数里，避免在 async 工具入口直接调用 pathlib。
@@ -63,7 +70,10 @@ class ListDirectoryTool:
                 "description": "本地目录路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
             },
             "recursive": {"type": "boolean", "description": "是否递归列出（默认：false）"},
-            "ignore_hidden": {"type": "boolean", "description": "是否忽略隐藏文件/目录（默认：true）"},
+            "ignore_hidden": {
+                "type": "boolean",
+                "description": "是否忽略隐藏文件/目录（默认：true）",
+            },
         },
         "required": ["path"],
         "additionalProperties": False,
@@ -77,7 +87,7 @@ class ListDirectoryTool:
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self.resolver = resolver
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
 
         call_id = args.get("_call_id", "")
         path_str = args.get("path", ".")
@@ -91,20 +101,21 @@ class ListDirectoryTool:
                 call_id,
                 f"{path_str!r} 是远程 URL，不是本地目录路径。"
                 "文件工具只接受本地路径；如需网页内容，请先将资源下载到工作区"
-                "（如 `outputs/`）再读取。",
+                "（如 `outbox/`）再读取。",
             )
 
         _first = path_str.strip().split("/", 1)[0]
         if path_str.startswith(("~", "/")):
-            path_str = str(canonicalize_fs_path(Path(path_str).expanduser()))
-        elif (
-            _first in WorkspaceResolver._SESSION_PREFIXES
-            or _first in ("sessions", "project")
-        ):
+            path_str = str(canonicalize_fs_path(Path(path_str).expanduser()))  # noqa: ASYNC240
+        elif _first in WorkspaceResolver._SESSION_PREFIXES or _first in ("sessions", "project"):
             try:
-                path_str = str(self.resolver.resolve_within(
-                    context.workspace_path, path_str, session_root=session_root(context),
-                ))
+                path_str = str(
+                    self.resolver.resolve_within(
+                        context.workspace_path,
+                        path_str,
+                        session_root=session_root(context),
+                    )
+                )
             except WorkspaceBoundaryError as exc:
                 return error_result(call_id, f"ls: {exc}")
 
@@ -127,7 +138,7 @@ class ListDirectoryTool:
 
         if isinstance(resp, dict) and resp.get("error"):
             err = str(resp["error"])
-            # 会话私有目录（inbox/outputs/...）是按需创建的；尚未创建时
+            # 会话私有目录（inbox/outbox/...）是按需创建的；尚未创建时
             # 对读取方等价于空目录，不应作为错误回给模型。
             if err.startswith("directory not found") and _is_uncreated_session_dir(
                 path_str, session_root(context)
@@ -140,6 +151,7 @@ class ListDirectoryTool:
 
         lines: list[str] = []
         import datetime as _dt
+
         for entry in entries:
             kind = "[DIR] " if entry.get("is_dir") else "[FILE]"
             name = entry.get("name", "")
@@ -156,6 +168,7 @@ class ListDirectoryTool:
 
 # ─── ReadTool ─────────────────────────────────────────────────────────
 
+
 class ReadTool:
     name = "read"
     DEFAULT_PAGE_LINES = _READ_DEFAULT_PAGE_LINES
@@ -163,13 +176,19 @@ class ReadTool:
 
     description = (
         "读取文件内容：文本、代码、文档 "
-        "（.docx/.xlsx/.pptx/.pdf/.md）以及图片（.png/.jpg/.jpeg/.webp/.gif/"
-        ".bmp/.svg/.ico/.tiff）。图片会返回由视觉模型生成的文本描述"
+        "（.pdf/.docx/.xlsx/.pptx/.xls/.md/.markdown/.rst/.rtf/.odt/.ods/.odp/"
+        ".epub/.ofd/.html/.htm/.mhtml/.mht/.csv/.tsv）以及图片（.png/.jpg/.jpeg/"
+        ".webp/.gif/.bmp/.svg/.ico/.tiff）。图片会返回由视觉模型生成的文本描述"
         "（OCR + 图像理解）——每次读取图片都会消耗视觉 token，因此请仅针对真正重要的图片使用，"
         "不要用于批量扫描；可传入 `question` 聚焦分析方向。"
         "文件按页读取：未显式指定 limit 时只返回前 "
         f"{_READ_DEFAULT_PAGE_LINES} 行，并附带续读标记以给出下一个 offset——"
-        "对大文件请分页读取，而不是整体载入。对 .xlsx/.pptx 会保留结构锚点供编辑。"
+        "对大文件请分页读取，而不是整体载入。对 .xlsx/.pptx 会保留结构锚点供编辑，"
+        "并列出内嵌图片路径（可按需 read 单张图识别）。"
+        "文档（.pdf/.docx/.odp/.epub 等）按页返回并标注块坐标；用返回的 after 游标续读，"
+        "offset 对 PDF/ODP/EPUB 表示页号。旧式二进制 .doc/.ppt 请先另存为 .docx/.pptx。"
+        "扫描页在 tier='text' 下返回 unsupported，"
+        "可传 tier='vision' 渲染整页识别（会调用视觉模型并外发页面图像）。"
     )
     parameters: dict[str, Any] = {
         "type": "object",
@@ -178,8 +197,16 @@ class ReadTool:
                 "type": "string",
                 "description": "本地文件路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
             },
-            "offset": {"type": "integer", "description": "起始行号（从 1 开始）"},
-            "limit": {"type": "integer", "description": "最多返回的行数"},
+            "offset": {"type": "integer", "description": "起始行号（从 1 开始）；对 PDF 表示页码"},
+            "limit": {"type": "integer", "description": "最多返回的行数（对文档为最多块数）"},
+            "after": {
+                "type": "string",
+                "description": "文档续读游标（原样传回上次返回的 after 值）",
+            },
+            "tier": {
+                "type": "string",
+                "description": "文档解析档位：'text'（默认）或 'vision'（渲染页面，扫描件用）",
+            },
             "question": {
                 "type": "string",
                 "description": (
@@ -201,7 +228,7 @@ class ReadTool:
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
 
         call_id = args.get("_call_id", "")
         raw_path = args.get("file_path")
@@ -213,7 +240,9 @@ class ReadTool:
 
         try:
             full_path = self._resolver.resolve_within(
-                context.workspace_path, raw_path, session_root=session_root(context),
+                context.workspace_path,
+                raw_path,
+                session_root=session_root(context),
             )
         except WorkspaceBoundaryError as exc:
             return error_result(call_id, str(exc))
@@ -231,9 +260,9 @@ class ReadTool:
         # tool, merged into read). Function-level import keeps the builtin ↔
         # file packages decoupled at load time.
         ext = full_path.suffix.lower()
-        from prismclaw.engine.toolkit.file.read_image import _IMAGE_EXTENSIONS, read_image_branch
+        from prismclaw.engine.toolkit.file.read_image import IMAGE_EXTENSIONS, read_image_branch
 
-        if ext in _IMAGE_EXTENSIONS:
+        if ext in IMAGE_EXTENSIONS:
             return await read_image_branch(
                 call_id=call_id,
                 raw_path=raw_path,
@@ -242,18 +271,18 @@ class ReadTool:
                 resolver=self._resolver,
             )
 
-        # Legacy binary office formats are not supported by any reader —
-        # fail with actionable guidance instead of a UnicodeDecodeError.
-        if ext in (".doc", ".xls", ".ppt"):
+        # Legacy binary .doc/.ppt have no pure-Python reader — fail with
+        # actionable guidance instead of a UnicodeDecodeError. (.xls is readable
+        # via xlrd and goes through the document branch below.)
+        if ext in (".doc", ".ppt"):
             return error_result(
                 call_id,
                 f"read：'{ext}' 属于旧式二进制 Office 格式，无法直接读取。"
-                "请先将该文件转换为开放格式（.docx/.xlsx/.pptx）。",
+                f"请先将该文件另存为 {ext}x 再读取。",
             )
 
-        # Document formats (.docx/.xlsx/.pptx/.pdf/.md/...) — handled by the
-        # document branch (former read_office tool, M1 merge). Function-level
-        # import keeps the builtin ↔ file packages decoupled at load time.
+        # Document formats (.docx/.xlsx/.pptx/.pdf/.md/.xls/.rtf/.odt/...) —
+        # handled by the document branch (former read_office tool, M1 merge).
         from prismclaw.engine.toolkit.file.read_office import (
             _fmt_for_path,
             read_document_branch,
@@ -265,6 +294,8 @@ class ReadTool:
                 raw_path=raw_path,
                 offset=args.get("offset"),
                 limit=args.get("limit"),
+                after=args.get("after"),
+                tier=args.get("tier"),
                 context=context,
                 resolver=self._resolver,
             )
@@ -279,7 +310,7 @@ class ReadTool:
             )
             if not r_result.success:
                 return error_result(call_id, f"read：{r_result.error}")
-            content = r_result.content
+            content = _text_or_empty(r_result)
         except UnicodeDecodeError:
             size = full_path.stat().st_size
             return text_result(call_id, f"[二进制文件或编码不受支持。大小：{size} 字节]")
@@ -319,8 +350,7 @@ class ReadTool:
         if start >= total_lines and total_lines > 0:
             return text_result(
                 call_id,
-                f"[read：offset {start + 1} 已超出文件末尾"
-                f"（共 {total_lines} 行）。无可显示内容。]",
+                f"[read：offset {start + 1} 已超出文件末尾（共 {total_lines} 行）。无可显示内容。]",
                 metadata={"read_epoch": read_epoch},
             )
 
@@ -337,12 +367,11 @@ class ReadTool:
             )
 
         # Record observation for file_observer (if read_file_state is a dict)
-        if hasattr(context, "read_file_state") and context.read_file_state is not None:
-            if isinstance(context.read_file_state, dict):
-                context.read_file_state[raw_path] = {
-                    "read_epoch": read_epoch,
-                    "line_count": total_lines,
-                }
+        if hasattr(context, "read_file_state") and isinstance(context.read_file_state, dict):
+            context.read_file_state[raw_path] = {
+                "read_epoch": read_epoch,
+                "line_count": total_lines,
+            }
 
         return text_result(
             call_id,
@@ -359,9 +388,14 @@ class ReadTool:
 
 # ─── WriteTool ────────────────────────────────────────────────────────
 
+
 class WriteTool:
     name = "write"
-    description = "在工作区内写入（创建或覆盖）文本文件，并自动创建缺失的目录。硬性规则：绝不要用于 Office/二进制文件（.docx/.pptx/.xlsx/.pdf）；先用 `read` 读取，再用 `activate_skill` 对应技能或 `bash` 修改。"
+    description = (
+        "在工作区内写入（创建或覆盖）文本文件，并自动创建缺失的目录。"
+        "硬性规则：绝不要用于 Office/二进制文件（.docx/.pptx/.xlsx/.pdf）；"
+        "先用 `read` 读取，再用 `activate_skill` 对应技能或 `bash` 修改。"
+    )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -370,7 +404,11 @@ class WriteTool:
                 "description": "本地文件路径（相对工作区或绝对）；不接受 http(s):// 等 URL",
             },
             "content": {"type": "string", "description": "要写入的文件内容"},
-            "create_dirs": {"type": "boolean", "description": "若父目录不存在则自动创建", "default": False},
+            "create_dirs": {
+                "type": "boolean",
+                "description": "若父目录不存在则自动创建",
+                "default": False,
+            },
         },
         "required": ["file_path", "content"],
         "additionalProperties": False,
@@ -386,7 +424,7 @@ class WriteTool:
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
 
         call_id = args.get("_call_id", "")
         raw_path = args.get("file_path")
@@ -405,7 +443,9 @@ class WriteTool:
 
         try:
             full_path = self._resolver.resolve_within(
-                context.workspace_path, raw_path, session_root=session_root(context),
+                context.workspace_path,
+                raw_path,
+                session_root=session_root(context),
                 for_write=True,
             )
         except WorkspaceBoundaryError as exc:
@@ -418,7 +458,7 @@ class WriteTool:
         # Serialize concurrent write/edit on the same file (write tool is
         # concurrency-safe only across *different* files; same-file mutation
         # must be ordered to keep baseline/diff/epoch consistent).
-        async def _do_write() -> Any:
+        async def _do_write() -> ToolResult:
             baseline_ok = True
             old_text = ""
             before_content: bytes | None = b""
@@ -429,7 +469,7 @@ class WriteTool:
                 workspace_root=_root,
             )
             if r_base.success:
-                old_text = r_base.content or ""
+                old_text = _text_or_empty(r_base)
                 before_content = old_text.encode("utf-8")
             elif "file not found" in (r_base.error or ""):
                 before_content = None  # new file -> delete on reject
@@ -453,8 +493,11 @@ class WriteTool:
             if baseline_ok:
                 before_sha = _sha256hex(old_text) if old_text else ""
                 change = build_file_change(
-                    raw_path, old_text, content,
-                    before_ref="", before_sha=before_sha,
+                    raw_path,
+                    old_text,
+                    content,
+                    before_ref="",
+                    before_sha=before_sha,
                 )
                 if change["insertions"] or change["deletions"]:
                     ui_artifact = UiArtifact(
@@ -466,20 +509,23 @@ class WriteTool:
                     registry = get_review_registry(context.workspace_path)
                     await asyncio.to_thread(
                         registry.register_edit,
-                        conversation_id, raw_path, before_content, after_content,
-                        context.session_id, call_id,
+                        conversation_id,
+                        raw_path,
+                        before_content,
+                        after_content,
+                        context.session_id,
+                        call_id,
                     )
 
             # Compute read_epoch of written content for subsequent edit
             read_epoch = _sha256hex(content)
 
             # Update read_file_state observation
-            if hasattr(context, "read_file_state") and context.read_file_state is not None:
-                if isinstance(context.read_file_state, dict):
-                    context.read_file_state[raw_path] = {
-                        "read_epoch": read_epoch,
-                        "line_count": content.count("\n") + 1,
-                    }
+            if hasattr(context, "read_file_state") and isinstance(context.read_file_state, dict):
+                context.read_file_state[raw_path] = {
+                    "read_epoch": read_epoch,
+                    "line_count": content.count("\n") + 1,
+                }
 
             return text_result(
                 call_id,
@@ -498,9 +544,15 @@ class WriteTool:
 
 # ─── EditTool ─────────────────────────────────────────────────────────
 
+
 class EditTool:
     name = "edit"
-    description = "在文本文件中将唯一的 old_string 替换为 new_string。多处匹配时使用 replace_all。Office 文档（.docx/.xlsx/.pptx）须先用 `read` 读取，再用 `activate_skill` 对应技能修改，不可当纯文本编辑。"
+    description = (
+        "在文本文件中将唯一的 old_string 替换为 new_string。"
+        "多处匹配时使用 replace_all。"
+        "Office 文档（.docx/.xlsx/.pptx）须先用 `read` 读取，"
+        "再用 `activate_skill` 对应技能修改，不可当纯文本编辑。"
+    )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -511,7 +563,13 @@ class EditTool:
             "old_string": {"type": "string", "description": "要替换的精确文本"},
             "new_string": {"type": "string", "description": "替换后的文本"},
             "replace_all": {"type": "boolean", "description": "替换所有出现位置", "default": False},
-            "read_epoch": {"type": "string", "description": "可选的 SHA-256 指纹，来自 `read` 工具。若提供，当文件在读取后发生变化时编辑会失败。"},
+            "read_epoch": {
+                "type": "string",
+                "description": (
+                    "可选的 SHA-256 指纹，来自 `read` 工具。"
+                    "若提供，当文件在读取后发生变化时编辑会失败。"
+                ),
+            },
         },
         "required": ["file_path", "old_string", "new_string"],
         "additionalProperties": False,
@@ -527,7 +585,7 @@ class EditTool:
     def __init__(self, resolver: WorkspaceResolver) -> None:
         self._resolver = resolver
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
 
         call_id = args.get("_call_id", "")
         raw_path = args.get("file_path")
@@ -550,16 +608,16 @@ class EditTool:
         # edit 走读链（SDD §3.1 L127）：裸路径读兜底定位 → 应用补丁 → 写回，
         # 静态能力目录只读：旧前缀会被解析器纠正进 assets/，写操作必须在此拒绝，
         # 否则 edit 会把「~/.prismclaw/plugins/x」的误写搬进只读的 assets。
-        _probe = Path(raw_path).expanduser()
+        _probe = Path(raw_path).expanduser()  # noqa: ASYNC240 - 纯字符串
         if _probe.is_absolute() and canonicalize_fs_path(_probe) != _probe:
-            return error_result(
-                call_id, "edit：~/.prismclaw 下的静态能力目录只读，不能编辑。"
-            )
+            return error_result(call_id, "edit：~/.prismclaw 下的静态能力目录只读，不能编辑。")
 
         # 全程不传 for_write=True，避免把合法的裸路径原件编辑拦截成边界错误。
         try:
             full_path = self._resolver.resolve_within(
-                context.workspace_path, raw_path, session_root=session_root(context),
+                context.workspace_path,
+                raw_path,
+                session_root=session_root(context),
             )
         except WorkspaceBoundaryError as exc:
             return error_result(call_id, str(exc))
@@ -571,7 +629,7 @@ class EditTool:
         # Serialize concurrent write/edit on the same file: the read →
         # epoch check → write sequence must be atomic against other
         # write/edit calls targeting the same path.
-        async def _do_edit() -> Any:
+        async def _do_edit() -> ToolResult:
             r_result = await runtime.read_text(
                 str(full_path),
                 template_id=_wk,
@@ -580,7 +638,7 @@ class EditTool:
             )
             if not r_result.success:
                 return error_result(call_id, f"edit：文件不存在：{raw_path}")
-            content = r_result.content or ""
+            content = _text_or_empty(r_result)
 
             if len(content) > self.MAX_EDIT_FILE_SIZE:
                 size_mb = len(content) / (1024 * 1024)
@@ -594,27 +652,27 @@ class EditTool:
             # Optimistic concurrency: verify read_epoch if provided
             claimed_epoch = args.get("read_epoch")
             current_epoch = _sha256hex(content)
-            if isinstance(claimed_epoch, str) and claimed_epoch:
-                if current_epoch != claimed_epoch:
-                    return error_result(
-                        call_id,
-                        "edit：文件在读取之后已被修改（read_epoch 不匹配）。"
-                        "请先重新读取该文件，然后再编辑。",
-                    )
+            if isinstance(claimed_epoch, str) and claimed_epoch and current_epoch != claimed_epoch:
+                return error_result(
+                    call_id,
+                    "edit：文件在读取之后已被修改（read_epoch 不匹配）。"
+                    "请先重新读取该文件，然后再编辑。",
+                )
 
             before_sha = current_epoch if content else ""
 
             # Normalize CRLF to LF to prevent cross-platform mismatch.
             # (``old`` is reassigned here, so it must not shadow the outer
             # parameter inside this closure — use a distinct local name.)
-            old_n = old.replace('\r\n', '\n')
-            content = content.replace('\r\n', '\n')
+            old_n = old.replace("\r\n", "\n")
+            content = content.replace("\r\n", "\n")
 
             count = content.count(old_n)
             if count == 0:
                 import re
+
                 def normalize(s: str) -> str:
-                    return re.sub(r'[ \t]+$', '', s.strip(), flags=re.MULTILINE)
+                    return re.sub(r"[ \t]+$", "", s.strip(), flags=re.MULTILINE)
 
                 if normalize(old_n) in normalize(content):
                     return error_result(
@@ -638,6 +696,7 @@ class EditTool:
             if raw_path.endswith(".py"):
                 try:
                     import ast
+
                     ast.parse(updated)
                 except SyntaxError as e:
                     error_msg = (
@@ -661,8 +720,11 @@ class EditTool:
                 return error_result(call_id, f"edit：写入文件失败：{w_result.error}")
 
             change = build_file_change(
-                raw_path, content, updated,
-                before_ref="", before_sha=before_sha,
+                raw_path,
+                content,
+                updated,
+                before_ref="",
+                before_sha=before_sha,
             )
             ui_artifact = (
                 UiArtifact(
@@ -679,18 +741,21 @@ class EditTool:
                 registry = get_review_registry(context.workspace_path)
                 await asyncio.to_thread(
                     registry.register_edit,
-                    conversation_id, raw_path, before_content, after_content,
-                    context.session_id, call_id,
+                    conversation_id,
+                    raw_path,
+                    before_content,
+                    after_content,
+                    context.session_id,
+                    call_id,
                 )
 
             # Compute new read_epoch and update observation
             new_read_epoch = _sha256hex(updated)
-            if hasattr(context, "read_file_state") and context.read_file_state is not None:
-                if isinstance(context.read_file_state, dict):
-                    context.read_file_state[raw_path] = {
-                        "read_epoch": new_read_epoch,
-                        "line_count": updated.count("\n") + 1,
-                    }
+            if hasattr(context, "read_file_state") and isinstance(context.read_file_state, dict):
+                context.read_file_state[raw_path] = {
+                    "read_epoch": new_read_epoch,
+                    "line_count": updated.count("\n") + 1,
+                }
 
             result_text = f"已编辑 {raw_path}（{count if replace_all else 1} 处替换）"
             # Remind to use read_epoch when it was not provided

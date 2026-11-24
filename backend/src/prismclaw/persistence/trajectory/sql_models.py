@@ -19,6 +19,7 @@ Design rationale:
 
 ALL parameterized queries use SQLAlchemy :param_name format (NOT $1, $2...).
 """
+
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
@@ -85,11 +86,16 @@ ON CONFLICT (session_id, entry_id) DO UPDATE SET
     thinking_detail = COALESCE(EXCLUDED.thinking_detail, pc_trajectory_cell.thinking_detail),
     model = COALESCE(EXCLUDED.model, pc_trajectory_cell.model),
     finish_reason = COALESCE(EXCLUDED.finish_reason, pc_trajectory_cell.finish_reason),
-    usage_input_tokens = COALESCE(EXCLUDED.usage_input_tokens, pc_trajectory_cell.usage_input_tokens),
-    usage_output_tokens = COALESCE(EXCLUDED.usage_output_tokens, pc_trajectory_cell.usage_output_tokens),
-    usage_cache_read_tokens = COALESCE(EXCLUDED.usage_cache_read_tokens, pc_trajectory_cell.usage_cache_read_tokens),
-    usage_cache_write_tokens = COALESCE(EXCLUDED.usage_cache_write_tokens, pc_trajectory_cell.usage_cache_write_tokens),
-    usage_reasoning_tokens = COALESCE(EXCLUDED.usage_reasoning_tokens, pc_trajectory_cell.usage_reasoning_tokens),
+    usage_input_tokens = COALESCE(EXCLUDED.usage_input_tokens,
+    pc_trajectory_cell.usage_input_tokens),
+    usage_output_tokens = COALESCE(EXCLUDED.usage_output_tokens,
+    pc_trajectory_cell.usage_output_tokens),
+    usage_cache_read_tokens = COALESCE(EXCLUDED.usage_cache_read_tokens,
+    pc_trajectory_cell.usage_cache_read_tokens),
+    usage_cache_write_tokens = COALESCE(EXCLUDED.usage_cache_write_tokens,
+    pc_trajectory_cell.usage_cache_write_tokens),
+    usage_reasoning_tokens = COALESCE(EXCLUDED.usage_reasoning_tokens,
+    pc_trajectory_cell.usage_reasoning_tokens),
     ttft_ms = COALESCE(EXCLUDED.ttft_ms, pc_trajectory_cell.ttft_ms),
     decoding_ms = COALESCE(EXCLUDED.decoding_ms, pc_trajectory_cell.decoding_ms),
     is_error = EXCLUDED.is_error,

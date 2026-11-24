@@ -1,4 +1,4 @@
-from prismclaw.engine.security.sandbox.bwrap import BwrapBinaryNotFound, BwrapPolicy
+from prismclaw.engine.security.sandbox.bwrap import BwrapBinaryNotFoundError, BwrapPolicy
 from prismclaw.engine.security.sandbox.env_strip import (
     DEFAULT_ALLOWLIST,
     HARDCODED_DENY_NAMES,
@@ -14,7 +14,7 @@ from prismclaw.engine.security.sandbox.state import (
 )
 
 __all__ = [
-    "BwrapBinaryNotFound",
+    "BwrapBinaryNotFoundError",
     "BwrapPolicy",
     "DEFAULT_ALLOWLIST",
     "HARDCODED_DENY_NAMES",

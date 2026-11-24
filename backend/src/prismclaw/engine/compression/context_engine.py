@@ -1,33 +1,38 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.config import (
-    DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
-    DEFAULT_KEEP_RECENT_TOKENS,
-    DEFAULT_THRESHOLD,
+from prismclaw.engine.compression.context_bundle import (
+    ContextServiceBundle,
+    build_context_service_bundle,
 )
+from prismclaw.engine.compression.memory_retriever import MemoryRetrievalSettings
+from prismclaw.engine.compression.ports import ContextRuntimePorts
+from prismclaw.engine.compression.summary_engine import SummarizerCallable
 from prismclaw.schema.agent.context import (
     BootstrapContextProvider,
     ContextEngine,
     MemoryAftermathBoundary,
     MemoryContextProvider,
 )
-from prismclaw.schema.llm.request_mode import RequestMode
-from prismclaw.engine.compression.context_bundle import (
-    ContextServiceBundle,
-    build_context_service_bundle,
-)
-from prismclaw.engine.compression.memory_retriever import MemoryRetrievalSettings
 from prismclaw.schema.agent.session import SessionContextState
 from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.audit.audit import RetrievalAuditLogger
+from prismclaw.schema.config import (
+    DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
+    DEFAULT_KEEP_RECENT_TOKENS,
+    DEFAULT_THRESHOLD,
+)
 from prismclaw.schema.config.config import CompactionConfig
 from prismclaw.schema.content.compaction import AssembleResult, CompactResult
-from prismclaw.schema.storage.storage_types import SessionStore
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.storage.storage_types import WorkspaceStore
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.memory.memory_graph import EdgeStoreProtocol
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore, WorkspaceStore
 
+if TYPE_CHECKING:
+    from prismclaw.engine.memory.attribution import AttributionRecorder
+    from prismclaw.engine.memory.validation_signals import ValidationSignalLedger
 
 __all__ = [
     "ContextEngine",
@@ -45,7 +50,7 @@ class DefaultContextEngine:
         *,
         threshold: float = DEFAULT_THRESHOLD,
         keep_recent_tokens: int = DEFAULT_KEEP_RECENT_TOKENS,
-        summarize: Any = None,
+        summarize: SummarizerCallable | None = None,
         compaction_timeout_s: float = DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
         chunk_token_budget: int = 8_000,
         workspace_store: WorkspaceStore | None = None,
@@ -54,13 +59,13 @@ class DefaultContextEngine:
         memory_settings: MemoryRetrievalSettings | None = None,
         compaction_config: CompactionConfig | None = None,
         session_store: SessionStore | None = None,
-        llm_client: object | None = None,
+        llm_client: LLMClient | None = None,
         evolution_settings: object | None = None,
-        retrieval_audit_log: object | None = None,
+        retrieval_audit_log: RetrievalAuditLogger | None = None,
         aftermath_boundary: MemoryAftermathBoundary | None = None,
-        attribution_recorder: object | None = None,
-        edge_store: object | None = None,
-        validation_ledger: object | None = None,
+        attribution_recorder: AttributionRecorder | None = None,
+        edge_store: EdgeStoreProtocol | None = None,
+        validation_ledger: ValidationSignalLedger | None = None,
     ) -> None:
         self._services = build_context_service_bundle(
             threshold=threshold,
@@ -110,8 +115,10 @@ class DefaultContextEngine:
         self.service_bundle.assemble_coordinator.set_session_store(session_store)
         self.service_bundle.memory_retriever.set_session_store(session_store)
 
-    def set_ports(self, ports: Any) -> None:
+    def set_ports(self, ports: object) -> None:
         """注入依赖反转 ports，委托给 assemble_coordinator。"""
+        if not isinstance(ports, ContextRuntimePorts):
+            raise TypeError("ports must implement ContextRuntimePorts")
         self.service_bundle.assemble_coordinator.set_ports(ports)
 
     async def get_bootstrap(self, session_id: str) -> str | None:
@@ -130,7 +137,6 @@ class DefaultContextEngine:
         messages: list[Any],
         token_budget: int | None = None,
         prompt: str | None = None,
-        request_mode: RequestMode | None = None,
         task_spec: TaskSpec | None = None,
     ) -> AssembleResult:
         return await self.service_bundle.assemble_coordinator.assemble(
@@ -138,7 +144,6 @@ class DefaultContextEngine:
             messages=messages,
             token_budget=token_budget,
             prompt=prompt,
-            request_mode=request_mode,
             task_spec=task_spec,
         )
 

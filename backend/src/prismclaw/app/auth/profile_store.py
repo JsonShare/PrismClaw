@@ -1,11 +1,18 @@
 """UserProfileStore implementation — Protocol defined in contracts, Redis impl here."""
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Mapping
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.services.auth import UserProfile, UserProfileStore  # noqa: F401 (re-exported via app.auth / handler_helpers)
+from prismclaw.schema.services.auth import (
+    UserProfile,
+)
+from prismclaw.schema.services.auth import (
+    UserProfileStore as UserProfileStore,
+)
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -30,22 +37,26 @@ def _redis_key(channel: str, user_id: str) -> str:
     return f"{_KEY_PREFIX}:{channel}:{user_id}"
 
 
-_KNOWN_FIELDS = frozenset({
-    "channel",
-    "user_id",
-})
+_KNOWN_FIELDS = frozenset(
+    {
+        "channel",
+        "user_id",
+    }
+)
 
 
-def _serialize(profile: UserProfile, raw_payload: dict | None = None) -> str:
-    payload: dict = dict(raw_payload) if raw_payload else {}
-    payload.update({
-        "channel": profile.channel,
-        "user_id": profile.user_id,
-    })
+def _serialize(profile: UserProfile, raw_payload: dict[str, Any] | None = None) -> str:
+    payload: dict[str, Any] = dict(raw_payload) if raw_payload else {}
+    payload.update(
+        {
+            "channel": profile.channel,
+            "user_id": profile.user_id,
+        }
+    )
     return json.dumps(payload, ensure_ascii=False)
 
 
-def _deserialize(raw: bytes | str) -> tuple[UserProfile, dict] | tuple[None, None]:
+def _deserialize(raw: bytes | str) -> tuple[UserProfile, dict[str, Any]] | tuple[None, None]:
     try:
         text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
         payload = json.loads(text)
@@ -78,7 +89,7 @@ class RedisJsonStore:
     def __init__(
         self,
         *,
-        redis_client: "Redis | None",
+        redis_client: Redis | None,
         json_source: Mapping[str, list[UserProfile]] | None = None,
     ) -> None:
         self._redis = redis_client
@@ -110,23 +121,19 @@ class RedisJsonStore:
             user_id=user_id,
         )
 
-    async def set(
-        self, profile: UserProfile, *, ttl_seconds: int | None = None
-    ) -> bool:
+    async def set(self, profile: UserProfile, *, ttl_seconds: int | None = None) -> bool:
         if self._redis is None or not profile.user_id:
             return False
         ttl = _DEFAULT_TTL_SECONDS if ttl_seconds is None else ttl_seconds
         try:
-            existing_unknown: dict | None = None
+            existing_unknown: dict[str, Any] | None = None
             try:
-                existing_raw = await self._redis.get(
-                    _redis_key(profile.channel, profile.user_id)
-                )
+                existing_raw = await self._redis.get(_redis_key(profile.channel, profile.user_id))
                 if existing_raw is not None:
                     _, existing_unknown = _deserialize(existing_raw)
             except Exception:
                 existing_unknown = None
-            merged_unknown: dict = dict(existing_unknown or {})
+            merged_unknown: dict[str, Any] = dict(existing_unknown or {})
             if profile.unknown_fields:
                 merged_unknown.update(profile.unknown_fields)
             await self._redis.setex(
@@ -157,12 +164,11 @@ class RedisJsonStore:
                         continue
                     if unknown:
                         from dataclasses import replace
+
                         profile = replace(profile, unknown_fields=unknown)
                     seen[profile.user_id] = profile
             except Exception:
-                logger.warning(
-                    "UserProfile redis scan failed; using JSON only", exc_info=True
-                )
+                logger.warning("UserProfile redis scan failed; using JSON only", exc_info=True)
         for entry in self._json_source.get(channel, ()):
             seen.setdefault(entry.user_id, entry)
         return list(seen.values())

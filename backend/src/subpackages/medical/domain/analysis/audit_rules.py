@@ -7,6 +7,7 @@
 
 run_audit 组合三规则，返回 AuditResult(passed, violations)。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -15,7 +16,8 @@ from dataclasses import dataclass, field
 @dataclass
 class AuditViolation:
     """审计违规项。"""
-    rule: str          # citation_existence | quote_verifiability | speculation_fencing
+
+    rule: str  # citation_existence | quote_verifiability | speculation_fencing
     citation_id: str
     detail: str
 
@@ -23,6 +25,7 @@ class AuditViolation:
 @dataclass
 class AuditResult:
     """审计结果。"""
+
     passed: bool
     violations: list[AuditViolation] = field(default_factory=list)
 
@@ -55,18 +58,21 @@ def check_citation_existence(
 
         if source_type == "report_section":
             if source_id and source_id not in report_ids:
-                violations.append(AuditViolation(
-                    rule="citation_existence",
-                    citation_id=citation_id,
-                    detail=f"report_section source_id='{source_id}' 不在报告集合中",
-                ))
-        elif source_type.startswith("kb_"):
-            if source_id and source_id not in kb_ids:
-                violations.append(AuditViolation(
+                violations.append(
+                    AuditViolation(
+                        rule="citation_existence",
+                        citation_id=citation_id,
+                        detail=f"report_section source_id='{source_id}' 不在报告集合中",
+                    )
+                )
+        elif source_type.startswith("kb_") and source_id and source_id not in kb_ids:
+            violations.append(
+                AuditViolation(
                     rule="citation_existence",
                     citation_id=citation_id,
                     detail=f"{source_type} source_id='{source_id}' 不在知识库集合中",
-                ))
+                )
+            )
     return violations
 
 
@@ -105,11 +111,13 @@ def check_quote_verifiability(
         # 截取前 30 字搜索
         probe = quoted[:30].strip()
         if probe and probe not in raw:
-            violations.append(AuditViolation(
-                rule="quote_verifiability",
-                citation_id=citation_id,
-                detail=f"quoted_text 前30字在报告 {source_id} 中未找到",
-            ))
+            violations.append(
+                AuditViolation(
+                    rule="quote_verifiability",
+                    citation_id=citation_id,
+                    detail=f"quoted_text 前30字在报告 {source_id} 中未找到",
+                )
+            )
     return violations
 
 
@@ -141,27 +149,29 @@ def check_speculation_fencing(
         for cid in sec.get("citation_ids", []):
             st = cit_types.get(cid, "")
             if st and st != "speculative":
-                violations.append(AuditViolation(
-                    rule="speculation_fencing",
-                    citation_id=cid,
-                    detail=f"推测性段落引用了非 speculative 引用 (source_type={st})",
-                ))
+                violations.append(
+                    AuditViolation(
+                        rule="speculation_fencing",
+                        citation_id=cid,
+                        detail=f"推测性段落引用了非 speculative 引用 (source_type={st})",
+                    )
+                )
 
     # 规则 3b：speculative 引用不能出现在非推测段落
-    speculative_cids: set[str] = {
-        cid for cid, st in cit_types.items() if st == "speculative"
-    }
+    speculative_cids: set[str] = {cid for cid, st in cit_types.items() if st == "speculative"}
     if speculative_cids:
         for sec in sections:
             if sec.get("is_speculative"):
                 continue
             for cid in sec.get("citation_ids", []):
                 if cid in speculative_cids:
-                    violations.append(AuditViolation(
-                        rule="speculation_fencing",
-                        citation_id=cid,
-                        detail="speculative 引用出现在非推测性段落中",
-                    ))
+                    violations.append(
+                        AuditViolation(
+                            rule="speculation_fencing",
+                            citation_id=cid,
+                            detail="speculative 引用出现在非推测性段落中",
+                        )
+                    )
 
     return violations
 
@@ -203,9 +213,6 @@ def run_audit(
     violations.extend(v_fence)
 
     # 判定：citation_existence 和 speculation_fencing 有违规 → 阻断
-    blocking = any(
-        v.rule in ("citation_existence", "speculation_fencing")
-        for v in violations
-    )
+    blocking = any(v.rule in ("citation_existence", "speculation_fencing") for v in violations)
 
     return AuditResult(passed=not blocking, violations=violations)

@@ -73,9 +73,7 @@ def test_save_schema_type_enum_matches_vocabulary() -> None:
 )
 def test_memory_entry_normalizes_case(raw: str, expected: str) -> None:
     """MemoryEntry 做大小写/空白归一，并接受系统内部类型。"""
-    entry = MemoryEntry(
-        id="e1", layer="L2", type=raw, content="c", created_at=0.0, updated_at=0.0
-    )
+    entry = MemoryEntry(id="e1", layer="L2", type=raw, content="c", created_at=0.0, updated_at=0.0)
     assert entry.type == expected
 
 
@@ -83,9 +81,7 @@ def test_memory_entry_normalizes_case(raw: str, expected: str) -> None:
 def test_memory_entry_rejects_unknown_types(raw: str) -> None:
     """未上线、无存量：词表外取值在构造期直接失败，不做静默改写。"""
     with pytest.raises(ValidationError):
-        MemoryEntry(
-            id="e1", layer="L2", type=raw, content="c", created_at=0.0, updated_at=0.0
-        )
+        MemoryEntry(id="e1", layer="L2", type=raw, content="c", created_at=0.0, updated_at=0.0)
 
 
 def test_classify_scope_uses_normalized_type() -> None:

@@ -11,15 +11,18 @@ The caller (``run_agent_stream``) retains responsibility for:
 * Tool loop policy evaluation
 * Post-tool observations (delivery ledger / same-target read counts)
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
-from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
+from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.hooks import _dispatch_pre_tool_hooks
 
+if TYPE_CHECKING:
+    from prismclaw.engine.security.gate.policies import WorkspaceTag
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +31,12 @@ logger = logging.getLogger(__name__)
 # Pre-tool checks
 # ---------------------------------------------------------------------------
 
+
 async def run_pre_tool_checks(
     rt: LoopRuntime,
     parsed_calls: list[ParsedToolCall],
     *,
-    workspace_tag: Any = None,
+    workspace_tag: WorkspaceTag | None = None,
     traj_turn_counter: int = 0,
     iteration: int = 0,
 ) -> tuple[dict[str, str], list[ParsedToolCall]]:
@@ -58,9 +62,7 @@ async def run_pre_tool_checks(
         if _skill_inv is not None:
             _active_skill_name = getattr(_skill_inv, "skill_name", None)
         _tool_ctx = rt.tool_ctx
-        _active_plugins = (
-            getattr(_tool_ctx, "tool_scope", None) if _tool_ctx is not None else None
-        )
+        _active_plugins = getattr(_tool_ctx, "tool_scope", None) if _tool_ctx is not None else None
         pre_tool_denied = await _dispatch_pre_tool_hooks(
             dispatcher=deps.hook_dispatcher,
             parsed_calls=parsed_calls,

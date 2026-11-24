@@ -9,6 +9,7 @@ The read_file_state dict in ToolContext remains the raw data store
 (dict[str, FileVersion]). FileObserver wraps it with behavioral methods
 like check_version() and clear().
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -24,7 +25,7 @@ class VersionCheck(Enum):
 
 @dataclass
 class FileVersion:
-    read_epoch: str   # SHA-256 content hash
+    read_epoch: str  # SHA-256 content hash
     line_count: int
 
 
@@ -36,6 +37,7 @@ class FileObserver:
     ToolContext.read_file_state remains the raw dict; FileObserver
     provides the behavioral interface.
     """
+
     _observations: dict[str, FileVersion] = field(default_factory=dict)
 
     def record_read(self, file_path: str, read_epoch: str, line_count: int) -> None:

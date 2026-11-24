@@ -3,25 +3,26 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from typing import TYPE_CHECKING, Any
 
-from typing import Any, TYPE_CHECKING
-
+from prismclaw.engine.compression._autocompact_breaker import (
+    _MAX_PTL_RETRIES,
+    _METRIC_AUTOCOMPACT_FAILURE,
+    _PROMPT_TOO_LONG_REASON,
+    AutocompactBreaker,
+    _emit_breaker_metric,
+)
 from prismclaw.engine.compression.compaction import (
     estimate_message_tokens,
 )
 from prismclaw.schema.content.compaction import CompactResult
 
-from prismclaw.engine.compression._autocompact_breaker import (
-    AutocompactBreaker,
-    _MAX_PTL_RETRIES,
-    _METRIC_AUTOCOMPACT_FAILURE,
-    _PROMPT_TOO_LONG_REASON,
-    _emit_breaker_metric,
-)
-
 if TYPE_CHECKING:
-    # 仅类型注解所需，runtime 不依赖 hooks。
+    # 仅类型注解所需，runtime 不依赖 hooks / execution。
+    from prismclaw.engine.compression.history_compaction import _CompactionDeps
+    from prismclaw.engine.compression.state_store import CompactionCheckpoint
     from prismclaw.engine.hooks import CompactionContext
+    from prismclaw.schema.agent.types import RunRequest
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +59,7 @@ def _parse_ptl_token_gap(error_message: str) -> int | None:
     tokens") and OpenAI-style ("maximum context length is X ... requested
     Y") formats. Returns ``None`` when neither pattern matches.
     """
-    m = re.search(
-        r"(\d+)\s+tokens.*exceeds.*?(\d+)\s*tokens", error_message, re.DOTALL
-    )
+    m = re.search(r"(\d+)\s+tokens.*exceeds.*?(\d+)\s*tokens", error_message, re.DOTALL)
     if m:
         return max(0, int(m.group(1)) - int(m.group(2)))
     m = re.search(
@@ -121,7 +120,11 @@ def truncate_head_for_ptl_retry(
 
     # Some providers reject a conversation that starts with an assistant
     # message; re-anchor with a synthetic user marker.
-    if kept_messages and isinstance(kept_messages[0], dict) and kept_messages[0].get("role") == "assistant":
+    if (
+        kept_messages
+        and isinstance(kept_messages[0], dict)
+        and kept_messages[0].get("role") == "assistant"
+    ):
         kept_messages = [
             {"role": "user", "content": "[早前对话已截断，以便进行压缩重试]"},
             *kept_messages,
@@ -131,8 +134,8 @@ def truncate_head_for_ptl_retry(
 
 async def _compact_with_ptl_retry(
     *,
-    deps: Any,
-    request: Any,
+    deps: _CompactionDeps,
+    request: RunRequest,
     base_messages: list[Any],
     history_budget: int,
     force: bool,
@@ -141,7 +144,7 @@ async def _compact_with_ptl_retry(
     threshold_override: float | None,
     keep_recent_tokens_override: int | None,
     breaker: AutocompactBreaker,
-    checkpoint: Any,
+    checkpoint: CompactionCheckpoint,
     compaction_ctx: CompactionContext,
 ) -> CompactResult:
     """压缩 API 调用 + PTL 重试循环。

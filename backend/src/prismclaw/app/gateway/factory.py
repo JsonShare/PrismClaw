@@ -1,9 +1,16 @@
 """Gateway component factory — called by assembly bundle builders to avoid
 assembly→app.gateway upward imports."""
+
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from redis.asyncio import Redis
+
+    from prismclaw.app.gateway.run_ownership import RunOwnershipStore
 
 from prismclaw.app.gateway.event_codec import decode_forward_event
 from prismclaw.infra.settings import Settings
@@ -12,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 
 def build_gateway_components(
-    redis_client: Any,
+    redis_client: Redis,
     worker_id: str,
     settings: Settings,
     *,
-    app: Any,
+    app: FastAPI,
 ) -> tuple[Any, Any]:
     """Build (gateway_router, forward_consumer) for session affinity.
 
@@ -46,7 +53,7 @@ def build_gateway_components(
         registry = getattr(web_deps, "connection_registry", None)
         return registry if isinstance(registry, ConnectionRegistry) else None
 
-    async def _dispatch_forwarded_event(payload: dict) -> None:
+    async def _dispatch_forwarded_event(payload: dict[str, Any]) -> None:
         """Deliver a forwarded frame to this worker's local sockets.
 
         Sends straight to ``ws.send_json`` — never back through ``send_event``
@@ -81,9 +88,9 @@ def build_gateway_components(
 
 
 def build_run_ownership_store(
-    redis_client: Any,
+    redis_client: Redis,
     settings: Settings,
-) -> Any:
+) -> RunOwnershipStore:
     """Build RunOwnershipStore for session affinity ownership tracking."""
     from prismclaw.app.gateway.run_ownership import RunOwnershipStore
 

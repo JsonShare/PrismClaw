@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
 from urllib.parse import unquote
 
 from prismclaw import token_counting as _token_counting
@@ -71,7 +70,7 @@ def estimate_tokens(text: str, *, image_tokens_each: int = 0) -> int:
     )
 
 
-def count_image_parts(messages: Any) -> int:
+def count_image_parts(messages: object) -> int:
     """统计消息列表中内联图片 part 数量（``image``/``image_url`` 块）。"""
     if not isinstance(messages, (list, tuple)):
         return 0
@@ -117,7 +116,7 @@ def file_reference_text(
     return " ".join(parts)
 
 
-def extract_text_from_content(content: Any) -> str:
+def extract_text_from_content(content: object) -> str:
     """Extract text from content that may be str, list[ContentBlock], or list[dict].
 
     Handles three shapes:

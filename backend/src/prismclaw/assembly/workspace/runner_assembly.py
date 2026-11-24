@@ -4,44 +4,62 @@ import dataclasses
 import json
 import logging
 import os
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.execution.skills.runtime import SkillRuntime
-from prismclaw.engine.services.llm.client import LiteLLMClient
-from prismclaw.schema.llm.errors import LLMError
-from prismclaw.engine.services.llm.provider_resolver import resolve_provider_for_model
-from prismclaw.engine.execution.loop.deps import AgentRunnerDeps, DreamBundle, PersistenceBundle, PluginBundle
-from prismclaw.engine.runtime.client import WorkspaceRuntimeClient
-from prismclaw.schema.services.env_types import ExecutionEnv
-from prismclaw.engine.task_profile.service import TaskProfileService
+from prismclaw.assembly.plugins.runtime_assembly import (
+    PluginRuntimeAssembly,
+    build_plugin_runtime,
+)
+from prismclaw.engine.compression.context_engine import DefaultContextEngine
+from prismclaw.engine.compression.summary_engine import SummarizerCallable
 from prismclaw.engine.execution.checkpoint import RunSnapshotStore
+from prismclaw.engine.execution.loop.deps import (
+    AgentRunnerDeps,
+    DreamBundle,
+    PersistenceBundle,
+    PluginBundle,
+)
+from prismclaw.engine.execution.skills.runtime import SkillRuntime
+from prismclaw.engine.hooks import HookRegistry
+from prismclaw.engine.runtime.client import WorkspaceRuntimeClient
+from prismclaw.engine.services.llm.client import LiteLLMClient
+from prismclaw.engine.services.llm.provider_resolver import resolve_provider_for_model
+from prismclaw.engine.task_profile.service import TaskProfileService
+from prismclaw.engine.toolkit.file.workspace import WorkspaceResolver
 from prismclaw.engine.toolkit.registry.builtin import (
     register_builtin_tools,
     register_tier2_builtin_tools,
 )
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.engine.toolkit.file.workspace import WorkspaceResolver
-from prismclaw.engine.compression.context_engine import DefaultContextEngine
-from prismclaw.engine.hooks import HookRegistry
-from prismclaw.assembly.plugins.runtime_assembly import (
-    PluginRuntimeAssembly,
-    build_plugin_runtime,
-)
-from prismclaw.runtime.memory_aftermath import (
-    build_memory_aftermath_boundary,
-)
+from prismclaw.infra.settings import Settings
+from prismclaw.infra.task_manager import TaskManager
 from prismclaw.runtime.capability_refresh import (
     build_capability_catalog,
     build_subagent_registry,
     register_subagent_tools,
     schedule_mcp_capability_refresh,
 )
+from prismclaw.runtime.memory_aftermath import (
+    build_memory_aftermath_boundary,
+)
 from prismclaw.runtime.skills.mcp_skills import mcp_prompt_resolver, mcp_skill_manifests_builder
-from prismclaw.infra.settings import Settings
-from prismclaw.infra.task_manager import TaskManager
 from prismclaw.schema.config.config import AgentRunConfig, WorkspaceConfig
+from prismclaw.schema.llm.errors import LLMError
+from prismclaw.schema.services.env_types import ExecutionEnv
+from prismclaw.schema.storage.persistence_types import LockManager
 from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore, WorkspaceStore
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+    from prismclaw.app.gateway.worker_registry import WorkerRegistry
+    from prismclaw.engine.dream.dispatch.dispatch import RedisDreamDispatchQueue
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
+    from prismclaw.schema.agent.memory import MemoryGatewayProtocol
+    from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
 
 
 def _build_runtime_client() -> ExecutionEnv:
@@ -86,13 +104,15 @@ def _build_runtime_client() -> ExecutionEnv:
     # 注入沙箱策略到进程内传输
     from prismclaw.engine.security.sandbox.state import resolve_sandbox_state
     from prismclaw.schema.config.config import SandboxConfig
+
     try:
         _sb_state = resolve_sandbox_state(SandboxConfig(enforce=True))
-        _sb_policy = _sb_state.policy if hasattr(_sb_state.policy, 'wrap_bash_command') else None
+        _sb_policy = _sb_state.policy if hasattr(_sb_state.policy, "wrap_bash_command") else None
     except Exception:
         _sb_policy = None
 
     return InProcessRuntimeClient(sandbox_policy=_sb_policy)
+
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +131,6 @@ class KernelRuntimeBundle:
 @dataclasses.dataclass(slots=True)
 class DreamRuntimeBundle:
     dreaming_engine: Any = None
-    dream_scheduler: Any = None
     dream_review_service: Any = None
     dream_boundary: Any = None
     dream_ops: Any = None
@@ -188,7 +207,8 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
         except LLMError as exc:
             raise RuntimeError(
                 f"models.default_model='{settings.models.default_model}' cannot be routed "
-                f"to any configured provider. Fix backend/configs/models.yaml before starting. {exc}"
+                f"to any configured provider. Fix "
+                f"backend/configs/models.yaml before starting. {exc}"
             ) from exc
 
     workspace_default = getattr(
@@ -240,19 +260,27 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
                     "promotion_min_days": settings.evolution.curator.promotion_min_days,
                     "llm_review_enabled": settings.evolution.curator.llm_review_enabled,
                     "llm_review_model": settings.evolution.curator.llm_review_model,
-                    "llm_review_interval_seconds": settings.evolution.curator.llm_review_interval_seconds,
+                    "llm_review_interval_seconds": (
+                        settings.evolution.curator.llm_review_interval_seconds
+                    ),
                     "llm_review_actions": list(settings.evolution.curator.llm_review_actions),
                     "llm_review_max_batch": settings.evolution.curator.llm_review_max_batch,
                 },
                 "dream": {
                     "enabled": settings.evolution.dream.enabled,
-                    "idle_check_interval_seconds": settings.evolution.dream.idle_check_interval_seconds,
+                    "idle_check_interval_seconds": (
+                        settings.evolution.dream.idle_check_interval_seconds
+                    ),
                     "idle_threshold_seconds": settings.evolution.dream.idle_threshold_seconds,
-                    "nightly_check_interval_seconds": settings.evolution.dream.nightly_check_interval_seconds,
+                    "nightly_check_interval_seconds": (
+                        settings.evolution.dream.nightly_check_interval_seconds
+                    ),
                     "nightly_timezone": settings.evolution.dream.nightly_timezone,
                     "nightly_start_hour_local": settings.evolution.dream.nightly_start_hour_local,
                     "nightly_end_hour_local": settings.evolution.dream.nightly_end_hour_local,
-                    "nightly_catch_up_grace_minutes": settings.evolution.dream.nightly_catch_up_grace_minutes,
+                    "nightly_catch_up_grace_minutes": (
+                        settings.evolution.dream.nightly_catch_up_grace_minutes
+                    ),
                     "nightly_max_sessions": settings.evolution.dream.nightly_max_sessions,
                     "multi_worker_scan_policy": settings.evolution.dream.multi_worker_scan_policy,
                     "publish_channel": settings.evolution.dream.publish_channel,
@@ -261,12 +289,18 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
                     "canary_rollout_percentage": settings.evolution.dream.canary_rollout_percentage,
                     "canary_rollout_salt": settings.evolution.dream.canary_rollout_salt,
                     "shadow_publish_enabled": settings.evolution.dream.shadow_publish_enabled,
-                    "shadow_memory_publish_enabled": settings.evolution.dream.shadow_memory_publish_enabled,
-                    "shadow_artifact_publish_enabled": settings.evolution.dream.shadow_artifact_publish_enabled,
+                    "shadow_memory_publish_enabled": (
+                        settings.evolution.dream.shadow_memory_publish_enabled
+                    ),
+                    "shadow_artifact_publish_enabled": (
+                        settings.evolution.dream.shadow_artifact_publish_enabled
+                    ),
                     "tiers_enabled": settings.evolution.dream.tiers_enabled,
                     "contest_exit_days": settings.evolution.dream.contest_exit_days,
                     "deep_merge_min_positive": settings.evolution.dream.deep_merge_min_positive,
-                    "correction_learning_enabled": settings.evolution.dream.correction_learning_enabled,
+                    "correction_learning_enabled": (
+                        settings.evolution.dream.correction_learning_enabled
+                    ),
                 },
             },
             "subagent": {
@@ -312,9 +346,13 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
         getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"]
     )
     # Wire engine-layer configs (eliminate Service Locator anti-pattern)
-    from prismclaw.engine.toolkit.file.read_image import set_vision_config
     from prismclaw.engine.execution.request.model_fallback import hydrate_spec_registry
-    from prismclaw.schema.config.config import VisionConfig, ProviderModelSpecs, ProviderModelSpecEntry
+    from prismclaw.engine.toolkit.file.read_image import set_vision_config
+    from prismclaw.schema.config.config import (
+        ProviderModelSpecEntry,
+        ProviderModelSpecs,
+        VisionConfig,
+    )
 
     vision_cfg = VisionConfig(
         model=settings.vision.model,
@@ -349,15 +387,15 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
 def build_dream_runtime(
     settings: Settings,
     *,
-    session_factory: Any,
+    session_factory: async_sessionmaker[AsyncSession],
     memory_store: MemoryStore | None,
     session_store: SessionStore,
     llm: LiteLLMClient,
     task_manager: TaskManager | None,
-    lock_manager: Any,
-    worker_registry: Any,
-    dream_dispatch_queue: Any,
-    db_engine: Any = None,
+    lock_manager: LockManager,
+    worker_registry: WorkerRegistry | None,
+    dream_dispatch_queue: RedisDreamDispatchQueue | None,
+    db_engine: AsyncEngine | None = None,
 ) -> DreamRuntimeBundle:
     if memory_store is None:
         from prismclaw.engine.dream.runtime_client import NullDreamBoundary
@@ -374,15 +412,15 @@ def build_dream_runtime(
         logger.warning("dream runtime disabled: task_manager/lock_manager unavailable")
         return DreamRuntimeBundle(dream_boundary=NullDreamBoundary())
 
-    from prismclaw.engine.dream.runtime_client import NullDreamBoundary
-    from prismclaw.engine.dream.engine import DreamEngine
     from prismclaw.engine.dream.dispatch.lock import DistributedDreamLockProvider
+    from prismclaw.engine.dream.dispatch.scheduler import DreamScheduler
+    from prismclaw.engine.dream.engine import DreamEngine
     from prismclaw.engine.dream.governance.ops import InProcessDreamAdminOps
     from prismclaw.engine.dream.governance.review_service import DreamReviewService
-    from prismclaw.engine.dream.dispatch.scheduler import DreamScheduler
+    from prismclaw.engine.dream.runtime_client import NullDreamBoundary
     from prismclaw.engine.dream.state.status_service import DreamStatusService
-    from prismclaw.persistence.dream.factory import create_dream_stores
     from prismclaw.persistence.audit.factory import create_audit_logger
+    from prismclaw.persistence.dream.factory import create_dream_stores
 
     try:
         stores = create_dream_stores(session_factory)
@@ -396,8 +434,8 @@ def build_dream_runtime(
         # E5: 记忆图谱边存储。独立于 MemoryStore，需要 db_engine。
         edge_store = None
         if db_engine is not None and settings.memory.memory_graph_enabled:
-            from prismclaw.persistence.memory.edge_store import EdgeStore
             from prismclaw.engine.security.dlp.scanner import DlpScanner
+            from prismclaw.persistence.memory.edge_store import EdgeStore
 
             edge_store = EdgeStore(db_engine, dlp_scanner=DlpScanner())
 
@@ -459,6 +497,7 @@ def build_dream_runtime(
         dream_scheduler.start(task_manager)
 
         from prismclaw.engine.dream.runtime_client import InProcessDreamBoundary
+
         boundary = InProcessDreamBoundary(
             scheduler=dream_scheduler,
             review_service=dream_review_service,
@@ -468,7 +507,6 @@ def build_dream_runtime(
 
         return DreamRuntimeBundle(
             dreaming_engine=dreaming_engine,
-            dream_scheduler=dream_scheduler,
             dream_review_service=dream_review_service,
             dream_ops=dream_ops,
             dream_audit_log=dream_audit_log,
@@ -491,10 +529,10 @@ def build_memory_runtime(
     session_store: SessionStore,
     task_manager: TaskManager | None,
     memory_store: MemoryStore | None,
-    redis_client: Any,
+    redis_client: aioredis.Redis | None,
     llm: LiteLLMClient,
     dream_runtime: DreamRuntimeBundle,
-    memory_gateway: Any = None,
+    memory_gateway: MemoryGatewayProtocol | None = None,
 ) -> MemoryRuntimeBundle:
     nudge_hook = None
     if memory_store is not None:
@@ -508,9 +546,7 @@ def build_memory_runtime(
     # retriever (injection bookkeeping) and the aftermath (turn sealing +
     # validation signals). Only active when memory.attribution_enabled.
     attribution_recorder = None
-    if memory_store is not None and bool(
-        getattr(settings.memory, "attribution_enabled", False)
-    ):
+    if memory_store is not None and bool(getattr(settings.memory, "attribution_enabled", False)):
         from prismclaw.engine.memory.attribution import AttributionRecorder
 
         attribution_recorder = AttributionRecorder(memory_store)
@@ -532,7 +568,7 @@ def build_memory_runtime(
         llm_client=llm,
         evolution_settings=settings.evolution,
         nudge_hook=nudge_hook,
-        dream_boundary=dream_runtime.dream_boundary or dream_runtime.dream_scheduler,
+        dream_boundary=dream_runtime.dream_boundary,
         dream_candidate_store=dream_runtime.dream_candidate_store,
         attribution_recorder=attribution_recorder,
         memory_gateway=memory_gateway,
@@ -565,7 +601,7 @@ def build_memory_runtime(
     return MemoryRuntimeBundle(context_engine=context_engine, nudge_hook=nudge_hook)
 
 
-def _build_llm_summarizer(llm: LiteLLMClient) -> Any:
+def _build_llm_summarizer(llm: LiteLLMClient) -> SummarizerCallable:
     """LLM-backed summarizer callable for the compaction SummaryEngine.
 
     SDD context-governance W11 (2026-08-21, root cause of "compaction
@@ -603,9 +639,9 @@ def _build_llm_summarizer(llm: LiteLLMClient) -> Any:
 def _validate_memory_runtime_prerequisites(
     *,
     memory_store: MemoryStore | None,
-    redis_client: Any,
+    redis_client: aioredis.Redis | None,
     task_manager: TaskManager | None,
-    lock_manager: Any,
+    lock_manager: LockManager | None,
 ) -> None:
     if memory_store is None:
         return
@@ -618,7 +654,7 @@ def _validate_memory_runtime_prerequisites(
         raise ValueError("memory runtime requires task_manager and lock_manager")
 
 
-def _build_summarize_fn(llm: LiteLLMClient) -> Any:
+def _build_summarize_fn(llm: LiteLLMClient) -> Callable[..., Awaitable[str]]:
     """Build a per-result LLM summarization callback from the LLM stream function.
 
     The returned callable matches ``async def summarize_fn(prompt: str) -> str``.
@@ -648,16 +684,16 @@ def assemble_runner_deps(
     workspace_store: WorkspaceStore | None,
     task_manager: TaskManager | None,
     memory_store: MemoryStore | None,
-    redis_client: Any,
-    lock_manager: Any,
-    mcp_death_handler: Any,
-    external_tool_registrar: Any,
+    redis_client: aioredis.Redis | None,
+    lock_manager: LockManager | None,
+    mcp_death_handler: Callable[[str], Awaitable[None]] | None,
+    external_tool_registrar: Callable[[ToolRegistry], None] | None,
     kernel_runtime: KernelRuntimeBundle,
     plugin_runtime: PluginRuntimeAssembly,
     memory_runtime: MemoryRuntimeBundle,
     dream_runtime: DreamRuntimeBundle,
-    trajectory_persistence: Any = None,
-    memory_gateway: Any = None,
+    trajectory_persistence: TrajectoryPersistence | None = None,
+    memory_gateway: MemoryGatewayProtocol | None = None,
 ) -> AgentRunnerDeps:
     tools = kernel_runtime.tools
     subagent_workspace_path = kernel_runtime.resolver.resolve("default")
@@ -679,12 +715,11 @@ def assemble_runner_deps(
         skill_provider=plugin_runtime.skill_provider,
         extension_manager=plugin_runtime.extension_manager,
         subagent_registry=subagent_registry,
-        mcp_skill_manifests_builder=mcp_skill_manifests_builder(
-            plugin_runtime.runtime_mcp_manager
-        ),
+        mcp_skill_manifests_builder=mcp_skill_manifests_builder(plugin_runtime.runtime_mcp_manager),
     )
     ext_mgr = plugin_runtime.extension_manager
     from prismclaw.runtime.skills.parser import parse_skill_file
+
     skill_runtime = SkillRuntime(
         capability_catalog=capability_catalog,
         mcp_prompt_resolver=mcp_prompt_resolver(plugin_runtime.runtime_mcp_manager),
@@ -718,7 +753,9 @@ def assemble_runner_deps(
         tools.register(ScheduledTaskTool())
 
     hooks = kernel_runtime.hooks
-    if memory_store is not None:
+    # memory runtime 本就要求 redis（见 _build_memory_runtime 的显式校验）；
+    # 两者都存在才注册内存工具与工作记忆钩子。
+    if memory_store is not None and redis_client is not None:
         from prismclaw.engine.hooks.working_memory_hook import WorkingMemoryHook
         from prismclaw.engine.toolkit.memory.memory_tools import MemoryTool
         from prismclaw.engine.toolkit.memory.update_working_memory import (
@@ -766,16 +803,17 @@ def assemble_runner_deps(
         redis_client=redis_client,
         task_manager=task_manager,
     )
-    register_subagent_tools(
-        tools,
-        settings=settings,
-        capability_catalog=capability_catalog,
-        subagent_registry=subagent_registry,
-        llm_client=kernel_runtime.llm,
-        memory_store=memory_store,
-        skill_runtime=skill_runtime,
-        collaboration=subagent_collaboration,
-    )
+    if subagent_registry is not None:
+        register_subagent_tools(
+            tools,
+            settings=settings,
+            capability_catalog=capability_catalog,
+            subagent_registry=subagent_registry,
+            llm_client=kernel_runtime.llm,
+            memory_store=memory_store,
+            skill_runtime=skill_runtime,
+            collaboration=subagent_collaboration,
+        )
     if settings.subagent.enabled and capability_catalog.count_agent_entries() > 0:
         from prismclaw.engine.execution.handoff.store import PendingHandoffStore
         from prismclaw.engine.execution.handoff.supervisor import HandoffSupervisor
@@ -783,12 +821,8 @@ def assemble_runner_deps(
         if settings.subagent.handoff_enabled:
             handoff_store = PendingHandoffStore(
                 redis_client=None,
-                ttl_seconds=(
-                    settings.subagent.pending_handoff_ttl_turns * 600
-                ),
-                reverse_lookup_enabled=(
-                    settings.subagent.handoff_reverse_lookup_enabled
-                ),
+                ttl_seconds=(settings.subagent.pending_handoff_ttl_turns * 600),
+                reverse_lookup_enabled=(settings.subagent.handoff_reverse_lookup_enabled),
             )
             handoff_supervisor = HandoffSupervisor(
                 store=handoff_store,
@@ -848,17 +882,17 @@ async def create_agent_runner_deps(
     workspace_store: WorkspaceStore | None = None,
     task_manager: TaskManager | None = None,
     memory_store: MemoryStore | None = None,
-    redis_client=None,
-    lock_manager=None,
-    mcp_death_handler=None,
-    external_tool_registrar=None,
-    mcp_manager=None,
-    worker_registry=None,
-    dream_dispatch_queue=None,
-    session_factory: Any = None,
-    trajectory_persistence: Any = None,
+    redis_client: aioredis.Redis | None = None,
+    lock_manager: LockManager | None = None,
+    mcp_death_handler: Callable[[str], Awaitable[None]] | None = None,
+    external_tool_registrar: Callable[[ToolRegistry], None] | None = None,
+    mcp_manager: MCPClientManager | None = None,
+    worker_registry: WorkerRegistry | None = None,
+    dream_dispatch_queue: RedisDreamDispatchQueue | None = None,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    trajectory_persistence: TrajectoryPersistence | None = None,
     project_root: Path | str | None = None,
-    db_engine: Any = None,
+    db_engine: AsyncEngine | None = None,
 ) -> AgentRunnerDeps:
     kernel_runtime = build_kernel_runtime(settings)
     _validate_memory_runtime_prerequisites(
@@ -877,25 +911,35 @@ async def create_agent_runner_deps(
         task_manager=task_manager,
         base_mcp_manager=mcp_manager,
     )
-    dream_runtime = build_dream_runtime(
-        settings,
-        session_factory=session_factory,
-        memory_store=memory_store,
-        session_store=session_store,
-        llm=kernel_runtime.llm,
-        task_manager=task_manager,
-        lock_manager=lock_manager,
-        worker_registry=worker_registry,
-        dream_dispatch_queue=dream_dispatch_queue,
-        db_engine=db_engine,
+    from prismclaw.engine.dream.runtime_client import NullDreamBoundary
+
+    dream_runtime = (
+        build_dream_runtime(
+            settings,
+            session_factory=session_factory,
+            memory_store=memory_store,
+            session_store=session_store,
+            llm=kernel_runtime.llm,
+            task_manager=task_manager,
+            lock_manager=lock_manager,
+            worker_registry=worker_registry,
+            dream_dispatch_queue=dream_dispatch_queue,
+            db_engine=db_engine,
+        )
+        if session_factory is not None and lock_manager is not None
+        else DreamRuntimeBundle(
+            dream_boundary=NullDreamBoundary(),
+        )
     )
     # SDD B2: one write-arbitration gateway per app — mode off/shadow/active
     # via memory.gateway_mode; built here (needs llm + lock_manager) and
     # shared by the memory tool and the aftermath (auto-extracted chat facts).
     memory_gateway = None
-    if memory_store is not None and str(
-        getattr(settings.memory, "gateway_mode", "off") or "off"
-    ) != "off":
+    if (
+        memory_store is not None
+        and lock_manager is not None
+        and str(getattr(settings.memory, "gateway_mode", "off") or "off") != "off"
+    ):
         from prismclaw.engine.memory.gateway import MemoryWriteGateway
 
         memory_gateway = MemoryWriteGateway(

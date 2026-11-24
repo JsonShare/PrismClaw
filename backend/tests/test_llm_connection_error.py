@@ -8,7 +8,6 @@ aiohttp.ClientPayloadError 等）必须被归类为 CONNECTION_ERROR，而非 UN
 
 from __future__ import annotations
 
-
 from prismclaw.engine.services.llm.provider_resolver import (
     _connection_error_types,
     _should_retry_transient_provider_error,
@@ -29,7 +28,8 @@ def test_classify_midstream_fallback_is_connection_error():
 
     exc = MidStreamFallbackError(
         "litellm.APIConnectionError: Response payload is not completed: "
-        "<TransferEncodingError: 400, message='Not enough data to satisfy transfer length header.'>",
+        "<TransferEncodingError: 400, message='Not enough data "
+        "to satisfy transfer length header.'>",
         model="qwen3.7-plus",
         llm_provider="openai",
     )
@@ -76,7 +76,10 @@ def test_retry_httpx_timeout_is_false():
 def test_classify_camelcase_api_connection_error_message_misses_substring():
     # 显式证明旧子串启发式（'connection error'）命中不了 camelCase 的
     # APIConnectionError——这正是为什么改用 isinstance 类型判定。
-    msg = "litellm.APIConnectionError: APIConnectionError: OpenAIException - Response payload is not completed"
+    msg = (
+        "litellm.APIConnectionError: APIConnectionError: OpenAIException "
+        "- Response payload is not completed"
+    )
     assert "connection error" not in msg.lower()
     # 而类型判定仍能正确归类（用 litellm 真实类型）。
     from litellm.exceptions import APIConnectionError

@@ -1,7 +1,7 @@
-"""subagent_search：插件子代理逐级披露契约。
+"""subagent_search 检索契约。
 
-固定 prompt 只列核心子代理与包索引；插件子代理必须能通过本工具检索，
-且工作区核心子代理不重复出现在结果里。
+固定 prompt 只列核心子代理索引；检索候选 = 核心 + 插件（核心是兜底通道，
+索引缺失或被预算撤除时必须仍能命中）。渲染按来源分组，不混排。
 """
 
 from __future__ import annotations
@@ -38,34 +38,52 @@ class _FakeCatalog:
         return self._entries
 
 
-_CATALOG = _FakeCatalog([
-    _agent("architect", "架构规划"),
-    _agent("auditor", "结果验证"),
-    _agent(
-        "docket-watcher",
-        "监控活跃案件组合中的法院案卷",
-        plugin_name="litigation",
-        marketplace_name="legal-chineselaw",
-    ),
-    _agent(
-        "clinical-reviewer",
-        "临床病历与检查数据复核",
-        plugin_name="clinical",
-        marketplace_name="medical-healthcare",
-    ),
-])
+_CATALOG = _FakeCatalog(
+    [
+        _agent("architect", "架构规划"),
+        _agent("auditor", "结果验证"),
+        _agent(
+            "docket-watcher",
+            "监控活跃案件组合中的法院案卷",
+            plugin_name="litigation",
+            marketplace_name="legal-chineselaw",
+        ),
+        _agent(
+            "clinical-reviewer",
+            "临床病历与检查数据复核",
+            plugin_name="clinical",
+            marketplace_name="medical-healthcare",
+        ),
+    ]
+)
 
 
 def _call(args):
     tool = SubagentSearchTool(capability_catalog=_CATALOG)
-    result = asyncio.run(tool.execute(args, context=ToolContext(workspace_id="w", workspace_path=Path("/tmp"))))
+    result = asyncio.run(
+        tool.execute(args, context=ToolContext(workspace_id="w", workspace_path=Path("/tmp")))
+    )
     return result.content[0].text
 
 
-def test_returns_plugin_subagent_and_excludes_core():
+def test_returns_plugin_subagent():
     text = _call({"query": "案卷 监控"})
     assert "docket-watcher" in text
-    assert "`architect`" not in text
+    assert "插件子代理" in text
+
+
+def test_core_subagent_is_searchable():
+    """D7：核心子代理必须能被检索命中，不能因"已在 <subagents>"而无兜底。"""
+    text = _call({"query": "架构规划"})
+    assert "`architect`" in text
+    assert "核心子代理" in text
+
+
+def test_core_and_plugin_rendered_in_separate_groups():
+    text = _call({"query": "复核 架构"})
+    assert "### 核心子代理：" in text
+    assert "### 插件子代理：" in text
+    assert text.index("### 核心子代理：") < text.index("### 插件子代理：")
 
 
 def test_package_filter():
@@ -73,11 +91,11 @@ def test_package_filter():
     assert "docket-watcher" not in _call({"query": "案卷", "package": "medical-healthcare"})
 
 
-def test_no_match_falls_back_to_all_plugin_agents():
+def test_no_match_falls_back_to_all_agents():
     text = _call({"query": "完全不相关的查询xyz"})
     assert "docket-watcher" in text
     assert "clinical-reviewer" in text
-    assert "`architect`" not in text
+    assert "`architect`" in text
     assert "subagent_search" in text
 
 
@@ -93,7 +111,12 @@ def test_limit_caps_result_count():
         for i in range(25)
     ]
     tool = SubagentSearchTool(capability_catalog=_FakeCatalog(entries))
-    result = asyncio.run(tool.execute({"query": "案件", "limit": 99}, context=ToolContext(workspace_id="w", workspace_path=Path("/tmp"))))
+    result = asyncio.run(
+        tool.execute(
+            {"query": "案件", "limit": 99},
+            context=ToolContext(workspace_id="w", workspace_path=Path("/tmp")),
+        )
+    )
     text = result.content[0].text
     assert text.count("plugin-agent-") == 20
 

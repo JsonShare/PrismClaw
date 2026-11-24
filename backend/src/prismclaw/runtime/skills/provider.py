@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
-from prismclaw.infra.settings import SkillSettings
 from prismclaw.infra.paths import build_project_capability_layout
-from prismclaw.schema.shared import CapabilityKind, CapabilityLocation
+from prismclaw.infra.settings import SkillSettings
 from prismclaw.runtime.skills.discovery import (
     SkillCatalogState,
     activate_conditional_skills_for_paths,
@@ -15,8 +14,8 @@ from prismclaw.runtime.skills.discovery import (
     discover_skills,
 )
 from prismclaw.runtime.skills.eligibility import filter_eligible
-from prismclaw.schema.services.skills import SkillManifest
-from prismclaw.schema.services.skills import resolve_skill_name
+from prismclaw.schema.services.skills import SkillManifest, resolve_skill_name
+from prismclaw.schema.shared import CapabilityKind, CapabilityLocation
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +92,7 @@ class DefaultSkillProvider:
             pr = self._project_root.resolve()
             if pr not in roots:
                 roots.append(pr)
-        for add in (self._additional_project_roots or []):
+        for add in self._additional_project_roots or []:
             ar = Path(add).resolve()
             if ar not in roots:
                 roots.append(ar)
@@ -168,10 +167,7 @@ class DefaultSkillProvider:
 
         root_paths = self._build_root_paths(workspace_path)
 
-        if file_paths is None:
-            file_paths = self.drain_tracked_file_paths()
-        else:
-            file_paths = list(file_paths)
+        file_paths = self.drain_tracked_file_paths() if file_paths is None else list(file_paths)
 
         if not file_paths:
             return []

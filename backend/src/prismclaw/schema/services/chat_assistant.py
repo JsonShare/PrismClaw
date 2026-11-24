@@ -5,12 +5,13 @@ delivery → engine dependency (G2).
 
 All dependencies are on contracts/kernel layer only.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.storage.storage_types import SessionStore
@@ -41,7 +42,7 @@ def _file_reference_text(
     return " ".join(parts)
 
 
-def _extract_text_from_content(content: Any) -> str:
+def _extract_text_from_content(content: object) -> str:
     """Extract text from content that may be str, list[ContentBlock], or list[dict].
 
     Inlined from kernel.utils to break circular dependency.
@@ -109,10 +110,7 @@ def _extract_text_from_content(content: Any) -> str:
 
 def _looks_like_chinese_text(text: str) -> bool:
     """Inlined from kernel.text_utils to break circular dependency."""
-    for ch in text:
-        if "\u4e00" <= ch <= "\u9fff":
-            return True
-    return False
+    return any("一" <= ch <= "鿿" for ch in text)
 
 
 def _parse_json_string_list(raw: str, *, max_items: int) -> list[str]:
@@ -168,14 +166,15 @@ async def load_recent_transcript(
     selected: list[Any] = []
     user_count = 0
     for entry in reversed(branch):
-        if getattr(entry, 'type', None) != 'message':
+        if getattr(entry, "type", None) != "message":
             continue
-        if entry.partial:
+        if getattr(entry, "partial", False):
             continue
-        if entry.role not in roles:
+        role = getattr(entry, "role", "")
+        if role not in roles:
             continue
         selected.append(entry)
-        if entry.role == "user":
+        if role == "user":
             user_count += 1
             if user_count >= max_turns:
                 break
@@ -198,11 +197,7 @@ def format_transcript_text(
         if len(text) > max_chars_per_entry:
             text = text[:max_chars_per_entry].rstrip() + "…"
         role = (
-            "User"
-            if entry.role == "user"
-            else "Assistant"
-            if entry.role == "assistant"
-            else "Tool"
+            "User" if entry.role == "user" else "Assistant" if entry.role == "assistant" else "Tool"
         )
         lines.append(f"{role}: {text}")
         if entry.role == "user":
@@ -223,9 +218,7 @@ async def generate_followup_questions(
     """基于对话历史生成推荐追问问题。"""
     from prismclaw.schema.llm.request import PackedLLMRequest
 
-    selected = await load_recent_transcript(
-        session_store, session_id, max_turns=max_turns
-    )
+    selected = await load_recent_transcript(session_store, session_id, max_turns=max_turns)
     lines: list[str] = []
     last_user_text = ""
     for entry in selected:
@@ -254,7 +247,8 @@ async def generate_followup_questions(
 
     target_lang = "Chinese" if _looks_like_chinese_text(last_user_text) else "English"
     prompt = (
-        "Based on the conversation transcript, generate exactly 3 follow-up questions the user could ask next.\n"
+        "Based on the conversation transcript, generate exactly 3 follow-up "
+        "questions the user could ask next.\n"
         "Rules:\n"
         "- Use the same language as the user's last message (target language: "
         f"{target_lang}).\n"

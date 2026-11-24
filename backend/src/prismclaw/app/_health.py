@@ -1,7 +1,9 @@
 """Health check endpoint builder."""
+
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import FastAPI, Request
 
@@ -12,13 +14,16 @@ def build_health_endpoint(app: FastAPI) -> None:
     """Register the ``/api/health`` endpoint on *app*."""
 
     @app.get("/api/health")
-    async def health(request: Request) -> dict:
+    async def health(request: Request) -> dict[str, Any]:
         from prismclaw.infra.redis import ping as redis_ping
         from prismclaw.runtime.facade.runtime_mode import build_runtime_mode_snapshot
 
         backend = getattr(request.app.state, "session_store", None)
         redis_client = getattr(request.app.state, "redis_client", None)
-        result: dict = {"status": "ok", "storage": type(backend).__name__ if backend else "none"}
+        result: dict[str, Any] = {
+            "status": "ok",
+            "storage": type(backend).__name__ if backend else "none",
+        }
         if redis_client is not None:
             result["redis"] = "ok" if await redis_ping(redis_client) else "error"
 
@@ -69,15 +74,23 @@ def build_health_endpoint(app: FastAPI) -> None:
                 dispatch_status = {"available": False, "summary": {"health_status": "unavailable"}}
             summary = dispatch_status.get("summary") if isinstance(dispatch_status, dict) else {}
             dead_letter_metrics = (
-                dispatch_status.get("dead_letter_metrics") if isinstance(dispatch_status, dict) else {}
+                dispatch_status.get("dead_letter_metrics")
+                if isinstance(dispatch_status, dict)
+                else {}
             )
-            session_health = dispatch_status.get("session_health") if isinstance(dispatch_status, dict) else {}
+            session_health = (
+                dispatch_status.get("session_health") if isinstance(dispatch_status, dict) else {}
+            )
             summary = summary if isinstance(summary, dict) else {}
-            dead_letter_metrics = dead_letter_metrics if isinstance(dead_letter_metrics, dict) else {}
+            dead_letter_metrics = (
+                dead_letter_metrics if isinstance(dead_letter_metrics, dict) else {}
+            )
             session_health = session_health if isinstance(session_health, dict) else {}
             health_status = str(summary.get("health_status", "unknown") or "unknown")
             result["dream_dispatch"] = {
-                "available": bool(dispatch_status.get("available")) if isinstance(dispatch_status, dict) else False,
+                "available": bool(dispatch_status.get("available"))
+                if isinstance(dispatch_status, dict)
+                else False,
                 "health_status": health_status,
                 "queue_backlog": int(summary.get("queue_backlog", 0) or 0),
                 "dead_letter_count": int(dead_letter_metrics.get("total_count", 0) or 0),

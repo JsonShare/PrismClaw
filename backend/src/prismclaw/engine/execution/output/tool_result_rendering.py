@@ -57,9 +57,7 @@ def tool_result_to_llm_content(result: ToolResult) -> str:
         envelope_data = json.loads(text)
     except ValueError:
         return text
-    if not isinstance(envelope_data, dict) or not (
-        _SUBAGENT_ENVELOPE_KEYS & envelope_data.keys()
-    ):
+    if not isinstance(envelope_data, dict) or not (_SUBAGENT_ENVELOPE_KEYS & envelope_data.keys()):
         return text
     try:
         envelope = SubagentResultEnvelope.model_validate_json(text)

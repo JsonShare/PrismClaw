@@ -1,17 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from prismclaw.schema.agent.session import AgentMessageDict
 from prismclaw.schema.content.context import ContextPackLayout, TaskProfile
 from prismclaw.schema.content.evidence import ContextGraph, EvidenceStrategy
-from prismclaw.schema.content import (
-    PreservationContract,
-    SemanticCapsule,
-)
-
+from prismclaw.schema.content.preservation import PreservationContract, SemanticCapsule
 
 CompactionArtifactType = Literal[
     "tool_result_compaction",
@@ -76,7 +73,7 @@ class CompactionArtifact(BaseModel):
         strategies: list[str],
         frozen: bool,
         state_updates: dict[str, Any] | None = None,
-    ) -> "CompactionArtifact":
+    ) -> CompactionArtifact:
         return cls(
             artifact_type="tool_result_compaction",
             artifact_id=artifact_id,
@@ -112,7 +109,7 @@ class CompactionArtifact(BaseModel):
         strategies: list[str],
         frozen: bool,
         state_updates: dict[str, Any] | None = None,
-    ) -> "CompactionArtifact":
+    ) -> CompactionArtifact:
         return cls(
             artifact_type="context_block_compaction",
             artifact_id=artifact_id,
@@ -144,7 +141,7 @@ class CompactionArtifact(BaseModel):
         preserved_identifiers: list[str],
         state_updates: dict[str, Any] | None = None,
         boundary: CompactionBoundary | None = None,
-    ) -> "CompactionArtifact":
+    ) -> CompactionArtifact:
         return cls(
             artifact_type="history_compaction_summary",
             artifact_id=artifact_id,
@@ -164,7 +161,7 @@ class CompactionArtifact(BaseModel):
         return self.model_dump(mode="json", exclude_none=True)
 
 
-def parse_compaction_artifact(data: Any | None) -> CompactionArtifact | None:
+def parse_compaction_artifact(data: object) -> CompactionArtifact | None:
     if isinstance(data, CompactionArtifact):
         return data
     if not isinstance(data, dict) or not data:
@@ -189,7 +186,11 @@ def coerce_compaction_artifact(data: dict[str, Any] | None) -> CompactionArtifac
                 artifact_id=reference_id,
                 block_source=str(data.get("block_source") or ""),
                 block_id=str(data.get("block_id") or ""),
-                source_digest=(str(data.get("source_digest")) if data.get("source_digest") is not None else None),
+                source_digest=(
+                    str(data.get("source_digest"))
+                    if data.get("source_digest") is not None
+                    else None
+                ),
                 material_type=str(data.get("material_type") or "generic_text"),
                 original_chars=int(data.get("original_chars") or 0),
                 compacted_chars=int(data.get("compacted_chars") or 0),
@@ -201,8 +202,12 @@ def coerce_compaction_artifact(data: dict[str, Any] | None) -> CompactionArtifac
         return CompactionArtifact.for_tool_result(
             artifact_id=reference_id,
             tool_name=str(data.get("tool_name") or ""),
-            tool_call_id=(str(data.get("tool_call_id")) if data.get("tool_call_id") is not None else None),
-            source_digest=(str(data.get("source_digest")) if data.get("source_digest") is not None else None),
+            tool_call_id=(
+                str(data.get("tool_call_id")) if data.get("tool_call_id") is not None else None
+            ),
+            source_digest=(
+                str(data.get("source_digest")) if data.get("source_digest") is not None else None
+            ),
             material_type=str(data.get("material_type") or "generic_text"),
             original_chars=int(data.get("original_chars") or 0),
             compacted_chars=int(data.get("compacted_chars") or 0),
@@ -247,21 +252,19 @@ class DecisionLedgerEvent(BaseModel):
     turn_index: int = 1
     summary: str
     payload: dict[str, Any] = Field(default_factory=dict)
-    timestamp: str = Field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
 class AssembleResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    messages: list[dict[str, Any]]
+    messages: list[AgentMessageDict]
     context_layout: ContextPackLayout = Field(default_factory=lambda: ContextPackLayout())
     task_profile: TaskProfile | None = None
     evidence_strategy: EvidenceStrategy | None = None
     context_graph: ContextGraph | None = None
     estimated_tokens: int = 0
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, __context: object) -> None:
         if self.estimated_tokens <= 0:
             self.estimated_tokens = sum(
                 block.estimated_tokens for block in self.context_layout.all_blocks()

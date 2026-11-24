@@ -79,6 +79,28 @@ export interface ConvState {
   lastFinalizedAt: number | null
 }
 
+/**
+ * 当前轮正文的唯一归属判据：live 气泡是否正在渲染这一轮。
+ *
+ * 澄清态不渲染 live 气泡（弹层接管），因此此时不能把 in_progress 消息藏掉，
+ * 否则用户回答完澄清问题前会看不到已经写出的正文。
+ */
+export const liveOwnsCurrentTurn = (conv: Pick<ConvState, 'isStreaming' | 'clarify'>): boolean =>
+  conv.isStreaming && !conv.clarify
+
+/**
+ * 渲染用消息视图：当前轮由 live 气泡负责时，权威层里这一轮的分步落库消息让位。
+ *
+ * 后端 /messages 把运行中这一轮标 in_progress（消息已分步落库，正文仍由实时流
+ * 续写）。两份同时渲染会出现同一段文字上下各一遍——这正是「回答被分割成两部分」
+ * 的形态。裁决放在这里一处，各数据入口（open/sync/snapshot/delta/loadOlder）
+ * 只做原样保存，不因运行态增删消息。
+ */
+export const visibleMessages = (conv: ConvState): Message[] =>
+  liveOwnsCurrentTurn(conv)
+    ? conv.messages.filter((message) => !message.inProgress)
+    : conv.messages
+
 interface ChatStore {
   conversations: SessionMeta[]
   listWorkspaceId: string
@@ -383,7 +405,7 @@ export const useChatStore = create<ChatStore>((set, get) => {
         if (!finalizedRecently(conv)) patchConv(sessionId, runToPatch(frame.data))
         break
 
-      case 'event:outputs': {
+      case 'event:outbox': {
         const files = (frame.data.files ?? []).filter(
           (file): file is string => typeof file === 'string' && file.trim().length > 0,
         )

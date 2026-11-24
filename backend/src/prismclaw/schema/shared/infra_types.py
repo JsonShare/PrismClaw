@@ -2,6 +2,7 @@
 
 Protocols for metrics emission and settings access.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any, Protocol
 
 
 class MetricsSinkProtocol(Protocol):
-    """Protocol for metrics emission — duck-typing compatible with infra/metrics._MetricsRegistry."""
+    """指标上报协议；与 infra/metrics._MetricsRegistry 鸭子类型兼容。"""
 
     def emit(
         self,

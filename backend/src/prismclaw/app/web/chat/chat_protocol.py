@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from collections import deque
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from prismclaw.app.web.connection import ConnectionState
 from prismclaw.app.web.protocol.messages import (
     ChatSendMessage,
 )
-from prismclaw.app.web.connection import ConnectionState
-from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.infra.task_manager import TaskManager
+from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.schema.content.streaming import SubagentProgressBatch
 
 logger = logging.getLogger(__name__)
@@ -219,10 +220,8 @@ class _ApprovalRuntime:
                 )
             entry.event.set()
         if grace_s and grace_s > 0:
-            try:
+            with contextlib.suppress(asyncio.CancelledError, BaseException):
                 await asyncio.sleep(grace_s)
-            except (asyncio.CancelledError, BaseException):
-                pass
         self._entries.clear()
 
 
@@ -269,7 +268,7 @@ class ConversationWebRuntimeProjection:
 
 
 def _set_loading_active(
-    queue: "SessionQueue",
+    queue: SessionQueue,
     *,
     conversation_id: str,
     active: bool,
@@ -495,7 +494,9 @@ class SessionQueue:
         实际转移发生在 consumer 取出时（消息本体温留排队队列，保持 FIFO
         时序与单消费者模型不变）。
         """
-        if not client_message_id or client_message_id not in self._queue_index.get(conversation_id, {}):
+        if not client_message_id or client_message_id not in self._queue_index.get(
+            conversation_id, {}
+        ):
             return (STEER_NOT_FOUND, self._steering_channel_len(conversation_id))
         steered = self._steered.setdefault(conversation_id, set())
         if client_message_id in steered:
@@ -511,7 +512,9 @@ class SessionQueue:
         若该消息已标记提升但尚未转移，一并撤销提升标记：取消是更明确的
         用户意图，优先于提升（宁可不注入，也不注入刚被取消的内容）。
         """
-        if not client_message_id or client_message_id not in self._queue_index.get(conversation_id, {}):
+        if not client_message_id or client_message_id not in self._queue_index.get(
+            conversation_id, {}
+        ):
             return STEER_NOT_FOUND
         steered = self._steered.get(conversation_id)
         if steered is not None:
@@ -519,7 +522,9 @@ class SessionQueue:
         self._cancelled.setdefault(conversation_id, set()).add(client_message_id)
         return CANCEL_OK
 
-    def push_steering(self, conversation_id: str, msg: ChatSendMessage, handler: MessageHandler) -> None:
+    def push_steering(
+        self, conversation_id: str, msg: ChatSendMessage, handler: MessageHandler
+    ) -> None:
         """消息进入 steering 队列（consumer 转移时调用；cap 已在 mark 阶段把关）。"""
         self._steering.setdefault(conversation_id, deque()).append((msg, handler))
 
@@ -775,15 +780,11 @@ class SessionQueue:
             except Exception:
                 logger.debug("approval mark_stale_for_conversation failed", exc_info=True)
         for event in self._abort_events.values():
-            try:
+            with contextlib.suppress(Exception):
                 event.set()
-            except Exception:
-                pass
         for rc in self._run_controls.values():
-            try:
+            with contextlib.suppress(Exception):
                 rc.abort_event.set()
-            except Exception:
-                pass
         if self._task_manager is not None:
             for tid in list(self._consumers.values()):
                 handle = self._task_manager._tasks.get(tid)
@@ -793,18 +794,16 @@ class SessionQueue:
         for t in pending:
             t.cancel()
         if pending:
-            try:
-                await asyncio.wait(pending, timeout=max(0.0, grace_s), return_when=asyncio.ALL_COMPLETED)
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                await asyncio.wait(
+                    pending, timeout=max(0.0, grace_s), return_when=asyncio.ALL_COMPLETED
+                )
             for t in pending:
                 if not t.done():
                     self._detached_tasks.discard(t)
                 else:
-                    try:
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
                         t.result()
-                    except (asyncio.CancelledError, Exception):
-                        pass
         try:
             await self._approval_runtime.shutdown(grace_s=max(0.0, grace_s))
         except Exception:
@@ -829,4 +828,4 @@ def _get_session_queue(state: ConnectionState) -> SessionQueue:
     from prismclaw.app.web.deps import WebDeps
 
     web_deps: WebDeps = state.ws.app.state.web_deps
-    return cast(SessionQueue, web_deps.session_queue)
+    return web_deps.session_queue

@@ -53,7 +53,7 @@ class ContextBlock(BaseModel):
     state_payload: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, __context: object) -> None:
         if self.estimated_tokens <= 0:
             self.estimated_tokens = _estimate_tokens(self.content)
 

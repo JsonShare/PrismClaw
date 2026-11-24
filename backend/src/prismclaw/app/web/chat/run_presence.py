@@ -20,7 +20,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +44,7 @@ RunState = Literal["active", "idle", "unknown"]
 class RunPresence:
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: Redis,
         *,
         on_abort: Callable[[str], None] | None = None,
     ) -> None:
@@ -67,9 +70,7 @@ class RunPresence:
         await self.ensure_started()
         try:
             await asyncio.wait_for(
-                self._redis.set(
-                    self._key(conversation_id), "active", ex=RUN_TTL_SECONDS
-                ),
+                self._redis.set(self._key(conversation_id), "active", ex=RUN_TTL_SECONDS),
                 timeout=_OP_TIMEOUT_SECONDS,
             )
         except Exception:
@@ -109,9 +110,7 @@ class RunPresence:
             return []
         pattern = f"{RUN_KEY_PREFIX}{conversation_id_prefix}*"
         try:
-            return await asyncio.wait_for(
-                self._scan_active(pattern), timeout=_SCAN_TIMEOUT_SECONDS
-            )
+            return await asyncio.wait_for(self._scan_active(pattern), timeout=_SCAN_TIMEOUT_SECONDS)
         except Exception:
             logger.debug("run_presence.scan_failed", exc_info=True)
             return []
@@ -120,7 +119,7 @@ class RunPresence:
         found: list[str] = []
         async for key in self._redis.scan_iter(match=pattern, count=200):
             if isinstance(key, str) and key.startswith(RUN_KEY_PREFIX):
-                found.append(key[len(RUN_KEY_PREFIX):])
+                found.append(key[len(RUN_KEY_PREFIX) :])
         return found
 
     async def heartbeat(self, conversation_id: str) -> None:
@@ -152,9 +151,7 @@ class RunPresence:
         async with self._start_lock:
             if self._listener is not None and not self._listener.done():
                 return
-            self._listener = asyncio.create_task(
-                self._listen_forever(), name="run-presence-abort"
-            )
+            self._listener = asyncio.create_task(self._listen_forever(), name="run-presence-abort")
 
     async def _listen_forever(self) -> None:
         backoff = 1.0

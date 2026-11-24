@@ -3,10 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, time as datetime_time, timedelta
-from typing import Any, Protocol
+from datetime import datetime, timedelta, tzinfo
+from datetime import time as datetime_time
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from prismclaw.schema.dream.dream import DreamStateStore
+from prismclaw.schema.dream.dream_types import DreamSessionState
 
 from .dispatch import (
     DreamDispatchJob,
@@ -14,15 +19,34 @@ from .dispatch import (
     build_nightly_dispatch_job,
 )
 from .lock import DreamLockProvider
-from prismclaw.schema.dream.dream import DreamStateStore
-from prismclaw.schema.dream.dream_types import DreamSessionState
+
+if TYPE_CHECKING:
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 
 logger = logging.getLogger(__name__)
 
 
 class DreamEngineLike(Protocol):
     async def run_light(self, session_key: str) -> dict[str, Any]: ...
-    async def run_nightly(self, session_key: str, *, include_light: bool = False) -> dict[str, Any]: ...
+    async def run_nightly(
+        self, session_key: str, *, include_light: bool = False
+    ) -> dict[str, Any]: ...
+
+
+class DreamWorkerRegistry(Protocol):
+    """Worker 注册表：用于判定本 worker 是否承担扫描职责。"""
+
+    @property
+    def available(self) -> bool: ...
+    @property
+    def worker_id(self) -> str: ...
+    async def active_workers(self, *, stale_threshold: float) -> list[dict[str, Any]]: ...
+
+
+class DreamDispatchQueuePort(Protocol):
+    """Dream 派发队列：仅需支持入队。"""
+
+    async def enqueue(self, job: DreamDispatchJob) -> bool: ...
 
 
 class DreamSchedulerSettings(Protocol):
@@ -35,7 +59,7 @@ class DreamSchedulerSettings(Protocol):
     nightly_end_hour_local: int
     nightly_catch_up_grace_minutes: int
     nightly_max_sessions: int
-    multi_worker_scan_policy: str
+    multi_worker_scan_policy: Literal["all", "leader_only"]
 
 
 @dataclass(slots=True)
@@ -51,13 +75,13 @@ class DreamScheduler:
         *,
         dreaming_engine: DreamEngineLike | None,
         settings: DreamSchedulerSettings,
-        time_fn: Any = None,
+        time_fn: Callable[[], float] | None = None,
         state_store: DreamStateStore | None = None,
         lock_provider: DreamLockProvider | None = None,
-        task_manager: Any | None = None,
-        worker_registry: Any | None = None,
+        task_manager: TaskManagerProtocol | None = None,
+        worker_registry: DreamWorkerRegistry | None = None,
         worker_stale_threshold_s: float = 90.0,
-        dispatch_queue: Any | None = None,
+        dispatch_queue: DreamDispatchQueuePort | None = None,
     ) -> None:
         self._dreaming_engine = dreaming_engine
         self._settings = settings
@@ -74,9 +98,11 @@ class DreamScheduler:
         self._task_manager = task_manager
         self._worker_registry = worker_registry
         self._worker_stale_threshold_s = max(1.0, float(worker_stale_threshold_s))
-        self._multi_worker_scan_policy = str(
-            getattr(settings, "multi_worker_scan_policy", "leader_only") or "leader_only"
-        ).strip().lower()
+        self._multi_worker_scan_policy = (
+            str(getattr(settings, "multi_worker_scan_policy", "leader_only") or "leader_only")
+            .strip()
+            .lower()
+        )
         self._dispatch_queue = dispatch_queue
         self._started = False
         if self._task_manager is not None:
@@ -90,7 +116,7 @@ class DreamScheduler:
     def state_store(self) -> DreamStateStore:
         return self._state_store
 
-    def start(self, task_manager: Any | None) -> None:
+    def start(self, task_manager: TaskManagerProtocol | None) -> None:
         if task_manager is not None:
             self._task_manager = task_manager
         if self._started or task_manager is None or not self._settings.enabled:
@@ -126,7 +152,9 @@ class DreamScheduler:
     async def enqueue_nightly(self, session_key: str) -> DreamSessionState:
         state = await self._state_store.get(session_key)
         if state is None:
-            state = DreamSessionState(session_key=session_key, last_activity_at=float(self._time_fn()))
+            state = DreamSessionState(
+                session_key=session_key, last_activity_at=float(self._time_fn())
+            )
         now = float(self._time_fn())
         state.nightly_pending = True
         state.last_enqueue_nightly_at = now
@@ -264,7 +292,9 @@ class DreamScheduler:
         if lease is None:
             # 锁被占说明该会话的 dream 正在被执行，本消息应 ack 丢弃而非重试进死信
             return True
-        state = (await self._state_store.get(session_key)) or DreamSessionState(session_key=session_key)
+        state = (await self._state_store.get(session_key)) or DreamSessionState(
+            session_key=session_key
+        )
         try:
             state.dream_lock_owner = "idle-light"
             state.dream_batch_id = f"light:{int(batch_started_at)}"
@@ -299,7 +329,9 @@ class DreamScheduler:
         if lease is None:
             # 锁被占说明该会话的 dream 正在被执行，本消息应 ack 丢弃而非重试进死信
             return True
-        state = (await self._state_store.get(session_key)) or DreamSessionState(session_key=session_key)
+        state = (await self._state_store.get(session_key)) or DreamSessionState(
+            session_key=session_key
+        )
         try:
             state.dream_lock_owner = "nightly-batch"
             state.dream_batch_id = f"nightly:{int(batch_started_at)}"
@@ -335,7 +367,10 @@ class DreamScheduler:
                     latest_state.last_gate_rejected_entries = int(
                         deep_result.get("gate_rejected_entries", 0) or 0
                     )
-                if latest_state.last_published_memory_count > 0 or result.get("rem_sleep") is not None:
+                if (
+                    latest_state.last_published_memory_count > 0
+                    or result.get("rem_sleep") is not None
+                ):
                     latest_state.publish_watermark_at = now
                 latest_state.last_nightly_window_started_at = nightly_window.start_at.timestamp()
                 if latest_state.last_activity_at <= batch_started_at:
@@ -381,7 +416,7 @@ class DreamScheduler:
             return True
         return last_run < nightly_window.start_at.timestamp()
 
-    def _normalize_nightly_now(self, now: datetime | Any | None) -> datetime:
+    def _normalize_nightly_now(self, now: datetime | object | None) -> datetime:
         if now is not None and not isinstance(now, datetime):
             return datetime.now(self._nightly_timezone).replace(
                 hour=int(getattr(now, "hour", 0)),
@@ -480,7 +515,9 @@ class DreamScheduler:
         try:
             workers = await registry.active_workers(stale_threshold=self._worker_stale_threshold_s)
         except Exception:
-            logger.warning("dream scan ownership resolution failed; falling back to local scan", exc_info=True)
+            logger.warning(
+                "dream scan ownership resolution failed; falling back to local scan", exc_info=True
+            )
             return True
         alive_ids = sorted(
             str(worker.get("id", "")).strip()
@@ -503,7 +540,7 @@ class DreamScheduler:
         return _NightlyWindow(start_at=start_at, end_at=end_at)
 
 
-def _resolve_nightly_timezone(raw_timezone: str) -> datetime.tzinfo:
+def _resolve_nightly_timezone(raw_timezone: str) -> tzinfo:
     normalized = raw_timezone.strip() if raw_timezone else "local"
     if not normalized or normalized.lower() == "local":
         local_tz = datetime.now().astimezone().tzinfo

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import json
 
-from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.agent.data_types import ContentBlock, ImageBlock, TextBlock
+from prismclaw.schema.content.content_types import ToolResult
 
 
 def _text_length(blocks: list[ContentBlock]) -> int:
@@ -68,14 +68,17 @@ def truncate_tool_result(result: ToolResult, max_chars: int) -> ToolResult:
         pass
 
     if is_json:
-        snipped_text = json.dumps({
-            "truncated": True,
-            "message": "因长度超限被截断（保留头部与尾部）",
-            "raw_preview": kept_head + "\n...[omitted]...\n" + kept_tail,
-            "omitted_chars": omitted_chars,
-            "kept_head_chars": head_len,
-            "kept_tail_chars": tail_len,
-        }, ensure_ascii=False)
+        snipped_text = json.dumps(
+            {
+                "truncated": True,
+                "message": "因长度超限被截断（保留头部与尾部）",
+                "raw_preview": kept_head + "\n...[omitted]...\n" + kept_tail,
+                "omitted_chars": omitted_chars,
+                "kept_head_chars": head_len,
+                "kept_tail_chars": tail_len,
+            },
+            ensure_ascii=False,
+        )
         new_blocks: list[ContentBlock] = [TextBlock(text=snipped_text)]
     else:
         new_blocks = [TextBlock(text=kept_text)]
@@ -88,7 +91,7 @@ def truncate_tool_result(result: ToolResult, max_chars: int) -> ToolResult:
     )
 
 
-def resolve_max_output_chars(tool, default_cap: int) -> int:
+def resolve_max_output_chars(tool: object, default_cap: int) -> int:
     override = getattr(tool, "max_output_chars", None)
     if override is None:
         return default_cap

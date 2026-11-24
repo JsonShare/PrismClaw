@@ -6,13 +6,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.schema.agent.types import RunRequest
     from prismclaw.schema.session import SessionTree
 
 from prismclaw.engine.execution.capabilities.catalog import (
     CapabilityCatalogService,
     CapabilityKind,
 )
-from prismclaw.engine.execution.request.system_prompt import (
+from prismclaw.engine.execution.request._prompt_types import (
     AvailableSubagentEntry,
     MarketplaceSummary,
     SystemPromptResult,
@@ -30,10 +32,9 @@ ShellCacheKey = tuple[
     str,
     int,
     int,
-    str | None,
-    str,
     tuple[str, ...],
     tuple[str, ...],
+    tuple[str, ...],  # visible_tool_names：<tools> 段的直接数据源
     str,  # skill_catalog_fingerprint
     str,  # subagent_catalog_fingerprint
 ]
@@ -44,9 +45,8 @@ class StaticContextResult:
     prompt_inputs: Any  # PromptInputs
     frozen_result: SystemPromptResult
     history_budget: int
-    request_mode: str | None
     prior_replacement_state: ReplacementDecisionState | None
-    shell_snapshot: "StaticTurnShellSnapshot | None" = None
+    shell_snapshot: StaticTurnShellSnapshot | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +54,6 @@ class StaticTurnShellSnapshot:
     workspace_id: str
     workspace_path: str | None
     model: str
-    request_mode: str | None
     tool_summaries: tuple[tuple[str, str], ...]
     subagent_registry_size: int
     handoff_enabled: bool
@@ -73,7 +72,19 @@ class StaticTurnShellSnapshot:
 
 
 class StaticTurnShellCache:
-    def __init__(self) -> None:
+    """静态壳缓存：键为 workspace 事实，不随决策漂移，条目数受 LRU 约束。
+
+    会话内 ``plugin_generation`` / ``discovered_tools`` / ``subagent_depth`` /
+    ``skill_invocation`` 都会变化，每次都产生新条目。键可以合法地多，
+    但生命周期必须有界——否则一个长会话会无限堆积整段 system 前缀。
+    """
+
+    # 覆盖单会话内的合法键变动次数（发现累积 × 插件代际 × 技能激活 × 子代理层级），
+    # 超出即淘汰最久未用条目。
+    MAX_ENTRIES = 32
+
+    def __init__(self, max_entries: int = MAX_ENTRIES) -> None:
+        self._max_entries = max_entries
         self._entries: dict[ShellCacheKey, StaticTurnShellSnapshot] = {}
 
     @property
@@ -81,16 +92,26 @@ class StaticTurnShellCache:
         return self._entries
 
     def get(self, key: ShellCacheKey) -> StaticTurnShellSnapshot | None:
-        return self._entries.get(key)
+        snapshot = self._entries.get(key)
+        if snapshot is not None:
+            # 命中即续期：dict 保序，移到末尾即最新。
+            self._entries.pop(key)
+            self._entries[key] = snapshot
+        return snapshot
 
     def put(self, key: ShellCacheKey, snapshot: StaticTurnShellSnapshot) -> None:
+        self._entries.pop(key, None)
         self._entries[key] = snapshot
+        while len(self._entries) > self._max_entries:
+            oldest = next(iter(self._entries))
+            self._entries.pop(oldest)
+            logger.debug("static_shell_cache.evict oldest_key=%s", oldest[:4])
 
     def clear(self) -> None:
         self._entries.clear()
 
 
-def _load_prior_replacement_state(tree: "SessionTree") -> ReplacementDecisionState | None:
+def _load_prior_replacement_state(tree: SessionTree) -> ReplacementDecisionState | None:
     try:
         engine: SessionProjectionEngine = SessionProjectionEngine(tree)
         state = engine.replacement.get_state()
@@ -100,14 +121,14 @@ def _load_prior_replacement_state(tree: "SessionTree") -> ReplacementDecisionSta
     return state if state.decisions else None
 
 
-def _resolve_static_shell_cache(deps: Any) -> StaticTurnShellCache:
+def _resolve_static_shell_cache(deps: AgentRunnerDeps) -> StaticTurnShellCache:
     cache = getattr(deps, "static_shell_cache", None)
     if isinstance(cache, StaticTurnShellCache):
         return cache
     raise RuntimeError("AgentRunnerDeps.static_shell_cache is required for prompt planning")
 
 
-def _plugin_generation(deps: Any) -> int:
+def _plugin_generation(deps: AgentRunnerDeps) -> int:
     lifecycle = getattr(deps.plugin, "lifecycle_manager", None)
     generation = getattr(lifecycle, "generation", 0)
     return generation if isinstance(generation, int) else 0
@@ -172,14 +193,14 @@ def _subagent_catalog_fingerprint(catalog: CapabilityCatalogService | None) -> s
 
 def _shell_cache_key(
     *,
-    request: Any,
+    request: RunRequest,
     tool_workspace_path: str | None,
     effective_model: str,
-    request_mode: str | None,
-    deps: Any,
+    deps: AgentRunnerDeps,
     skill_invocation: SkillInvocationState | None,
     discovered_tools: set[str] | None,
     subagent_depth: int,
+    visible_tool_names: set[str],
     skill_catalog_fingerprint: str = "",
     subagent_catalog_fingerprint: str = "",
 ) -> ShellCacheKey:
@@ -187,6 +208,10 @@ def _shell_cache_key(
     active_skill_name = skill_invocation.skill_name if skill_invocation else None
     allowed_tools = tuple(skill_invocation.allowed_tools_override or ()) if skill_invocation else ()
     discovered_names = tuple(sorted(discovered_tools or ()))
+    # <tools> 段直接由本轮可见集渲染（SDD D14），因此可见集是壳内容的
+    # 事实输入，必须进键——否则同一会话内插件作用域 / 熔断 / 技能解锁
+    # 改变可见集后会命中旧壳，提示词与实际工具面再次不一致。
+    visible_names = tuple(sorted(visible_tool_names))
     return (
         str(request.session_id),
         str(request.workspace_id),
@@ -194,9 +219,9 @@ def _shell_cache_key(
         effective_model,
         _plugin_generation(deps),
         subagent_depth,
-        request_mode or "",
         (active_skill_name or "", *allowed_tools),
         discovered_names,
+        visible_names,
         skill_catalog_fingerprint,
         subagent_catalog_fingerprint,
     )

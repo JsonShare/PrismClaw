@@ -5,10 +5,10 @@ WorkspaceRuntimeClient 是工具与 Runtime-Agent 之间的通信层。
 而是通过此客户端发送 HTTP 请求到 Runtime-Agent，由 Agent 在容器内执行。
 
 架构：
-  Tool → WorkspaceRuntimeClient.bash("ls", tier=STANDARD) 
-       → HMAC 签名 + HTTP POST 
-       → Runtime-Agent /bash 
-       → BwrapPolicy 执行 
+  Tool → WorkspaceRuntimeClient.bash("ls", tier=STANDARD)
+       → HMAC 签名 + HTTP POST
+       → Runtime-Agent /bash
+       → BwrapPolicy 执行
        → CommandResult
 
 安全：
@@ -16,18 +16,21 @@ WorkspaceRuntimeClient 是工具与 Runtime-Agent 之间的通信层。
   - 密钥从环境变量 / Vault 动态拉取
   - 90 天轮换 + 7 天共存窗口
 """
+
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import hmac
 import json
 import logging
 import os
-from typing import Any, Tuple
+from typing import Any
 
 import httpx
 
+from prismclaw.schema.services.env_types import CommandResult, FileResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,7 @@ logger = logging.getLogger(__name__)
 # ── UTF-8 字节安全切片（用于 write_stream 文本模式字节分片） ─────────────
 
 
-def _cut_utf8_safe(data: bytes, max_bytes: int) -> Tuple[bytes, str]:
+def _cut_utf8_safe(data: bytes, max_bytes: int) -> tuple[bytes, str]:
     """返回 data 中不超过 max_bytes 的**最长合法 UTF-8 前缀**。
 
     Args:
@@ -61,7 +64,7 @@ def _cut_utf8_safe(data: bytes, max_bytes: int) -> Tuple[bytes, str]:
     scan_from = max(0, max_bytes - 6)
     for pos in range(max_bytes, scan_from - 1, -1):
         b = data[pos] if pos < len(data) else 0
-        if (b & 0x80) == 0:                       # 1B ASCII start
+        if (b & 0x80) == 0:  # 1B ASCII start
             cut = pos + 1
             break
         if (b & 0xE0) == 0xC0 and pos + 2 <= max_bytes:  # 2B start
@@ -89,8 +92,6 @@ def _cut_utf8_safe(data: bytes, max_bytes: int) -> Tuple[bytes, str]:
 
 # ── 数据类型 ──────────────────────────────────────────────────────────
 
-from prismclaw.schema.services.env_types import CommandResult, FileResult
-
 
 # ── HMAC 签名 ──────────────────────────────────────────────────────────
 
@@ -99,6 +100,14 @@ def _sign_payload(body: bytes, secret: str, key_version: str) -> str:
     """HMAC-SHA256 签名，格式：v{key_version}:sha256-hmac-body"""
     sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return f"v{key_version}:{sig}"
+
+
+def _response_object(resp: httpx.Response) -> dict[str, Any]:
+    """解析响应体为 JSON 对象；非对象响应视为协议错误。"""
+    data: object = resp.json()
+    if isinstance(data, dict):
+        return data
+    raise ValueError(f"Runtime-Agent returned non-object JSON body: {resp.request.url}")
 
 
 def _with_root(payload: dict[str, Any], workspace_root: str | None) -> dict[str, Any]:
@@ -145,7 +154,9 @@ class WorkspaceRuntimeClient:
                     logger.warning("PRISMCLAW_RUNTIME_AGENT_URLS is not valid JSON: %r", env_map)
         if not self._agent_urls:
             self._agent_urls["__default__"] = "http://localhost:9001"
-        self._hmac_secret = hmac_secret or os.getenv("PRISMCLAW_RUNTIME_HMAC_SECRET", "dev-secret")
+        self._hmac_secret: str = (
+            hmac_secret or os.getenv("PRISMCLAW_RUNTIME_HMAC_SECRET") or "dev-secret"
+        )
         self._hmac_key_version = hmac_key_version
         self._workspace_id = workspace_id
         self._timeout = timeout_seconds
@@ -210,7 +221,7 @@ class WorkspaceRuntimeClient:
             },
         )
         resp.raise_for_status()
-        return resp.json()
+        return _response_object(resp)
 
     async def _get(
         self,
@@ -233,7 +244,7 @@ class WorkspaceRuntimeClient:
             },
         )
         resp.raise_for_status()
-        return resp.json()
+        return _response_object(resp)
 
     # ── 公共 API ──────────────────────────────────────────────────────
 
@@ -264,7 +275,9 @@ class WorkspaceRuntimeClient:
             payload["hard_timeout"] = int(hard_timeout)
         _with_root(payload, workspace_root)
 
-        data = await self._post("/bash", payload, template_id=template_id, workspace_id=workspace_id)
+        data = await self._post(
+            "/bash", payload, template_id=template_id, workspace_id=workspace_id
+        )
         if data.get("detached"):
             return data
         return CommandResult(
@@ -275,32 +288,90 @@ class WorkspaceRuntimeClient:
             sandbox_tier_used=data.get("tier_used", str(tier)),
         )
 
-    async def read_text(self, path: str, *, encoding: str = "utf-8", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def read_text(
+        self,
+        path: str,
+        *,
+        encoding: str = "utf-8",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         """在容器内读取文本文件。"""
-        data = await self._post("/read", _with_root({"path": path, "mode": "text", "encoding": encoding}, workspace_root), template_id=template_id, workspace_id=workspace_id)
+        data = await self._post(
+            "/read",
+            _with_root({"path": path, "mode": "text", "encoding": encoding}, workspace_root),
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
         if data.get("success"):
             return FileResult(success=True, content=data.get("content", ""))
         return FileResult(success=False, error=data.get("error", "unknown error"))
 
-    async def write_text(self, path: str, content: str, *, encoding: str = "utf-8", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def write_text(
+        self,
+        path: str,
+        content: str,
+        *,
+        encoding: str = "utf-8",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         """在容器内写入文本文件。"""
-        data = await self._post("/write", _with_root({"path": path, "content": content, "mode": "text", "encoding": encoding}, workspace_root), template_id=template_id, workspace_id=workspace_id)
+        data = await self._post(
+            "/write",
+            _with_root(
+                {"path": path, "content": content, "mode": "text", "encoding": encoding},
+                workspace_root,
+            ),
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
         return FileResult(success=data.get("success", False), error=data.get("error"))
 
-    async def read_bytes(self, path: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def read_bytes(
+        self,
+        path: str,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         """在容器内读取二进制文件。"""
-        data = await self._post("/read", _with_root({"path": path, "mode": "bytes"}, workspace_root), template_id=template_id, workspace_id=workspace_id)
+        data = await self._post(
+            "/read",
+            _with_root({"path": path, "mode": "bytes"}, workspace_root),
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
         if data.get("success"):
             return FileResult(success=True, content=base64.b64decode(data.get("content_b64", "")))
         return FileResult(success=False, error=data.get("error", "unknown error"))
 
-    async def write_bytes(self, path: str, content: bytes, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def write_bytes(
+        self,
+        path: str,
+        content: bytes,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         """在容器内写入二进制文件。"""
-        data = await self._post("/write", _with_root({
-            "path": path,
-            "content_b64": base64.b64encode(content).decode(),
-            "mode": "bytes",
-        }, workspace_root), template_id=template_id, workspace_id=workspace_id)
+        data = await self._post(
+            "/write",
+            _with_root(
+                {
+                    "path": path,
+                    "content_b64": base64.b64encode(content).decode(),
+                    "mode": "bytes",
+                },
+                workspace_root,
+            ),
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
         return FileResult(success=data.get("success", False), error=data.get("error"))
 
     async def write_stream(
@@ -341,10 +412,7 @@ class WorkspaceRuntimeClient:
 
         # 统一规范化为 bytes 以便按字节切片
         if mode == "bytes":
-            if isinstance(content, str):
-                payload = content.encode(encoding)
-            else:
-                payload = content
+            payload = content.encode(encoding) if isinstance(content, str) else content
             send_mode = "bytes"
         else:  # text
             text = content if isinstance(content, str) else content.decode(encoding)
@@ -352,12 +420,20 @@ class WorkspaceRuntimeClient:
             send_mode = "text"
 
         # begin（告知 server 按 text/bytes 模式写出，encoding 也一并传递）
-        begin_data = await self._post("/write_stream", _with_root({
-            "action": "begin",
-            "path": path,
-            "mode": send_mode,
-            "encoding": encoding,
-        }, workspace_root), template_id=template_id, workspace_id=workspace_id)
+        begin_data = await self._post(
+            "/write_stream",
+            _with_root(
+                {
+                    "action": "begin",
+                    "path": path,
+                    "mode": send_mode,
+                    "encoding": encoding,
+                },
+                workspace_root,
+            ),
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
         if not begin_data.get("success"):
             return FileResult(success=False, error=begin_data.get("error", "begin failed"))
         session_id = begin_data["session_id"]
@@ -367,7 +443,7 @@ class WorkspaceRuntimeClient:
             offset = 0
             while offset < total:
                 if send_mode == "bytes":
-                    chunk_bytes = payload[offset:offset + chunk_size]
+                    chunk_bytes = payload[offset : offset + chunk_size]
                     send_data = base64.b64encode(chunk_bytes).decode("ascii")
                 else:
                     # text 模式：字节边界安全切割 → 返回合法 (bytes, str)
@@ -377,52 +453,143 @@ class WorkspaceRuntimeClient:
                         # 理论上不应触发（cut_utf8_safe 最坏返回空），兜底整段处理
                         chunk_bytes = remaining
                         send_data = remaining.decode(encoding, errors="replace")
-                chunk_data = await self._post("/write_stream", {
-                    "action": "chunk",
-                    "session_id": session_id,
-                    "data": send_data,
-                }, template_id=template_id, workspace_id=workspace_id)
+                chunk_data = await self._post(
+                    "/write_stream",
+                    {
+                        "action": "chunk",
+                        "session_id": session_id,
+                        "data": send_data,
+                    },
+                    template_id=template_id,
+                    workspace_id=workspace_id,
+                )
                 if not chunk_data.get("success"):
                     return FileResult(success=False, error=chunk_data.get("error", "chunk failed"))
                 offset += len(chunk_bytes)
 
             # finish
-            finish_data = await self._post("/write_stream", {
-                "action": "finish",
-                "session_id": session_id,
-            }, template_id=template_id, workspace_id=workspace_id)
-            return FileResult(success=finish_data.get("success", False), error=finish_data.get("error"))
+            finish_data = await self._post(
+                "/write_stream",
+                {
+                    "action": "finish",
+                    "session_id": session_id,
+                },
+                template_id=template_id,
+                workspace_id=workspace_id,
+            )
+            return FileResult(
+                success=finish_data.get("success", False), error=finish_data.get("error")
+            )
         except Exception as e:
             # 尝试清理会话
-            try:
-                await self._post("/write_stream", {"action": "finish", "session_id": session_id}, template_id=template_id, workspace_id=workspace_id)
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                await self._post(
+                    "/write_stream",
+                    {"action": "finish", "session_id": session_id},
+                    template_id=template_id,
+                    workspace_id=workspace_id,
+                )
             return FileResult(success=False, error=str(e))
 
-    async def http_get(self, url: str, *, tier: str = "standard", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def http_get(
+        self,
+        url: str,
+        *,
+        tier: str = "standard",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         """通过容器内代理获取 HTTP 资源。"""
-        data = await self._post("/http_get", {"url": url, "tier": str(tier)}, template_id=template_id, workspace_id=workspace_id)
+        data = await self._post(
+            "/http_get",
+            {"url": url, "tier": str(tier)},
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
         if data.get("success"):
-            return FileResult(success=True, content=data.get("content", ""), http_status_code=data.get("http_status_code"), http_headers=data.get("http_headers"))
-        return FileResult(success=False, error=data.get("error", "unknown error"), http_status_code=data.get("http_status_code"), http_headers=data.get("http_headers"))
+            return FileResult(
+                success=True,
+                content=data.get("content", ""),
+                http_status_code=data.get("http_status_code"),
+                http_headers=data.get("http_headers"),
+            )
+        return FileResult(
+            success=False,
+            error=data.get("error", "unknown error"),
+            http_status_code=data.get("http_status_code"),
+            http_headers=data.get("http_headers"),
+        )
 
-    async def fs_list(self, path: str = ".", *, recursive: bool = False, ignore_hidden: bool = True, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def fs_list(
+        self,
+        path: str = ".",
+        *,
+        recursive: bool = False,
+        ignore_hidden: bool = True,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         """列出容器内目录内容。"""
-        payload = _with_root({"path": path, "recursive": recursive, "ignore_hidden": ignore_hidden}, workspace_root)
+        payload = _with_root(
+            {"path": path, "recursive": recursive, "ignore_hidden": ignore_hidden}, workspace_root
+        )
         return await self._post("/fs/list", payload, template_id, workspace_id)
 
-    async def fs_glob(self, pattern: str = "*", path: str = ".", *, max_results: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def fs_glob(
+        self,
+        pattern: str = "*",
+        path: str = ".",
+        *,
+        max_results: int = 200,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         """在容器内按 glob 模式搜索文件。"""
-        payload = _with_root({"pattern": pattern, "path": path, "max_results": max_results}, workspace_root)
+        payload = _with_root(
+            {"pattern": pattern, "path": path, "max_results": max_results}, workspace_root
+        )
         return await self._post("/fs/glob", payload, template_id, workspace_id)
 
-    async def fs_grep(self, pattern: str, path: str = ".", *, include: str = "*", case_insensitive: bool = False, max_matches: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def fs_grep(
+        self,
+        pattern: str,
+        path: str = ".",
+        *,
+        include: str = "*",
+        case_insensitive: bool = False,
+        max_matches: int = 200,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         """在容器内按正则模式搜索文件内容。"""
-        payload = _with_root({"pattern": pattern, "path": path, "include": include, "case_insensitive": case_insensitive, "max_matches": max_matches}, workspace_root)
+        payload = _with_root(
+            {
+                "pattern": pattern,
+                "path": path,
+                "include": include,
+                "case_insensitive": case_insensitive,
+                "max_matches": max_matches,
+            },
+            workspace_root,
+        )
         return await self._post("/fs/grep", payload, template_id, workspace_id)
 
-    async def http_post(self, url: str, *, body: Any = None, headers: dict[str, str] | None = None, content_type: str = "application/json", tier: str = "standard", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def http_post(
+        self,
+        url: str,
+        *,
+        body: object = None,
+        headers: dict[str, str] | None = None,
+        content_type: str = "application/json",
+        tier: str = "standard",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         """通过容器内代理发送 HTTP POST 请求。"""
         payload: dict[str, Any] = {"url": url, "tier": str(tier)}
         if body is not None:
@@ -445,7 +612,12 @@ class WorkspaceRuntimeClient:
             http_headers=resp.get("http_headers"),
         )
 
-    async def health(self, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> bool:
+    async def health(
+        self,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> bool:
         """检查指定 template_id 的 Runtime-Agent 是否健康。"""
         try:
             client = await self._ensure_client(template_id)
@@ -454,38 +626,102 @@ class WorkspaceRuntimeClient:
         except Exception:
             return False
 
-    async def mcp_spawn(self, server_name: str, *, transport: str = "stdio", args: list[str] | None = None, env: dict[str, str] | None = None, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict:
+    async def mcp_spawn(
+        self,
+        server_name: str,
+        *,
+        transport: str = "stdio",
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         """在容器内启动 MCP 服务器。"""
-        return await self._post("/mcp/spawn", {"server_name": server_name, "transport": transport, "args": args or [], "env": env or {}}, template_id=template_id, workspace_id=workspace_id)
+        return await self._post(
+            "/mcp/spawn",
+            {
+                "server_name": server_name,
+                "transport": transport,
+                "args": args or [],
+                "env": env or {},
+            },
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
 
-    async def mcp_call(self, server_name: str, tool_name: str, arguments: dict | None = None, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict:
+    async def mcp_call(
+        self,
+        server_name: str,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         """调用容器内 MCP 服务器工具。"""
-        return await self._post("/mcp/call", {"server_name": server_name, "tool_name": tool_name, "arguments": arguments or {}}, template_id=template_id, workspace_id=workspace_id)
+        return await self._post(
+            "/mcp/call",
+            {"server_name": server_name, "tool_name": tool_name, "arguments": arguments or {}},
+            template_id=template_id,
+            workspace_id=workspace_id,
+        )
 
     # ── 归档 ──────────────────────────────────────────────────────────
 
-    async def archive_create(self, name: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def archive_create(
+        self,
+        name: str,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         payload = {"name": name}
         return await self._post("/archive/create", payload, template_id, workspace_id)
 
-    async def archive_restore(self, archive_id: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def archive_restore(
+        self,
+        archive_id: str,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         payload = {"archive_id": archive_id}
         return await self._post("/archive/restore", payload, template_id, workspace_id)
 
-    async def archive_list(self, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def archive_list(
+        self,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return await self._get("/archive/list", template_id, workspace_id)
 
     # ── 后台任务（与生产 server.py 端点一致）─────────────────────────────
 
     async def list_jobs(
-        self, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None
+        self,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
     ) -> list[dict[str, Any]]:
         """列出工作区后台任务。"""
         data = await self._get("/bash/jobs", template_id=template_id)
-        return data.get("jobs", [])
+        jobs = data.get("jobs")
+        if not isinstance(jobs, list):
+            return []
+        return [job for job in jobs if isinstance(job, dict)]
 
     async def job_status(
-        self, pid: int, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None
+        self,
+        pid: int,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
     ) -> dict[str, Any] | None:
         """查询后台任务状态；不存在返回 None。"""
         try:
@@ -496,10 +732,13 @@ class WorkspaceRuntimeClient:
             raise
 
     async def job_kill(
-        self, pid: int, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None
+        self,
+        pid: int,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
     ) -> bool:
         """杀掉后台任务，成功返回 True。"""
-        data = await self._post(
-            f"/bash/jobs/{pid}/kill", {}, template_id=template_id
-        )
+        data = await self._post(f"/bash/jobs/{pid}/kill", {}, template_id=template_id)
         return bool(data.get("killed", False))

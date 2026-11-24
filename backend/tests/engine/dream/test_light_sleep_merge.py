@@ -75,12 +75,20 @@ def _build_engine(memory_store: _FakeMemoryStore, *, raw_json: str) -> DreamEngi
 
 _L1_ENTRIES = [
     MemoryEntry(
-        id="old-a", layer="L1", type="fact", content="preview-a",
-        created_at=1730000000.0, updated_at=1730000000.0,
+        id="old-a",
+        layer="L1",
+        type="fact",
+        content="preview-a",
+        created_at=1730000000.0,
+        updated_at=1730000000.0,
     ),
     MemoryEntry(
-        id="old-b", layer="L1", type="fact", content="preview-b",
-        created_at=1730000000.0, updated_at=1730000000.0,
+        id="old-b",
+        layer="L1",
+        type="fact",
+        content="preview-b",
+        created_at=1730000000.0,
+        updated_at=1730000000.0,
     ),
 ]
 

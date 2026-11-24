@@ -11,28 +11,30 @@
 9.   run_loop 骨架集成：消费点清 override（G5）
 10.  协议层：chat.steer / chat.cancel 解析 + WS handler 注册接线
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 from prismclaw.app.web.chat.chat_protocol import (
+    _STEERING_CAP,
     CANCEL_OK,
     STEER_ALREADY,
     STEER_CAP_REACHED,
     STEER_NOT_FOUND,
     STEER_OK,
     SessionQueue,
-    _STEERING_CAP,
 )
 from prismclaw.app.web.protocol.messages import (
+    _CLIENT_MESSAGE_MAP,
+    SERVER_CHAT_STEERING_ACK,
     ChatCancelMessage,
     ChatSendMessage,
     ChatSteerMessage,
-    SERVER_CHAT_STEERING_ACK,
-    _CLIENT_MESSAGE_MAP,
     parse_client_message,
 )
 from prismclaw.engine.execution.checkpoint.models import RunState
@@ -59,6 +61,7 @@ def _msg(cid: str, mid: str | None, content: str | None = None) -> ChatSendMessa
 # 1-2. mark_steered / mark_cancelled 结果与优先级
 # ---------------------------------------------------------------------------
 
+
 def test_mark_steered_outcomes():
     async def run():
         sq = SessionQueue()
@@ -77,6 +80,7 @@ def test_mark_steered_outcomes():
 
 def test_cancel_revokes_steer_priority():
     """取消已提升但未转移的消息：撤销提升标记——不注入刚被取消的内容。"""
+
     async def run():
         sq = SessionQueue()
         cid = "c1"
@@ -97,6 +101,7 @@ async def _noop_handler(msg: ChatSendMessage) -> None:
 # ---------------------------------------------------------------------------
 # 3. consumer 取出分流
 # ---------------------------------------------------------------------------
+
 
 def test_consumer_transfer_skip_execute():
     async def run():
@@ -122,16 +127,15 @@ def test_consumer_transfer_skip_execute():
         assert sq._steering_len(cid) == 1  # A 在 steering deque
         assert not sq._steered.get(cid, set())  # 标记已消费
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
     asyncio.run(run())
 
 
 def test_no_client_message_id_regression():
     """无 client_message_id 的消息：正常执行，不进任何 steering 分支。"""
+
     async def run():
         sq = SessionQueue()
         cid = "c1"
@@ -148,10 +152,8 @@ def test_no_client_message_id_regression():
             await asyncio.sleep(0.02)
         assert handled == ["None"]
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
     asyncio.run(run())
 
@@ -159,6 +161,7 @@ def test_no_client_message_id_regression():
 # ---------------------------------------------------------------------------
 # 4. consumer finally 兜底（G4）
 # ---------------------------------------------------------------------------
+
 
 def test_consumer_finally_drain_fallback():
     async def run():
@@ -179,10 +182,8 @@ def test_consumer_finally_drain_fallback():
         assert sq._steering_len(cid) == 1
 
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
         await asyncio.sleep(0)
 
         # finally：先注销自身再 drain——消息转回排队、索引有效（可再操作）
@@ -200,6 +201,7 @@ def test_consumer_finally_drain_fallback():
 # ---------------------------------------------------------------------------
 # 5. settle_steering_after_run（run 结束收口）
 # ---------------------------------------------------------------------------
+
 
 def test_settle_after_run():
     async def run():
@@ -238,6 +240,7 @@ def test_settle_after_run():
 # 6. cap
 # ---------------------------------------------------------------------------
 
+
 def test_steering_cap():
     async def run():
         sq = SessionQueue()
@@ -265,6 +268,7 @@ def test_steering_cap():
 # 8. FIFO 保序
 # ---------------------------------------------------------------------------
 
+
 def test_drain_fifo_order():
     async def run():
         sq = SessionQueue()
@@ -282,10 +286,8 @@ def test_drain_fifo_order():
         # 那是 test_consumer_finally_drain_fallback 覆盖的路径）。
         items = sq.drain_steering(cid)
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
         assert [m.client_message_id for m, _ in items] == ["s1", "s2", "s3"]
 
@@ -295,6 +297,7 @@ def test_drain_fifo_order():
 # ---------------------------------------------------------------------------
 # 9. run_loop 骨架集成：steering 消费注入（G5）
 # ---------------------------------------------------------------------------
+
 
 def test_run_loop_steering_injection():
     async def run():
@@ -342,6 +345,7 @@ def test_run_loop_steering_injection():
 
 def test_run_loop_no_steering_callback_unchanged():
     """G3：未配置 get_steering_messages 时骨架行为不变（零开销路径）。"""
+
     async def run():
         state = RunLoopState(iteration=0, run_state=RunState(session_id="s1"))
 
@@ -376,6 +380,7 @@ def test_run_loop_no_steering_callback_unchanged():
 # 10. 协议层 + WS 接线
 # ---------------------------------------------------------------------------
 
+
 def test_protocol_parse_steer_and_cancel():
     m = parse_client_message(
         {"type": "chat.steer", "conversation_id": "c1", "client_message_id": "m-42"}
@@ -397,8 +402,7 @@ def test_protocol_parse_steer_and_cancel():
 def test_websocket_handler_wiring():
     """WS 层接线（源码断言）：dispatch 分支 + handler 注册 + RunRequest 传递。"""
     ws_src = (
-        Path(__file__).resolve().parents[1]
-        / "src/prismclaw/app/web/websocket/websocket.py"
+        Path(__file__).resolve().parents[1] / "src/prismclaw/app/web/websocket/websocket.py"
     ).read_text(encoding="utf-8")
     assert 'state.msg_handlers["chat.steer"] = _on_chat_steer' in ws_src
     assert 'state.msg_handlers["chat.cancel"] = _on_chat_cancel' in ws_src
@@ -408,8 +412,7 @@ def test_websocket_handler_wiring():
     assert "session_queue.mark_cancelled(" in ws_src
 
     runner_src = (
-        Path(__file__).resolve().parents[1]
-        / "src/prismclaw/app/web/chat/chat_runner.py"
+        Path(__file__).resolve().parents[1] / "src/prismclaw/app/web/chat/chat_runner.py"
     ).read_text(encoding="utf-8")
     assert "conversation_id=msg.conversation_id," in runner_src
     assert "settle_steering_after_run" in runner_src
@@ -418,26 +421,22 @@ def test_websocket_handler_wiring():
 def test_engine_closure_source_wiring():
     """引擎闭包接线（源码断言）：LoopConfig 字段 + 骨架消费点 + 闭包实现。"""
     wiring_src = (
-        Path(__file__).resolve().parents[1]
-        / "src/prismclaw/engine/execution/loop/wiring.py"
+        Path(__file__).resolve().parents[1] / "src/prismclaw/engine/execution/loop/wiring.py"
     ).read_text(encoding="utf-8")
     assert "get_steering_messages=partial(_terminal.get_steering_messages, rt)" in wiring_src
 
     terminal_src = (
-        Path(__file__).resolve().parents[1]
-        / "src/prismclaw/engine/execution/loop/terminal.py"
+        Path(__file__).resolve().parents[1] / "src/prismclaw/engine/execution/loop/terminal.py"
     ).read_text(encoding="utf-8")
     assert 'role="user"' in terminal_src  # 落树原样 user 身份（无前缀）
 
     types_src = (
-        Path(__file__).resolve().parents[1]
-        / "src/prismclaw/engine/execution/loop/types.py"
+        Path(__file__).resolve().parents[1] / "src/prismclaw/engine/execution/loop/types.py"
     ).read_text(encoding="utf-8")
     assert "get_steering_messages: Callable[[], Awaitable[list[str]]] | None" in types_src
 
     req_src = (
-        Path(__file__).resolve().parents[1]
-        / "src/prismclaw/schema/agent/types.py"
+        Path(__file__).resolve().parents[1] / "src/prismclaw/schema/agent/types.py"
     ).read_text(encoding="utf-8")
     assert "conversation_id: str | None = None" in req_src
 

@@ -21,7 +21,7 @@ import type { PreviewFile } from '../FilePreview'
 import { socket } from '../../services/socket'
 import { uploadAttachments } from '../../services/uploads'
 import { useAppStore } from '../../stores/useAppStore'
-import { useChatStore } from '../../stores/useChatStore'
+import { liveOwnsCurrentTurn, useChatStore, visibleMessages } from '../../stores/useChatStore'
 import { useComposerStore } from '../../stores/useComposerStore'
 import type { ConvState } from '../../stores/useChatStore'
 import type { Message } from '../../types'
@@ -267,12 +267,15 @@ export default function ConversationPane({
   )
 
   const live = conv.isStreaming
+  // 运行态常驻一条 assistant 消息：无正文时显示执行状态，有正文时在末尾显示回复状态
+  const showLive = liveOwnsCurrentTurn(conv)
+  // 当前轮正文由 live 气泡负责时，权威层里这一轮的分步落库消息让位；
+  // 判据与 showLive 同源，数据层因此不在任何入口增删消息。
+  const messages = visibleMessages(conv)
   // 对话一旦开始（已有消息或正在输出），就不再提供 chat / 工作区切换入口
   const started = conv.messages.length > 0 || live
-  // 运行态常驻一条 assistant 消息：无正文时显示执行状态，有正文时在末尾显示回复状态
-  const showLive = live && !conv.clarify
   const showEmpty =
-    conv.messages.length === 0 &&
+    messages.length === 0 &&
     !showLive &&
     conv.hydration !== 'loading' &&
     conv.hydration !== 'error'
@@ -341,15 +344,15 @@ export default function ConversationPane({
                 </View>
               </EmptyState>
             ) : (
-              conv.messages.map((message, index) => (
+              messages.map((message, index) => (
                 <Fragment key={message.id}>
                   {message.role === 'user' ? (
                     // 用户提问外层包一层锚点容器：发送后按它的高度补足撑高
                     <View id={`msg-top-${message.id}`}>
-                      {renderMessage(message, index === conv.messages.length - 1)}
+                      {renderMessage(message, index === messages.length - 1)}
                     </View>
                   ) : (
-                    renderMessage(message, index === conv.messages.length - 1)
+                    renderMessage(message, index === messages.length - 1)
                   )}
                 </Fragment>
               ))
@@ -374,7 +377,7 @@ export default function ConversationPane({
                     </View>
                   )}
                   {conv.liveOutputFiles.length ? (
-                    <View className='msg-outputs'>
+                    <View className='msg-outbox'>
                       {conv.liveOutputFiles.map((path) => (
                         <View
                           className='msg-output'

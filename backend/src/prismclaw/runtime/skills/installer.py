@@ -27,7 +27,7 @@ async def _install_lock(install_dir: Path) -> AsyncIterator[None]:
     或让 lock 文件丢更新。用 flock 而不是 ``asyncio.Lock``：uvicorn 多 worker
     部署时进程内锁无效，文件锁才真正互斥。
     """
-    install_dir.mkdir(parents=True, exist_ok=True)
+    install_dir.mkdir(parents=True, exist_ok=True)  # noqa: ASYNC240 - 单次 mkdir，随即可用
     handle = (install_dir / ".install.lock").open("a+")
     try:
         await asyncio.to_thread(fcntl.flock, handle.fileno(), fcntl.LOCK_EX)

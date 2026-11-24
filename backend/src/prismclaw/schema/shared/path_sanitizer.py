@@ -9,7 +9,7 @@ LLM 在工具执行过程中会看到宿主真实路径（bash 输出、工具�
 历史回放的正文与 tool_result）统一调用，保证路径暴露零出口。
 
 设计约束：
-    - 只匹配**宿主绝对路径**，保留虚拟路径前缀（outputs/、project/、inbox/ 等）
+    - 只匹配**宿主绝对路径**，保留虚拟路径前缀（outbox/、project/、inbox/ 等）
     - 纯文本变换，不修改原始 LLM 内部链路（执行引擎状态、LLM 上下文里的路径不受影响）
     - 幂等：替换结果 ``[内部路径]`` 不会被后续再次匹配
 """
@@ -33,7 +33,7 @@ __all__ = ["redact_server_paths", "split_stream_safe", "StreamingPathRedactor"]
 #   7. sessions/<sid>/.work/xxx — 会话私有工作区内部文件
 #
 # 不匹配（保留）：
-#   - outputs/xxx、project/xxx、inbox/xxx — 虚拟路径前缀
+#   - outbox/xxx、project/xxx、inbox/xxx — 虚拟路径前缀
 #   - 纯文件名（无 / 或只有相对路径）
 #   - 代码块里的 URL（http://、https://）
 
@@ -102,10 +102,7 @@ def redact_server_paths(text: str) -> str:
 
 # 路径候选字符：\w 含 Unicode 字母（中文不会误伤，因为不含 / 或 ~ 就不滞留）
 _PATH_CANDIDATE_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyz"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    "0123456789"
-    "._-@/~"
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-@/~"
 )
 # 滞留上限：超过则放弃保护直接推送，避免长串路径把正文无限延迟。
 # 取值需大于最长可能的不完整路径片段（含替换串 [内部路径] 本身）。

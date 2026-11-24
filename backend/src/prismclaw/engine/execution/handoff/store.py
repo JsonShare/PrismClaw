@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from prismclaw.engine.execution.handoff.contract import HandoffRequestEntry
 
@@ -23,20 +23,18 @@ def _task_hash(task: str) -> str:
     return hashlib.sha256(task.encode("utf-8")).hexdigest()[:12]
 
 
-def composite_subkey(
-    *, source_sub_session_id: str, target: str, task: str
-) -> str:
+def composite_subkey(*, source_sub_session_id: str, target: str, task: str) -> str:
     return f"{source_sub_session_id}|{target}|{_task_hash(task)}"
 
 
 @runtime_checkable
 class _RedisLike(Protocol):
-    async def setex(self, key: str, ttl: int, value: str) -> Any: ...
-    async def get(self, key: str) -> Any: ...
-    async def delete(self, *keys: str) -> Any: ...
-    async def hgetall(self, key: str) -> Any: ...
-    async def hset(self, key: str, mapping: dict[str, str]) -> Any: ...
-    async def expire(self, key: str, ttl: int) -> Any: ...
+    async def setex(self, key: str, ttl: int, value: str) -> object: ...
+    async def get(self, key: str) -> str | bytes | None: ...
+    async def delete(self, *keys: str) -> object: ...
+    async def hgetall(self, key: str) -> object: ...
+    async def hset(self, key: str, mapping: dict[str, str]) -> object: ...
+    async def expire(self, key: str, ttl: int) -> object: ...
 
 
 @dataclass
@@ -152,9 +150,7 @@ class PendingHandoffStore:
         try:
             data = json.loads(payload)
         except (json.JSONDecodeError, TypeError):
-            logger.warning(
-                "handoff_store.hydrate.json_parse_failed session_id=%s", session_id
-            )
+            logger.warning("handoff_store.hydrate.json_parse_failed session_id=%s", session_id)
             return 0
         state = _SessionState()
         for entry_dict in data.get("entries", []):
@@ -173,9 +169,7 @@ class PendingHandoffStore:
         self._memory[session_id] = state
         return len(state.entries)
 
-    async def _persist_session_to_redis(
-        self, session_id: str, state: _SessionState
-    ) -> None:
+    async def _persist_session_to_redis(self, session_id: str, state: _SessionState) -> None:
         if self._redis is None:
             return
         session_hash = _session_hash(session_id)
@@ -204,6 +198,8 @@ class PendingHandoffStore:
                 session_id,
                 exc_info=True,
             )
+
+
 __all__ = [
     "HandoffRequestEntry",
     "PendingHandoffStore",

@@ -4,6 +4,7 @@ Moved from contracts.services.skills to break the contracts→engine
 dependency cycle. This is an I/O function (reads the filesystem) and
 belongs in the engine layer.
 """
+
 from __future__ import annotations
 
 from pathlib import Path as _Path

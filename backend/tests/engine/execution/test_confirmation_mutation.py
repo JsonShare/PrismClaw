@@ -1,4 +1,5 @@
 """确认门 mutation 语义：approve 统一收敛为 task.confirmation_resolved。"""
+
 from __future__ import annotations
 
 from prismclaw.engine.execution.state.task_persistence import (

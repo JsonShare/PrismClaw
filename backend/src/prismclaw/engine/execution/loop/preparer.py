@@ -8,6 +8,7 @@ RunPreparer.prepare()，返回判别类型 PrepareResult：
 
 调用方只需 isinstance 判别，不再需要 try/except NameError 守护。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,6 +25,7 @@ from prismclaw.engine.compression.preservation import (
 )
 from prismclaw.engine.execution.checkpoint import (
     ResumeBoundary,
+    RunSnapshot,
     RunStateMachine,
     evaluate_resume_decision,
     is_recovery_probe_resumable,
@@ -105,9 +107,10 @@ from prismclaw.schema.agent.session import MessageEntry, SystemReminderProjectio
 from prismclaw.schema.agent.task_runtime import ConfirmationDecision
 from prismclaw.schema.agent.types import RunRequest
 from prismclaw.schema.config.config import WorkspaceConfig
-from prismclaw.schema.content.streaming import ErrorEvent
+from prismclaw.schema.content.streaming import AgentEvent, ErrorEvent
 from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.schema.services.skills import SkillInvocation, SkillInvocationState
+from prismclaw.schema.session.projection import SessionProjectionEngine
 from prismclaw.schema.session.types import generate_entry_id, now_iso
 
 logger = logging.getLogger(__name__)
@@ -117,9 +120,11 @@ logger = logging.getLogger(__name__)
 # PrepareResult: discriminated union
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class EarlyExit:
     """早期退出路径：携带待 yield 的事件流 + 已初始化的 run 容器。"""
+
     events: AsyncIterator[Any]
     runtime: LoopRuntime
 
@@ -131,6 +136,7 @@ PrepareResult = EarlyExit | LoopRuntime
 # ---------------------------------------------------------------------------
 # RunPreparer
 # ---------------------------------------------------------------------------
+
 
 class RunPreparer:
     """封装 run_agent_stream 的全部启动路径判定。
@@ -153,7 +159,7 @@ class RunPreparer:
         *,
         tool_workspace_path: str | Path,
         control: RunControl | None = None,
-    ):
+    ) -> None:
         self._request = request
         self._deps = deps
         self._tool_workspace_path = Path(tool_workspace_path).resolve()
@@ -209,7 +215,7 @@ class RunPreparer:
             agent_id=request.agent_id,
         )
         # 会话目录及标准子目录在每次 run 启动时幂等建好：后续 ls inbox /
-        # ls outputs 等读取永远看到空目录，而不是“目录不存在”。
+        # ls outbox 等读取永远看到空目录，而不是“目录不存在”。
         ensure_session_layout(resolved_ws_path, request.session_id)
         snapshot = load_run_snapshot_for_tree(tree)
         rt.tree = tree
@@ -222,7 +228,7 @@ class RunPreparer:
         existing_task_runtime = snapshot.active_context.task_runtime
         existing_task_spec = _restore_task_spec_from_snapshot(snapshot)
         # 证据台账提前加载：放弃确认时需要为旧任务写 task.block 记录。
-        evidence_ledger = tree.get_evidence_ledger()
+        evidence_ledger = SessionProjectionEngine(tree).task.get_evidence_ledger()
         rt.evidence_ledger = evidence_ledger
 
         if recovery_mode:
@@ -296,7 +302,9 @@ class RunPreparer:
                 timestamp=now_iso(),
                 role="user",
                 content=user_entry_content,
-                enriched_content=user_llm_content if user_llm_content != user_entry_content else None,
+                enriched_content=user_llm_content
+                if user_llm_content != user_entry_content
+                else None,
                 client_message_id=request.client_message_id,
             )
             await _append(deps, tree, user_entry)
@@ -328,9 +336,7 @@ class RunPreparer:
                         deps=deps,
                         request=request,
                         tree=tree,
-                        session_messages=[
-                            {"role": "user", "content": request.user_message}
-                        ],
+                        session_messages=[{"role": "user", "content": request.user_message}],
                         append_entry=_append,
                         response_text=f"[plugin hook] {block_reason}",
                         usage_totals={},
@@ -370,14 +376,19 @@ class RunPreparer:
             else:
                 if request.confirmation_decision is not None:
                     logger.warning(
-                        "discarding stale confirmation_decision=%s session_id=%s task_id=%s state=%s",
+                        (
+                            "discarding stale confirmation_decision=%s "
+                            "session_id=%s task_id=%s state=%s"
+                        ),
                         request.confirmation_decision,
                         request.session_id,
-                        existing_task_runtime.task_id if existing_task_runtime is not None else None,
+                        existing_task_runtime.task_id
+                        if existing_task_runtime is not None
+                        else None,
                         existing_task_runtime.state if existing_task_runtime is not None else None,
                     )
                     request.confirmation_decision = None
-                if awaiting_confirmation_state is not None:
+                if awaiting_confirmation_state is not None and existing_task_runtime is not None:
                     abandon_mutation = _new_task_mutation(
                         existing_task_runtime,
                         actor_kind="system",
@@ -404,7 +415,7 @@ class RunPreparer:
         else:
             initial_task_spec = request.task_spec
 
-        # ── 单轮任务评估（减法：简单任务跳过重管道 / 走 fast_path）──
+        # ── 单轮任务评估（减法：简单任务跳过重管道）──
         # 复用 TaskSpec 的 preflight/turn_index/goal 信号，纯规则零 LLM 调用。
         # 仅新任务回合评估：确认轮/恢复轮沿用既有任务路径。
         _is_fresh_turn = not recovery_mode and pending_confirmation_state is None
@@ -416,12 +427,15 @@ class RunPreparer:
             )
             request.complexity = turn_assessment.level
 
-        latest_review_decision = tree.get_latest_review_decision()
-        persisted_task_runtime = tree.get_latest_task_runtime()
+        projection = SessionProjectionEngine(tree)
+        latest_review_decision = projection.task.get_latest_review_decision()
+        persisted_task_runtime = projection.task.get_latest_task_runtime()
         task_runtime = snapshot.active_context.task_runtime
         if (
-            task_runtime is None or task_runtime.task_id != initial_task_spec.task_id
-        ) and persisted_task_runtime is not None and persisted_task_runtime.task_id == initial_task_spec.task_id:
+            (task_runtime is None or task_runtime.task_id != initial_task_spec.task_id)
+            and persisted_task_runtime is not None
+            and persisted_task_runtime.task_id == initial_task_spec.task_id
+        ):
             task_runtime = persisted_task_runtime
 
         bootstrapped_runtime_for_new_task = False
@@ -662,9 +676,7 @@ class RunPreparer:
                 workspace_path=resolved_ws_path,
                 preflight_probe=initial_task_spec.preflight_probe,
             )
-            task_runtime = task_runtime.model_copy(
-                update={"pending_confirmation_reason": None}
-            )
+            task_runtime = task_runtime.model_copy(update={"pending_confirmation_reason": None})
             recovery_probe_evidence = _build_recovery_probe_evidence(
                 task_runtime=task_runtime,
             )
@@ -684,7 +696,9 @@ class RunPreparer:
                     "status": recovery_probe_result.status,
                     "checked_paths": recovery_probe_result.checked_paths,
                     "missing_paths": recovery_probe_result.missing_paths,
-                    "signals": [signal.model_dump(mode="json") for signal in recovery_probe_result.signals],
+                    "signals": [
+                        signal.model_dump(mode="json") for signal in recovery_probe_result.signals
+                    ],
                 },
             )
             await _persist_decision_ledger_event(deps, tree, event=recovery_probe_event)
@@ -696,7 +710,8 @@ class RunPreparer:
                 event_type="run_takeover_started",
                 summary=(
                     f"Worker {getattr(deps, 'worker_id', 'unknown')} is resuming run "
-                    f"{request.recovery_run_id} after owner {request.recovery_owner_worker_id} became unavailable."
+                    f"{request.recovery_run_id} after owner "
+                    f"{request.recovery_owner_worker_id} became unavailable."
                 ),
                 payload={
                     "request_id": request.request_id,
@@ -856,9 +871,7 @@ class RunPreparer:
             _append_decision_tail(snapshot, probe_event.event_id)
 
             if confirmation_probe.status == "blocked":
-                blocked_reason = (
-                    f"确认前工作区校验未通过，任务已停止：{confirmation_probe.summary}"
-                )
+                blocked_reason = f"确认前工作区校验未通过，任务已停止：{confirmation_probe.summary}"
                 block_mutation = _new_task_mutation(
                     task_runtime,
                     actor_kind="system",
@@ -953,10 +966,14 @@ class RunPreparer:
 
         if request.sandbox_policy is None:
             raise RuntimeError(
-                "run_agent_stream requires request.sandbox_policy to be resolved before ToolContext construction"
+                "run_agent_stream requires request.sandbox_policy "
+                "to be resolved before ToolContext construction"
             )
 
         _sandbox_tier = getattr(request, "current_sandbox_tier", None) or SandboxTier.STANDARD
+        # 前面所有分支都已确保 request_id 有值（新请求生成 / 恢复用 recovery_run_id）。
+        request_id = request.request_id or f"req_{generate_entry_id(set())}"
+        request.request_id = request_id
 
         tool_ctx = ToolContext(
             workspace_id=request.workspace_id,
@@ -967,7 +984,7 @@ class RunPreparer:
             abort=abort_event,
             user_id=request.user_id,
             user_profile=request.user_profile,
-            request_id=request.request_id,
+            request_id=request_id,
             task_id=initial_task_spec.task_id,
             task_spec=initial_task_spec,
             task_runtime=ParallelTaskExtras(
@@ -975,7 +992,9 @@ class RunPreparer:
             ),
             hook_registry=deps.hooks if deps.hooks is not None else None,
             hook_dispatcher=getattr(deps, "hook_dispatcher", None),
-            capability_catalog=deps.capability_catalog if deps.capability_catalog is not None else None,
+            capability_catalog=deps.capability_catalog
+            if deps.capability_catalog is not None
+            else None,
             task_manager=deps.task_manager,
             session_store=deps.session_store,
             session_tree=tree,
@@ -1003,9 +1022,7 @@ class RunPreparer:
         _progress_sink = deps.callbacks.on_subagent_progress if deps.callbacks is not None else None
         if _progress_sink is not None:
             tool_ctx.subagent_progress_sink = _progress_sink
-        _terminal_sink = (
-            deps.callbacks.on_subagent_terminal if deps.callbacks is not None else None
-        )
+        _terminal_sink = deps.callbacks.on_subagent_terminal if deps.callbacks is not None else None
         if _terminal_sink is not None:
             tool_ctx.subagent_terminal_sink = _terminal_sink
 
@@ -1044,8 +1061,13 @@ class RunPreparer:
         # 合并在 _merge_invocations 里完成，避免「上轮插件把本轮技能挡住」。
         if request.designated_skills and _pending_cmd is None:
             active_skill_invocation = await self._activate_designated_skills(
-                request, deps, resolved_ws_path, snapshot, tool_ctx,
-                active_skill_invocation, hook_context_injections,
+                request,
+                deps,
+                resolved_ws_path,
+                snapshot,
+                tool_ctx,
+                active_skill_invocation,
+                hook_context_injections,
             )
 
         # ── Auto-activated skill (gesture / single search match) ──
@@ -1071,14 +1093,8 @@ class RunPreparer:
                 )
             except Exception:
                 _auto_artifact = None  # best-effort; never block run start
-            _auto_inv = (
-                _auto_artifact.skill_invocation
-                if _auto_artifact is not None
-                else None
-            )
-            _auto_skill_name = (
-                _auto_inv.skill_name if _auto_inv is not None else None
-            )
+            _auto_inv = _auto_artifact.skill_invocation if _auto_artifact is not None else None
+            _auto_skill_name = _auto_inv.skill_name if _auto_inv is not None else None
             if isinstance(_auto_skill_name, str) and _auto_skill_name:
                 _auto_invocation = SkillInvocation(
                     skill_name=_auto_skill_name,
@@ -1135,13 +1151,18 @@ class RunPreparer:
         # ── Designated plugins activation ──
         if request.designated_plugins:
             active_skill_invocation = await self._activate_designated_plugins(
-                request, deps, snapshot, tool_ctx,
-                active_skill_invocation, _pending_cmd, hook_context_injections,
+                request,
+                deps,
+                snapshot,
+                tool_ctx,
+                active_skill_invocation,
+                _pending_cmd,
+                hook_context_injections,
             )
 
         # ── Referenced files injection ──
         # 路径由前端给出（工作区根相对或工具虚拟前缀）。存在性判断必须走文件
-        # 工具的同一个解析器，否则 `outputs/x`、`project/x` 这类前缀会被误判：
+        # 工具的同一个解析器，否则 `outbox/x`、`project/x` 这类前缀会被误判：
         # 模型能读到、注入块却标"不存在"。失效路径不阻断请求，只做标注。
         if request.referenced_files:
             _resolver = WorkspaceResolver(
@@ -1149,21 +1170,16 @@ class RunPreparer:
             )
             _session_root = session_dir_in(resolved_ws_path, request.session_id)
             _ref_lines: list[str] = []
-            for _rf in dict.fromkeys(
-                p.strip() for p in request.referenced_files if p.strip()
-            ):
+            for _rf in dict.fromkeys(p.strip() for p in request.referenced_files if p.strip()):
                 try:
                     _missing = not _resolver.resolve_within(
                         resolved_ws_path, _rf, session_root=_session_root
                     ).exists()
                 except WorkspaceBoundaryError:
                     _missing = True
-                _ref_lines.append(
-                    f"- {_rf}" + ("（文件不存在或已移动）" if _missing else "")
-                )
+                _ref_lines.append(f"- {_rf}" + ("（文件不存在或已移动）" if _missing else ""))
             hook_context_injections.append(
-                "用户显式引用了以下工作区文件，请先读取或参考后再回答：\n"
-                + "\n".join(_ref_lines)
+                "用户显式引用了以下工作区文件，请先读取或参考后再回答：\n" + "\n".join(_ref_lines)
             )
 
         project_preservation_runtime(
@@ -1227,9 +1243,7 @@ class RunPreparer:
         if not ordered:
             return None
 
-        skill_names = [
-            s.skill_name for s in ordered if not s.skill_name.startswith("_plugin:")
-        ]
+        skill_names = [s.skill_name for s in ordered if not s.skill_name.startswith("_plugin:")]
         plugin_names = [s.plugin_name for s in ordered if s.plugin_name]
         overrides = [s.allowed_tools_override for s in ordered]
         if any(o is None for o in overrides):
@@ -1241,35 +1255,34 @@ class RunPreparer:
         # skill_names 为空——绝不能回退成 ordered[0].skill_name，
         # 那会把 ``_plugin:<name>`` 这种内部伪技能名经 active_skill_name
         # 渲染进 system prompt（R2 断言：prompt 不得出现 `_plugin:`）。
-        return ordered[0].model_copy(update={
-            "skill_name": ", ".join(skill_names),
-            "plugin_name": plugin_names[0] if plugin_names else ordered[0].plugin_name,
-            "allowed_tools_override": merged_tools,
-            "is_active": True,
-            # 任一技能按轮次清理 → 合成态也清理；专家记录本身是持久的，不受影响。
-            "clear_after_terminal_result": any(
-                s.clear_after_terminal_result for s in ordered
-            ),
-            "invocation_context": (
-                "skill"
-                if any(s.invocation_context == "skill" for s in ordered)
-                else ordered[0].invocation_context
-            ),
-        })
+        return ordered[0].model_copy(
+            update={
+                "skill_name": ", ".join(skill_names),
+                "plugin_name": plugin_names[0] if plugin_names else ordered[0].plugin_name,
+                "allowed_tools_override": merged_tools,
+                "is_active": True,
+                # 任一技能按轮次清理 → 合成态也清理；专家记录本身是持久的，不受影响。
+                "clear_after_terminal_result": any(s.clear_after_terminal_result for s in ordered),
+                "invocation_context": (
+                    "skill"
+                    if any(s.invocation_context == "skill" for s in ordered)
+                    else ordered[0].invocation_context
+                ),
+            }
+        )
 
     async def _activate_designated_skills(
         self,
         request: RunRequest,
         deps: AgentRunnerDeps,
         resolved_ws_path: Path,
-        snapshot: Any,
+        snapshot: RunSnapshot,
         tool_ctx: ToolContext,
         active_skill_invocation: SkillInvocationState | None,
         hook_context_injections: list[str],
     ) -> SkillInvocationState | None:
         """逐个激活 designated_skills，返回合并后的 active_skill_invocation。"""
         from prismclaw.schema.services.skills import SkillInvocation
-        from prismclaw.schema.services.skills import SkillInvocationState as _SIS
 
         states: list[SkillInvocationState] = []
         for skill_name in dict.fromkeys(n for n in request.designated_skills if n):
@@ -1298,12 +1311,14 @@ class RunPreparer:
                         "setting invocation state only for skill=%s",
                         skill_name,
                     )
-                    states.append(_SIS(
-                        skill_name=skill_name,
-                        is_active=True,
-                        clear_after_terminal_result=True,
-                        invocation_context="skill",
-                    ))
+                    states.append(
+                        SkillInvocationState(
+                            skill_name=skill_name,
+                            is_active=True,
+                            clear_after_terminal_result=True,
+                            invocation_context="skill",
+                        )
+                    )
             except LookupError:
                 logger.warning(
                     "designated_skill_not_found: skill=%s session=%s",
@@ -1332,15 +1347,14 @@ class RunPreparer:
         self,
         request: RunRequest,
         deps: AgentRunnerDeps,
-        snapshot: Any,
+        snapshot: RunSnapshot,
         tool_ctx: ToolContext,
         active_skill_invocation: SkillInvocationState | None,
-        _pending_cmd: Any,
+        _pending_cmd: dict[str, Any] | None,
         hook_context_injections: list[str],
     ) -> SkillInvocationState | None:
         """逐个激活 designated_plugins，返回与已有技能合并后的 invocation。"""
         from prismclaw.engine.execution.checkpoint.models import InvokedSkillRecord
-        from prismclaw.schema.services.skills import SkillInvocationState as _SIS
 
         # 命令 dispatch 期间不叠加插件（命令的 active invocation 优先），
         # 但作用域必须收敛为空集而非留 None——None 的语义是「无插件上下文、
@@ -1362,9 +1376,9 @@ class RunPreparer:
         # 下一轮不 @ 时 A 仍被解锁）。因此先剔除不在本轮 chip 里的旧记录。
         _requested_set = set(_requested)
         for _key in [
-            k for k in snapshot.invoked_skill_state.skills
-            if k.startswith("_plugin:")
-            and k.removeprefix("_plugin:") not in _requested_set
+            k
+            for k in snapshot.invoked_skill_state.skills
+            if k.startswith("_plugin:") and k.removeprefix("_plugin:") not in _requested_set
         ]:
             del snapshot.invoked_skill_state.skills[_key]
 
@@ -1376,7 +1390,9 @@ class RunPreparer:
         if len(_requested) > 1:
             logger.info(
                 "plugin_persona_degraded: primary=%s ignored=%s session=%s",
-                _primary, _requested[1:], request.session_id,
+                _primary,
+                _requested[1:],
+                request.session_id,
             )
         for plugin_name in _requested:
             _is_primary = plugin_name == _primary
@@ -1391,8 +1407,7 @@ class RunPreparer:
                     _plugin_has_skills = False
                     if _catalog is not None:
                         _plugin_skills = [
-                            e for e in _catalog.list_skill_entries()
-                            if e.plugin_name == plugin_name
+                            e for e in _catalog.list_skill_entries() if e.plugin_name == plugin_name
                         ]
                         _plugin_has_skills = len(_plugin_skills) > 0
                     if not _declared and not _plugin_has_skills:
@@ -1407,14 +1422,16 @@ class RunPreparer:
                     if _plugin_instructions:
                         hook_context_injections.append(_plugin_instructions)
 
-                    states.append(_SIS(
-                        skill_name=f"_plugin:{plugin_name}",
-                        is_active=True,
-                        clear_after_terminal_result=False,
-                        allowed_tools_override=None,
-                        plugin_name=plugin_name,
-                        invocation_context="skill",
-                    ))
+                    states.append(
+                        SkillInvocationState(
+                            skill_name=f"_plugin:{plugin_name}",
+                            is_active=True,
+                            clear_after_terminal_result=False,
+                            allowed_tools_override=None,
+                            plugin_name=plugin_name,
+                            invocation_context="skill",
+                        )
+                    )
 
                     if _plugin_instructions:
                         _skill_key = f"_plugin:{plugin_name}"
@@ -1429,13 +1446,15 @@ class RunPreparer:
                         "setting invocation state only for plugin=%s",
                         plugin_name,
                     )
-                    states.append(_SIS(
-                        skill_name=f"_plugin:{plugin_name}",
-                        is_active=True,
-                        clear_after_terminal_result=False,
-                        plugin_name=plugin_name,
-                        invocation_context="skill",
-                    ))
+                    states.append(
+                        SkillInvocationState(
+                            skill_name=f"_plugin:{plugin_name}",
+                            is_active=True,
+                            clear_after_terminal_result=False,
+                            plugin_name=plugin_name,
+                            invocation_context="skill",
+                        )
+                    )
             except Exception:
                 logger.warning(
                     "designated_plugin_activation_failed: plugin=%s session=%s",
@@ -1468,6 +1487,7 @@ class RunPreparer:
 # Helper: single-event async iterator
 # ---------------------------------------------------------------------------
 
-async def _single_event_iter(event: Any) -> AsyncIterator[Any]:
+
+async def _single_event_iter(event: AgentEvent) -> AsyncIterator[AgentEvent]:
     """Yield a single event as an async iterator, for EarlyExit paths."""
     yield event

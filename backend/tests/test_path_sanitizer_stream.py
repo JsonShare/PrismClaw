@@ -4,6 +4,7 @@
 ``/tmp/g`` + ``z_pages/doctor1.html``。逐片 redact 会把前片替成 ``[内部路径]``，
 后片不再以绝对路径开头于是原样漏出——用户实时看到 ``[内部路径]z_pages/doctor1.html``。
 """
+
 from __future__ import annotations
 
 from prismclaw.schema.shared.path_sanitizer import (

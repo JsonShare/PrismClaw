@@ -2,6 +2,7 @@
 
 Protocol for session lifecycle management.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
@@ -11,7 +12,10 @@ if TYPE_CHECKING:
 
 
 class SessionRouterProtocol(Protocol):
-    """Protocol for session routing — duck-typing compatible with delivery/session_router.SessionRouter."""
+    """
+    Protocol for session routing — duck-typing compatible with
+    delivery/session_router.SessionRouter.
+    """
 
     async def resolve_or_create(
         self,

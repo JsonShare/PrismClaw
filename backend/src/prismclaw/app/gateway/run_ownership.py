@@ -4,7 +4,12 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from prismclaw.infra.redis import resolve
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -119,20 +124,22 @@ return 1
 
 def _record_to_payload(record: OwnershipRecord) -> str:
     """Serialize OwnershipRecord to JSON for Redis storage."""
-    return json.dumps({
-        "run_id": record.run_id,
-        "session_id": record.session_id,
-        "owner_worker_id": record.owner_worker_id,
-        "snapshot_cursor": record.snapshot_cursor,
-        "last_safe_boundary": record.last_safe_boundary,
-        "heartbeat_at_epoch_ms": record.heartbeat_at_epoch_ms,
-    })
+    return json.dumps(
+        {
+            "run_id": record.run_id,
+            "session_id": record.session_id,
+            "owner_worker_id": record.owner_worker_id,
+            "snapshot_cursor": record.snapshot_cursor,
+            "last_safe_boundary": record.last_safe_boundary,
+            "heartbeat_at_epoch_ms": record.heartbeat_at_epoch_ms,
+        }
+    )
 
 
 class RunOwnershipStore:
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: Redis,
         *,
         key_prefix: str = "prismclaw:",
         ttl_seconds: int = 90,
@@ -189,16 +196,18 @@ class RunOwnershipStore:
         if record is None or not self.available:
             return False
         payload = _record_to_payload(record)
-        result = await self._redis.eval(
-            _CLAIM_OR_REFRESH_SCRIPT,
-            2,
-            self._run_key(record.run_id),
-            self._index_key(),
-            record.run_id,
-            record.owner_worker_id,
-            payload,
-            self._ttl_seconds,
-            record.heartbeat_at_epoch_ms,
+        result = await resolve(
+            self._redis.eval(
+                _CLAIM_OR_REFRESH_SCRIPT,
+                2,
+                self._run_key(record.run_id),
+                self._index_key(),
+                record.run_id,
+                record.owner_worker_id,
+                payload,
+                self._ttl_seconds,
+                record.heartbeat_at_epoch_ms,
+            )
         )
         return bool(result)
 
@@ -208,13 +217,15 @@ class RunOwnershipStore:
     async def release(self, run_id: str, owner_worker_id: str) -> bool:
         if not run_id or not owner_worker_id or not self.available:
             return False
-        result = await self._redis.eval(
-            _RELEASE_SCRIPT,
-            2,
-            self._run_key(run_id),
-            self._index_key(),
-            run_id,
-            owner_worker_id,
+        result = await resolve(
+            self._redis.eval(
+                _RELEASE_SCRIPT,
+                2,
+                self._run_key(run_id),
+                self._index_key(),
+                run_id,
+                owner_worker_id,
+            )
         )
         return bool(result)
 
@@ -222,16 +233,18 @@ class RunOwnershipStore:
         if record is None or not self.available or not expected_owner_worker_id:
             return False
         payload = _record_to_payload(record)
-        result = await self._redis.eval(
-            _TAKEOVER_SCRIPT,
-            2,
-            self._run_key(record.run_id),
-            self._index_key(),
-            record.run_id,
-            expected_owner_worker_id,
-            payload,
-            self._ttl_seconds,
-            record.heartbeat_at_epoch_ms,
+        result = await resolve(
+            self._redis.eval(
+                _TAKEOVER_SCRIPT,
+                2,
+                self._run_key(record.run_id),
+                self._index_key(),
+                record.run_id,
+                expected_owner_worker_id,
+                payload,
+                self._ttl_seconds,
+                record.heartbeat_at_epoch_ms,
+            )
         )
         return bool(result)
 
@@ -254,10 +267,14 @@ class RunOwnershipStore:
         if not self.available:
             return []
         now_ms = int(time.time() * 1000)
-        max_age_ms = int((max_age_seconds if max_age_seconds is not None else self._ttl_seconds) * 1000)
+        max_age_ms = int(
+            (max_age_seconds if max_age_seconds is not None else self._ttl_seconds) * 1000
+        )
         cutoff_ms = now_ms - max(1000, max_age_ms)
         try:
-            await self._redis.zremrangebyscore(self._index_key(), "-inf", cutoff_ms - (self._ttl_seconds * 1000))
+            await self._redis.zremrangebyscore(
+                self._index_key(), "-inf", cutoff_ms - (self._ttl_seconds * 1000)
+            )
         except Exception:
             logger.debug("run ownership lazy prune failed", exc_info=True)
         run_ids = await self._redis.zrangebyscore(self._index_key(), cutoff_ms, "+inf")

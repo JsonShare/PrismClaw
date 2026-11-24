@@ -4,6 +4,7 @@
 ``_plugin:<name>`` 记录，而不是 active_invocation.plugin_name（后者在
 「只 @ 了某插件下的技能」时也会被写成插件名，用它做粘性会越权解锁）。
 """
+
 from __future__ import annotations
 
 from prismclaw.engine.execution.checkpoint.models import (
@@ -92,10 +93,12 @@ def test_explicit_chip_replaces_previous_plugin():
 def test_skill_only_activation_does_not_unlock_plugin():
     """只有真实技能被激活时，快照里没有 _plugin: 记录 → scope 为空。"""
     snapshot = InvokedSkillState(
-        skills={"contract-review": InvokedSkillRecord(
-            skill_name="contract-review",
-            rendered_prompt_fragment="x",
-            clear_after_terminal_result=True,
-        )}
+        skills={
+            "contract-review": InvokedSkillRecord(
+                skill_name="contract-review",
+                rendered_prompt_fragment="x",
+                clear_after_terminal_result=True,
+            )
+        }
     )
     assert _scope_of_turn([], snapshot) == frozenset()

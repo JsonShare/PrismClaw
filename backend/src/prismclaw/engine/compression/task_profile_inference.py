@@ -67,8 +67,8 @@ class TaskProfileInference:
         if image_seen or file_seen:
             notes.append("non_text_input_present")
         return TaskProfile(
-            risk_level=risk_level,  # type: ignore[arg-type]
-            material_types=material_types,  # type: ignore[arg-type]
+            risk_level=risk_level,
+            material_types=material_types,
             prefers_tooling=prefers_tooling,
             requires_grounding=requires_grounding,
             notes=notes,

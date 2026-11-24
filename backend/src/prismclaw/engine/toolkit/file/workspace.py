@@ -53,7 +53,7 @@ _TRAILING_CLOSE_WRAPPERS = frozenset({")", "]", "}", '"', "'", "`", ",", ";", ":
 # whitespace. Writing ``\\s`` in the raw string would put a literal letter
 # ``s`` into the class and strip the trailing ``s`` of real paths like
 # ``old.xls`` or ``docs/`` — a bug caught by the M1 legacy-office test.
-_TAIL_TEMPLATE_RE = re.compile(r'[\{\}\[\]\(\)\`\'\"\\\s,;:!?]+$')
+_TAIL_TEMPLATE_RE = re.compile(r"[\{\}\[\]\(\)\`\'\"\\\s,;:!?]+$")
 
 
 def _strip_sentence_trailing_period(s: str) -> str:
@@ -154,9 +154,7 @@ class WorkspaceResolver:
         return self._config.resolve_path(workspace_id)
 
     # 虚拟路径前缀 → session 私有子目录（物理目录名 = 前缀名）。
-    _SESSION_PREFIXES = frozenset(
-        {"inbox", "outputs", "context_blocks", "tool_results"}
-    )
+    _SESSION_PREFIXES = frozenset({"inbox", "outbox", "context_blocks", "tool_results"})
 
     def resolve_within(
         self,
@@ -175,11 +173,11 @@ class WorkspaceResolver:
           inbox/<...>              → sessions/<sid>/inbox/      (session 私有)
           context_blocks/<...>      → sessions/<sid>/context_blocks/
           tool_results/<...>        → sessions/<sid>/tool_results/
-          outputs/<...>             → sessions/<sid>/outputs/
+          outbox/<...>              → sessions/<sid>/outbox/
           sessions/<sid>/<...>      → 物理格式归一：本会话 → 剥前缀按上面规则；
                                        跨会话 → workspace 根直达，只读、禁写
-          <无前缀>                  → 读：session_root/outputs/；(有 session_root)
-                                       写：必须显式前缀（outputs/ 或 project/）；
+          <无前缀>                  → 读：session_root/outbox/；(有 session_root)
+                                       写：必须显式前缀（outbox/ 或 project/）；
                                        无 session_root → workspace_root/
 
         session_root 由调用方通过 workspace_paths.resolve_session_dir 算好传入——
@@ -187,7 +185,7 @@ class WorkspaceResolver:
         纯路径解析 + 边界检查。
 
         for_write=True 时，project/ 前缀禁止写入 sessions/.work 子树（写 session
-        交付物请用 outputs/ 前缀）。read 默认 False。
+        交付物请用 outbox/ 前缀）。read 默认 False。
         """
         stripped_raw = relative.strip()
 
@@ -195,17 +193,17 @@ class WorkspaceResolver:
             raise WorkspaceBoundaryError(
                 f"{relative!r} 是远程 URL，不是本地文件路径。"
                 "文件工具只接受本地路径；如需网页内容，请先将资源下载到工作区"
-                "（如 `outputs/`）再读取。"
+                "（如 `outbox/`）再读取。"
             )
 
         # 文件工具参数是字面量字符串，不做 shell 变量展开。技能文档里
-        # `$PRISMCLAW_OUTPUT_DIR/<rel>` 只适用于 bash 通道；模型照抄到文件工具
-        # 会生成名为 `$PRISMCLAW_OUTPUT_DIR` 的字面目录（验收 1 明令阻断）。
+        # `$PRISMCLAW_OUTBOX_DIR/<rel>` 只适用于 bash 通道；模型照抄到文件工具
+        # 会生成名为 `$PRISMCLAW_OUTBOX_DIR` 的字面目录（验收 1 明令阻断）。
         if "$" in stripped_raw:
             raise WorkspaceBoundaryError(
                 f"路径 {relative!r} 含未展开的 shell 变量；文件工具不做变量展开。"
-                "写本会话交付物请用 `outputs/<rel>`（仅 bash 中可用 "
-                "`$PRISMCLAW_OUTPUT_DIR/<rel>`）。"
+                "写本会话交付物请用 `outbox/<rel>`（仅 bash 中可用 "
+                "`$PRISMCLAW_OUTBOX_DIR/<rel>`）。"
             )
 
         # ── home-relative (~) 或文件系统绝对 (/Users, /etc) ──────────────────
@@ -242,18 +240,18 @@ class WorkspaceResolver:
         # 容器内挂载点 `/workspace/...` 前缀泄漏：模型看到挂载点会照抄。
         # 仅当工作区根下没有真实名为 workspace/ 的目录时剥离，避免吞掉用户项目目录。
         if cleaned.startswith("workspace/"):
-            residual = cleaned[len("workspace/"):]
+            residual = cleaned[len("workspace/") :]
             if residual and not (workspace_abs / "workspace").exists():
                 cleaned = residual
 
         # `sessions/<sid>/...` 物理格式泄漏：present_files 报错与系统提示里
         # 出现的就是这种路径，模型会照抄进文件工具参数。若不做显式归一，它会
-        # 落入裸路径分支，被解析到 session_root/outputs/ 造成双重嵌套
-        # （outputs/sessions/<sid>/outputs/x.docx）——写新文件时创建垃圾目录。
+        # 落入裸路径分支，被解析到 session_root/outbox/ 造成双重嵌套
+        # （outbox/sessions/<sid>/outbox/x.docx）——写新文件时创建垃圾目录。
         # 本会话自引用 → 剥前缀归一后走正常分支；跨会话 → 只读直达、禁止写。
         preset_target: Path | None = None
         if cleaned.startswith("sessions/") or cleaned == "sessions":
-            residual = cleaned[len("sessions/"):] if cleaned != "sessions" else ""
+            residual = cleaned[len("sessions/") :] if cleaned != "sessions" else ""
             seg, _, rest = residual.partition("/")
             if session_root is not None and seg and seg == session_root.name:
                 if rest:
@@ -264,24 +262,24 @@ class WorkspaceResolver:
                 if for_write:
                     raise WorkspaceBoundaryError(
                         f"路径 {relative!r} 指向会话 {seg!r} 的私有目录，禁止写入。"
-                        "写本会话交付物请用 `outputs/<rel>`。"
+                        "写本会话交付物请用 `outbox/<rel>`。"
                     )
                 preset_target = workspace_abs / cleaned
 
         # ── 虚拟路径前缀映射 ────────────────────────────────────────────────
         # project/ → workspace 根（用户项目文件，直达原件）
         # 写入时禁止 sessions/、biz_domain/、.work/ 子树
-        #（session 交付物用 outputs/；业务域真实路径在 user_root 下，
+        # （session 交付物用 outbox/；业务域真实路径在 user_root 下，
         # 不在 workspace 内，此处禁止是为了不产生同名影子目录）
         if preset_target is not None:
             target = preset_target
         elif cleaned.startswith("project/") or cleaned == "project":
-            rel_after = cleaned[len("project/"):].lstrip("/") if cleaned != "project" else ""
+            rel_after = cleaned[len("project/") :].lstrip("/") if cleaned != "project" else ""
             if for_write and rel_after:
                 if rel_after.startswith("sessions/") or rel_after == "sessions":
                     raise WorkspaceBoundaryError(
                         f"project/ 前缀下禁止写入 sessions/ 子树（{relative!r}）。"
-                        f"写 session 交付物请改用 outputs/<sid>/..."
+                        f"写 session 交付物请改用 outbox/<sid>/..."
                     )
                 if rel_after.startswith("biz_domain/") or rel_after == "biz_domain":
                     raise WorkspaceBoundaryError(
@@ -302,7 +300,7 @@ class WorkspaceResolver:
                         raise WorkspaceBoundaryError(
                             f"路径 {relative!r} 需要 session_root（session-scoped 前缀）"
                         )
-                    target = session_root.resolve() / prefix / cleaned[len(prefix):].lstrip("/")
+                    target = session_root.resolve() / prefix / cleaned[len(prefix) :].lstrip("/")
                     matched_session = True
                     break
 
@@ -311,41 +309,76 @@ class WorkspaceResolver:
                     if for_write:
                         raise WorkspaceBoundaryError(
                             f"写入路径 {relative!r} 缺少虚拟前缀；"
-                            "请用 `outputs/<rel>`（本会话交付物）或 `project/<rel>`（用户项目文件）。"
+                            "请用 `outbox/<rel>`（本会话交付物）"
+                            "或 `project/<rel>`（用户项目文件）。"
                         )
-                    target = session_root.resolve() / "outputs" / cleaned
+                    # 读路径：模型可读会话内任意相对路径，但不含系统区。
+                    # `.work/` 是解析缓存与运行时副产物，模型可写即等于可伪造缓存。
+                    if cleaned.startswith(".work/") or cleaned == ".work":
+                        raise WorkspaceBoundaryError(
+                            f"路径 {relative!r} 属于会话系统区，不可读写。"
+                        )
+                    target = session_root.resolve() / "outbox" / cleaned
                 else:
                     target = workspace_abs / cleaned
 
         # ── 展开 + resolve + 边界检查 ────────────────────────────────────────
         target_expanded = Path(str(target)).expanduser()
-        resolved = target_expanded.resolve() if target_expanded.exists() else _lexical_resolve(target_expanded)
+        resolved = (
+            target_expanded.resolve()
+            if target_expanded.exists()
+            else _lexical_resolve(target_expanded)
+        )
         try:
             resolved.relative_to(workspace_abs)
         except ValueError as exc:
             raise WorkspaceBoundaryError(
                 f"路径 {relative!r}（清理后：{cleaned!r}）越出工作区边界 {workspace_abs}"
             ) from exc
+
+        # 归一后仍可能落进系统区（`outbox/../../.work/...` 这类穿越在清理阶段看不出来）。
+        # `.work/` 是解析缓存与运行时副产物，模型可写即等于可伪造缓存正文。
+        if for_write and _in_system_work(resolved, workspace_abs, session_root):
+            raise WorkspaceBoundaryError(f"路径 {relative!r} 落在系统缓存区，禁止写入。")
         return resolved
 
 
-_FS_ROOT_SEGMENTS = frozenset({
-    "Users", "users",
-    "etc",
-    "private",
-    "opt",
-    "var",
-    "tmp",
-    "Library", "library",
-    "Applications", "applications",
-    "System", "system",
-    "Volumes", "volumes",
-    "home",
-    "root",
-    "dev",
-    "mnt",
-    "srv",
-})
+def _in_system_work(target: Path, workspace_abs: Path, session_root: Path | None) -> bool:
+    """目标是否位于任一 `.work/` 系统区之内。"""
+    roots = [workspace_abs]
+    if session_root is not None:
+        roots.append(Path(session_root).resolve())
+    for root in roots:
+        work = root / ".work"
+        if target == work or work in target.parents:
+            return True
+    return False
+
+
+_FS_ROOT_SEGMENTS = frozenset(
+    {
+        "Users",
+        "users",
+        "etc",
+        "private",
+        "opt",
+        "var",
+        "tmp",
+        "Library",
+        "library",
+        "Applications",
+        "applications",
+        "System",
+        "system",
+        "Volumes",
+        "volumes",
+        "home",
+        "root",
+        "dev",
+        "mnt",
+        "srv",
+    }
+)
 
 
 # ── 能力目录别名纠正 ────────────────────────────────────────────────────────
@@ -377,7 +410,7 @@ def _within(path: Path, root: Path) -> bool:
 
 
 # 远程 URL 不是文件路径。模型常把网页链接直接传给 read/ls，pathlib 会把它当
-# 相对路径折叠成 ``outputs/https:/host/...``，报错信息毫无指向性。在解析入口
+# 相对路径折叠成 ``outbox/https:/host/...``，报错信息毫无指向性。在解析入口
 # 直接拒绝，并给出可操作的下一步。
 _REMOTE_URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
 

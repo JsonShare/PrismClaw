@@ -74,17 +74,14 @@ def test_core_schema_contains_static_memory_objects() -> None:
     memory_schema = schema[schema.index("-- ── 记忆") :]
     statements = sql_runner.split_sql(memory_schema)
 
-    assert sum(
-        stmt.startswith("CREATE TABLE") for stmt in sql_runner.split_sql(schema)
-    ) == 19
+    assert sum(stmt.startswith("CREATE TABLE") for stmt in sql_runner.split_sql(schema)) == 19
     assert schema.count("VECTOR(1024)") == 3
     assert "VECTOR{" not in schema
     assert len(statements) == 25
     assert sum(stmt.startswith("CREATE TABLE") for stmt in statements) == 6
-    assert sum(
-        stmt.startswith(("CREATE INDEX", "CREATE UNIQUE INDEX"))
-        for stmt in statements
-    ) == 16
+    assert (
+        sum(stmt.startswith(("CREATE INDEX", "CREATE UNIQUE INDEX")) for stmt in statements) == 16
+    )
     assert sum(stmt.startswith("DO $$") for stmt in statements) == 3
     assert sum("USING hnsw" in stmt for stmt in statements) == 2
 

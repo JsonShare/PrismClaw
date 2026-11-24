@@ -7,6 +7,7 @@ pc_medical_briefs 表的读写操作，供 analysis_pipeline.py / api/briefs.py 
 - 查询方法支持分页与过滤
 - row_to_dict 统一转换
 """
+
 from __future__ import annotations
 
 import logging
@@ -69,7 +70,9 @@ class BriefStore:
                     is_deleted=0,
                 )
             )
-        logger.info("简报创建成功: %s (patient=%s, reports=%d)", brief_id, patient_id, len(report_ids))
+        logger.info(
+            "简报创建成功: %s (patient=%s, reports=%d)", brief_id, patient_id, len(report_ids)
+        )
 
     # ── 查询 ────────────────────────────────────────────────
 
@@ -77,9 +80,7 @@ class BriefStore:
         """按 ID 查询简报（逻辑删除不可见）。"""
         async with self._engine.connect() as conn:
             result = await conn.execute(
-                select(briefs).where(
-                    (briefs.c.id == brief_id) & (briefs.c.is_deleted == 0)
-                )
+                select(briefs).where((briefs.c.id == brief_id) & (briefs.c.is_deleted == 0))
             )
             row = result.fetchone()
             return dict(row_to_dict(row)) if row else None
@@ -104,9 +105,7 @@ class BriefStore:
 
             # 计数
             total = (
-                await conn.execute(
-                    select(func.count()).select_from(briefs).where(base_where)
-                )
+                await conn.execute(select(func.count()).select_from(briefs).where(base_where))
             ).scalar() or 0
 
             # 分页
@@ -125,7 +124,9 @@ class BriefStore:
         """检查该患者是否有正在分析中的简报（防重复创建）。"""
         async with self._engine.connect() as conn:
             result = await conn.execute(
-                select(func.count()).select_from(briefs).where(
+                select(func.count())
+                .select_from(briefs)
+                .where(
                     (briefs.c.patient_id == patient_id)
                     & (briefs.c.is_deleted == 0)
                     & (briefs.c.status == "分析中")
@@ -134,16 +135,15 @@ class BriefStore:
             return (result.scalar() or 0) > 0
 
     async def list_briefs_by_patient(
-        self, patient_id: str, limit: int = 100,
+        self,
+        patient_id: str,
+        limit: int = 100,
     ) -> list[dict[str, Any]]:
         """某患者的简报列表（不分行页，用于患者详情页右栏 Tab）。"""
         async with self._engine.connect() as conn:
             stmt = (
                 select(briefs)
-                .where(
-                    (briefs.c.patient_id == patient_id)
-                    & (briefs.c.is_deleted == 0)
-                )
+                .where((briefs.c.patient_id == patient_id) & (briefs.c.is_deleted == 0))
                 .order_by(briefs.c.update_at.desc())
                 .limit(limit)
             )
@@ -188,7 +188,11 @@ class BriefStore:
     # ── 更新 ────────────────────────────────────────────────
 
     async def update_brief(
-        self, brief_id: str, data: dict[str, Any], *, user_id: str,
+        self,
+        brief_id: str,
+        data: dict[str, Any],
+        *,
+        user_id: str,
     ) -> None:
         """更新简报记录。user_id: 写入 update_by。"""
         now = datetime.utcnow()
@@ -197,9 +201,7 @@ class BriefStore:
             if key in data:
                 values[key] = data[key]
         async with self._engine.begin() as conn:
-            await conn.execute(
-                update(briefs).where(briefs.c.id == brief_id).values(**values)
-            )
+            await conn.execute(update(briefs).where(briefs.c.id == brief_id).values(**values))
         logger.info("简报更新成功: %s", brief_id)
 
     async def update_brief_status(
@@ -221,9 +223,7 @@ class BriefStore:
     async def increment_version(self, brief_id: str, *, user_id: str) -> int:
         """简报版本递增，返回新版本号。用于 reanalyze 端点。"""
         async with self._engine.begin() as conn:
-            result = await conn.execute(
-                select(briefs.c.version).where(briefs.c.id == brief_id)
-            )
+            result = await conn.execute(select(briefs.c.version).where(briefs.c.id == brief_id))
             row = result.fetchone()
             old_version = row[0] if row else 1
             new_version = old_version + 1

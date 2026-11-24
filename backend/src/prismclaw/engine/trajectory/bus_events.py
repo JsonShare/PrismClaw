@@ -26,9 +26,8 @@ CRITICAL RULE FOR SUBSCRIBERS:
     them before passing to downstream state that re-uses them (projection
     state, serializer, etc.).
 """
-from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -53,6 +52,7 @@ class SessionTurnStarted(BaseModel):
     session; core resolves it from tree.turn_counter or session-owned
     monotonic counter. Must NOT collide between turns of same session.
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -67,6 +67,7 @@ class SessionIterationStarted(BaseModel):
     projection uses it to push a new blank RequestAuditRecord onto its
     `state.pending` slot.
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -82,6 +83,7 @@ class SessionIterationFinished(BaseModel):
     `state.records` iff all expected layers populated, and reports gap count
     otherwise (mirroring `TrajectoryAggregator.complete_iteration()`).
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -98,6 +100,7 @@ class SessionTurnFinished(BaseModel):
     `terminated_by` carries the final turn-end reason from agent_loop's
     rt.terminated_by (closed vocabulary: ``TerminalReason``).
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -122,12 +125,13 @@ class SessionTurnFinished(BaseModel):
 class ProjectorInputDone(BaseModel):
     """Layer 0.5: raw SessionTree.order entries AS-IS before projector runs.
 
-    Core publisher responsibility: take `list(tree.order or [])` and
-    snapshot each entry's `entry.type`, `entry.id`, `entry.seq`,
-    `entry.parent_id` as frozen tuples — don't pass raw Entry references
- that could be mutated by subsequent steps (deepFreeze equivalent
-    at publish time via pydantic frozen + coerced tuples).
+       Core publisher responsibility: take `list(tree.order or [])` and
+       snapshot each entry's `entry.type`, `entry.id`, `entry.seq`,
+       `entry.parent_id` as frozen tuples — don't pass raw Entry references
+    that could be mutated by subsequent steps (deepFreeze equivalent
+       at publish time via pydantic frozen + coerced tuples).
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -143,26 +147,27 @@ class ProjectorInputDone(BaseModel):
 class ProjectorOutputDone(BaseModel):
     """Layer ①: MessageProjector output = messages list passed downstream.
 
-    Values exactly match old `set_projector_snapshot`'s 4 fields:
-      msg_count   = source_messages count
-      msg_roles   = tuple of "user" / "assistant" / "system"
-      head / tail = up-to-3 human-readable head / tail strings (snippets).
+       Values exactly match old `set_projector_snapshot`'s 4 fields:
+         msg_count   = source_messages count
+         msg_roles   = tuple of "user" / "assistant" / "system"
+         head / tail = up-to-3 human-readable head / tail strings (snippets).
 
-    Fix F: `appended_msg_count` is the number of messages that will be
-    injected downstream via `appended_messages_override` (the new user
-    message + skill prompts). The projector output (msg_count) is the
-    tree's history branch only — it can be 0 on a fresh turn while the
-    LLM still receives 1+ appended messages. Without this field the
-    panel shows "Layer ① = 0 messages" while Layers ②/③/④ show 1+,
-    which looks broken but is actually correct pipeline behavior.
+       Fix F: `appended_msg_count` is the number of messages that will be
+       injected downstream via `appended_messages_override` (the new user
+       message + skill prompts). The projector output (msg_count) is the
+       tree's history branch only — it can be 0 on a fresh turn while the
+       LLM still receives 1+ appended messages. Without this field the
+       panel shows "Layer ① = 0 messages" while Layers ②/③/④ show 1+,
+       which looks broken but is actually correct pipeline behavior.
 
- `user_message_preview` carries the latest user message
-    content (up to 500 chars) so the trajectory panel can show WHAT the
-    user asked, not just "1 user message". `tool_results_preview` carries
-    the previous iteration's tool-result content (role='tool' messages
-    from source_messages), each up to 200 chars — answers "what did the
-    tools return that fed into THIS iteration".
+    `user_message_preview` carries the latest user message
+       content (up to 500 chars) so the trajectory panel can show WHAT the
+       user asked, not just "1 user message". `tool_results_preview` carries
+       the previous iteration's tool-result content (role='tool' messages
+       from source_messages), each up to 200 chars — answers "what did the
+       tools return that fed into THIS iteration".
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -173,13 +178,14 @@ class ProjectorOutputDone(BaseModel):
     head: tuple[str, ...] = ()
     tail: tuple[str, ...] = ()
     appended_msg_count: int = 0
- # actual user/tool content previews (not just 80-char snippets)
+    # actual user/tool content previews (not just 80-char snippets)
     user_message_preview: str | None = None
     tool_results_preview: tuple[str, ...] = ()
 
 
 class AssembleEntryDone(BaseModel):
     """Layer ②: `assembled.messages` AFTER assemble_coordinator.assemble()."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -194,6 +200,7 @@ class AssembleEntryDone(BaseModel):
 
 class PipelineOutDone(BaseModel):
     """Layer ③: dynamic_result.projection.projected_messages AFTER pipeline."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -207,7 +214,7 @@ class PipelineOutDone(BaseModel):
     # Per-layer metadata — previously `set_pipeline_out_snapshot` kwargs
     budget_summary: dict[str, int] = Field(default_factory=dict)
     compressors_used: tuple[str, ...] = ()
- # compaction input/output preview (up to 500 chars) so the
+    # compaction input/output preview (up to 500 chars) so the
     # panel can show WHAT was compressed, not just "compact_history:trim"
     # labels. None when no compaction happened this iteration.
     compaction_summary: str | None = None
@@ -215,6 +222,7 @@ class PipelineOutDone(BaseModel):
 
 class PackerFinalDone(BaseModel):
     """Layer ④: final messages that ACTUALLY go to the LLM API call."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -229,7 +237,7 @@ class PackerFinalDone(BaseModel):
     system_text_chars: int | None = None
     tool_schema_chars: int | None = None
     response_format_chars: int | None = None
- # actual system prompt + tool schema TEXT (up to 1000 chars).
+    # actual system prompt + tool schema TEXT (up to 1000 chars).
     # The existing *_chars fields only carry counts — useless for "what did
     # the system prompt actually say". These give the panel real content.
     system_prompt_text: str | None = None
@@ -265,15 +273,16 @@ class PackerFinalDone(BaseModel):
 class LLMResponseReceived(BaseModel):
     """LLM 成功响应事件 — response 构造后 publish.
 
-    不传 llm_provider — provider 解析在 LiteLLMClient 内部,
-    runner 不可见. 消费者按 model 前缀推断 provider.
+       不传 llm_provider — provider 解析在 LiteLLMClient 内部,
+       runner 不可见. 消费者按 model 前缀推断 provider.
 
- `assistant_text_preview` carries the LLM response text
-    (up to 500 chars) so the panel can show WHAT the assistant answered,
-    not just "model=X, output_tokens=Y". `tool_calls_summary` carries
-    one string per emitted tool call in `name(args[:200])` format —
-    answers "which tools were called and with what arguments".
+    `assistant_text_preview` carries the LLM response text
+       (up to 500 chars) so the panel can show WHAT the assistant answered,
+       not just "model=X, output_tokens=Y". `tool_calls_summary` carries
+       one string per emitted tool call in `name(args[:200])` format —
+       answers "which tools were called and with what arguments".
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
@@ -286,10 +295,10 @@ class LLMResponseReceived(BaseModel):
     usage_cache_read_tokens: int | None = None
     usage_cache_write_tokens: int | None = None
     usage_reasoning_tokens: int | None = None
-    ttft_ms: float | None = None        # real first-token time minus _llm_start
-    total_ms: float | None = None       # _llm_end - _llm_start
+    ttft_ms: float | None = None  # real first-token time minus _llm_start
+    total_ms: float | None = None  # _llm_end - _llm_start
     completed_at_ms: int
- # actual content previews (not just token counts)
+    # actual content previews (not just token counts)
     assistant_text_preview: str | None = None
     tool_calls_summary: tuple[str, ...] = ()
 
@@ -304,16 +313,17 @@ class LLMRequestFailed(BaseModel):
         apply 不写, read_snapshot_v2 返回的 model_dump 不含, API 读不到.
         重试审计若将来需要, 应走 metrics counter, 不在事件层提前设计.
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
     turn_counter: int
     iteration: int
 
     model: str = ""
-    error_code: str = ""               # "timeout" / "aborted" / LLMError.code
-    error_message: str = ""            # truncated to 256 chars (see validator below)
-    ttft_ms: float | None = None       # if a first token arrived before failure; None otherwise
-    total_ms: float | None = None      # _llm_start to failure moment
+    error_code: str = ""  # "timeout" / "aborted" / LLMError.code
+    error_message: str = ""  # truncated to 256 chars (see validator below)
+    ttft_ms: float | None = None  # if a first token arrived before failure; None otherwise
+    total_ms: float | None = None  # _llm_start to failure moment
     failed_at_ms: int
 
     @field_validator("error_message")
@@ -338,43 +348,44 @@ class LLMRequestFailed(BaseModel):
 
 class ConversationNodeAdded(BaseModel):
     """Published by bootstrap._append() every time a node is added to
- SessionTree. One event = one trajectory cell.
+    SessionTree. One event = one trajectory cell.
 
- mapping (trajectory-record.ts → layout.ts):
-      role='user'        → kind='user'      (lane 0 / Input)
-      role='assistant'   → kind='message'   (lane 1 / Model)
-                           + each tool_call in entry.tool_calls → kind='tool'
-                             (lane 2 / Tools) — emitted as separate
-                             ConversationNodeAdded events by the runner
-                             when tool results come back
-      role='tool'        → kind='tool'      (lane 2 / Tools)
-      role='system'      → kind='system'    (lane 0 / Input)
-      compaction marker  → kind='compacted' (lane 1 / Model) — emitted
-                           separately by the compaction pipeline
+    mapping (trajectory-record.ts → layout.ts):
+         role='user'        → kind='user'      (lane 0 / Input)
+         role='assistant'   → kind='message'   (lane 1 / Model)
+                              + each tool_call in entry.tool_calls → kind='tool'
+                                (lane 2 / Tools) — emitted as separate
+                                ConversationNodeAdded events by the runner
+                                when tool results come back
+         role='tool'        → kind='tool'      (lane 2 / Tools)
+         role='system'      → kind='system'    (lane 0 / Input)
+         compaction marker  → kind='compacted' (lane 1 / Model) — emitted
+                              separately by the compaction pipeline
 
-    `iteration` is set ONLY for assistant cells (the LLM iteration that
-    produced this response).  user / tool / system cells have iteration=None.
+       `iteration` is set ONLY for assistant cells (the LLM iteration that
+       produced this response).  user / tool / system cells have iteration=None.
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
     session_id: str
-    entry_id: str                       # SessionTree.entries key
-    seq: int                            # position in SessionTree.order
-    turn: int                           # 1-based user-message counter
-    role: str                           # 'user' | 'assistant' | 'tool' | 'system'
-    kind: str                           # kind: 'user'|'message'|'tool'|'system'|'compacted'|'context'|'subtool'
+    entry_id: str  # SessionTree.entries key
+    seq: int  # position in SessionTree.order
+    turn: int  # 1-based user-message counter
+    role: str  # 'user' | 'assistant' | 'tool' | 'system'
+    kind: str  # kind: 'user'|'message'|'tool'|'system'|'compacted'|'context'|'subtool'
     content_preview: str | None = None  # content text up to 500 chars
     tool_calls_summary: tuple[str, ...] = ()  # name(args[:200]) per call (assistant only)
-    tool_call_id: str | None = None     # for role='tool' cells
+    tool_call_id: str | None = None  # for role='tool' cells
     # full-content + flag fields carried at publish time so the
     # cell projector can persist them in the same INSERT as the cell.
-    input_detail: str | None = None     # full input content (user msg / tool args)
-    output_detail: str | None = None    # full output content (assistant response / tool result)
-    thinking_detail: str | None = None   # reasoning text (assistant thinking / compaction)
+    input_detail: str | None = None  # full input content (user msg / tool args)
+    output_detail: str | None = None  # full output content (assistant response / tool result)
+    thinking_detail: str | None = None  # reasoning text (assistant thinking / compaction)
     is_error: bool = False
-    schema_detail: str | None = None    # tool schema JSON (tool only)
+    schema_detail: str | None = None  # tool schema JSON (tool only)
     started_at_ms: int
     completed_at_ms: int | None = None
-    iteration: int | None = None        # assistant/tool cell → LLM iteration number
+    iteration: int | None = None  # assistant/tool cell → LLM iteration number
     error: str | None = None
     # Response-side metrics for assistant cells. The LLM response HAS
     # returned by the time the assistant MessageEntry is appended (the
@@ -391,7 +402,7 @@ class ConversationNodeAdded(BaseModel):
     usage_reasoning_tokens: int | None = None
     ttft_ms: float | None = None
     decoding_ms: float | None = None
-    tool_name: str | None = None        # tool cell → tool name (schema lookup)
+    tool_name: str | None = None  # tool cell → tool name (schema lookup)
 
 
 # Aliases that match the names uses (helps cross-reference when
@@ -432,7 +443,7 @@ ALL_EVENTS: tuple[type[BaseModel], ...] = (
 )
 
 
-def event_typename(ev: Any) -> str:
+def event_typename(ev: BaseModel) -> str:
     """Human-readable type name — identical to event.type convention.
 
     Example: `ProjectorOutputDone(session_id=..., ...)` →

@@ -1,12 +1,9 @@
-from prismclaw.assembly.workspace.runner_deps import (
-    build_workspace_scoped_runner_deps,
-)
 from prismclaw.assembly.workspace.cache import (
+    ResolvedState,
+    WarmState,
+    WorkspaceFamilyKey,
     WorkspaceRuntimeWarmCache,
     WorkspaceRuntimeWarmEntry,
-    WorkspaceFamilyKey,
-    WarmState,
-    ResolvedState,
     clear_workspace_runner_deps_cache,
     get_app_workspace_extension_manager,
     get_app_workspace_extension_manager_async,
@@ -15,14 +12,17 @@ from prismclaw.assembly.workspace.cache import (
     get_app_workspace_runner_deps_state,
 )
 from prismclaw.assembly.workspace.runner_assembly import (
-    KernelRuntimeBundle,
     DreamRuntimeBundle,
+    KernelRuntimeBundle,
     MemoryRuntimeBundle,
     assemble_runner_deps,
-    build_kernel_runtime,
     build_dream_runtime,
+    build_kernel_runtime,
     build_memory_runtime,
     create_agent_runner_deps,
+)
+from prismclaw.assembly.workspace.runner_deps import (
+    build_workspace_scoped_runner_deps,
 )
 
 __all__ = [

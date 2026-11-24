@@ -2,7 +2,7 @@
 
 Read this when SKILL.md section 0 sends you here.
 
-Every `am` below means the full `AM_HOME="${AM_HOME:-${PRISMCLAW_OUTPUT_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs` command from SKILL.md section 2. There is no global `am` binary on this host.
+Every `am` below means the full `AM_HOME="${AM_HOME:-${PRISMCLAW_OUTBOX_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs` command from SKILL.md section 2. There is no global `am` binary on this host.
 
 When the arguments for this call (shown in section 0 of SKILL.md) start with `config` (for example `/answer-me-with-html config open off`), this turn handles settings only and produces no page:
 

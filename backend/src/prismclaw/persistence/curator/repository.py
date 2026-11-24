@@ -9,15 +9,17 @@ temporary ``async_sessionmaker(db_engine, ...)`` per call; this class uses
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json as _json
 import logging
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import bindparam, text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.schema.agent import (
@@ -29,6 +31,11 @@ from prismclaw.schema.agent import (
 from prismclaw.schema.llm.request import PackedLLMRequest
 from prismclaw.schema.memory.classify import SOP_MEMORY_TYPE
 from prismclaw.schema.shared.async_utils import await_or_abort
+
+if TYPE_CHECKING:
+    from prismclaw.infra.settings._memory import CuratorSettings
+    from prismclaw.schema.agent.curator import CuratorL1Index
+    from prismclaw.schema.llm.types import LLMClient
 
 # SDD D9：验证信号毕业路径阈值——positive 累计两次且无反证即可毕业
 # （count_validation_signals 只分 positive/negative 两类极性，无 neutral）。
@@ -56,6 +63,7 @@ def _graduation_candidates(
         ):
             eligible.add(entry_id)
     return [(entry_id, content) for entry_id, content in aged if entry_id in eligible]
+
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +109,7 @@ def _session_clause(session_key: str | None) -> tuple[str, dict[str, Any]]:
     return "AND session_key = :sk", {"sk": session_key}
 
 
-def _row_to_sop(row: Any) -> SopRow:
+def _row_to_sop(row: Sequence[Any]) -> SopRow:
     return SopRow(
         entry_id=str(row[0]),
         session_key=str(row[1]),
@@ -157,7 +165,7 @@ class PostgresCuratorSopRepository:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         *,
-        graduator: Callable | None = None,
+        graduator: Callable[..., tuple[bool, str | None]] | None = None,
     ) -> None:
         self._sf = session_factory
         # ``graduate_single_sop`` is engine business logic;
@@ -189,10 +197,11 @@ class PostgresCuratorSopRepository:
         self,
         session_key: str,
         archive_days: int,
-        l1_index: Any,
+        l1_index: CuratorL1Index,
         workspace_base_dir: Path | None = None,
-        settings: Any = None,
-        count_validation_signals: Callable | None = None,
+        settings: CuratorSettings | None = None,
+        count_validation_signals: Callable[[str, list[str]], Awaitable[dict[str, dict[str, int]]]]
+        | None = None,
     ) -> tuple[int, int]:
         """Archive stale SOPs and graduate high-use ones for one session_key."""
 
@@ -316,10 +325,10 @@ class PostgresCuratorSopRepository:
     async def review_session(
         self,
         session_key: str,
-        settings: Any,
-        l1_index: Any,
+        settings: CuratorSettings,
+        l1_index: CuratorL1Index,
         workspace_base_dir: Path,
-        llm_client: Any,
+        llm_client: LLMClient,
         *,
         check_alive: Callable[[], None] = lambda: None,
         abort_event: asyncio.Event | None = None,
@@ -448,10 +457,8 @@ class PostgresCuratorSopRepository:
                         )
                         await session.commit()
                     if l1_index:
-                        try:
+                        with contextlib.suppress(Exception):
                             await l1_index.index_remove(session_key, decision.id)
-                        except Exception:
-                            pass
                     promoted_count += 1
                     logger.info("LLM review promoted %s", decision.id[:8])
                 else:
@@ -472,14 +479,10 @@ class PostgresCuratorSopRepository:
                     )
                     await session.commit()
                 if l1_index:
-                    try:
+                    with contextlib.suppress(Exception):
                         await l1_index.index_remove(session_key, decision.id)
-                    except Exception:
-                        pass
                 archived_count += 1
-                logger.info(
-                    "LLM review archived %s: %s", decision.id[:8], reason_text
-                )
+                logger.info("LLM review archived %s: %s", decision.id[:8], reason_text)
 
         return ReviewOutcome(
             session_key=session_key,
@@ -516,11 +519,11 @@ class PostgresCuratorSopRepository:
 
     async def list_stale_sops(
         self,
-        settings: Any,
+        settings: CuratorSettings,
         *,
         session_key: str | None = None,
     ) -> list[SopRow]:
-        stale_days = settings.evolution.curator.stale_after_days
+        stale_days = settings.stale_after_days
         threshold = time.time() - stale_days * 86400
         clause, params = _session_clause(session_key)
         params["threshold"] = threshold
@@ -572,12 +575,12 @@ class PostgresCuratorSopRepository:
 
     async def preview_graduation(
         self,
-        settings: Any,
+        settings: CuratorSettings,
         *,
         session_key: str | None = None,
     ) -> list[SopRow]:
-        min_use = getattr(settings.evolution.curator, "promotion_min_use_count", 5)
-        min_days = getattr(settings.evolution.curator, "promotion_min_days", 7)
+        min_use = settings.promotion_min_use_count
+        min_days = settings.promotion_min_days
         threshold = time.time() - min_days * 86400
         clause, params = _session_clause(session_key)
         params["min_use"] = min_use
@@ -621,5 +624,5 @@ class PostgresCuratorSopRepository:
                 params,
             )
             await session.commit()
-            count = int(result.rowcount or 0)
+            count = int(result.rowcount or 0) if isinstance(result, CursorResult) else 0
         return count

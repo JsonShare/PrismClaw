@@ -6,22 +6,26 @@ import logging
 import os
 import re
 import time
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
-from prismclaw.schema.agent.context import MemoryAftermathBoundary
-from prismclaw.schema.session.ids import derive_memory_session_key
-from prismclaw.schema.llm.request_mode import RequestMode
-from prismclaw.schema.audit.audit import RetrievalAuditLogger
-from prismclaw.schema.audit.audit_types import RetrievalAuditEntry
 from prismclaw.engine.compression.context_router import DynamicContextRouter
 from prismclaw.engine.compression.memory_query_planner import build_evidence_strategy
 from prismclaw.engine.compression.memory_selector import select_relevant_memories
 from prismclaw.engine.foundation.metrics import emit
+from prismclaw.schema.agent.context import MemoryAftermathBoundary
 from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.audit.audit import RetrievalAuditLogger
+from prismclaw.schema.audit.audit_types import RetrievalAuditEntry
 from prismclaw.schema.content.context import ContextBlock, TaskProfile
 from prismclaw.schema.content.evidence import EvidencePacket, EvidenceStrategy
-from prismclaw.schema.storage.storage_types import MemoryStore
+from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.memory.memory_graph import EdgeStoreProtocol
+from prismclaw.schema.session.ids import derive_memory_session_key
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
+
+if TYPE_CHECKING:
+    from prismclaw.engine.memory.attribution import AttributionRecorder
+    from prismclaw.engine.memory.validation_signals import ValidationSignalLedger
 
 ARCHIVE_CACHE_MAX_ENTRIES = 200
 
@@ -30,9 +34,7 @@ ARCHIVE_CACHE_MAX_ENTRIES = 200
 # 子步骤挂起时无限期阻塞整个 agent 回合（表现为 UI 卡死、执行过程为 0）。
 # 可用 PRISMCLAW_MEMORY_RETRIEVAL_BUDGET_S 覆盖（秒）。
 try:
-    _DEFAULT_RETRIEVAL_BUDGET_S = float(
-        os.environ.get("PRISMCLAW_MEMORY_RETRIEVAL_BUDGET_S", "20")
-    )
+    _DEFAULT_RETRIEVAL_BUDGET_S = float(os.environ.get("PRISMCLAW_MEMORY_RETRIEVAL_BUDGET_S", "20"))
 except (TypeError, ValueError):
     _DEFAULT_RETRIEVAL_BUDGET_S = 20.0
 if _DEFAULT_RETRIEVAL_BUDGET_S <= 0:
@@ -79,7 +81,7 @@ class _NullMemoryAftermathBoundary:
         _ = session_id
         return False
 
-    def set_session_store(self, session_store: Any) -> None:
+    def set_session_store(self, session_store: SessionStore | None) -> None:
         _ = session_store
 
 
@@ -89,16 +91,16 @@ class MemoryRetriever:
         *,
         memory_store: MemoryStore | None = None,
         memory_settings: MemoryRetrievalSettings | None = None,
-        session_store: Any = None,
-        llm_client: Any = None,
-        evolution_settings: Any = None,
+        session_store: SessionStore | None = None,
+        llm_client: LLMClient | None = None,
+        evolution_settings: object | None = None,
         retrieval_audit_log: RetrievalAuditLogger | None = None,
         aftermath_boundary: MemoryAftermathBoundary | None = None,
-        attribution_recorder: Any = None,
+        attribution_recorder: AttributionRecorder | None = None,
         edge_store: EdgeStoreProtocol | None = None,
         retrieval_budget_s: float | None = None,
         interactive_retrieval_budget_s: float | None = None,
-        validation_ledger: Any = None,
+        validation_ledger: ValidationSignalLedger | None = None,
     ) -> None:
         self._memory_store = memory_store
         self._memory_settings = memory_settings
@@ -118,8 +120,7 @@ class MemoryRetriever:
         )
         self.interactive_retrieval_budget_s = (
             interactive_retrieval_budget_s
-            if interactive_retrieval_budget_s is not None
-            and interactive_retrieval_budget_s > 0
+            if interactive_retrieval_budget_s is not None and interactive_retrieval_budget_s > 0
             else _DEFAULT_INTERACTIVE_RETRIEVAL_BUDGET_S
         )
         self._l1_cache: dict[str, list[Any]] = {}
@@ -129,7 +130,7 @@ class MemoryRetriever:
         self._retrieval_fail_streak = 0
         self._retrieval_circuit_open_until = 0.0
 
-    def set_session_store(self, session_store: Any) -> None:
+    def set_session_store(self, session_store: SessionStore | None) -> None:
         self._session_store = session_store
         self._aftermath_boundary.set_session_store(session_store)
 
@@ -161,14 +162,12 @@ class MemoryRetriever:
         session_id: str,
         retrieval_query: str | None,
         task_profile: TaskProfile,
-        request_mode: RequestMode | None = None,
         include_canary: bool = False,
     ) -> tuple[list[Any], list[Any]]:
         evidence_strategy = self.build_evidence_strategy(
             session_id=session_id,
             retrieval_query=retrieval_query,
             task_profile=task_profile,
-            request_mode=request_mode,
             merged_state_payload=None,
             anchor_blocks=[],
             task_spec=None,
@@ -187,7 +186,6 @@ class MemoryRetriever:
         session_id: str,
         retrieval_query: str | None,
         task_profile: TaskProfile,
-        request_mode: RequestMode | None,
         merged_state_payload: dict[str, Any] | None,
         anchor_blocks: list[ContextBlock],
         task_spec: TaskSpec | None,
@@ -207,14 +205,12 @@ class MemoryRetriever:
         l2_quota, l3_quota, archive_limit = DynamicContextRouter.allocate_quotas(
             task_profile=task_profile,
             settings=cfg,
-            request_mode=request_mode,
         )
 
         return build_evidence_strategy(
             session_id=session_id,
             retrieval_query=retrieval_query,
             task_profile=task_profile,
-            request_mode=request_mode,
             merged_state_payload=merged_state_payload,
             anchor_blocks=anchor_blocks,
             task_spec=task_spec,
@@ -272,9 +268,12 @@ class MemoryRetriever:
                 ),
                 timeout=budget_s,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             emit(
-                "memory_retrieval_total", 1.0, kind="counter", labels={"outcome": "timeout_fallback"}
+                "memory_retrieval_total",
+                1.0,
+                kind="counter",
+                labels={"outcome": "timeout_fallback"},
             )
             logger.warning(
                 "memory_retriever.retrieve_evidence budget exceeded (%.1fs); "
@@ -331,17 +330,19 @@ class MemoryRetriever:
         绝不让回合挂在准备阶段。
         """
         session_key = self.derive_session_key(session_id)
+        memory_store = self._memory_store
+        if memory_store is None:
+            emit("memory_retrieval_fallback", 1.0, kind="counter", labels={"outcome": "failed"})
+            return [], [], []
         try:
             active_entries = await asyncio.wait_for(
-                self._memory_store.list_entries_by_status(
+                memory_store.list_entries_by_status(
                     session_key, ["active"], limit=_FALLBACK_SCAN_LIMIT
                 ),
                 timeout=_FALLBACK_FETCH_TIMEOUT_S,
             )
         except Exception:
-            emit(
-                "memory_retrieval_fallback", 1.0, kind="counter", labels={"outcome": "failed"}
-            )
+            emit("memory_retrieval_fallback", 1.0, kind="counter", labels={"outcome": "failed"})
             logger.warning(
                 "memory heuristic fallback fetch failed for %s", session_id, exc_info=True
             )
@@ -354,9 +355,7 @@ class MemoryRetriever:
         )
         budget = max(0, min(_FALLBACK_MAX_RESULTS, max(quota, 5)))
         if not active_entries or budget == 0 or not query:
-            emit(
-                "memory_retrieval_fallback", 1.0, kind="counter", labels={"outcome": "empty"}
-            )
+            emit("memory_retrieval_fallback", 1.0, kind="counter", labels={"outcome": "empty"})
             return [], [], []
         entries = _rank_entries_by_keyword_intersection(active_entries, query)[:budget]
         packets = self._build_evidence_packets(l2l3_results=entries, archive_results=[])
@@ -377,7 +376,7 @@ class MemoryRetriever:
         include_canary: bool = False,
         llm_selector_enabled: bool = True,
     ) -> tuple[list[Any], list[Any], list[EvidencePacket]]:
-        retrieval_query = evidence_strategy.query_text
+        retrieval_query = str(evidence_strategy.query_text or "")
 
         started_at = time.time()
         _impl_start_m = time.monotonic()
@@ -387,6 +386,9 @@ class MemoryRetriever:
             self._evolution_settings,
         )
         cfg = self._memory_settings
+        memory_store = self._memory_store
+        if cfg is None or memory_store is None:
+            return [], [], []
         query_plan = evidence_strategy
         l2l3_results: list[Any] = []
         archive_results: list[Any] = []
@@ -399,7 +401,7 @@ class MemoryRetriever:
 
         _t0 = time.monotonic()
         try:
-            raw_l2l3 = await self._memory_store.search(
+            raw_l2l3 = await memory_store.search(
                 session_key,
                 retrieval_query,
                 layers=list(query_plan.memory_layers),
@@ -413,12 +415,13 @@ class MemoryRetriever:
             # SDD B5 (§5.9): scope routing — agent-scope entries leave the
             # default retrieval path (dedicated channel deferred). Legacy
             # NULL-scope entries pass through untouched.
-            if bool(getattr(self._memory_settings, "scope_routing_enabled", False)):
+            if bool(getattr(cfg, "scope_routing_enabled", False)):
                 l2l3_results = [
-                    entry for entry in l2l3_results
+                    entry
+                    for entry in l2l3_results
                     if str(getattr(entry, "scope", "") or "").lower() != "agent"
                 ]
-            memory_search_meta = _search_meta(self._memory_store, kind="memory")
+            memory_search_meta = _search_meta(memory_store, kind="memory")
         except Exception:
             l2l3_error = True
             logger.warning(
@@ -440,7 +443,7 @@ class MemoryRetriever:
                 archive_results = list(cached[2])
             else:
                 try:
-                    artifact_results = await self._memory_store.search_l4_artifacts(
+                    artifact_results = await memory_store.search_l4_artifacts(
                         session_key,
                         retrieval_query,
                         artifact_kinds=list(query_plan.artifact_kinds),
@@ -455,12 +458,12 @@ class MemoryRetriever:
                         include_canary=effective_include_canary,
                     )
                     archive_search_meta = _merge_search_meta(
-                        _search_meta(self._memory_store, kind="artifact"),
-                        _search_meta(self._memory_store, kind="archive"),
+                        _search_meta(memory_store, kind="artifact"),
+                        _search_meta(memory_store, kind="archive"),
                     )
-                    archive_results = _rank_archive_like_entries(
-                        artifact_results
-                    )[: query_plan.archive_limit]
+                    archive_results = _rank_archive_like_entries(artifact_results)[
+                        : query_plan.archive_limit
+                    ]
                     if len(self._archive_cache) >= ARCHIVE_CACHE_MAX_ENTRIES:
                         oldest_session_id = next(iter(self._archive_cache))
                         del self._archive_cache[oldest_session_id]
@@ -480,11 +483,7 @@ class MemoryRetriever:
 
         # E7: 边扩展（graph_expansion_enabled 且 edge_store 可用时）
         _t0 = time.monotonic()
-        if (
-            query_plan.graph_expansion_enabled
-            and self._edge_store is not None
-            and l2l3_results
-        ):
+        if query_plan.graph_expansion_enabled and self._edge_store is not None and l2l3_results:
             l2l3_results = await self._expand_via_edges(
                 session_key=session_key,
                 seed_results=l2l3_results,
@@ -503,7 +502,7 @@ class MemoryRetriever:
             max_memory=max(1, sum(query_plan.per_layer_limits.values())),
             max_archives=max(0, query_plan.archive_limit),
             selector_metrics=selector_metrics,
-            ranking_settings=self._memory_settings,
+            ranking_settings=cfg,
         )
         # SDD T1-8 影子 use 记账：attribution_enabled=False 时仍记录注入面
         # （仅遥测/日志，不写库）——闭合「注入→使用」反馈环的最小一环，
@@ -557,14 +556,22 @@ class MemoryRetriever:
                 started_at=started_at,
                 ended_at=time.time(),
                 duration_s=max(0.0, time.time() - started_at),
-                memory_candidate_count=int(selector_metrics.get("input_memory_count", len(l2l3_results))),
+                memory_candidate_count=int(
+                    selector_metrics.get("input_memory_count", len(l2l3_results))
+                ),
                 archive_candidate_count=int(
                     selector_metrics.get("input_archive_count", len(archive_results))
                 ),
                 memory_text_candidate_count=int(memory_search_meta.get("text_candidate_count", 0)),
-                memory_vector_candidate_count=int(memory_search_meta.get("vector_candidate_count", 0)),
-                archive_text_candidate_count=int(archive_search_meta.get("text_candidate_count", 0)),
-                archive_vector_candidate_count=int(archive_search_meta.get("vector_candidate_count", 0)),
+                memory_vector_candidate_count=int(
+                    memory_search_meta.get("vector_candidate_count", 0)
+                ),
+                archive_text_candidate_count=int(
+                    archive_search_meta.get("text_candidate_count", 0)
+                ),
+                archive_vector_candidate_count=int(
+                    archive_search_meta.get("vector_candidate_count", 0)
+                ),
                 selected_memory_count=len(l2l3_results),
                 selected_archive_count=len(archive_results),
                 selected_layer_distribution=_selected_layer_distribution(l2l3_results),
@@ -609,12 +616,12 @@ class MemoryRetriever:
         max_expanded_entries: int = 5,
     ) -> list[Any]:
         """E7: 边扩展 — 种子记忆 → traverse → 条件求值 → merge 回候选列表。"""
-        seed_ids = [
-            str(getattr(e, "id", ""))
-            for e in seed_results
-            if getattr(e, "id", None)
-        ]
+        seed_ids = [str(getattr(e, "id", "")) for e in seed_results if getattr(e, "id", None)]
         if not seed_ids:
+            return seed_results
+
+        edge_store = self._edge_store
+        if edge_store is None:
             return seed_results
 
         # hub 预检（IG2 circuit breaker）
@@ -622,7 +629,7 @@ class MemoryRetriever:
         safe_source_ids: list[str] = []
         for sid in seed_ids:
             try:
-                deg = await self._edge_store.edge_degree(session_key, sid)
+                deg = await edge_store.edge_degree(session_key, sid)
             except Exception:
                 logger.debug("[E7] edge_degree failed for %s, skipping", sid, exc_info=True)
                 continue
@@ -635,20 +642,27 @@ class MemoryRetriever:
 
         # 遍历
         try:
-            edges = await self._edge_store.traverse(
-                session_key, safe_source_ids,
-                max_hops=max_hops, max_edges=max_edges,
+            edges = await edge_store.traverse(
+                session_key,
+                safe_source_ids,
+                max_hops=max_hops,
+                max_edges=max_edges,
             )
         except Exception:
             logger.warning("[E7] edge traversal failed for %s", session_key, exc_info=True)
             return seed_results
         if not edges:
             return seed_results
+        # 条件边求值依赖 LLM；未配置时无法判定，放弃本次扩展。
+        if self._llm_client is None:
+            return seed_results
 
         # 条件求值
         try:
-            applicable_edges = await self._edge_store.edges_applicable_in_context(
-                edges, retrieval_query, self._llm_client,
+            applicable_edges = await edge_store.edges_applicable_in_context(
+                edges,
+                retrieval_query,
+                self._llm_client,
             )
         except Exception:
             logger.warning("[E7] condition evaluation failed for %s", session_key, exc_info=True)
@@ -656,7 +670,7 @@ class MemoryRetriever:
 
         # 获取扩展条目 ID（排除已在种子中的），按边置信度降序排列
         seed_id_set = set(seed_ids)
-        unique_targets = {}
+        unique_targets: dict[str, float] = {}
         for e in applicable_edges:
             if e.target_id not in seed_id_set and e.target_id not in unique_targets:
                 unique_targets[e.target_id] = e.confidence
@@ -665,7 +679,9 @@ class MemoryRetriever:
 
         # 限量：按置信度排序后截断
         expanded_target_ids = sorted(
-            unique_targets, key=unique_targets.get, reverse=True,
+            unique_targets,
+            key=lambda target_id: unique_targets[target_id],
+            reverse=True,
         )[:max_expanded_entries]
         expanded_entries = await self._fetch_entries_by_ids(session_key, expanded_target_ids)
 
@@ -676,13 +692,18 @@ class MemoryRetriever:
         # merge：扩展条目追加到末尾，由下游 select_relevant_memories 精排
         logger.info(
             "[E7] edge expansion: session=%s seeds=%d edges=%d applicable=%d expanded=%d",
-            session_key, len(seed_ids), len(edges),
-            len(applicable_edges), len(expanded_entries),
+            session_key,
+            len(seed_ids),
+            len(edges),
+            len(applicable_edges),
+            len(expanded_entries),
         )
         return list(seed_results) + expanded_entries
 
     async def _fetch_entries_by_ids(
-        self, session_key: str, entry_ids: list[str],
+        self,
+        session_key: str,
+        entry_ids: list[str],
     ) -> list[Any]:
         """按 ID 列表获取完整记忆条目（E7：使用 PG 后端，避免 L1 镜像截断）。"""
         if not entry_ids or self._memory_store is None:
@@ -735,19 +756,14 @@ class MemoryRetriever:
                     session_id,
                     entry_id=str(getattr(entry, "id", "")),
                     entry_content=str(
-                        getattr(entry, "summary", None)
-                        or getattr(entry, "content", "")
-                        or ""
+                        getattr(entry, "summary", None) or getattr(entry, "content", "") or ""
                     ),
                     query_text=retrieval_query,
                     query_embedding=None,  # archive search meta lacks the vec (B1 scope)
                     relevance_score=getattr(entry, "similarity", None),
                 )
         except Exception:
-            logger.warning(
-                "injection recording failed for %s", session_id, exc_info=True
-            )
-
+            logger.warning("injection recording failed for %s", session_id, exc_info=True)
 
     def _build_evidence_packets(
         self,
@@ -797,7 +813,7 @@ class MemoryRetriever:
             packets.append(
                 EvidencePacket(
                     packet_id=packet_id,
-                    kind=packet_kind,  # type: ignore[arg-type]
+                    kind=packet_kind,
                     source="memory_archives",
                     title=str(artifact_kind or "archive"),
                     content=str(getattr(entry, "summary", "")),
@@ -829,7 +845,7 @@ class MemoryRetriever:
         return packets
 
 
-def _normalize_confidence(value: Any) -> float | None:
+def _normalize_confidence(value: object) -> float | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
@@ -837,7 +853,7 @@ def _normalize_confidence(value: Any) -> float | None:
     return None
 
 
-def _freshness_bucket(timestamp: Any) -> str:
+def _freshness_bucket(timestamp: object) -> str:
     if not isinstance(timestamp, (int, float)) or isinstance(timestamp, bool):
         return "unknown"
     age_s = max(0.0, time.time() - float(timestamp))
@@ -899,7 +915,7 @@ def _filter_publishable_artifacts(entries: list[Any], *, include_canary: bool) -
     return filtered
 
 
-def _search_meta(memory_store: Any, *, kind: str) -> dict[str, Any]:
+def _search_meta(memory_store: MemoryStore | None, *, kind: str) -> dict[str, Any]:
     attr_name = {
         "memory": "last_memory_search_meta",
         "archive": "last_archive_search_meta",
@@ -909,7 +925,7 @@ def _search_meta(memory_store: Any, *, kind: str) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-def _normalize_mix(raw: Any) -> dict[str, int]:
+def _normalize_mix(raw: object) -> dict[str, int]:
     if not isinstance(raw, dict):
         return {}
     normalized: dict[str, int] = {}
@@ -960,7 +976,7 @@ def _merge_search_meta(*metas: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _should_include_canary_for_session(session_id: str, evolution_settings: Any) -> bool:
+def _should_include_canary_for_session(session_id: str, evolution_settings: object) -> bool:
     dream_settings = getattr(evolution_settings, "dream", None)
     if dream_settings is None:
         return False
@@ -969,8 +985,10 @@ def _should_include_canary_for_session(session_id: str, evolution_settings: Any)
         return False
     if rollout_percentage >= 100:
         return True
-    rollout_salt = str(getattr(dream_settings, "canary_rollout_salt", "dream-canary") or "dream-canary")
-    digest = hashlib.sha1(f"{rollout_salt}:{session_id}".encode("utf-8")).hexdigest()
+    rollout_salt = str(
+        getattr(dream_settings, "canary_rollout_salt", "dream-canary") or "dream-canary"
+    )
+    digest = hashlib.sha1(f"{rollout_salt}:{session_id}".encode()).hexdigest()
     bucket = int(digest[:8], 16) % 100
     return bucket < rollout_percentage
 
@@ -983,14 +1001,14 @@ def _query_terms(text: str) -> set[str]:
     lowered = text.lower()
     terms = set(re.findall(r"[a-z0-9_]+", lowered))
     cjk_chars = _CJK_RE.findall(lowered)
-    terms.update(
-        cjk_chars[i] + cjk_chars[i + 1] for i in range(max(0, len(cjk_chars) - 1))
-    )
+    terms.update(cjk_chars[i] + cjk_chars[i + 1] for i in range(max(0, len(cjk_chars) - 1)))
     return {term for term in terms if term}
 
 
-def _recency_weight(timestamp: Any) -> float:
+def _recency_weight(timestamp: object) -> float:
     """30 天线性衰减的新鲜度权重（0~1），fallback 打分微调用。"""
+    if not isinstance(timestamp, (int, float, str)):
+        return 0.5
     try:
         age = max(0.0, time.time() - float(timestamp))
     except (TypeError, ValueError):
@@ -998,20 +1016,18 @@ def _recency_weight(timestamp: Any) -> float:
     return max(0.0, 1.0 - age / (30 * 86400.0))
 
 
-def _rank_entries_by_keyword_intersection(
-    entries: list[Any], query: str
-) -> list[Any]:
+def _rank_entries_by_keyword_intersection(entries: list[Any], query: str) -> list[Any]:
     """按关键词交集 + 新鲜度微调排序（fallback 专用，无 DB/LLM 依赖）。
 
     零命中条目一律剔除（去零）：纯新鲜度不得让无关记忆混入注入面。
     """
     terms = _query_terms(query)
 
-    def hit_ratio(entry: Any) -> float:
+    def hit_ratio(entry: object) -> float:
         content_terms = _query_terms(str(getattr(entry, "content", "") or "").lower())
         return float(len(terms & content_terms)) / max(1.0, float(len(terms)))
 
-    def score(entry: Any) -> float:
+    def score(entry: object) -> float:
         value = hit_ratio(entry)
         if not terms:
             value = 0.0

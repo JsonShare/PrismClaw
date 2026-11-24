@@ -3,12 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from prismclaw.schema.content.compaction import CompactResult
+from prismclaw.engine.plugins.hooks.handlers import HookHandler
 from prismclaw.engine.plugins.hooks.schema import (
     HookContext,
     HookDecision,
@@ -16,9 +17,10 @@ from prismclaw.engine.plugins.hooks.schema import (
     HookResult,
     PermissionDecision,
 )
-from prismclaw.engine.plugins.hooks.handlers import HookHandler
+from prismclaw.schema.content.compaction import CompactResult
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
     from prismclaw.schema.agent.run_control_types import RunControl
     from prismclaw.schema.services.skills import SkillManifest
 
@@ -69,17 +71,17 @@ class CompactionContext:
 
 @runtime_checkable
 class SkillProvider(Protocol):
-    def list_skills(self, workspace_path: str | None = None) -> list["SkillManifest"]: ...
-    def get(self, name: str, workspace_path: str | None = None) -> "SkillManifest" | None: ...
+    def list_skills(self, workspace_path: str | None = None) -> list[SkillManifest]: ...
+    def get(self, name: str, workspace_path: str | None = None) -> SkillManifest | None: ...
     def refresh_lightweight(
         self,
         file_paths: Iterable[str | Path] | None = None,
         workspace_path: str | None = None,
-    ) -> list["SkillManifest"]: ...
+    ) -> list[SkillManifest]: ...
     def refresh_heavyweight(
         self,
         workspace_path: str | None = None,
-    ) -> list["SkillManifest"]: ...
+    ) -> list[SkillManifest]: ...
     def set_plugin_skill_dirs(self, dirs: list[Path]) -> None: ...
     def track_file_paths(self, paths: Iterable[str | Path]) -> None: ...
 
@@ -201,7 +203,7 @@ class HookRegistry:
 # ── HookEvent ────────────────────────────────────────────────────────────────
 
 
-class HookEvent(str, Enum):
+class HookEvent(StrEnum):
     """Hook 事件枚举。"""
 
     # 会话生命周期
@@ -284,7 +286,7 @@ class HookDispatcher:
                     del handlers[idx]
                     break
 
-    def register_extension_hooks(self, extension_manager: Any) -> None:
+    def register_extension_hooks(self, extension_manager: ExtensionManager) -> None:
         """从 ExtensionManager 注册所有 hook bindings。
 
         保留 ``binding.plugin_name``：插件 hook 只在所属插件激活时执行
@@ -296,20 +298,16 @@ class HookDispatcher:
             if not isinstance(event_name, str):
                 continue
             if not isinstance(handler, HookHandler):
-                logger.debug(
-                    "Skipping non-HookHandler binding for event %s", event_name
-                )
+                logger.debug("Skipping non-HookHandler binding for event %s", event_name)
                 continue
-            self.register_named(
-                event_name, handler, plugin_name=binding.plugin_name
-            )
+            self.register_named(event_name, handler, plugin_name=binding.plugin_name)
 
     async def dispatch(
         self,
         event: HookEvent,
-        context: HookContext | Any,
+        context: HookContext | object,
         *,
-        timeout: float | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109 - 逐 handler 单独计时，需保留参数
         active_plugins: frozenset[str] | set[str] | None = None,
     ) -> HookResult:
         """分发事件，返回聚合 HookResult。
@@ -328,14 +326,8 @@ class HookDispatcher:
 
         aggregated = HookResult.success()
         for owner, handler in self._hooks[event]:
-            if (
-                active_plugins is not None
-                and owner is not None
-                and owner not in active_plugins
-            ):
-                logger.debug(
-                    "hook_scope_skipped: event=%s plugin=%s", event.value, owner
-                )
+            if active_plugins is not None and owner is not None and owner not in active_plugins:
+                logger.debug("hook_scope_skipped: event=%s plugin=%s", event.value, owner)
                 continue
             try:
                 result = await asyncio.wait_for(
@@ -360,7 +352,7 @@ class HookDispatcher:
                 )
                 aggregated.outcome = HookOutcome.CANCELLED
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error("Hook execution timed out for event %s", event.value)
                 result = HookResult(
                     outcome=HookOutcome.NON_BLOCKING_ERROR,
@@ -392,7 +384,10 @@ class HookDispatcher:
                 aggregated.permission_decision_reason = result.permission_decision_reason
             if result.updated_input and not aggregated.updated_input:
                 aggregated.updated_input = result.updated_input
-            if result.updated_mcp_tool_output is not None and aggregated.updated_mcp_tool_output is None:
+            if (
+                result.updated_mcp_tool_output is not None
+                and aggregated.updated_mcp_tool_output is None
+            ):
                 aggregated.updated_mcp_tool_output = result.updated_mcp_tool_output
             if result.decision and not aggregated.decision:
                 aggregated.decision = result.decision
@@ -406,9 +401,7 @@ class HookDispatcher:
 
         return aggregated
 
-    async def _execute_handler(
-        self, handler: HookHandler, context: Any
-    ) -> HookResult:
+    async def _execute_handler(self, handler: HookHandler, context: object) -> HookResult:
         """执行 HookHandler，返回 HookResult。"""
         hook_context = _coerce_context(context)
         return await handler.execute(hook_context)
@@ -417,7 +410,7 @@ class HookDispatcher:
 # ── Helper functions ──────────────────────────────────────────────────────────
 
 
-def _coerce_context(context: Any) -> HookContext:
+def _coerce_context(context: object) -> HookContext:
     """将任意 context 转换为 HookContext。
 
     如果 context 已经是 HookContext，直接返回。

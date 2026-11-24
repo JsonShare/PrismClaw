@@ -4,6 +4,7 @@
 所有运行期依赖通过 ``rt: LoopRuntime`` 显式访问，``nonlocal`` 变量
 （initial_task_spec、iteration_budget_warned）已改为 ``rt`` 属性读写。
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,6 +23,7 @@ from prismclaw.engine.execution.loop._loop_helpers import (
 from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.execution.loop.types import RunLoopState
 from prismclaw.schema.content.streaming import ErrorEvent
+from prismclaw.schema.llm.types import LLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ logger = logging.getLogger(__name__)
 async def should_continue(
     rt: LoopRuntime,
     state: RunLoopState,
-    response: Any | None = None,
+    response: LLMResponse | None = None,
     *,
     event: LoopEvent,
 ) -> Decision:
@@ -53,6 +55,9 @@ async def should_continue(
 
     # 台账绑定：内核读的是与 rt/state 同一个 list（append 语义共享）。
     rt.completion_state.ledger = state.ledger.evidence_ledger
+    kernel = rt.completion_kernel
+    if kernel is None:
+        raise RuntimeError("completion_kernel 未装配，无法做续跑裁决")
     _sc_t0 = _time.monotonic()
     _gov_ms = -1.0
 
@@ -75,7 +80,10 @@ async def should_continue(
         return Decision("TERMINATE", TerminalReason.ABORTED)
 
     # ── 无工具回合（preflight 独有）：模型停止调用工具 = 完成申报 ──
+    prepared_turn = state.prepared_turn
     if event.site == "preflight" and response is not None and not response.tool_calls:
+        if prepared_turn is None:
+            raise RuntimeError("preflight 阶段缺少 prepared_turn，无法评估完成契约")
         from prismclaw.engine.execution.state.governance import evaluate_no_tool_governance
 
         _stop_event = replace(
@@ -88,11 +96,11 @@ async def should_continue(
             rt,
             response=response,
             event=_stop_event,
-            kernel=rt.completion_kernel,
+            kernel=kernel,
             retry_counts=rt.retry_counts,
             response_policy=rt.response_policy,
             state_machine=rt.state_machine,
-            prepared_turn=state.prepared_turn,
+            prepared_turn=prepared_turn,
             total_input_tokens=state.ledger.total_input_tokens,
             total_output_tokens=state.ledger.total_output_tokens,
             total_cache_creation_tokens=state.ledger.total_cache_creation_tokens,
@@ -104,9 +112,7 @@ async def should_continue(
         if gov.done_event is not None:
             state.done_event = gov.done_event
             rt.terminated_by = (
-                TerminalReason.MAX_TOKENS
-                if state.max_tokens_hit_in_step
-                else TerminalReason.DONE
+                TerminalReason.MAX_TOKENS if state.max_tokens_hit_in_step else TerminalReason.DONE
             )
         if gov.terminal_code is not None:
             await _terminal.terminate(
@@ -130,7 +136,7 @@ async def should_continue(
 
     # ── 预算 + 恢复（非完成事件；内核是唯一预算权威）──
     _kernel_t0 = _time.monotonic()
-    decision = rt.completion_kernel.decide(event)
+    decision = kernel.decide(event)
     if decision.verdict == "TERMINATE":
         await _terminal.terminate(rt, state, decision.code)
         return decision
@@ -139,10 +145,12 @@ async def should_continue(
             # 盲重启 = 模型原样重发同一批被拒调用。RESTART 必须携带
             # 拒绝原因与「换工具/收敛」指令，否则这一轮重规划没有
             # 任何可用信息（旧实现即此空转）。
-            state.pending_messages.append({
-                "role": "user",
-                "content": _build_all_blocked_guidance(state.blocked_tool_results),
-            })
+            state.pending_messages.append(
+                {
+                    "role": "user",
+                    "content": _build_all_blocked_guidance(state.blocked_tool_results),
+                }
+            )
         return decision
 
     # ── 预算临限提醒（不改变裁决，只提醒一次）──
@@ -171,7 +179,7 @@ async def should_continue(
         )
 
         _tool_name: str | None = None
-        _tool_args: dict = {}
+        _tool_args: dict[str, Any] = {}
         _first_id = ""
         _parsed = parse_tool_calls(response.tool_calls[:1])
         if _parsed:
@@ -194,21 +202,15 @@ async def should_continue(
             tool_name=_tool_name,
             tool_signature=_tool_sig,
             result_fingerprint=compute_result_fingerprint(_first_result),
-            is_error=bool(
-                _first_result is None or getattr(_first_result, "is_error", False)
-            ),
+            is_error=bool(_first_result is None or getattr(_first_result, "is_error", False)),
             error_origin=(
-                getattr(_first_result, "error_origin", None)
-                if _first_result is not None
-                else None
+                getattr(_first_result, "error_origin", None) if _first_result is not None else None
             ),
         )
         loop_outcome = evaluate_tool_loop_policies(
             state=rt.tool_loop_state,
             config=(
-                getattr(rt.deps.config, "run_loop", None)
-                if hasattr(rt.deps, "config")
-                else None
+                getattr(rt.deps.config, "run_loop", None) if hasattr(rt.deps, "config") else None
             ),
         )
         rt.state_machine.update_tool_loop_state(rt.tool_loop_state)
@@ -221,7 +223,8 @@ async def should_continue(
         if loop_outcome.action == "freeze":
             if loop_outcome.frozen_signature:
                 rt.tool_loop_state.frozen_call_signatures.setdefault(
-                    loop_outcome.frozen_signature, 0,
+                    loop_outcome.frozen_signature,
+                    0,
                 )
             state.pending_messages.append(
                 {"role": "user", "content": loop_outcome.guidance},

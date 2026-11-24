@@ -13,11 +13,7 @@ from prismclaw.runtime.skills.models import ClawHubError
 
 logger = logging.getLogger(__name__)
 
-_TOKEN_ENV_VARS = (
-    "PRISMCLAW_CLAWHUB_TOKEN",
-    "CLAWHUB_TOKEN",
-    "CLAWHUB_AUTH_TOKEN"
-)
+_TOKEN_ENV_VARS = ("PRISMCLAW_CLAWHUB_TOKEN", "CLAWHUB_TOKEN", "CLAWHUB_AUTH_TOKEN")
 
 _TOKEN_KEYS = {"accessToken", "authToken", "apiToken", "token"}
 _NESTED_KEYS = {"auth", "session", "credentials", "user"}
@@ -115,16 +111,23 @@ class ClawHubClient:
         )
         if not isinstance(items, list):
             items = []
-        return [
-            SkillSearchResult(
-                slug=item.get("slug", ""),
-                name=item.get("displayName", item.get("name", "")),
-                description=item.get("summary", item.get("description", "")),
-                version=item.get("version") or item.get("latestVersion") or "",
+        results: list[SkillSearchResult] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            slug = item.get("slug", "")
+            name = item.get("displayName", item.get("name", ""))
+            description = item.get("summary", item.get("description", ""))
+            version = item.get("version") or item.get("latestVersion") or ""
+            results.append(
+                SkillSearchResult(
+                    slug=slug if isinstance(slug, str) else "",
+                    name=name if isinstance(name, str) else "",
+                    description=description if isinstance(description, str) else "",
+                    version=version if isinstance(version, str) else "",
+                )
             )
-            for item in items
-            if isinstance(item, dict)
-        ]
+        return results
 
     async def get_detail(self, slug: str) -> SkillDetail:
         resp = await self._client.get(f"/api/v1/skills/{slug}")

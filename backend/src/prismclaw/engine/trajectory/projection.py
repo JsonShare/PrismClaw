@@ -34,20 +34,25 @@ This projection is the **sole source of truth** for trajectory audit data
 after the Phase 0' 解耦 refactor. The old `TrajectoryAggregator` wrapper
 was removed in earlier cleanup passes (see trajectory/__init__.py).
 """
+
 from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, TypeAlias, Union
+from collections.abc import Callable
+
+from pydantic import BaseModel
 
 from prismclaw.engine.trajectory import bus_events as evmod
 from prismclaw.schema.trajectory import (
     RequestAuditRecord,
     TrajectoryProjectionState,
+    _clone_record,
     init_state,
     view,
 )
-from prismclaw.schema.trajectory import _clone_record
+
+__all__ = ["RequestAuditRecord", "TrajectoryProjectionState", "init_state", "view"]
 
 logger = logging.getLogger(__name__)
 
@@ -121,13 +126,14 @@ def _infer_llm_provider(model: str | None) -> str | None:
             return provider
     return None
 
-LayerEvent: TypeAlias = Union[
-    evmod.ProjectorInputDone,
-    evmod.ProjectorOutputDone,
-    evmod.AssembleEntryDone,
-    evmod.PipelineOutDone,
-    evmod.PackerFinalDone,
-]
+
+type LayerEvent = (
+    evmod.ProjectorInputDone
+    | evmod.ProjectorOutputDone
+    | evmod.AssembleEntryDone
+    | evmod.PipelineOutDone
+    | evmod.PackerFinalDone
+)
 
 
 # ---------------------------------------------------------------------------
@@ -135,40 +141,39 @@ LayerEvent: TypeAlias = Union[
 # ---------------------------------------------------------------------------
 
 
-def apply(state: TrajectoryProjectionState, event: Any) -> TrajectoryProjectionState:
+def apply(state: TrajectoryProjectionState, event: BaseModel) -> TrajectoryProjectionState:
     """Fold `event` into `state` → NEW state. Input state is NOT mutated.
 
- 性能：热路径上 apply 就是 switch-case + 按类型纯函数更新。
+    性能：热路径上 apply 就是 switch-case + 按类型纯函数更新。
     """
     # Event → handler dispatch.
-    et = type(event)
-    if et is evmod.SessionTurnStarted:
+    if isinstance(event, evmod.SessionTurnStarted):
         return _apply_turn_started(state, event)
-    if et is evmod.SessionIterationStarted:
+    if isinstance(event, evmod.SessionIterationStarted):
         return _apply_iteration_started(state, event)
-    if et is evmod.SessionIterationFinished:
+    if isinstance(event, evmod.SessionIterationFinished):
         return _apply_iteration_finished(state, event)
-    if et is evmod.SessionTurnFinished:
+    if isinstance(event, evmod.SessionTurnFinished):
         # Turn-finished doesn't structurally change audit content (still
         # same records); but it resets turn_counter awareness and signals
         # "flush window ends". State IS different → new ref.
         return _apply_turn_finished(state, event)
     # 5 layer events:
-    if et is evmod.ProjectorInputDone:
+    if isinstance(event, evmod.ProjectorInputDone):
         return _apply_projector_input(state, event)
-    if et is evmod.ProjectorOutputDone:
+    if isinstance(event, evmod.ProjectorOutputDone):
         return _apply_projector_output(state, event)
-    if et is evmod.AssembleEntryDone:
+    if isinstance(event, evmod.AssembleEntryDone):
         return _apply_assemble_entry(state, event)
-    if et is evmod.PipelineOutDone:
+    if isinstance(event, evmod.PipelineOutDone):
         return _apply_pipeline_out(state, event)
-    if et is evmod.PackerFinalDone:
+    if isinstance(event, evmod.PackerFinalDone):
         return _apply_packer_final(state, event)
     # LLM response-side events (not layer events but routed through
     # projection.apply() so pending.llm_* fields get filled).
-    if et is evmod.LLMResponseReceived:
+    if isinstance(event, evmod.LLMResponseReceived):
         return _apply_llm_response(state, event)
-    if et is evmod.LLMRequestFailed:
+    if isinstance(event, evmod.LLMRequestFailed):
         return _apply_llm_failure(state, event)
     # 未知事件 → 同引用返回（无变更信号）。`return state if unchanged`。
     return state
@@ -177,6 +182,7 @@ def apply(state: TrajectoryProjectionState, event: Any) -> TrajectoryProjectionS
 # ---------------------------------------------------------------------------
 # apply helpers  (each returns new state; does NOT mutate argument)
 # ---------------------------------------------------------------------------
+
 
 def _copy_state(s: TrajectoryProjectionState) -> TrajectoryProjectionState:
     """Shallow-copy fields — records list duplicated so we can append."""
@@ -219,7 +225,10 @@ def _record_has_llm_data(r: RequestAuditRecord) -> bool:
 
 
 def _ensure_pending(
-    s: TrajectoryProjectionState, session_id: str, turn: int, iteration: int,
+    s: TrajectoryProjectionState,
+    session_id: str,
+    turn: int,
+    iteration: int,
     started_ms: int,
 ) -> TrajectoryProjectionState:
     """Ensure state.pending is a blank RequestAuditRecord for (turn, iter).
@@ -230,11 +239,7 @@ def _ensure_pending(
     has LLM/layer data; otherwise silently drop it to avoid polluting the
     audit trail with empty rows that would skew statistics.
     """
-    if (
-        s.pending is not None
-        and s.pending.turn == turn
-        and s.pending.iteration == iteration
-    ):
+    if s.pending is not None and s.pending.turn == turn and s.pending.iteration == iteration:
         return s  # same ref = no change
     ns = _copy_state(s)
     if ns.pending is not None:
@@ -263,18 +268,20 @@ def _ensure_pending(
 
 
 def _apply_turn_started(
-    s: TrajectoryProjectionState, ev: evmod.SessionTurnStarted,
+    s: TrajectoryProjectionState,
+    ev: evmod.SessionTurnStarted,
 ) -> TrajectoryProjectionState:
     ns = _copy_state(s)
     if ns.session_id in (None, ""):
         ns.session_id = ev.session_id
- # turn/start sets `turn_counter` — we just ensure state tracks it.
+    # turn/start sets `turn_counter` — we just ensure state tracks it.
     ns.turn_counter = ev.turn_counter
     return ns
 
 
 def _apply_iteration_started(
-    s: TrajectoryProjectionState, ev: evmod.SessionIterationStarted,
+    s: TrajectoryProjectionState,
+    ev: evmod.SessionIterationStarted,
 ) -> TrajectoryProjectionState:
     # If a layer event arrived before us and created the pending with a
     # synthetic start time, correct it now with the real timestamp so the
@@ -293,12 +300,17 @@ def _apply_iteration_started(
         ns.pending.started_at_ms = ev.started_at_ms
         return ns
     return _ensure_pending(
-        s, ev.session_id, ev.turn_counter, ev.iteration, ev.started_at_ms,
+        s,
+        ev.session_id,
+        ev.turn_counter,
+        ev.iteration,
+        ev.started_at_ms,
     )
 
 
 def _apply_iteration_finished(
-    s: TrajectoryProjectionState, ev: evmod.SessionIterationFinished,
+    s: TrajectoryProjectionState,
+    ev: evmod.SessionIterationFinished,
 ) -> TrajectoryProjectionState:
     if s.pending is None:
         # orphan finish without start
@@ -348,7 +360,8 @@ def _apply_iteration_finished(
 
 
 def _apply_turn_finished(
-    s: TrajectoryProjectionState, ev: evmod.SessionTurnFinished,
+    s: TrajectoryProjectionState,
+    ev: evmod.SessionTurnFinished,
 ) -> TrajectoryProjectionState:
     # If pending still exists → commit it as status="orphaned" (turn ended
     # without an explicit SessionIterationFinished for the in-flight iter).
@@ -384,10 +397,20 @@ def _apply_turn_finished(
     return ns
 
 
-def _apply_layer_event(
+def _apply_layer_event[
+    LayerEventT: (
+        evmod.ProjectorInputDone,
+        evmod.ProjectorOutputDone,
+        evmod.AssembleEntryDone,
+        evmod.PipelineOutDone,
+        evmod.PackerFinalDone,
+        evmod.LLMResponseReceived,
+        evmod.LLMRequestFailed,
+    )
+](
     s: TrajectoryProjectionState,
-    ev: LayerEvent,
-    updater,
+    ev: LayerEventT,
+    updater: Callable[[RequestAuditRecord, LayerEventT], None],
 ) -> TrajectoryProjectionState:
     """Generic layer-event applier: ensure pending exists, then run updater(rec).
 
@@ -405,7 +428,11 @@ def _apply_layer_event(
         # validation if real start event never arrives.
         started = getattr(ev, "started_at_ms", None) or 1_700_000_000_000
         ns = _ensure_pending(
-            s, ev.session_id, ev.turn_counter, ev.iteration, started,
+            s,
+            ev.session_id,
+            ev.turn_counter,
+            ev.iteration,
+            started,
         )
     else:
         ns = _copy_state(s)
@@ -416,21 +443,24 @@ def _apply_layer_event(
 
 
 def _apply_projector_input(
-    s: TrajectoryProjectionState, ev: evmod.ProjectorInputDone,
+    s: TrajectoryProjectionState,
+    ev: evmod.ProjectorInputDone,
 ) -> TrajectoryProjectionState:
-    def up(r: RequestAuditRecord, e: evmod.ProjectorInputDone):
+    def up(r: RequestAuditRecord, e: evmod.ProjectorInputDone) -> None:
         r.projector_input_order_count = e.order_count
         r.projector_input_entry_types = tuple(e.order_entry_types)
         r.projector_input_head_seq = tuple(e.order_head_seq)
         r.projector_input_tail_seq = tuple(e.order_tail_seq)
         r.projector_input_tail_types = tuple(e.order_tail_types)
+
     return _apply_layer_event(s, ev, up)
 
 
 def _apply_projector_output(
-    s: TrajectoryProjectionState, ev: evmod.ProjectorOutputDone,
+    s: TrajectoryProjectionState,
+    ev: evmod.ProjectorOutputDone,
 ) -> TrajectoryProjectionState:
-    def up(r: RequestAuditRecord, e: evmod.ProjectorOutputDone):
+    def up(r: RequestAuditRecord, e: evmod.ProjectorOutputDone) -> None:
         r.projector_msg_count = e.msg_count
         r.projector_msg_roles = tuple(e.msg_roles)
         r.projector_head = tuple(e.head)
@@ -438,16 +468,18 @@ def _apply_projector_output(
         # Fix F: surface appended_msg_count so the panel can show
         # "history=0 + appended=N → total N" instead of misleading "0".
         r.projector_appended_msg_count = e.appended_msg_count
- # actual content previews
+        # actual content previews
         r.projector_user_message_preview = e.user_message_preview
         r.projector_tool_results_preview = tuple(e.tool_results_preview)
+
     return _apply_layer_event(s, ev, up)
 
 
 def _apply_assemble_entry(
-    s: TrajectoryProjectionState, ev: evmod.AssembleEntryDone,
+    s: TrajectoryProjectionState,
+    ev: evmod.AssembleEntryDone,
 ) -> TrajectoryProjectionState:
-    def up(r: RequestAuditRecord, e: evmod.AssembleEntryDone):
+    def up(r: RequestAuditRecord, e: evmod.AssembleEntryDone) -> None:
         r.assemble_entry_msg_count = e.msg_count
         r.assemble_entry_roles = tuple(e.msg_roles)
         r.assemble_entry_head = tuple(e.head)
@@ -455,16 +487,19 @@ def _apply_assemble_entry(
         r.assemble_entry_meta_keys = tuple(e.entry_meta_keys)
         # hash for N11 metadata delta debug (cheap, 16 hex)
         import hashlib
+
         r.assemble_entry_meta_values_hash = hashlib.sha1(
             ",".join(e.entry_meta_keys).encode("utf-8"),
         ).hexdigest()[:16]
+
     return _apply_layer_event(s, ev, up)
 
 
 def _apply_pipeline_out(
-    s: TrajectoryProjectionState, ev: evmod.PipelineOutDone,
+    s: TrajectoryProjectionState,
+    ev: evmod.PipelineOutDone,
 ) -> TrajectoryProjectionState:
-    def up(r: RequestAuditRecord, e: evmod.PipelineOutDone):
+    def up(r: RequestAuditRecord, e: evmod.PipelineOutDone) -> None:
         r.pipeline_out_msg_count = e.msg_count
         r.pipeline_out_roles = tuple(e.msg_roles)
         r.pipeline_out_head = tuple(e.head)
@@ -478,15 +513,17 @@ def _apply_pipeline_out(
             r.pipeline_out_msg_count > 0
             and (r.assemble_entry_msg_count - r.pipeline_out_msg_count) > 0
         )
- # compaction content preview
+        # compaction content preview
         r.pipeline_out_compaction_summary = e.compaction_summary
+
     return _apply_layer_event(s, ev, up)
 
 
 def _apply_packer_final(
-    s: TrajectoryProjectionState, ev: evmod.PackerFinalDone,
+    s: TrajectoryProjectionState,
+    ev: evmod.PackerFinalDone,
 ) -> TrajectoryProjectionState:
-    def up(r: RequestAuditRecord, e: evmod.PackerFinalDone):
+    def up(r: RequestAuditRecord, e: evmod.PackerFinalDone) -> None:
         r.packer_final_msg_count = e.msg_count
         r.packer_final_roles = tuple(e.msg_roles)
         r.packer_final_head = tuple(e.head)
@@ -497,12 +534,11 @@ def _apply_packer_final(
         if e.tool_schema_chars is not None:
             r.packer_final_tool_schema_total_chars = int(e.tool_schema_chars)
         if e.response_format_chars is not None:
-            r.packer_final_response_format_text = (
-                f"<chars={e.response_format_chars}>"
-            )
- # actual text previews
+            r.packer_final_response_format_text = f"<chars={e.response_format_chars}>"
+        # actual text previews
         r.packer_final_system_prompt_text = e.system_prompt_text
         r.packer_final_tool_schema_text = e.tool_schema_text
+
     return _apply_layer_event(s, ev, up)
 
 
@@ -524,8 +560,10 @@ def _apply_packer_final(
 #                           `yield ErrorEvent`. Same pending invariant holds.
 # ---------------------------------------------------------------------------
 
+
 def _apply_llm_response(
-    s: TrajectoryProjectionState, ev: evmod.LLMResponseReceived,
+    s: TrajectoryProjectionState,
+    ev: evmod.LLMResponseReceived,
 ) -> TrajectoryProjectionState:
     """成功路径: 填充 pending 的 9 个响应字段 + packer_final_model (v1.0 bug fix).
 
@@ -533,12 +571,16 @@ def _apply_llm_response(
     bus_events.LLMResponseReceived docstring 与 _infer_llm_provider).
     """
     from prismclaw.engine.trajectory.metrics import (
-        Stage, StageTimer, WriteMode, inc_write,
+        Stage,
+        StageTimer,
+        WriteMode,
+        inc_write,
     )
+
     with StageTimer(Stage.LLM_RESPONSE_APPLY):
         inc_write(WriteMode.LLM_RESPONSE_RECEIVED)
 
-        def up(r: RequestAuditRecord, e: evmod.LLMResponseReceived):
+        def up(r: RequestAuditRecord, e: evmod.LLMResponseReceived) -> None:
             r.llm_model = e.model
             # Fix D: provider 不在事件层 (runner 看不到 _resolve_credentials
             # 解析结果), 由消费者按 model 前缀推断. 失败时保持 None.
@@ -559,35 +601,42 @@ def _apply_llm_response(
             # 模型 (与 llm_model 同值, 但消费者可能从 packer_final_*
             # 字段组读取, 所以两个地方都要有).
             r.packer_final_model = e.model
- # actual response content previews
+            # actual response content previews
             r.assistant_text_preview = e.assistant_text_preview
             r.tool_calls_summary = tuple(e.tool_calls_summary)
+
         return _apply_layer_event(s, ev, up)
 
 
 def _apply_llm_failure(
-    s: TrajectoryProjectionState, ev: evmod.LLMRequestFailed,
+    s: TrajectoryProjectionState,
+    ev: evmod.LLMRequestFailed,
 ) -> TrajectoryProjectionState:
     """失败路径: 填充 pending 的 finish_reason='error' + error 信息.
 
     Fix D: 失败路径也按 model 前缀推断 llm_provider, 与成功路径一致.
     """
     from prismclaw.engine.trajectory.metrics import (
-        Stage, StageTimer, WriteMode, inc_write,
+        Stage,
+        StageTimer,
+        WriteMode,
+        inc_write,
     )
+
     with StageTimer(Stage.LLM_FAILURE_APPLY):
         inc_write(WriteMode.LLM_REQUEST_FAILED)
 
-        def up(r: RequestAuditRecord, e: evmod.LLMRequestFailed):
+        def up(r: RequestAuditRecord, e: evmod.LLMRequestFailed) -> None:
             r.llm_model = e.model
             _inferred = _infer_llm_provider(e.model)
             if _inferred is not None:
                 r.llm_provider = _inferred
             r.finish_reason = "error"
-            r.error = e.error_code or None      # RequestAuditRecord.error 字段
+            r.error = e.error_code or None  # RequestAuditRecord.error 字段
             r.error_stack = e.error_message or None
-            r.packer_final_model = e.model       # v1.0 bug fix (see above)
+            r.packer_final_model = e.model  # v1.0 bug fix (see above)
             # usage 字段在失败时不填 (litellm 失败时无 usage 返回)
             r.ttft_ms = int(e.ttft_ms) if e.ttft_ms is not None else None
             r.total_ms = int(e.total_ms) if e.total_ms is not None else None
+
         return _apply_layer_event(s, ev, up)

@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import secrets
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -20,16 +21,21 @@ from prismclaw.schema.content.streaming import Done, ReasoningChunk, TextChunk
 from prismclaw.schema.services.chat_service import ChatService
 from prismclaw.schema.shared.tool_markup import MarkupStreamFilter
 
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from prismclaw.engine.security.sandbox.policy import SandboxPolicy
+
 openai_router = APIRouter(prefix="/api/v1", tags=["openai"])
 
 _chat_service: ChatService | None = None
 _session_router: SessionRouter | None = None
 _web_settings: WebSettings | None = None
-_redis_client: Any = None
-_sandbox_policy: Any = None
+_redis_client: Redis | None = None
+_sandbox_policy: SandboxPolicy | None = None
 
 
-def _require_sandbox_policy(sandbox_policy: Any) -> Any:
+def _require_sandbox_policy(sandbox_policy: SandboxPolicy | None) -> SandboxPolicy:
     if sandbox_policy is None:
         raise RuntimeError(
             "openai web runtime requires sandbox_policy to be resolved before dependency wiring"
@@ -40,9 +46,9 @@ def _require_sandbox_policy(sandbox_policy: Any) -> Any:
 def set_openai_deps(
     chat_service: ChatService,
     session_router: SessionRouter,
-    sandbox_policy: Any,
+    sandbox_policy: SandboxPolicy | None,
     web_settings: WebSettings | None = None,
-    redis_client: Any = None,
+    redis_client: Redis | None = None,
 ) -> None:
     global _chat_service, _session_router, _web_settings, _redis_client, _sandbox_policy
     _chat_service = chat_service
@@ -66,11 +72,11 @@ class ChatCompletionRequest(BaseModel):
     user: str | None = None
 
 
-@openai_router.post("/chat/completions")
+@openai_router.post("/chat/completions", response_model=None)
 async def chat_completions(
     body: ChatCompletionRequest,
     user_id: str = Depends(get_current_user),
-) -> Any:
+) -> StreamingResponse | dict[str, Any]:
     if _chat_service is None or _session_router is None:
         raise HTTPException(500, "OpenAI compat deps not configured")
 
@@ -122,7 +128,7 @@ def _resolve_user_workspace(user_id: str) -> Path:
     return user_workspace
 
 
-async def _stream_sse(request: RunRequest, model: str, user_id: str):
+async def _stream_sse(request: RunRequest, model: str, user_id: str) -> AsyncIterator[str]:
     assert _chat_service is not None
     completion_id = f"chatcmpl-{secrets.token_hex(12)}"
 
@@ -142,7 +148,9 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str):
     # 逐片 strip_tool_markup 无法识别半截标记，会把残留漏给调用方。
     markup_filter = MarkupStreamFilter()
 
-    async for event in _chat_service.start_conversation(request, tool_workspace_path=tool_workspace):
+    async for event in _chat_service.start_conversation(
+        request, tool_workspace_path=tool_workspace
+    ):
         if isinstance(event, TextChunk):
             text = markup_filter.feed(event.text or "")
             if not text:
@@ -223,7 +231,9 @@ async def _complete_response(request: RunRequest, model: str, user_id: str) -> d
 
     tool_workspace = _resolve_user_workspace(user_id)
 
-    async for event in _chat_service.start_conversation(request, tool_workspace_path=tool_workspace):
+    async for event in _chat_service.start_conversation(
+        request, tool_workspace_path=tool_workspace
+    ):
         if isinstance(event, TextChunk):
             collected_text.append(event.text)
         elif isinstance(event, ReasoningChunk):

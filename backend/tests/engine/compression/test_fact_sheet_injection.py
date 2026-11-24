@@ -10,6 +10,7 @@
 Phase 4 重构后此测试必须验证：history_compaction 中删 except pass + 抛 FactSheetUnavailable。
 当前 Phase 1 先验证 fact_sheet 模块本身契约。
 """
+
 from __future__ import annotations
 
 import pytest
@@ -29,9 +30,7 @@ from prismclaw.schema.session.types import (
 
 def _make_tree() -> SessionTree:
     """构造空 SessionTree（需 header 字段）。"""
-    return SessionTree(
-        header=SessionHeader(id="", workspace_id="", agent_id="")
-    )
+    return SessionTree(header=SessionHeader(id="", workspace_id="", agent_id=""))
 
 
 def _append_fact_sheet_entry(
@@ -53,7 +52,7 @@ def _append_fact_sheet_entry(
     return entry_id
 
 
-# ──────────────────────────── 1. load_fact_sheet 基础契约 ────────────────────────────
+# ────────────────────────────────── 1. load_fact_sheet 基础契约 ───────────────────────────────────
 
 
 def test_load_fact_sheet_empty_tree():
@@ -90,7 +89,7 @@ def test_load_fact_sheet_void_key_removed():
     assert facts["通知时间"] == "周六14:00"
 
 
-# ──────────────────────────── 2. save_fact_sheet 增量契约 ────────────────────────────
+# ────────────────────────────────── 2. save_fact_sheet 增量契约 ───────────────────────────────────
 
 
 def test_save_fact_sheet_no_change_returns_empty():
@@ -133,7 +132,7 @@ def test_save_fact_sheet_removed_key_voided():
     assert facts["通知时间"] == "周六14:00"
 
 
-# ──────────────────────────── 3. render_fact_sheet_text 契约 ────────────────────────────
+# ───────────────────────────────── 3. render_fact_sheet_text 契约 ─────────────────────────────────
 
 
 def test_render_fact_sheet_empty_returns_empty_string():
@@ -152,7 +151,7 @@ def test_render_fact_sheet_contains_anchor():
     assert "二甲双胍" in text
 
 
-# ──────────────────────────── 4. Phase 4 后置契约：FactSheetUnavailable 异常 ────────────────────────────
+# ───────────────────────── 4. Phase 4 后置契约：FactSheetUnavailable 异常 ─────────────────────────
 #
 # Phase 1 阶段 fact_sheet.py 尚未引入 FactSheetUnavailable 异常。
 # Phase 4 修复契约后，此测试将启用。当前 xfail 标记，避免阻塞基线。
@@ -169,9 +168,11 @@ def test_fact_sheet_unavailable_exception_will_be_raised_after_phase4():
     # Phase 1 验证现状：load_fact_sheet 对损坏 tree 不会抛 FactSheetUnavailable
     # （因为该异常类尚未定义）
     try:
-        from prismclaw.engine.compression.fact_sheet import FactSheetUnavailable  # type: ignore
+        from prismclaw.engine.compression.fact_sheet import (  # noqa: F401 - 探测导入
+            FactSheetUnavailable,
+        )
+
         pytest.fail("Phase 4 重构后此测试应启用")
     except ImportError:
         # Phase 1 现状：异常类未定义，测试 xfail
         pytest.skip("Phase 4 后启用：FactSheetUnavailable 尚未引入")
-

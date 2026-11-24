@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+import logging
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol, cast
 
+from sqlalchemy import RowMapping
+
+from prismclaw.persistence.memory._helpers import _parse_supersedes, _rrf_score
 from prismclaw.schema.memory.entry import (
     ArchiveEntry,
     L4ArtifactEntry,
     MemoryEntry,
 )
 
-from prismclaw.persistence.memory._helpers import _parse_supersedes, _rrf_score
+logger = logging.getLogger(__name__)
 
 
-def _memory_entry_from_row(row: Any, *, score: float) -> MemoryEntry:
+def _memory_entry_from_row(row: RowMapping, *, score: float) -> MemoryEntry:
     return MemoryEntry(
         id=row["id"],
         layer=row["layer"],
@@ -44,7 +49,34 @@ def _memory_entry_from_row(row: Any, *, score: float) -> MemoryEntry:
     )
 
 
-def _artifact_entry_from_row(row: Any, *, score: float, similarity: float | None) -> L4ArtifactEntry:
+def _row_label(row: object) -> str:
+    """尽力取出 row 的 id 用于告警；任何异常都不得中断隔离。"""
+    try:
+        if isinstance(row, dict):
+            return str(row.get("id", "?"))
+        return str(getattr(row, "id", "?"))
+    except Exception:
+        return "?"
+
+
+def _entries_from_rows(rows: Sequence[RowMapping], *, score: float) -> list[MemoryEntry]:
+    """逐行映射，单行非法只丢该行。
+
+    写边界（store）仍由 MemoryEntry 严格校验；读边界必须隔离——一行历史
+    遗留数据（如旧词表取值）不应让整批检索/扫描失败。
+    """
+    entries: list[MemoryEntry] = []
+    for row in rows:
+        try:
+            entries.append(_memory_entry_from_row(row, score=score))
+        except Exception:
+            logger.warning("memory row dropped: id=%s", _row_label(row), exc_info=True)
+    return entries
+
+
+def _artifact_entry_from_row(
+    row: RowMapping, *, score: float, similarity: float | None
+) -> L4ArtifactEntry:
     if isinstance(row, L4ArtifactEntry):
         return row
     payload = row.get("payload_json")
@@ -72,8 +104,8 @@ def _artifact_entry_from_row(row: Any, *, score: float, similarity: float | None
 
 
 def _merge_memory_candidates(
-    text_rows: list[Any],
-    vector_rows: list[Any],
+    text_rows: list[RowMapping],
+    vector_rows: list[RowMapping],
     *,
     limit: int,
     per_layer_limits: dict[str, int] | None = None,
@@ -106,7 +138,13 @@ def _merge_memory_candidates(
             combined_score += _rrf_score(int(payload["vector_rank"]))
         if combined_score <= 0.0:
             combined_score = max(float(payload["text_score"]), float(payload["vector_score"]))
-        ranked.append(_memory_entry_from_row(payload["row"], score=combined_score))
+        try:
+            ranked.append(_memory_entry_from_row(payload["row"], score=combined_score))
+        except Exception:
+            # 检索边界隔离：单条历史脏数据不得让整轮检索返回空。
+            logger.warning(
+                "memory search row dropped: id=%s", _row_label(payload["row"]), exc_info=True
+            )
 
     ranked.sort(
         key=lambda item: (
@@ -132,21 +170,26 @@ def _merge_memory_candidates(
     return selected
 
 
-def _row_id(row: Any) -> str:
-    if isinstance(row, dict):
+class _HasId(Protocol):
+    @property
+    def id(self) -> object: ...
+
+
+def _row_id(row: Mapping[str, Any] | object) -> str:
+    if isinstance(row, Mapping):
         return str(row["id"])
-    return str(getattr(row, "id"))
+    return str(cast(_HasId, row).id)
 
 
-def _row_score(row: Any, key: str, default: float = 0.0) -> float:
-    if isinstance(row, dict):
+def _row_score(row: Mapping[str, Any] | object, key: str, default: float = 0.0) -> float:
+    if isinstance(row, Mapping):
         return float(row.get(key) or default)
     return float(getattr(row, key, default) or default)
 
 
 def _merge_artifact_candidates(
-    text_rows: list[Any],
-    vector_rows: list[Any],
+    text_rows: list[RowMapping],
+    vector_rows: list[RowMapping],
     *,
     limit: int,
 ) -> list[L4ArtifactEntry]:
@@ -172,7 +215,9 @@ def _merge_artifact_candidates(
                 _row_score(row, "retrieval_score"),
             )
             if source == "vector":
-                sim = row["similarity"] if isinstance(row, dict) else getattr(row, "similarity", None)
+                sim = (
+                    row["similarity"] if isinstance(row, dict) else getattr(row, "similarity", None)
+                )
                 if sim is not None:
                     bucket["similarity"] = float(sim)
 
@@ -191,7 +236,9 @@ def _merge_artifact_candidates(
             similarity=payload["similarity"],
         )
         if isinstance(payload["row"], L4ArtifactEntry):
-            entry = entry.model_copy(update={"score": combined_score, "similarity": payload["similarity"]})
+            entry = entry.model_copy(
+                update={"score": combined_score, "similarity": payload["similarity"]}
+            )
         ranked.append(entry)
 
     ranked.sort(
@@ -206,7 +253,7 @@ def _merge_artifact_candidates(
 
 
 def _build_search_meta_from_rows(
-    selected_entries: list[MemoryEntry] | list[ArchiveEntry],
+    selected_entries: Sequence[MemoryEntry | ArchiveEntry | L4ArtifactEntry],
     *,
     text_rows: list[Any],
     vector_rows: list[Any],

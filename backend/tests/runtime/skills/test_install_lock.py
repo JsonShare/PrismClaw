@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from pathlib import Path
 
 from prismclaw.runtime.skills.installer import _install_lock
@@ -32,10 +33,8 @@ async def test_install_lock_released_after_exception(tmp_path: Path) -> None:
         async with _install_lock(tmp_path):
             raise RuntimeError("boom")
 
-    try:
+    with contextlib.suppress(RuntimeError):
         await boom()
-    except RuntimeError:
-        pass
 
     async with asyncio.timeout(2):
         async with _install_lock(tmp_path):

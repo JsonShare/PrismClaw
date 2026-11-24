@@ -37,12 +37,17 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.storage.storage_types import MemoryStore
 from prismclaw.schema.memory.classify import classify_scope
 from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.storage.storage_types import MemoryStore
+
+if TYPE_CHECKING:
+    from prismclaw.infra.settings._memory import MemorySettings
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.services.lock import LockManagerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +62,7 @@ class GatewayLockError(RuntimeError):
     """Arbitration lock could not be acquired — caller should retry."""
 
 
-class GatewayDecision(str, Enum):
+class GatewayDecision(StrEnum):
     ADD = "ADD"
     UPDATE = "UPDATE"
     SUPERSEDE = "SUPERSEDE"
@@ -78,7 +83,8 @@ class GatewayResult:
     notes: list[str] = field(default_factory=list)
 
 
-_ARBITRATION_PROMPT = """你是一个记忆仲裁器。判断新记忆（候选）与既有记忆的关系，从五个决策中选一个。
+_ARBITRATION_PROMPT = """你是一个记忆仲裁器。
+判断新记忆（候选）与既有记忆的关系，从五个决策中选一个。
 
 决策定义：
 - ADD：候选是新信息，与既有记忆不重复、不冲突
@@ -93,7 +99,10 @@ _ARBITRATION_PROMPT = """你是一个记忆仲裁器。判断新记忆（候选�
 - agent：与具体用户/项目无关的通用经验
 
 以 JSON 输出：
-{{"decision": "ADD|UPDATE|SUPERSEDE|CONTEST|NOOP", "target_id": "决策对象的id（UPDATE/SUPERSEDE/CONTEST必填）", "merged_content": "仅UPDATE时：合并后的完整内容", "scope": "user|project|agent", "reason": "一句话理由"}}
+{{"decision": "ADD|UPDATE|SUPERSEDE|CONTEST|NOOP",
+ "target_id": "决策对象的id（UPDATE/SUPERSEDE/CONTEST必填）",
+ "merged_content": "仅UPDATE时：合并后的完整内容",
+ "scope": "user|project|agent", "reason": "一句话理由"}}
 
 === 新记忆（候选）===
 {candidate}
@@ -108,9 +117,9 @@ class MemoryWriteGateway:
         self,
         *,
         memory_store: MemoryStore,
-        llm_client: Any,
-        lock_manager: Any,
-        memory_settings: Any,
+        llm_client: LLMClient,
+        lock_manager: LockManagerProtocol,
+        memory_settings: MemorySettings,
     ) -> None:
         self._memory = memory_store
         self._llm = llm_client
@@ -175,15 +184,18 @@ class MemoryWriteGateway:
         # allowlist). Stamped once here so shadow legacy-store AND active
         # execution both carry scope.
         scope = classify_scope(candidate.type)
+        reason: str | None
         if not neighbors:
             decision, target_id, merged, reason = (
-                GatewayDecision.ADD, None, None,
+                GatewayDecision.ADD,
+                None,
+                None,
                 "fast path: no near neighbor",
             )
             decided_by = "fast_path"
         else:
-            decision, target_id, merged, reason, decided_by, llm_scope = (
-                await self._llm_arbitrate(session_key, candidate, neighbors)
+            decision, target_id, merged, reason, decided_by, llm_scope = await self._llm_arbitrate(
+                session_key, candidate, neighbors
             )
             if llm_scope in ("user", "project", "agent"):
                 scope = llm_scope
@@ -238,9 +250,7 @@ class MemoryWriteGateway:
         )
         return result
 
-    async def _find_neighbors(
-        self, session_key: str, candidate: MemoryEntry
-    ) -> list[MemoryEntry]:
+    async def _find_neighbors(self, session_key: str, candidate: MemoryEntry) -> list[MemoryEntry]:
         """Search existing entries with the candidate content as query.
 
         The search already excludes archived/contested/decayed (B2 status
@@ -315,22 +325,50 @@ class MemoryWriteGateway:
             parsed = _parse_arbitration_output(getattr(response, "text", "") or "")
             if parsed is None:
                 logger.warning("gateway arbitration output unparseable; fail-open ADD")
-                return GatewayDecision.ADD, None, None, "llm output unparseable", "llm_error_fallback", None
+                return (
+                    GatewayDecision.ADD,
+                    None,
+                    None,
+                    "llm output unparseable",
+                    "llm_error_fallback",
+                    None,
+                )
 
             decision_str = parsed.get("decision", "").upper()
             if decision_str not in _ALLOWED_DECISIONS:
-                return GatewayDecision.ADD, None, None, f"invalid decision {decision_str!r}", "llm_error_fallback", None
+                return (
+                    GatewayDecision.ADD,
+                    None,
+                    None,
+                    f"invalid decision {decision_str!r}",
+                    "llm_error_fallback",
+                    None,
+                )
 
             target_id = parsed.get("target_id") or ""
             if decision_str in ("UPDATE", "SUPERSEDE", "CONTEST") and target_id not in {
                 n.id for n in neighbors
             }:
                 # Hallucinated/absent target — never act on an unseen entry.
-                return GatewayDecision.ADD, None, None, "target_id not in neighbor set", "llm_error_fallback", None
+                return (
+                    GatewayDecision.ADD,
+                    None,
+                    None,
+                    "target_id not in neighbor set",
+                    "llm_error_fallback",
+                    None,
+                )
 
             merged = parsed.get("merged_content") or None
             if decision_str == "UPDATE" and not (merged or "").strip():
-                return GatewayDecision.ADD, None, None, "UPDATE without merged_content", "llm_error_fallback", None
+                return (
+                    GatewayDecision.ADD,
+                    None,
+                    None,
+                    "UPDATE without merged_content",
+                    "llm_error_fallback",
+                    None,
+                )
 
             scope_value = str(parsed.get("scope", "") or "").strip().lower()
             return (

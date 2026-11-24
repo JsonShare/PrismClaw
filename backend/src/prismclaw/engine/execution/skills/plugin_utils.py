@@ -4,13 +4,17 @@ Moved from contracts.services.skills to break the contracts→engine
 dependency cycle. This is a runtime helper that operates on manifest
 objects and belongs in the engine layer.
 """
+
 from __future__ import annotations
 
 from pathlib import Path as _Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prismclaw.schema.services.skills import SkillManifest
 
 
-def _resolve_plugin_name(manifest: Any) -> str | None:
+def _resolve_plugin_name(manifest: SkillManifest) -> str | None:
     """从 source=='plugin' 的 SkillManifest 解析 plugin 名 (执业档案 key)。"""
     if getattr(manifest, "source", None) != "plugin":
         return None

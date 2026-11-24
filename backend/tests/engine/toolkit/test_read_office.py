@@ -1,16 +1,12 @@
-"""read 工具文档分支（read_office.py）图文解析回归测试。
+"""read 工具文档分支（read_office.py）行为测试。
 
-背景：commit a17c6b5 重构时 read_office.py 漏 import TextBlock，导致
-`_blocks_to_text` / `_write_analysis_md` 对所有 docx/pdf/md 必抛
-NameError（被宽 except 吞成 "failed to parse"）。该模块此前
-零测试覆盖——本文件就是那道缺失的防线。
+覆盖 read 的分派与文档分支的对外契约：
+1. ReadTool 的路由（文档 / 图片 / 旧式 Office / 纯文本）；
+2. read_document_branch 的分页、续读游标、格式约束。
 
-M1 合并后：独立工具 OfficeReadTool 已删除，read_office.py 成为 read
-工具的文档分支（read_document_branch）。本文件覆盖两层：
-1. 模块级解析函数（_blocks_to_text / _write_analysis_md / OCR 缓存保持）；
-2. ReadTool 的分派行为（文档分派 / image 指路 / legacy office 拦截 /
-   纯文本路径不受影响）。
+解析层的块级断言在 test_document_reader.py。
 """
+
 from __future__ import annotations
 
 import sys
@@ -21,86 +17,11 @@ SRC = PROJECT_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from prismclaw.schema.agent.data_types import ImageBlock, TextBlock  # noqa: E402
-from prismclaw.schema.content.content_types import ToolResult  # noqa: E402
 from prismclaw.engine.toolkit.builtin.file_tools import ReadTool  # noqa: E402
-from prismclaw.engine.toolkit.file.read_office import (  # noqa: E402
-    _blocks_to_text,
-    _fmt_for_path,
-    _write_analysis_md,
-)
-from prismclaw.engine.toolkit.office.document_image_extract import (  # noqa: E402
-    extract_document_blocks,
-)
-
-
-def _make_blocks() -> list:
-    """模拟 extract_document_blocks 的真实输出：文本-图片-文本交错。"""
-    return [
-        TextBlock(type="text", text="段落一"),
-        ImageBlock(
-            type="image", data="", mime_type="image/jpeg",
-            source_path="uploads/.extracted/doc_img_001.jpeg",
-        ),
-        TextBlock(type="text", text="段落二"),
-        ImageBlock(
-            type="image", data="", mime_type="image/jpeg",
-            source_path="uploads/.extracted/doc_img_002.jpeg",
-        ),
-    ]
-
-
-def test_blocks_to_text_preserves_order_and_image_refs():
-    """文本直拼 + 图片引用占位，顺序不乱、引用带 source_path。"""
-    text = _blocks_to_text(_make_blocks())
-    assert "段落一" in text and "段落二" in text
-    assert "uploads/.extracted/doc_img_001.jpeg" in text
-    assert "uploads/.extracted/doc_img_002.jpeg" in text
-    assert text.index("段落一") < text.index("doc_img_001.jpeg") < text.index("段落二")
-
-
-def test_blocks_to_text_real_docx(tmp_path):
-    """真实 docx（内嵌图片）走完整 extract → to_text 链路不抛 NameError。
-
-    用 zipfile 在测试内构造最小 docx，不依赖外部文件。
-    """
-    import io
-    import zipfile
-
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr(
-            "word/document.xml",
-            '<?xml version="1.0"?>'
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
-            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            "<w:body><w:p><w:r><w:t>标题文本</w:t></w:r></w:p></w:body></w:document>",
-        )
-        zf.writestr("word/_rels/document.xml.rels", '<?xml version="1.0"?><Relationships/>')
-        # 一张 1x1 PNG
-        import base64
-        png = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg"
-            "YGBgAAAABQABh6FO1AAAAABJRU5ErkJggg=="
-        )
-        zf.writestr("word/media/image1.png", png)
-
-    blocks = extract_document_blocks(
-        buf.getvalue(), "docx",
-        source_rel_path="uploads/test.docx", workspace_path=tmp_path,
-    )
-    text = _blocks_to_text(blocks)  # 修复前此处抛 NameError
-    assert "标题文本" in text
-
-
-def test_write_analysis_md_persists(tmp_path):
-    """analysis.md 必须真实落盘（修复前此函数抛 NameError，文件从未写出）。"""
-    out = tmp_path / "out.analysis.md"
-    _write_analysis_md(_make_blocks(), out, workspace_path=str(tmp_path))
-    assert out.exists()
-    content = out.read_text(encoding="utf-8")
-    assert "段落一" in content and "段落二" in content
-    assert "[图片: doc_img_001.jpeg]" in content
+from prismclaw.engine.toolkit.file.read_office import _fmt_for_path  # noqa: E402
+from prismclaw.engine.toolkit.office.document_reader import DOC_FORMATS  # noqa: E402
+from prismclaw.schema.agent.data_types import TextBlock  # noqa: E402
+from prismclaw.schema.content.content_types import ToolResult  # noqa: E402
 
 
 def test_fmt_for_path_covers_supported_suffixes():
@@ -112,92 +33,13 @@ def test_fmt_for_path_covers_supported_suffixes():
     assert _fmt_for_path("a.txt") is None
 
 
-# ---------------------------------------------------------------------------
-# OCR 缓存保持（修 _save_image_block 无条件重写导致缓存全量失效的缺陷）
-# ---------------------------------------------------------------------------
-
-_DOC_XML = (
-    '<?xml version="1.0"?>'
-    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
-    "<w:body><w:p><w:r><w:drawing><blip embed=\"rId1\"/></w:drawing></w:r></w:p></w:body>"
-    "</w:document>"
-)
-_RELS_XML = (
-    '<?xml version="1.0"?>'
-    '<Relationships><Relationship Id="rId1" Target="media/image1.png"/></Relationships>'
-)
+def test_fmt_for_path_agrees_with_single_source():
+    """两处格式表已收敛为一处：路径解析结果必须与 DOC_FORMATS 一致。"""
+    for ext, fmt in DOC_FORMATS.items():
+        assert _fmt_for_path(f"x{ext}") == fmt
 
 
-def _make_png(rgb: bytes) -> bytes:
-    """构造 1x1 最小 PNG（颜色由 rgb 决定，用于区分内容差异）。"""
-    import struct
-    import zlib
-
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return (
-            struct.pack(">I", len(data)) + tag + data
-            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
-        )
-
-    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
-    idat = zlib.compress(b"\x00" + rgb)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
-
-
-def _build_docx_with_image(image_bytes: bytes) -> bytes:
-    import io
-    import zipfile
-
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("word/document.xml", _DOC_XML)
-        zf.writestr("word/_rels/document.xml.rels", _RELS_XML)
-        zf.writestr("word/media/image1.png", image_bytes)
-    return buf.getvalue()
-
-
-def _extract_one_image(raw: bytes, ws) -> str:
-    blocks = extract_document_blocks(
-        raw, "docx", source_rel_path="uploads/t.docx", workspace_path=ws
-    )
-    return next(b.source_path for b in blocks if b.type == "image")
-
-
-def test_reextract_preserves_ocr_cache(tmp_path):
-    """内容未变时 re-extract 不得重写图片——ctime/ino 指纹保持，OCR 缓存命中。"""
-    from prismclaw.engine.toolkit.file.ocr_cache import read_ocr_cache, write_ocr_cache
-
-    raw = _build_docx_with_image(_make_png(b"\x00\x00\x00"))
-    img_rel = _extract_one_image(raw, tmp_path)
-    img_path = tmp_path / img_rel
-    st1 = img_path.stat()
-
-    write_ocr_cache(str(tmp_path), img_rel, "OCR_TEXT", "test-model")
-
-    _extract_one_image(raw, tmp_path)  # 模拟 read / 再次上传的 re-extract
-    st2 = img_path.stat()
-
-    assert (st1.st_ctime_ns, st1.st_ino) == (st2.st_ctime_ns, st2.st_ino), (
-        "内容未变却重写了图片 → OCR 缓存指纹失效"
-    )
-    assert read_ocr_cache(str(tmp_path), img_rel) == "OCR_TEXT"
-
-
-def test_reextract_rewrites_when_image_content_changes(tmp_path):
-    """图片内容变化时必须重写（缓存应失效、文件应为新内容）。"""
-    raw_v1 = _build_docx_with_image(_make_png(b"\x00\x00\x00"))
-    img_rel = _extract_one_image(raw_v1, tmp_path)
-    assert (tmp_path / img_rel).read_bytes() == _make_png(b"\x00\x00\x00")
-
-    raw_v2 = _build_docx_with_image(_make_png(b"\xff\x00\x00"))
-    _extract_one_image(raw_v2, tmp_path)
-    assert (tmp_path / img_rel).read_bytes() == _make_png(b"\xff\x00\x00")
-
-
-# ---------------------------------------------------------------------------
-# ReadTool 分派行为（M1 合并：read 吸收 read_office 后的路由）
-# ---------------------------------------------------------------------------
-
+_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 _DOC_TEXT_XML = (
     '<?xml version="1.0"?>'
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
@@ -212,8 +54,33 @@ def _build_docx_with_text() -> bytes:
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr(
+            "[Content_Types].xml",
+            '<?xml version="1.0"?>'
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="xml" ContentType="application/xml"/>'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.re'
+            'lationships+xml"/>'
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlform'
+            'ats-officedocument.wordprocessingml.document.main+xml"/>'
+            "</Types>",
+        )
+        zf.writestr(
+            "_rels/.rels",
+            '<?xml version="1.0"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="'
+            + _REL_TYPE
+            + "/officeDocument"
+            + '" Target="word/document.xml"/>'
+            "</Relationships>",
+        )
         zf.writestr("word/document.xml", _DOC_TEXT_XML)
-        zf.writestr("word/_rels/document.xml.rels", '<?xml version="1.0"?><Relationships/>')
+        zf.writestr(
+            "word/_rels/document.xml.rels",
+            '<?xml version="1.0"?>'
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>',
+        )
     return buf.getvalue()
 
 
@@ -246,15 +113,65 @@ def _text_of(result: ToolResult) -> str:
 
 
 def test_read_dispatches_docx_to_document_branch(tmp_path):
-    """read(.docx) 走文档分支：header 标记 document，正文含提取文本。"""
+    """read(.docx) 走文档分支：页头标注页数，正文含提取文本。"""
     (tmp_path / "doc.docx").write_bytes(_build_docx_with_text())
-    result = _run_read(
-        _make_read_tool(), {"file_path": "doc.docx"}, _make_read_ctx(tmp_path)
-    )
+    result = _run_read(_make_read_tool(), {"file_path": "doc.docx"}, _make_read_ctx(tmp_path))
     assert not result.is_error
     text = _text_of(result)
-    assert text.startswith("[read：doc.docx — 文档，第 1-")
+    assert text.startswith("[read: doc.docx — 共 1 页，当前 p1（tier=text）]")
     assert "标题文本" in text
+
+
+def test_docx_offset_gt_one_is_rejected(tmp_path):
+    """docx 无页概念：offset>1 明确报错，不假装分页。"""
+    (tmp_path / "doc.docx").write_bytes(_build_docx_with_text())
+    result = _run_read(
+        _make_read_tool(), {"file_path": "doc.docx", "offset": 5}, _make_read_ctx(tmp_path)
+    )
+    assert result.is_error
+    assert "无页概念" in _text_of(result)
+
+
+def test_docx_vision_tier_is_rejected(tmp_path):
+    """docx 无页可渲染：tier=vision 明确报错。"""
+    (tmp_path / "doc.docx").write_bytes(_build_docx_with_text())
+    result = _run_read(
+        _make_read_tool(), {"file_path": "doc.docx", "tier": "vision"}, _make_read_ctx(tmp_path)
+    )
+    assert result.is_error
+    assert "vision" in _text_of(result)
+
+
+def test_invalid_after_locator_returns_error(tmp_path):
+    """非法 after 游标返回错误而非抛栈。"""
+    (tmp_path / "doc.docx").write_bytes(_build_docx_with_text())
+    result = _run_read(
+        _make_read_tool(), {"file_path": "doc.docx", "after": "p1/b1"}, _make_read_ctx(tmp_path)
+    )
+    assert result.is_error
+    assert "定位符格式错误" in _text_of(result)
+
+
+def test_second_read_hits_cache(tmp_path, monkeypatch):
+    """同一文档二次读取不再调用解析器（命中会话缓存）。"""
+    import prismclaw.engine.toolkit.file.read_office as mod
+
+    (tmp_path / "doc.docx").write_bytes(_build_docx_with_text())
+    calls = {"n": 0}
+    original = mod.parse_page
+
+    def counting(*args, **kwargs):
+        calls["n"] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(mod, "parse_page", counting)
+
+    tool, ctx = _make_read_tool(), _make_read_ctx(tmp_path)
+    _run_read(tool, {"file_path": "doc.docx"}, ctx)
+    first = calls["n"]
+    _run_read(tool, {"file_path": "doc.docx"}, ctx)
+    assert first >= 1
+    assert calls["n"] == first, "第二次读取不应重新解析"
 
 
 def test_read_image_formats_dispatch_to_vision_branch(tmp_path, monkeypatch):
@@ -283,21 +200,20 @@ def test_read_image_formats_dispatch_to_vision_branch(tmp_path, monkeypatch):
 
 
 def test_read_legacy_office_formats_blocked(tmp_path):
-    """read(.doc/.xls/.ppt) 给出可行动的转换提示，而非 UnicodeDecodeError。"""
-    for ext in (".doc", ".xls", ".ppt"):
-        result = _run_read(
-            _make_read_tool(), {"file_path": f"old{ext}"}, _make_read_ctx(tmp_path)
-        )
+    """read(.doc/.ppt) 给出可行动的转换提示，而非 UnicodeDecodeError。
+
+    .xls 不在其中：旧式 xls 表格可由 xlrd 直读，走文档分支。
+    """
+    for ext in (".doc", ".ppt"):
+        result = _run_read(_make_read_tool(), {"file_path": f"old{ext}"}, _make_read_ctx(tmp_path))
         assert result.is_error, ext
         assert "旧式二进制 Office 格式" in _text_of(result), ext
 
 
 def test_read_text_path_unchanged_for_py(tmp_path):
-    """合并后纯文本路径行为不变：正常读取 + 分页元数据。"""
+    """纯文本路径行为不变：正常读取 + 分页元数据。"""
     (tmp_path / "code.py").write_text("def main():\n    return 42\n", encoding="utf-8")
-    result = _run_read(
-        _make_read_tool(), {"file_path": "code.py"}, _make_read_ctx(tmp_path)
-    )
+    result = _run_read(_make_read_tool(), {"file_path": "code.py"}, _make_read_ctx(tmp_path))
     assert not result.is_error
     text = _text_of(result)
     assert "def main():" in text
@@ -305,18 +221,81 @@ def test_read_text_path_unchanged_for_py(tmp_path):
 
 
 def test_read_dispatches_md_to_document_branch(tmp_path):
-    """read(.md) 走文档分支（M1 设计决策）：header 标记 document，正文含原文。
-
-    注意与文本路径的观测差异（设计内）：.md 不进 read_file_state、
-    无 read_epoch metadata、无单行截断——分支归属断言是关键防线。
-    """
+    """read(.md) 走文档分支：页头标注页数，正文含原文。"""
     (tmp_path / "notes.md").write_text(
         "# 标题\n\n正文段落，含 [图](img.png) 引用。\n", encoding="utf-8"
     )
-    result = _run_read(
-        _make_read_tool(), {"file_path": "notes.md"}, _make_read_ctx(tmp_path)
-    )
+    result = _run_read(_make_read_tool(), {"file_path": "notes.md"}, _make_read_ctx(tmp_path))
     assert not result.is_error
     text = _text_of(result)
-    assert text.startswith("[read：notes.md — 文档，第 1-")
+    assert text.startswith("[read: notes.md — 共 1 页，当前 p1（tier=text）]")
     assert "正文段落" in text
+
+
+def test_vision_cache_is_reused_for_unreadable_page(tmp_path):
+    """text 档遇到无文本层页时，复用已存在的 vision 缓存而非返回 unsupported。"""
+    from prismclaw.engine.toolkit.office.document_reader import (
+        Block,
+        cache_dir,
+        ensure_cache,
+        save_page,
+    )
+
+    (tmp_path / "doc.md").write_text("第一段\n", encoding="utf-8")
+    ctx = _make_read_ctx(tmp_path)
+    _run_read(_make_read_tool(), {"file_path": "doc.md"}, ctx)
+
+    raw = (tmp_path / "doc.md").read_bytes()
+    target = cache_dir(tmp_path, raw, "doc.md")
+    ensure_cache(target, fmt="markdown", pages=1)
+    save_page(target, 1, "text", [Block(kind="unsupported", page=1, index=1, text="无文本层")])
+    save_page(
+        target, 1, "vision", [Block(kind="text", page=1, index=1, text="【视觉结果】识别出的内容")]
+    )
+
+    result = _run_read(_make_read_tool(), {"file_path": "doc.md"}, ctx)
+    assert not result.is_error
+    assert "视觉结果" in _text_of(result)
+
+
+def test_scanned_attachment_keeps_a_hint(tmp_path):
+    """扫描件附件不返回空块：保留 unsupported 提示，模型据此可改用 vision。"""
+    from prismclaw.engine.execution.request.attachments import _extract_file_blocks
+    from prismclaw.schema.agent.data_types import FileBlock
+
+    (tmp_path / "scan.pdf").write_bytes(_minimal_blank_pdf())
+    fb = FileBlock(type="file", path="scan.pdf", name="scan.pdf", mime_type="application/pdf")
+    blocks = _extract_file_blocks(fb, tmp_path)
+
+    assert blocks, "扫描件附件不应返回空列表"
+    assert any("扫描件" in getattr(b, "text", "") for b in blocks)
+
+
+def _minimal_blank_pdf() -> bytes:
+    """构造一页无文本层的 PDF（空内容流）。"""
+    import io
+
+    content = ""
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 4 0 R >>",
+        f"<< /Length {len(content)} >>\nstream\n{content}\nendstream",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, obj in enumerate(objects, start=1):
+        offsets.append(out.tell())
+        out.write(f"{i} 0 obj\n{obj}\nendobj\n".encode("latin-1"))
+    xref = out.tell()
+    out.write(f"xref\n0 {len(objects) + 1}\n".encode("latin-1"))
+    out.write(b"0000000000 65535 f \n")
+    for off in offsets:
+        out.write(f"{off:010d} 00000 n \n".encode("latin-1"))
+    out.write(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode(
+            "latin-1"
+        )
+    )
+    return out.getvalue()

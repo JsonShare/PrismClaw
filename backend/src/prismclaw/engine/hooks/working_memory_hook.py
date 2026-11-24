@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.hooks import (
     CompactionContext,
@@ -9,7 +9,11 @@ from prismclaw.engine.hooks import (
     PromptBuildResult,
     ResponseObservation,
 )
+from prismclaw.infra.redis import resolve
 from prismclaw.schema.content.compaction import CompactResult
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,7 @@ class WorkingMemoryHook:
 
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: Redis,
         *,
         key_prefix: str = "prismclaw:wm:",
         max_chars: int = 1024,
@@ -48,11 +52,11 @@ class WorkingMemoryHook:
             hash_key = self._hash_key(context.session_id)
             order_key = self._order_key(context.session_id)
 
-            all_fields = await self._redis.hgetall(hash_key)
+            all_fields = await resolve(self._redis.hgetall(hash_key))
             if not all_fields:
                 return None
 
-            order = await self._redis.lrange(order_key, 0, -1)
+            order = await resolve(self._redis.lrange(order_key, 0, -1))
             if order:
                 ordered_keys = [k for k in order if k in all_fields]
                 remaining = [k for k in all_fields if k not in set(order)]

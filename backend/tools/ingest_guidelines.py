@@ -12,6 +12,7 @@
 
 依赖：PyMuPDF(fitz)、asyncpg；CSCO 扫描件额外需要 tesseract（chi_sim）。
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import fitz
@@ -46,14 +47,42 @@ SPECIALTY_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("乳腺癌", ("乳腺",)),
     ("妇科肿瘤", ("卵巢", "宫颈", "子宫内膜", "子宫", "外阴", "妊娠滋养")),
     ("泌尿肿瘤", ("前列腺", "膀胱", "肾癌", "肾细胞", "尿路上皮", "睾丸")),
-    ("消化肿瘤", ("胃", "结直肠", "结肠", "直肠", "食管", "肝癌", "肝细胞", "胆道", "胆管",
-                  "胰腺", "胃肠", "消化", "壶腹", "小肠")),
+    (
+        "消化肿瘤",
+        (
+            "胃",
+            "结直肠",
+            "结肠",
+            "直肠",
+            "食管",
+            "肝癌",
+            "肝细胞",
+            "胆道",
+            "胆管",
+            "胰腺",
+            "胃肠",
+            "消化",
+            "壶腹",
+            "小肠",
+        ),
+    ),
     ("肺癌", ("肺", "呼吸", "NSCLC", "SCLC", "胸膜", "间皮瘤")),
 ]
 
 # 非肿瘤主题过滤：命中即排除（本地 Downloads 混有大量病历/无关文档）
-NON_ONCOLOGY = ("PETCT", "影像健康报告", "诊断报告", "股权转让", "起诉状", "聘用信",
-                "对话_", "hello", "大模型配置", "QR_HB", "Answer-")
+NON_ONCOLOGY = (
+    "PETCT",
+    "影像健康报告",
+    "诊断报告",
+    "股权转让",
+    "起诉状",
+    "聘用信",
+    "对话_",
+    "hello",
+    "大模型配置",
+    "QR_HB",
+    "Answer-",
+)
 
 
 def normalize(s: str) -> str:
@@ -85,17 +114,36 @@ def slug(*parts: str) -> str:
     return f"{ascii_part[:48]}-{digest}" if ascii_part else f"kb-{digest}"
 
 
-def make_date(year: int | None, month: int | None = None, day: int | None = None) -> datetime | None:
+def make_date(
+    year: int | None, month: int | None = None, day: int | None = None
+) -> datetime | None:
     if not year:
         return None
-    return datetime(year, month or 1, day or 1, tzinfo=timezone.utc)
+    return datetime(year, month or 1, day or 1, tzinfo=UTC)
 
 
 # ── NCCN ────────────────────────────────────────────────────
 
-NCCN_MONTHS = {m: i for i, m in enumerate(
-    ["January", "February", "March", "April", "May", "June",
-     "July", "August", "September", "October", "November", "December"], start=1)}
+NCCN_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ],
+        start=1,
+    )
+}
 
 # 病种英文 → 中文
 NCCN_CN = {
@@ -161,10 +209,12 @@ def _nccn_title(lines: list[str]) -> str:
       - 中文译本：病种单独一行（乳腺癌 / 结肠癌）
     """
     candidates = [
-        l for l in lines
-        if l and not any(n in l for n in NCCN_NOISE)
-        and not re.match(r"^版本?\s*[\d.]+", l)
-        and len(l) <= 90
+        line
+        for line in lines
+        if line
+        and not any(n in line for n in NCCN_NOISE)
+        and not re.match(r"^版本?\s*[\d.]+", line)
+        and len(line) <= 90
     ]
     if not candidates:
         return ""
@@ -172,9 +222,12 @@ def _nccn_title(lines: list[str]) -> str:
     # 英文正本被断行时，与下一行拼接（仅当下一行不含版本号等噪声）
     if len(candidates) > 1:
         nxt = candidates[1]
-        if first.endswith(("Lung", "Cell", "and", "of", "Junction")) and len(nxt) <= 30:
-            first = f"{first} {nxt}"
-        elif nxt.startswith("(") and ")" in nxt:
+        if (
+            first.endswith(("Lung", "Cell", "and", "of", "Junction"))
+            and len(nxt) <= 30
+            or nxt.startswith("(")
+            and ")" in nxt
+        ):
             first = f"{first} {nxt}"
     return first
 
@@ -200,7 +253,7 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
         if not doc.page_count:
             return None
         first = doc[0].get_text()
-        lines = [normalize(l) for l in first.split("\n") if l.strip()]
+        lines = [normalize(ln) for ln in first.split("\n") if ln.strip()]
 
         title_en = _nccn_title(lines)
         if not title_en:
@@ -208,7 +261,9 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
         # 中文译本首页病种为中文，标记以便不重复填 title_cn
         has_cn_title = bool(re.search(r"[\u4e00-\u9fa5]", title_en))
 
-        ver_m = re.search(r"Version\s+(\d+\.\d{4})", first) or re.search(r"版本\s*(\d+\.\d{4})", first)
+        ver_m = re.search(r"Version\s+(\d+\.\d{4})", first) or re.search(
+            r"版本\s*(\d+\.\d{4})", first
+        )
         version = ver_m.group(1) if ver_m else ""
 
         published = None
@@ -221,7 +276,11 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
                 y = int(dm2.group(3))
                 y = y + 2000 if y < 100 else y
                 published = make_date(y, int(dm2.group(1)), int(dm2.group(2)))
-        year = published.year if published else (int(version.split(".")[1]) if "." in version else None)
+        year = (
+            published.year
+            if published
+            else (int(version.split(".")[1]) if "." in version else None)
+        )
 
         # 中文译本没有独立 Discussion 目录页，直接在全文里找「概述」段
         if has_cn_title:
@@ -245,8 +304,9 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
                         cn_points.append(s)
                     if len(cn_points) >= 5:
                         break
-            return _nccn_row(path, first, title_en, True, version, published, year,
-                             cn_abstract, cn_points)
+            return _nccn_row(
+                path, first, title_en, True, version, published, year, cn_abstract, cn_points
+            )
 
         # Discussion 目录页：含「Discussion」+「Table of Contents」+ 指向后续 MS 页的目录行。
         # 页码偏移不统一（多数是 MS-1，前列腺癌是 MS-2），所以不写死页脚。
@@ -259,7 +319,11 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
                 continue
             if first_toc < 0:
                 first_toc = i
-            if "Discussion" in t and "Updates in Version" not in t and re.search(r"MS-\d+\s*$", t, re.M):
+            if (
+                "Discussion" in t
+                and "Updates in Version" not in t
+                and re.search(r"MS-\d+\s*$", t, re.M)
+            ):
                 disc_idx = i
                 break
         if disc_idx < 0:
@@ -268,8 +332,9 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
         abstract = ""
         points: list[str] = []
         if disc_idx >= 0:
-            body_pages = [doc[i].get_text() for i in
-                          range(disc_idx + 1, min(disc_idx + 40, doc.page_count))]
+            body_pages = [
+                doc[i].get_text() for i in range(disc_idx + 1, min(disc_idx + 40, doc.page_count))
+            ]
             # 逐行剔除页眉/页脚/目录点线：每页都有版本声明与 MS-n 页脚
             kept: list[str] = []
             for page in body_pages:
@@ -284,19 +349,32 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
                     # 目录行：标题 + 大量点 + 页码
                     if re.search(r"[.·]{5,}", s) or re.fullmatch(r"[\d.]+", s):
                         continue
-                    if s in (title_en, "Discussion", "Table of Contents", "Continued",
-                             "NCCN Guidelines Index", "Overall Management of Cancer"):
+                    if s in (
+                        title_en,
+                        "Discussion",
+                        "Table of Contents",
+                        "Continued",
+                        "NCCN Guidelines Index",
+                        "Overall Management of Cancer",
+                    ):
                         continue
                     kept.append(s)
             body = normalize(" ".join(kept))
 
             # Overview 正文：从标题开始，到下一个一级小节为止
-            ov = re.search(r"\bOverview\b\s*(?:[A-Z][^.]{0,80}\.)?(.{300,3000}?)(?:Literature Search Criteria|Guidelines Update Methodology|\bStaging\b|\bRisk Factors\b)", body)
+            ov = re.search(
+                r"\bOverview\b\s*(?:[A-Z][^.]{0,80}\.)?(.{300,3000}?)"
+                r"(?:Literature Search Criteria|Guidelines Update Methodology"
+                r"|\bStaging\b|\bRisk Factors\b)",
+                body,
+            )
             abstract = normalize(ov.group(1)) if ov else body[:700]
             # 兜底：Overview 段落没定位到时，去掉首页索引/机构声明类噪声
             abstract = re.sub(
-                r"^(?:NCCN Guidelines Index|Find an NCCN Member Institution|NCCN Categories of Evidence).*?(?=[A-Z][a-z]{3,}\s)",
-                "", abstract,
+                r"^(?:NCCN Guidelines Index|Find an NCCN Member Institution"
+                r"|NCCN Categories of Evidence).*?(?=[A-Z][a-z]{3,}\s)",
+                "",
+                abstract,
             ).strip()
 
             # category 1 推荐：取含 "category 1" 的完整句
@@ -312,26 +390,40 @@ def parse_nccn(path: str) -> dict[str, Any] | None:
             if not points:
                 for sent in re.split(r"(?<=[.!])\s+", body):
                     s = normalize(sent)
-                    if ("is recommended" in s or "are recommended" in s
-                            or "is preferred" in s or "are preferred" in s):
-                        if 80 <= len(s) <= 320:
-                            points.append(s)
+                    if (
+                        "is recommended" in s
+                        or "are recommended" in s
+                        or "is preferred" in s
+                        or "are preferred" in s
+                    ) and 80 <= len(s) <= 320:
+                        points.append(s)
                     if len(points) >= 5:
                         break
 
-        return _nccn_row(path, first, title_en, has_cn_title, version, published,
-                         year, abstract, points)
+        return _nccn_row(
+            path, first, title_en, has_cn_title, version, published, year, abstract, points
+        )
 
 
-def _nccn_row(path: str, first: str, title_en: str, has_cn_title: bool,
-              version: str, published: datetime | None, year: int | None,
-              abstract: str, points: list[str]) -> dict[str, Any]:
+def _nccn_row(
+    path: str,
+    first: str,
+    title_en: str,
+    has_cn_title: bool,
+    version: str,
+    published: datetime | None,
+    year: int | None,
+    abstract: str,
+    points: list[str],
+) -> dict[str, Any]:
     """组装 NCCN 记录（英文正本 / 中文译本 / 中国版共用）。"""
     is_china = "for China" in first or "China Edition" in os.path.basename(path)
     cn = "" if has_cn_title else _nccn_cn_name(title_en)
     specialty = detect_specialty(title_en, cn or "", os.path.basename(path))
     # 中文译本标题已含中文病种，直接作为主标题
-    title = title_en if has_cn_title else f"NCCN Clinical Practice Guidelines in Oncology: {title_en}"
+    title = (
+        title_en if has_cn_title else f"NCCN Clinical Practice Guidelines in Oncology: {title_en}"
+    )
     author_name = "中国专家委员会" if is_china else f"NCCN {title_en} Panel"
 
     return {
@@ -354,7 +446,9 @@ def _nccn_row(path: str, first: str, title_en: str, has_cn_title: bool,
         "_kind": "nccn",
     }
 
+
 # ── CSCO（扫描件，需 OCR）─────────────────────────────────────
+
 
 def ocr_page(doc: fitz.Document, index: int, dpi: int = 200) -> str:
     """渲染指定页并 OCR，返回带换行的文本。"""
@@ -363,8 +457,9 @@ def ocr_page(doc: fitz.Document, index: int, dpi: int = 200) -> str:
     png = os.path.join(tempfile.gettempdir(), f"kb_ocr_{os.getpid()}_{index}.png")
     try:
         doc[index].get_pixmap(dpi=dpi).save(png)
-        proc = subprocess.run(["tesseract", png, "stdout", "-l", "chi_sim", "--psm", "3"],
-                              capture_output=True)
+        proc = subprocess.run(
+            ["tesseract", png, "stdout", "-l", "chi_sim", "--psm", "3"], capture_output=True
+        )
         return proc.stdout.decode("utf-8", "replace")
     finally:
         if os.path.exists(png):
@@ -461,8 +556,24 @@ def _csco_sections(pages: list[str]) -> list[str]:
     扫描件库里目录页与 CIP/版权页混排，需剔除出版信息（印刷、组织编写、标准书号等），
     并优先保留带小数点的二级标题（信息量高于一级）。
     """
-    noise = ("印刷", "组织编写", "标准书号", "出版", "发行", "定价", "字", "版次",
-             "开本", "印张", "插页", "书号", "数据", "核字", "版权所有", "侵权")
+    noise = (
+        "印刷",
+        "组织编写",
+        "标准书号",
+        "出版",
+        "发行",
+        "定价",
+        "字",
+        "版次",
+        "开本",
+        "印张",
+        "插页",
+        "书号",
+        "数据",
+        "核字",
+        "版权所有",
+        "侵权",
+    )
     primary: list[str] = []
     secondary: list[str] = []
     for text in pages:
@@ -481,7 +592,6 @@ def _csco_sections(pages: list[str]) -> list[str]:
     return (secondary or primary)[:6]
 
 
-
 def _csco_book_name(head: str, filename: str) -> str:
     """CSCO 书名：优先扫描件里命中的正式书名，其次用文件名还原。
 
@@ -492,16 +602,22 @@ def _csco_book_name(head: str, filename: str) -> str:
     m = re.match(r"CSCO[_\-\s]*(.+?)(\d{4})?$", stem, re.I)
     from_name = normalize(m.group(1)) if m else ""
     if from_name:
-        return f"中国临床肿瘤学会（CSCO）{from_name}" if not from_name.startswith("中国") else from_name
+        return (
+            f"中国临床肿瘤学会（CSCO）{from_name}"
+            if not from_name.startswith("中国")
+            else from_name
+        )
 
-    m2 = re.search(r"中国临床肿瘤学会\s*[（(]?\s*CSCO\s*[)）]?\s*([\u4e00-\u9fa5]{2,30}?指南)", head)
+    m2 = re.search(
+        r"中国临床肿瘤学会\s*[（(]?\s*CSCO\s*[)）]?\s*([\u4e00-\u9fa5]{2,30}?指南)", head
+    )
     if m2:
         return f"中国临床肿瘤学会（CSCO）{m2.group(1)}"
     return normalize(stem)
 
 
-
 # ── 中华医学会 / 专委会 ─────────────────────────────────────
+
 
 def _cn_title(lines: list[str], stem: str) -> str:
     """抽取中文指南标题。
@@ -513,7 +629,7 @@ def _cn_title(lines: list[str], stem: str) -> str:
       - 有时首行为栏目名（「标准与规范」），真正标题在第 2-3 行。
     """
     skip = ("标准与规范", "指南与共识", "专家论坛", "述评", "论著", "综述")
-    body = [l for l in lines if l and l not in skip]
+    body = [ln for ln in lines if ln and ln not in skip]
 
     # 在文件名里找完整标题（文件名通常就是完整标题）
     stem_clean = re.sub(r"\s+", "", stem)
@@ -554,7 +670,7 @@ def parse_cn(path: str) -> dict[str, Any] | None:
         if not doc.page_count:
             return None
         first = doc[0].get_text()
-        lines = [normalize(l) for l in first.split("\n") if l.strip()]
+        lines = [normalize(ln) for ln in first.split("\n") if ln.strip()]
 
         stem = os.path.splitext(os.path.basename(path))[0]
         title = _cn_title(lines, stem)
@@ -565,7 +681,11 @@ def parse_cn(path: str) -> dict[str, Any] | None:
             if any(k in line for k in ("分会", "专家委员会", "专业委员会", "学组", "协会")):
                 org_line = line
                 break
-        org_name = "中华医学会" if "中华医学会" in (org_line or first) or "中华" in org_line else "中华医学会"
+        org_name = (
+            "中华医学会"
+            if "中华医学会" in (org_line or first) or "中华" in org_line
+            else "中华医学会"
+        )
         if "中国抗癌协会" in (org_line or first):
             org_name = "中国抗癌协会"
         elif "中国医师协会" in (org_line or first):
@@ -601,7 +721,8 @@ def parse_cn(path: str) -> dict[str, Any] | None:
         # 1) 显式编号条目（多数共识用「推荐意见N：」「专家共识N：」）
         for m in re.finditer(
             r"(专家共识|推荐意见|共识意见)\s*(\d{1,2})\s*[：:](.{10,400}?)(?=(?:专家共识|推荐意见|共识意见)\s*\d|$)",
-            body, re.S,
+            body,
+            re.S,
         ):
             text = f"{m.group(1)}{m.group(2)}：{normalize(m.group(3))}"
             # 编号也可能出现在方法学段落里（「针对共识意见进行投票」），排除
@@ -621,8 +742,19 @@ def parse_cn(path: str) -> dict[str, Any] | None:
                     continue
                 if not ("推荐" in s or "建议" in s):
                     continue
-                if not any(k in s for k in ("证据级别", "推荐强度", "证据等级", "推荐级别",
-                                            "推荐意见", "推荐采用", "建议采用", "不推荐")):
+                if not any(
+                    k in s
+                    for k in (
+                        "证据级别",
+                        "推荐强度",
+                        "证据等级",
+                        "推荐级别",
+                        "推荐意见",
+                        "推荐采用",
+                        "建议采用",
+                        "不推荐",
+                    )
+                ):
                     continue
                 points.append(s)
                 if len(points) >= 6:
@@ -634,9 +766,9 @@ def parse_cn(path: str) -> dict[str, Any] | None:
                 r"[（(][^（()）]{0,40}证据[级等][^（()）]{0,60}推荐[强级][^（()）]{0,40}[)）]",
                 flat_all,
             ):
-                seg = flat_all[max(0, m.start() - 240):m.end()]
+                seg = flat_all[max(0, m.start() - 240) : m.end()]
                 cut = max(seg.rfind("。"), seg.rfind("；"))
-                text = normalize(seg[cut + 1:] if cut > 0 else seg)
+                text = normalize(seg[cut + 1 :] if cut > 0 else seg)
                 if len(text) < 30:
                     continue
                 if text not in points:
@@ -645,8 +777,21 @@ def parse_cn(path: str) -> dict[str, Any] | None:
                     break
 
         # 4) 统一清洗：剔除方法学/流程类句子（三条分支都可能命中）
-        noise = ("投票", "共识框架", "制定流程", "初稿", "表决", "编写小组", "指导委员会",
-                 "利益冲突", "基金项目", "注册", "检索策略", "德尔菲", "审定共识发布")
+        noise = (
+            "投票",
+            "共识框架",
+            "制定流程",
+            "初稿",
+            "表决",
+            "编写小组",
+            "指导委员会",
+            "利益冲突",
+            "基金项目",
+            "注册",
+            "检索策略",
+            "德尔菲",
+            "审定共识发布",
+        )
         points = [p for p in points if not any(k in p for k in noise)]
 
         if not points and keywords:
@@ -681,6 +826,7 @@ def parse_cn(path: str) -> dict[str, Any] | None:
 
 # ── 采集 / 去重 ─────────────────────────────────────────────
 
+
 def collect(sources: list[str], use_ocr: bool) -> tuple[list[dict], list[str]]:
     rows: list[dict] = []
     skipped: list[str] = []
@@ -695,7 +841,8 @@ def collect(sources: list[str], use_ocr: bool) -> tuple[list[dict], list[str]]:
         if any(k in name for k in NON_ONCOLOGY):
             continue
         try:
-            digest = hashlib.md5(open(path, "rb").read()).hexdigest()
+            with open(path, "rb") as fh:
+                digest = hashlib.md5(fh.read()).hexdigest()
         except OSError:
             continue
         if digest in seen_hash:
@@ -767,10 +914,21 @@ async def write_rows(rows: list[dict], dsn: str) -> int:
             for r in rows:
                 await conn.execute(
                     UPSERT,
-                    r["id"], r["title"], r["title_cn"], r["doc_type"], r["authors"],
-                    r["specialty"], r["region"], r["published_at"], r["org"], r["category"],
-                    r["year"], r["version"], r["abstract"],
-                    json.dumps(r["points"], ensure_ascii=False), r["source"],
+                    r["id"],
+                    r["title"],
+                    r["title_cn"],
+                    r["doc_type"],
+                    r["authors"],
+                    r["specialty"],
+                    r["region"],
+                    r["published_at"],
+                    r["org"],
+                    r["category"],
+                    r["year"],
+                    r["version"],
+                    r["abstract"],
+                    json.dumps(r["points"], ensure_ascii=False),
+                    r["source"],
                 )
         return len(rows)
     finally:
@@ -778,15 +936,20 @@ async def write_rows(rows: list[dict], dsn: str) -> int:
 
 
 def print_table(rows: list[dict]) -> None:
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     print(f"解析结果：{len(rows)} 条\n")
     for r in rows:
         date = r["published_at"].strftime("%Y-%m-%d") if r["published_at"] else "-"
-        print(f"[{r['_kind']:<6}] {r['org']:<10} {date:<11} {r['specialty']:<6} "
-              f"{r['version']:<14} {r['doc_type']}  {r['title'][:62]}")
+        print(
+            f"[{r['_kind']:<6}] {r['org']:<10} {date:<11} {r['specialty']:<6} "
+            f"{r['version']:<14} {r['doc_type']}  {r['title'][:62]}"
+        )
         if r["title_cn"]:
             print(f"         cn: {r['title_cn']}")
-        print(f"         authors: {r['authors'][:60]} | points={len(r['points'])} | abstract={len(r['abstract'])}字")
+        print(
+            f"         authors: {r['authors'][:60]} | points={len(r['points'])} "
+            f"| abstract={len(r['abstract'])}字"
+        )
     print("=" * 100)
 
 

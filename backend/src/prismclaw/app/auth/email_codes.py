@@ -7,9 +7,12 @@ import secrets
 import smtplib
 from email.headerregistry import Address
 from email.message import EmailMessage
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from fastapi import HTTPException
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 from prismclaw.infra.settings import SmtpSettings
 
@@ -59,15 +62,15 @@ def _lock_key(prefix: str, email: str) -> str:
     return _key(prefix, "lock", _sha1(email))
 
 
-async def _consume_quota(redis: Any, key: str, limit: int, window: int) -> bool:
+async def _consume_quota(redis: Redis, key: str, limit: int, window: int) -> bool:
     """计数 +1，首次写入时设置过期；返回是否仍在配额内。"""
-    value = await redis.incr(key)
+    value = int(await redis.incr(key))
     if value == 1:
         await redis.expire(key, window)
     return value <= limit
 
 
-async def _refund_quota(redis: Any, key: str) -> None:
+async def _refund_quota(redis: Redis, key: str) -> None:
     if await redis.decr(key) <= 0:
         await redis.delete(key)
 
@@ -96,7 +99,7 @@ def _send_sync(smtp: SmtpSettings, to_addr: str, code: str, scene: str) -> None:
 
 
 async def issue_code(
-    redis: Any,
+    redis: Redis,
     *,
     prefix: str,
     smtp: SmtpSettings,
@@ -136,13 +139,13 @@ async def issue_code(
             await redis.delete(cooldown)
             await _refund_quota(redis, send_key)
             await _refund_quota(redis, ip_key)
-            raise HTTPException(status_code=503, detail="验证码邮件发送失败，请稍后再试")
+            raise HTTPException(status_code=503, detail="验证码邮件发送失败，请稍后再试") from None
 
     await redis.set(_code_key(prefix, scene, email), code, ex=CODE_TTL_SECONDS)
     await redis.delete(_try_key(prefix, scene, email))
 
 
-async def verify_code(redis: Any, *, prefix: str, email: str, scene: Scene, code: str) -> None:
+async def verify_code(redis: Redis, *, prefix: str, email: str, scene: Scene, code: str) -> None:
     """校验验证码；错误次数达到上限时立即作废该验证码。"""
     key = _code_key(prefix, scene, email)
     stored = await redis.get(key)
@@ -161,15 +164,15 @@ async def verify_code(redis: Any, *, prefix: str, email: str, scene: Scene, code
         raise HTTPException(status_code=400, detail="验证码错误")
 
 
-async def clear_code(redis: Any, *, prefix: str, email: str, scene: Scene) -> None:
+async def clear_code(redis: Redis, *, prefix: str, email: str, scene: Scene) -> None:
     await redis.delete(_code_key(prefix, scene, email))
     await redis.delete(_try_key(prefix, scene, email))
 
 
-async def acquire_action_lock(redis: Any, *, prefix: str, email: str) -> bool:
+async def acquire_action_lock(redis: Redis, *, prefix: str, email: str) -> bool:
     """注册/重置的短并发锁，避免同一邮箱被重复提交。"""
     return bool(await redis.set(_lock_key(prefix, email), "1", ex=ACTION_LOCK_SECONDS, nx=True))
 
 
-async def release_action_lock(redis: Any, *, prefix: str, email: str) -> None:
+async def release_action_lock(redis: Redis, *, prefix: str, email: str) -> None:
     await redis.delete(_lock_key(prefix, email))

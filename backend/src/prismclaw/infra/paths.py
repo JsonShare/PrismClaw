@@ -14,6 +14,7 @@
   * 本模块只处理"项目级"路径。用户级 / 工作区级路径（workspaces.json、previews/、
     edits/、spills/ 等）保持在各自调用点，不在这里过度抽象，避免多用户串数据。
 """
+
 from __future__ import annotations
 
 import os

@@ -4,7 +4,8 @@ Implements the PrismClaw variant of Session.append → firehose → Projection
 architecture (see docs/trajectory-upgrade-plan-v2-decoupled.md §3.1 / §3.3).
 
 Core publisher (runner.py, context_helpers.py, turn_preparation.py) imports
-ONLY from `prismclaw.engine.trajectory.bus` and `prismclaw.engine.trajectory.bus_events`. It does **NOT**
+ONLY from `prismclaw.engine.trajectory.bus` and
+`prismclaw.engine.trajectory.bus_events`. It does **NOT**
 import `prismclaw.engine.trajectory.*` — trajectory is a downstream subscriber,
 not a core dependency.
 
@@ -52,14 +53,17 @@ Usage (subscriber, e.g. Trajectory module):
 
 Unloading is explicit (`unsubscribe_all()`) for lifespan shutdown.
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections import defaultdict
+from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Type, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -73,11 +77,12 @@ Handler = SyncHandler | AsyncHandler
 # pass TrajectoryAggregator today. A No-op bus (publish is O(1) NOP) is the
 # default so callers in OFF mode don't even allocate.
 _current_bus: ContextVar[SessionBus | None] = ContextVar(
-    "prismclaw.engine.bus.current_bus", default=None,
+    "prismclaw.engine.bus.current_bus",
+    default=None,
 )
 
 
-def current_bus() -> "SessionBus":
+def current_bus() -> SessionBus:
     """Return the current session bus.
 
     Falls back to a thread/context-local no-op singleton so callers never
@@ -100,7 +105,7 @@ class _BusToken:
     """
 
     reset_value: Any
-    bus: "SessionBus"
+    bus: SessionBus
 
 
 class SessionBus:
@@ -120,12 +125,12 @@ class SessionBus:
         self._sync_handlers: dict[type, list[SyncHandler]] = defaultdict(list)
         self._async_handlers: dict[type, list[AsyncHandler]] = defaultdict(list)
         self._reducers: dict[type, list[SyncHandler]] = defaultdict(list)
-        self._in_flight: set[asyncio.Task[None]] = set()
+        self._in_flight: set[asyncio.Task[Any]] = set()
         self._is_noop: bool = is_noop
 
     # ------------------------------------------------------------------ API
 
-    def subscribe(self, event_type: Type[T], handler: Handler) -> None:
+    def subscribe(self, event_type: type[T], handler: Handler) -> None:
         """Register `handler` for events of `event_type`.
 
         Async handlers (`async def fn(ev)`) get scheduled via create_task on
@@ -137,7 +142,7 @@ class SessionBus:
         import inspect
 
         if inspect.iscoroutinefunction(handler):
-            self._async_handlers[event_type].append(handler)  # type: ignore[arg-type]
+            self._async_handlers[event_type].append(handler)
         else:
             self._sync_handlers[event_type].append(handler)  # type: ignore[arg-type]
 
@@ -155,7 +160,7 @@ class SessionBus:
             return
         self._reducers[event_type].append(reducer)
 
-    def unsubscribe(self, event_type: Type[T], handler: Handler) -> bool:
+    def unsubscribe(self, event_type: type[T], handler: Handler) -> bool:
         """Remove handler. Returns True if actually removed."""
         if self._is_noop:
             return False
@@ -201,11 +206,13 @@ class SessionBus:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "SessionBus.reducer failed event=%s reducer=%s: %s",
-                    et.__name__, getattr(reducer, "__qualname__", repr(reducer)), exc,
+                    et.__name__,
+                    getattr(reducer, "__qualname__", repr(reducer)),
+                    exc,
                 )
         # --- sync path — inline, fail-safe ---
         syncs = self._sync_handlers.get(et) or ()
-        asyncs = self._async_handlers.get(et) or ()
+        asyncs: list[AsyncHandler] = list(self._async_handlers.get(et) or ())
         if not syncs and not asyncs:
             return
         # --- sync path — inline, fail-safe ---
@@ -215,7 +222,9 @@ class SessionBus:
             except Exception as exc:  # noqa: BLE001  -- deliberate swallow
                 logger.warning(
                     "SessionBus.sync_handler failed event=%s handler=%s: %s",
-                    et.__name__, getattr(fn, "__qualname__", repr(fn)), exc,
+                    et.__name__,
+                    getattr(fn, "__qualname__", repr(fn)),
+                    exc,
                 )
         # --- async path — schedule tasks, hold in _in_flight ---
         if asyncs:
@@ -226,11 +235,12 @@ class SessionBus:
                 logger.warning(
                     "SessionBus.publish called without running event loop; "
                     "%d async handler(s) dropped for event=%s",
-                    len(asyncs), et.__name__,
+                    len(asyncs),
+                    et.__name__,
                 )
                 return
-            for fn in asyncs:
-                coro = self._wrap_async_handler(fn, event, et.__name__)
+            for async_fn in asyncs:
+                coro = self._wrap_async_handler(async_fn, event, et.__name__)
                 task = loop.create_task(coro)
                 self._in_flight.add(task)
                 task.add_done_callback(self._in_flight.discard)
@@ -253,19 +263,22 @@ class SessionBus:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "SessionBus.publish_async reducer failed event=%s reducer=%s: %s",
-                    et.__name__, getattr(reducer, "__qualname__", repr(reducer)), exc,
+                    et.__name__,
+                    getattr(reducer, "__qualname__", repr(reducer)),
+                    exc,
                 )
         # --- sync + async handlers ---
         syncs = self._sync_handlers.get(et) or ()
-        asyncs = self._async_handlers.get(et) or ()
+        asyncs: list[AsyncHandler] = list(self._async_handlers.get(et) or ())
         for fn in syncs:
             try:
                 fn(event)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "SessionBus.publish_async sync_handler failed event=%s "
-                    "handler=%s: %s",
-                    et.__name__, getattr(fn, "__qualname__", repr(fn)), exc,
+                    "SessionBus.publish_async sync_handler failed event=%s handler=%s: %s",
+                    et.__name__,
+                    getattr(fn, "__qualname__", repr(fn)),
+                    exc,
                 )
         if asyncs:
             await asyncio.gather(
@@ -302,19 +315,19 @@ class SessionBus:
     # ------------------------------------------------------------------ internals
 
     @staticmethod
-    async def _wrap_async_handler(
-        fn: AsyncHandler, event: object, evname: str
-    ) -> None:
+    async def _wrap_async_handler(fn: AsyncHandler, event: object, evname: str) -> None:
         try:
             await fn(event)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "SessionBus.async_handler failed event=%s handler=%s: %s",
-                evname, getattr(fn, "__qualname__", repr(fn)), exc,
+                evname,
+                getattr(fn, "__qualname__", repr(fn)),
+                exc,
             )
 
     # ContextVar integration — mirror bind_aggregator's API.
-    def bind(self) -> "_BusCtxManager":
+    def bind(self) -> _BusCtxManager:
         """Return a context manager that sets `_current_bus` to `self`.
 
         Usage:
@@ -334,17 +347,20 @@ class _BusCtxManager:
         self._token = _current_bus.set(self.bus)
         return self.bus
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object,
+    ) -> None:
         if self._token is not None:
-            try:
+            # ContextVar.reset(token) 要求 token 必须在同一个 async context
+            # 里创建 — 当这个 ctx manager 被跨 context 关闭（典型场景：
+            # async generator 提前抛 GeneratorExit，__aexit__ 在不同的
+            # context 里执行）时 token 无法 reset，让 context 自己销毁
+            # 时自动清理 ContextVar 即可，这里静默忽略。
+            with contextlib.suppress(ValueError):
                 _current_bus.reset(self._token)
-            except ValueError:
-                # ContextVar.reset(token) 要求 token 必须在同一个 async context
-                # 里创建 — 当这个 ctx manager 被跨 context 关闭（典型场景：
-                # async generator 提前抛 GeneratorExit，__aexit__ 在不同的
-                # context 里执行）时 token 无法 reset，让 context 自己销毁
-                # 时自动清理 ContextVar 即可，这里静默忽略。
-                pass
             self._token = None
 
 

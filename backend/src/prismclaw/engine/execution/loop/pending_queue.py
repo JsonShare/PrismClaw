@@ -8,10 +8,16 @@
 压缩重启即丢；steering 由通道层 SessionQueue 标记法 + 引擎闭包落树
 （role="user" MessageEntry）实现，见 docs/architecture/sdd-steering-channel.md。
 """
+
 from __future__ import annotations
 
-from prismclaw.schema.agent.session import AgentMessageDict, ProjectionInputMessage, SystemReminderProjection
 from typing import cast
+
+from prismclaw.schema.agent.session import (
+    AgentMessageDict,
+    ProjectionInputMessage,
+    SystemReminderProjection,
+)
 
 __all__ = ["PendingMessageQueue"]
 

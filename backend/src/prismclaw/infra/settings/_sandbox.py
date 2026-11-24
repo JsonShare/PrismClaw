@@ -44,9 +44,7 @@ class SandboxSettings(BaseSettings):
     default_network: SandboxNetworkConfig = Field(
         default_factory=lambda: SandboxNetworkConfig(),
     )
-    default_env_allowlist: list[str] = Field(
-        default_factory=list
-    )
+    default_env_allowlist: list[str] = Field(default_factory=list)
 
     @field_validator("default_env_allowlist")
     @classmethod

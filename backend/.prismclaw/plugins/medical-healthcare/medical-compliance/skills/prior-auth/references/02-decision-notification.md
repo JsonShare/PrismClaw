@@ -145,7 +145,7 @@ This disclaimer must appear prominently at the header/top of every notification 
   },
 
   "notification": {
-    "letter_file": "outputs/notification_letter.txt",
+    "letter_file": "outbox/notification_letter.txt",
     "sent_date": "..."
   }
 }
@@ -184,7 +184,7 @@ Display concise completion summary with:
 
 **Files Generated:**
 - waypoints/decision.json
-- outputs/notification_letter.txt or .pdf
+- outbox/notification_letter.txt or .pdf
 
 **Review Metrics:**
 - Turnaround time, review type, confidence level
@@ -199,7 +199,7 @@ Handle user choice appropriately.
 
 **Created:**
 - `waypoints/decision.json` - Final decision record
-- `outputs/notification_letter.txt` or `.pdf` - Provider notification
+- `outbox/notification_letter.txt` or `.pdf` - Provider notification
 
 ---
 

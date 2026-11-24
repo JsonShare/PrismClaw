@@ -33,7 +33,7 @@ function shouldHideTaskPanelFile(path: string): boolean {
   if (lowerPath.includes('/skills/') || lowerPath.includes('/scripts/') || lowerPath.includes('/.trae/')) return true
   const ext = fileExt(normalized)
   if (ext && new Set(['md', 'txt', 'csv', 'tsv', 'html', 'htm', 'json']).has(ext)) {
-    const deliverableDirs = ['outputs', 'output', 'out', 'artifacts', 'exports', 'reports', 'results', 'generated']
+    const deliverableDirs = ['outbox', 'output', 'out', 'artifacts', 'exports', 'reports', 'results', 'generated']
     if (!deliverableDirs.some((d) => lowerPath.includes(`/${d}/`))) return true
   }
   return false
@@ -136,7 +136,7 @@ export function useTaskPanelData(): TaskPanelData {
   }, [currentMessages])
 
   // 交付物列表只来自 explicitOutputFiles（LLM 通过 present_files 工具声明的最终交付物，
-  // 经后端 event:outputs 推送 + message.metadata.outputFiles 持久化）。
+  // 经后端 event:outbox 推送 + message.metadata.outputFiles 持久化）。
   // 不再从 timeline kind=write 提取——那包含中间文件，不是交付物信号，
   // 且任务完成后 liveTimeline 被 clearLive 清空会导致交付物间歇性消失。
   const panelTaskOutputFiles = useMemo(() => {

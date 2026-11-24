@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+import contextlib
+from collections.abc import Awaitable, Callable
 
 
 async def shutdown_web_channel_runtime_globals(
     *,
     grace_s: float = 0.25,
-    close_client_fn: Callable[[Any], Awaitable[None]] | None = None,
-    app_state: Any = None,
+    close_client_fn: Callable[[object], Awaitable[None]] | None = None,
+    app_state: object | None = None,
 ) -> None:
     """Async counterpart to :func:`reset_web_channel_runtime_globals`, used
     during FastAPI shutdown.
@@ -44,7 +45,7 @@ async def shutdown_web_channel_runtime_globals(
         session_queue = wired_queue
 
     if session_queue is not None and hasattr(session_queue, "shutdown"):
-        shutdown_fn = getattr(session_queue, "shutdown")
+        shutdown_fn = session_queue.shutdown
         if callable(shutdown_fn):
             try:
                 await shutdown_fn(grace_s=grace_s)
@@ -54,14 +55,10 @@ async def shutdown_web_channel_runtime_globals(
                 # hits an unexpected error.
                 import logging
 
-                logging.getLogger(__name__).warning(
-                    "web runtime shutdown error", exc_info=True
-                )
+                logging.getLogger(__name__).warning("web runtime shutdown error", exc_info=True)
     # Finally clear WS registry (no async work needed)
-    try:
+    with contextlib.suppress(Exception):
         _ws_registry.clear()
-    except Exception:
-        pass
     _ = close_client_fn
 
 

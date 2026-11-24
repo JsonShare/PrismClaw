@@ -10,6 +10,7 @@
 它只做观测（不修改任何业务路径），成本约为每 ``interval_s`` 一次
 ``monotonic`` 与一次 sleep。
 """
+
 from __future__ import annotations
 
 import asyncio

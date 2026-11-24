@@ -16,6 +16,7 @@
 
 并发控制：asyncio.Semaphore(2) 限制并行 LLM 调用 ≤2，防 429。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -186,7 +187,9 @@ async def _run(
     plan = normalize_director_plan(plan_raw or {})
     # 保存主任规划（后续阶段消费）
     await brief_store.update_brief(
-        brief_id, {"director_plan_json": plan}, user_id="system",
+        brief_id,
+        {"director_plan_json": plan},
+        user_id="system",
     )
     logger.info("简报 %s 主任规划: focus=%s", brief_id, plan.get("focus_areas", []))
 
@@ -208,9 +211,7 @@ async def _run(
     await _advance(brief_store, brief_id, BriefStatus.ANALYZING.value, 70)
 
     expert_coros = [
-        _run_with_semaphore(
-            _expert_analysis(llm, role, plan, kb_hits, report_data)
-        )
+        _run_with_semaphore(_expert_analysis(llm, role, plan, kb_hits, report_data))
         for role in EXPERT_ROLES
     ]
     wave2_raw = await asyncio.gather(*expert_coros, return_exceptions=True)
@@ -229,7 +230,11 @@ async def _run(
         llm,
         system=SYNTHESIS_SYSTEM,
         prompt=build_synthesis_prompt(
-            wave1_results, wave2_results, wave3_result, plan, all_citations,
+            wave1_results,
+            wave2_results,
+            wave3_result,
+            plan,
+            all_citations,
         ),
         tool=SYNTHESIS_TOOL,
         tool_name="brief_draft",
@@ -368,7 +373,9 @@ async def _advance(
 ) -> None:
     """推进简报状态（与 parse_pipeline._advance 对称）。"""
     await brief_store.update_brief(
-        brief_id, {"status": status}, user_id="system",
+        brief_id,
+        {"status": status},
+        user_id="system",
     )
 
 

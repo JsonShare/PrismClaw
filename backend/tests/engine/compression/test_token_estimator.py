@@ -8,22 +8,20 @@
 5. estimate_messages_tokens：sum(单条)
 6. PRISMCLAW_COMPACTION_ESTIMATOR_V2 rollback 开关保留
 """
+
 from __future__ import annotations
 
-
-
+from prismclaw.engine.compression.compaction import (
+    estimate_message_tokens,
+    estimate_messages_tokens,
+)
 from prismclaw.schema.shared.utils import (
     _CJK_TOKENS_PER_CHAR,
     _OTHER_CHARS_PER_TOKEN,
     estimate_tokens,
 )
-from prismclaw.engine.compression.compaction import (
-    estimate_message_tokens,
-    estimate_messages_tokens,
-)
 
-
-# ──────────────────────────── 1. 基础契约 ────────────────────────────
+# ────────────────────────────────────────── 1. 基础契约 ───────────────────────────────────────────
 
 
 def test_estimate_tokens_empty_returns_zero():
@@ -47,7 +45,7 @@ def test_estimate_tokens_calibrated_constants():
     assert _OTHER_CHARS_PER_TOKEN == 3.4
 
 
-# ──────────────────────────── 2. 中文校准契约（核心） ────────────────────────────
+# ──────────────────────────────────── 2. 中文校准契约（核心） ─────────────────────────────────────
 
 
 def test_estimate_tokens_chinese_higher_than_legacy_len_div_4():
@@ -75,7 +73,7 @@ def test_estimate_tokens_chinese_long_text_within_budget():
     assert 850 <= estimated <= 950
 
 
-# ──────────────────────────── 3. PRISMCLAW_COMPACTION_ESTIMATOR_V2 rollback 开关 ────────────────────────────
+# ─────────────────────── 3. PRISMCLAW_COMPACTION_ESTIMATOR_V2 rollback 开关 ───────────────────────
 
 
 def test_estimate_tokens_v2_enabled_by_default(monkeypatch):
@@ -95,6 +93,7 @@ def test_estimate_tokens_v2_disabled_restores_legacy(monkeypatch):
     # 需要重新 import 让 _estimator_v2_enabled 重读
     # 由于 _estimator_v2_enabled 是函数（每次调用读 env），直接调用即可
     from prismclaw.schema.shared.utils import _estimator_v2_enabled
+
     assert _estimator_v2_enabled() is False
 
     # legacy 路径：len//4
@@ -103,7 +102,7 @@ def test_estimate_tokens_v2_disabled_restores_legacy(monkeypatch):
     assert estimated == 25  # 100 // 4
 
 
-# ──────────────────────────── 4. estimate_message_tokens 契约 ────────────────────────────
+# ──────────────────────────────── 4. estimate_message_tokens 契约 ─────────────────────────────────
 
 
 def test_estimate_message_tokens_string_content():
@@ -185,7 +184,7 @@ def test_estimate_message_tokens_tool_call_dict_arguments():
     assert tokens == expected
 
 
-# ──────────────────────────── 5. estimate_messages_tokens 求和契约 ────────────────────────────
+# ────────────────────────────── 5. estimate_messages_tokens 求和契约 ──────────────────────────────
 
 
 def test_estimate_messages_tokens_empty_list():
@@ -204,7 +203,7 @@ def test_estimate_messages_tokens_sum_of_singles():
     assert total == expected
 
 
-# ──────────────────────────── 6. 唯一入口契约（Phase 4 后启用） ────────────────────────────
+# ─────────────────────────────── 6. 唯一入口契约（Phase 4 后启用） ────────────────────────────────
 #
 # Phase 4 重构后必须验证：所有调用方使用 prismclaw.schema.shared.estimate_tokens。
 # 当前 Phase 1 阶段，compression/compaction/compaction.py 仍提供 wrapper。
@@ -214,12 +213,13 @@ def test_estimate_tokens_single_authoritative_source():
     """schema.shared.estimate_tokens 是唯一权威实现；
     compaction.compaction.estimate_tokens 是薄包装 delegate。"""
     from prismclaw.engine.compression.compaction import estimate_tokens as wrapper
+
     # wrapper 应与权威实现返回相同结果
     test_text = "测试 token 估算一致性 hello world"
     assert wrapper(test_text) == estimate_tokens(test_text)
 
 
-# ──────────────────────────── 7. 独立插件契约 ────────────────────────────
+# ──────────────────────────────────────── 7. 独立插件契约 ─────────────────────────────────────────
 
 
 def test_heuristic_counter_honors_custom_coefficients():
@@ -252,9 +252,7 @@ def test_active_counter_is_swappable():
     )
 
     try:
-        set_token_counter(
-            HeuristicTokenCounter(cjk_tokens_per_char=1.0, other_chars_per_token=1.0)
-        )
+        set_token_counter(HeuristicTokenCounter(cjk_tokens_per_char=1.0, other_chars_per_token=1.0))
         assert estimate_tokens("中" * 10) == 10
     finally:
         reset_token_counter()

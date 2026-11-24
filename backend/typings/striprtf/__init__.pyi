@@ -1,0 +1,3 @@
+"""Type stubs for ``striprtf`` covering the RTF-to-text surface used here."""
+
+def rtf_to_text(text: str, encoding: str = ..., errors: str = ...) -> str: ...

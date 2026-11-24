@@ -19,11 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from prismclaw.schema.agent.review_errors import (
-    DocxReviewEngineGap,
-    UnsupportedDocxChange,
-)
 from prismclaw.engine.toolkit.builtin.shared_tool_helpers import sha256hex
+from prismclaw.schema.agent.review_errors import (
+    DocxReviewEngineGapError,
+    UnsupportedDocxChangeError,
+)
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,10 @@ def _parse_read_document_lines(text: str) -> list[tuple[str, str]]:
 
 def _build_docx_para_id_map(base_bytes: bytes) -> dict[str, str]:
     snapshot_text = read_docx_agent_text(base_bytes).text
-    return {para_id: paragraph_text for para_id, paragraph_text in _parse_read_document_lines(snapshot_text)}
+    return {
+        para_id: paragraph_text
+        for para_id, paragraph_text in _parse_read_document_lines(snapshot_text)
+    }
 
 
 def normalize_docx_suggested_changes(
@@ -94,7 +97,7 @@ def normalize_docx_suggested_changes(
 ) -> list[SuggestedDocxChange]:
     """Validate `.docx` suggest_change operations against current reviewer handles."""
     if not isinstance(operations, list) or not operations:
-        raise UnsupportedDocxChange("operations must be a non-empty list")
+        raise UnsupportedDocxChangeError("operations must be a non-empty list")
 
     para_ids = _build_docx_para_id_map(base_bytes)
     normalized: list[SuggestedDocxChange] = []
@@ -102,27 +105,33 @@ def normalize_docx_suggested_changes(
 
     for operation in operations:
         if not isinstance(operation, dict):
-            raise UnsupportedDocxChange("every operation must be an object")
+            raise UnsupportedDocxChangeError("every operation must be an object")
 
         op = str(operation.get("op") or "")
         ref = str(operation.get("ref") or "")
         if op not in _SUPPORTED_DOCX_NATIVE_OPS:
-            raise UnsupportedDocxChange(
+            raise UnsupportedDocxChangeError(
                 f"docx native review does not support op '{op}'. Supported op: suggest_change."
             )
         if not ref:
-            raise UnsupportedDocxChange("docx operation ref is required")
+            raise UnsupportedDocxChangeError("docx operation ref is required")
         if ref in seen_refs:
-            raise UnsupportedDocxChange(f"duplicate docx ref in one batch is not allowed: {ref}")
+            raise UnsupportedDocxChangeError(
+                f"duplicate docx ref in one batch is not allowed: {ref}"
+            )
         seen_refs.add(ref)
         if ref not in para_ids:
-            raise UnsupportedDocxChange(f"docx paraId not found: {ref}")
+            raise UnsupportedDocxChangeError(f"docx paraId not found: {ref}")
         search = operation.get("search")
         replace_with = operation.get("replaceWith")
         if not isinstance(search, str):
-            raise UnsupportedDocxChange(f"docx suggest_change requires string search for {ref}")
+            raise UnsupportedDocxChangeError(
+                f"docx suggest_change requires string search for {ref}"
+            )
         if not isinstance(replace_with, str):
-            raise UnsupportedDocxChange(f"docx suggest_change requires string replaceWith for {ref}")
+            raise UnsupportedDocxChangeError(
+                f"docx suggest_change requires string replaceWith for {ref}"
+            )
         normalized.append(
             SuggestedDocxChange(
                 op=op,
@@ -138,18 +147,20 @@ def normalize_docx_suggested_changes(
 def _parse_bridge_stdout(stdout: str, stderr: str) -> dict[str, Any]:
     raw = (stdout or "").strip()
     if not raw:
-        raise DocxReviewEngineGap(f"docx review bridge produced no stdout. stderr: {stderr.strip()}")
+        raise DocxReviewEngineGapError(
+            f"docx review bridge produced no stdout. stderr: {stderr.strip()}"
+        )
 
     candidate = raw.splitlines()[-1]
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError as exc:
-        raise DocxReviewEngineGap(
+        raise DocxReviewEngineGapError(
             f"docx review bridge returned invalid JSON: {candidate}"
         ) from exc
 
     if not isinstance(payload, dict):
-        raise DocxReviewEngineGap("docx review bridge returned a non-object payload")
+        raise DocxReviewEngineGapError("docx review bridge returned a non-object payload")
     return payload
 
 
@@ -161,12 +172,12 @@ def read_docx_agent_text(
     """Read a DOCX through the official reviewer bridge and return agent text."""
     node = shutil.which("node")
     if not node:
-        raise DocxReviewEngineGap("node executable not found")
+        raise DocxReviewEngineGapError("node executable not found")
 
     bridge_path = _bridge_path()
     bridge_cwd = _bridge_cwd()
     if not bridge_path.exists():
-        raise DocxReviewEngineGap(f"docx review bridge not found: {bridge_path}")
+        raise DocxReviewEngineGapError(f"docx review bridge not found: {bridge_path}")
 
     with tempfile.TemporaryDirectory(prefix="prismclaw-docx-read-") as tmpdir:
         tmp_root = Path(tmpdir)
@@ -192,8 +203,10 @@ def read_docx_agent_text(
 
         bridge_payload = _parse_bridge_stdout(proc.stdout, proc.stderr)
         if proc.returncode != 0 or not bridge_payload.get("ok"):
-            error_text = str(bridge_payload.get("error") or proc.stderr.strip() or "unknown bridge error")
-            raise DocxReviewEngineGap(error_text)
+            error_text = str(
+                bridge_payload.get("error") or proc.stderr.strip() or "unknown bridge error"
+            )
+            raise DocxReviewEngineGapError(error_text)
 
     return ReadDocxAgentTextResult(text=str(bridge_payload.get("text") or ""))
 
@@ -209,12 +222,12 @@ def build_docx_review_artifact(
 
     node = shutil.which("node")
     if not node:
-        raise DocxReviewEngineGap("node executable not found")
+        raise DocxReviewEngineGapError("node executable not found")
 
     bridge_path = _bridge_path()
     bridge_cwd = _bridge_cwd()
     if not bridge_path.exists():
-        raise DocxReviewEngineGap(f"docx review bridge not found: {bridge_path}")
+        raise DocxReviewEngineGapError(f"docx review bridge not found: {bridge_path}")
 
     payload = [
         {
@@ -261,16 +274,18 @@ def build_docx_review_artifact(
 
         bridge_payload = _parse_bridge_stdout(proc.stdout, proc.stderr)
         if proc.returncode != 0 or not bridge_payload.get("ok"):
-            error_text = str(bridge_payload.get("error") or proc.stderr.strip() or "unknown bridge error")
-            raise DocxReviewEngineGap(error_text)
+            error_text = str(
+                bridge_payload.get("error") or proc.stderr.strip() or "unknown bridge error"
+            )
+            raise DocxReviewEngineGapError(error_text)
         if not output_path.exists():
-            raise DocxReviewEngineGap("docx review bridge did not produce an output file")
+            raise DocxReviewEngineGapError("docx review bridge did not produce an output file")
 
         review_docx_bytes = output_path.read_bytes()
 
     pending_changes = int(bridge_payload.get("pending_changes") or 0)
     if pending_changes <= 0:
-        raise UnsupportedDocxChange("docx review artifact contains no pending tracked changes")
+        raise UnsupportedDocxChangeError("docx review artifact contains no pending tracked changes")
 
     return BuildDocxReviewArtifactResult(
         review_docx_bytes=review_docx_bytes,

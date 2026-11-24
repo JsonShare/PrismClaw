@@ -80,7 +80,7 @@ export function outputDownloadUrl(workspaceId: string, relPath: string): string 
 }
 
 export async function fetchOutputs(workspaceId: string, token: string | null): Promise<OutputFile[]> {
-  const url = `${apiUrl('/api/workspaces/outputs')}?workspace_id=${encodeURIComponent(workspaceId || 'all')}`
+  const url = `${apiUrl('/api/workspaces/outbox')}?workspace_id=${encodeURIComponent(workspaceId || 'all')}`
   const headers: Record<string, string> = {}
   if (token) {
     headers.Authorization = `Bearer ${token}`

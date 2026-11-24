@@ -4,9 +4,8 @@
 装配协调器未提供注入接口时 attach 为空操作（缓存不生效，装配
 行为退化为无缓存路径）。
 """
-from __future__ import annotations
 
-from typing import Any
+from __future__ import annotations
 
 from prismclaw.engine.compression.memory_assembly_cache import MemoryCoreCache
 
@@ -22,7 +21,7 @@ class RunProjector:
     def __init__(self, *, label: str = "run") -> None:
         self._cache = MemoryCoreCache(label=label)
 
-    def attach(self, assembler: Any) -> None:
+    def attach(self, assembler: object) -> None:
         """把记忆组合缓存注入装配协调器（幂等）。"""
         setter = getattr(assembler, "set_memory_core_cache", None)
         if setter is None:

@@ -4,6 +4,7 @@ Pi 先例：Pi 按 consumer 定义接口（FileSystem/Shell）。
 OfficeReviewProtocol 是 PrismClaw 独有的——Pi 没有 web review 子系统。
 但"按 consumer 定义接口"这个原则是抄 Pi 的。
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable

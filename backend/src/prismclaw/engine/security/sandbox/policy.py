@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from mcp import StdioServerParameters
+
+    from prismclaw.schema.content.workspace import SandboxTier
 
 SandboxBackend = Literal["bwrap", "none"]
 
@@ -20,9 +26,7 @@ class SandboxPolicy(Protocol):
 
     backend: SandboxBackend
 
-    def wrap_bash_command(
-        self, cmd: str, ctx: Any
-    ) -> tuple[str, list[str]]:
+    def wrap_bash_command(self, cmd: str, ctx: object) -> tuple[str, list[str]]:
         """Return ``(executable, args)`` for ``asyncio.create_subprocess_exec``.
 
         ``ctx`` is a ``ToolContext`` carrying ``workspace_root``, ``sandbox_tier``,
@@ -34,14 +38,18 @@ class SandboxPolicy(Protocol):
 
     def wrap_mcp_stdio(
         self,
-        params: Any,
+        params: StdioServerParameters,
         server_name: str,
-        sandbox_config: Any,
-    ) -> Any:
+        sandbox_config: Mapping[str, object],
+    ) -> StdioServerParameters:
         """Return ``StdioServerParameters`` (possibly wrapped) for MCP spawn.
 
         ``BwrapPolicy`` rewrites ``params.command`` to ``bwrap``
         and prepends sandbox args + original command + args.
         ``_PassthroughPolicy`` returns ``params`` unchanged.
         """
+        ...
+
+    def check_network_access(self, tier: SandboxTier) -> str | None:
+        """Return a deny reason when ``tier`` forbids network access, else ``None``."""
         ...

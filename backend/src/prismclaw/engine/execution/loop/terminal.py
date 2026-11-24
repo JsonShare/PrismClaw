@@ -8,12 +8,18 @@
 
 所有函数以 ``rt: LoopRuntime`` 为第一参数，显式读写受控字段。
 """
+
 from __future__ import annotations
 
 import dataclasses
 import logging
 import time as _time
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
+    from prismclaw.schema.content.streaming import ToolCallEnd
+    from prismclaw.schema.llm.types import LLMResponse
 
 from prismclaw.engine.execution.checkpoint import persist_run_snapshot
 from prismclaw.engine.execution.control.kernel import TerminalReason
@@ -41,6 +47,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # 终态副作用 — terminate 与 teardown 共用的原子操作
 # ---------------------------------------------------------------------------
+
 
 async def persist_snapshot_fn(rt: LoopRuntime) -> None:
     """持久化当前运行快照。"""
@@ -86,6 +93,7 @@ def record_review_outcome(rt: LoopRuntime, record: ReviewDecisionRecord) -> None
 # ---------------------------------------------------------------------------
 # terminate — 终态副作用的唯一实现
 # ---------------------------------------------------------------------------
+
 
 async def terminate(
     rt: LoopRuntime,
@@ -138,11 +146,16 @@ async def terminate(
 # persist_turn — 合并 denied / clarified 两种落树
 # ---------------------------------------------------------------------------
 
+
 async def persist_turn(
     rt: LoopRuntime,
-    response: Any,
+    response: LLMResponse,
     kind: str,
-    **kwargs: Any,
+    *,
+    blocked_events: list[ToolCallEnd] | None = None,
+    allowed_calls: list[ParsedToolCall] | None = None,
+    ask_call_id: str | None = None,
+    answer: str | None = None,
 ) -> None:
     """落树回合（denied 或 clarified）。
 
@@ -169,7 +182,6 @@ async def persist_turn(
         )
 
         if kind == "denied":
-            blocked_events = kwargs.get("blocked_events", [])
             if blocked_events:
                 await _persist_blocked_tool_results(
                     deps=rt.deps,
@@ -181,9 +193,9 @@ async def persist_turn(
                 deps=rt.deps,
                 tree=rt.tree,
                 response=response,
-                allowed_calls=kwargs.get("allowed_calls", []),
-                ask_call_id=kwargs.get("ask_call_id", ""),
-                answer=kwargs.get("answer"),
+                allowed_calls=allowed_calls or [],
+                ask_call_id=ask_call_id or "",
+                answer=answer,
             )
         else:
             raise ValueError(f"persist_turn: unknown kind={kind!r}")
@@ -200,9 +212,10 @@ async def persist_turn(
 # HITL — check + wait（共享 _hitl_impl，保留两个端口薄 wrapper）
 # ---------------------------------------------------------------------------
 
+
 def check_hitl(
     rt: LoopRuntime,
-    calls: list[Any],
+    calls: list[ParsedToolCall],
 ) -> HITLCheckResult | None:
     """HITL 检测。AskUserQuestion 需要跨 yield 边界处理。
 
@@ -248,17 +261,21 @@ async def wait_for_clarification(
     自动读到正确的剩余时间。
     """
     rt.deps.session_queue.set_phase("awaiting_clarification")
-    _wait_id = (
-        hitl.clarification_request.approval_id
-        if hasattr(hitl.clarification_request, "approval_id")
-        else ""
-    )
+    _clarify_request = hitl.clarification_request
+    if _clarify_request is None:
+        rt.deps.session_queue.set_phase(None)
+        raise RuntimeError(
+            "HITLCheckResult.needs_clarification=True 但缺少 clarification_request："
+            "无法确定等待哪一次澄清，拒绝以空 approval_id 无限等待。"
+        )
+    _wait_id = _clarify_request.approval_id
     logger.warning(
-        "hitl.wait.start approval_id=%s (无限等待，仅用户作答恢复)", _wait_id,
+        "hitl.wait.start approval_id=%s (无限等待，仅用户作答恢复)",
+        _wait_id,
     )
     _wait_t0 = _time.monotonic()
     try:
-        answer = await rt.deps.session_queue.wait_for_clarification(_wait_id)
+        answer: str | None = await rt.deps.session_queue.wait_for_clarification(_wait_id)
     finally:
         rt.deps.session_queue.set_phase(None)
     _elapsed = _time.monotonic() - _wait_t0
@@ -269,7 +286,9 @@ async def wait_for_clarification(
     logger.warning(
         "hitl.wait.done approval_id=%s elapsed=%.1fs answered=%s "
         "run_started_deduced=%.1fs new_hard_at=%.1f",
-        _wait_id, _elapsed, answer is not None,
+        _wait_id,
+        _elapsed,
+        answer is not None,
         _elapsed,
         _read_attr(rt, "run_state", "loop_state", "hard_at") or 0.0,
     )
@@ -308,12 +327,10 @@ def _deduct_wait_time_from_budget(rt: LoopRuntime, elapsed_s: float) -> None:
     if _bg is not None and hasattr(_bg, "_budget"):
         _budget = _bg._budget
         if getattr(_budget, "run_started", 0.0) > 0.0:
-            _bg._budget = dataclasses.replace(
-                _budget, run_started=_budget.run_started + elapsed_s
-            )
+            _bg._budget = dataclasses.replace(_budget, run_started=_budget.run_started + elapsed_s)
 
 
-def _read_attr(obj: Any, *path: str) -> Any:
+def _read_attr(obj: object, *path: str) -> object:
     """链式 getattr，中间任一环节 None 时返回 None。"""
     cur = obj
     for p in path:
@@ -326,6 +343,7 @@ def _read_attr(obj: Any, *path: str) -> Any:
 # ---------------------------------------------------------------------------
 # steering — 消费 + 落树
 # ---------------------------------------------------------------------------
+
 
 async def get_steering_messages(
     rt: LoopRuntime,

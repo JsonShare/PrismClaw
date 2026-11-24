@@ -48,14 +48,10 @@ def test_tool_budget_exhausted_schedules_wrapup_turn() -> None:
 def test_wrapup_turn_survives_stream_phase() -> None:
     state = _state(steps_spent=3, tool_calls_spent=4)
     now = time.monotonic()
-    evaluate_loop_control(
-        run_state=state, run_budget=_budget(), now=now, phase="prepare"
-    )
+    evaluate_loop_control(run_state=state, run_budget=_budget(), now=now, phase="prepare")
     # stream 阶段 steps_spent 已自增，同一收尾轮仍须判为 last_turn。
     state.loop_state.steps_spent = 4
-    decision = evaluate_loop_control(
-        run_state=state, run_budget=_budget(), now=now, phase="stream"
-    )
+    decision = evaluate_loop_control(run_state=state, run_budget=_budget(), now=now, phase="stream")
     assert decision.should_stop is False
     assert decision.is_last_turn is True
 
@@ -63,13 +59,9 @@ def test_wrapup_turn_survives_stream_phase() -> None:
 def test_stop_after_wrapup_turn_finished() -> None:
     state = _state(steps_spent=3, tool_calls_spent=4)
     now = time.monotonic()
-    evaluate_loop_control(
-        run_state=state, run_budget=_budget(), now=now, phase="prepare"
-    )
+    evaluate_loop_control(run_state=state, run_budget=_budget(), now=now, phase="prepare")
     state.loop_state.steps_spent = 4
-    evaluate_loop_control(
-        run_state=state, run_budget=_budget(), now=now, phase="stream"
-    )
+    evaluate_loop_control(run_state=state, run_budget=_budget(), now=now, phase="stream")
     # 收尾轮结束后进入下一轮 prepare：这次必须停。
     decision = evaluate_loop_control(
         run_state=state, run_budget=_budget(), now=now, phase="prepare"

@@ -3,39 +3,39 @@ from __future__ import annotations
 import logging
 import secrets
 import time
-from datetime import datetime, timezone
-
-from typing import Annotated, Any, Literal, TYPE_CHECKING, Union, get_args
-
-logger = logging.getLogger(__name__)
+from datetime import UTC, datetime
+from typing import Annotated, Any, Literal, get_args
 
 from pydantic import BaseModel, Field, TypeAdapter
 
-from prismclaw.schema.content import (
-    CompactionArtifact,
-)
-from prismclaw.schema.agent.data_types import ContentBlock
 from prismclaw.schema.agent.session import (
-    AgentMessageDict,
-    MessageEntry,
+    MessageEntry as MessageEntry,
+)
+from prismclaw.schema.agent.session import (
     SessionContextState,
-    SessionEntryBase,
-    SessionEvent,
-    SessionEventType,
-    SessionHeader,
-    SystemReminderProjection,
     TurnRuntimeMetricsSnapshot,
 )
-from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.agent.session import (
+    SessionEntryBase as SessionEntryBase,
+)
+from prismclaw.schema.agent.session import (
+    SessionEvent as SessionEvent,
+)
+from prismclaw.schema.agent.session import (
+    SessionEventType as SessionEventType,
+)
+from prismclaw.schema.agent.session import (
+    SessionHeader as SessionHeader,
+)
 from prismclaw.schema.agent.task_runtime import (
     EvidenceRecord,
     ReviewDecisionRecord,
     TaskMutation,
     TaskRuntimeState,
 )
+from prismclaw.schema.agent.task_types import TaskSpec
 
-if TYPE_CHECKING:
-    from prismclaw.schema.content.replacement_state import ReplacementDecisionState
+logger = logging.getLogger(__name__)
 
 _TURN_RUNTIME_METRICS_CUSTOM_TYPE = "turn_runtime_metrics"
 TURN_RUNTIME_METRICS_CUSTOM_TYPE = "turn_runtime_metrics"
@@ -173,7 +173,7 @@ class _CustomPayloadFactSheet(BaseModel):
     facts: dict[str, str]
 
     @property
-    def data(self) -> dict[str, str]:  # type: ignore[override]
+    def data(self) -> dict[str, str]:
         return self.facts
 
 
@@ -188,13 +188,13 @@ class RunProjectionPayload(BaseModel):
     conversation_id: str
     state: str = "active"
     streaming_text: str = ""
-    timeline_nodes: list[dict] = []
-    task_runtime: dict = {}
+    timeline_nodes: list[dict[str, Any]] = []
+    task_runtime: dict[str, Any] = {}
     phase: str | None = None
     phase_at: int | None = None
     # 待用户回答的 HITL 澄清态（AskUserQuestion 暂停中）。非空时前端
     # hydrate 须重建提问卡片；用户作答 / 作废后由后端清除。
-    clarification: dict | None = None
+    clarification: dict[str, Any] | None = None
     updated_at: int = 0
 
 
@@ -245,42 +245,40 @@ class _CustomPayloadSubagentToolEffect(BaseModel):
 
 
 CustomPayload = Annotated[
-    Union[
-        _CustomPayloadCacheStrategy,
-        _CustomPayloadTurnMetrics,
-        _CustomPayloadTaskRuntime,
-        _CustomPayloadTaskSpec,
-        _CustomPayloadEvidenceRecord,
-        _CustomPayloadReviewDecision,
-        _CustomPayloadTaskMutation,
-        _CustomPayloadForkTask,
-        _CustomPayloadParallelTaskRuntime,
-        _CustomPayloadHandoff,
-        _CustomPayloadSearch,
-        _CustomPayloadExtract,
-        _CustomPayloadSessionMemory,
-        _CustomPayloadSessionState,
-        _CustomPayloadReplacementDecision,
-        _CustomPayloadRunProjection,
-        _CustomPayloadRunTakeoverState,
-        _CustomPayloadContextCompactionReference,
-        _CustomPayloadRunSnapshot,
-        _CustomPayloadSubagentSession,
-        _CustomPayloadSubagentRun,
-        _CustomPayloadSubagentToolEffect,
-        _CustomPayloadFeedback,
-        _CustomPayloadOutputFiles,
-        _CustomPayloadFileChanges,
-        _CustomPayloadExecutionTimeline,
-        _CustomPayloadResultCompactionReference,
-        _CustomPayloadDecisionLedgerEvent,
-        _CustomPayloadTransientRetryNotice,
-        _CustomPayloadFactSheet,
-    ],
+    _CustomPayloadCacheStrategy
+    | _CustomPayloadTurnMetrics
+    | _CustomPayloadTaskRuntime
+    | _CustomPayloadTaskSpec
+    | _CustomPayloadEvidenceRecord
+    | _CustomPayloadReviewDecision
+    | _CustomPayloadTaskMutation
+    | _CustomPayloadForkTask
+    | _CustomPayloadParallelTaskRuntime
+    | _CustomPayloadHandoff
+    | _CustomPayloadSearch
+    | _CustomPayloadExtract
+    | _CustomPayloadSessionMemory
+    | _CustomPayloadSessionState
+    | _CustomPayloadReplacementDecision
+    | _CustomPayloadRunProjection
+    | _CustomPayloadRunTakeoverState
+    | _CustomPayloadContextCompactionReference
+    | _CustomPayloadRunSnapshot
+    | _CustomPayloadSubagentSession
+    | _CustomPayloadSubagentRun
+    | _CustomPayloadSubagentToolEffect
+    | _CustomPayloadFeedback
+    | _CustomPayloadOutputFiles
+    | _CustomPayloadFileChanges
+    | _CustomPayloadExecutionTimeline
+    | _CustomPayloadResultCompactionReference
+    | _CustomPayloadDecisionLedgerEvent
+    | _CustomPayloadTransientRetryNotice
+    | _CustomPayloadFactSheet,
     Field(discriminator="custom_type"),
 ]
 
-_CustomPayloadAdapter = TypeAdapter(CustomPayload)
+_CustomPayloadAdapter: TypeAdapter[CustomPayload] = TypeAdapter(CustomPayload)
 
 CustomType = Literal[
     "cache_strategy_snapshot",
@@ -328,7 +326,7 @@ def generate_entry_id(existing_ids: set[str], max_attempts: int = 100) -> str:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def now_ms_epoch() -> int:
@@ -355,7 +353,9 @@ class CustomEntry(SessionEntryBase):
     custom_type: CustomType
     data: dict[str, Any] | None = None
 
-    def get_typed_data(self) -> Any | None:
+    def get_typed_data(
+        self,
+    ) -> BaseModel | dict[str, Any] | dict[str, str] | TurnRuntimeMetricsSnapshot | None:
         """Return data as a typed model based on custom_type.
 
         Uses the CustomPayload discriminated union to validate and coerce
@@ -381,7 +381,7 @@ def _coerce_custom_payload(
     backward compatibility with raw dict storage.
     """
     try:
-        payload = _CustomPayloadAdapter.validate_python(
+        payload: CustomPayload = _CustomPayloadAdapter.validate_python(
             {"custom_type": custom_type, "data": data}
         )
         return payload
@@ -408,7 +408,9 @@ def _event_to_message_entry(
     """
     entry_id = data.get("entry_id") or ""
     if not entry_id:
-        role_prefix = {"user": "msg_user", "assistant": "msg_asst", "tool": "msg_tool"}.get(role, "msg")
+        role_prefix = {"user": "msg_user", "assistant": "msg_asst", "tool": "msg_tool"}.get(
+            role, "msg"
+        )
         entry_id = f"{role_prefix}_{data.get('type', '')}"
 
     raw_timestamp = data.get("timestamp")
@@ -453,8 +455,7 @@ def _event_to_message_entry(
     )
 
 
-
-def _repair_parent_chain(tree: "SessionTree") -> None:
+def _repair_parent_chain(tree: SessionTree) -> None:
     """Legacy-data repair for sessions persisted before message events
     carried parent_id.
 
@@ -565,9 +566,8 @@ class SessionTree(BaseModel):
                 if "header" in data:
                     header = SessionHeader.model_validate(data["header"])
             elif etype == SessionEventType.REQUEST_HEADER:
-                if "header" in data:
-                    if header is not None:
-                        header = header.model_copy(update=data["header"])
+                if "header" in data and header is not None:
+                    header = header.model_copy(update=data["header"])
                     # Partial header updates (e.g. last_interaction_at) arriving
                     # before any SESSION_CREATED must not crash the replay —
                     # the caller falls back to the stored header key.
@@ -589,14 +589,13 @@ class SessionTree(BaseModel):
                     entries[entry.id] = entry
                     order.append(entry.id)
                     leaf_id = entry.id
-            elif etype == SessionEventType.ENTRY_UPDATED:
-                if "entry" in data:
-                    entry = _parse_entry(data["entry"])
-                    if entry:
-                        entry.seq = event.seq
-                        entries[entry.id] = entry
-                    if "leaf_id" in data:
-                        leaf_id = data["leaf_id"]
+            elif etype == SessionEventType.ENTRY_UPDATED and "entry" in data:
+                updated_entry = _parse_entry(data["entry"])
+                if updated_entry:
+                    updated_entry.seq = event.seq
+                    entries[updated_entry.id] = updated_entry
+                if "leaf_id" in data:
+                    leaf_id = data["leaf_id"]
 
         if header is None:
             header = SessionHeader(id="", workspace_id="", agent_id="")
@@ -647,244 +646,3 @@ class SessionTree(BaseModel):
 
     def all_entry_ids(self) -> set[str]:
         return set(self.entries.keys())
-
-    def _proj(self):
-        from prismclaw.schema.session.projection import SessionProjectionEngine
-        return SessionProjectionEngine(self)
-
-    def get_latest_task_runtime(self) -> TaskRuntimeState | None:
-        return self._proj().task.get_latest_task_runtime()
-
-    def get_latest_task_spec(self) -> TaskSpec | None:
-        return self._proj().task.get_latest_task_spec()
-
-    def get_latest_review_decision(self) -> ReviewDecisionRecord | None:
-        return self._proj().task.get_latest_review_decision()
-
-    def get_evidence_ledger(self) -> list[EvidenceRecord]:
-        return self._proj().task.get_evidence_ledger()
-
-    def get_history_compaction_count(self) -> int:
-        return self._proj().history_compaction.get_count()
-
-    def get_latest_history_compaction_reduction(self) -> int:
-        return self._proj().history_compaction.get_latest_reduction()
-
-    def get_turn_runtime_metrics_snapshots(self) -> list[TurnRuntimeMetricsSnapshot]:
-        return self._proj().cache.get_turn_metrics_snapshots()
-
-    def get_replacement_decision_state(self) -> ReplacementDecisionState:
-        return self._proj().replacement.get_state()
-
-    def build_runtime_messages(self) -> list[AgentMessageDict]:
-        return self._proj().messages.build_runtime_messages()
-
-    def build_runtime_meta_messages(self) -> list[SystemReminderProjection]:
-        return self._proj().messages.build_runtime_meta_messages()
-
-    def get_persisted_artifacts(self) -> dict[str, CompactionArtifact]:
-        return self._proj().replacement.get_persisted_artifacts()
-
-    def get_latest_session_memory_state(self) -> SessionContextState | None:
-        return self._proj().get_latest_session_memory_state()
-
-
-def _effective_fork_task_projection_entries(
-    entries: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    effective_reversed: list[dict[str, Any]] = []
-    seen_task_ids: set[str] = set()
-    for entry in reversed(entries):
-        task_id = entry.get("task_id")
-        if isinstance(task_id, str) and task_id:
-            if task_id in seen_task_ids:
-                continue
-            seen_task_ids.add(task_id)
-        effective_reversed.append(dict(entry))
-    effective_reversed.reverse()
-    return effective_reversed
-
-
-def _latest_custom_entry_index(
-    tree: SessionTree,
-    *,
-    custom_type: str,
-) -> int | None:
-    branch = tree.get_branch()
-    for index in range(len(branch) - 1, -1, -1):
-        entry = branch[index]
-        if isinstance(entry, CustomEntry) and entry.custom_type == custom_type:
-            return index
-    return None
-
-
-def _message_entry_to_dict(
-    entry: MessageEntry,
-    *,
-    content_override: str | list[ContentBlock] | None = None,
-) -> AgentMessageDict:
-    content: Any
-    if content_override is not None:
-        entry_content = content_override
-    elif entry.enriched_content is not None:
-        entry_content = entry.enriched_content
-    else:
-        entry_content = entry.content
-    if entry.role == "tool" and isinstance(entry_content, str):
-        content = [{"type": "text", "text": entry_content}]
-    elif isinstance(entry_content, list):
-        content = _content_blocks_to_llm(entry_content)
-    else:
-        content = entry_content
-    msg: AgentMessageDict = {
-        "role": entry.role,
-        "content": content,
-        "__entry_id__": entry.id,  # type: ignore
-    }
-    if entry.tool_calls:
-        msg["tool_calls"] = entry.tool_calls
-    if entry.tool_call_id:
-        msg["tool_call_id"] = entry.tool_call_id
-    return msg
-
-
-def _collect_custom_models(
-    branch: list[SessionEntry],
-    custom_type: str,
-    model_cls: type[BaseModel],
-) -> list[Any]:
-    models: list[Any] = []
-    for entry in branch:
-        if not isinstance(entry, CustomEntry) or entry.custom_type != custom_type:
-            continue
-        if not isinstance(entry.data, dict):
-            continue
-        try:
-            models.append(model_cls.model_validate(entry.data))
-        except Exception:
-            continue
-    return models
-
-
-def _find_latest_custom_model(
-    branch: list[SessionEntry],
-    custom_type: str,
-    model_cls: type[BaseModel],
-) -> Any | None:
-    for entry in reversed(branch):
-        if not isinstance(entry, CustomEntry) or entry.custom_type != custom_type:
-            continue
-        if not isinstance(entry.data, dict):
-            continue
-        try:
-            return model_cls.model_validate(entry.data)
-        except Exception:
-            continue
-    return None
-
-
-def _as_optional_str(value: Any) -> str | None:
-    if isinstance(value, str) and value:
-        return value
-    return None
-
-
-
-
-def _as_str_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    result: list[str] = []
-    for item in value:
-        if isinstance(item, str) and item:
-            result.append(item)
-    return result
-
-
-
-
-def _collect_turn_runtime_metrics_snapshots(
-    branch: list[SessionEntry],
-) -> list[TurnRuntimeMetricsSnapshot]:
-    snapshots: list[TurnRuntimeMetricsSnapshot] = []
-    for entry in branch:
-        if not isinstance(entry, CustomEntry) or entry.custom_type != _TURN_RUNTIME_METRICS_CUSTOM_TYPE:
-            continue
-        snapshot = _coerce_turn_runtime_metrics_snapshot(entry.data)
-        if snapshot is not None:
-            snapshots.append(snapshot)
-    return snapshots
-
-
-def _coerce_turn_runtime_metrics_snapshot(data: Any) -> TurnRuntimeMetricsSnapshot | None:
-    if not isinstance(data, dict):
-        return None
-    request_mode = data.get("request_mode")
-    dynamic_payload = data.get("dynamic_payload")
-    input_tokens = data.get("input_tokens")
-    cache_read_tokens = data.get("cache_read_tokens")
-    result_payload_reduction = data.get("result_payload_reduction")
-    if not isinstance(request_mode, str):
-        return None
-    if not isinstance(dynamic_payload, int):
-        return None
-    if not isinstance(input_tokens, int):
-        return None
-    if not isinstance(cache_read_tokens, int):
-        return None
-    if not isinstance(result_payload_reduction, int):
-        return None
-    snapshot = TurnRuntimeMetricsSnapshot(
-        request_mode=request_mode,
-        dynamic_payload=dynamic_payload,
-        input_tokens=input_tokens,
-        cache_read_tokens=cache_read_tokens,
-        result_payload_reduction=result_payload_reduction,
-    )
-    return snapshot
-
-
-def _history_compaction_reduction(entry: CompactionEntry) -> int:
-    tokens_before = entry.tokens_before if entry.tokens_before > 0 else 0
-    tokens_after: int | None = None
-    details = entry.details or {}
-    raw_tokens_after = details.get("tokens_after")
-    if isinstance(raw_tokens_after, int):
-        tokens_after = raw_tokens_after
-    elif isinstance(raw_tokens_after, float):
-        tokens_after = int(raw_tokens_after)
-    if tokens_after is None:
-        return 0
-    return max(0, tokens_before - max(0, tokens_after))
-def _content_blocks_to_llm(blocks: list[ContentBlock]) -> list[dict[str, Any]]:
-    from prismclaw.schema.content.content_types import FileBlock, ImageBlock, TextBlock
-    from prismclaw.schema.shared.utils import file_reference_text
-
-    result: list[dict[str, Any]] = []
-    for block in blocks:
-        if isinstance(block, ImageBlock):
-            result.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{block.mime_type};base64,{block.data}"},
-                }
-            )
-        elif isinstance(block, TextBlock):
-            if not block.text or not block.text.strip():
-                continue
-            result.append({"type": "text", "text": block.text})
-        elif isinstance(block, FileBlock):
-            if not block.path or not block.path.strip():
-                continue
-            result.append(
-                {
-                    "type": "text",
-                    "text": file_reference_text(
-                        block.path.strip(),
-                        name=block.name,
-                        mime_type=block.mime_type,
-                    ),
-                }
-            )
-    return result
-

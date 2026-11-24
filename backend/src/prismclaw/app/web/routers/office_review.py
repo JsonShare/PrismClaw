@@ -21,16 +21,18 @@ The TipTap JSON shape consumed by the frontend
             {"type": "deletion", "attrs": {"changeId": 0}}]}
     ]} ]}
 """
+
 from __future__ import annotations
 
 import hashlib
 import io
+from collections.abc import Callable
 from typing import Any
 
+_apply_office_ops_ref: Callable[[bytes, str, list[dict[str, Any]]], bytes] | None = None
 
-_apply_office_ops_ref: Any = None
 
-def _set_apply_office_ops(fn: Any) -> None:
+def _set_apply_office_ops(fn: Callable[[bytes, str, list[dict[str, Any]]], bytes]) -> None:
     global _apply_office_ops_ref
     _apply_office_ops_ref = fn
 
@@ -70,25 +72,24 @@ def _doc(*blocks: dict[str, Any]) -> dict[str, Any]:
 def _empty_doc() -> dict[str, Any]:
     return _doc(_paragraph())
 
+
 # ── .xlsx ─────────────────────────────────────────────────────────────────────
-def _synthesize_xlsx(before_bytes: bytes, details: list[dict] | None) -> dict[str, Any]:
+def _synthesize_xlsx(before_bytes: bytes, details: list[dict[str, Any]] | None) -> dict[str, Any]:
     import openpyxl
 
     wb = openpyxl.load_workbook(io.BytesIO(before_bytes))
-    detail_by_ref: dict[str, list[tuple[int, dict]]] = {}
+    detail_by_ref: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     for i, d in enumerate(details or []):
         if isinstance(d, dict) and d.get("ref"):
             detail_by_ref.setdefault(d["ref"], []).append((i, d))
 
-    blocks: list[dict] = []
+    blocks: list[dict[str, Any]] = []
     for si, ws in enumerate(wb.worksheets, start=1):
-        blocks.append(
-            _paragraph([_text(f"Sheet: {ws.title}")], attrs={"data-sheet": ws.title})
-        )
+        blocks.append(_paragraph([_text(f"Sheet: {ws.title}")], attrs={"data-sheet": ws.title}))
         max_row = ws.max_row or 0
         max_col = ws.max_column or 0
         for r in range(1, max_row + 1):
-            parts: list[dict] = []
+            parts: list[dict[str, Any]] = []
             for c in range(1, max_col + 1):
                 ref = f"s#{si}!r#{r}c#{c}"
                 val = ws.cell(row=r, column=c).value
@@ -112,20 +113,18 @@ def _synthesize_xlsx(before_bytes: bytes, details: list[dict] | None) -> dict[st
 
 
 # ── .pptx ─────────────────────────────────────────────────────────────────────
-def _synthesize_pptx(before_bytes: bytes, details: list[dict] | None) -> dict[str, Any]:
+def _synthesize_pptx(before_bytes: bytes, details: list[dict[str, Any]] | None) -> dict[str, Any]:
     from pptx import Presentation
 
     prs = Presentation(io.BytesIO(before_bytes))
-    detail_by_ref: dict[str, list[tuple[int, dict]]] = {}
+    detail_by_ref: dict[str, list[tuple[int, dict[str, Any]]]] = {}
     for i, d in enumerate(details or []):
         if isinstance(d, dict) and d.get("ref"):
             detail_by_ref.setdefault(d["ref"], []).append((i, d))
 
-    blocks: list[dict] = []
+    blocks: list[dict[str, Any]] = []
     for si, slide in enumerate(prs.slides, start=1):
-        blocks.append(
-            _paragraph([_text(f"Slide {si}")], attrs={"data-slide": si})
-        )
+        blocks.append(_paragraph([_text(f"Slide {si}")], attrs={"data-slide": si}))
         tf_index = 0
         for shape in slide.shapes:
             if not shape.has_text_frame:
@@ -145,10 +144,7 @@ def _synthesize_pptx(before_bytes: bytes, details: list[dict] | None) -> dict[st
                 changed = True
             if not changed and text:
                 children.append(_text(text))
-            blocks.append(
-                _paragraph(children if children else None,
-                           attrs={"data-tf-ref": ref})
-            )
+            blocks.append(_paragraph(children if children else None, attrs={"data-tf-ref": ref}))
 
     return _doc(*blocks)
 
@@ -157,7 +153,7 @@ def _synthesize_pptx(before_bytes: bytes, details: list[dict] | None) -> dict[st
 def _render_plain_fallback(raw: bytes | None, fmt: str | None) -> dict[str, Any]:
     if not raw:
         return _empty_doc()
-    blocks: list[dict] = []
+    blocks: list[dict[str, Any]] = []
     try:
         if fmt == "xlsx":
             import openpyxl
@@ -194,7 +190,7 @@ def synthesize_review_doc(
     before_bytes: bytes | None,
     current_bytes: bytes | None,
     fmt: str | None,
-    details: list[dict] | None,
+    details: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
     """Build a TipTap JSON review document.
 
@@ -215,9 +211,7 @@ def synthesize_review_doc(
     return _render_plain_fallback(current_bytes or before_bytes, fmt)
 
 
-def apply_office_subset(
-    before_bytes: bytes, fmt: str, operations: list[dict]
-) -> bytes:
+def apply_office_subset(before_bytes: bytes, fmt: str, operations: list[dict[str, Any]]) -> bytes:
     """Re-materialize an office file from its original backup applying only the
     accepted ``operations`` subset. Returns the new file bytes.
 

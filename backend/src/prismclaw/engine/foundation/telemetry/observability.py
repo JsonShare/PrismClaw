@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol
 
 from prismclaw.schema.session.cache_types import PromptCacheRuntimeState
@@ -19,7 +19,7 @@ from prismclaw.schema.session.cache_types import PromptCacheRuntimeState
 logger = logging.getLogger(__name__)
 
 
-class EventCategory(str, Enum):
+class EventCategory(StrEnum):
     API_QUERY = "api_query"
     API_ERROR = "api_error"
     API_SUCCESS = "api_success"
@@ -34,6 +34,7 @@ class EventCategory(str, Enum):
 @dataclass
 class StructuredEvent:
     """A structured analytics event."""
+
     event_name: str
     category: EventCategory
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -42,6 +43,7 @@ class StructuredEvent:
 
 class EventSink(Protocol):
     """Protocol for event consumers."""
+
     def on_event(self, event: StructuredEvent) -> None: ...
 
 
@@ -50,6 +52,8 @@ class _QueuedEvent:
 
     def __init__(self, event: StructuredEvent) -> None:
         self.event = event
+
+
 class EventBus:
     """Structured event bus with queue + sink pattern.
 
@@ -106,17 +110,20 @@ def get_event_bus() -> EventBus:
     return _event_bus
 
 
-def _emit(event_name: str, category: EventCategory, **metadata: Any) -> None:
+def _emit(event_name: str, category: EventCategory, **metadata: object) -> None:
     """Internal helper to emit a structured event."""
-    get_event_bus().emit(StructuredEvent(
-        event_name=event_name,
-        category=category,
-        metadata=metadata,
-        pii_verified=True,
-    ))
+    get_event_bus().emit(
+        StructuredEvent(
+            event_name=event_name,
+            category=category,
+            metadata=metadata,
+            pii_verified=True,
+        )
+    )
 
 
 # ─── Convenience emitters ────────────────────────────────────────────
+
 
 def emit_api_query(
     *,
@@ -314,6 +321,7 @@ def emit_cache_event(
 
 # ─── Cache break detection ───────────────────────────────────────────
 
+
 class CacheBreakDetector:
     """Stateless cache-break detector driven by PromptCacheRuntimeState.
 
@@ -382,6 +390,7 @@ class CacheBreakDetector:
 
 
 # ─── Logging sink (default) ──────────────────────────────────────────
+
 
 class LoggingSink:
     """Default sink that logs events via Python logging."""

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import dataclasses
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.assembly.plugins.plugin_lifecycle import PluginLifecycleManager
 from prismclaw.infra.settings import Settings
 from prismclaw.infra.task_manager import TaskManager
 from prismclaw.schema.shared import ProjectCapabilityLayout
+
+if TYPE_CHECKING:
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
 
 
 @dataclasses.dataclass(slots=True)
@@ -26,14 +29,14 @@ async def build_plugin_runtime(
     workspace_default: Path | str,
     project_root: Path | str | None,
     task_manager: TaskManager | None,
-    base_mcp_manager: Any,
+    base_mcp_manager: MCPClientManager | None,
     capability_layout: ProjectCapabilityLayout | None = None,
 ) -> PluginRuntimeAssembly:
     plugin_lifecycle_manager = PluginLifecycleManager(
         settings,
         workspace_default=workspace_default,
         project_root=project_root,
-        additional_project_roots=[Path(workspace_default).expanduser()],
+        additional_project_roots=[Path(workspace_default).expanduser()],  # noqa: ASYNC240
         task_manager=task_manager,
         base_mcp_manager=base_mcp_manager,
         capability_layout=capability_layout,
@@ -47,4 +50,3 @@ async def build_plugin_runtime(
         runtime_mcp_manager=plugin_runtime.runtime_mcp_manager,
         capability_layout=plugin_runtime.capability_layout,
     )
-

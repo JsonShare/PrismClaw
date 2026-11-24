@@ -11,23 +11,24 @@ from __future__ import annotations
 import json
 from typing import Any
 
-
-from prismclaw.schema.content.subagent import (
-    EvidenceRef,
-    SubagentResultEnvelope,
-)
 from prismclaw.schema.agent.session import (
     SessionContextItem,
     SessionContextState,
     SessionStateUpdate,
 )
-
+from prismclaw.schema.content.subagent import (
+    EvidenceRef,
+    SubagentResultEnvelope,
+)
 
 # ═══════════════════════════════════════════════════════════════
 # Helpers: 构造模拟数据
 # ═══════════════════════════════════════════════════════════════
 
-def _make_read_messages(file_path: str, content: str, offset: int | None = None) -> list[dict[str, Any]]:
+
+def _make_read_messages(
+    file_path: str, content: str, offset: int | None = None
+) -> list[dict[str, Any]]:
     """构造 read 工具调用的 assistant + tool result 消息对。"""
     tc_id = "tc_read_001"
     args: dict[str, Any] = {"file_path": file_path}
@@ -141,11 +142,13 @@ def _make_session_state(
     state = SessionContextState(session_id="test-session-001")
     if facts:
         for f in facts:
-            state.facts.append(SessionContextItem(
-                id=f"fac_{hash(f) % 10000:04d}",
-                kind="fact",
-                content=f,
-            ))
+            state.facts.append(
+                SessionContextItem(
+                    id=f"fac_{hash(f) % 10000:04d}",
+                    kind="fact",
+                    content=f,
+                )
+            )
     if evidence:
         state.evidence = evidence
     return state
@@ -154,6 +157,7 @@ def _make_session_state(
 # ═══════════════════════════════════════════════════════════════
 # R01: 单 researcher 成功返回, evidence 包含 read/grep/web_fetch
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_r01_collect_evidence_from_multiple_tools():
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
@@ -180,6 +184,7 @@ def test_r01_collect_evidence_from_multiple_tools():
 # ═══════════════════════════════════════════════════════════════
 # R02: 并行结果保留各 Agent 的独立 evidence，不自动合并去重
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_r02_parallel_results_preserve_independent_evidence():
     from prismclaw.engine.subagent.tool import SubAgentTool
@@ -225,6 +230,7 @@ def test_r02_parallel_results_preserve_independent_evidence():
 # R03: researcher 超时退出, evidence 仍被收集
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r03_evidence_collected_on_non_success_outcome():
     """验证 _collect_evidence_from_messages 不依赖 outcome，
     在 _lifecycle_mixin.py 中已移到 outcome 分支前。"""
@@ -251,6 +257,7 @@ def test_r03_evidence_collected_on_non_success_outcome():
 # R04: subagent error 退出, 部分 evidence 被保留
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r04_partial_evidence_on_error():
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
@@ -268,6 +275,7 @@ def test_r04_partial_evidence_on_error():
 # ═══════════════════════════════════════════════════════════════
 # R05: 每个 Agent 的 confidence 独立保留，不计算全体最低值
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_r05_confidence_remains_scoped_to_each_agent():
     from prismclaw.engine.subagent.tool import SubAgentTool
@@ -298,14 +306,14 @@ def test_r05_confidence_remains_scoped_to_each_agent():
     assert aggregated.subagent_envelope is not None
     assert aggregated.subagent_envelope.result_envelope is None
     assert [
-        item.envelope.confidence_assessment
-        for item in aggregated.subagent_envelope.results
+        item.envelope.confidence_assessment for item in aggregated.subagent_envelope.results
     ] == ["high", "low"]
 
 
 # ═══════════════════════════════════════════════════════════════
 # R10: 跨轮次 prior_evidence 传递
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_r10_prior_evidence_cross_round():
     from prismclaw.engine.subagent.core.contract import _collect_prior_evidence
@@ -328,6 +336,7 @@ def test_r10_prior_evidence_cross_round():
 # ═══════════════════════════════════════════════════════════════
 # R11: 动态上限——facts > 6 时 findings limit 为 12
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_r11_dynamic_findings_limit():
     from prismclaw.engine.subagent.core.contract import build_context_snapshot
@@ -362,6 +371,7 @@ def test_r11_dynamic_findings_limit():
 # R12: builder 成功执行, evidence 包含 bash
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r12_bash_evidence():
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
@@ -377,6 +387,7 @@ def test_r12_bash_evidence():
 # R13: auditor 验证通过, confidence_assessment 为 high
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r13_auditor_confidence_high():
     envelope = SubagentResultEnvelope(
         summary="VERIFICATION: PASSED",
@@ -391,14 +402,23 @@ def test_r13_auditor_confidence_high():
 # R14: _render_subagent_result_handover 输出包含 evidence 行
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r14_render_handover_includes_evidence():
-    from prismclaw.engine.execution.output.tool_result_rendering import _render_subagent_result_handover
+    from prismclaw.engine.execution.output.tool_result_rendering import (
+        _render_subagent_result_handover,
+    )
 
     envelope = SubagentResultEnvelope(
         summary="test",
         findings=["[HIGH] fact1"],
         evidence=[
-            EvidenceRef(source_type="file", source_path="/a.py", source_location="L10", quoted_text="hello", confidence="high"),
+            EvidenceRef(
+                source_type="file",
+                source_path="/a.py",
+                source_location="L10",
+                quoted_text="hello",
+                confidence="high",
+            ),
         ],
         confidence_assessment="high",
     )
@@ -412,10 +432,26 @@ def test_r14_render_handover_includes_evidence():
 # R15: apply_update 去重——相同 source_path + quoted_text 不重复追加
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r15_apply_update_evidence_dedup():
-    ev1 = {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"}
-    ev2 = {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"}
-    ev3 = {"source_type": "file", "source_path": "/b.py", "quoted_text": "world", "confidence": "medium"}
+    ev1 = {
+        "source_type": "file",
+        "source_path": "/a.py",
+        "quoted_text": "hello",
+        "confidence": "high",
+    }
+    ev2 = {
+        "source_type": "file",
+        "source_path": "/a.py",
+        "quoted_text": "hello",
+        "confidence": "high",
+    }
+    ev3 = {
+        "source_type": "file",
+        "source_path": "/b.py",
+        "quoted_text": "world",
+        "confidence": "medium",
+    }
 
     state = _make_session_state(evidence=[ev1])
     update = SessionStateUpdate(evidence=[ev2, ev3])
@@ -429,10 +465,16 @@ def test_r15_apply_update_evidence_dedup():
 # R16: normalize_state_payload 透传 evidence
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r16_normalize_state_payload_evidence():
     from prismclaw.engine.state.state_protocol import normalize_state_payload
 
-    ev = {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"}
+    ev = {
+        "source_type": "file",
+        "source_path": "/a.py",
+        "quoted_text": "hello",
+        "confidence": "high",
+    }
     state = _make_session_state(evidence=[ev])
 
     payload = normalize_state_payload(state)
@@ -445,12 +487,28 @@ def test_r16_normalize_state_payload_evidence():
 # R17: merge_state_payloads 去重合并 evidence
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r17_merge_state_payloads_evidence():
     from prismclaw.engine.state.state_protocol import merge_state_payloads
 
-    ev1 = {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"}
-    ev2 = {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"}
-    ev3 = {"source_type": "web", "source_path": "https://x.com", "quoted_text": "info", "confidence": "medium"}
+    ev1 = {
+        "source_type": "file",
+        "source_path": "/a.py",
+        "quoted_text": "hello",
+        "confidence": "high",
+    }
+    ev2 = {
+        "source_type": "file",
+        "source_path": "/a.py",
+        "quoted_text": "hello",
+        "confidence": "high",
+    }
+    ev3 = {
+        "source_type": "web",
+        "source_path": "https://x.com",
+        "quoted_text": "info",
+        "confidence": "medium",
+    }
 
     p1 = {"evidence": [ev1]}
     p2 = {"evidence": [ev2, ev3]}
@@ -462,6 +520,7 @@ def test_r17_merge_state_payloads_evidence():
 # ═══════════════════════════════════════════════════════════════
 # R18: render_result_envelope_handover 包含 confidence 行
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_r18_render_envelope_handover_confidence():
     from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
@@ -483,17 +542,20 @@ def test_r18_render_envelope_handover_confidence():
 # R19: 子代理规则归属固定段 <subagents>
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r19_delegation_section_contains_evidence_rules():
     from prismclaw.engine.execution.request._prompt_types import PromptInputs
     from prismclaw.engine.execution.request.system_prompt import delegation_section
 
-    result = delegation_section(PromptInputs(
-        session_id="test-session",
-        workspace_id="test-ws",
-        agent_id="test-agent",
-        tools=[("sub_agent", "delegate")],
-        subagent_registry_size=2,
-    ))
+    result = delegation_section(
+        PromptInputs(
+            session_id="test-session",
+            workspace_id="test-ws",
+            agent_id="test-agent",
+            tools=[("sub_agent", "delegate")],
+            subagent_registry_size=2,
+        )
+    )
     assert result is not None
     assert "证据" in result
     assert "主 Agent 直接比较各 Agent 的结果" in result
@@ -531,11 +593,13 @@ def test_r19_domain_advisory_renders_registered_rules():
     )
     from prismclaw.engine.execution.request._prompt_advisory import domain_advisory_section
 
-    register_advisory_rule(DomainAdvisoryRule(
-        domain="test-domain",
-        title="免责声明（强制）",
-        body="必须附加免责声明。",
-    ))
+    register_advisory_rule(
+        DomainAdvisoryRule(
+            domain="test-domain",
+            title="免责声明（强制）",
+            body="必须附加免责声明。",
+        )
+    )
     try:
         result = domain_advisory_section()
     finally:
@@ -549,6 +613,7 @@ def test_r19_domain_advisory_renders_registered_rules():
 # R20: 完整链路——从 evidence 收集到 prior_evidence 传递的端到端
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_r20_full_evidence_chain_e2e():
     """模拟完整链路:
     1. subagent 执行 → 收集 evidence
@@ -558,22 +623,28 @@ def test_r20_full_evidence_chain_e2e():
     5. render_context_snapshot → XML
     6. render_task_envelope → JSON 格式引导
     """
-    from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.core.contract import (
-        render_result_envelope_handover,
-        render_context_snapshot,
-        render_task_envelope,
-        build_context_snapshot,
-    )
     from prismclaw.engine.state.state_protocol import (
         _extract_structured_tool_result_sections,
         _merge_subagent_result_update,
     )
+    from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
+    from prismclaw.engine.subagent.core.contract import (
+        build_context_snapshot,
+        render_context_snapshot,
+        render_result_envelope_handover,
+        render_task_envelope,
+    )
 
     # ---- Step 1: subagent 执行, 产生工具调用 ----
     messages = []
-    messages.extend(_make_read_messages("/src/drug_interaction.py", "DrugA contraindicates DrugB", offset=100))
-    messages.extend(_make_grep_messages("contraindication", "drug_interaction.py:100: DrugA contraindicates DrugB"))
+    messages.extend(
+        _make_read_messages("/src/drug_interaction.py", "DrugA contraindicates DrugB", offset=100)
+    )
+    messages.extend(
+        _make_grep_messages(
+            "contraindication", "drug_interaction.py:100: DrugA contraindicates DrugB"
+        )
+    )
     evidence = _collect_evidence_from_messages(messages)
     assert len(evidence) == 2
 
@@ -588,7 +659,12 @@ def test_r20_full_evidence_chain_e2e():
         summary="No interaction found for DrugC",
         findings=["[MEDIUM] DrugC appears safe"],
         evidence=[
-            EvidenceRef(source_type="web", source_path="https://pharma.db/c", quoted_text="No known interactions", confidence="medium"),
+            EvidenceRef(
+                source_type="web",
+                source_path="https://pharma.db/c",
+                quoted_text="No known interactions",
+                confidence="medium",
+            ),
         ],
         confidence_assessment="medium",
     )
@@ -668,6 +744,7 @@ def test_r20_full_evidence_chain_e2e():
 # ═══════════════════════════════════════════════════════════════
 # 边界条件补充测试
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_evidence_ref_default_confidence_is_high():
     """EvidenceRef 默认 confidence 为 high（因为来自工具输出，非 LLM 记忆）。"""
@@ -785,10 +862,17 @@ def test_collect_prior_evidence_handles_invalid_dict():
     """无效 dict 不应导致崩溃。"""
     from prismclaw.engine.subagent.core.contract import _collect_prior_evidence
 
-    state = _make_session_state(evidence=[
-        {"invalid_key": "no source_type"},
-        {"source_type": "file", "source_path": "/a.py", "quoted_text": "ok", "confidence": "high"},
-    ])
+    state = _make_session_state(
+        evidence=[
+            {"invalid_key": "no source_type"},
+            {
+                "source_type": "file",
+                "source_path": "/a.py",
+                "quoted_text": "ok",
+                "confidence": "high",
+            },
+        ]
+    )
     prior = _collect_prior_evidence(state)
     # 第一个 dict 缺少必要字段但 EvidenceRef 有默认值，不会崩溃
     assert len(prior) == 2
@@ -796,7 +880,12 @@ def test_collect_prior_evidence_handles_invalid_dict():
 
 def test_apply_update_evidence_empty_update():
     """空 update 不影响现有 evidence。"""
-    ev = {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"}
+    ev = {
+        "source_type": "file",
+        "source_path": "/a.py",
+        "quoted_text": "hello",
+        "confidence": "high",
+    }
     state = _make_session_state(evidence=[ev])
     update = SessionStateUpdate()  # evidence 为空列表
     state.apply_update(update)
@@ -805,9 +894,16 @@ def test_apply_update_evidence_empty_update():
 
 def test_has_content_includes_evidence():
     """has_content() 应在有 evidence 时返回 True。"""
-    state = _make_session_state(evidence=[
-        {"source_type": "file", "source_path": "/a.py", "quoted_text": "hello", "confidence": "high"},
-    ])
+    state = _make_session_state(
+        evidence=[
+            {
+                "source_type": "file",
+                "source_path": "/a.py",
+                "quoted_text": "hello",
+                "confidence": "high",
+            },
+        ]
+    )
     assert state.has_content() is True
 
 

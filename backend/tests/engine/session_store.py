@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from prismclaw.persistence.session.redis import RedisSessionStore
 from prismclaw.persistence.session.base import serialize_entry
+from prismclaw.persistence.session.redis import RedisSessionStore
 
 
 class _FakeLockManager:
@@ -16,11 +16,11 @@ class _FakeLockManager:
 
 
 class _FakePipeline:
-    def __init__(self, client: "_FakeRedisClient") -> None:
+    def __init__(self, client: _FakeRedisClient) -> None:
         self._client = client
         self._ops: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = []
 
-    async def __aenter__(self) -> "_FakePipeline":
+    async def __aenter__(self) -> _FakePipeline:
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
@@ -118,7 +118,9 @@ class _FakeRedisClient:
         num: int | None = None,
     ) -> list[str]:
         bucket = self._zsets.get(key, {})
-        ordered = [item[0] for item in sorted(bucket.items(), key=lambda item: item[1], reverse=True)]
+        ordered = [
+            item[0] for item in sorted(bucket.items(), key=lambda item: item[1], reverse=True)
+        ]
         if num is None:
             return ordered[start:]
         return ordered[start : start + num]
@@ -141,7 +143,9 @@ class _FakeRedisClient:
 
 class FakeRedisSessionStore(RedisSessionStore):
     def __init__(self) -> None:
-        super().__init__(_FakeRedisClient(), _FakeLockManager(), ttl_seconds=604_800, key_prefix="test:")
+        super().__init__(
+            _FakeRedisClient(), _FakeLockManager(), ttl_seconds=604_800, key_prefix="test:"
+        )
 
     async def save_header(self, tree) -> None:
         await super().save_header(tree)

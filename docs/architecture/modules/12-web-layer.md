@@ -141,7 +141,7 @@ SERVER_CHAT_DONE = "chat.done"
 SERVER_CHAT_QUEUED = "chat.queued"
 SERVER_REFERENCE = "event:reference"
 SERVER_QUESTIONS = "event:questions"
-SERVER_OUTPUTS = "event:outputs"
+SERVER_OUTBOX = "event:outbox"
 SERVER_FILE_CHANGES = "event:file_changes"
 SERVER_TASK_RUNTIME = "task.runtime"
 SERVER_TASK_TIMELINE = "task.timeline"
@@ -228,7 +228,7 @@ async def _run_chat(state: ConnectionState, msg: ChatSendMessage):
 关键机制：
 - **单 pass 实时正文（PrismClaw 模式）**：所有轮次的 `TextChunk` 即时推送 `chat.delta`，token 级零缓冲；`Done` 时提交 `final_message = "\n\n".join(full_transcript_parts)` 作为全转录权威提交源（与实时流逐字节相等，I3 不变量）。中间轮过程文本保留在正文，不撤回、不归入思考区。
 - **chat.done 指数退避**：覆盖 WS 短暂断开（退避序列 0.5, 1, 2, 4, 6, 8, 10, 15s，共 8 次）
-- **交付物确定策略**：仅 LLM 通过 `present_files` 主动声明的文件才展示；自动扫描 `outputs/` 仅用于验证
+- **交付物确定策略**：仅 LLM 通过 `present_files` 主动声明的文件才展示；自动扫描 `outbox/` 仅用于验证
 
 ### Session 队列（chat_protocol.py）
 
@@ -364,13 +364,13 @@ POST /files/write_text     # 写入文本
 POST /files/delete         # 删除路径
 POST /files/move           # 移动/重命名
 GET  /files/search         # 文件名搜索（rglob）
-GET  /files/export         # ZIP 导出 outputs/ 目录
+GET  /files/export         # ZIP 导出 outbox/ 目录
 
 # workspace.py — workspace_router
 GET    /workspaces           # 列出用户工作区
 POST   /workspaces           # 创建工作区
 DELETE /workspaces/{id}      # 删除工作区
-GET    /workspaces/outputs   # 聚合交付物文件
+GET    /workspaces/outbox   # 聚合交付物文件
 
 # openai_compat.py — openai_router (prefix="/api/v1")
 POST /api/v1/chat/completions   # OpenAI 兼容聊天（stream/non-stream）
@@ -423,7 +423,7 @@ def _install_tracing(app):           # OpenTelemetry 分布式追踪
               ToolCallEnd → 时间线更新 + SERVER_TASK_RUNTIME
               ReasoningChunk → 时间线推理增量
               Done → SERVER_CHAT_DONE（final_message=全转录，指数退避重试）
-                → 输出文件收集 + SERVER_OUTPUTS
+                → 输出文件收集 + SERVER_OUTBOX
                 → 文件变更 + SERVER_FILE_CHANGES
                 → 追问生成 + SERVER_QUESTIONS
                 → 引用推送 + SERVER_REFERENCE
@@ -506,7 +506,7 @@ _lifespan(app)
 | `GET /api/v1/models` | HTTP | 模型列表 |
 | `GET/POST /api/files/*` | HTTP | 文件操作（列表/读取/上传/搜索/导出等） |
 | `GET/POST/DELETE /api/workspaces*` | HTTP | 工作区管理 |
-| `GET /api/workspaces/outputs` | HTTP | 聚合交付物文件 |
+| `GET /api/workspaces/outbox` | HTTP | 聚合交付物文件 |
 | `GET /metrics` | HTTP | Prometheus 指标 |
 
 ## 依赖关系

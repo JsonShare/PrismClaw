@@ -18,18 +18,10 @@ class DreamSettings(BaseSettings):
     nightly_end_hour_local: int = Field(5)
     nightly_catch_up_grace_minutes: int = Field(90)
     nightly_max_sessions: int = Field(10)
-    multi_worker_scan_policy: Literal["all", "leader_only"] = Field(
-        "leader_only"
-    )
-    publish_channel: Literal["direct", "shadow", "canary"] | None = Field(
-        None
-    )
-    memory_publish_channel: Literal["direct", "shadow", "canary"] | None = Field(
-        None
-    )
-    artifact_publish_channel: Literal["direct", "shadow", "canary"] | None = Field(
-        None
-    )
+    multi_worker_scan_policy: Literal["all", "leader_only"] = Field("leader_only")
+    publish_channel: Literal["direct", "shadow", "canary"] | None = Field(None)
+    memory_publish_channel: Literal["direct", "shadow", "canary"] | None = Field(None)
+    artifact_publish_channel: Literal["direct", "shadow", "canary"] | None = Field(None)
     canary_rollout_percentage: int = Field(0)
     canary_rollout_salt: str = Field("dream-canary")
     shadow_publish_enabled: bool = Field(False)

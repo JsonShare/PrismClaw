@@ -4,15 +4,18 @@ Lives in contracts (L0) so that engine (L2) can depend on these interfaces
 without circular imports.  All Protocols are ``@runtime_checkable`` for
 duck-typing compatibility checks.  See SDD §5.1.2 + §5.1.4.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
 from prismclaw.schema.dream.dream_types import (
     DreamAuditEntry,
+    DreamBatchHealthMetrics,
     DreamCandidateKind,
     DreamCandidateStatus,
     DreamDecisionAuditRecord,
+    DreamEnqueueResult,
     DreamGovernanceRecord,
     DreamMemoryCandidate,
     DreamPublishChannel,
@@ -53,6 +56,31 @@ class DreamStateStore(Protocol):
 @runtime_checkable
 class DreamAuditLogger(Protocol):
     async def record(self, entry: DreamAuditEntry) -> None: ...
+
+
+@runtime_checkable
+class DreamAuditReader(Protocol):
+    """Read side of the Dream audit log (status/diagnostics surfaces)."""
+
+    async def list_entries(
+        self,
+        *,
+        session_key: str | None = None,
+        batch_id: str | None = None,
+        phase: str | None = None,
+    ) -> list[DreamAuditEntry]: ...
+
+    async def latest_batch_metrics(
+        self,
+        *,
+        trigger: str | None = None,
+        session_key: str | None = None,
+    ) -> DreamBatchHealthMetrics | None: ...
+
+
+@runtime_checkable
+class DreamAuditStore(DreamAuditLogger, DreamAuditReader, Protocol):
+    """Combined Dream audit store: write on hot path, read for diagnostics."""
 
 
 @runtime_checkable
@@ -102,7 +130,9 @@ class DreamDecisionAuditStore(Protocol):
 
 @runtime_checkable
 class DreamGovernanceOps(Protocol):
-    async def list_pending_reviews(self, session_key: str | None = None) -> list[DreamGovernanceRecord]: ...
+    async def list_pending_reviews(
+        self, session_key: str | None = None
+    ) -> list[DreamGovernanceRecord]: ...
 
     async def list_governance_records(
         self,
@@ -230,14 +260,14 @@ class DreamAdminOps(
 # ── Dispatch boundary Protocols ──────────────────────────────────────
 # Moved from engine/dream/dispatch/boundary.py — consumed by app layer.
 
-from prismclaw.schema.dream.dream_types import DreamEnqueueResult
-
 
 @runtime_checkable
 class DreamEnqueueBoundary(Protocol):
     def is_available(self) -> bool: ...
 
-    async def mark_activity(self, session_key: str, *, dirty_delta: int = 1) -> DreamEnqueueResult: ...
+    async def mark_activity(
+        self, session_key: str, *, dirty_delta: int = 1
+    ) -> DreamEnqueueResult: ...
 
     async def enqueue_nightly(self, session_key: str) -> DreamEnqueueResult: ...
 

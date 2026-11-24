@@ -5,6 +5,7 @@ v4 重构：
 - 删除 ``get_plugin(name)``，新增 ``by_id(plugin_id)`` 和 ``by_name(name)``（多匹配）
 - ``by_state`` 等查询方法基于 ``PluginID``
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,8 +20,8 @@ from prismclaw.engine.plugins.registry.descriptors import (
 )
 
 if TYPE_CHECKING:
-    from prismclaw.engine.plugins.registry.identity import PluginID
     from prismclaw.engine.plugins.lifecycle.state import PluginLifecycleState
+    from prismclaw.engine.plugins.registry.identity import PluginID
 
 
 @dataclass(slots=True)
@@ -59,10 +60,13 @@ class DescriptorRegistry:
         self.agents[descriptor.canonical_id] = descriptor
 
     def register_hook(self, descriptor: HookDescriptor) -> None:
-        key = f"{descriptor.plugin_name or 'global'}:{descriptor.event_name or 'config'}:{len(self.hooks)}"
+        key = (
+            f"{descriptor.plugin_name or 'global'}:"
+            f"{descriptor.event_name or 'config'}:{len(self.hooks)}"
+        )
         self.hooks[key] = descriptor
 
-    def by_id(self, plugin_id: "PluginID") -> PluginDescriptor | None:
+    def by_id(self, plugin_id: PluginID) -> PluginDescriptor | None:
         """按 PluginID 精确查找。"""
         return self.plugins.get(plugin_id.canonical)
 
@@ -71,10 +75,7 @@ class DescriptorRegistry:
 
         优先级：session > marketplace > local > builtin。
         """
-        candidates = [
-            desc for desc in self.plugins.values()
-            if desc.plugin_name == name
-        ]
+        candidates = [desc for desc in self.plugins.values() if desc.plugin_name == name]
         if not candidates:
             return None
         return max(candidates, key=lambda d: d.source_priority)
@@ -82,8 +83,6 @@ class DescriptorRegistry:
     def get_command(self, command_name: str) -> CommandDescriptor | None:
         return self.commands.get(command_name.lower())
 
-    def by_state(self, state: "PluginLifecycleState") -> list[PluginDescriptor]:
+    def by_state(self, state: PluginLifecycleState) -> list[PluginDescriptor]:
         """按生命周期状态过滤插件。"""
-        return [
-            desc for desc in self.plugins.values() if desc.lifecycle_state == state
-        ]
+        return [desc for desc in self.plugins.values() if desc.lifecycle_state == state]

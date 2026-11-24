@@ -5,6 +5,7 @@ during *ingest* (producing rewritten copies; originals are never modified).
 Home of the path-remap adapter (``path_remap``) and the dialect detection /
 ingest pipeline.
 """
+
 from __future__ import annotations
 
 from .detect import DialectDetection, PluginDialect, detect_dialect

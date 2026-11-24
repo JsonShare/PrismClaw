@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.storage.storage_types import SessionStore
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
+
+if TYPE_CHECKING:
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.session.types import SessionTree
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +34,7 @@ def _derive_session_key(session_id: str) -> str:
     return derive_memory_session_key(session_id)
 
 
-def _count_user_messages(tree: Any) -> int:
+def _count_user_messages(tree: SessionTree) -> int:
     count = 0
     for entry in tree.entries.values():
         if isinstance(entry, MessageEntry) and entry.role == "user":
@@ -39,7 +42,7 @@ def _count_user_messages(tree: Any) -> int:
     return count
 
 
-def _simple_summary(tree: Any) -> str:
+def _simple_summary(tree: SessionTree) -> str:
     from prismclaw.schema.shared import extract_text_from_content
 
     texts: list[str] = []
@@ -57,7 +60,7 @@ def _simple_summary(tree: Any) -> str:
     return joined[:SIMPLE_SUMMARY_HEAD] + "\n...\n" + joined[-SIMPLE_SUMMARY_TAIL:]
 
 
-def _archive_messages(tree: Any) -> list[dict[str, Any]]:
+def _archive_messages(tree: SessionTree) -> list[dict[str, Any]]:
     """Full-text user/assistant transcript in tree order (zero truncation)."""
     from prismclaw.schema.shared import extract_text_from_content
 
@@ -74,14 +77,14 @@ def _archive_messages(tree: Any) -> list[dict[str, Any]]:
     return messages
 
 
-async def _llm_archive_summary(tree: Any, llm_client: Any) -> str | None:
+async def _llm_archive_summary(tree: SessionTree, llm_client: LLMClient) -> str | None:
     """LLM archive summary via the compaction SummaryEngine (chunked map-reduce).
 
     Returns None on any failure — the caller falls back to _simple_summary.
     """
     try:
-        from prismclaw.schema.llm.request import PackedLLMRequest
         from prismclaw.engine.compression.summary_engine import SummaryEngine
+        from prismclaw.schema.llm.request import PackedLLMRequest
 
         messages = _archive_messages(tree)
         if not messages:
@@ -120,7 +123,7 @@ async def archive_session_background(
     session_store: SessionStore,
     old_session_id: str,
     *,
-    llm_client: Any = None,
+    llm_client: LLMClient | None = None,
 ) -> None:
     try:
         tree = await session_store.load(old_session_id)

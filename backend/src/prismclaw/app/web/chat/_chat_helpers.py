@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import inspect
 import json
 import logging
 import time
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -14,29 +16,31 @@ from prismclaw.app.web.chat.chat_protocol import (
     SessionQueue,
     _get_session_queue,
 )
+from prismclaw.app.web.connection import ConnectionState, send_event
+from prismclaw.app.web.deps import WebDeps
 from prismclaw.app.web.protocol.messages import (
     SERVER_RUN_SNAPSHOT,
     SERVER_TASK_RUNTIME,
     SERVER_TASK_TIMELINE,
 )
-from prismclaw.app.web.connection import ConnectionState, send_event
-from prismclaw.schema.agent.types import AgentDeps
-from prismclaw.schema.agent import DecisionLedgerEvent
+from prismclaw.persistence.session.redis import SessionLockError
 from prismclaw.runtime.facade.trajectory import (
     TaskExecutionProjector,
     TimelinePatch,
 )
+from prismclaw.schema.agent import DecisionLedgerEvent
+from prismclaw.schema.agent.session import MessageEntry, SessionEvent
 from prismclaw.schema.agent.task_runtime import ProbeSignal, RecoveryProbeResult
+from prismclaw.schema.agent.types import AgentDeps
+from prismclaw.schema.session.event_logger import SessionEventLogger
 from prismclaw.schema.session.types import (
-    CustomEntry,
     RUN_PROJECTION_CUSTOM_TYPE,
+    CustomEntry,
     RunProjectionPayload,
+    SessionTree,
     generate_entry_id,
     now_iso,
 )
-from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.session.event_logger import SessionEventLogger
-from prismclaw.persistence.session.redis import SessionLockError
 
 logger = logging.getLogger(__name__)
 _event_logger = SessionEventLogger()
@@ -50,25 +54,26 @@ _EXECUTION_TIMELINE_ENTRY_TYPE = "execution_timeline"
 _SOFT_LANDING_CODES = frozenset({"timeout", "budget_seconds", "budget_iterations"})
 
 
-def _extract_tool_result_text(event: Any) -> str:
-    if not event or not getattr(event, "result", None):
+def _extract_tool_result_text(event: object) -> str:
+    result = getattr(event, "result", None)
+    if not result:
         return ""
-    result = event.result
-    content = result.content if hasattr(result, "content") else None
+    content = getattr(result, "content", None)
     if not content:
         return ""
     parts: list[str] = []
     for block in content:
         t = getattr(block, "text", None)
         if t is not None:
-            parts.append(t)
+            parts.append(str(t))
         elif isinstance(block, dict) and "text" in block:
-            parts.append(block["text"])
+            parts.append(str(block["text"]))
     return "\n".join(parts)
 
 
 def _sanitize_workspace_id(workspace_id: str | None) -> str:
     from prismclaw.app.web.workspace_ids import clean_workspace_id
+
     return clean_workspace_id(workspace_id)
 
 
@@ -84,14 +89,14 @@ def _resolve_tool_workspace_path(
     return base.resolve()
 
 
-def _call_sync_tree_accessor(tree: Any, name: str) -> Any | None:
+def _call_sync_tree_accessor(tree: SessionTree, name: str) -> object | None:
     accessor = getattr(tree, name, None)
     if not callable(accessor):
         return None
     if inspect.iscoroutinefunction(accessor):
         return None
     try:
-        value = accessor()
+        value: object = accessor()
     except Exception:
         logger.warning("web.task_runtime.accessor_failed: %s", name, exc_info=True)
         return None
@@ -102,7 +107,7 @@ def _call_sync_tree_accessor(tree: Any, name: str) -> Any | None:
     return value
 
 
-def _model_dump_if_supported(value: Any) -> dict[str, Any] | None:
+def _model_dump_if_supported(value: object) -> dict[str, Any] | None:
     if value is None or not hasattr(value, "model_dump"):
         return None
     try:
@@ -121,7 +126,7 @@ def _serialize_runtime_subagent_items(
     return list(projection.subagent_items.values())
 
 
-def _extract_latest_recovery_probe_payload(tree: Any) -> dict[str, Any] | None:
+def _extract_latest_recovery_probe_payload(tree: SessionTree) -> dict[str, Any] | None:
     decision_events = _call_sync_tree_accessor(tree, "get_decision_ledger_events")
     if not isinstance(decision_events, list):
         return None
@@ -145,7 +150,9 @@ def _extract_latest_recovery_probe_payload(tree: Any) -> dict[str, Any] | None:
         missing_paths = payload.get("missing_paths")
         try:
             result = RecoveryProbeResult(
-                probe_id=str(payload.get("request_id") or payload.get("probe_id") or event.event_id),
+                probe_id=str(
+                    payload.get("request_id") or payload.get("probe_id") or event.event_id
+                ),
                 workspace_root=(
                     str(payload.get("workspace_root"))
                     if isinstance(payload.get("workspace_root"), str)
@@ -153,8 +160,12 @@ def _extract_latest_recovery_probe_payload(tree: Any) -> dict[str, Any] | None:
                 ),
                 baseline_source=str(payload.get("baseline_source") or "none"),
                 status=str(payload.get("status") or "ready"),
-                checked_paths=[str(item) for item in checked_paths] if isinstance(checked_paths, list) else [],
-                missing_paths=[str(item) for item in missing_paths] if isinstance(missing_paths, list) else [],
+                checked_paths=[str(item) for item in checked_paths]
+                if isinstance(checked_paths, list)
+                else [],
+                missing_paths=[str(item) for item in missing_paths]
+                if isinstance(missing_paths, list)
+                else [],
                 signals=signals,
                 summary=event.summary,
             )
@@ -166,7 +177,7 @@ def _extract_latest_recovery_probe_payload(tree: Any) -> dict[str, Any] | None:
 
 
 def _build_task_runtime_projection_payload(
-    tree: Any,
+    tree: SessionTree,
     *,
     web_runtime: ConversationWebRuntimeProjection | None = None,
 ) -> dict[str, Any] | None:
@@ -233,22 +244,45 @@ def _build_task_runtime_idempotency_key(payload: dict[str, Any]) -> str:
 # Tree 缓存：同一 turn 中多次调用 _push_task_runtime_event 时，
 # 避免重复 load 同一棵 tree。TTL 短（200ms），仅在同一 iteration 内复用。
 _TREE_CACHE_TTL = 0.2
-_tree_cache: dict[str, tuple[float, Any]] = {}
+_tree_cache: dict[str, tuple[float, SessionTree]] = {}
 
 
-def _get_cached_tree(session_id: str) -> Any | None:
+def _get_cached_tree(session_id: str) -> SessionTree | None:
     entry = _tree_cache.get(session_id)
     if entry is not None and (time.time() - entry[0]) < _TREE_CACHE_TTL:
         return entry[1]
     return None
 
 
-def _set_cached_tree(session_id: str, tree: Any) -> None:
+def _set_cached_tree(session_id: str, tree: SessionTree) -> None:
     _tree_cache[session_id] = (time.time(), tree)
 
 
 def invalidate_tree_cache(session_id: str) -> None:
     _tree_cache.pop(session_id, None)
+
+
+async def _load_tree_for_write(deps: AgentDeps, session_id: str) -> SessionTree | None:
+    """加载会话树；未配置 session_store 时视为不可持久化（返回 None）。"""
+    store = deps.session_store
+    if store is None:
+        return None
+    cached = _get_cached_tree(session_id)
+    if cached is not None:
+        return cached
+    tree = await store.load(session_id)
+    if tree is not None:
+        _set_cached_tree(session_id, tree)
+    return tree
+
+
+async def _commit_events(deps: AgentDeps, events: list[SessionEvent]) -> bool:
+    """提交事件到会话存储；未配置 session_store 时返回 False（跳过）。"""
+    store = deps.session_store
+    if store is None:
+        return False
+    await store.commit_events(events)
+    return True
 
 
 async def _push_task_runtime_event(
@@ -261,7 +295,7 @@ async def _push_task_runtime_event(
     tree = _get_cached_tree(session_id)
     if tree is None:
         try:
-            tree = await deps.session_store.load(session_id)
+            tree = await _load_tree_for_write(deps, session_id)
         except Exception:
             logger.warning("web.task_runtime.load_failed", exc_info=True)
             return
@@ -356,7 +390,7 @@ async def _persist_execution_timeline(
         return
     payload = _build_execution_timeline_payload(projector, message_id)
     try:
-        tree = await deps.session_store.load(session_id)
+        tree = await _load_tree_for_write(deps, session_id)
     except Exception:
         logger.warning("web.timeline.persist.load_failed", exc_info=True)
         return
@@ -373,7 +407,7 @@ async def _persist_execution_timeline(
     )
     try:
         event = _event_logger.entry_updated(session_id, entry, leaf_id=entry.id)
-        await deps.session_store.commit_events([event])
+        await _commit_events(deps, [event])
         invalidate_tree_cache(session_id)
     except Exception:
         logger.warning("web.timeline.persist.append_failed", exc_info=True)
@@ -408,7 +442,7 @@ async def _persist_partial_assistant_message(
     if not projector.has_content() and not (transcript_text or "").strip():
         return None
     try:
-        tree = await deps.session_store.load(session_id)
+        tree = await _load_tree_for_write(deps, session_id)
     except Exception:
         logger.warning("web.partial_message.persist.load_failed", exc_info=True)
         return None
@@ -424,7 +458,7 @@ async def _persist_partial_assistant_message(
     )
     try:
         event = _event_logger.entry_updated(session_id, entry, leaf_id=entry.id)
-        await deps.session_store.commit_events([event])
+        await _commit_events(deps, [event])
         invalidate_tree_cache(session_id)
         return entry.id
     except Exception:
@@ -433,8 +467,8 @@ async def _persist_partial_assistant_message(
 
 
 def _build_run_projection_payload(
-    tree: Any,
-    session_queue: Any,
+    tree: SessionTree,
+    session_queue: SessionQueue,
     conversation_id: str,
 ) -> RunProjectionPayload | None:
     """从内存投影 + 树构建 RunProjection payload（纯构造：不落库、不推送）。
@@ -450,9 +484,7 @@ def _build_run_projection_payload(
     phase_at_ms = session_queue.get_phase_epoch_ms() if phase is not None else None
     task_runtime = _build_task_runtime_projection_payload(tree, web_runtime=projection)
     timeline_nodes = (
-        projection.timeline_snapshot.get("nodes")
-        if projection.timeline_snapshot
-        else []
+        projection.timeline_snapshot.get("nodes") if projection.timeline_snapshot else []
     )
     if not isinstance(timeline_nodes, list):
         timeline_nodes = []
@@ -474,7 +506,7 @@ async def _persist_run_projection(
     *,
     session_id: str,
     conversation_id: str,
-    session_queue: Any,
+    session_queue: SessionQueue,
 ) -> None:
     """把后端运行态投影周期落盘为 run_projection custom entry（审计留档）。
 
@@ -485,7 +517,7 @@ async def _persist_run_projection(
     tree = _get_cached_tree(session_id)
     if tree is None:
         try:
-            tree = await deps.session_store.load(session_id)
+            tree = await _load_tree_for_write(deps, session_id)
         except Exception:
             logger.warning("web.run_projection.load_failed", exc_info=True)
             return
@@ -493,17 +525,13 @@ async def _persist_run_projection(
             return
         _set_cached_tree(session_id, tree)
 
-    payload = _build_run_projection_payload(
-        tree, session_queue, conversation_id
-    )
+    payload = _build_run_projection_payload(tree, session_queue, conversation_id)
     if payload is None:
         return
     projection = session_queue.get_web_runtime_projection(conversation_id)
 
     data = payload.model_dump(mode="json")
-    sig = hashlib.sha1(
-        json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    sig = hashlib.sha1(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if projection is not None and getattr(projection, "_run_projection_sig", "") == sig:
         return
     if projection is not None:
@@ -518,7 +546,7 @@ async def _persist_run_projection(
     )
     try:
         event = _event_logger.entry_updated(session_id, entry, leaf_id=entry.id)
-        await deps.session_store.commit_events([event])
+        await _commit_events(deps, [event])
         invalidate_tree_cache(session_id)
     except SessionLockError:
         # commit_events 已带短退避重试；重试仍失败 = 该 session 正被其他
@@ -536,7 +564,7 @@ async def _push_run_snapshot(
     *,
     session_id: str,
     conversation_id: str,
-    session_queue: Any,
+    session_queue: SessionQueue,
 ) -> None:
     """周期向活跃连接下发一帧全量 run.snapshot（P3）。
 
@@ -546,7 +574,7 @@ async def _push_run_snapshot(
     try:
         tree = _get_cached_tree(session_id)
         if tree is None:
-            tree = await deps.session_store.load(session_id)
+            tree = await _load_tree_for_write(deps, session_id)
             if tree is None:
                 return
             _set_cached_tree(session_id, tree)
@@ -564,7 +592,7 @@ async def _push_run_snapshot(
 
 
 def _spawn_background(
-    coro: Any,
+    coro: Coroutine[Any, Any, Any],
     *,
     label: str,
     session_queue: SessionQueue | None = None,
@@ -575,25 +603,22 @@ def _spawn_background(
         logger.warning("web.parallel_task.spawn_failed: %s", label, exc_info=True)
         return
 
-    def _done(t: asyncio.Task) -> None:
+    def _done(t: asyncio.Task[Any]) -> None:
         try:
             t.result()
         except Exception:
             logger.warning("web.parallel_task.failed: %s", label, exc_info=True)
 
-    try:
+    with contextlib.suppress(Exception):
         task.add_done_callback(_done)
-    except Exception:
-        pass
     if session_queue is not None:
-        try:
+        with contextlib.suppress(Exception):
             session_queue._track_detached(task)
-        except Exception:
-            pass
 
 
 def _get_runner_deps(state: ConnectionState) -> AgentDeps:
-    return state.ws.app.state.web_deps.runner_deps
+    web_deps: WebDeps = state.ws.app.state.web_deps
+    return web_deps.runner_deps
 
 
 async def _get_workspace_runner_deps(
@@ -603,7 +628,7 @@ async def _get_workspace_runner_deps(
     wait_for_ready: bool = False,
 ) -> AgentDeps:
     app = state.ws.app
-    web_deps = app.state.web_deps
+    web_deps: WebDeps = app.state.web_deps
     workspace_root = _resolve_tool_workspace_path(
         user_id=str(state.user_id),
         workspace_id=workspace_id,
@@ -611,17 +636,25 @@ async def _get_workspace_runner_deps(
     started_at = time.monotonic()
     get_ws_deps_fn = web_deps.workspace_runner_deps_fn
     get_ws_deps_state_fn = web_deps.workspace_runner_deps_state_fn
-    scoped = await get_ws_deps_fn(
-        app,
-        user_id=str(state.user_id),
-        workspace_root=workspace_root,
-        wait_for_ready=wait_for_ready,
-    ) if get_ws_deps_fn is not None else None
-    cache_state = get_ws_deps_state_fn(
-        app,
-        user_id=str(state.user_id),
-        workspace_root=workspace_root,
-    ) if get_ws_deps_state_fn is not None else "unknown"
+    scoped: AgentDeps | None = (
+        await get_ws_deps_fn(
+            app,
+            user_id=str(state.user_id),
+            workspace_root=workspace_root,
+            wait_for_ready=wait_for_ready,
+        )
+        if get_ws_deps_fn is not None
+        else None
+    )
+    cache_state = (
+        get_ws_deps_state_fn(
+            app,
+            user_id=str(state.user_id),
+            workspace_root=workspace_root,
+        )
+        if get_ws_deps_state_fn is not None
+        else "unknown"
+    )
     hotpath = getattr(web_deps, "hotpath_telemetry", None)
     if scoped is None:
         if hotpath is not None:

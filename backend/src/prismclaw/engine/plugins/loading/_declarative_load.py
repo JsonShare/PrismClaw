@@ -10,26 +10,31 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.plugins.loading.agent_loader import PluginAgentLoader
-from prismclaw.engine.plugins.registry.identity import PluginID
-from prismclaw.engine.plugins.loading.load_result import LoadedPlugin, PluginError
 from prismclaw.engine.plugins.loading._manifest_parse import (
     _coerce_string_list,
     _load_json_file,
-    _resolve_canonical_manifest,
-    _sensitive_user_config_keys,
-    _resolve_user_config,
-    _resolve_relative_paths,
-    _validate_hook_command_paths,
     _merge_hook_config,
+    _resolve_canonical_manifest,
+    _resolve_relative_paths,
+    _resolve_user_config,
+    _sensitive_user_config_keys,
+    _validate_hook_command_paths,
 )
+from prismclaw.engine.plugins.loading.agent_loader import PluginAgentLoader
+from prismclaw.engine.plugins.loading.load_result import LoadedPlugin, PluginError
 from prismclaw.engine.plugins.manifest import PluginManifest
+from prismclaw.engine.plugins.registry.identity import PluginID
+from prismclaw.schema.services.skills import SkillManifest
 from prismclaw.schema.shared.utils import estimate_tokens, truncate_by_tokens
 
 logger = logging.getLogger(__name__)
+
+# 技能目录扫描器：接收目录与上限参数，返回仅解析 frontmatter 的技能清单。
+SkillScanner = Callable[..., list[SkillManifest]]
 
 
 def _load_declared_commands(
@@ -78,6 +83,7 @@ def _load_declared_commands(
     if not commands_dir.is_dir():
         return commands
     import yaml
+
     from prismclaw.schema.shared import _extract_frontmatter
 
     for entry in sorted(commands_dir.iterdir(), key=lambda p: p.name):
@@ -150,8 +156,8 @@ def _apply_content_pipeline(
     effective_remap_rules: list[Any],
     resolved_user_config: dict[str, Any],
     sensitive_user_config_keys: frozenset[str],
-    ensure_plugin_data_dir: Any,
-    ensure_marketplace_data_dir: Any,
+    ensure_plugin_data_dir: Callable[[], None],
+    ensure_marketplace_data_dir: Callable[[], None],
 ) -> str | None:
     """公共 body 替换管道：path_remap → variable substitution → user_config substitution。
 
@@ -223,13 +229,12 @@ def _load_mcp_servers(
     try:
         data = _load_json_file(mcp_path)
         if isinstance(data, dict):
-            servers = data.get("mcp_servers")
-            if servers is None:
-                servers = data.get("mcpServers")
-            if isinstance(servers, dict):
-                servers = dict(servers)
+            servers_raw = data.get("mcp_servers")
+            if servers_raw is None:
+                servers_raw = data.get("mcpServers")
+            if isinstance(servers_raw, dict):
                 return _substitute_mcp_server_configs(
-                    servers, path, plugin_data_dir, marketplace_data_dir
+                    dict(servers_raw), path, plugin_data_dir, marketplace_data_dir
                 )
             return data
     except Exception as exc:
@@ -273,8 +278,7 @@ def _substitute_mcp_server_configs(
             values = cfg.get(field)
             if isinstance(values, list):
                 cfg[field] = [
-                    substitute_variables(v, variables) if isinstance(v, str) else v
-                    for v in values
+                    substitute_variables(v, variables) if isinstance(v, str) else v for v in values
                 ]
         for field in ("env", "headers"):
             mapping = cfg.get(field)
@@ -350,9 +354,7 @@ def _is_priority_section(heading: str) -> bool:
     return any(keyword in lowered for keyword in _PRIORITY_SECTION_KEYWORDS)
 
 
-def _cap_plugin_instructions(
-    text: str, token_budget: int | None = None
-) -> str:
+def _cap_plugin_instructions(text: str, token_budget: int | None = None) -> str:
     """章节感知的注入限额：优先保留安全/输出规范类章节，其余按原顺序填充。
 
     安全/输出类章节整体超预算时，小章节整段保留、大章节按体量比例分剩余
@@ -506,7 +508,7 @@ def _build_manifest_and_capability(
     manifest_override: PluginManifest | None = None,
     remap_rules: list[Any] | None = None,
     marketplace_data_dir: Path | None = None,
-    skill_scanner: Any | None = None,
+    skill_scanner: SkillScanner | None = None,
 ) -> tuple[
     PluginManifest, Any, dict[str, Any], dict[str, Any], dict[str, Any], dict[str, str], str | None
 ]:
@@ -542,10 +544,9 @@ def _build_manifest_and_capability(
     if manifest.dependencies:
         for dep in manifest.dependencies:
             if not isinstance(dep, str) or not dep.strip():
-                raise PluginError(
+                raise ValueError(
                     f"插件 {plugin_namespace!r} 的依赖声明无效：{dep!r} "
-                    "（应为非空字符串，如 'name' 或 'name@marketplace'）",
-                    plugin_name=plugin_namespace,
+                    "（应为非空字符串，如 'name' 或 'name@marketplace'）"
                 )
         logger.info(
             "plugin %r declares dependencies: %s (resolution deferred to PluginLoader)",
@@ -564,7 +565,9 @@ def _build_manifest_and_capability(
     # porting 是 PluginManifest 的显式字段，直接属性访问。
     own_porting = manifest.porting
     own_remap_cfg = own_porting.get("remap") if isinstance(own_porting, dict) else None
-    effective_remap_rules = list(DEFAULT_REMAP_RULES) + parse_remap_rules(own_remap_cfg) + list(remap_rules or [])
+    effective_remap_rules = (
+        list(DEFAULT_REMAP_RULES) + parse_remap_rules(own_remap_cfg) + list(remap_rules or [])
+    )
 
     resolved_user_config = _resolve_user_config(manifest, plugin_options)
     sensitive_user_config_keys = _sensitive_user_config_keys(manifest)
@@ -587,7 +590,10 @@ def _build_manifest_and_capability(
         if not hook_path.exists() or not hook_path.is_file():
             continue
         try:
-            hooks_config = _merge_hook_config(hooks_config, _load_json_file(hook_path))
+            hook_payload = _load_json_file(hook_path)
+            if not isinstance(hook_payload, dict):
+                raise ValueError(f"hooks 配置必须是 JSON 对象：{hook_path}")
+            hooks_config = _merge_hook_config(hooks_config, hook_payload)
         except Exception as exc:
             raise ValueError(f"Invalid hooks configuration at {hook_path}: {exc}") from exc
 
@@ -603,7 +609,7 @@ def _build_manifest_and_capability(
         install_path / "skills",
         *_resolve_relative_paths(install_path, manifest.skills),
     ]
-    skills: list[Any] = []
+    skills: list[SkillManifest] = []
     seen_skill_dirs: set[Path] = set()
     for skills_dir in skill_paths:
         if not skills_dir.exists() or not skills_dir.is_dir():
@@ -718,7 +724,7 @@ def _build_manifest_and_capability(
 
     for command in commands:
         command["output_styles"] = sorted(output_styles.keys())
-        command["mcp_servers"] = sorted(f"{plugin_namespace}.{name}" for name in mcp_servers.keys())
+        command["mcp_servers"] = sorted(f"{plugin_namespace}.{name}" for name in mcp_servers)
         command["plugin_options"] = dict(resolved_user_config)
 
     capability_graph = build_plugin_capability_graph(
@@ -756,7 +762,7 @@ async def _load_declarative_plugin(
     manifest_override: PluginManifest | None = None,
     porting_context: dict[str, Any] | None = None,
     dialect: str,
-    skill_scanner: Any | None = None,
+    skill_scanner: SkillScanner | None = None,
 ) -> tuple[LoadedPlugin | None, list[PluginError]]:
     """声明式插件加载核心。
 
@@ -849,7 +855,9 @@ async def _load_declarative_plugin(
             # v5 渐进式披露：marketplace_name 从 porting_context 传递
             marketplace_name=marketplace_name if isinstance(marketplace_name, str) else None,
             # v5 渐进式披露：marketplace_description 从市场级 plugin.json 传递
-            marketplace_description=marketplace_description if isinstance(marketplace_description, str) else None,
+            marketplace_description=marketplace_description
+            if isinstance(marketplace_description, str)
+            else None,
         )
         return loaded, errors
     except Exception as exc:

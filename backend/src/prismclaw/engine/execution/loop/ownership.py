@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 if TYPE_CHECKING:
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
@@ -12,6 +12,30 @@ from prismclaw.engine.execution.checkpoint import RunSnapshot
 from prismclaw.schema.agent.task_types import TaskSpec
 
 logger = logging.getLogger(__name__)
+
+
+class _OwnershipStore(Protocol):
+    """run ownership store 的内部最小视图（deps 暴露的 Protocol 未覆盖全部方法）。"""
+
+    def make_record(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        owner_worker_id: str,
+        snapshot_cursor: str,
+        last_safe_boundary: str,
+    ) -> object: ...
+
+    async def claim(self, record: object) -> bool: ...
+
+    async def takeover(self, record: object, *, expected_owner_worker_id: str) -> bool: ...
+
+    async def get(self, run_id: str) -> object: ...
+
+    async def heartbeat(self, record: object) -> bool: ...
+
+    async def release(self, run_id: str, owner_worker_id: str) -> None: ...
 
 
 @dataclass
@@ -25,8 +49,13 @@ class _RunOwnershipLease:
     _released: bool = False
 
 
-async def _claim_run_ownership(snapshot: RunSnapshot, deps: AgentRunnerDeps) -> _RunOwnershipLease | None:
-    store = deps.persistence.run_ownership_store if deps.persistence is not None else None
+async def _claim_run_ownership(
+    snapshot: RunSnapshot, deps: AgentRunnerDeps
+) -> _RunOwnershipLease | None:
+    store = cast(
+        "_OwnershipStore | None",
+        deps.persistence.run_ownership_store if deps.persistence is not None else None,
+    )
     run_id = snapshot.run_state.run_id or ""
     owner_worker_id = snapshot.worker_id or getattr(deps, "worker_id", None) or ""
     if store is None or not run_id or not owner_worker_id:
@@ -65,7 +94,10 @@ async def _takeover_run_ownership(
     *,
     expected_owner_worker_id: str,
 ) -> _RunOwnershipLease | None:
-    store = deps.persistence.run_ownership_store if deps.persistence is not None else None
+    store = cast(
+        "_OwnershipStore | None",
+        deps.persistence.run_ownership_store if deps.persistence is not None else None,
+    )
     run_id = snapshot.run_state.run_id or ""
     owner_worker_id = snapshot.worker_id or getattr(deps, "worker_id", None) or ""
     if store is None or not run_id or not owner_worker_id:
@@ -98,7 +130,9 @@ async def _takeover_run_ownership(
     )
 
 
-async def _run_ownership_heartbeat_loop(store: Any, *, snapshot: RunSnapshot, stop_event: asyncio.Event) -> None:
+async def _run_ownership_heartbeat_loop(
+    store: _OwnershipStore, *, snapshot: RunSnapshot, stop_event: asyncio.Event
+) -> None:
     interval = max(1, int(getattr(store, "heartbeat_interval_seconds", 30)))
     while not stop_event.is_set():
         try:
@@ -139,7 +173,10 @@ async def _release_run_ownership(lease: _RunOwnershipLease | None, deps: AgentRu
         await lease.task
     except Exception:
         logger.warning("run ownership heartbeat task shutdown failed", exc_info=True)
-    store = deps.persistence.run_ownership_store if deps.persistence is not None else None
+    store = cast(
+        "_OwnershipStore | None",
+        deps.persistence.run_ownership_store if deps.persistence is not None else None,
+    )
     if store is None:
         return
     try:

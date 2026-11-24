@@ -11,6 +11,7 @@
 状态是**进程级单向闩锁**：一旦进入停机不再回滚（同一进程不会重新启动
 服务生命周期）。测试可用 :func:`reset_for_tests` 复位。
 """
+
 from __future__ import annotations
 
 _shutting_down: bool = False

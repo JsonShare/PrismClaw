@@ -2,18 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
 from prismclaw.engine.toolkit.builtin.file_helpers import (
     BASH_DEFAULT_TIMEOUT_SECONDS,
-    _ws_root,
-    _ws_kind,
     _require_runtime,
+    _ws_kind,
+    _ws_root,
 )
-from prismclaw.schema.services.env_types import CommandResult
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
+from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.content.workspace import SandboxTier
-
+from prismclaw.schema.services.env_types import CommandResult
 
 # ─── BashTool description & parameters 生成函数 ─────────────────────
+
 
 def _bash_description() -> str:
     """给 LLM 的 bash tool 描述（~350 tokens）。
@@ -30,7 +31,7 @@ def _bash_description() -> str:
         "      export PRISMCLAW_WORKSPACE=<workspace_root>\n"
         "      cd sessions/<session_id>/\n"
         "      export PRISMCLAW_CONTEXT_BLOCKS_DIR=$PWD/context_blocks\n"
-        "      export PRISMCLAW_OUTPUT_DIR=$PWD/outputs\n"
+        "      export PRISMCLAW_OUTBOX_DIR=$PWD/outbox\n"
         "      export PRISMCLAW_UPLOADS_DIR=$PWD/inbox\n"
         "  • So CWD is always the session root at call start.\n"
         "\n"
@@ -97,6 +98,7 @@ def _bash_parameters() -> dict[str, Any]:
 
 # ─── BashTool ─────────────────────────────────────────────────────────
 
+
 class BashTool:
     name = "bash"
     description = _bash_description()
@@ -111,7 +113,7 @@ class BashTool:
     # Format: {workspace_id: {"process": Popen, "queue": Queue}}
     _sessions: dict[str, Any] = {}
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
         command = args.get("command")
         if not isinstance(command, str) or not command.strip():
@@ -123,8 +125,8 @@ class BashTool:
         # Blocking Budget implementation
         # Maximum time LLM reasoning loop will block waiting for this command.
         blocking_budget_ms = float(args.get("blocking_budget_ms", 15000))
-        blocking_budget_s = min(blocking_budget_ms / 1000.0, 15.0) # Hard cap at 15s
-        
+        blocking_budget_s = min(blocking_budget_ms / 1000.0, 15.0)  # Hard cap at 15s
+
         # Total time before process is actually killed
         hard_timeout = float(args.get("timeout_seconds") or BASH_DEFAULT_TIMEOUT_SECONDS)
 
@@ -132,26 +134,22 @@ class BashTool:
         # To truly support a persistent PTY we would use `pexpect` or a custom daemon.
         # Since we are evolving the architecture, we'll wrap the execution in a way
         # that allows for state retention if implemented, but falls back to stateful wrappers.
-        
-        # Inject workspace-scoped dirs dynamically via shell, so they follow $PWD
-        # regardless of which directory the task is working in.
-        # 交付物目录：<workspace>/sessions/<sid>/outputs/。
-        # 引擎层通过 resolve_within(session_root=...) 自动把无前缀路径落到 session outputs。
-        # 技能/脚本可以按 $PRISMCLAW_OUTPUT_DIR 环境变量或直接相对路径写产物。
-        #   全局共享 PRISMCLAW_RUNTIME_ROOT    ← ~/.prismclaw/runtime（所有 workspace 共用，
-        #                                          node_modules/pip --target 等重资产装这里）
-        #   workspace-local PRISMCLAW_SKILL_CACHE ← $PRISMCLAW_WORKSPACE/.work/cache/projects/<skill>
-        #                                          （docx-p...-20261020-xxx 项目目录落这里）
-        # 每种 runtime 发现机制各有不同，引擎层统一注入 PATH 扩展：
-        #   Python: pip install --target <dir>/site-packages
-        #           → PYTHONPATH += <dir>/site-packages（进程自动 import 发现）
-        #   Node:   npm install --prefix <dir>  → node_modules/ 自动创建
-        #           → NODE_PATH += <dir>/node_modules（require() 自动发现）
-        # 两种环境互不干扰（site-packages ≠ node_modules），可共存同一 <dir>。
+
+        # 通过 shell 动态注入工作区路径，跟随 $PWD 而非进程 cwd。
+        # 交付物写入 <workspace>/sessions/<sid>/outbox/；无前缀路径由引擎的
+        # resolve_within(session_root=...) 落到该目录，技能也可用 $PRISMCLAW_OUTBOX_DIR。
+        # 运行时目录按作用域分两类，互不干扰、可共存：
+        #   全局 PRISMCLAW_RUNTIME_ROOT  → ~/.prismclaw/runtime（各 workspace 共享重资产）
+        #   工作区 PRISMCLAW_SKILL_CACHE → $PRISMCLAW_WORKSPACE/.work/cache/projects/<skill>
+        # 依赖发现统一由 PATH 扩展完成：
+        #   Python: pip install --target <dir>/site-packages → PYTHONPATH
+        #   Node:   npm install --prefix <dir>              → NODE_PATH
         import re as _re
-        from prismclaw.infra.runtime_root import resolve_runtime_root as _resolve_runtime_root
+
         from prismclaw.engine.toolkit.builtin.file_helpers import session_root as _session_root
+        from prismclaw.infra.runtime_root import resolve_runtime_root as _resolve_runtime_root
         from prismclaw.infra.workspace_paths import SESSION_SUBDIRS as _SESSION_SUBDIRS
+
         _raw_skill = getattr(context, "active_skill_name", None) or "_default"
         _skill_safe = _re.sub(r"[^\w.\-]", "_", _raw_skill)[:64] or "_default"
         _global_runtime = _resolve_runtime_root()
@@ -164,22 +162,21 @@ class BashTool:
         if _sr is not None:
             # bash cd 到 session 根后，$PWD 即 session 根，
             # 所以 env var 直接用 $PWD/<subdir> 即可。
-            _output_dir = '"$PWD/outputs"'
+            _output_dir = '"$PWD/outbox"'
             _uploads_dir = '"$PWD/inbox"'
             _cb_dir = '"$PWD/context_blocks"'
             _tr_dir = '"$PWD/tool_results"'
             _tmp_dir = '"$PWD/.work/tmp"'
             _mkdir_dirs = (
                 " ".join(
-                    f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/{sub}"'
-                    for sub in _SESSION_SUBDIRS
+                    f'"$PRISMCLAW_WORKSPACE/sessions/{_sr.name}/{sub}"' for sub in _SESSION_SUBDIRS
                 )
-                + f' {_skill_cache} {_skill_runtime} {_py_site} {_node_modules}'
+                + f" {_skill_cache} {_skill_runtime} {_py_site} {_node_modules}"
             )
         else:
             # 降级（无 session_id 的罕见路径）：没有 session 级隔离概念，
             # 所有引擎产出统一落到工作区的 run/tmp——
-            # 避免 env 指向 workspace 根裸 outputs/inbox 污染用户项目目录。
+            # 避免 env 指向 workspace 根裸 outbox/inbox 污染用户项目目录。
             _safe = '"$PWD/.work/run/tmp"'
             _output_dir = _safe
             _uploads_dir = _safe
@@ -187,11 +184,10 @@ class BashTool:
             _tr_dir = _safe
             _tmp_dir = _safe
             _mkdir_dirs = (
-                f'"$PWD/.work/run/tmp" '
-                f'{_skill_cache} {_skill_runtime} {_py_site} {_node_modules}'
+                f'"$PWD/.work/run/tmp" {_skill_cache} {_skill_runtime} {_py_site} {_node_modules}'
             )
         # bash cwd 策略：workspace 根 → session 根。
-        # 模型写 `./outputs/xxx.md` 这类相对路径时自然落到 session 级，
+        # 模型写 `./outbox/xxx.md` 这类相对路径时自然落到 session 级，
         # 不再绕过 resolve_within 直接 mkdir workspace 根旧目录。
         # workspace 根资源通过 $PRISMCLAW_WORKSPACE 绝对路径访问。
         if _sr is not None:
@@ -200,27 +196,27 @@ class BashTool:
             _cd_cmd = (
                 f'mkdir -p "$PWD/sessions/{_sr.name}" '
                 f'&& cd "$PWD/sessions/{_sr.name}" '
-                f'&& mkdir -p .work/tmp && '
+                f"&& mkdir -p .work/tmp && "
             )
         else:
-            _cd_cmd = ''
+            _cd_cmd = ""
         _env_prefix = (
             f'export PRISMCLAW_WORKSPACE="$PWD" && '
-            f'{_cd_cmd}'
-            f'mkdir -p {_mkdir_dirs} && '
-            f'export PRISMCLAW_TMP_DIR={_tmp_dir} && '
-            f'export PRISMCLAW_OUTPUT_DIR={_output_dir} && '
-            f'export PRISMCLAW_UPLOADS_DIR={_uploads_dir} && '
-            f'export PRISMCLAW_CONTEXT_BLOCKS_DIR={_cb_dir} && '
-            f'export PRISMCLAW_TOOL_RESULTS_DIR={_tr_dir} && '
-            f'export PRISMCLAW_SKILL_CACHE={_skill_cache} && '
+            f"{_cd_cmd}"
+            f"mkdir -p {_mkdir_dirs} && "
+            f"export PRISMCLAW_TMP_DIR={_tmp_dir} && "
+            f"export PRISMCLAW_OUTBOX_DIR={_output_dir} && "
+            f"export PRISMCLAW_UPLOADS_DIR={_uploads_dir} && "
+            f"export PRISMCLAW_CONTEXT_BLOCKS_DIR={_cb_dir} && "
+            f"export PRISMCLAW_TOOL_RESULTS_DIR={_tr_dir} && "
+            f"export PRISMCLAW_SKILL_CACHE={_skill_cache} && "
             f'export PRISMCLAW_RUNTIME_ROOT="{_global_runtime}" && '
-            f'export PRISMCLAW_SKILL_RUNTIME={_skill_runtime} && '
+            f"export PRISMCLAW_SKILL_RUNTIME={_skill_runtime} && "
             # ── 运行时发现机制 ──
             # Python: 让 python -c / script.py 能直接 import 全局 site-packages
-            f'export PYTHONPATH={_py_site}${{PYTHONPATH:+:$PYTHONPATH}} && '
+            f"export PYTHONPATH={_py_site}${{PYTHONPATH:+:$PYTHONPATH}} && "
             # Node:   让 require() 能找到全局 node_modules
-            f'export NODE_PATH={_node_modules}${{NODE_PATH:+:$NODE_PATH}} && '
+            f"export NODE_PATH={_node_modules}${{NODE_PATH:+:$NODE_PATH}} && "
         )
         wrapped_command = f"{_env_prefix}{command}"
         # TODO GC 策略：全局 runtime 目录 ~/.prismclaw/runtime/ 会无限增长

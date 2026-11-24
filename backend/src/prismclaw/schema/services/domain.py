@@ -7,11 +7,20 @@ DomainBundle 是业务域（如垂直行业包、自建 agent）接入 PrismClaw
 
 依赖方向：engine/assembly → schema（Protocol 定义在 schema，实现在 engine/assembly）
 """
+
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from fastapi import APIRouter, FastAPI
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+    from prismclaw.infra.settings import Settings
+    from prismclaw.schema.services.task_protocol import TaskCoro, TaskManagerProtocol
 
 
 @dataclass
@@ -21,6 +30,7 @@ class MenuEntry:
     当 DomainManifest.menus 长度 <= 1 时，工作台不显示左侧菜单，
     直接全屏渲染功能页面，此时 MenuEntry 仅用于声明默认 Tab key。
     """
+
     key: str
     label: str
     icon: str = ""
@@ -35,10 +45,11 @@ class MenuEntry:
 @dataclass
 class PageEntry:
     """前端页面组件描述"""
+
     key: str
     path: str
-    js_asset: str = ""   # 前端组件 bundle URL
-    css_asset: str = ""   # 前端样式 URL
+    js_asset: str = ""  # 前端组件 bundle URL
+    css_asset: str = ""  # 前端样式 URL
 
 
 @dataclass
@@ -51,10 +62,11 @@ class DomainManifest:
 
     path 始终指向工作台/功能页面路由，如 "/my-domain"。
     """
+
     key: str
     label: str
     icon: str = ""
-    path: str = ""           # 工作台/功能页面路由
+    path: str = ""  # 工作台/功能页面路由
     menus: list[MenuEntry] = field(default_factory=list)
     pages: list[PageEntry] = field(default_factory=list)
 
@@ -67,46 +79,83 @@ class DomainInfrastructureContext:
 
     def __init__(
         self,
-        db_engine: Any = None,
-        redis_client: Any = None,
-        session_factory: Any = None,
-        settings: Any = None,
-        app: Any = None,
+        db_engine: AsyncEngine | None = None,
+        redis_client: object | None = None,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
+        settings: Settings | None = None,
+        app: FastAPI | None = None,
     ) -> None:
         self._db_engine = db_engine
         self._redis_client = redis_client
         self._session_factory = session_factory
         self._settings = settings
         self._app = app
-        self._domain_stores: dict[str, Any] = {}
+        self._domain_stores: dict[str, object] = {}
 
     @property
-    def db_engine(self) -> Any:
+    def db_engine(self) -> AsyncEngine | None:
         return self._db_engine
 
     @property
-    def redis_client(self) -> Any:
+    def redis_client(self) -> object | None:
         return self._redis_client
 
     @property
-    def session_factory(self) -> Any:
+    def session_factory(self) -> async_sessionmaker[AsyncSession] | None:
         return self._session_factory
 
     @property
-    def settings(self) -> Any:
+    def settings(self) -> Settings | None:
         return self._settings
 
     @property
-    def app(self) -> Any:
+    def app(self) -> FastAPI | None:
         return self._app
 
     @property
-    def domain_stores(self) -> dict[str, Any]:
+    def domain_stores(self) -> dict[str, object]:
         return self._domain_stores
 
-    def register_store(self, name: str, store: Any) -> None:
+    def register_store(self, name: str, store: object) -> None:
         """注册域级持久化存储"""
         self._domain_stores[name] = store
+
+
+class DomainNamedPort(Protocol):
+    """带唯一名字的注册项（工具 / 技能清单）。"""
+
+    @property
+    def name(self) -> str: ...
+
+
+class DomainToolRegistryPort(Protocol):
+    """域运行时注册工具所需的最小工具注册表视图。"""
+
+    def register(self, tool: object) -> None: ...
+
+    def unregister(self, name: str) -> None: ...
+
+
+class DomainHookDispatcherPort(Protocol):
+    """域运行时注册钩子所需的最小钩子分发器视图。"""
+
+    def register(self, event: object, handler: object) -> None: ...
+
+    def unregister(self, event: object, handler: object) -> None: ...
+
+
+class DomainSkillCatalogPort(Protocol):
+    """动态技能表视图（SkillCatalogState 的结构化子集）。"""
+
+    @property
+    def dynamic_skills(self) -> dict[str, DomainNamedPort]: ...
+
+
+class DomainSkillProviderPort(Protocol):
+    """域运行时注入动态技能所需的最小技能提供者视图。"""
+
+    @property
+    def _dynamic_state(self) -> DomainSkillCatalogPort: ...
 
 
 class DomainRuntimeContext:
@@ -119,14 +168,14 @@ class DomainRuntimeContext:
     def __init__(
         self,
         domain_name: str,
-        tool_registry: Any = None,
-        hook_dispatcher: Any = None,
-        governance_reducers: list[Any] | None = None,
-        skill_provider: Any = None,
+        tool_registry: DomainToolRegistryPort | None = None,
+        hook_dispatcher: DomainHookDispatcherPort | None = None,
+        governance_reducers: list[object] | None = None,
+        skill_provider: DomainSkillProviderPort | None = None,
         *,
-        tool_wrapper: Any = None,
-        hook_wrapper: Any = None,
-        domain_stores: dict[str, Any] | None = None,
+        tool_wrapper: Callable[[DomainNamedPort, str], DomainNamedPort] | None = None,
+        hook_wrapper: Callable[[object, str], object] | None = None,
+        domain_stores: dict[str, object] | None = None,
     ) -> None:
         self._domain_name = domain_name
         self._tool_registry = tool_registry
@@ -138,10 +187,10 @@ class DomainRuntimeContext:
         self._hook_wrapper = hook_wrapper
         self._domain_stores = domain_stores or {}
         # 暂存
-        self._pending_tools: list[Any] = []
-        self._pending_hooks: list[tuple[Any, Any]] = []
-        self._pending_governance: list[Any] = []
-        self._pending_skills: list[Any] = []
+        self._pending_tools: list[DomainNamedPort] = []
+        self._pending_hooks: list[tuple[object, object]] = []
+        self._pending_governance: list[object] = []
+        self._pending_skills: list[DomainNamedPort] = []
         self._pending_registry_cleanups: list[Callable[[], None]] = []
         self._committed = False
 
@@ -150,23 +199,23 @@ class DomainRuntimeContext:
         return self._domain_name
 
     @property
-    def domain_stores(self) -> dict[str, Any]:
+    def domain_stores(self) -> dict[str, object]:
         """基础设施阶段注册的域存储映射，供运行时工具引用。"""
         return self._domain_stores
 
-    def register_tool(self, tool: Any) -> None:
+    def register_tool(self, tool: DomainNamedPort) -> None:
         """暂存工具注册（commit 时生效）。"""
         self._pending_tools.append(tool)
 
-    def register_hook(self, event: Any, handler: Any) -> None:
+    def register_hook(self, event: object, handler: object) -> None:
         """暂存钩子注册（commit 时生效）"""
         self._pending_hooks.append((event, handler))
 
-    def register_governance(self, reducer: Any) -> None:
+    def register_governance(self, reducer: object) -> None:
         """暂存治理规则注册（commit 时生效）"""
         self._pending_governance.append(reducer)
 
-    def register_skill(self, skill_manifest: Any) -> None:
+    def register_skill(self, skill_manifest: DomainNamedPort) -> None:
         """暂存域技能注册（commit 时生效）。
 
         域通过此方法将 SKILL.md 解析后的 SkillManifest 注入平台技能目录。
@@ -193,55 +242,61 @@ class DomainRuntimeContext:
         if self._committed:
             return
         committed_tools: list[str] = []
-        committed_hooks: list[tuple[Any, Any]] = []
+        committed_hooks: list[tuple[object, object]] = []
         committed_governance_count = 0
         committed_skills: list[str] = []
         try:
             # 注册 tools（可选包裹故障隔离层）
             for tool in self._pending_tools:
-                wrapped = self._tool_wrapper(tool, self._domain_name) if self._tool_wrapper else tool
+                wrapped = (
+                    self._tool_wrapper(tool, self._domain_name) if self._tool_wrapper else tool
+                )
                 if self._tool_registry is not None:
                     self._tool_registry.register(wrapped)
                 committed_tools.append(wrapped.name)
             # 注册 hooks（可选包裹故障隔离层）
             for event, handler in self._pending_hooks:
-                wrapped = self._hook_wrapper(handler, self._domain_name) if self._hook_wrapper else handler
+                wrapped_hook = (
+                    self._hook_wrapper(handler, self._domain_name)
+                    if self._hook_wrapper
+                    else handler
+                )
                 if self._hook_dispatcher is not None:
-                    self._hook_dispatcher.register(event, wrapped)
-                committed_hooks.append((event, wrapped))
+                    self._hook_dispatcher.register(event, wrapped_hook)
+                committed_hooks.append((event, wrapped_hook))
             # 追加 governance reducers
             self._governance_reducers.extend(self._pending_governance)
             committed_governance_count = len(self._pending_governance)
             # 注册域技能（注入 _skill_provider 的动态技能表）
             for skill_manifest in self._pending_skills:
                 if self._skill_provider is not None:
-                    self._skill_provider._dynamic_state.dynamic_skills[skill_manifest.name] = skill_manifest
+                    self._skill_provider._dynamic_state.dynamic_skills[skill_manifest.name] = (
+                        skill_manifest
+                    )
                 committed_skills.append(skill_manifest.name)
             self._committed = True
         except Exception:
-            self._rollback(committed_tools, committed_hooks, committed_governance_count, committed_skills)
+            self._rollback(
+                committed_tools, committed_hooks, committed_governance_count, committed_skills
+            )
             raise
 
     def _rollback(
         self,
         tools: list[str],
-        hooks: list[tuple[Any, Any]],
+        hooks: list[tuple[object, object]],
         governance_count: int,
         skills: list[str] | None = None,
     ) -> None:
         """回滚已注册内容"""
         for name in tools:
             if self._tool_registry is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._tool_registry.unregister(name)
-                except Exception:
-                    pass
         for event, handler in hooks:
             if self._hook_dispatcher is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._hook_dispatcher.unregister(event, handler)
-                except Exception:
-                    pass
         # 回滚 governance
         for _ in range(governance_count):
             if self._governance_reducers:
@@ -249,16 +304,12 @@ class DomainRuntimeContext:
         # 回滚域技能
         for name in skills or []:
             if self._skill_provider is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._skill_provider._dynamic_state.dynamic_skills.pop(name, None)
-                except Exception:
-                    pass
         # 回滚全局注册表清理（逆序）
         for cleanup_fn in reversed(self._pending_registry_cleanups):
-            try:
+            with contextlib.suppress(Exception):
                 cleanup_fn()
-            except Exception:
-                pass
         self._pending_registry_cleanups.clear()
 
 
@@ -267,35 +318,35 @@ class DomainLifecycleContext:
 
     def __init__(
         self,
-        app: Any = None,
-        settings: Any = None,
-        task_manager: Any = None,
+        app: FastAPI | None = None,
+        settings: Settings | None = None,
+        task_manager: TaskManagerProtocol | None = None,
     ) -> None:
         self._app = app
         self._settings = settings
         self._task_manager = task_manager
-        self._domain_routers: list[tuple[Any, str]] = []
+        self._domain_routers: list[tuple[APIRouter, str]] = []
 
     @property
-    def app(self) -> Any:
+    def app(self) -> FastAPI | None:
         return self._app
 
     @property
-    def settings(self) -> Any:
+    def settings(self) -> Settings | None:
         return self._settings
 
-    def register_route(self, router: Any, prefix: str = "") -> None:
+    def register_route(self, router: APIRouter, prefix: str = "") -> None:
         """注册域级 API 路由"""
         self._domain_routers.append((router, prefix))
 
-    def spawn_background_task(self, name: str, coro: Any) -> str | None:
+    def spawn_background_task(self, name: str, coro: TaskCoro) -> str | None:
         """启动后台任务（需要 task_manager）"""
         if self._task_manager is not None:
             return self._task_manager.spawn(name, coro)
         return None
 
     @property
-    def domain_routers(self) -> list[tuple[Any, str]]:
+    def domain_routers(self) -> list[tuple[APIRouter, str]]:
         return self._domain_routers
 
 
@@ -324,16 +375,14 @@ class DomainBundle(Protocol):
     depends_on: list[str]
     """依赖的其他域，如 ["base_domain"] """
 
-    task_store: Any | None = None
+    task_store: object | None = None
     """可选：域长任务 store 实例（需继承 StatusEmitterMixin）。
 
     声明后 DomainRegistry.apply_lifecycle 会自动完成 emitter 接线
     （web_deps 可用时），域 bundle 无需手写接线代码。不声明则不接。
     """
 
-    def on_build_infrastructure(
-        self, ctx: DomainInfrastructureContext
-    ) -> Awaitable[None] | None:
+    def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> Awaitable[None] | None:
         """基础设施构建时调用 — 注册持久化存储，支持同步或异步实现。"""
         ...
 

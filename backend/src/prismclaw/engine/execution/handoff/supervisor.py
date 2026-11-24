@@ -4,17 +4,17 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
+from prismclaw.engine.execution.handoff.contract import (
+    HandoffRequestEntry,
+    handoff_request_entry_from_payload,
+)
 from prismclaw.engine.execution.handoff.match import (
     find_merge_matches,
     find_single_match,
     order_merged_chains,
-)
-from prismclaw.engine.execution.handoff.contract import (
-    HandoffRequestEntry,
-    handoff_request_entry_from_payload,
 )
 from prismclaw.engine.execution.handoff.store import PendingHandoffStore
 from prismclaw.schema.content.content_types import ToolResult
@@ -77,9 +77,7 @@ class HandoffSupervisor:
     def current_turn(self, session_id: str) -> int:
         return self._turn_counter.get(session_id, 0)
 
-    async def insert_from_tool_results(
-        self, *, session_id: str, results: list[ToolResult]
-    ) -> int:
+    async def insert_from_tool_results(self, *, session_id: str, results: list[ToolResult]) -> int:
         n_inserted = 0
         for result in results:
             artifact = result.persistence_artifact
@@ -91,9 +89,7 @@ class HandoffSupervisor:
             if entry is None:
                 continue
             current_turn = self.current_turn(session_id)
-            await self._store.insert(
-                session_id=session_id, entry=entry, current_turn=current_turn
-            )
+            await self._store.insert(session_id=session_id, entry=entry, current_turn=current_turn)
             self._emit_chain_started(
                 session_id=session_id,
                 entry=entry,
@@ -122,20 +118,14 @@ class HandoffSupervisor:
             target, task = _extract_target_task(call)
             if not target or not task:
                 continue
-            merge_matches = find_merge_matches(
-                entries, target=target, task=task
-            )
+            merge_matches = find_merge_matches(entries, target=target, task=task)
             if len(merge_matches) >= 2:
                 source_entries = [m.entry for m in merge_matches]
                 ordered = order_merged_chains(source_entries)
                 merged_chain_id = uuid.uuid4().hex
-                effective = (
-                    max(e.source_effective_hop_index for e in ordered) + 1
-                )
+                effective = max(e.source_effective_hop_index for e in ordered) + 1
                 for entry in source_entries:
-                    await self._store.consume(
-                        session_id, _entry_to_subkey(entry)
-                    )
+                    await self._store.consume(session_id, _entry_to_subkey(entry))
                 entries = await self._store.get_all(session_id)
                 if effective >= self._max_chain_length:
                     cap_info = CapExceededInfo(
@@ -172,9 +162,7 @@ class HandoffSupervisor:
             if single is not None:
                 effective = single.entry.source_effective_hop_index + 1
                 if effective >= self._max_chain_length:
-                    consumed = await self._store.consume(
-                        session_id, _entry_to_subkey(single.entry)
-                    )
+                    consumed = await self._store.consume(session_id, _entry_to_subkey(single.entry))
                     if consumed:
                         entries = await self._store.get_all(session_id)
                     cap_info = CapExceededInfo(
@@ -195,9 +183,7 @@ class HandoffSupervisor:
                         terminated_at_hop=single.entry.source_hop_index + 1,
                     )
                 else:
-                    consumed = await self._store.consume(
-                        session_id, _entry_to_subkey(single.entry)
-                    )
+                    consumed = await self._store.consume(session_id, _entry_to_subkey(single.entry))
                     if consumed:
                         entries = await self._store.get_all(session_id)
                         result_map[call_id] = HandoffDispatchExtras(
@@ -211,7 +197,9 @@ class HandoffSupervisor:
                         )
         return result_map, cap_exceeded_map
 
-    def build_cap_exceeded_error_text(self, info: CapExceededInfo, *, terminated_at_hop: int) -> str:
+    def build_cap_exceeded_error_text(
+        self, info: CapExceededInfo, *, terminated_at_hop: int
+    ) -> str:
         return (
             f"[移交链长度已达上限：本次将是第 "
             f"{terminated_at_hop} 跳（有效跳数 {info.effective_hop_count}），"
@@ -245,26 +233,20 @@ class HandoffSupervisor:
             payload["source_is_fork"] = True
         self._emit_audit(payload)
 
-    async def expire_aged(
-        self, *, session_id: str, ttl_turns: int
-    ) -> list[HandoffRequestEntry]:
+    async def expire_aged(self, *, session_id: str, ttl_turns: int) -> list[HandoffRequestEntry]:
         current_turn = self.current_turn(session_id)
         expired = await self._store.expire_aged(
             session_id, current_turn=current_turn, ttl_turns=ttl_turns
         )
         for entry in expired:
-            self._emit_request_expired(
-                session_id=session_id, entry=entry, ttl_turns=ttl_turns
-            )
+            self._emit_request_expired(session_id=session_id, entry=entry, ttl_turns=ttl_turns)
         return expired
 
     async def clear_session(self, session_id: str) -> int:
         self._turn_counter.pop(session_id, None)
         return await self._store.clear_session(session_id)
 
-    def _build_entry(
-        self, handoff_request: dict[str, Any]
-    ) -> HandoffRequestEntry | None:
+    def _build_entry(self, handoff_request: dict[str, Any]) -> HandoffRequestEntry | None:
         entry = handoff_request_entry_from_payload(handoff_request)
         if entry is None:
             logger.warning(
@@ -279,7 +261,7 @@ class HandoffSupervisor:
         session_id: str,
         entry: HandoffRequestEntry,
     ) -> None:
-        payload = {
+        payload: dict[str, Any] = {
             "event": "handoff_chain_started",
             "ts": _now_iso(),
             "handoff_chain_id": entry.source_chain_id,
@@ -323,9 +305,7 @@ class HandoffSupervisor:
 
     def _emit_audit(self, payload: dict[str, Any]) -> None:
         try:
-            self._audit.info(
-                json.dumps(payload, separators=(",", ":"), sort_keys=False)
-            )
+            self._audit.info(json.dumps(payload, separators=(",", ":"), sort_keys=False))
         except Exception:
             logger.warning(
                 "handoff_supervisor.audit.emit_failed event=%s",
@@ -335,7 +315,7 @@ class HandoffSupervisor:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _entry_to_subkey(entry: HandoffRequestEntry) -> str:

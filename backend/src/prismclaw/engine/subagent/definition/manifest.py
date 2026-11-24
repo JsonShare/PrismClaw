@@ -53,9 +53,8 @@ class AgentManifest(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _normalize_tools_alias(cls, data: object) -> object:
-        if isinstance(data, dict):
-            if data.get("allowed_tools") is not None:
-                data.pop("tools", None)
+        if isinstance(data, dict) and data.get("allowed_tools") is not None:
+            data.pop("tools", None)
         return data
 
     @field_validator("name")
@@ -91,7 +90,7 @@ class AgentManifest(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _validate_handoff_tool_consistency(self) -> "AgentManifest":
+    def _validate_handoff_tool_consistency(self) -> AgentManifest:
         if self.can_handoff_to is None:
             return self
         if self.allowed_tools is None:

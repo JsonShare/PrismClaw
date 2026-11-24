@@ -7,11 +7,12 @@
   唯一兼容层），闭包直写 frame/ledger 的单一真相
 - IterationFrame / RunLedger 的默认独立实例（跨 RunLoopState 不共享）
 """
+
 from __future__ import annotations
 
 import pytest
 
-from prismclaw.engine.execution.control.kernel import Decision, LoopEvent
+from prismclaw.engine.execution.control.kernel import Decision
 from prismclaw.engine.execution.loop.types import (
     ExecutePort,
     LoopConfig,

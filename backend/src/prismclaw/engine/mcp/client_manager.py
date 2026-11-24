@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections import deque
+from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
 import mcp
@@ -47,6 +48,11 @@ from mcp.client.session_group import ClientSessionGroup
 
 from prismclaw.engine.mcp._composite import CompositeMCPManager
 from prismclaw.engine.mcp._declarative import DeclarativeMCPManager
+from prismclaw.engine.mcp._mixin_adapter import AdapterMixin
+from prismclaw.engine.mcp._mixin_config import ConfigMixin
+from prismclaw.engine.mcp._mixin_connection import ConnectionMixin
+from prismclaw.engine.mcp._mixin_lifecycle import LifecycleMixin
+from prismclaw.engine.mcp._mixin_registry import RegistryMixin
 from prismclaw.engine.mcp._patch import _install_mcp_stdio_client_patch
 from prismclaw.engine.mcp._types import (
     ConnectionSummary,
@@ -56,12 +62,6 @@ from prismclaw.engine.mcp._types import (
 )
 from prismclaw.engine.mcp._utils import _is_unfilled_placeholder, _ToolRegistryProto
 from prismclaw.engine.mcp.settings import McpSettings
-
-from prismclaw.engine.mcp._mixin_config import ConfigMixin
-from prismclaw.engine.mcp._mixin_connection import ConnectionMixin
-from prismclaw.engine.mcp._mixin_lifecycle import LifecycleMixin
-from prismclaw.engine.mcp._mixin_registry import RegistryMixin
-from prismclaw.engine.mcp._mixin_adapter import AdapterMixin
 
 if TYPE_CHECKING:
     from prismclaw.schema.services.task_protocol import TaskManagerProtocol
@@ -74,7 +74,7 @@ class PrismClawClientSessionGroup(ClientSessionGroup):
         self,
         _exc_type: type[BaseException] | None,
         _exc_val: BaseException | None,
-        _exc_tb: Any,
+        _exc_tb: TracebackType | None,
     ) -> bool | None:
         # Upstream ClientSessionGroup registers each session stack in the main
         # exit stack and also keeps it in _session_exit_stacks. Closing both
@@ -113,10 +113,10 @@ class MCPClientManager(ConfigMixin, ConnectionMixin, LifecycleMixin, RegistryMix
         self._registry: _ToolRegistryProto | None = None
         self._stderr_buffers: dict[str, deque[str]] = {}
         self._stderr_files: dict[str, Any] = {}
-        self._stderr_pumps: dict[str, asyncio.Task] = {}
+        self._stderr_pumps: dict[str, asyncio.Task[Any]] = {}
         self._runtime_telemetry: dict[str, Any] = {}
         self._supervisor_task_id: str | None = None
-        self._supervisor_task: asyncio.Task | None = None
+        self._supervisor_task: asyncio.Task[Any] | None = None
         self._shutdown_requested: asyncio.Event = asyncio.Event()
         self._supervisor_commands: asyncio.Queue[_SupervisorCommand] = asyncio.Queue()
         self._group: ClientSessionGroup = PrismClawClientSessionGroup()
@@ -130,8 +130,11 @@ class MCPClientManager(ConfigMixin, ConnectionMixin, LifecycleMixin, RegistryMix
 
 
 __all__ = [
+    "CompositeMCPManager",
     "ConnectionSummary",
+    "DeclarativeMCPManager",
     "MCPClientManager",
     "RestartResult",
     "ServerStatus",
+    "_is_unfilled_placeholder",
 ]

@@ -1,4 +1,4 @@
-"""Domain-specific PII/PHI pattern registry — core declares extension point, domains register patterns.
+"""领域 PII/PHI 模式注册表：核心声明扩展点，领域包注册具体模式。
 
 Core phi_sanitizer provides universal PII patterns (phone, email, SSN, ID card, etc.).
 Domain-specific patterns (e.g. record numbers, bed numbers, admission dates)
@@ -16,6 +16,7 @@ Usage:
         ...
     ])
 """
+
 from __future__ import annotations
 
 import re

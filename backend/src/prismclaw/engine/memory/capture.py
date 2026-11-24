@@ -20,11 +20,39 @@ import logging
 import re
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
-from prismclaw.schema.storage.storage_types import MemoryStore
 from prismclaw.schema.memory.classify import classify_scope, normalize_type
 from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.storage.storage_types import MemoryStore
+
+if TYPE_CHECKING:
+    from prismclaw.schema.llm.types import LLMClient
+
+    class GatewayDecisionPort(Protocol):
+        @property
+        def decision(self) -> str: ...
+
+    class MemoryGatewayPort(Protocol):
+        async def submit(
+            self, session_key: str, entry: MemoryEntry, *, source: str
+        ) -> GatewayDecisionPort: ...
+
+    class ValidationLedgerPort(Protocol):
+        async def record_validation(
+            self,
+            *,
+            session_key: str,
+            session_id: str,
+            entry_id: str | None,
+            entry_type: str,
+            fact_content: str,
+            validation_label: str,
+            confidence_before: float,
+            confidence_after: float,
+            reason: str,
+        ) -> None: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +97,10 @@ _EXTRACTION_PROMPT = """你是一个记忆提取引擎。以下是一段纯对�
    - time_scope: permanent（长期有效）/ short_term（临时状态/近期计划）/ recurring（周期性）
 4. "我今天/这周末想X"是 short_term；"我一直/我们总是X"是 permanent。
 5. 若整段对话没有值得记忆的内容，返回空数组。
-6. 事实以用户原话及其明确确认为准；assistant 的转述、总结与建议不是事实来源——禁止从中提取，禁止将 assistant 回答中丢失或弱化的细节（如省略的技术专名、数值）再生成一条"残缺版本"事实。同一主题只保留信息最完整的表述，与用户原话冲突的转述一律丢弃。
+6. 事实以用户原话及其明确确认为准；assistant 的转述、总结与建议不是事实来源——
+   禁止从中提取，禁止将 assistant 回答中丢失或弱化的细节（如省略的技术专名、数值）
+   再生成一条"残缺版本"事实。同一主题只保留信息最完整的表述，
+   与用户原话冲突的转述一律丢弃。
 
 ─── Never Infer 敏感属性约束（最高优先级）───
 以下属性{sensitive_attrs}，**只有用户明确说自己/他人"患有 X"/"正在使用 X"/"是 X"时才能存成 fact**。
@@ -101,10 +132,10 @@ def build_extraction_prompt(turns: list[dict[str, Any]]) -> str:
             lines.append(f"assistant: {assistant_text}")
     # NOTE: .replace (not str.format) — the prompt template embeds a JSON
     # example whose braces would be misread as format placeholders.
-    return _EXTRACTION_PROMPT.replace("{type_hint}", _TYPE_HINT).replace(
-        "{sensitive_attrs}", _SENSITIVE_ATTRIBUTES
-    ).replace(
-        "{transcript}", "\n".join(lines)
+    return (
+        _EXTRACTION_PROMPT.replace("{type_hint}", _TYPE_HINT)
+        .replace("{sensitive_attrs}", _SENSITIVE_ATTRIBUTES)
+        .replace("{transcript}", "\n".join(lines))
     )
 
 
@@ -148,7 +179,9 @@ def parse_facts(raw_text: str) -> list[dict[str, str]]:
     return facts
 
 
-async def extract_chat_facts(llm_client: Any, turns: list[dict[str, Any]]) -> list[dict[str, str]]:
+async def extract_chat_facts(
+    llm_client: LLMClient, turns: list[dict[str, Any]]
+) -> list[dict[str, str]]:
     """One batched LLM call over the buffered turns. Best-effort: [] on failure."""
     if not turns:
         return []
@@ -171,7 +204,7 @@ async def store_chat_facts(
     session_key: str,
     session_id: str,
     facts: list[dict[str, str]],
-    gateway: Any = None,
+    gateway: MemoryGatewayPort | None = None,
 ) -> int:
     """Persist extracted facts via the memorize store() path.
 
@@ -206,9 +239,7 @@ async def store_chat_facts(
                 if result.decision != "NOOP":
                     stored += 1
             except Exception:
-                logger.warning(
-                    "gateway submit failed for chat fact (skipped)", exc_info=True
-                )
+                logger.warning("gateway submit failed for chat fact (skipped)", exc_info=True)
             continue
         await memory_store.store(session_key, entry)
         stored += 1
@@ -230,14 +261,17 @@ async def store_chat_facts(
 #   3. rejected 直接丢弃，不入库
 # ═══════════════════════════════════════════════════════════════════
 
-_VALIDATION_PROMPT = """你是一个记忆审核引擎。以下是一段对话的完整轮次记录，以及另一个引擎从这段对话中提取出的候选记忆条目。
+_VALIDATION_PROMPT = """你是一个记忆审核引擎。以下是一段对话的完整轮次记录，
+以及另一个引擎从这段对话中提取出的候选记忆条目。
 请你逐条审查每个候选条目，判断它是否真的应该被记忆下来。
 
 审查标准：
-1. **主语归属（最高优先级）**："用户询问/讨论/帮朋友问/好奇 X" ≠ "用户患有/使用/是 X"。以下敏感属性只有用户明确说自己/他人有 X 才能判 pass：
+1. **主语归属（最高优先级）**："用户询问/讨论/帮朋友问/好奇 X" ≠ "用户患有/使用/是 X"。
+   以下敏感属性只有用户明确说自己/他人有 X 才能判 pass：
    {sensitive_attrs}
    如果候选条目的 fact 内容把"询问/讨论"当成了"确认"，一律判 rejected。
-2. **证据来源**：事实必须有对话中的明确证据（用户原话明确确认 / 用户原话提供了信息）。如果候选条目是从 assistant 的回答或外部知识里来的，判 flagged（降 confidence）。
+2. **证据来源**：事实必须有对话中的明确证据（用户原话明确确认 / 用户原话提供了信息）。
+   如果候选条目是从 assistant 的回答或外部知识里来的，判 flagged（降 confidence）。
 3. **自包含**：脱离对话后是否还能理解。如果需要当前对话上下文才能读懂，判 flagged。
 4. **冗余**：如果多个候选条目说的是同一件事，保留信息最完整的那条，其余判 rejected。
 
@@ -283,12 +317,10 @@ def build_validation_prompt(
             f"fact={c.get('fact', '')}"
         )
 
-    return _VALIDATION_PROMPT.replace(
-        "{sensitive_attrs}", _SENSITIVE_ATTRIBUTES
-    ).replace(
-        "{candidates_json}", "\n".join(candidates_lines)
-    ).replace(
-        "{transcript}", "\n".join(lines)
+    return (
+        _VALIDATION_PROMPT.replace("{sensitive_attrs}", _SENSITIVE_ATTRIBUTES)
+        .replace("{candidates_json}", "\n".join(candidates_lines))
+        .replace("{transcript}", "\n".join(lines))
     )
 
 
@@ -333,8 +365,10 @@ def parse_validation(raw_text: str, num_candidates: int) -> list[dict[str, Any]]
             label = "rejected"
         try:
             conf_raw = item.get("confidence")
-            confidence = float(conf_raw) if conf_raw is not None else (
-                1.0 if label == "pass" else 0.4 if label == "flagged" else 0.0
+            confidence = (
+                float(conf_raw)
+                if conf_raw is not None
+                else (1.0 if label == "pass" else 0.4 if label == "flagged" else 0.0)
             )
             confidence = max(0.0, min(1.0, confidence))
         except (TypeError, ValueError):
@@ -349,7 +383,7 @@ def parse_validation(raw_text: str, num_candidates: int) -> list[dict[str, Any]]
 
 
 async def validate_facts(
-    llm_client: Any,
+    llm_client: LLMClient,
     turns: list[dict[str, Any]],
     candidates: list[dict[str, str]],
 ) -> list[dict[str, Any]]:
@@ -362,7 +396,11 @@ async def validate_facts(
     if llm_client is None:
         # 没 LLM 就跳过 validator——但 confidence 保守设低
         return [
-            {"validation_label": "flagged", "confidence": 0.4, "reason": "validator 未运行（无 LLM）"}
+            {
+                "validation_label": "flagged",
+                "confidence": 0.4,
+                "reason": "validator 未运行（无 LLM）",
+            }
             for _ in candidates
         ]
     try:
@@ -370,17 +408,13 @@ async def validate_facts(
 
         response = await llm_client.complete(
             request=PackedLLMRequest(
-                messages=[
-                    {"role": "user", "content": build_validation_prompt(turns, candidates)}
-                ],
+                messages=[{"role": "user", "content": build_validation_prompt(turns, candidates)}],
                 system="",
                 context_payload=None,
                 cache_strategy={},
             )
         )
-        return parse_validation(
-            getattr(response, "text", "") or "", len(candidates)
-        )
+        return parse_validation(getattr(response, "text", "") or "", len(candidates))
     except Exception:
         logger.warning("chat fact validation: LLM call failed")
         return [
@@ -396,8 +430,8 @@ async def store_validated_chat_facts(
     session_id: str,
     facts: list[dict[str, str]],
     validation_results: list[dict[str, Any]],
-    gateway: Any = None,
-    validation_ledger: Any = None,
+    gateway: MemoryGatewayPort | None = None,
+    validation_ledger: ValidationLedgerPort | None = None,
 ) -> int:
     """Store facts that passed validator。
 
@@ -415,32 +449,38 @@ async def store_validated_chat_facts(
         logger.warning(
             "store_validated_chat_facts: facts(%d) vs validation(%d) length mismatch, "
             "fallback to rejected for misaligned entries",
-            len(facts), len(validation_results),
+            len(facts),
+            len(validation_results),
         )
         aligned_results = []
-        for i, f in enumerate(facts):
+        for i, _f in enumerate(facts):
             if i < len(validation_results):
                 aligned_results.append(validation_results[i])
             else:
-                aligned_results.append({
-                    "validation_label": "rejected",
-                    "confidence": 0.0,
-                    "reason": "validation_results 长度不足",
-                })
+                aligned_results.append(
+                    {
+                        "validation_label": "rejected",
+                        "confidence": 0.0,
+                        "reason": "validation_results 长度不足",
+                    }
+                )
         validation_results = aligned_results
 
-    for fact, vr in zip(facts, validation_results):
+    for fact, vr in zip(facts, validation_results, strict=False):
         label = vr.get("validation_label", "rejected")
         if label == "rejected":
             # rejected 也写 validation_events（方便审计知道丢了多少）
             await _maybe_write_validation_event(
-                validation_ledger, session_key, session_id,
-                fact=fact, validation=vr, entry_id=None,
+                validation_ledger,
+                session_key,
+                session_id,
+                fact=fact,
+                validation=vr,
+                entry_id=None,
             )
             continue
 
         confidence = float(vr.get("confidence", 0.4))
-        reason = vr.get("reason", "")
         origin = "auto_validated" if label == "pass" else "auto_flagged"
 
         entry = MemoryEntry(
@@ -462,9 +502,7 @@ async def store_validated_chat_facts(
         persisted = False
         if gateway is not None:
             try:
-                result = await gateway.submit(
-                    session_key, entry, source="auto_chat_extraction"
-                )
+                result = await gateway.submit(session_key, entry, source="auto_chat_extraction")
                 if result.decision != "NOOP":
                     stored += 1
                     persisted = True
@@ -480,15 +518,19 @@ async def store_validated_chat_facts(
 
         if persisted:
             await _maybe_write_validation_event(
-                validation_ledger, session_key, session_id,
-                fact=fact, validation=vr, entry_id=entry.id,
+                validation_ledger,
+                session_key,
+                session_id,
+                fact=fact,
+                validation=vr,
+                entry_id=entry.id,
             )
 
     return stored
 
 
 async def _maybe_write_validation_event(
-    validation_ledger: Any,
+    validation_ledger: ValidationLedgerPort | None,
     session_key: str,
     session_id: str,
     *,
@@ -512,6 +554,4 @@ async def _maybe_write_validation_event(
             reason=validation.get("reason", "")[:500],
         )
     except Exception:
-        logger.warning(
-            "validation event write failed (non-fatal)", exc_info=True
-        )
+        logger.warning("validation event write failed (non-fatal)", exc_info=True)

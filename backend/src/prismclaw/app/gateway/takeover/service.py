@@ -4,19 +4,24 @@ import asyncio
 import dataclasses
 import hashlib
 import logging
-from pathlib import Path
 import time
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.session.types import CustomEntry, generate_entry_id, now_iso
-from prismclaw.runtime.facade.execution import RunRequest, run_agent_stream
+from prismclaw.engine.security.sandbox.policy import SandboxPolicy
 from prismclaw.runtime.facade.execution import (
+    RunRequest,
     evaluate_resume_decision,
+    is_recovery_probe_resumable,
     load_run_snapshot_for_tree,
     recovery_probe_required,
-    is_recovery_probe_resumable,
+    run_agent_stream,
 )
 from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.session.types import CustomEntry, generate_entry_id, now_iso
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 logger = logging.getLogger(__name__)
 _event_logger = SessionEventLogger()
@@ -37,22 +42,30 @@ _TAKEOVER_REASON_POLICY: dict[str, dict[str, Any]] = {
     "takeover_runtime_unavailable": {
         "category": "runtime",
         "retryable": True,
-        "operator_action": "Restore run ownership store and session store before retrying takeover.",
+        "operator_action": (
+            "Restore run ownership store and session store before retrying takeover."
+        ),
     },
     "ownership_not_found": {
         "category": "ownership",
         "retryable": True,
-        "operator_action": "Confirm the run is still active and inspect ownership TTL before retrying.",
+        "operator_action": (
+            "Confirm the run is still active and inspect ownership TTL before retrying."
+        ),
     },
     "ownership_missing_session_id": {
         "category": "ownership",
         "retryable": False,
-        "operator_action": "Treat as corrupt ownership data and inspect ownership/snapshot write path.",
+        "operator_action": (
+            "Treat as corrupt ownership data and inspect ownership/snapshot write path."
+        ),
     },
     "session_tree_not_found": {
         "category": "session_data",
         "retryable": False,
-        "operator_action": "Restore the session tree or recover the backing session store before takeover.",
+        "operator_action": (
+            "Restore the session tree or recover the backing session store before takeover."
+        ),
     },
     "snapshot_run_id_mismatch": {
         "category": "snapshot_consistency",
@@ -62,37 +75,45 @@ _TAKEOVER_REASON_POLICY: dict[str, dict[str, Any]] = {
     "owner_still_active": {
         "category": "ownership",
         "retryable": True,
-        "operator_action": "Do not take over while the previous owner is healthy; wait for stale/dead/missing.",
+        "operator_action": (
+            "Do not take over while the previous owner is healthy; wait for stale/dead/missing."
+        ),
     },
     "resume_not_auto_resumable": {
         "category": "resume_policy",
         "retryable": False,
-        "operator_action": "Inspect resume_disposition and resume_reason_code; human intervention may be required.",
+        "operator_action": (
+            "Inspect resume_disposition and resume_reason_code; human intervention may be required."
+        ),
     },
     "recovery_context_missing": {
         "category": "resume_context",
         "retryable": False,
-        "operator_action": "Inspect snapshot payload and restore missing task/review context before takeover.",
+        "operator_action": (
+            "Inspect snapshot payload and restore missing task/review context before takeover."
+        ),
     },
     "takeover_task_running": {
         "category": "coordination",
         "retryable": True,
-        "operator_action": "Inspect current takeover task and avoid duplicate trigger while it is still running.",
+        "operator_action": (
+            "Inspect current takeover task and avoid duplicate trigger while it is still running."
+        ),
     },
     "spawn_failed": {
         "category": "task_runtime",
         "retryable": True,
-        "operator_action": "Inspect task manager, workspace resolution, and runtime logs before retrying.",
+        "operator_action": (
+            "Inspect task manager, workspace resolution, and runtime logs before retrying."
+        ),
     },
 }
 
 
-def _require_runtime_sandbox_policy(state: Any) -> Any:
+def _require_runtime_sandbox_policy(state: object) -> SandboxPolicy:
     sandbox_policy = getattr(state, "sandbox_policy", None)
-    if sandbox_policy is None:
-        raise RuntimeError(
-            "takeover recovery requires app state sandbox_policy to be resolved"
-        )
+    if not isinstance(sandbox_policy, SandboxPolicy):
+        raise RuntimeError("takeover recovery requires app state sandbox_policy to be resolved")
     return sandbox_policy
 
 
@@ -114,7 +135,7 @@ def session_user_id(session_id: str) -> str | None:
     return user_id or None
 
 
-def resolve_takeover_workspace_path(state: Any, *, session_id: str, workspace_id: str) -> Path:
+def resolve_takeover_workspace_path(state: object, *, session_id: str, workspace_id: str) -> Path:
     user_id = session_user_id(session_id)
     if user_id is None:
         workspace_base = getattr(state, "workspace_base", None)
@@ -184,7 +205,7 @@ def _with_reason_policy(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _persist_takeover_state(
-    state: Any,
+    state: object,
     *,
     run_id: str,
     session_id: str,
@@ -232,7 +253,7 @@ async def _persist_takeover_state(
     return payload
 
 
-def latest_persisted_takeover_state(tree: Any, run_id: str) -> dict[str, Any] | None:
+def latest_persisted_takeover_state(tree: object, run_id: str) -> dict[str, Any] | None:
     get_branch = getattr(tree, "get_branch", None)
     if not callable(get_branch):
         return None
@@ -250,7 +271,9 @@ def latest_persisted_takeover_state(tree: Any, run_id: str) -> dict[str, Any] | 
     return None
 
 
-def persisted_takeover_history(tree: Any, run_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
+def persisted_takeover_history(
+    tree: object, run_id: str, *, limit: int = 5
+) -> list[dict[str, Any]]:
     get_branch = getattr(tree, "get_branch", None)
     if not callable(get_branch):
         return []
@@ -272,7 +295,7 @@ def persisted_takeover_history(tree: Any, run_id: str, *, limit: int = 5) -> lis
 
 
 async def latest_persisted_takeover_states_for_ownerships(
-    state: Any,
+    state: object,
     ownerships: list[dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     session_store = getattr(state, "session_store", None)
@@ -287,7 +310,9 @@ async def latest_persisted_takeover_states_for_ownerships(
         try:
             tree = await session_store.load(session_id)
         except Exception:
-            logger.warning("failed to load session tree for takeover state run_id=%s", run_id, exc_info=True)
+            logger.warning(
+                "failed to load session tree for takeover state run_id=%s", run_id, exc_info=True
+            )
             continue
         if tree is None:
             continue
@@ -298,7 +323,7 @@ async def latest_persisted_takeover_states_for_ownerships(
 
 
 async def persisted_takeover_histories_for_ownerships(
-    state: Any,
+    state: object,
     ownerships: list[dict[str, Any]],
     *,
     limit: int = 5,
@@ -329,7 +354,7 @@ async def persisted_takeover_histories_for_ownerships(
     return by_run_id
 
 
-def serialize_takeover_task(task: Any) -> dict[str, Any] | None:
+def serialize_takeover_task(task: object) -> dict[str, Any] | None:
     name = str(getattr(task, "name", "") or "")
     parsed = _parse_takeover_task_name(name)
     if parsed is None:
@@ -347,7 +372,7 @@ def serialize_takeover_task(task: Any) -> dict[str, Any] | None:
     }
 
 
-def cluster_takeover_tasks(task_manager: Any) -> list[dict[str, Any]]:
+def cluster_takeover_tasks(task_manager: object) -> list[dict[str, Any]]:
     if task_manager is None:
         return []
     list_tasks = getattr(task_manager, "list_tasks", None)
@@ -366,7 +391,7 @@ def cluster_takeover_tasks(task_manager: Any) -> list[dict[str, Any]]:
     return items
 
 
-def takeover_task_running(task_manager: Any, run_id: str) -> bool:
+def takeover_task_running(task_manager: object, run_id: str) -> bool:
     list_tasks = getattr(task_manager, "list_tasks", None)
     if not callable(list_tasks):
         return False
@@ -380,8 +405,11 @@ def takeover_task_running(task_manager: Any, run_id: str) -> bool:
     return False
 
 
-def _update_auto_takeover_status(state: Any, **fields: Any) -> dict[str, Any]:
-    current = getattr(state, "auto_takeover_status", None)
+_AUTO_TAKEOVER_STATUS_ATTR = "auto_takeover_status"
+
+
+def _update_auto_takeover_status(state: object, **fields: object) -> dict[str, Any]:
+    current = getattr(state, _AUTO_TAKEOVER_STATUS_ATTR, None)
     if not isinstance(current, dict):
         current = auto_takeover_status_snapshot(
             enabled=bool(getattr(state, "auto_takeover_task_id", None)),
@@ -389,7 +417,7 @@ def _update_auto_takeover_status(state: Any, **fields: Any) -> dict[str, Any]:
         )
     updated = dict(current)
     updated.update(fields)
-    state.auto_takeover_status = updated
+    setattr(state, _AUTO_TAKEOVER_STATUS_ATTR, updated)
     return updated
 
 
@@ -416,7 +444,7 @@ def _append_blocked_sample(
     samples.append(payload)
 
 
-def _enum_value_or_str(value: Any) -> str | None:
+def _enum_value_or_str(value: object) -> str | None:
     if value is None:
         return None
     enum_value = getattr(value, "value", None)
@@ -426,142 +454,172 @@ def _enum_value_or_str(value: Any) -> str | None:
 
 
 async def evaluate_takeover_eligibility(
-    state: Any,
+    state: object,
     run_id: str,
     *,
     workers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     if state is None:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "app_state_unavailable",
-            "reason_message": "Application state is unavailable.",
-            "http_status": 503,
-            "run_id": run_id,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "app_state_unavailable",
+                "reason_message": "Application state is unavailable.",
+                "http_status": 503,
+                "run_id": run_id,
+            }
+        )
     run_ownership_store = getattr(state, "run_ownership_store", None)
     session_store = getattr(state, "session_store", None)
     worker_registry = getattr(state, "worker_registry", None)
     if run_ownership_store is None or session_store is None:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "takeover_runtime_unavailable",
-            "reason_message": "Run ownership store or session store is unavailable.",
-            "http_status": 503,
-            "run_id": run_id,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "takeover_runtime_unavailable",
+                "reason_message": "Run ownership store or session store is unavailable.",
+                "http_status": 503,
+                "run_id": run_id,
+            }
+        )
 
     ownership = await run_ownership_store.get(run_id)
     if ownership is None:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "ownership_not_found",
-            "reason_message": "Run ownership record does not exist.",
-            "http_status": 404,
-            "run_id": run_id,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "ownership_not_found",
+                "reason_message": "Run ownership record does not exist.",
+                "http_status": 404,
+                "run_id": run_id,
+            }
+        )
     if not ownership.session_id:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "ownership_missing_session_id",
-            "reason_message": "Run ownership record does not carry session_id and cannot be resumed safely.",
-            "http_status": 409,
-            "run_id": run_id,
-            "session_id": None,
-            "previous_owner_worker_id": ownership.owner_worker_id,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "ownership_missing_session_id",
+                "reason_message": (
+                    "Run ownership record does not carry session_id and cannot be resumed safely."
+                ),
+                "http_status": 409,
+                "run_id": run_id,
+                "session_id": None,
+                "previous_owner_worker_id": ownership.owner_worker_id,
+            }
+        )
 
     tree = await session_store.load(ownership.session_id)
     if tree is None:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "session_tree_not_found",
-            "reason_message": "Session tree referenced by the ownership record could not be loaded.",
-            "http_status": 404,
-            "run_id": run_id,
-            "session_id": ownership.session_id,
-            "previous_owner_worker_id": ownership.owner_worker_id,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "session_tree_not_found",
+                "reason_message": (
+                    "Session tree referenced by the ownership record could not be loaded."
+                ),
+                "http_status": 404,
+                "run_id": run_id,
+                "session_id": ownership.session_id,
+                "previous_owner_worker_id": ownership.owner_worker_id,
+            }
+        )
     snapshot = load_run_snapshot_for_tree(tree)
     if snapshot.run_state.run_id != run_id:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "snapshot_run_id_mismatch",
-            "reason_message": "Latest session snapshot does not match the requested run_id.",
-            "http_status": 409,
-            "run_id": run_id,
-            "session_id": ownership.session_id,
-            "previous_owner_worker_id": ownership.owner_worker_id,
-            "snapshot_run_id": snapshot.run_state.run_id,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "snapshot_run_id_mismatch",
+                "reason_message": "Latest session snapshot does not match the requested run_id.",
+                "http_status": 409,
+                "run_id": run_id,
+                "session_id": ownership.session_id,
+                "previous_owner_worker_id": ownership.owner_worker_id,
+                "snapshot_run_id": snapshot.run_state.run_id,
+            }
+        )
 
     if workers is None:
         workers = await worker_registry.active_workers() if worker_registry else []
     owner_status = worker_status_map(workers).get(ownership.owner_worker_id, "missing")
     if owner_status not in {"stale", "dead", "missing"}:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "owner_still_active",
-            "reason_message": "Current run owner is still healthy enough and must not be taken over.",
-            "http_status": 409,
-            "run_id": run_id,
-            "session_id": ownership.session_id,
-            "previous_owner_worker_id": ownership.owner_worker_id,
-            "previous_owner_status": owner_status,
-        })
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "owner_still_active",
+                "reason_message": (
+                    "Current run owner is still healthy enough and must not be taken over."
+                ),
+                "http_status": 409,
+                "run_id": run_id,
+                "session_id": ownership.session_id,
+                "previous_owner_worker_id": ownership.owner_worker_id,
+                "previous_owner_status": owner_status,
+            }
+        )
 
     resume_decision = evaluate_resume_decision(snapshot)
     if not is_recovery_probe_resumable(resume_decision):
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "resume_not_recovery_resumable",
-            "reason_message": "Latest snapshot cannot enter recovery probe based resume/takeover.",
-            "http_status": 409,
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "resume_not_recovery_resumable",
+                "reason_message": (
+                    "Latest snapshot cannot enter recovery probe based resume/takeover."
+                ),
+                "http_status": 409,
+                "run_id": run_id,
+                "session_id": ownership.session_id,
+                "previous_owner_worker_id": ownership.owner_worker_id,
+                "previous_owner_status": owner_status,
+                "resume_disposition": resume_decision.disposition.value,
+                "resume_reason_code": resume_decision.reason_code,
+                "resume_reason_message": resume_decision.human_readable_reason,
+            }
+        )
+
+    if snapshot.active_context.task_spec is None:
+        return _with_reason_policy(
+            {
+                "eligible": False,
+                "reason_code": "recovery_context_missing",
+                "reason_message": (
+                    "Snapshot is missing task or review requirements context required for recovery."
+                ),
+                "http_status": 409,
+                "run_id": run_id,
+                "session_id": ownership.session_id,
+                "previous_owner_worker_id": ownership.owner_worker_id,
+                "previous_owner_status": owner_status,
+                "resume_disposition": resume_decision.disposition.value,
+                "resume_reason_code": resume_decision.reason_code,
+            }
+        )
+
+    return _with_reason_policy(
+        {
+            "eligible": True,
+            "reason_code": "eligible",
+            "reason_message": "Run is eligible for takeover.",
+            "http_status": 200,
             "run_id": run_id,
             "session_id": ownership.session_id,
+            "workspace_id": snapshot.run_state.workspace_id or "default",
             "previous_owner_worker_id": ownership.owner_worker_id,
             "previous_owner_status": owner_status,
+            "snapshot_cursor": ownership.snapshot_cursor,
+            "last_safe_boundary": _enum_value_or_str(ownership.last_safe_boundary),
             "resume_disposition": resume_decision.disposition.value,
             "resume_reason_code": resume_decision.reason_code,
             "resume_reason_message": resume_decision.human_readable_reason,
-        })
-
-    if snapshot.active_context.task_spec is None:
-        return _with_reason_policy({
-            "eligible": False,
-            "reason_code": "recovery_context_missing",
-            "reason_message": "Snapshot is missing task or review requirements context required for recovery.",
-            "http_status": 409,
-            "run_id": run_id,
-            "session_id": ownership.session_id,
-            "previous_owner_worker_id": ownership.owner_worker_id,
-            "previous_owner_status": owner_status,
-            "resume_disposition": resume_decision.disposition.value,
-            "resume_reason_code": resume_decision.reason_code,
-        })
-
-    return _with_reason_policy({
-        "eligible": True,
-        "reason_code": "eligible",
-        "reason_message": "Run is eligible for takeover.",
-        "http_status": 200,
-        "run_id": run_id,
-        "session_id": ownership.session_id,
-        "workspace_id": snapshot.run_state.workspace_id or "default",
-        "previous_owner_worker_id": ownership.owner_worker_id,
-        "previous_owner_status": owner_status,
-        "snapshot_cursor": ownership.snapshot_cursor,
-        "last_safe_boundary": _enum_value_or_str(ownership.last_safe_boundary),
-        "resume_disposition": resume_decision.disposition.value,
-        "resume_reason_code": resume_decision.reason_code,
-        "resume_reason_message": resume_decision.human_readable_reason,
-        "recovery_probe_required": recovery_probe_required(resume_decision),
-        "resume_from_boundary": (
-            resume_decision.resume_from_boundary.value
-            if resume_decision.resume_from_boundary is not None
-            else None
-        ),
-    })
+            "recovery_probe_required": recovery_probe_required(resume_decision),
+            "resume_from_boundary": (
+                resume_decision.resume_from_boundary.value
+                if resume_decision.resume_from_boundary is not None
+                else None
+            ),
+        }
+    )
 
 
 def preferred_takeover_worker(run_id: str, healthy_workers: list[str]) -> str | None:
@@ -576,16 +634,18 @@ def preferred_takeover_worker(run_id: str, healthy_workers: list[str]) -> str | 
 async def consume_takeover_recovery(
     run_request: RunRequest,
     *,
-    state: Any,
-    deps: Any,
+    state: object,
+    deps: AgentRunnerDeps,
     tool_workspace_path: Path,
     trigger_mode: str,
 ) -> None:
     terminated_by = "unknown"
     try:
-        async for event in run_agent_stream(run_request, deps, tool_workspace_path=tool_workspace_path):
+        async for event in run_agent_stream(
+            run_request, deps, tool_workspace_path=tool_workspace_path
+        ):
             if hasattr(event, "type"):
-                terminated_by = str(getattr(event, "type"))
+                terminated_by = str(event.type)
         await _persist_takeover_state(
             state,
             run_id=str(run_request.recovery_run_id or run_request.request_id or ""),
@@ -593,7 +653,9 @@ async def consume_takeover_recovery(
             status="completed",
             trigger_mode=trigger_mode,
             recovery_reason=run_request.recovery_reason or "unknown",
-            owner_worker_id=str(getattr(getattr(state, "worker_registry", None), "worker_id", "") or ""),
+            owner_worker_id=str(
+                getattr(getattr(state, "worker_registry", None), "worker_id", "") or ""
+            ),
             previous_owner_worker_id=run_request.recovery_owner_worker_id,
             resume_from_boundary=None,
             terminated_by=terminated_by,
@@ -606,7 +668,9 @@ async def consume_takeover_recovery(
             status="failed",
             trigger_mode=trigger_mode,
             recovery_reason=run_request.recovery_reason or "unknown",
-            owner_worker_id=str(getattr(getattr(state, "worker_registry", None), "worker_id", "") or ""),
+            owner_worker_id=str(
+                getattr(getattr(state, "worker_registry", None), "worker_id", "") or ""
+            ),
             previous_owner_worker_id=run_request.recovery_owner_worker_id,
             error="takeover_recovery_failed",
         )
@@ -625,7 +689,7 @@ async def consume_takeover_recovery(
 
 
 async def spawn_takeover_recovery(
-    state: Any,
+    state: object,
     eligibility: dict[str, Any],
     *,
     trigger_mode: str,
@@ -701,7 +765,7 @@ async def spawn_takeover_recovery(
     return payload
 
 
-async def auto_takeover_once(state: Any) -> list[dict[str, Any]]:
+async def auto_takeover_once(state: object) -> list[dict[str, Any]]:
     run_ownership_store = getattr(state, "run_ownership_store", None)
     worker_registry = getattr(state, "worker_registry", None)
     task_manager = getattr(state, "task_manager", None)
@@ -827,7 +891,7 @@ async def auto_takeover_once(state: Any) -> list[dict[str, Any]]:
     return started
 
 
-async def auto_takeover_loop(state: Any, *, interval_s: float = 10.0) -> None:
+async def auto_takeover_loop(state: object, *, interval_s: float = 10.0) -> None:
     try:
         _update_auto_takeover_status(
             state,

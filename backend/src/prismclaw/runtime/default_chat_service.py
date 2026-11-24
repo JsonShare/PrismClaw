@@ -3,15 +3,20 @@
 唯一知道 AgentRunnerDeps 的 ChatService 实现。
 runtime 层持有此实现并注入到 channels 层，channels 只依赖 ChatService Protocol。
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.agent.types import RunRequest
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.loop.runner import run_agent_stream
 from prismclaw.schema.agent.run_control_types import RunControl
+from prismclaw.schema.agent.types import RunRequest
+
+if TYPE_CHECKING:
+    from prismclaw.schema.storage.storage_types import SessionStore
 
 
 class DefaultChatService:
@@ -21,8 +26,11 @@ class DefaultChatService:
         self._deps = deps
 
     @property
-    def session_store(self) -> Any:
-        return self._deps.session_store
+    def session_store(self) -> SessionStore:
+        store = self._deps.session_store
+        if store is None:
+            raise RuntimeError("DefaultChatService 需要 AgentRunnerDeps.session_store")
+        return store
 
     @property
     def deps(self) -> AgentRunnerDeps:
@@ -33,7 +41,7 @@ class DefaultChatService:
         self,
         request: RunRequest,
         *,
-        tool_workspace_path: Any,
+        tool_workspace_path: str | Path,
         control: RunControl | None = None,
     ) -> AsyncIterator[Any]:
         return run_agent_stream(

@@ -1,4 +1,5 @@
 """运行时指令注入：块形状、幂等分隔符、失败不置标志。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -34,9 +35,15 @@ def test_list_system_appends_text_block_not_message():
 def test_soft_landing_prompt_is_appended_verbatim():
     state = _state("base")
 
-    assert _append_system_directive(
-        state, _SOFT_LANDING_PROMPT, reason="soft_landing", remaining_hard_s="12.0",
-    ) is True
+    assert (
+        _append_system_directive(
+            state,
+            _SOFT_LANDING_PROMPT,
+            reason="soft_landing",
+            remaining_hard_s="12.0",
+        )
+        is True
+    )
 
     assert state.prepared_turn.preflight.packed_request.system.endswith(
         _SOFT_LANDING_PROMPT.strip()

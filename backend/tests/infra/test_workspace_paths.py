@@ -3,11 +3,10 @@
 覆盖两件事：
   * 对话任务（sessions/<sid>）与固定业务域（biz_domain/<domain>/inbox/<record>）
     的路径形态，两者同级但结构不同（见 SDD 5.2.8.1）；
-  * 裸路径是确定性解析：读落 `sessions/<sid>/outputs/`，写必须显式前缀。
+  * 裸路径是确定性解析：读落 `sessions/<sid>/outbox/`，写必须显式前缀。
 """
-from __future__ import annotations
 
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
@@ -30,9 +29,7 @@ def ws_base(tmp_path, monkeypatch):
     from prismclaw.infra.settings import load_settings
 
     settings = load_settings()
-    monkeypatch.setattr(
-        settings.workspaces, "default", str(tmp_path), raising=False
-    )
+    monkeypatch.setattr(settings.workspaces, "default", str(tmp_path), raising=False)
     return tmp_path
 
 
@@ -58,37 +55,32 @@ def test_medical_upload_lands_in_biz_domain_inbox(ws_base):
 
     target = resolve_upload_dir("alice", "rpt-001")
     assert target == (
-        resolve_workspace_dir("alice").parent
-        / "biz_domain"
-        / "medical"
-        / "inbox"
-        / "rpt-001"
+        resolve_workspace_dir("alice").parent / "biz_domain" / "medical" / "inbox" / "rpt-001"
     )
 
 
 def test_session_inbox_stay_under_sessions(ws_base):
     target = resolve_session_inbox_dir("alice", "default", "sid-1")
-    assert target == (
-        resolve_workspace_dir("alice") / "sessions" / "sid-1" / "inbox"
-    )
+    assert target == (resolve_workspace_dir("alice") / "sessions" / "sid-1" / "inbox")
 
 
 @pytest.fixture
 def resolver_and_ws(tmp_path):
     ws = tmp_path / "web_alice" / "default"
-    (ws / "sessions" / "sid" / "outputs").mkdir(parents=True)
+    (ws / "sessions" / "sid" / "outbox").mkdir(parents=True)
     (ws / "biz_domain" / "medical" / "inbox" / "r1").mkdir(parents=True)
     resolver = WorkspaceResolver(WorkspaceConfig(resolve_path=lambda _wid: ws))
     return resolver, ws
 
 
 def test_inputs_prefix_is_no_longer_special(resolver_and_ws):
-    """`inputs/` 前缀已移除；它现在只是普通裸路径，读落到 session outputs/。"""
+    """`inputs/` 前缀已移除；它现在只是普通裸路径，读落到 session outbox/。"""
     resolver, ws = resolver_and_ws
     session_root = ws / "sessions" / "sid"
-    assert resolver.resolve_within(ws, "inputs/a.txt", session_root=session_root) == (
-        session_root / "outputs" / "inputs" / "a.txt"
-    ).resolve()
+    assert (
+        resolver.resolve_within(ws, "inputs/a.txt", session_root=session_root)
+        == (session_root / "outbox" / "inputs" / "a.txt").resolve()
+    )
 
 
 def test_project_prefix_write_into_biz_domain_is_blocked(resolver_and_ws):
@@ -104,15 +96,13 @@ def test_project_prefix_write_into_biz_domain_is_blocked(resolver_and_ws):
 
 def test_project_prefix_read_of_biz_domain_is_allowed(resolver_and_ws):
     resolver, ws = resolver_and_ws
-    resolved = resolver.resolve_within(
-        ws, "project/biz_domain/medical/inbox/r1/x.txt"
-    )
+    resolved = resolver.resolve_within(ws, "project/biz_domain/medical/inbox/r1/x.txt")
     assert resolved == ws / "biz_domain" / "medical" / "inbox" / "r1" / "x.txt"
 
 
-def test_outputs_prefix_still_maps_to_session_root(resolver_and_ws):
+def test_outbox_prefix_still_maps_to_session_root(resolver_and_ws):
     resolver, ws = resolver_and_ws
     resolved = resolver.resolve_within(
-        ws, "outputs/report.md", session_root=ws / "sessions" / "sid", for_write=True
+        ws, "outbox/report.md", session_root=ws / "sessions" / "sid", for_write=True
     )
-    assert resolved == ws / "sessions" / "sid" / "outputs" / "report.md"
+    assert resolved == ws / "sessions" / "sid" / "outbox" / "report.md"

@@ -248,9 +248,7 @@ async def test_heartbeat_checks_identity_and_extends_lease(store, clock: _Clock)
     assert (await store.list_active())[0].heartbeat == 1_700_000_009_000
 
 
-async def test_expired_lease_can_only_be_taken_over_with_a_new_fence(
-    store, clock: _Clock
-) -> None:
+async def test_expired_lease_can_only_be_taken_over_with_a_new_fence(store, clock: _Clock) -> None:
     lease = await store.claim("agent-a", "run-1", "worker-1", "token-1")
     assert lease is not None
     assert await store.takeover(lease, "run-early", "token-early") is None
@@ -331,9 +329,7 @@ async def test_different_agents_can_run_in_parallel(store) -> None:
     assert await store.validate(second)
 
 
-async def test_active_directory_survives_expiry_and_tracks_takeover(
-    store, clock: _Clock
-) -> None:
+async def test_active_directory_survives_expiry_and_tracks_takeover(store, clock: _Clock) -> None:
     lease = await store.claim(
         "agent-a",
         "run-1",

@@ -29,6 +29,7 @@
   - get_default_model()                读取全局默认模型名
   - set_default_model(provider, model) 设置全局默认模型（条目不存在或已停用则拒绝）
 """
+
 from __future__ import annotations
 
 import logging
@@ -48,6 +49,7 @@ class ModelRegistryError(ValueError):
 # 文件读写
 # ---------------------------------------------------------------------------
 
+
 def _models_config_path() -> Path:
     """返回 models 段所属配置文件路径（{项目根}/backend/configs/models.yaml）。
 
@@ -55,6 +57,7 @@ def _models_config_path() -> Path:
     避免把改动落到不承载该段的骨架文件上。
     """
     from prismclaw.infra.settings import config_file_owner
+
     return config_file_owner("models")
 
 
@@ -71,6 +74,7 @@ def _write_models_file(data: dict[str, Any]) -> None:
     """原子写回 models.yaml 并强制重载 settings 缓存。"""
     _write_config_document(_models_config_path(), data)
     from prismclaw.infra.settings import load_settings
+
     load_settings(force_reload=True)
 
 
@@ -109,6 +113,7 @@ def _default_model_of(data: dict[str, Any]) -> str:
 # 条目构造 / 投影
 # ---------------------------------------------------------------------------
 
+
 def _entry_projection(
     provider_name: str,
     provider: dict[str, Any],
@@ -141,7 +146,7 @@ def _entry_projection(
     }
 
 
-def _positive_int(value: Any, field: str) -> int:
+def _positive_int(value: int | float | str, field: str) -> int:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -202,6 +207,7 @@ def _apply_provider_fields(provider: dict[str, Any], payload: dict[str, Any]) ->
 # 定位
 # ---------------------------------------------------------------------------
 
+
 def _locate(
     data: dict[str, Any],
     provider_name: str,
@@ -233,6 +239,7 @@ def _is_builtin(entry: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 # 对外 API
 # ---------------------------------------------------------------------------
+
 
 def list_models() -> list[dict[str, Any]]:
     """列出全部模型条目（扁平行，内置优先、同类按名称排序）。"""
@@ -366,9 +373,7 @@ def delete_model(provider_name: str, model_id: str) -> None:
     if _is_builtin(entry):
         raise ModelRegistryError(f"builtin model cannot be deleted: {provider_name}/{model_id}")
     if _default_model_of(data) == model_id:
-        raise ModelRegistryError(
-            f"default model cannot be deleted: {provider_name}/{model_id}"
-        )
+        raise ModelRegistryError(f"default model cannot be deleted: {provider_name}/{model_id}")
 
     del provider["models"][model_id]
     if not provider["models"]:
@@ -385,9 +390,7 @@ def set_model_enabled(provider_name: str, model_id: str, enabled: bool) -> dict[
     if _is_builtin(entry):
         raise ModelRegistryError(f"builtin model cannot be disabled: {provider_name}/{model_id}")
     if not enabled and _default_model_of(data) == model_id:
-        raise ModelRegistryError(
-            f"default model cannot be disabled: {provider_name}/{model_id}"
-        )
+        raise ModelRegistryError(f"default model cannot be disabled: {provider_name}/{model_id}")
 
     entry["enabled"] = bool(enabled)
     _write_models_file(data)

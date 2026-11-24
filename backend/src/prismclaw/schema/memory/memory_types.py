@@ -4,6 +4,7 @@ Moved from prismclaw.schema.memory.entry to prismclaw.schema.memory
 so that contracts can reference these models without creating a kernel→contracts
 circular dependency.  kernel.memory.entry re-exports for backward compatibility.
 """
+
 from __future__ import annotations
 
 import time
@@ -11,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from prismclaw.schema.memory.classify import CANONICAL_TYPES, SOP_MEMORY_TYPE, normalize_type
+from prismclaw.schema.memory.classify import normalize_type
 
 MemoryLayer = Literal["L1", "L2", "L3"]
 L4ArtifactKind = Literal["archive", "pattern", "graph", "relation"]

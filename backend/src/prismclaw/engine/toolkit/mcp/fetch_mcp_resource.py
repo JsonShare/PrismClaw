@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from prismclaw.engine.mcp._types import ServerStatus
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
 from prismclaw.schema.content.content_types import ToolResult
+
+if TYPE_CHECKING:
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
 
 logger = logging.getLogger(__name__)
 
 
-def _safe_get_status(manager: Any, name: str) -> Any | None:
+def _safe_get_status(manager: MCPClientManager, name: str) -> ServerStatus | None:
     getter = getattr(manager, "get_status", None)
     if not callable(getter):
         return None
     status = getter(name)
-    if getattr(status, "name", None) != name:
+    if not isinstance(status, ServerStatus):
         return None
-    if getattr(status, "status", None) not in {"connected", "failed", "disabled", "pending"}:
+    if status.name != name:
         return None
     return status
 
@@ -48,7 +52,7 @@ class FetchMcpResourceTool:
     tool_class = "read"
     effect_class = "pure_read"
 
-    def __init__(self, mcp_manager: Any) -> None:
+    def __init__(self, mcp_manager: MCPClientManager) -> None:
         self._mcp_manager = mcp_manager
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -66,8 +70,7 @@ class FetchMcpResourceTool:
         if server not in configured:
             return error_result(
                 call_id,
-                f"fetch_mcp_resource：服务 {server!r} 未配置"
-                f"（已知：{sorted(configured)!r}）",
+                f"fetch_mcp_resource：服务 {server!r} 未配置（已知：{sorted(configured)!r}）",
             )
 
         status = _safe_get_status(self._mcp_manager, server)
@@ -77,8 +80,7 @@ class FetchMcpResourceTool:
                 return error_result(
                     call_id,
                     f"fetch_mcp_resource：服务 {server!r} 已禁用或仅为声明式配置，"
-                    f"没有可用的 MCP 会话"
-                    + (f" ({status.reason})" if status.reason else ""),
+                    f"没有可用的 MCP 会话" + (f" ({status.reason})" if status.reason else ""),
                 )
             if status is not None and status.status == "pending":
                 return error_result(
@@ -130,10 +132,14 @@ class FetchMcpResourceTool:
         return text_result(call_id, "\n\n".join(text_parts))
 
 
-def _safe_dump(item: Any) -> dict[str, Any]:
-    if hasattr(item, "model_dump"):
+def _safe_dump(item: object) -> dict[str, Any]:
+    dump = getattr(item, "model_dump", None)
+    if callable(dump):
         try:
-            return item.model_dump(mode="json")
+            dumped = dump(mode="json")
         except Exception:
             pass
+        else:
+            if isinstance(dumped, dict):
+                return dumped
     return {"repr": repr(item)}

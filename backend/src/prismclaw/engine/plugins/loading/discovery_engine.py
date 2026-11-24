@@ -2,9 +2,11 @@
 
 配置驱动发现，文件系统扫描作为补充。
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from dataclasses import dataclass, field
@@ -19,7 +21,9 @@ from prismclaw.engine.plugins.loading.load_result import (
     ManifestParseError,
     PluginError,
     PluginLoadBatch,
-    PluginLoadResult,
+)
+from prismclaw.engine.plugins.loading.load_result import (
+    PluginLoadResult as PluginLoadResult,
 )
 from prismclaw.engine.plugins.loading.load_strategy import (
     PluginLoadStrategy,
@@ -124,7 +128,7 @@ class PluginDiscoveryEngine:
                         source="config",
                         plugin=raw_id,
                         file_path="(settings.plugins.enabled)",
-                        line=0,
+                        line_no=0,
                         message=f"插件 ID '{raw_id}' 无效：{exc}",
                     )
                 )
@@ -156,9 +160,7 @@ class PluginDiscoveryEngine:
                         type="source_not_trusted",
                         source=plugin_id.source,
                         plugin=plugin_id.name,
-                        message=(
-                            f"来源 {plugin_id.source} 需要可信工作区才能加载"
-                        ),
+                        message=(f"来源 {plugin_id.source} 需要可信工作区才能加载"),
                     )
                 )
                 continue
@@ -216,9 +218,7 @@ class PluginDiscoveryEngine:
                     # 市场清单的 porting.remap 声明，name 用作共享数据目录键。
                     # 无任何插件特定逻辑。
                     porting = data.get("porting")
-                    remap_cfg = (
-                        porting.get("remap") if isinstance(porting, dict) else None
-                    )
+                    remap_cfg = porting.get("remap") if isinstance(porting, dict) else None
                     remap_rules = parse_remap_rules(remap_cfg)
                     mp_name = data.get("name")
                     marketplace_name = (
@@ -239,12 +239,8 @@ class PluginDiscoveryEngine:
                         if name in seen_names:
                             continue
                         seen_names.add(name)
-                        try:
-                            discovered.append(
-                                PluginID(name=name, source=dir_source.source)
-                            )
-                        except ValueError:
-                            pass
+                        with contextlib.suppress(ValueError):
+                            discovered.append(PluginID(name=name, source=dir_source.source))
         except OSError as exc:
             logger.debug("Failed to scan %s: %s", dir_source.path, exc)
 
@@ -261,12 +257,8 @@ class PluginDiscoveryEngine:
                         if entry.name in seen_names:
                             break
                         seen_names.add(entry.name)
-                        try:
-                            discovered.append(
-                                PluginID(name=entry.name, source=dir_source.source)
-                            )
-                        except ValueError:
-                            pass
+                        with contextlib.suppress(ValueError):
+                            discovered.append(PluginID(name=entry.name, source=dir_source.source))
                         break
         except OSError as exc:
             logger.debug("Failed to scan %s: %s", dir_source.path, exc)
@@ -395,7 +387,7 @@ class PluginLoadOrchestrator:
         marketplace_batch = PluginLoadBatch.empty()
         session_batch = PluginLoadBatch.empty()
         local_batch = PluginLoadBatch.empty()
-        for source, batch in zip(groups.keys(), group_results):
+        for source, batch in zip(groups.keys(), group_results, strict=False):
             if source == BUILTIN_SOURCE:
                 builtin_batch = batch
             elif source == "marketplace":
@@ -432,15 +424,13 @@ class PluginLoadOrchestrator:
 
         return PluginLoadResult(enabled=enabled, disabled=disabled, errors=errors)
 
-    async def _load_group(
-        self, source: str, plugin_ids: list[PluginID]
-    ) -> PluginLoadBatch:
+    async def _load_group(self, source: str, plugin_ids: list[PluginID]) -> PluginLoadBatch:
         """并行加载一组插件，单个失败转为错误记录。"""
         tasks = [self._load_one(pid) for pid in plugin_ids]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         batch = PluginLoadBatch()
-        for plugin_id, result in zip(plugin_ids, results):
-            if isinstance(result, Exception):
+        for plugin_id, result in zip(plugin_ids, results, strict=False):
+            if isinstance(result, BaseException):
                 batch.errors.append(
                     PluginError(
                         type="generic_error",
@@ -456,9 +446,7 @@ class PluginLoadOrchestrator:
                 batch.plugins.append(loaded)
         return batch
 
-    async def _load_one(
-        self, plugin_id: PluginID
-    ) -> tuple[LoadedPlugin | None, list[PluginError]]:
+    async def _load_one(self, plugin_id: PluginID) -> tuple[LoadedPlugin | None, list[PluginError]]:
         """加载单个插件。"""
         install_path = self._discovery.resolve_install_path(plugin_id)
         if install_path is None:
@@ -478,9 +466,7 @@ class PluginLoadOrchestrator:
                     enabled=True,
                     plugin_configs=self._plugin_configs,
                     data_base_dir=self._data_base_dir,
-                    porting_context=self._discovery.marketplace_porting_context(
-                        plugin_id.name
-                    ),
+                    porting_context=self._discovery.marketplace_porting_context(plugin_id.name),
                 )
         return None, [
             PluginError(

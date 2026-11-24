@@ -5,14 +5,6 @@ import time
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
-from prismclaw.engine.state.turn_state import TurnState
-from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.schema.agent.capability import EffectClass
-from prismclaw.schema.agent.task_runtime import TaskRuntimeState
-from prismclaw.schema.session.cache_types import (
-    CompressionRuntimeState,
-    PromptCacheRuntimeState,
-)
 
 from prismclaw.engine.execution.checkpoint.models import (
     BatchRuntimeRecord,
@@ -24,6 +16,14 @@ from prismclaw.engine.execution.checkpoint.models import (
     RunState,
     SystemPromptSectionState,
     ToolEffectRecord,
+)
+from prismclaw.engine.state.turn_state import TurnState
+from prismclaw.schema.agent.capability import EffectClass
+from prismclaw.schema.agent.task_runtime import TaskRuntimeState
+from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.session.cache_types import (
+    CompressionRuntimeState,
+    PromptCacheRuntimeState,
 )
 
 CURRENT_RUN_SNAPSHOT_VERSION = 6
@@ -54,7 +54,9 @@ class RunSnapshot(BaseModel):
     last_request_snapshot: RequestAssemblySnapshot | None = None
     prompt_cache_runtime: PromptCacheRuntimeState = Field(default_factory=PromptCacheRuntimeState)
     compression_runtime: CompressionRuntimeState = Field(default_factory=CompressionRuntimeState)
-    system_prompt_sections: SystemPromptSectionState = Field(default_factory=SystemPromptSectionState)
+    system_prompt_sections: SystemPromptSectionState = Field(
+        default_factory=SystemPromptSectionState
+    )
     invoked_skill_state: InvokedSkillState = Field(default_factory=InvokedSkillState)
     active_context: ActiveRunContextSnapshot = Field(default_factory=ActiveRunContextSnapshot)
     snapshot_cursor: str = ""
@@ -89,9 +91,8 @@ def is_recovery_probe_resumable(decision: ResumeDecision) -> bool:
 
 
 def recovery_probe_required(decision: ResumeDecision) -> bool:
-    return (
-        decision.disposition != ResumeDisposition.AUTO_RESUME
-        and is_recovery_probe_resumable(decision)
+    return decision.disposition != ResumeDisposition.AUTO_RESUME and is_recovery_probe_resumable(
+        decision
     )
 
 
@@ -109,7 +110,7 @@ class OwnershipRecord(BaseModel):
 RUN_SNAPSHOT_CUSTOM_TYPE = "run_snapshot"
 
 
-def parse_run_snapshot(data: Any) -> RunSnapshot | None:
+def parse_run_snapshot(data: object) -> RunSnapshot | None:
     if isinstance(data, RunSnapshot):
         return data
     if not isinstance(data, dict):
@@ -128,7 +129,7 @@ def parse_run_snapshot_json(payload: str) -> RunSnapshot | None:
     return parse_run_snapshot(data)
 
 
-def parse_ownership_record(data: Any) -> OwnershipRecord | None:
+def parse_ownership_record(data: object) -> OwnershipRecord | None:
     if isinstance(data, OwnershipRecord):
         return data
     if not isinstance(data, dict):
@@ -166,13 +167,14 @@ def build_empty_run_snapshot(
     )
 
 
-def load_run_snapshot_payload(session_id: str, payload: Any) -> RunSnapshot:
+def load_run_snapshot_payload(session_id: str, payload: object) -> RunSnapshot:
     snapshot = parse_run_snapshot(payload)
     if snapshot is None:
         raise ValueError("invalid run snapshot payload")
     if snapshot.run_state.session_id != session_id:
         raise ValueError(
-            f"run snapshot session mismatch: expected {session_id!r}, got {snapshot.run_state.session_id!r}"
+            f"run snapshot session mismatch: expected "
+            f"{session_id!r}, got {snapshot.run_state.session_id!r}"
         )
     return snapshot
 
@@ -193,7 +195,10 @@ def evaluate_resume_decision(snapshot: RunSnapshot) -> ResumeDecision:
         return ResumeDecision(
             disposition=ResumeDisposition.HUMAN_REVIEW,
             reason_code="approval_pending",
-            human_readable_reason="A tool approval decision is still pending and requires human action before resuming.",
+            human_readable_reason=(
+                "A tool approval decision is still pending "
+                "and requires human action before resuming."
+            ),
         )
     effect = snapshot.latest_tool_effect
     if effect is None:
@@ -206,7 +211,10 @@ def evaluate_resume_decision(snapshot: RunSnapshot) -> ResumeDecision:
             return ResumeDecision(
                 disposition=ResumeDisposition.HUMAN_REVIEW,
                 reason_code="batch_runtime_requires_review",
-                human_readable_reason="Latest snapshot carries a batch runtime state that requires operator review before resuming.",
+                human_readable_reason=(
+                    "Latest snapshot carries a batch runtime state "
+                    "that requires operator review before resuming."
+                ),
             )
         return ResumeDecision(
             disposition=ResumeDisposition.AUTO_RESUME,
@@ -219,30 +227,43 @@ def evaluate_resume_decision(snapshot: RunSnapshot) -> ResumeDecision:
             return ResumeDecision(
                 disposition=ResumeDisposition.HUMAN_REVIEW,
                 reason_code="subagent_parallel_unknown_effect",
-                human_readable_reason="Latest tool batch is a parallel sub-agent fan-out with unresolved effect semantics and requires operator review.",
+                human_readable_reason=(
+                    "Latest tool batch is a parallel sub-agent fan-out with "
+                    "unresolved effect semantics and requires operator review."
+                ),
             )
         if batch is not None and batch.effect_summary == "mixed":
             return ResumeDecision(
                 disposition=ResumeDisposition.HUMAN_REVIEW,
                 reason_code="mixed_batch_unknown_effect",
-                human_readable_reason="Latest tool batch mixes multiple effect classes and cannot be resumed automatically.",
+                human_readable_reason=(
+                    "Latest tool batch mixes multiple effect "
+                    "classes and cannot be resumed automatically."
+                ),
             )
         return ResumeDecision(
             disposition=ResumeDisposition.HUMAN_REVIEW,
             reason_code="unknown_effect",
-            human_readable_reason="Latest tool effect is unknown and must not be replayed automatically.",
+            human_readable_reason=(
+                "Latest tool effect is unknown and must not be replayed automatically."
+            ),
         )
     if effect.commit_state == CommitState.COMMIT_UNKNOWN:
         if batch is not None and batch.batch_kind == "subagent_parallel":
             return ResumeDecision(
                 disposition=ResumeDisposition.HUMAN_REVIEW,
                 reason_code="subagent_parallel_commit_unknown",
-                human_readable_reason="Latest parallel sub-agent batch has an unknown commit state and requires operator review.",
+                human_readable_reason=(
+                    "Latest parallel sub-agent batch has an unknown "
+                    "commit state and requires operator review."
+                ),
             )
         return ResumeDecision(
             disposition=ResumeDisposition.HUMAN_REVIEW,
             reason_code="commit_unknown",
-            human_readable_reason="Latest tool commit state is unknown and requires operator review.",
+            human_readable_reason=(
+                "Latest tool commit state is unknown and requires operator review."
+            ),
         )
     if effect.effect_class == EffectClass.EXTERNAL_MUTATION:
         return ResumeDecision(
@@ -250,7 +271,10 @@ def evaluate_resume_decision(snapshot: RunSnapshot) -> ResumeDecision:
             reason_code="external_mutation",
             human_readable_reason="External mutations require explicit review before resuming.",
         )
-    if effect.effect_class == EffectClass.LOCAL_MUTATION and effect.commit_state == CommitState.IN_PROGRESS:
+    if (
+        effect.effect_class == EffectClass.LOCAL_MUTATION
+        and effect.commit_state == CommitState.IN_PROGRESS
+    ):
         return ResumeDecision(
             disposition=ResumeDisposition.RESUME_BLOCKED,
             reason_code="local_mutation_in_progress",

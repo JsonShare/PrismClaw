@@ -14,6 +14,7 @@ which also live under ``~/.prismclaw``)::
 The base directory is overridable so tests and alternative deployments can
 redirect it without touching call sites.
 """
+
 from __future__ import annotations
 
 import re
@@ -44,9 +45,7 @@ def resolve_data_base_dir(data_base_dir: Path | str | None = None) -> Path:
     return Path.home() / ".prismclaw" / DEFAULT_DATA_BASE_DIRNAME
 
 
-def get_plugin_data_dir(
-    data_base_dir: Path | str | None, plugin_name: str
-) -> Path:
+def get_plugin_data_dir(data_base_dir: Path | str | None, plugin_name: str) -> Path:
     """Return the persistent data directory for ``plugin_name``.
 
     The plugin name is sanitized into a single filesystem-safe segment (path

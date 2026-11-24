@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.engine.hooks import (
     CompactionContext,
     PromptBuildContext,
@@ -10,6 +9,7 @@ from prismclaw.engine.hooks import (
     ResponseObservation,
 )
 from prismclaw.engine.utils.xml import xml_escape
+from prismclaw.schema.agent.run_control_types import RunControl
 from prismclaw.schema.content.compaction import CompactResult
 
 logger = logging.getLogger(__name__)

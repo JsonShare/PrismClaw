@@ -5,6 +5,10 @@ import os
 import secrets
 import socket
 import time
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +34,11 @@ def generate_worker_id() -> str:
 class WorkerRegistry:
     def __init__(
         self,
-        redis_client=None,
+        redis_client: Redis | None = None,
         worker_id: str = "",
         key: str = "prismclaw:workers",
         heartbeat_interval: int = 30,
-    ):
+    ) -> None:
         self._redis = redis_client
         self._worker_id = worker_id
         self._key = key
@@ -49,11 +53,12 @@ class WorkerRegistry:
         return self._worker_id
 
     async def register(self) -> None:
-        if not self.available:
+        redis_client = self._redis
+        if redis_client is None:
             return
         now = time.time()
         floor_cutoff = now - _REGISTER_PRUNE_FLOOR_SECONDS
-        pipe = self._redis.pipeline()
+        pipe = redis_client.pipeline()
         pipe.zadd(self._key, {self._worker_id: now})
         pipe.zremrangebyscore(self._key, "-inf", floor_cutoff)
         await pipe.execute()
@@ -62,24 +67,24 @@ class WorkerRegistry:
         await self.register()
 
     async def deregister(self) -> None:
-        if not self.available:
+        redis_client = self._redis
+        if redis_client is None:
             return
-        await self._redis.zrem(self._key, self._worker_id)
+        await redis_client.zrem(self._key, self._worker_id)
 
-    async def active_workers(self, stale_threshold: float = 90.0) -> list[dict]:
-        if not self.available:
+    async def active_workers(self, stale_threshold: float = 90.0) -> list[dict[str, Any]]:
+        redis_client = self._redis
+        if redis_client is None:
             return [{"id": self._worker_id, "last_heartbeat": time.time(), "status": "healthy"}]
 
         now = time.time()
         lazy_cutoff = now - stale_threshold * _LAZY_PRUNE_MULTIPLIER
         try:
-            await self._redis.zremrangebyscore(self._key, "-inf", lazy_cutoff)
+            await redis_client.zremrangebyscore(self._key, "-inf", lazy_cutoff)
         except Exception:
-            logger.debug(
-                "worker_registry.lazy_prune failed (non-fatal)", exc_info=True
-            )
+            logger.debug("worker_registry.lazy_prune failed (non-fatal)", exc_info=True)
 
-        members = await self._redis.zrangebyscore(self._key, "-inf", "+inf", withscores=True)
+        members = await redis_client.zrangebyscore(self._key, "-inf", "+inf", withscores=True)
         result = []
         for member, score in members or []:
             worker_id = member.decode() if isinstance(member, bytes) else member

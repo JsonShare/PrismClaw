@@ -7,6 +7,7 @@
   None，所有依赖该函数的检查点原生跳过。
 * agent.yaml 实际配置为 0（防配置回退）。
 """
+
 from __future__ import annotations
 
 import time
@@ -20,11 +21,13 @@ _AGENT_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "agent.yaml"
 
 
 def _guard(max_iterations: int) -> BudgetGuard:
-    return BudgetGuard(Budget(
-        max_iterations=max_iterations,
-        run_deadline_s=0.0,
-        run_started=0.0,
-    ))
+    return BudgetGuard(
+        Budget(
+            max_iterations=max_iterations,
+            run_deadline_s=0.0,
+            run_started=0.0,
+        )
+    )
 
 
 def test_budget_zero_max_iterations_never_fires():
@@ -59,5 +62,3 @@ def test_agent_config_budget_present():
     assert budget["tool_calls"] > 0
     assert budget["hard_s"] > 0
     assert budget["soft_s"] <= budget["hard_s"]
-
-

@@ -6,6 +6,7 @@
 
 迁移策略：与 RunLoopState 并存，提供受限写入方法，防止非法状态转换。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -78,9 +79,17 @@ class DecisionState:
         """从 RunLoopState 提取决策状态视图。"""
         evidence = getattr(state, "evidence_ledger", [])
         return cls(
-            tool_loop_count=getattr(state, "tool_loop_count", 0) if hasattr(state, "tool_loop_count") else 0,
-            search_loop_count=getattr(state, "search_loop_count", 0) if hasattr(state, "search_loop_count") else 0,
+            tool_loop_count=getattr(state, "tool_loop_count", 0)
+            if hasattr(state, "tool_loop_count")
+            else 0,
+            search_loop_count=getattr(state, "search_loop_count", 0)
+            if hasattr(state, "search_loop_count")
+            else 0,
             execution_evidence=list(evidence) if evidence else [],
-            recovery_mode=getattr(state, "recovery_mode", False) if hasattr(state, "recovery_mode") else False,
-            overflow_recovery_used=getattr(state, "overflow_recovery_used", False) if hasattr(state, "overflow_recovery_used") else False,
+            recovery_mode=getattr(state, "recovery_mode", False)
+            if hasattr(state, "recovery_mode")
+            else False,
+            overflow_recovery_used=getattr(state, "overflow_recovery_used", False)
+            if hasattr(state, "overflow_recovery_used")
+            else False,
         )

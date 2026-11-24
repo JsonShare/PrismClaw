@@ -2,6 +2,7 @@
 
 由 ``build_loop_config`` 绑定为 ``PreparePort.prepare_next_turn``。
 """
+
 from __future__ import annotations
 
 import logging
@@ -30,8 +31,13 @@ async def prepare_next_turn(
         _build_source_query_loop_state,
     )
 
+    tree = state.tree
+    snapshot = state.snapshot
+    if tree is None or snapshot is None:
+        raise RuntimeError("prepare_next_turn 缺少会话树或运行快照")
+
     query_loop_state = _build_source_query_loop_state(
-        tree=state.tree,
+        tree=tree,
         request=rt.request,
         deps=rt.deps,
         tool_ctx=rt.tool_ctx,
@@ -56,6 +62,7 @@ async def prepare_next_turn(
         # 调 LLM——设 terminal_error 让 agent_loop 直接 yield + return。
         from prismclaw.engine.execution.control.kernel import TerminalReason
         from prismclaw.engine.execution.loop import terminal as _terminal
+
         await _terminal.terminate(
             rt,
             state,
@@ -81,15 +88,15 @@ async def prepare_next_turn(
     result = await rt.pipeline.run(
         request=rt.request,
         deps=rt.deps,
-        tree=state.tree,
-        turn_state=state.snapshot.turn_state,
+        tree=tree,
+        turn_state=snapshot.turn_state,
         tool_workspace_path=rt.tool_workspace_path,
         effective_model=rt.effective_model,
         tool_ctx=rt.tool_ctx,
         skill_invocation=state.active_skill_invocation,
         attachment_guidance=rt.attachment_guidance,
         query_loop_state=query_loop_state,
-        compression_runtime=state.snapshot.compression_runtime,
+        compression_runtime=snapshot.compression_runtime,
         abort_event=rt.abort_event,
         compression_orchestrator=rt.deps.session_compressor,
     )
@@ -104,13 +111,14 @@ async def prepare_next_turn(
     if compression_preparation is not None and compression_preparation.action == "restart_turn":
         code = rt.recovery.consult("compression_restart")
         if code is not None:
-            _replay = list(
-                result.query_loop_state.query_view.source_messages.appended_messages
-            )
+            _replay = list(result.query_loop_state.query_view.source_messages.appended_messages)
             rt.run_projector.invalidate(getattr(rt.request, "session_id", None))
             return TurnUpdate(restart=True, pending_messages=_replay)
         await _terminal.terminate(
-            rt, state, "error", message="恢复链已耗尽（压缩重启被熔断）",
+            rt,
+            state,
+            "error",
+            message="恢复链已耗尽（压缩重启被熔断）",
         )
         return TurnUpdate(restart=False)
 

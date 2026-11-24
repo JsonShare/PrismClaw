@@ -6,12 +6,13 @@ from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.execution.staging.tool_result_persistence import (
-    is_persisted_content,
     PERSISTED_OUTPUT_TAG,
+    is_persisted_content,
 )
 from prismclaw.engine.toolkit.registry.tool_classification import is_network_read_tool
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True, slots=True)
 class ToolResultLifecycle:
@@ -27,7 +28,9 @@ class ToolResultLifecycle:
 
 _TOOL_LIFECYCLE: dict[str, ToolResultLifecycle] = {
     # Tier 1: ephemeral — consumed in the current reasoning step
-    "fetch_mcp_resource": ToolResultLifecycle(1, "使用 `fetch_mcp_resource` 工具重新获取该 MCP 资源。"),
+    "fetch_mcp_resource": ToolResultLifecycle(
+        1, "使用 `fetch_mcp_resource` 工具重新获取该 MCP 资源。"
+    ),
     "tool_search": ToolResultLifecycle(1, "使用 `tool_search` 工具重新检索。"),
     "skill_search": ToolResultLifecycle(1, "使用 `skill_search` 工具重新检索。"),
     "activate_skill": ToolResultLifecycle(1, "使用 `activate_skill` 工具重新激活该技能。"),
@@ -40,9 +43,7 @@ _TOOL_LIFECYCLE: dict[str, ToolResultLifecycle] = {
     "read": ToolResultLifecycle(8, "使用 `read` 工具重新读取该文件。"),
 }
 _DEFAULT_KEEP_RECENT = 3  # fallback for unrecognised compactable tools
-_DEFAULT_KEEP_RECENT_TIERS = {
-    name: spec.keep_recent for name, spec in _TOOL_LIFECYCLE.items()
-}
+_DEFAULT_KEEP_RECENT_TIERS = {name: spec.keep_recent for name, spec in _TOOL_LIFECYCLE.items()}
 
 
 def is_compactable_tool(tool_name: str) -> bool:
@@ -62,6 +63,7 @@ def _load_keep_recent_tiers() -> dict[str, int]:
     """惰性读取配置分档表；加载失败回退内置分档。"""
     try:
         from prismclaw.infra.settings import load_settings
+
         tiers = load_settings().agent.context.compaction.microcompact_keep_recent
         if isinstance(tiers, dict) and tiers:
             return tiers
@@ -95,7 +97,7 @@ class QueryMicrocompactResult:
 def _build_cleared_reference(
     tool_name: str,
     call_id: str,
-    original_content: Any,
+    original_content: object,
 ) -> str:
     """Build a recovery-enabled cleared marker with content preview.
 
@@ -125,8 +127,7 @@ def _build_cleared_reference(
     tip = spec.restore_hint if spec else f"如需使用，请重新调用 `{tool_name}` 工具。"
 
     parts = [
-        f"{_CLEARED_TAG_PREFIX} tool={tool_name} call_id={call_id} "
-        f"原大小={original_size} 字符]。",
+        f"{_CLEARED_TAG_PREFIX} tool={tool_name} call_id={call_id} 原大小={original_size} 字符]。",
     ]
     if preview:
         parts.append(f"预览：{preview}")
@@ -134,7 +135,7 @@ def _build_cleared_reference(
     return "\n".join(parts)
 
 
-def _content_size(content: Any) -> int:
+def _content_size(content: object) -> int:
     if isinstance(content, str):
         return len(content)
     if isinstance(content, list):
@@ -159,7 +160,7 @@ def _resolve_results_dir(working_dir: str | Path | None) -> Path | None:
         return None
 
 
-def _extract_text(content: Any) -> str:
+def _extract_text(content: object) -> str:
     """Extract plain text from tool result content (str or list[ContentBlock])."""
     if isinstance(content, str):
         return content
@@ -176,7 +177,7 @@ def _extract_text(content: Any) -> str:
 
 def _archive_and_reference(
     *,
-    content: Any,
+    content: object,
     tool_name: str,
     call_id: str,
     tool_args: str,
@@ -197,6 +198,7 @@ def _archive_and_reference(
 
     try:
         import hashlib
+
         content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         safe_id = call_id.replace("/", "_").replace("\\", "_").replace("..", "_").replace(":", "_")
         filename = f"mc_{safe_id}_{content_hash}.txt"
@@ -230,7 +232,7 @@ def _describe_content(tool_name: str, text: str, tool_args: str) -> str:
         path = _extract_arg(tool_args, "file_path") or _extract_arg(tool_args, "path") or "file"
         return f"内容：读取文件 {path}（{line_count} 行）"
     elif tool_name == "grep":
-        match_count = sum(1 for l in lines if l and not l.startswith(" ") and ":" in l)
+        match_count = sum(1 for ln in lines if ln and not ln.startswith(" ") and ":" in ln)
         return f"内容：grep 搜索结果（{match_count} 处匹配）"
     elif tool_name == "glob":
         return f"内容：glob 搜索列表（{line_count} 项）"
@@ -247,6 +249,7 @@ def _extract_arg(args_str: str, key: str) -> str:
     """Try to extract a JSON argument value from tool args string."""
     try:
         import json
+
         parsed = json.loads(args_str)
         val = parsed.get(key, "")
         return str(val) if val else ""
@@ -255,7 +258,7 @@ def _extract_arg(args_str: str, key: str) -> str:
         idx = args_str.find(needle)
         if idx < 0:
             return ""
-        rest = args_str[idx + len(needle):]
+        rest = args_str[idx + len(needle) :]
         for i, ch in enumerate(rest):
             if ch == '"':
                 start = i + 1
@@ -369,7 +372,10 @@ def microcompact_query_messages(
 
     if cleared_count:
         logger.info(
-            "microcompact_query_messages: cleared %d old tool results (tiered retention, archived=%s)",
+            (
+                "microcompact_query_messages: cleared %d old "
+                "tool results (tiered retention, archived=%s)"
+            ),
             cleared_count,
             results_dir is not None,
         )
@@ -380,22 +386,23 @@ def microcompact_query_messages(
     )
 
 
-def _is_cleared(content: Any) -> bool:
+def _is_cleared(content: object) -> bool:
     """True if content already carries a "cleared" marker."""
     if isinstance(content, list):
         for block in content:
             if isinstance(block, dict) and block.get("type") == "text":
                 if _CLEARED_TAG_PREFIX in block.get("text", ""):
                     return True
-            elif hasattr(block, "text") and _CLEARED_TAG_PREFIX in (getattr(block, "text", "") or ""):
+            elif hasattr(block, "text") and _CLEARED_TAG_PREFIX in (
+                getattr(block, "text", "") or ""
+            ):
                 return True
-    elif isinstance(content, str):
-        if _CLEARED_TAG_PREFIX in content:
-            return True
+    elif isinstance(content, str) and _CLEARED_TAG_PREFIX in content:
+        return True
     return False
 
 
-def _build_cleared_content(content: Any, tool_name: str, call_id: str) -> Any:
+def _build_cleared_content(content: object, tool_name: str, call_id: str) -> object:
     """Build cleared content with full recovery guidance."""
     cleared_text = _build_cleared_reference(tool_name, call_id, content)
     if isinstance(content, list):
@@ -427,8 +434,8 @@ def tool_result_chars(messages: list[Any]) -> int:
 
 def batch_cleanup_threshold(
     *,
-    budget: Any,
-    tool_results: Any,
+    budget: object,
+    tool_results: object,
     window: int | None = None,
     model_max_output: int | None = None,
     tools_wire: int = 0,
@@ -451,7 +458,7 @@ def batch_microcompact_tick(
     prev_total: int,
     threshold: int,
     working_dir: str | Path | None = None,
-) -> tuple[int, int, "QueryMicrocompactResult | None"]:
+) -> tuple[int, int, QueryMicrocompactResult | None]:
     """batch 模式单轮决策：只累加「本轮新增」的 R 区结果字符，超阈值才批量清理。
 
     增量 = 当前全量结果字符 − 上一轮快照（prev_total）。上一轮清理导致总量

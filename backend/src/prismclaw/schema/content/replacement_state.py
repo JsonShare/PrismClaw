@@ -31,11 +31,12 @@ class ReplacementDecision(BaseModel):
     frozen: bool = True
 
     @classmethod
-    def from_artifact(cls, artifact: CompactionArtifact) -> "ReplacementDecision | None":
+    def from_artifact(cls, artifact: CompactionArtifact) -> ReplacementDecision | None:
         if artifact.scope not in {"tool_result", "context_block"}:
             logger.debug(
                 "ReplacementDecision.from_artifact skipped: unsupported scope=%s artifact_id=%s",
-                artifact.scope, artifact.artifact_id,
+                artifact.scope,
+                artifact.artifact_id,
             )
             return None
         source_id = artifact.source_id or artifact.tool_call_id
@@ -65,7 +66,7 @@ class ReplacementDecision(BaseModel):
 
     def to_compaction_artifact(self) -> CompactionArtifact:
         return CompactionArtifact(
-            artifact_type=self.artifact_type,  # type: ignore[arg-type]
+            artifact_type=self.artifact_type,
             artifact_id=self.reference_id or self.decision_id,
             scope=self.scope,
             reference_id=self.reference_id or self.decision_id,
@@ -127,7 +128,11 @@ class ReplacementDecisionState(BaseModel):
             decision.stable_payload()
             for decision in sorted(
                 self.latest_by_source_id().values(),
-                key=lambda item: (item.scope, item.source_id, item.reference_id or item.decision_id),
+                key=lambda item: (
+                    item.scope,
+                    item.source_id,
+                    item.reference_id or item.decision_id,
+                ),
             )
         ]
         if not normalized:
@@ -140,7 +145,7 @@ class ReplacementDecisionState(BaseModel):
         )
         return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
 
-    def merged_with(self, other: "ReplacementDecisionState | None") -> "ReplacementDecisionState":
+    def merged_with(self, other: ReplacementDecisionState | None) -> ReplacementDecisionState:
         merged = self.latest_by_source_id()
         if other is not None:
             merged.update(other.latest_by_source_id())

@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.foundation.metrics import emit
 
+if TYPE_CHECKING:
+    from prismclaw.schema.config.config import SoftBudgetConfig
 
 # ──────────────────────────── Soft Budget ────────────────────────────
 
 
-class SoftBudgetExhausted(Exception):
+class SoftBudgetExhaustedError(Exception):
     """Raised by the runner when the soft-budget terminate threshold is
     crossed mid-turn.
 
@@ -44,7 +47,7 @@ def evaluate_soft_budget(
     token_usage: int,
     effective_window: int,
     *,
-    soft_budget: Any | None,
+    soft_budget: SoftBudgetConfig | None,
 ) -> SoftBudgetVerdict:
     """判定是否注入警告或强制收尾。
 
@@ -77,7 +80,9 @@ def evaluate_soft_budget(
     )
 
 
-def render_budget_warning(verdict: SoftBudgetVerdict, *, soft_budget: Any | None) -> str:
+def render_budget_warning(
+    verdict: SoftBudgetVerdict, *, soft_budget: SoftBudgetConfig | None
+) -> str:
     """Render the warning template with the current ratio.
 
     Resolves ``warning_template`` from one of three sources (mirrors
@@ -88,7 +93,8 @@ def render_budget_warning(verdict: SoftBudgetVerdict, *, soft_budget: Any | None
     3. The hard-coded fallback (last-resort safety net).
     """
     configured = getattr(soft_budget, "warning_template", None) if soft_budget else None
-    if configured:
+    template: str
+    if isinstance(configured, str) and configured:
         # Heuristic: multi-line values are always inline.  Single-line
         # values: try to read as a filesystem path; on failure treat
         # as inline.  This keeps backwards-compat with tests / callers
@@ -98,26 +104,18 @@ def render_budget_warning(verdict: SoftBudgetVerdict, *, soft_budget: Any | None
         else:
             candidate = Path(configured)
             if not candidate.is_absolute():
-                candidate = (
-                    Path(__file__).resolve().parent
-                    / "prompts"
-                    / configured
-                )
+                candidate = Path(__file__).resolve().parent / "prompts" / configured
             try:
                 template = candidate.read_text(encoding="utf-8")
             except OSError:
                 template = configured
     else:
-        default_path = (
-            Path(__file__).resolve().parent
-            / "prompts"
-            / "budget_warning.md"
-        )
+        default_path = Path(__file__).resolve().parent / "prompts" / "budget_warning.md"
         try:
             template = default_path.read_text(encoding="utf-8")
         except OSError:
             template = (
-                "<budget_warning ratio=\"{ratio:.0%}\">\n"
+                '<budget_warning ratio="{ratio:.0%}">\n'
                 "你已使用有效上下文窗口的 {ratio:.0%}。"
                 "请完成当前步骤，返回结果后停止。"
                 "不要开始新的探索；除非绝对必要，不要调用更多工具。\n"
@@ -129,7 +127,7 @@ def render_budget_warning(verdict: SoftBudgetVerdict, *, soft_budget: Any | None
         # Fall back to a minimal but well-formed warning if the
         # operator-provided template is broken.
         return (
-            f"<budget_warning ratio=\"{verdict.ratio:.0%}\">\n"
+            f'<budget_warning ratio="{verdict.ratio:.0%}">\n'
             f"上下文使用率已达到 {verdict.ratio:.0%}；请完成当前步骤后停止。\n"
             f"</budget_warning>"
         )
@@ -140,7 +138,7 @@ def maybe_raise_soft_budget_exhausted(
     *,
     enabled: bool = True,
 ) -> None:
-    """Raise :class:`SoftBudgetExhausted` when the verdict crosses
+    """Raise :class:`SoftBudgetExhaustedError` when the verdict crosses
     the terminate ratio and the kill switch is on.
 
     Callers that want the runner to keep retrying should pass
@@ -150,18 +148,16 @@ def maybe_raise_soft_budget_exhausted(
     if not enabled:
         return
     if verdict.should_terminate:
-        try:
+        with contextlib.suppress(Exception):
             emit(_METRIC_SOFT_BUDGET_TERMINATE, 1.0, kind="counter")
-        except Exception:
-            pass
-        raise SoftBudgetExhausted(verdict)
+        raise SoftBudgetExhaustedError(verdict)
 
 
 def inject_budget_warning(
     messages: list[Any],
     verdict: SoftBudgetVerdict,
     *,
-    soft_budget: Any | None,
+    soft_budget: SoftBudgetConfig | None,
     enabled: bool = True,
 ) -> list[Any]:
     """在首条 system message 前注入预算警告。
@@ -177,10 +173,8 @@ def inject_budget_warning(
     except Exception:
         pass
     if verdict.should_terminate:
-        try:
+        with contextlib.suppress(Exception):
             emit(_METRIC_SOFT_BUDGET_TERMINATE, 1.0, kind="counter")
-        except Exception:
-            pass
     out: list[Any] = []
     injected = False
     for msg in messages:

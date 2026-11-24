@@ -4,7 +4,10 @@ Pure conversion functions with zero external dependencies.
 Moved from engine/scheduler/ to kernel/ so that web/persistence layers
 can reference these without coupling to engine.
 """
+
 from __future__ import annotations
+
+from typing import Any
 
 _WEEKDAY_MAP: dict[str, int] = {
     "mon": 1,
@@ -19,7 +22,7 @@ _WEEKDAY_MAP: dict[str, int] = {
 _WEEKDAY_REVERSE: dict[int, str] = {v: k for k, v in _WEEKDAY_MAP.items()}
 
 
-def spec_to_cron(spec: dict) -> str:
+def spec_to_cron(spec: dict[str, Any]) -> str:
     """Convert a frontend ScheduleSpec dict to a 5-field cron expression.
 
     Supported types: minute, hour, day, week, month.
@@ -71,7 +74,7 @@ def spec_to_cron(spec: dict) -> str:
     raise ValueError(f"unknown schedule type: {spec_type}")
 
 
-def cron_to_spec(cron: str) -> dict:
+def cron_to_spec(cron: str) -> dict[str, Any]:
     """Best-effort reverse conversion for display purposes.
 
     Handles the exact patterns produced by spec_to_cron. Falls back to
@@ -98,7 +101,12 @@ def cron_to_spec(cron: str) -> dict:
     # M H * * D
     if minute_f.isdigit() and hour_f.isdigit() and dom_f == "*" and dow_f.isdigit():
         weekday = _WEEKDAY_REVERSE.get(int(dow_f), "mon")
-        return {"type": "week", "weekday": weekday, "hour": hour_f.zfill(2), "minute": minute_f.zfill(2)}
+        return {
+            "type": "week",
+            "weekday": weekday,
+            "hour": hour_f.zfill(2),
+            "minute": minute_f.zfill(2),
+        }
 
     # M H D * *
     if minute_f.isdigit() and hour_f.isdigit() and dom_f.isdigit() and dow_f == "*":

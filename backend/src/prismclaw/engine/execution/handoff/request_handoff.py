@@ -8,8 +8,8 @@ from typing import Any
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
 from prismclaw.engine.execution.handoff.contract import build_handoff_request_payload
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
-from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.agent.data_types import TextBlock
+from prismclaw.schema.content.content_types import ToolResult
 
 _TARGET_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
 _TASK_MIN_CHARS = 8
@@ -31,16 +31,12 @@ _PARAMETERS_SCHEMA: dict[str, Any] = {
             "type": "string",
             "minLength": _TASK_MIN_CHARS,
             "maxLength": _TASK_MAX_CHARS,
-            "description": (
-                "交给下一子代理的任务描述，请尽量具体；将作为其初始用户消息。"
-            ),
+            "description": ("交给下一子代理的任务描述，请尽量具体；将作为其初始用户消息。"),
         },
         "context_hint": {
             "type": "string",
             "maxLength": _CONTEXT_HINT_MAX_CHARS,
-            "description": (
-                "可选补充上下文（如关键路径、此前决策），与任务描述一同传递。"
-            ),
+            "description": ("可选补充上下文（如关键路径、此前决策），与任务描述一同传递。"),
         },
     },
     "required": ["target", "task"],
@@ -57,15 +53,14 @@ class RequestHandoffTool:
     name = "request_handoff"
     side_effect = False
     tool_class = "read"
+    effect_class = "pure_read"
     visibility_scope = "subagent_only"
 
     def __init__(self) -> None:
         self.parameters = _PARAMETERS_SCHEMA
         self.description = _DESCRIPTION
 
-    async def execute(
-        self, args: dict[str, Any], context: ToolContext
-    ) -> ToolResult:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
         if context.subagent_depth <= 0:
             return _err(
@@ -83,8 +78,7 @@ class RequestHandoffTool:
         if context.handoff_request_seen:
             return _err(
                 call_id,
-                "本轮循环中已尝试过 request_handoff；"
-                "首次尝试生效（无论成功或失败）",
+                "本轮循环中已尝试过 request_handoff；首次尝试生效（无论成功或失败）",
             )
 
         context.handoff_request_seen = True
@@ -118,17 +112,11 @@ class RequestHandoffTool:
                     f"允许的目标：{', '.join(allowed)}",
                 )
 
-        source_subagent = (
-            getattr(manifest, "name", None) if manifest is not None else None
-        )
+        source_subagent = getattr(manifest, "name", None) if manifest is not None else None
         if source_subagent is None:
             source_subagent = context.subagent_name or "<unknown>"
-        skill_origin = (
-            getattr(manifest, "skill_origin", None) if manifest is not None else None
-        )
-        preload_skills = (
-            getattr(manifest, "preload_skills", None) if manifest is not None else None
-        )
+        skill_origin = getattr(manifest, "skill_origin", None) if manifest is not None else None
+        preload_skills = getattr(manifest, "preload_skills", None) if manifest is not None else None
         is_fork = bool(context.task_runtime_ctx.is_fork)
 
         source_chain_id = context.task_runtime_ctx.handoff_chain_id or uuid.uuid4().hex
@@ -154,18 +142,12 @@ class RequestHandoffTool:
 
         return ToolResult(
             tool_call_id=call_id,
-            content=[
-                TextBlock(
-                    text=f"已排队移交至 {target}；子代理循环到此结束。"
-                )
-            ],
+            content=[TextBlock(text=f"已排队移交至 {target}；子代理循环到此结束。")],
             is_error=False,
         )
 
 
-def _validate_format(
-    target: str, task: str, context_hint: str | None
-) -> str | None:
+def _validate_format(target: str, task: str, context_hint: str | None) -> str | None:
     if not target or not _TARGET_PATTERN.match(target):
         return (
             f"request_handoff 的 target 必须匹配 ^[a-z][a-z0-9-]*\\$ "
@@ -174,15 +156,9 @@ def _validate_format(
     task_norm = unicodedata.normalize("NFC", task)
     n = len(task_norm)
     if n < _TASK_MIN_CHARS:
-        return (
-            f"request_handoff 的 task 至少需要 {_TASK_MIN_CHARS} 个字符；"
-            f"实际收到 {n}"
-        )
+        return f"request_handoff 的 task 至少需要 {_TASK_MIN_CHARS} 个字符；实际收到 {n}"
     if n > _TASK_MAX_CHARS:
-        return (
-            f"request_handoff 的 task 不得超过 {_TASK_MAX_CHARS} 个字符；"
-            f"实际收到 {n}"
-        )
+        return f"request_handoff 的 task 不得超过 {_TASK_MAX_CHARS} 个字符；实际收到 {n}"
     if len(set(task_norm)) < _TASK_MIN_DISTINCT_CHARS:
         return (
             f"request_handoff 的 task 至少需包含 "

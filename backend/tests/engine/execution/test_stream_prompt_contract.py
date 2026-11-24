@@ -3,6 +3,7 @@
 防止回归——历史上两个注入函数各自把 `{"role": "system"}` 追加进 system 块数组，
 那是消息形状，不是文本块形状。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

@@ -11,6 +11,7 @@ Shell hook 细节：
 - ${PRISMCLAW_PLUGIN_ROOT} 变量替换
 - ${user_config.KEY} 变量替换
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,9 +22,10 @@ import re
 import shlex
 import sys
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from typing import Any
 
-from prismclaw.engine.plugins.hooks.schema import HookContext, HookResult
+from prismclaw.engine.plugins.hooks.schema import HookContext, HookOutcome, HookResult
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +48,7 @@ class HookHandler(ABC):
 class CallbackHookHandler(HookHandler):
     """Python callable hook 处理器。PrismClaw 已有此模式。"""
 
-    def __init__(self, callback: Any) -> None:
+    def __init__(self, callback: Callable[[HookContext], Awaitable[object] | object]) -> None:
         self._callback = callback
 
     async def execute(self, context: HookContext) -> HookResult:
@@ -67,7 +69,7 @@ class CallbackHookHandler(HookHandler):
         except Exception as exc:
             logger.error("Callback hook failed: %s", exc)
             return HookResult(
-                outcome="non_blocking_error",
+                outcome=HookOutcome.NON_BLOCKING_ERROR,
                 system_message=str(exc),
             )
 
@@ -107,9 +109,10 @@ class MatcherFilteredHandler(HookHandler):
             if self._matches(candidate):
                 return await self._inner.execute(context)
         logger.debug(
-            "hook matcher %r did not match any candidate "
-            "(tool_name=%r, skill_name=%r)",
-            self._matcher, context.tool_name, context.skill_name,
+            "hook matcher %r did not match any candidate (tool_name=%r, skill_name=%r)",
+            self._matcher,
+            context.tool_name,
+            context.skill_name,
         )
         return HookResult.success()
 
@@ -163,12 +166,12 @@ class ShellCommandHookHandler(HookHandler):
                     proc.communicate(input=stdin_data.encode("utf-8")),
                     timeout=self._timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
                 await proc.wait()
                 logger.error("Shell hook timed out after %ss: %s", self._timeout, command)
                 return HookResult(
-                    outcome="blocking",
+                    outcome=HookOutcome.BLOCKING,
                     system_message=f"钩子执行超时（{self._timeout}s）",
                 )
 
@@ -182,10 +185,10 @@ class ShellCommandHookHandler(HookHandler):
             return _parse_hook_output(stdout.decode("utf-8", errors="replace"))
         except FileNotFoundError as exc:
             logger.error("Shell hook failed (shell not found): %s", exc)
-            return HookResult(outcome="non_blocking_error", system_message=str(exc))
+            return HookResult(outcome=HookOutcome.NON_BLOCKING_ERROR, system_message=str(exc))
         except Exception as exc:
             logger.error("Shell hook failed: %s", exc)
-            return HookResult(outcome="non_blocking_error", system_message=str(exc))
+            return HookResult(outcome=HookOutcome.NON_BLOCKING_ERROR, system_message=str(exc))
 
     def _substitute_variables(self, command: str) -> str:
         """变量替换。
@@ -225,9 +228,7 @@ class ShellCommandHookHandler(HookHandler):
             env["PRISMCLAW_PLUGIN_DATA"] = self._plugin_data_dir
         # PRISMCLAW_PLUGIN_OPTION_{KEY} 注入 user_config
         for key, value in self._user_config.items():
-            env_key = "PRISMCLAW_PLUGIN_OPTION_" + re.sub(
-                r"[^A-Za-z0-9_]", "_", key.upper()
-            )
+            env_key = "PRISMCLAW_PLUGIN_OPTION_" + re.sub(r"[^A-Za-z0-9_]", "_", key.upper())
             env[env_key] = str(value)
         return env
 
@@ -251,41 +252,45 @@ class HttpHookHandler(HookHandler):
             import aiohttp
         except ImportError:
             logger.error("aiohttp not available for HTTP hook")
-            return HookResult(outcome="non_blocking_error", system_message="aiohttp not installed")
+            return HookResult(
+                outcome=HookOutcome.NON_BLOCKING_ERROR, system_message="aiohttp not installed"
+            )
 
         from prismclaw.infra.aiohttp_session import open_client_session
 
         try:
-            async with open_client_session() as session:
-                async with session.post(
+            async with (
+                open_client_session() as session,
+                session.post(
                     self._url,
                     json=context.to_dict(),
                     headers=self._headers,
                     timeout=aiohttp.ClientTimeout(total=self._timeout),
-                ) as resp:
-                    if resp.content_type == "application/json":
-                        body = await resp.json()
-                    else:
-                        text = await resp.text()
-                        try:
-                            body = json.loads(text)
-                        except json.JSONDecodeError:
-                            return HookResult(
-                                outcome="non_blocking_error",
-                                system_message=f"HTTP 钩子返回了非 JSON 内容：{text[:200]}",
-                            )
+                ) as resp,
+            ):
+                if resp.content_type == "application/json":
+                    body = await resp.json()
+                else:
+                    text = await resp.text()
+                    try:
+                        body = json.loads(text)
+                    except json.JSONDecodeError:
+                        return HookResult(
+                            outcome=HookOutcome.NON_BLOCKING_ERROR,
+                            system_message=f"HTTP 钩子返回了非 JSON 内容：{text[:200]}",
+                        )
             if isinstance(body, dict):
                 return HookResult.from_dict(body)
             return HookResult.success()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("HTTP hook timed out after %ss", self._timeout)
             return HookResult(
-                outcome="blocking",
+                outcome=HookOutcome.BLOCKING,
                 system_message=f"HTTP 钩子超时（{self._timeout}s）",
             )
         except Exception as exc:
             logger.error("HTTP hook failed: %s", exc)
-            return HookResult(outcome="non_blocking_error", system_message=str(exc))
+            return HookResult(outcome=HookOutcome.NON_BLOCKING_ERROR, system_message=str(exc))
 
 
 def _default_shell() -> str:

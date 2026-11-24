@@ -6,7 +6,23 @@
 所有 re-export 均为协议顺从性导入（实现核心定义的接口），
 而非运行时服务依赖。真正的服务协作仍走 integration/ 层。
 """
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # 仅类型检查期导入，运行时仍走 __getattr__ 惰性加载（见下方 _LAZY_IMPORTS）。
+    from prismclaw.engine.plugins.hooks.handlers import HookHandler
+    from prismclaw.engine.plugins.hooks.schema import HookContext, HookOutcome, HookResult
+    from prismclaw.engine.toolkit.registry.tool_runtime import (
+        ToolContext,
+        error_result,
+        text_result,
+    )
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.services.domain import DomainManifest, MenuEntry, PageEntry
+    from prismclaw.schema.shared._phi_pattern_registry import PhiPatternEntry
 
 __all__ = [
     # Tool protocol
@@ -63,3 +79,7 @@ def __getattr__(name: str):
 
 def __dir__():
     return list(globals()) + __all__
+
+
+# `__all__` 的符号由 __getattr__ 惰性提供。
+__all__ += ["__getattr__", "__dir__"]

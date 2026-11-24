@@ -4,7 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 ExecutorKind = Literal["local", "mcp_remote", "agent_spawn"]
 VisibilityScope = Literal["all", "main_only", "subagent_only"]
 ToolClass = Literal["read", "memory-write-safe", "write"]

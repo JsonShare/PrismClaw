@@ -28,6 +28,7 @@ resolve 优先级 (**三阶段，容器探针在 env 之后**):
 （只缓存最后一次无 override 场景），消除 bash tool 每次执行时的 json.load +
 Path.home 开销。``override`` 参数不进入缓存。
 """
+
 from __future__ import annotations
 
 import os

@@ -1,4 +1,4 @@
-"""Domain-sensitive file extension registry — core declares extension point, domains register extensions.
+"""敏感文件扩展名注册表：核心声明扩展点，领域包注册具体扩展名。
 
 Core RuleGate checks file extensions for security-sensitive formats.
 Cryptographic and signature-related extensions are universal (domain-agnostic).
@@ -14,8 +14,8 @@ Usage:
     # In domain bundle on_build_runtime():
     register_sensitive_extensions("my_domain", {".ext", ...})
 """
-from __future__ import annotations
 
+from __future__ import annotations
 
 _EXTENSIONS: list[tuple[str, frozenset[str]]] = []
 

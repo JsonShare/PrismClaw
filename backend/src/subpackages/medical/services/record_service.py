@@ -2,13 +2,14 @@
 
 从 routes/record.py 提取的业务逻辑。
 """
+
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
+from ..domain.parsing.match import age_from_birth, normalize_name
 from ..models.enums import ReportStatus
-from ..domain.parsing.match import normalize_name, age_from_birth
 from ..persistence.medical_store import MedicalStore
 from ..persistence.storage import save_upload_bytes
 
@@ -27,8 +28,12 @@ async def list_records(
     keyword: 患者名/诊断/摘要/文件名；report_type/status: 元数据过滤。
     """
     return await store.list_reports(
-        keyword=keyword, page=page, page_size=page_size,
-        create_by=create_by, report_type=report_type, status=status,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        create_by=create_by,
+        report_type=report_type,
+        status=status,
     )
 
 
@@ -77,21 +82,20 @@ def _ambiguous_candidates(
     target = normalize_name(report.get("patient_name_raw") or "")
     if not target:
         return []
-    same_name = [
-        c for c in patient_pool
-        if normalize_name(str(c.get("name") or "")) == target
-    ]
+    same_name = [c for c in patient_pool if normalize_name(str(c.get("name") or "")) == target]
     if len(same_name) < 2:
         return []
     out: list[dict[str, Any]] = []
     for c in same_name[:5]:
         birth = str(c.get("birth_date") or "")
-        out.append({
-            "id": str(c.get("id") or ""),
-            "name": str(c.get("name") or ""),
-            "gender": str(c.get("gender") or ""),
-            "age": age_from_birth(birth) or 0,
-        })
+        out.append(
+            {
+                "id": str(c.get("id") or ""),
+                "name": str(c.get("name") or ""),
+                "gender": str(c.get("gender") or ""),
+                "age": age_from_birth(birth) or 0,
+            }
+        )
     return out
 
 
@@ -119,7 +123,9 @@ async def assign_report(
         return None, "patient_forbidden"
 
     await store.update_report(
-        report_id, {"patient_id": patient_id}, user_id=user_id,
+        report_id,
+        {"patient_id": patient_id},
+        user_id=user_id,
     )
     updated = await store.get_report(report_id)
     if updated is not None:
@@ -128,7 +134,9 @@ async def assign_report(
 
 
 async def get_queue(
-    store: MedicalStore, *, create_by: str | None = None,
+    store: MedicalStore,
+    *,
+    create_by: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """获取处理队列 + 汇总。create_by: 行级过滤。"""
     return await store.get_queue(create_by=create_by)

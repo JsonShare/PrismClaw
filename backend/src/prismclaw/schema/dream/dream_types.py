@@ -3,12 +3,13 @@
 Lives in contracts (L0) so that Protocol definitions can reference these
 types without depending on engine (L2).  See SDD §5.1.2 + §5.1.4.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Literal
 import time
 import uuid
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 # ── Literal types ──
 
@@ -16,15 +17,20 @@ DreamCandidateKind = Literal["turn_context", "session_episode"]
 DreamCandidateStatus = Literal["draft", "published", "discarded"]
 DreamPublishState = Literal["draft", "reviewed", "canary", "published", "rejected"]
 DreamTargetType = Literal["memory", "artifact", "compression"]
-DreamReviewStatus = Literal["pending_review", "published", "rolled_back", "rollback_requested", "rejected"]
+DreamReviewStatus = Literal[
+    "pending_review", "published", "rolled_back", "rollback_requested", "rejected"
+]
 DreamPublishChannel = Literal["direct", "shadow", "canary"]
-DreamRolloutStage = Literal["shadow", "canary", "live", "rolled_back", "rollback_requested", "rejected"]
+DreamRolloutStage = Literal[
+    "shadow", "canary", "live", "rolled_back", "rollback_requested", "rejected"
+]
 DreamAuditStatus = Literal["ok", "failed"]
 DreamMemoryKind = Literal["fact", "preference", "constraint", "procedure", "episode", "pattern"]
 DreamArtifactKind = Literal["archive", "pattern", "graph", "relation"]
 
 
 # ── Data containers ──
+
 
 @dataclass(slots=True)
 class DreamMemoryCandidate:
@@ -131,6 +137,7 @@ class DreamDecisionAuditRecord:
 
 # ── Dispatch boundary types ──
 
+
 @dataclass(frozen=True, slots=True)
 class DreamEnqueueResult:
     status: Literal["accepted", "unavailable", "failed"]
@@ -145,12 +152,14 @@ class DreamEnqueueResult:
 
 # ── ID generation helpers (pure domain logic, not I/O) ──
 
+
 def build_governance_record_id(prefix: str = "dream-review") -> str:
     """Generate a unique governance record ID."""
     return f"{prefix}:{uuid.uuid4().hex[:16]}"
 
 
 # ── Batch health metrics (pure data, moved from persistence) ──
+
 
 @dataclass(slots=True)
 class DreamBatchHealthMetrics:

@@ -9,6 +9,7 @@
 - complete_json      结构化调用（tool_calls 优先，正文 JSON 兜底，失败重试）
 - ocr_image          图片转文字
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -194,7 +195,7 @@ async def ocr_image(vision: Any, image_bytes: bytes, mime: str) -> str:
             ),
             timeout=OCR_PER_IMAGE_TIMEOUT,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("OCR 单页超时 (%ds)，跳过该页", OCR_PER_IMAGE_TIMEOUT)
         raise
     return (getattr(response, "text", "") or "").strip()

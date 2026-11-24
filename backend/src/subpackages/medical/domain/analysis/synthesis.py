@@ -3,10 +3,10 @@
 将各 Wave 产出的 findings / citations 汇聚成合成器可消费的结构。
 也提供"降级填充"——某领域暂缺时产出占位段落。
 """
+
 from __future__ import annotations
 
 from typing import Any
-
 
 # 缺失领域的占位文本
 _DEGRADATION_MESSAGES = {
@@ -37,14 +37,16 @@ def collect_all_citations(
             key = f"kb:{cid}"
             if key not in seen and cid:
                 seen.add(key)
-                all_citations.append({
-                    "citation_id": f"cit:{cid}",
-                    "source_type": c.get("source_type", "kb_literature"),
-                    "source_id": cid,
-                    "title": c.get("title", ""),
-                    "snippet": c.get("snippet", ""),
-                    "confidence": c.get("relevance", "medium"),
-                })
+                all_citations.append(
+                    {
+                        "citation_id": f"cit:{cid}",
+                        "source_type": c.get("source_type", "kb_literature"),
+                        "source_id": cid,
+                        "title": c.get("title", ""),
+                        "snippet": c.get("snippet", ""),
+                        "confidence": c.get("relevance", "medium"),
+                    }
+                )
 
     for w2 in wave2_results:
         for c in w2.get("citations", []):
@@ -82,7 +84,5 @@ def build_raw_texts_map(
 ) -> dict[str, str]:
     """构建 report_id → raw_text 映射，供审计引文定位用。"""
     return {
-        r.get("id", ""): r.get("raw_text", "")
-        for r in reports
-        if r.get("id") and r.get("raw_text")
+        r.get("id", ""): r.get("raw_text", "") for r in reports if r.get("id") and r.get("raw_text")
     }

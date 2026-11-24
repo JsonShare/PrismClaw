@@ -3,8 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
+from prismclaw.schema.content.content_types import ToolResult
 
 # ─── DeclareBlockedTool ───────────────────────────────────────────────
+
 
 class DeclareBlockedTool:
     name = "declare_blocked"
@@ -20,7 +22,10 @@ class DeclareBlockedTool:
         "properties": {
             "reason_code": {
                 "type": "string",
-                "description": "稳定的机器可读代码，例如 'missing_credentials' 或 'external_service_unreachable'。",
+                "description": (
+                    "稳定的机器可读代码，例如 'missing_credentials' "
+                    "或 'external_service_unreachable'。"
+                ),
             },
             "reason_message": {
                 "type": "string",
@@ -38,7 +43,7 @@ class DeclareBlockedTool:
     # 暴露给它只会产出"已记录"的空指引。
     visibility_scope = "main_only"
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         from prismclaw.engine.toolkit.registry.tool_runtime import GoalBlockIntent
 
         call_id = args.get("_call_id", "")
@@ -63,9 +68,21 @@ class DeclareBlockedTool:
 
 # ─── AskUserQuestionTool ──────────────────────────────────────────────
 
+
 class AskUserQuestionTool:
     name = "ask_user_question"
-    description = "向用户提问并暂停执行，收到作答后继续。仅当需要的信息只有用户知道（偏好、意图、决策或需要用户补充的材料）且不同选择的后果差异显著时使用。文件位置、现有实现、当前状态等可发现的事实必须先探索，禁止拿来问用户；能合理假设的直接假设并在结果中声明。需要用户补充信息或上传文件时也用本工具，不要只在正文里说明。每次调用只提交一个问题，选项 2-4 个，推荐项置首并标「（推荐）」；同一任务的连续追问不超过 3 个。答案标记「（跳过）」的题目按首位选项继续，并在最终结果中声明该假设，不要重复追问。"
+    description = (
+        "向用户提问并暂停执行，收到作答后继续。"
+        "仅当需要的信息只有用户知道（偏好、意图、决策或需要用户补充的材料）"
+        "且不同选择的后果差异显著时使用。"
+        "文件位置、现有实现、当前状态等可发现的事实必须先探索，禁止拿来问用户；"
+        "能合理假设的直接假设并在结果中声明。"
+        "需要用户补充信息或上传文件时也用本工具，不要只在正文里说明。"
+        "每次调用只提交一个问题，选项 2-4 个，推荐项置首并标「（推荐）」；"
+        "同一任务的连续追问不超过 3 个。"
+        "答案标记「（跳过）」的题目按首位选项继续，"
+        "并在最终结果中声明该假设，不要重复追问。"
+    )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -77,28 +94,41 @@ class AskUserQuestionTool:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "question": {"type": "string", "description": "问题正文，一句话，只问一个决策点"},
-                        "header": {"type": "string", "description": "该问题的短标题（12 字以内），用于答案回传时对应"},
+                        "question": {
+                            "type": "string",
+                            "description": "问题正文，一句话，只问一个决策点",
+                        },
+                        "header": {
+                            "type": "string",
+                            "description": "该问题的短标题（12 字以内），用于答案回传时对应",
+                        },
                         "options": {
                             "type": "array",
-                            "description": "选项之间互斥；推荐选项放首位并在 label 后加「（推荐）」；不要放凑数项",
+                            "description": (
+                                "选项之间互斥；推荐选项放首位并在 label 后加「（推荐）」；"
+                                "不要放凑数项"
+                            ),
                             "minItems": 2,
                             "maxItems": 4,
                             "items": {
                                 "type": "object",
                                 "properties": {
                                     "label": {"type": "string"},
-                                    "description": {"type": "string"}
+                                    "description": {"type": "string"},
                                 },
                                 "required": ["label"],
                                 "additionalProperties": False,
-                            }
+                            },
                         },
-                        "multi_select": {"type": "boolean", "description": "是否允许多选", "default": False},
+                        "multi_select": {
+                            "type": "boolean",
+                            "description": "是否允许多选",
+                            "default": False,
+                        },
                     },
                     "required": ["question", "header", "options", "multi_select"],
                     "additionalProperties": False,
-                }
+                },
             }
         },
         "required": ["questions"],
@@ -110,7 +140,7 @@ class AskUserQuestionTool:
     effect_class = "pure_read"
     requires_interactive_user = True
 
-    async def execute(self, args: dict[str, Any], context: ToolContext) -> Any:
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         """防御性兜底：正常路径下本方法永不应被调用。
 
         run_loop 的 HITL 分支（check_hitl）在 dispatch 之前拦截

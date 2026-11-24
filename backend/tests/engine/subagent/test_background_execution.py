@@ -45,8 +45,7 @@ class _MemoryTaskStore:
         )
         if owner is not None and owner.agent_id != record.agent_id:
             raise ValueError(
-                f"parallel task {record.task_id!r} already belongs to "
-                f"agent {owner.agent_id!r}"
+                f"parallel task {record.task_id!r} already belongs to agent {owner.agent_id!r}"
             )
         self.records.append(record)
         self._latest[(record.agent_id, record.task_id)] = record
@@ -65,9 +64,7 @@ class _MemoryTaskStore:
     ) -> list[ParallelTaskRuntimeRecord]:
         values = list(self._latest.values())
         if not include_terminal:
-            values = [
-                r for r in values if r.status not in PARALLEL_TASK_TERMINAL_STATUSES
-            ]
+            values = [r for r in values if r.status not in PARALLEL_TASK_TERMINAL_STATUSES]
         if kinds is not None:
             values = [r for r in values if r.kind in kinds]
         return values
@@ -176,8 +173,10 @@ async def test_launch_background_returns_before_run_finishes(monkeypatch) -> Non
     assert elapsed < 0.1
 
     await _wait_until(
-        lambda: store._latest.get((agent_id, task_id)) is not None
-        and store._latest[(agent_id, task_id)].status == "running"
+        lambda: (
+            store._latest.get((agent_id, task_id)) is not None
+            and store._latest[(agent_id, task_id)].status == "running"
+        )
     )
     await manager.shutdown()
     assert store._latest[(agent_id, task_id)].status == "cancelled"
@@ -269,8 +268,10 @@ async def test_background_writes_single_record_per_status(monkeypatch) -> None:
     )
     assert error is None and task_id is not None
     await _wait_until(
-        lambda: store._latest.get((agent_id, task_id)) is not None
-        and store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
+        lambda: (
+            store._latest.get((agent_id, task_id)) is not None
+            and store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
+        )
     )
 
     statuses = [r.status for r in store.records if r.task_id == task_id]
@@ -285,9 +286,7 @@ async def test_sync_run_still_writes_same_record_count(monkeypatch) -> None:
     manager = TaskManager()
     executor = _executor()
 
-    result = await executor.run(
-        _manifest(), "do it", _context(store, manager), call_id="call-1"
-    )
+    result = await executor.run(_manifest(), "do it", _context(store, manager), call_id="call-1")
     assert result.outcome == "success"
     statuses = [r.status for r in store.records]
     assert statuses == ["scheduled", "running", "completed"]
@@ -313,8 +312,10 @@ async def test_shutdown_writes_terminal_state_for_running_background_task(
     )
     assert error is None and task_id is not None
     await _wait_until(
-        lambda: store._latest.get((agent_id, task_id)) is not None
-        and store._latest[(agent_id, task_id)].status == "running"
+        lambda: (
+            store._latest.get((agent_id, task_id)) is not None
+            and store._latest[(agent_id, task_id)].status == "running"
+        )
     )
 
     report = await manager.shutdown()
@@ -338,11 +339,15 @@ async def test_parallel_gate_rejects_launch_over_limit(monkeypatch) -> None:
     first_id, first_agent_id, first_error = await executor.launch_background(_manifest(), "a", ctx)
     assert first_error is None and first_id is not None
     await _wait_until(
-        lambda: store._latest.get((first_agent_id, first_id)) is not None
-        and store._latest[(first_agent_id, first_id)].status == "running"
+        lambda: (
+            store._latest.get((first_agent_id, first_id)) is not None
+            and store._latest[(first_agent_id, first_id)].status == "running"
+        )
     )
 
-    second_id, second_agent_id, second_error = await executor.launch_background(_manifest(), "b", ctx)
+    second_id, second_agent_id, second_error = await executor.launch_background(
+        _manifest(), "b", ctx
+    )
     assert second_id is None
     assert second_error is not None and "上限" in second_error
     assert second_agent_id is None
@@ -364,8 +369,10 @@ async def test_background_run_crash_writes_failed_terminal(monkeypatch) -> None:
     )
     assert error is None and task_id is not None
     await _wait_until(
-        lambda: store._latest.get((agent_id, task_id)) is not None
-        and store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
+        lambda: (
+            store._latest.get((agent_id, task_id)) is not None
+            and store._latest[(agent_id, task_id)].status in PARALLEL_TASK_TERMINAL_STATUSES
+        )
     )
     assert store._latest[(agent_id, task_id)].status == "failed"
     assert "boom" in (store._latest[(agent_id, task_id)].error_summary or "")
@@ -393,8 +400,10 @@ async def test_parent_abort_really_cancels_background_run(monkeypatch) -> None:
     assert error is None and task_id is not None
     await asyncio.wait_for(started.wait(), timeout=1.0)
     await _wait_until(
-        lambda: store._latest.get((agent_id, task_id)) is not None
-        and store._latest[(agent_id, task_id)].status == "running"
+        lambda: (
+            store._latest.get((agent_id, task_id)) is not None
+            and store._latest[(agent_id, task_id)].status == "running"
+        )
     )
 
     ctx.abort.set()
@@ -442,9 +451,7 @@ async def test_sync_run_does_not_deliver_terminal_notification(monkeypatch) -> N
         delivered.append(record)
 
     executor = _executor()
-    await executor.run(
-        _manifest(), "do it", _context(store, manager, sink=sink), call_id="call-1"
-    )
+    await executor.run(_manifest(), "do it", _context(store, manager, sink=sink), call_id="call-1")
     assert delivered == []
 
 

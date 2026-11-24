@@ -65,9 +65,7 @@ def find_single_match(
             candidates.append(MatchResult(entry=entry, overlap_int=overlap_int))
     if not candidates:
         return None
-    candidates.sort(
-        key=lambda r: (-r.overlap_int, r.entry.insertion_seq)
-    )
+    candidates.sort(key=lambda r: (-r.overlap_int, r.entry.insertion_seq))
     return candidates[0]
 
 

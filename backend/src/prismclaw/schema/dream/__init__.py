@@ -1,12 +1,49 @@
 from __future__ import annotations
 
-from prismclaw.schema.dream.dream import DreamCandidateStore, DreamStateStore, DreamAuditLogger, DreamGovernanceStore, DreamDecisionAuditStore, DreamGovernanceOps, DreamArchiveOps, DreamStatusOps, DreamDispatchOps, DreamReviewDecisionOps, DreamAdminOps, DreamEnqueueBoundary, DreamBoundary
-from prismclaw.schema.dream.dream_types import DreamCandidateKind, DreamCandidateStatus, DreamPublishState, DreamTargetType, DreamReviewStatus, DreamPublishChannel, DreamRolloutStage, DreamAuditStatus, DreamMemoryKind, DreamArtifactKind, DreamMemoryCandidate, DreamSessionState, DreamAuditEntry, DreamGovernanceRecord, DreamDecisionAuditRecord, DreamEnqueueResult, build_governance_record_id, DreamBatchHealthMetrics
+from prismclaw.schema.dream.dream import (
+    DreamAdminOps,
+    DreamArchiveOps,
+    DreamAuditLogger,
+    DreamAuditReader,
+    DreamAuditStore,
+    DreamBoundary,
+    DreamCandidateStore,
+    DreamDecisionAuditStore,
+    DreamDispatchOps,
+    DreamEnqueueBoundary,
+    DreamGovernanceOps,
+    DreamGovernanceStore,
+    DreamReviewDecisionOps,
+    DreamStateStore,
+    DreamStatusOps,
+)
+from prismclaw.schema.dream.dream_types import (
+    DreamArtifactKind,
+    DreamAuditEntry,
+    DreamAuditStatus,
+    DreamBatchHealthMetrics,
+    DreamCandidateKind,
+    DreamCandidateStatus,
+    DreamDecisionAuditRecord,
+    DreamEnqueueResult,
+    DreamGovernanceRecord,
+    DreamMemoryCandidate,
+    DreamMemoryKind,
+    DreamPublishChannel,
+    DreamPublishState,
+    DreamReviewStatus,
+    DreamRolloutStage,
+    DreamSessionState,
+    DreamTargetType,
+    build_governance_record_id,
+)
 
 __all__ = [
     "DreamCandidateStore",
     "DreamStateStore",
     "DreamAuditLogger",
+    "DreamAuditReader",
+    "DreamAuditStore",
     "DreamGovernanceStore",
     "DreamDecisionAuditStore",
     "DreamGovernanceOps",

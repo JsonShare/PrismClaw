@@ -3,14 +3,13 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any
 
 from prismclaw.engine.execution.checkpoint import (
     SystemPromptSectionRecord,
     SystemPromptSectionState,
 )
 from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.schema.content.context import ContextBlock
+from prismclaw.schema.content.context import ContextBlock, ContextPackLayout
 
 
 def _wrap_xml(tag: str, content: str | None) -> str | None:
@@ -132,15 +131,13 @@ def _section_record_from_block(block: ContextBlock) -> SystemPromptSectionRecord
 
 
 def build_system_prompt_section_state(
-    plan: Any,  # ContextPackLayout — import deferred to avoid circular / TODO
+    plan: ContextPackLayout,
 ) -> SystemPromptSectionState:
     static_sections = [_section_record_from_block(block) for block in plan.static_blocks]
     dynamic_sections = [_section_record_from_block(block) for block in plan.dynamic_blocks]
     cache_break_sections = list(
         dict.fromkeys(
-            record.name
-            for record in [*static_sections, *dynamic_sections]
-            if not record.cacheable
+            record.name for record in [*static_sections, *dynamic_sections] if not record.cacheable
         )
     )
     return SystemPromptSectionState(

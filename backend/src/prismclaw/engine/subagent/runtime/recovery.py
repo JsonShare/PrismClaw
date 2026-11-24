@@ -66,17 +66,17 @@ async def assess_and_repair_recovery(
                 calls[call_id] = _assistant_tool_call(persistence, raw_call, metadata)
         elif isinstance(entry, MessageEntry) and entry.role == "tool":
             metadata = entry.metadata or {}
-            call_id = entry.tool_call_id or metadata.get("tool_call_id")
-            if isinstance(call_id, str) and call_id:
-                tool_results.setdefault(call_id, []).append(entry)
+            raw_call_id = entry.tool_call_id or metadata.get("tool_call_id")
+            if isinstance(raw_call_id, str) and raw_call_id:
+                tool_results.setdefault(raw_call_id, []).append(entry)
         elif (
             isinstance(entry, CustomEntry)
             and entry.custom_type == SUBAGENT_TOOL_EFFECT_CUSTOM_TYPE
             and isinstance(entry.data, dict)
         ):
-            call_id = entry.data.get("tool_call_id")
-            if isinstance(call_id, str) and call_id:
-                latest_effects[call_id] = dict(entry.data)
+            effect_call_id = entry.data.get("tool_call_id")
+            if isinstance(effect_call_id, str) and effect_call_id:
+                latest_effects[effect_call_id] = dict(entry.data)
 
     blocked = False
     reasons: list[str] = []
@@ -345,7 +345,7 @@ def _recovery_action(entry: MessageEntry) -> str:
     return str((entry.metadata or {}).get("recovery_action") or "")
 
 
-def _enum_value(value: Any) -> str:
+def _enum_value(value: object) -> str:
     if isinstance(value, Enum):
         return str(value.value)
     return str(value or "")
@@ -357,7 +357,7 @@ def _new_entry_id(existing_ids: set[str]) -> str:
     return entry_id
 
 
-def _arguments_summary(raw_arguments: Any) -> str:
+def _arguments_summary(raw_arguments: object) -> str:
     if isinstance(raw_arguments, str):
         text = raw_arguments
     else:

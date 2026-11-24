@@ -1,19 +1,22 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.context.projection_models import ProjectionMessageSet
-from prismclaw.schema.session.types import SessionTree
 from prismclaw.schema.agent.session import ProjectionInputMessage
+from prismclaw.schema.session.projection import SessionProjectionEngine
+from prismclaw.schema.session.types import SessionTree
 
 if TYPE_CHECKING:
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
-    from prismclaw.engine.execution.loop.runner import RunRequest
-    from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
     from prismclaw.engine.execution.query.state import (
         QueryLoopState,
         QueryRuntimeContext,
     )
+    from prismclaw.engine.state.tool_loop_state import ToolLoopState
+    from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
+    from prismclaw.schema.agent.types import RunRequest
 
 
 # [Phase 0' Decoupled Trajectory] — capture layer 0.5 and layer ① at the
@@ -33,8 +36,8 @@ if TYPE_CHECKING:
 # current_aggregator` inside every capture site (coupled, invasive).
 def _trajectory_capture_projector(
     tree: object,
-    source_messages: list[dict[str, Any]],
-    appended_messages: list[dict[str, Any]] | None = None,
+    source_messages: Sequence[object],
+    appended_messages: Sequence[object] | None = None,
 ) -> None:
     try:
         from prismclaw.engine.trajectory.bus import current_bus
@@ -57,6 +60,7 @@ def _trajectory_capture_projector(
         # to — skip publishing entirely (the bus is per-session, a fake
         # session_id event would only be dropped downstream).
         from prismclaw.engine.trajectory.bus_context import current_runtime  # noqa: PLC0415
+
         _rt = current_runtime()
         if _rt is None:
             return
@@ -64,17 +68,21 @@ def _trajectory_capture_projector(
 
         # Layer 0.5: tree.order entries BEFORE MessageProjector ran
         order_entries = list(getattr(tree, "order", ()) or [])
-        order_count, entry_types, head_seq, tail_seq, tail_types = (
-            summarize_tree_order(order_entries)
+        order_count, entry_types, head_seq, tail_seq, tail_types = summarize_tree_order(
+            order_entries
         )
-        bus.publish(ProjectorInputDone(
-            session_id=sid, turn_counter=turn_counter, iteration=iteration,
-            order_count=order_count,
-            order_entry_types=entry_types,
-            order_head_seq=head_seq,
-            order_tail_seq=tail_seq,
-            order_tail_types=tail_types,
-        ))
+        bus.publish(
+            ProjectorInputDone(
+                session_id=sid,
+                turn_counter=turn_counter,
+                iteration=iteration,
+                order_count=order_count,
+                order_entry_types=entry_types,
+                order_head_seq=head_seq,
+                order_tail_seq=tail_seq,
+                order_tail_types=tail_types,
+            )
+        )
 
         # Layer ① projector output messages
         msg_count, roles, head_summ, tail_summ = summarize_messages(source_messages)
@@ -86,7 +94,7 @@ def _trajectory_capture_projector(
         # shows "Layer ① = 0 messages" while Layers ②/③/④ show 1+.
         _appended_count = len(list(appended_messages or []))
 
- # extract actual content previews so the panel can
+        # extract actual content previews so the panel can
         # show WHAT the user asked and WHAT tools returned, not just
         # "[user] xxx[:80]" snippets.
         #   user_message_preview = last role='user' message text (500 chars)
@@ -119,16 +127,20 @@ def _trajectory_capture_projector(
             _user_preview = None
             _tool_previews = []
 
-        bus.publish(ProjectorOutputDone(
-            session_id=sid, turn_counter=turn_counter, iteration=iteration,
-            msg_count=msg_count,
-            msg_roles=roles,
-            head=head_summ,
-            tail=tail_summ,
-            appended_msg_count=_appended_count,
-            user_message_preview=_user_preview,
-            tool_results_preview=tuple(_tool_previews),
-        ))
+        bus.publish(
+            ProjectorOutputDone(
+                session_id=sid,
+                turn_counter=turn_counter,
+                iteration=iteration,
+                msg_count=msg_count,
+                msg_roles=roles,
+                head=head_summ,
+                tail=tail_summ,
+                appended_msg_count=_appended_count,
+                user_message_preview=_user_preview,
+                tool_results_preview=tuple(_tool_previews),
+            )
+        )
     except Exception:
         # 🛡️ Never break baseline build — trajectory is diagnostic-only.
         pass
@@ -136,12 +148,12 @@ def _trajectory_capture_projector(
 
 def _build_query_runtime_context(
     *,
-    request: "RunRequest",
-    deps: "AgentRunnerDeps",
-    tool_ctx: "ToolContext",
+    request: RunRequest,
+    deps: AgentRunnerDeps,
+    tool_ctx: ToolContext,
     effective_model: str,
     attachment_guidance: str | None,
-) -> "QueryRuntimeContext":
+) -> QueryRuntimeContext:
     from prismclaw.engine.execution.query.state import QueryRuntimeContext
 
     return QueryRuntimeContext(
@@ -166,19 +178,22 @@ def _build_query_runtime_context(
 def _build_source_query_loop_state(
     *,
     tree: SessionTree,
-    request: "RunRequest",
-    deps: "AgentRunnerDeps",
-    tool_ctx: "ToolContext",
+    request: RunRequest,
+    deps: AgentRunnerDeps,
+    tool_ctx: ToolContext,
     effective_model: str,
     attachment_guidance: str | None,
-    tool_loop_state: dict[str, object],
+    tool_loop_state: ToolLoopState | None,
     pending_meta_messages: list[ProjectionInputMessage] | None,
     appended_messages_override: list[ProjectionInputMessage] | None,
-) -> "QueryLoopState":
+) -> QueryLoopState:
     from prismclaw.engine.execution.query.builder import build_query_loop_state
 
-    source_messages = tree.build_runtime_messages()
-    source_meta_messages = list(tree.build_runtime_meta_messages() or [])
+    engine = SessionProjectionEngine(tree)
+    source_messages = engine.messages.build_runtime_messages()
+    source_meta_messages: list[ProjectionInputMessage] = list(
+        engine.messages.build_runtime_meta_messages() or []
+    )
 
     # ⚓ [Phase 0' Trajectory] layer 0.5 + layer ① capture (single call-site).
     # Must run AFTER source_messages computed, BEFORE source_message_set is

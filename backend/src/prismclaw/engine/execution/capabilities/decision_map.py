@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class CapabilityDecisionKind(str, Enum):
+class CapabilityDecisionKind(StrEnum):
     PERMISSION = "permission"
     TOOL_GOVERNANCE = "tool_governance"
     TOOL_CALLABLE = "tool_callable"
@@ -16,7 +16,7 @@ class CapabilityDecisionKind(str, Enum):
     SKILL = "skill"
 
 
-class FailureSeverity(str, Enum):
+class FailureSeverity(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
 
@@ -91,9 +91,7 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
                 "tools_for_llm",
                 "tool_pool_id",
             ),
-            failure_source_ids=(
-                "skill-runtime-tool-constraint-projection",
-            ),
+            failure_source_ids=("skill-runtime-tool-constraint-projection",),
         ),
         CapabilityDecisionEntry(
             entry_id="preservation_runtime.project_active_skill_invocation",
@@ -465,9 +463,7 @@ def build_capability_decision_map() -> CapabilityDecisionMap:
                 "tool_calls",
                 "resolve_registry_tool_governance",
             ),
-            outputs=(
-                "tool_results",
-            ),
+            outputs=("tool_results",),
             failure_source_ids=(),
         ),
         CapabilityDecisionEntry(

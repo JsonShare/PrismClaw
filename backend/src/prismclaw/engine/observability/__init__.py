@@ -10,15 +10,6 @@ Public surface:
 
 from __future__ import annotations
 
-from prismclaw.engine.observability.feature_flags import (
-    FLAG_SCHEDULER_V2,
-    FLAG_STREAMING_V2,
-    clear_static_flags,
-    is_enabled,
-    set_static_flag,
-    set_static_flags_from_mapping,
-    snapshot_static_flags,
-)
 from prismclaw.engine.foundation.metrics import (
     Counter,
     Gauge,
@@ -29,6 +20,15 @@ from prismclaw.engine.foundation.metrics import (
     get_metrics,
     reset,
     snapshot,
+)
+from prismclaw.engine.observability.feature_flags import (
+    FLAG_SCHEDULER_V2,
+    FLAG_STREAMING_V2,
+    clear_static_flags,
+    is_enabled,
+    set_static_flag,
+    set_static_flags_from_mapping,
+    snapshot_static_flags,
 )
 
 __all__ = [

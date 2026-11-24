@@ -21,6 +21,8 @@ from pathlib import Path
 from prismclaw.schema.agent.review import ContentRef, ContentStore
 from prismclaw.schema.agent.review_errors import IntegrityError
 
+__all__ = ["ContentRef", "ContentStore", "FileSystemContentStore", "IntegrityError"]
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,8 +60,7 @@ class FileSystemContentStore:
         if actual != ref.sha256:
             # Bit-rot / silent corruption — fail loud, never restore garbage.
             raise IntegrityError(
-                f"blob integrity mismatch for {ref.ref}: "
-                f"expected {ref.sha256}, got {actual}"
+                f"blob integrity mismatch for {ref.ref}: expected {ref.sha256}, got {actual}"
             )
         return data
 

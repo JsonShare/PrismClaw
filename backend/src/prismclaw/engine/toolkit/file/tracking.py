@@ -29,13 +29,15 @@ class FileEditRecord:
     record_id: str
     session_id: str
     tool_call_id: str
-    path: str           # relative path within workspace
-    before_sha: str      # SHA-256 of before-content (hex)
-    after_sha: str       # SHA-256 of after-content  (hex)
-    before_ref: str      # blob path for before-content
-    after_ref: str       # blob path for after-content  (may be empty for WriteTool if not persisted yet)
-    ts: float            # unix epoch seconds
-    binary: bool = False # True for non-text blobs (e.g. .docx bytes); restore_file branches on this
+    path: str  # relative path within workspace
+    before_sha: str  # SHA-256 of before-content (hex)
+    after_sha: str  # SHA-256 of after-content  (hex)
+    before_ref: str  # blob path for before-content
+    after_ref: str  # blob path for after-content  (may be empty for WriteTool if not persisted yet)
+    ts: float  # unix epoch seconds
+    binary: bool = (
+        False  # True for non-text blobs (e.g. .docx bytes); restore_file branches on this
+    )
 
 
 @dataclass
@@ -168,6 +170,7 @@ class ChangeTrackingStore:
             ):
                 return DocxReviewArtifactRecord(**data)
         return None
+
 
 def get_tracking_store(workspace_path: Path) -> ChangeTrackingStore:
     """Factory — returns a ChangeTrackingStore rooted at workspace_path/.work/audit/edits/."""

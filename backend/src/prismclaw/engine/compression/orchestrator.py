@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
-from dataclasses import dataclass, field
 import time
-from typing import Any, Awaitable, Callable, Literal, TYPE_CHECKING
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal
 
 from prismclaw.engine.compression.budget_orchestrator import (
     BudgetOrchestrator,
@@ -14,15 +17,21 @@ from prismclaw.engine.compression.history_compaction import (
     predict_compaction_trigger,
 )
 from prismclaw.engine.compression.retention import SectionRetention
-from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
 from prismclaw.engine.foundation.metrics import emit
+from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
 
 if TYPE_CHECKING:
     # 类型注解所需的 execution 类型通过 TYPE_CHECKING 引入，
     # runtime 不依赖 execution，避免 compression → execution 反向 import。
-    from prismclaw.engine.execution.query.state import QueryLoopState
     from prismclaw.engine.execution.checkpoint import CompressionRuntimeState
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.execution.query._static_context_types import StaticContextResult
+    from prismclaw.engine.execution.query.state import QueryLoopState
+    from prismclaw.engine.state.turn_state import TurnState
     from prismclaw.engine.task_profile.service import TaskCompactionPolicy
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.content.context import TaskProfile
+    from prismclaw.schema.session import SessionTree
 
 
 # Metric names follow v3 §11.1: {ns}.{comp}.{name}[_{unit}].
@@ -94,16 +103,17 @@ class CompressionOrchestrator:
     async def prepare_turn(
         self,
         *,
-        request: Any,
-        deps: Any,
-        tree: Any,
-        static_result: Any,
+        request: RunRequest,
+        deps: AgentRunnerDeps,
+        tree: SessionTree,
+        static_result: StaticContextResult,
+        include_l1_memory: bool,
         attachment_guidance: str | None,
         query_loop_state: QueryLoopState,
         compression_runtime: CompressionRuntimeState,
         model: str,
-        abort_event: Any,
-        turn_state: Any | None = None,
+        abort_event: asyncio.Event,
+        turn_state: TurnState | None = None,
         model_max_output: int | None = None,
     ) -> CompressionPreparation:
         started_at = time.monotonic()
@@ -113,11 +123,14 @@ class CompressionOrchestrator:
         try:
             message_set = query_loop_state.query_view.messages_for_query
             if self._prepare_turn_callable is None:
-                raise RuntimeError("prepare_turn_callable not configured — wire it in runner_assembly.py")
+                raise RuntimeError(
+                    "prepare_turn_callable not configured — wire it in runner_assembly.py"
+                )
             preflight = await self._prepare_turn_callable(
                 request=request,
                 deps=deps,
                 static_result=static_result,
+                include_l1_memory=include_l1_memory,
                 attachment_guidance=attachment_guidance,
                 message_set=message_set,
                 model=model,
@@ -132,9 +145,7 @@ class CompressionOrchestrator:
             # Cleared on successful compaction; otherwise accumulates for
             # growth-rate estimation.
             try:
-                compression_runtime.recent_history_tokens.append(
-                    preflight.history_tokens
-                )
+                compression_runtime.recent_history_tokens.append(preflight.history_tokens)
                 # Keep only the last 20 snapshots to bound memory.
                 if len(compression_runtime.recent_history_tokens) > 20:
                     compression_runtime.recent_history_tokens = (
@@ -150,7 +161,10 @@ class CompressionOrchestrator:
             )
             should_compact = history_assessment.should_compact
             logger.info(
-                "history compaction assess: history_tokens=%d total_input=%d trigger=%d should_compact=%s",
+                (
+                    "history compaction assess: history_tokens=%d "
+                    "total_input=%d trigger=%d should_compact=%s"
+                ),
                 preflight.history_tokens,
                 history_assessment.total_input_tokens,
                 history_assessment.trigger_budget,
@@ -242,15 +256,11 @@ class CompressionOrchestrator:
                 if outcome.compacted:
                     outcome_label = "restart_turn"
                     # v4 §5.4 触发点 (a)：历史压缩事件边界执行一次批量 microcompact。
-                    _microcompact_at_compaction_boundary(
-                        query_loop_state, compression_runtime
-                    )
+                    _microcompact_at_compaction_boundary(query_loop_state, compression_runtime)
                     # v4.0: Clear predictive compaction snapshots after
                     # successful compaction — growth rate resets.
-                    try:
+                    with contextlib.suppress(Exception):
                         compression_runtime.recent_history_tokens = []
-                    except Exception:
-                        pass
                     return CompressionPreparation(
                         action="restart_turn",
                         execution_mode=execution_mode,
@@ -299,9 +309,9 @@ class CompressionOrchestrator:
 
 def _build_compaction_policy(
     *,
-    deps: Any,
+    deps: AgentRunnerDeps,
     history_budget: int,
-    task_profile: Any,
+    task_profile: TaskProfile | None,
 ) -> TaskCompactionPolicy | None:
     if task_profile is None:
         return None
@@ -314,8 +324,8 @@ def _build_compaction_policy(
 
 
 def _microcompact_at_compaction_boundary(
-    query_loop_state: "QueryLoopState",
-    compression_runtime: "CompressionRuntimeState",
+    query_loop_state: QueryLoopState,
+    compression_runtime: CompressionRuntimeState,
 ) -> None:
     """历史压缩事件边界：batch 模式下复位 R 区批量清理计数（v4 §5.4 触发点 a）。
 

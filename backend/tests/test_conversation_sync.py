@@ -6,6 +6,7 @@
   ``client_message_id``，客户端据此把本地乐观气泡 re-key 到服务端 entry；
 - 运行中/无法确认时把本轮 assistant 标 in_progress，settled_seq 不得越过它。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,11 +42,7 @@ def _tree(cid: str, entries: list) -> SessionTree:
         ),
         entries={entry.id: entry for entry in entries},
         # 与生产一致：CustomEntry 不进 order（它走 entry_updated 落库）。
-        order=[
-            entry.id
-            for entry in entries
-            if isinstance(entry, MessageEntry)
-        ],
+        order=[entry.id for entry in entries if isinstance(entry, MessageEntry)],
         leaf_id=entries[-1].id if entries else None,
     )
 
@@ -82,7 +79,7 @@ def _timeline(entry_id: str, message_id: str, seq: int) -> CustomEntry:
 
 def _fake_request(
     session_queue: SessionQueue | None,
-    presence: "_FakePresence | None" = None,
+    presence: _FakePresence | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         app=SimpleNamespace(
@@ -140,6 +137,7 @@ def _sync(sq, *, cid: str = CID, after_seq: int = 0):
 # 1. idle：无运行态，assistant 全部定稿
 # ---------------------------------------------------------------------------
 
+
 def test_idle_returns_no_run_and_all_settled(monkeypatch):
     tree = _tree(CID, [_user("u1", 1), _assistant("a1", 2, "答")])
     _patch_verify(monkeypatch, tree)
@@ -160,6 +158,7 @@ def test_idle_returns_no_run_and_all_settled(monkeypatch):
 # ---------------------------------------------------------------------------
 # 2. active：本轮 assistant 标记 in_progress，settled_seq 不得越过它
 # ---------------------------------------------------------------------------
+
 
 def test_active_marks_tail_assistant_in_progress(monkeypatch):
     tree = _tree(CID, [_user("u1", 1), _assistant("a1", 5, "执行中…")])
@@ -182,6 +181,7 @@ def test_active_marks_tail_assistant_in_progress(monkeypatch):
 # ---------------------------------------------------------------------------
 # 3. after_seq 增量：只返回 seq 更大的消息（user/assistant 同口径）
 # ---------------------------------------------------------------------------
+
 
 def test_after_seq_returns_only_newer_messages(monkeypatch):
     tree = _tree(
@@ -207,6 +207,7 @@ def test_after_seq_returns_only_newer_messages(monkeypatch):
 # 4. after_seq 超过水位：客户端本地 seq 失效
 # ---------------------------------------------------------------------------
 
+
 def test_after_seq_beyond_watermark_resets_history(monkeypatch):
     tree = _tree(CID, [_user("u1", 1), _assistant("a1", 2, "答")])
     _patch_verify(monkeypatch, tree)
@@ -223,6 +224,7 @@ def test_after_seq_beyond_watermark_resets_history(monkeypatch):
 # ---------------------------------------------------------------------------
 # 5. session_queue 缺失：unknown 且保守标记本轮 assistant
 # ---------------------------------------------------------------------------
+
 
 def test_unknown_state_marks_tail_assistant_conservatively(monkeypatch):
     tree = _tree(CID, [_user("u1", 1), _assistant("a1", 2, "可能还在跑")])
@@ -241,6 +243,7 @@ def test_unknown_state_marks_tail_assistant_conservatively(monkeypatch):
 # ---------------------------------------------------------------------------
 # 6. 单页上限 100 条
 # ---------------------------------------------------------------------------
+
 
 def test_page_limit_sets_has_more(monkeypatch):
     entries = []
@@ -267,6 +270,7 @@ def test_page_limit_sets_has_more(monkeypatch):
 # 6b. 改造前的历史 entry（seq=0）不进同步：只经 /messages 提供
 # ---------------------------------------------------------------------------
 
+
 def test_legacy_seq_zero_entries_are_not_synced(monkeypatch):
     """否则老会话首页全是 seq=0，settled_seq 停在 0，新回答永远取不到。"""
     tree = _tree(
@@ -292,6 +296,7 @@ def test_legacy_seq_zero_entries_are_not_synced(monkeypatch):
 # 7. timeline 晚到：同一 message 的 seq 被抬高
 # ---------------------------------------------------------------------------
 
+
 def test_late_timeline_raises_message_seq(monkeypatch):
     tree = _tree(
         CID,
@@ -315,6 +320,7 @@ def test_late_timeline_raises_message_seq(monkeypatch):
 # ---------------------------------------------------------------------------
 # 8. 后台子代理/工具痕迹仍在，但本轮已结束：必须按 turn 级判活收尾
 # ---------------------------------------------------------------------------
+
 
 def test_aborting_turn_stays_in_progress_until_done(monkeypatch):
     """中止信号已发出、done 尚未到达：本轮正文还没落库，必须仍算进行中。
@@ -362,6 +368,7 @@ def test_projection_activity_does_not_block_settlement(monkeypatch):
 # 9. 非 owner worker：本地无运行态时用 Redis presence 判定
 # ---------------------------------------------------------------------------
 
+
 def test_presence_makes_non_owner_worker_report_active(monkeypatch):
     """run 在别的 worker 上：本地 is_turn_running 恒 False，不能据此 seal。"""
     tree = _tree(CID, [_user("u1", 1), _assistant("a1", 5, "别的 worker 上的半截答案")])
@@ -405,6 +412,7 @@ def test_presence_unreadable_reports_unknown(monkeypatch):
 # 9. /messages 全量含 user；after_seq 与 in_progress 口径与 sync 一致
 # ---------------------------------------------------------------------------
 
+
 def test_messages_share_sync_semantics(monkeypatch):
     tree = _tree(
         CID,
@@ -418,10 +426,18 @@ def test_messages_share_sync_semantics(monkeypatch):
         request = _fake_request(sq)
 
         sync_res = await sync_conversation(
-            request, session_id=CID, workspace_id="default", after_seq=0, user_id="admin",
+            request,
+            session_id=CID,
+            workspace_id="default",
+            after_seq=0,
+            user_id="admin",
         )
         full = await get_messages(
-            request, session_id=CID, offset=0, limit=50, user_id="admin",
+            request,
+            session_id=CID,
+            offset=0,
+            limit=50,
+            user_id="admin",
         )
         # 全量历史与 sync 同口径：user/assistant 都按 seq 交付
         assert [m["id"] for m in full] == ["u1", "a1", "u2", "a2"]
@@ -449,10 +465,18 @@ def test_user_message_carries_client_message_id(monkeypatch):
         request = _fake_request(sq)
 
         sync_res = await sync_conversation(
-            request, session_id=CID, workspace_id="default", after_seq=0, user_id="admin",
+            request,
+            session_id=CID,
+            workspace_id="default",
+            after_seq=0,
+            user_id="admin",
         )
         full = await get_messages(
-            request, session_id=CID, offset=0, limit=50, user_id="admin",
+            request,
+            session_id=CID,
+            offset=0,
+            limit=50,
+            user_id="admin",
         )
         for payload in (sync_res["messages"], full):
             users = {m["id"]: m for m in payload if m["role"] == "user"}
@@ -482,6 +506,7 @@ def test_user_event_roundtrip_keeps_client_message_id():
 # 9. 新一轮刚发出、assistant 尚未落库：上一轮答案不得被误标 in_progress
 # ---------------------------------------------------------------------------
 
+
 def test_trailing_user_message_does_not_flag_previous_answer(monkeypatch):
     tree = _tree(CID, [_user("u1", 1), _assistant("a1", 2, "上一轮答案"), _user("u2", 3)])
     _patch_verify(monkeypatch, tree)
@@ -500,6 +525,7 @@ def test_trailing_user_message_does_not_flag_previous_answer(monkeypatch):
 # ---------------------------------------------------------------------------
 # 10. steering：树结构无法区分"新轮次首条 user"，选择少标而不是误标
 # ---------------------------------------------------------------------------
+
 
 def test_steering_message_does_not_hide_previous_answer(monkeypatch):
     """两条 user 消息时，前一条 assistant 不标 in_progress。
@@ -532,6 +558,7 @@ def test_steering_message_does_not_hide_previous_answer(monkeypatch):
 # ---------------------------------------------------------------------------
 # 11. 正文为空但有执行时间线：消息必须保留（否则刷新后执行过程永久消失）
 # ---------------------------------------------------------------------------
+
 
 def test_timeline_only_turn_is_returned(monkeypatch):
     tree = _tree(

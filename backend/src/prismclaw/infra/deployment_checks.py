@@ -55,11 +55,7 @@ def validate_container_layout(*, assets_root: Path, runtime_root: Path) -> None:
     if not is_container():
         return
 
-    empty = [
-        name
-        for name in ("skills", "plugins")
-        if not any((assets_root / name).glob("*"))
-    ]
+    empty = [name for name in ("skills", "plugins") if not any((assets_root / name).glob("*"))]
     if len(empty) == 2:
         raise ContainerCheckError(
             f"静态能力目录为空：{assets_root}/skills 与 {assets_root}/plugins 都没有内容。"

@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import redis.asyncio as aioredis
 
 from prismclaw.schema.scheduler import SchedulerDispatchJob
 
@@ -31,7 +34,7 @@ class RedisSchedulerDispatchQueue:
 
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: aioredis.Redis,
         *,
         key_prefix: str = "prismclaw:scheduler:dispatch:",
         group_name: str = "scheduler-dispatch",
@@ -91,9 +94,9 @@ class RedisSchedulerDispatchQueue:
         """
         await self.ensure_group()
         consumer_name = f"worker-{id(self)}"
-        inflight: set[asyncio.Task] = set()
+        inflight: set[asyncio.Task[Any]] = set()
 
-        def _on_done(t: asyncio.Task) -> None:
+        def _on_done(t: asyncio.Task[Any]) -> None:
             """Drop the task and surface unexpected handler failures.
 
             The executor only catches exceptions from its run_chat block;
@@ -135,9 +138,7 @@ class RedisSchedulerDispatchQueue:
             for _stream, messages in results:
                 for msg_id, fields in messages:
                     try:
-                        await self._redis.xack(
-                            self._stream_key, self._group_name, msg_id
-                        )
+                        await self._redis.xack(self._stream_key, self._group_name, msg_id)
                     except Exception:
                         # A failed ACK must not kill the consumer loop. There
                         # is no reclaim, so dropping this one-shot notification
@@ -150,13 +151,14 @@ class RedisSchedulerDispatchQueue:
                     job = self._parse_message(msg_id, fields)
                     if job is None:
                         continue
-                    t = asyncio.create_task(handler(job))
+                    t = asyncio.ensure_future(handler(job))
                     inflight.add(t)
                     t.add_done_callback(_on_done)
 
     @staticmethod
-    def _parse_message(msg_id: Any, fields: dict) -> SchedulerDispatchJob | None:
+    def _parse_message(msg_id: str, fields: dict[str, Any]) -> SchedulerDispatchJob | None:
         try:
+
             def _s(key: str) -> str:
                 # A missing field must make parsing fail (KeyError -> None),
                 # not silently produce an empty-valued job that gets executed.
@@ -173,9 +175,7 @@ class RedisSchedulerDispatchQueue:
                 fired_at=float(_s("fired_at") or "0"),
             )
         except Exception:
-            logger.warning(
-                "scheduler.dispatch.parse_error", extra={"msg_id": str(msg_id)}
-            )
+            logger.warning("scheduler.dispatch.parse_error", extra={"msg_id": str(msg_id)})
             return None
 
 
@@ -205,6 +205,5 @@ class SchedulerDispatchConsumer:
         user_sem = self._user_semaphores.setdefault(
             job.user_id, asyncio.Semaphore(self._max_per_user)
         )
-        async with self._semaphore:
-            async with user_sem:
-                await self._handler(job)
+        async with self._semaphore, user_sem:
+            await self._handler(job)

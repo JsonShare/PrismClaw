@@ -2,6 +2,7 @@
 
 由 ``build_loop_config`` 绑定为 ``StreamPort.stream_llm``。
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -13,6 +14,7 @@ from typing import Any
 from prismclaw.engine.execution.control.kernel import TerminalReason
 from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.execution.loop.types import RunLoopState
+from prismclaw.schema.session.projection import SessionProjectionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,7 @@ async def stream_llm(
     if _remaining_run is not None and _remaining_run <= 0:
         rt.terminated_by = TerminalReason.TIMEOUT
         from prismclaw.engine.execution.loop.terminal import mark_task_blocked
+
         await mark_task_blocked(rt, "timeout")
         _timeout_error = ErrorEvent(error_code="timeout", message="run exceeded run_seconds")
         state.llm_outcome = LLMStreamError(error_event=_timeout_error)
@@ -103,6 +106,7 @@ async def stream_llm(
                             evaluate_soft_budget,
                             render_budget_warning,
                         )
+
                         _verdict = evaluate_soft_budget(
                             token_usage=_tokens,
                             effective_window=_budget,
@@ -170,13 +174,16 @@ async def stream_llm(
                     _turn_input,
                     _turn_cache_read / _turn_input,
                 )
-            with contextlib.suppress(Exception):
-                state.snapshot.compression_runtime.last_prompt_tokens = (
-                    getattr(_usage, "input_tokens", None)
-                )
+            _snapshot = state.snapshot
+            if _snapshot is not None:
+                with contextlib.suppress(Exception):
+                    _snapshot.compression_runtime.last_prompt_tokens = getattr(
+                        _usage, "input_tokens", None
+                    )
             _pt = state.prepared_turn
             if _pt is not None and _pt.preflight is not None:
                 from prismclaw.engine.execution.query._turn_helpers import log_turn_token_usage
+
                 log_turn_token_usage(
                     logger_=logger,
                     iteration=state.perf.llm_calls,
@@ -184,7 +191,9 @@ async def stream_llm(
                     usage=_usage,
                     history_budget=_pt.history_budget,
                     history_compaction_count=(
-                        rt.tree.get_history_compaction_count() if rt.tree is not None else 0
+                        SessionProjectionEngine(rt.tree).history_compaction.get_count()
+                        if rt.tree is not None
+                        else 0
                     ),
                     tools_tokens=_pt.tools_wire_tokens,
                 )
@@ -193,6 +202,7 @@ async def stream_llm(
 # ---------------------------------------------------------------------------
 # overflow recovery — context_overflow 时强制压缩恢复
 # ---------------------------------------------------------------------------
+
 
 async def _try_overflow_recovery(
     rt: LoopRuntime,
@@ -221,13 +231,22 @@ async def _try_overflow_recovery(
         )
         return False
 
+    if state.tree is None:
+        logger.warning("overflow recovery: session tree unavailable")
+        return False
+
+    snapshot = state.snapshot
+    if snapshot is None:
+        logger.warning("overflow recovery: run snapshot unavailable")
+        return False
+
     try:
         outcome = await recover_from_context_overflow(
             deps=rt.deps,
             tree=state.tree,
             request=rt.request,
             query_loop_state=prepared.query_loop_state,
-            compression_runtime=state.snapshot.compression_runtime,
+            compression_runtime=snapshot.compression_runtime,
             history_budget=prepared.history_budget,
             abort_event=rt.abort_event,
         )
@@ -267,7 +286,7 @@ def _append_system_directive(
     text: str,
     *,
     reason: str,
-    **fields: Any,
+    **fields: object,
 ) -> bool:
     """把运行时指令追加到打包后的 system，返回是否写入。
 

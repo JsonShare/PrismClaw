@@ -6,9 +6,10 @@
 推断器签名: (source_type, source_path, result_text) -> dict[str, str]
   返回 dict 的 key 须带域名前缀，如 "{domain}.evidence_level"。
 """
+
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 # 类型别名
 EvidenceInferencer = Callable[[str, str, str], dict[str, str]]

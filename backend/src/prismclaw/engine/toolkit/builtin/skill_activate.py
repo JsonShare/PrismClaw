@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import (
     ToolContext,
@@ -11,6 +11,7 @@ from prismclaw.engine.toolkit.registry.tool_runtime import (
 from prismclaw.schema.content.content_types import (
     RuntimeControlArtifact,
     ToolContextModifier,
+    ToolResult,
     ToolSkillExecutionStrategy,
     ToolSkillInvocation,
 )
@@ -21,6 +22,7 @@ from prismclaw.schema.services.skills import (
 )
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
     from prismclaw.engine.execution.skills.runtime import SkillRuntime
 
 logger = logging.getLogger(__name__)
@@ -60,15 +62,11 @@ class ActivateSkillTool:
         "properties": {
             "skill_name": {
                 "type": "string",
-                "description": (
-                    "由 skill_search 或可用技能列表展示的精确技能名，例如 'docx'。"
-                ),
+                "description": ("由 skill_search 或可用技能列表展示的精确技能名，例如 'docx'。"),
             },
             "task_context": {
                 "type": "string",
-                "description": (
-                    "可选的简短说明，用于描述激活该技能所服务的当前任务。"
-                ),
+                "description": ("可选的简短说明，用于描述激活该技能所服务的当前任务。"),
             },
         },
         "required": ["skill_name"],
@@ -81,12 +79,12 @@ class ActivateSkillTool:
         self,
         *,
         skill_runtime: SkillRuntime,
-        capability_catalog: Any = None,
+        capability_catalog: CapabilityCatalogService | None = None,
     ) -> None:
         self._skill_runtime = skill_runtime
         self._capability_catalog = capability_catalog
 
-    async def execute(self, args: dict[str, Any], context: ToolContext):
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
         raw_name = args.get("skill_name", "")
         if not isinstance(raw_name, str) or not raw_name.strip():
@@ -133,8 +131,7 @@ class ActivateSkillTool:
             if _owner is not None and _owner not in _scope:
                 return error_result(
                     call_id,
-                    f"skill_scope_denied:{_owner}"
-                    f"（该技能属于插件「{_owner}」，请先 @ 该插件）",
+                    f"skill_scope_denied:{_owner}（该技能属于插件「{_owner}」，请先 @ 该插件）",
                 )
 
         try:
@@ -199,9 +196,7 @@ class ActivateSkillTool:
                     append_messages=[dict(m) for m in plan.append_messages],
                 ),
             )
-            message = (
-                f"技能“{plan.skill_name}”正以“{plan.execution_mode}”执行模式分发。"
-            )
+            message = f"技能“{plan.skill_name}”正以“{plan.execution_mode}”执行模式分发。"
 
         return text_result(call_id, message, runtime_control=runtime_control)
 

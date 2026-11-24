@@ -1,5 +1,17 @@
 from __future__ import annotations
 
+import re
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import TypedDict
+
+from prismclaw.schema.agent.data_types import ContentBlock
+
 """Session-related shared types and context state.
 
 Consolidates session_types.py (MessageEntry, SessionEvent, etc.) and
@@ -7,23 +19,12 @@ session_state.py (SessionContextState, etc.) into a single module
 to reduce file fragmentation in contracts/agent/.
 """
 
-import re
-import time
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Any, Literal
-from typing_extensions import TypedDict
-
-from pydantic import BaseModel, ConfigDict, Field
-
-from prismclaw.schema.agent.data_types import ContentBlock
-
 
 # ── Helper functions (local copies to avoid contracts → kernel coupling) ──
 
+
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _now_ms_epoch() -> int:
@@ -33,8 +34,8 @@ def _now_ms_epoch() -> int:
 
 # ── TypedDict / dataclass types (pre-existing) ──────────────────────────
 
+
 class TurnRuntimeMetricsSnapshot(TypedDict):
-    request_mode: str
     dynamic_payload: int
     input_tokens: int
     cache_read_tokens: int
@@ -65,7 +66,7 @@ class SystemReminderProjection:
         *,
         role: Literal["user"] = "user",
         entry_id: str | None = None,
-    ) -> "SystemReminderProjection":
+    ) -> SystemReminderProjection:
         return cls(
             kind="text",
             text=text,
@@ -79,7 +80,7 @@ class SystemReminderProjection:
         *,
         summary_text: str,
         entry_id: str | None = None,
-    ) -> "SystemReminderProjection":
+    ) -> SystemReminderProjection:
         return cls(
             kind="history_compaction_summary",
             summary_text=summary_text,
@@ -91,6 +92,7 @@ ProjectionInputMessage = AgentMessageDict | SystemReminderProjection
 
 
 # ── Session data models (moved from kernel/session/types.py) ─────────────
+
 
 class SessionHeader(BaseModel):
     type: Literal["session"] = "session"
@@ -134,7 +136,7 @@ class MessageEntry(SessionEntryBase):
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     partial: bool = False
- # tool-result failure flag ( — drives the red timeline span
+    # tool-result failure flag ( — drives the red timeline span
     # and the ledger error marker). Set by the tool execution loop when the
     # ToolResult carries is_error.
     is_error: bool = False
@@ -142,14 +144,14 @@ class MessageEntry(SessionEntryBase):
     # trajectory projector). Set by the tool execution loop.
     tool_name: str | None = None
     # 任意业务标记（默认 None），供展示层/分析层按需识别。
-    metadata: dict | None = None
+    metadata: dict[str, Any] | None = None
     # 客户端生成的消息标识（web channel 的 chat.send.client_message_id）。
     # 服务端 user entry 与客户端乐观气泡据此对齐：客户端收到带该值的 user
     # 消息时原地 re-key，而不是再追加一个重复气泡。
     client_message_id: str | None = None
 
 
-class SessionEventType(str, Enum):
+class SessionEventType(StrEnum):
     """Session event types — aligned with 会话事件映射.
 
     Lifecycle: turn → step → message → tool → result
@@ -177,23 +179,23 @@ class SessionEventType(str, Enum):
     SESSION_END_SEED = "session/end-seed"
 
     # PrismClaw-specific extensions
-    ENTRY_UPDATED = "entry_updated"   # compaction / microcompaction patch
+    ENTRY_UPDATED = "entry_updated"  # compaction / microcompaction patch
 
 
 class SessionEvent(BaseModel):
     """Immutable session event — core of Event Sourcing.
 
- Aligned with 会话事件类型:
-    - seq: monotonic sequence number (Redis INCR, cross-worker safe)
-    - time: epoch milliseconds (int, sortable, time-range query support)
-    - type: event type from SessionEventMap
-    - data: flexible dict payload (Event Sourcing — not enforced at runtime)
-    - ignorable: reader may safely skip when type is unknown
-    - source_event_seqs: seqs of earlier events this cites (traceability)
+    Aligned with 会话事件类型:
+       - seq: monotonic sequence number (Redis INCR, cross-worker safe)
+       - time: epoch milliseconds (int, sortable, time-range query support)
+       - type: event type from SessionEventMap
+       - data: flexible dict payload (Event Sourcing — not enforced at runtime)
+       - ignorable: reader may safely skip when type is unknown
+       - source_event_seqs: seqs of earlier events this cites (traceability)
 
-    B/S architecture:
-    - session_id is implicit in the Event Log key, kept for convenience
-    - Events are append-only — once written, never modified
+       B/S architecture:
+       - session_id is implicit in the Event Log key, kept for convenience
+       - Events are append-only — once written, never modified
     """
 
     seq: int
@@ -232,7 +234,7 @@ class SessionStateUpdate(BaseModel):
     decisions: list[SessionContextItem] = Field(default_factory=list)
     assumptions: list[SessionContextItem] = Field(default_factory=list)
     open_questions: list[SessionContextItem] = Field(default_factory=list)
-    evidence: list[dict] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class GoalRecord(BaseModel):
@@ -262,7 +264,7 @@ class SessionContextState(BaseModel):
     goals: list[GoalRecord] = Field(default_factory=list)
     assumptions: list[SessionContextItem] = Field(default_factory=list)
     open_questions: list[SessionContextItem] = Field(default_factory=list)
-    evidence: list[dict] = Field(default_factory=list)
+    evidence: list[dict[str, Any]] = Field(default_factory=list)
     recent_messages: list[str] = Field(default_factory=list)
 
     def record_recent_message(self, role: str, content: str) -> None:
@@ -294,13 +296,10 @@ class SessionContextState(BaseModel):
         self.constraints = _merge_session_items(self.constraints, update.constraints)
         self.decisions = _merge_session_items(self.decisions, update.decisions)
         self.assumptions = _merge_session_items(self.assumptions, update.assumptions)
-        self.open_questions = _merge_session_items(
-            self.open_questions, update.open_questions
-        )
+        self.open_questions = _merge_session_items(self.open_questions, update.open_questions)
         if update.evidence:
             existing_keys = {
-                f"{e.get('source_path', '')}:{e.get('quoted_text', '')}"
-                for e in self.evidence
+                f"{e.get('source_path', '')}:{e.get('quoted_text', '')}" for e in self.evidence
             }
             for item in update.evidence:
                 key = f"{item.get('source_path', '')}:{item.get('quoted_text', '')}"
@@ -313,17 +312,53 @@ class SessionContextState(BaseModel):
 
 _STATE_TOKEN_RE = re.compile(r"[a-z0-9_]+")
 _STATE_STOPWORDS = {
-    "the", "a", "an", "to", "for", "of", "and", "or", "with",
-    "on", "in", "by", "is", "are", "be", "this", "that", "it",
-    "we", "do", "does", "done",
+    "the",
+    "a",
+    "an",
+    "to",
+    "for",
+    "of",
+    "and",
+    "or",
+    "with",
+    "on",
+    "in",
+    "by",
+    "is",
+    "are",
+    "be",
+    "this",
+    "that",
+    "it",
+    "we",
+    "do",
+    "does",
+    "done",
 }
 _POSITIVE_ACTION_HINTS = {
-    "enable", "enabled", "keep", "use", "using", "add",
-    "allow", "require", "prefer", "ship", "migrate",
+    "enable",
+    "enabled",
+    "keep",
+    "use",
+    "using",
+    "add",
+    "allow",
+    "require",
+    "prefer",
+    "ship",
+    "migrate",
 }
 _NEGATIVE_ACTION_HINTS = {
-    "disable", "disabled", "remove", "drop", "avoid",
-    "forbid", "reject", "deprecate", "stop", "block",
+    "disable",
+    "disabled",
+    "remove",
+    "drop",
+    "avoid",
+    "forbid",
+    "reject",
+    "deprecate",
+    "stop",
+    "block",
 }
 
 
@@ -396,9 +431,7 @@ def _items_conflict(existing: SessionContextItem, incoming: SessionContextItem) 
     incoming_polarity = _state_item_polarity(incoming.content)
     if existing_polarity != 0 and incoming_polarity != 0 and existing_polarity != incoming_polarity:
         return True
-    if incoming.kind == "question" and incoming.status == "superseded":
-        return True
-    return False
+    return bool(incoming.kind == "question" and incoming.status == "superseded")
 
 
 def _items_share_topic(left: SessionContextItem, right: SessionContextItem) -> bool:
@@ -413,7 +446,9 @@ def _items_share_topic(left: SessionContextItem, right: SessionContextItem) -> b
 
 
 def _state_topic_tokens(text: str) -> set[str]:
-    tokens = {token for token in _STATE_TOKEN_RE.findall(text.lower()) if token not in _STATE_STOPWORDS}
+    tokens = {
+        token for token in _STATE_TOKEN_RE.findall(text.lower()) if token not in _STATE_STOPWORDS
+    }
     return {token for token in tokens if len(token) > 1}
 
 

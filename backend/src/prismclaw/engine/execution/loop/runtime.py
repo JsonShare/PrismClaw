@@ -4,10 +4,14 @@ prepare 阶段构造并填充「入参 / run 级状态」，``build_runtime`` �
 「装配产物」。stage 函数以 ``rt: LoopRuntime`` 为第一参数显式读写，不依赖
 隐式作用域，也不存在第二份 run 级上下文。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.control.kernel import CompletionKernel
 
 
 @dataclass
@@ -64,7 +68,7 @@ class LoopRuntime:
     completion_state: Any = None
     budget_guard: Any = None
     run_budget: Any = None
-    completion_kernel: Any = None
+    completion_kernel: CompletionKernel | None = None
     terminal_messages: dict[str, str] = field(default_factory=dict)
     run_projector: Any = None
 

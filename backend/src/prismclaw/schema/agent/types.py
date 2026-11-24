@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from prismclaw.schema.agent.task_runtime import (
     ConfirmationDecision,
@@ -12,7 +13,12 @@ from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.services.env_types import ExecutionEnv
 from prismclaw.schema.storage.storage_types import SessionStore
 
+if TYPE_CHECKING:
+    from prismclaw.engine.subagent.runtime.parallel import ParallelTaskRuntimeRecord
+    from prismclaw.schema.content.streaming import SubagentProgressBatch
+
 # ── RunRequest (moved from core/agent/ownership.py) ────────────────
+
 
 @dataclass
 class RunRequest:
@@ -37,7 +43,7 @@ class RunRequest:
     request_id: str | None = None
     task_id: str | None = None
     # 本轮任务复杂度（由 RunPreparer 基于规则评估写入；仅新任务回合写入，
-    # 确认/恢复回合为 None）。simple 路径据此跳过重管道与走 fast_path。
+    # 确认/恢复回合为 None）。由 TurnPlanner 折叠进 TurnPlan。
     complexity: TaskComplexity | None = None
     task_spec: TaskSpec | None = None
     recovery_run_id: str | None = None
@@ -71,6 +77,7 @@ class RunRequest:
 
 # ── AgentDeps Protocol ─────────────────────────────────────────────
 
+
 class AgentDeps(Protocol):
     """Agent 运行时需要的依赖契约。
 
@@ -94,8 +101,8 @@ class AgentDeps(Protocol):
     def with_request_context(
         self,
         *,
-        progress_sink: Any = None,
-        terminal_sink: Any = None,
+        progress_sink: Callable[[SubagentProgressBatch], Awaitable[None]] | None = None,
+        terminal_sink: Callable[[ParallelTaskRuntimeRecord], Awaitable[None]] | None = None,
         channel: str | None = None,
     ) -> AgentDeps:
         """创建注入了请求级上下文的 deps 变体。

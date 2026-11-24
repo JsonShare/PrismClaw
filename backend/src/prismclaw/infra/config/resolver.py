@@ -9,6 +9,7 @@
 模型基建（服务商凭据 / 模型能力 / 全局默认模型）不在这里，见 models_registry.py，
 其归属文件是 backend/configs/models.yaml。
 """
+
 from __future__ import annotations
 
 import logging
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 # 路径解析
 # ---------------------------------------------------------------------------
 
+
 def _defaults_config_path(domain: str) -> Path:
     """返回域默认配置文件路径：backend/src/subpackages/{domain}/configs/{domain}.json。
 
@@ -40,7 +42,16 @@ def _defaults_config_path(domain: str) -> Path:
     """
     validate_domain_name(domain)
     from prismclaw.infra.paths import resolve_project_root
-    return resolve_project_root() / "backend" / "src" / "subpackages" / domain / "configs" / f"{domain}.json"
+
+    return (
+        resolve_project_root()
+        / "backend"
+        / "src"
+        / "subpackages"
+        / domain
+        / "configs"
+        / f"{domain}.json"
+    )
 
 
 def _workspace_config_dir(
@@ -52,7 +63,7 @@ def _workspace_config_dir(
     工作区目录由 ``infra.workspace_paths`` 单一权威源解析（消除本地复刻）：
     {workspace_base}/web_{user_id}/{workspace_id}/.work/state/configs/
     """
-    from prismclaw.infra.workspace_paths import work_dir, resolve_workspace_dir
+    from prismclaw.infra.workspace_paths import resolve_workspace_dir, work_dir
 
     return work_dir(resolve_workspace_dir(user_id, workspace_id), "state", "configs")
 
@@ -70,6 +81,7 @@ def _override_config_path(
 # ---------------------------------------------------------------------------
 # 配置文档读写（YAML/JSON 自适应）
 # ---------------------------------------------------------------------------
+
 
 def _read_config_document(path: Path) -> dict[str, Any] | None:
     """读取配置文件（YAML/JSON 自适应）。解析失败返回 None + warning。"""
@@ -89,6 +101,7 @@ def _write_config_document(path: Path, data: dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 # 域配置
 # ---------------------------------------------------------------------------
+
 
 def get_effective_config(
     domain: str,
@@ -130,7 +143,11 @@ def get_effective_config(
             logger.warning(
                 "Config version mismatch for domain=%s workspace=%s: "
                 "default=%s override=%s, stale keys removed: %s",
-                domain, workspace_id, default_ver, override_ver, stale_keys,
+                domain,
+                workspace_id,
+                default_ver,
+                override_ver,
+                stale_keys,
             )
         override = cleaned
 

@@ -30,7 +30,7 @@ const MAIN_MENU_ITEMS = [
   { key: 'chat' as const, label: '新任务', img: iconNew },
   { key: 'experts' as const, label: '能力扩展', img: iconSkill },
   { key: 'files' as const, label: '自动化', img: iconClock },
-  { key: 'outputs' as const, label: '产出物', img: iconFolder },
+  { key: 'outbox' as const, label: '产出物', img: iconFolder },
 ]
 
 /** 侧栏平铺后的一组：分组标签 + 该组内的域菜单项 */

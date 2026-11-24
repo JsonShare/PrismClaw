@@ -2,13 +2,14 @@
 
 数据权威层级：抽取字段定位，原文下结论。
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .._protocols import ToolContext, text_result, error_result
+from .._protocols import ToolContext, error_result, text_result
 
 
 @dataclass
@@ -24,16 +25,18 @@ class ReadRawReportTool:
         "查询原始报告全文。参数为 report_id（从 read_patient_reports 获取）。"
         "数据权威层级：抽取字段定位，原文下结论。"
     )
-    parameters: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {
-            "report_id": {
-                "type": "string",
-                "description": "报告 ID（从 read_patient_reports 返回的 report_id）",
+    parameters: dict[str, Any] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "report_id": {
+                    "type": "string",
+                    "description": "报告 ID（从 read_patient_reports 返回的 report_id）",
+                },
             },
-        },
-        "required": ["report_id"],
-    })
+            "required": ["report_id"],
+        }
+    )
     tool_class: str = "read"
     side_effect: bool = False
     effect_class: str = ""
@@ -73,17 +76,23 @@ class ReadRawReportTool:
             status = report.get("status", "排队中")
             return text_result(
                 call_id,
-                json.dumps({
-                    "report_id": report_id,
-                    "status": status,
-                    "note": "原始文本为空，可能尚未完成解析",
-                }, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "report_id": report_id,
+                        "status": status,
+                        "note": "原始文本为空，可能尚未完成解析",
+                    },
+                    ensure_ascii=False,
+                ),
             )
 
         return text_result(
             call_id,
-            json.dumps({
-                "report_id": report_id,
-                "raw_text": raw_text,
-            }, ensure_ascii=False),
+            json.dumps(
+                {
+                    "report_id": report_id,
+                    "raw_text": raw_text,
+                },
+                ensure_ascii=False,
+            ),
         )

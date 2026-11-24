@@ -1,9 +1,10 @@
 """consent 子域 — 声明驱动同意管理。"""
+
 from prismclaw.engine.security.consent.consent_gate import (
-    ConsentRecord,
     ConsentCheckResult,
-    InMemoryConsentStore,
     ConsentGate,
+    ConsentRecord,
+    InMemoryConsentStore,
 )
 from prismclaw.engine.security.consent.redis_consent_store import RedisConsentStore
 

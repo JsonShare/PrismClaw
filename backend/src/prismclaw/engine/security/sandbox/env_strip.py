@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 from prismclaw.schema.security.deny_names import (
     HARDCODED_DENY_NAMES,
@@ -28,6 +28,14 @@ from prismclaw.schema.security.deny_names import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_ALLOWLIST: frozenset[str] = frozenset({"PATH", "HOME", "LANG", "TERM"})
+
+# sandbox/__init__.py 从本模块导出这三个符号（见其 __all__）。
+__all__ = [
+    "DEFAULT_ALLOWLIST",
+    "HARDCODED_DENY_NAMES",
+    "build_clean_env",
+    "validate_env_allowlist",
+]
 
 
 def build_clean_env(
@@ -76,6 +84,9 @@ def build_clean_env(
         )
     logger.debug(
         "sandbox env built: allowed=%d dropped=%d allowlist_size=%d base_env_size=%d",
-        len(clean), len(dropped), len(names), len(base_env or {}),
+        len(clean),
+        len(dropped),
+        len(names),
+        len(base_env or {}),
     )
     return clean

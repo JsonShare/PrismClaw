@@ -12,12 +12,13 @@ PrismClaw 特有设计（Python ``importlib`` 需要 load/activate 分离）。
     [active|inactive|loaded] ──unload()─► [installed]
     [installed]   ──uninstall()─► [uninstalled]
 """
+
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class PluginLifecycleState(str, Enum):
+class PluginLifecycleState(StrEnum):
     UNINSTALLED = "uninstalled"
     INSTALLED = "installed"
     LOADED = "loaded"
@@ -28,22 +29,30 @@ class PluginLifecycleState(str, Enum):
 # 合法状态转移表
 _TRANSITIONS: dict[PluginLifecycleState, frozenset[PluginLifecycleState]] = {
     PluginLifecycleState.UNINSTALLED: frozenset({PluginLifecycleState.INSTALLED}),
-    PluginLifecycleState.INSTALLED: frozenset({
-        PluginLifecycleState.LOADED,
-        PluginLifecycleState.UNINSTALLED,
-    }),
-    PluginLifecycleState.LOADED: frozenset({
-        PluginLifecycleState.ACTIVE,
-        PluginLifecycleState.INSTALLED,
-    }),
-    PluginLifecycleState.ACTIVE: frozenset({
-        PluginLifecycleState.INACTIVE,
-        PluginLifecycleState.INSTALLED,
-    }),
-    PluginLifecycleState.INACTIVE: frozenset({
-        PluginLifecycleState.ACTIVE,
-        PluginLifecycleState.INSTALLED,
-    }),
+    PluginLifecycleState.INSTALLED: frozenset(
+        {
+            PluginLifecycleState.LOADED,
+            PluginLifecycleState.UNINSTALLED,
+        }
+    ),
+    PluginLifecycleState.LOADED: frozenset(
+        {
+            PluginLifecycleState.ACTIVE,
+            PluginLifecycleState.INSTALLED,
+        }
+    ),
+    PluginLifecycleState.ACTIVE: frozenset(
+        {
+            PluginLifecycleState.INACTIVE,
+            PluginLifecycleState.INSTALLED,
+        }
+    ),
+    PluginLifecycleState.INACTIVE: frozenset(
+        {
+            PluginLifecycleState.ACTIVE,
+            PluginLifecycleState.INSTALLED,
+        }
+    ),
 }
 
 

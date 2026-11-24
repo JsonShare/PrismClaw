@@ -2,6 +2,7 @@
 
 Protocols for plugin trust checking and loading, plus shared plugin types.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ class PluginLoadProtocol(Protocol):
 @dataclass(slots=True)
 class PluginReloadSummary:
     """Summary of a plugin reload operation — zero prismclaw internal dependencies."""
+
     plugin_count: int
     command_count: int
     skill_count: int

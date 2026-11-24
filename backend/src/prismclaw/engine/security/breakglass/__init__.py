@@ -1,17 +1,18 @@
 """breakglass 子域 — 熔断/紧急访问机制。"""
+
 from prismclaw.engine.security.breakglass.breakglass_manager import (
-    BreakGlassToken,
-    InMemoryBreakGlassStore,
+    BreakGlassManager,
     BreakGlassRequest,
     BreakGlassResult,
-    BreakGlassManager,
+    BreakGlassToken,
+    InMemoryBreakGlassStore,
 )
 from prismclaw.engine.security.breakglass.breakglass_recorder import (
+    BreakGlassRecorder,
+    LocalRecordingStorage,
     RecordingChunk,
     RecordingIndex,
     RecordingStorage,
-    LocalRecordingStorage,
-    BreakGlassRecorder,
 )
 
 __all__ = [

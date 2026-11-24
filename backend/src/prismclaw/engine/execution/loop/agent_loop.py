@@ -7,6 +7,7 @@
 
 循环：单层 ``while True``。压缩重启由 ``TurnUpdate.restart`` 回到顶部。
 """
+
 from __future__ import annotations
 
 import logging
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # run_loop — 纯控制流骨架
 # ---------------------------------------------------------------------------
+
 
 async def run_loop(
     state: RunLoopState,
@@ -129,15 +131,15 @@ async def run_loop(
 
         # 只标记当前 iteration 是否触发 max_tokens：正常完成时重置，
         # 避免上一轮截断污染本轮终止判定。
-        state.max_tokens_hit_in_step = (
-            getattr(response, "finish_reason", None) == "length"
-        )
+        state.max_tokens_hit_in_step = getattr(response, "finish_reason", None) == "length"
 
         # ── Step 2d: should_continue (preflight) ──
         # 覆盖 budget / abort / max_iterations / 无工具回合治理（路径 C）；
         # 工具循环（路径 D）在 post 评估，全拒（路径 E）在 all_blocked。
         _decision = await config.should_continue(
-            state, response, event=LoopEvent(site="preflight", iteration=state.perf.llm_calls),
+            state,
+            response,
+            event=LoopEvent(site="preflight", iteration=state.perf.llm_calls),
         )
         if not _decision.should_continue:
             if state.terminal_error is not None:
@@ -184,7 +186,8 @@ async def run_loop(
                     # （含 tool_calls）落树，被拒结果也必须落树才能维持
                     # tool_calls ↔ tool 消息配对（否则下轮 API 400）。
                     _blocked_evt = _create_blocked_tool_result(
-                        call, before_result.reason or "工具执行被阻止",
+                        call,
+                        before_result.reason or "工具执行被阻止",
                     )
                     yield _blocked_evt
                     state.blocked_tool_results.append(_blocked_evt)
@@ -250,7 +253,11 @@ async def run_loop(
                 # 会被 provider 拒绝（400）。
                 if config.persist_clarified_turn is not None:
                     await config.persist_clarified_turn(
-                        state, response, allowed_calls, _ask_call_id, _clarify_answer,
+                        state,
+                        response,
+                        allowed_calls,
+                        _ask_call_id,
+                        _clarify_answer,
                     )
                 if _ask_call_id:
                     yield _create_clarify_tool_end(_ask_call_id, _clarify_answer)
@@ -278,7 +285,9 @@ async def run_loop(
         # ── Step 4: should_continue (post-turn) ──
         # 覆盖：tool_loop 进度观察（record + evaluate）、budget、abort
         _decision = await config.should_continue(
-            state, response, event=LoopEvent(site="post", iteration=state.perf.llm_calls),
+            state,
+            response,
+            event=LoopEvent(site="post", iteration=state.perf.llm_calls),
         )
         if not _decision.should_continue:
             if state.terminal_error is not None:
@@ -301,5 +310,3 @@ async def run_loop(
         # 清理本回合的 LLM 结果，下一轮 prepare 从 tree 重建上下文。
         state.llm_outcome = None
         state.llm_response = None
-
-

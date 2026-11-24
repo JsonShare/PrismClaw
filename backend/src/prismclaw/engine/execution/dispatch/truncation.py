@@ -6,6 +6,7 @@
 
 安全做法：全部标记为失败，让 LLM 下一轮重新生成。
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,7 @@ def fail_truncated_tool_calls(
     """
     from prismclaw.engine.execution.dispatch.execution import ToolExecutionArtifacts
     from prismclaw.schema.agent.data_types import TextBlock
-    from prismclaw.engine.toolkit.registry.tool_runtime import ToolResult
+    from prismclaw.schema.content.content_types import ToolResult
 
     logger.warning(
         "tool.truncated_response session_id=%s tool_count=%d "
@@ -45,11 +46,13 @@ def fail_truncated_tool_calls(
     results = [
         ToolResult(
             tool_call_id=tc.get("id", ""),
-            content=[TextBlock(
-                text=f"工具调用 \"{tc.get('function', {}).get('name', '?')}\" "
-                     f"未被执行：本次响应触达输出 token 上限，"
-                     f"其参数可能已被截断。请使用完整的参数重新发起该工具调用。"
-            )],
+            content=[
+                TextBlock(
+                    text=f'工具调用 "{tc.get("function", {}).get("name", "?")}" '
+                    f"未被执行：本次响应触达输出 token 上限，"
+                    f"其参数可能已被截断。请使用完整的参数重新发起该工具调用。"
+                )
+            ],
             is_error=True,
         )
         for tc in tool_calls

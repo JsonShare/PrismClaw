@@ -3,6 +3,7 @@
 历史 bug：固定 header 先 append 再读文件，导致没有任何 AGENTS.md 时
 仍返回一段"以下展示代码库"的引导语，既误导又白耗 token。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -35,9 +36,7 @@ def test_returns_empty_when_file_is_blank() -> None:
 
 def test_header_prepended_when_content_exists() -> None:
     out = asyncio.run(
-        load_bootstrap_context(
-            "w1", _FakeStore({"AGENTS.md": "项目规则 A"}), ["AGENTS.md"]
-        )
+        load_bootstrap_context("w1", _FakeStore({"AGENTS.md": "项目规则 A"}), ["AGENTS.md"])
     )
     assert out.startswith("以下为工作区与用户指令")
     assert "项目规则 A" in out

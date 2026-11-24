@@ -4,6 +4,7 @@
 只有在真正启动服务时才暴露（曾因再导出缺失导致 uvicorn lifespan 启动失败）。
 这里只做导入，不构造任何 app。
 """
+
 from __future__ import annotations
 
 

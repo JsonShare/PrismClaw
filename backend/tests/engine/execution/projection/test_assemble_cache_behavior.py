@@ -4,6 +4,7 @@
 assemble 不得再次触发记忆检索；输入（anchor digest）变化则必须
 重算。检索调用用假 retriever 计数，其余重依赖以最小 patch 隔离。
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -173,9 +174,7 @@ async def test_interactive_mode_tightens_retrieval_and_disables_llm_selector():
             session_id="s",
             messages=[],
             prompt="今天天气怎么样",
-            task_spec=TaskSpec(
-                task_id="t1", session_id="s", goal="今天天气怎么样？"
-            ),
+            task_spec=TaskSpec(task_id="t1", session_id="s", goal="今天天气怎么样？"),
         )
     assert retriever.retrieve_calls == 1
     assert retriever.last_kwargs["retrieval_budget_s"] == 3.0
@@ -204,9 +203,7 @@ async def test_create_mode_keeps_default_budget_and_llm_selector():
             session_id="s",
             messages=[],
             prompt="生成报告",
-            task_spec=TaskSpec(
-                task_id="t2", session_id="s", goal="产出季度报告文件"
-            ),
+            task_spec=TaskSpec(task_id="t2", session_id="s", goal="产出季度报告文件"),
         )
     assert retriever.retrieve_calls == 1
     assert retriever.last_kwargs["retrieval_budget_s"] is None

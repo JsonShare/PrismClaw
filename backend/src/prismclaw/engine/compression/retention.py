@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     # 依赖反转：compression 层禁止 runtime import execution 层。
@@ -35,11 +35,11 @@ class SectionRetention:
             )
 
     @classmethod
-    def unchanged(cls) -> "SectionRetention":
+    def unchanged(cls) -> SectionRetention:
         return cls()
 
     @classmethod
-    def active_from_preflight(cls) -> "SectionRetention":
+    def active_from_preflight(cls) -> SectionRetention:
         return cls(
             source="preflight",
             lifecycle_phase="active",
@@ -47,7 +47,7 @@ class SectionRetention:
         )
 
     @classmethod
-    def durable_static(cls) -> "SectionRetention":
+    def durable_static(cls) -> SectionRetention:
         return cls(
             source="snapshot",
             lifecycle_phase="durable",
@@ -57,7 +57,7 @@ class SectionRetention:
     def durable_with_dynamic_sections(
         cls,
         *section_names: str,
-    ) -> "SectionRetention":
+    ) -> SectionRetention:
         retained_names = tuple(
             dict.fromkeys(name for name in section_names if isinstance(name, str) and name)
         )
@@ -75,15 +75,15 @@ def apply_section_retention(
     if retention.source == "unchanged":
         return state.model_copy(deep=True)
 
-    retained_static_sections = [
-        section.model_copy(deep=True) for section in state.static_sections
-    ]
+    retained_static_sections = [section.model_copy(deep=True) for section in state.static_sections]
     retained_dynamic_sections = _retained_dynamic_sections(
         state.dynamic_sections,
         retention,
     )
     retained_section_names = {
-        section.name for section in [*retained_static_sections, *retained_dynamic_sections] if section.name
+        section.name
+        for section in [*retained_static_sections, *retained_dynamic_sections]
+        if section.name
     }
     retained_cache_break_sections = [
         name for name in state.cache_break_sections if name in retained_section_names

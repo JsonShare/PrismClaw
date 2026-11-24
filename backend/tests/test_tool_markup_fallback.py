@@ -9,6 +9,7 @@
 + tool_calls），而真实形态是全角竖线 U+FF5C + ``calls``，导致 9/9 样本一条都
 没匹配上，兜底代码从未生效却"测试通过"——自造样本自证等于没测。
 """
+
 from __future__ import annotations
 
 import random
@@ -41,7 +42,8 @@ REAL_DSML = (
     '    u="https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id="+pid\n'
     "    return urllib.request.urlopen(u,timeout=60).read()\n"
     "PY</\uff5cDSML\uff5cparameter>\n"
-    '<\uff5cDSML\uff5cparameter name="description" string="true">取队列规模</\uff5cDSML\uff5cparameter>\n'
+    '<\uff5cDSML\uff5cparameter name="description" string="true">取队列规模</\uff5cDSML\uff5c'
+    "parameter>\n"
     "</\uff5cDSML\uff5cinvoke>\n"
     "</\uff5cDSML\uff5ccalls>"
 )
@@ -77,7 +79,10 @@ def test_ascii_variant_still_supported():
 
 
 def test_spaced_markup_variant():
-    spaced = '< \uff5c DSML \uff5c calls >< \uff5c DSML \uff5c invoke name="bash" >x< / \uff5c DSML \uff5c calls >'
+    spaced = (
+        "< \uff5c DSML \uff5c calls >< \uff5c DSML \uff5c invoke "
+        'name="bash" >x< / \uff5c DSML \uff5c calls >'
+    )
     assert has_tool_markup(spaced)
     assert strip_tool_markup(spaced) == ""
 
@@ -102,7 +107,7 @@ def test_clean_text_not_touched():
 
 
 def test_unclosed_block_is_dropped():
-    assert strip_tool_markup("<\uff5cDSML\uff5ccalls>\n<\uff5cDSML\uff5cinvoke name=\"bash\">") == ""
+    assert strip_tool_markup('<\uff5cDSML\uff5ccalls>\n<\uff5cDSML\uff5cinvoke name="bash">') == ""
 
 
 def test_strip_noise_keeps_thinking_behaviour():
@@ -123,26 +128,18 @@ def test_classify_marks_markup_only_turn_as_tool_markup():
 
 def test_markup_turn_is_retried_then_exhausted():
     response = SimpleNamespace(text=REAL_DSML, tool_calls=[])
-    config = SimpleNamespace(
-        retry=SimpleNamespace(reasoning_only_limit=2, empty_response_limit=1)
-    )
+    config = SimpleNamespace(retry=SimpleNamespace(reasoning_only_limit=2, empty_response_limit=1))
 
-    first = decide_no_tool_turn(
-        response=response, config=config, retry_counts={"tool_markup": 0}
-    )
+    first = decide_no_tool_turn(response=response, config=config, retry_counts={"tool_markup": 0})
     assert first.classification == "tool_markup"
     assert first.action == "retry"
 
-    second = decide_no_tool_turn(
-        response=response, config=config, retry_counts={"tool_markup": 1}
-    )
+    second = decide_no_tool_turn(response=response, config=config, retry_counts={"tool_markup": 1})
     assert second.action == "complete"
 
 
 def test_retry_limit_defaults_to_empty_limit():
-    config = SimpleNamespace(
-        retry=SimpleNamespace(reasoning_only_limit=2, empty_response_limit=1)
-    )
+    config = SimpleNamespace(retry=SimpleNamespace(reasoning_only_limit=2, empty_response_limit=1))
     assert retry_limit_for("tool_markup", config, None) == 1
 
 
@@ -174,5 +171,8 @@ def test_stream_filter_is_chunk_boundary_agnostic():
 
 def test_stream_filter_unclosed_block_flushes_empty():
     f = MarkupStreamFilter()
-    assert f.feed("正文。\n<\uff5cDSML\uff5ccalls>\n<\uff5cDSML\uff5cinvoke name=\"bash\">") == "正文。\n"
+    assert (
+        f.feed('正文。\n<\uff5cDSML\uff5ccalls>\n<\uff5cDSML\uff5cinvoke name="bash">')
+        == "正文。\n"
+    )
     assert f.flush() == ""

@@ -16,7 +16,6 @@ from prismclaw.engine.execution.handoff.contract import (
 from prismclaw.engine.execution.request._disclaimer_registry import get_advisory_rules
 from prismclaw.engine.execution.request._prompt_types import PromptInputs, _wrap_xml
 
-
 _HANDOFF_ADVISORY_TEXT = (
     "## 跨代理移交\n"
     "子代理可能发出 request_handoff；ToolResult 的 final_text 会以 "

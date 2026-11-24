@@ -10,11 +10,11 @@
 归一化函数承担「模型说什么都不能信」的职责：列表长度裁剪、类型矫正、
 引用 ID 格式校验。落库的字段一律先过这里。
 """
+
 from __future__ import annotations
 
 import json
 from typing import Any
-
 
 # 输出长度上限
 MAX_FOCUS_AREAS = 6
@@ -28,9 +28,15 @@ MAX_QUOTED_TEXT = 200
 MAX_FIELD = 256
 
 # 有效 source_type 枚举
-_SOURCE_TYPES = frozenset({
-    "report_section", "kb_literature", "kb_guideline", "kb_drug", "speculative",
-})
+_SOURCE_TYPES = frozenset(
+    {
+        "report_section",
+        "kb_literature",
+        "kb_guideline",
+        "kb_drug",
+        "speculative",
+    }
+)
 
 # 有效 confidence 枚举
 _CONFIDENCE_LEVELS = frozenset({"high", "medium", "low"})
@@ -102,9 +108,7 @@ def build_director_prompt(
             parts.append(f"  用药: {_truncate_list(r['medications'], 5)}")
 
     parts.append(f"\n患者画像：{_json_compact(patient_profile)}")
-    parts.append(
-        "\n请输出 focus_areas / retrieval_queries / analysis_priorities。"
-    )
+    parts.append("\n请输出 focus_areas / retrieval_queries / analysis_priorities。")
     return "\n".join(parts)
 
 
@@ -133,7 +137,10 @@ KB_RETRIEVAL_TOOL: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "properties": {
-                            "source_type": {"type": "string", "description": "kb_literature/kb_guideline/kb_drug"},
+                            "source_type": {
+                                "type": "string",
+                                "description": "kb_literature/kb_guideline/kb_drug",
+                            },
                             "source_id": {"type": "string"},
                             "title": {"type": "string"},
                             "snippet": {"type": "string"},
@@ -282,7 +289,9 @@ def build_expert_prompt(
     if kb_hits:
         parts.append("\n知识库相关条目：")
         for h in kb_hits[:10]:
-            parts.append(f"  [{h.get('source_type', '')}:{h.get('source_id', '')}] {h.get('snippet', '')}")
+            parts.append(
+                f"  [{h.get('source_type', '')}:{h.get('source_id', '')}] {h.get('snippet', '')}"
+            )
 
     parts.append("\n报告数据：")
     for r in report_data:
@@ -506,8 +515,12 @@ def _json_compact(obj: Any) -> str:
 def normalize_director_plan(raw: dict[str, Any]) -> dict[str, Any]:
     """收敛主任规划输出。"""
     focus = [_str(a, 64) for a in (raw.get("focus_areas") or [])[:MAX_FOCUS_AREAS] if a]
-    queries = [_str(q, 128) for q in (raw.get("retrieval_queries") or [])[:MAX_RETRIEVAL_QUERIES] if q]
-    priorities = [_str(p, 64) for p in (raw.get("analysis_priorities") or [])[:MAX_FOCUS_AREAS] if p]
+    queries = [
+        _str(q, 128) for q in (raw.get("retrieval_queries") or [])[:MAX_RETRIEVAL_QUERIES] if q
+    ]
+    priorities = [
+        _str(p, 64) for p in (raw.get("analysis_priorities") or [])[:MAX_FOCUS_AREAS] if p
+    ]
     return {
         "focus_areas": focus,
         "retrieval_queries": queries,
@@ -524,13 +537,17 @@ def normalize_kb_retrieval(raw: dict[str, Any]) -> list[dict[str, Any]]:
         st = _str(h.get("source_type"), 32)
         if st not in ("kb_literature", "kb_guideline", "kb_drug"):
             continue
-        hits.append({
-            "source_type": st,
-            "source_id": _str(h.get("source_id"), 64),
-            "title": _str(h.get("title"), 256),
-            "snippet": _str(h.get("snippet"), 200),
-            "relevance": _str(h.get("relevance"), 8) if _str(h.get("relevance")) in _CONFIDENCE_LEVELS else "medium",
-        })
+        hits.append(
+            {
+                "source_type": st,
+                "source_id": _str(h.get("source_id"), 64),
+                "title": _str(h.get("title"), 256),
+                "snippet": _str(h.get("snippet"), 200),
+                "relevance": _str(h.get("relevance"), 8)
+                if _str(h.get("relevance")) in _CONFIDENCE_LEVELS
+                else "medium",
+            }
+        )
     return hits
 
 
@@ -540,11 +557,15 @@ def normalize_expert_findings(raw: dict[str, Any], role: str) -> dict[str, Any]:
     for f in (raw.get("findings") or [])[:MAX_EXPERT_FINDINGS]:
         if not isinstance(f, dict):
             continue
-        findings.append({
-            "statement": _str(f.get("statement"), 500),
-            "detail": _str(f.get("detail"), 1000),
-            "citation_ids": [str(c) for c in (f.get("citation_ids") or [])[:MAX_CITATIONS_PER_EXPERT]],
-        })
+        findings.append(
+            {
+                "statement": _str(f.get("statement"), 500),
+                "detail": _str(f.get("detail"), 1000),
+                "citation_ids": [
+                    str(c) for c in (f.get("citation_ids") or [])[:MAX_CITATIONS_PER_EXPERT]
+                ],
+            }
+        )
 
     citations = []
     for c in (raw.get("citations") or [])[:MAX_CITATIONS_PER_EXPERT]:
@@ -553,14 +574,18 @@ def normalize_expert_findings(raw: dict[str, Any], role: str) -> dict[str, Any]:
         st = _str(c.get("source_type"), 32)
         if st not in _SOURCE_TYPES:
             st = "report_section"
-        citations.append({
-            "citation_id": _str(c.get("citation_id"), 64),
-            "source_type": st,
-            "source_id": _str(c.get("source_id"), 64),
-            "section_heading": _str(c.get("section_heading"), 128),
-            "quoted_text": _str(c.get("quoted_text"), MAX_QUOTED_TEXT),
-            "confidence": _str(c.get("confidence"), 8) if _str(c.get("confidence")) in _CONFIDENCE_LEVELS else "medium",
-        })
+        citations.append(
+            {
+                "citation_id": _str(c.get("citation_id"), 64),
+                "source_type": st,
+                "source_id": _str(c.get("source_id"), 64),
+                "section_heading": _str(c.get("section_heading"), 128),
+                "quoted_text": _str(c.get("quoted_text"), MAX_QUOTED_TEXT),
+                "confidence": _str(c.get("confidence"), 8)
+                if _str(c.get("confidence")) in _CONFIDENCE_LEVELS
+                else "medium",
+            }
+        )
 
     conf = _str(raw.get("confidence"), 8)
     if conf not in _CONFIDENCE_LEVELS:
@@ -580,23 +605,27 @@ def normalize_hypothesis(raw: dict[str, Any]) -> dict[str, Any]:
     for h in (raw.get("hypotheses") or [])[:MAX_HYPOTHESES]:
         if not isinstance(h, dict):
             continue
-        hypotheses.append({
-            "statement": _str(h.get("statement"), 500),
-            "rationale": _str(h.get("rationale"), 500),
-            "citation_ids": [str(c) for c in (h.get("citation_ids") or [])[:5]],
-        })
+        hypotheses.append(
+            {
+                "statement": _str(h.get("statement"), 500),
+                "rationale": _str(h.get("rationale"), 500),
+                "citation_ids": [str(c) for c in (h.get("citation_ids") or [])[:5]],
+            }
+        )
 
     citations = []
-    for c in (raw.get("citations") or [])[:MAX_HYPOTHESES * 2]:
+    for c in (raw.get("citations") or [])[: MAX_HYPOTHESES * 2]:
         if not isinstance(c, dict):
             continue
-        citations.append({
-            "citation_id": _str(c.get("citation_id"), 64),
-            "source_type": "speculative",  # 强制：假设引用必须是 speculative
-            "source_id": _str(c.get("source_id"), 64),
-            "quoted_text": _str(c.get("quoted_text"), MAX_QUOTED_TEXT),
-            "confidence": "low",  # 推测性假设默认低置信度
-        })
+        citations.append(
+            {
+                "citation_id": _str(c.get("citation_id"), 64),
+                "source_type": "speculative",  # 强制：假设引用必须是 speculative
+                "source_id": _str(c.get("source_id"), 64),
+                "quoted_text": _str(c.get("quoted_text"), MAX_QUOTED_TEXT),
+                "confidence": "low",  # 推测性假设默认低置信度
+            }
+        )
 
     return {"hypotheses": hypotheses, "citations": citations}
 
@@ -607,12 +636,14 @@ def normalize_brief(raw: dict[str, Any]) -> dict[str, Any]:
     for s in (raw.get("sections") or [])[:MAX_BRIEF_SECTIONS]:
         if not isinstance(s, dict):
             continue
-        sections.append({
-            "heading": _str(s.get("heading"), 128),
-            "body": _str(s.get("body"), 4000),
-            "citation_ids": [str(c) for c in (s.get("citation_ids") or [])[:10]],
-            "is_speculative": bool(s.get("is_speculative")),
-        })
+        sections.append(
+            {
+                "heading": _str(s.get("heading"), 128),
+                "body": _str(s.get("body"), 4000),
+                "citation_ids": [str(c) for c in (s.get("citation_ids") or [])[:10]],
+                "is_speculative": bool(s.get("is_speculative")),
+            }
+        )
 
     citations = []
     seen_ids: set[str] = set()
@@ -626,13 +657,17 @@ def normalize_brief(raw: dict[str, Any]) -> dict[str, Any]:
         st = _str(c.get("source_type"), 32)
         if st not in _SOURCE_TYPES:
             st = "report_section"
-        citations.append({
-            "citation_id": cid,
-            "source_type": st,
-            "source_id": _str(c.get("source_id"), 64),
-            "section_heading": _str(c.get("section_heading"), 128),
-            "quoted_text": _str(c.get("quoted_text"), MAX_QUOTED_TEXT),
-            "confidence": _str(c.get("confidence"), 8) if _str(c.get("confidence")) in _CONFIDENCE_LEVELS else "medium",
-        })
+        citations.append(
+            {
+                "citation_id": cid,
+                "source_type": st,
+                "source_id": _str(c.get("source_id"), 64),
+                "section_heading": _str(c.get("section_heading"), 128),
+                "quoted_text": _str(c.get("quoted_text"), MAX_QUOTED_TEXT),
+                "confidence": _str(c.get("confidence"), 8)
+                if _str(c.get("confidence")) in _CONFIDENCE_LEVELS
+                else "medium",
+            }
+        )
 
     return {"sections": sections, "citations": citations}

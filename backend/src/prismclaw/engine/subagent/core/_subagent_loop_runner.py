@@ -15,12 +15,14 @@ turns 映射（现实现 turns 在 tool_calls 判断前自增；骨架 iteration
 - 自然完成 / break_flag / max_turns / dispatch 前超时 → turns = iteration + 1
 - LLM 调用前 abort / 超时 → turns = iteration
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.execution.control.kernel import Decision, LoopEvent
 from prismclaw.engine.execution.dispatch.pipeline import LLMStreamError
@@ -40,9 +42,11 @@ from prismclaw.engine.subagent.core.run_context import SubagentRunInterruptedErr
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.streaming import ErrorEvent
 from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.llm.types import LLMResponse
 
 if TYPE_CHECKING:
-    from prismclaw.engine.subagent.core._loop_mixin import LoopMixin
+    from prismclaw.engine.subagent.core._instance_base import _InstanceBase
+    from prismclaw.engine.subagent.definition.manifest import AgentManifest
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +67,7 @@ _TERMINAL_STATUS = {
 
 
 async def run_subagent_turn_loop(
-    instance: "LoopMixin",
+    instance: _InstanceBase,
     *,
     messages: list[dict[str, Any]],
     system_prompt: str,
@@ -74,7 +78,7 @@ async def run_subagent_turn_loop(
     tool_schemas: list[dict[str, Any]],
     sub_ctx: ToolContext,
     parent_ctx: ToolContext,
-    manifest: Any,
+    manifest: AgentManifest,
 ) -> tuple[str, int, dict[str, int]]:
     """Run the canonical sub-agent turn loop on the shared run_loop skeleton.
 
@@ -140,7 +144,7 @@ async def run_subagent_turn_loop(
 
         # D1 advisory 预留通道（当前恒空；启用后 advisory 经此进下一轮上下文）
         if s.pending_messages:
-            messages.extend(s.pending_messages)
+            messages.extend(dict(m) for m in s.pending_messages if isinstance(m, dict))
             s.pending_messages = []
 
         await asyncio.sleep(0)
@@ -167,11 +171,7 @@ async def run_subagent_turn_loop(
                     tools=tool_schemas,
                     abort_event=sub_ctx.abort,
                 ),
-                timeout=(
-                    max(deadline - time.monotonic(), 0.001)
-                    if deadline is not None
-                    else None
-                ),
+                timeout=(max(deadline - time.monotonic(), 0.001) if deadline is not None else None),
             )
         except TimeoutError:
             logger.info(
@@ -234,7 +234,7 @@ async def run_subagent_turn_loop(
         yield  # pragma: no cover
 
     async def execute_tools(
-        s: RunLoopState, response: Any, allowed_calls: list
+        s: RunLoopState, response: LLMResponse, allowed_calls: list[dict[str, Any]]
     ) -> AsyncIterator[None]:
         # 子代理无 before_tool_call 门控（恒 None），allowed_calls 即全量解析结果；
         # 分发走原始 tool_calls（与旧 _loop 同一入参形态），坏调用由
@@ -306,7 +306,10 @@ async def run_subagent_turn_loop(
         yield  # pragma: no cover
 
     async def should_continue(
-        s: RunLoopState, response: Any, *, event: LoopEvent,
+        s: RunLoopState,
+        response: LLMResponse,
+        *,
+        event: LoopEvent,
     ) -> Decision:
         if end["cause"] is not None:
             # 终局已定（如 dispatch 前墙钟超时），post 相位不得覆盖

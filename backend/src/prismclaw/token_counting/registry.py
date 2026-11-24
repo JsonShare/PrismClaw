@@ -49,7 +49,7 @@ def available_token_providers() -> tuple[str, ...]:
     return tuple(sorted(_PROVIDERS))
 
 
-def build_token_counter(provider: str = _DEFAULT_PROVIDER, **options: Any) -> TokenCounter:
+def build_token_counter(provider: str = _DEFAULT_PROVIDER, **options: object) -> TokenCounter:
     """Instantiate a registered provider.
 
     Raises:

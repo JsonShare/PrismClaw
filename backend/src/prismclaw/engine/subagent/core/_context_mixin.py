@@ -1,10 +1,12 @@
 """Auto-extracted Mixin from instance.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from prismclaw.engine.subagent.core._instance_base import _InstanceBase
 from prismclaw.engine.subagent.core.constants import TIMEOUT_HARD_CEILING_S
 from prismclaw.engine.subagent.core.contract import (
     coerce_context_snapshot,
@@ -16,13 +18,19 @@ from prismclaw.engine.subagent.prompting import (
     resolve_preloaded_skill_context,
 )
 from prismclaw.engine.subagent.shared_types import PreloadedSkillContext
-from prismclaw.schema.llm.request_format import inject_cache_control_breakpoints
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.subagent import SubagentContextSnapshot
+from prismclaw.schema.llm.request_format import inject_cache_control_breakpoints
+
+if TYPE_CHECKING:
+    from prismclaw.engine.subagent.definition.manifest import AgentManifest
+    from prismclaw.schema.agent.data_types import ContentBlock
+    from prismclaw.schema.session.types import SessionEntry, SessionTree
 
 logger = logging.getLogger(__name__)
 
-class ContextMixin:
+
+class ContextMixin(_InstanceBase):
     async def _build_context(
         self,
         task: str,
@@ -186,10 +194,9 @@ class ContextMixin:
 
         return messages
 
-
     def _extract_messages_from_session(
         self,
-        session_tree: Any,
+        session_tree: SessionTree | dict[str, Any],
     ) -> list[dict[str, Any]]:
         """Extract messages from SessionTree.
 
@@ -233,7 +240,10 @@ class ContextMixin:
 
         return messages
 
-    def _extract_message_from_entry(self, entry: Any) -> dict[str, Any] | None:
+    def _extract_message_from_entry(
+        self,
+        entry: SessionEntry | dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Extract a single message from a session entry.
 
         Returns None if the entry is not a message entry.
@@ -289,7 +299,10 @@ class ContextMixin:
 
         return None
 
-    def _convert_content_to_llm_format(self, content: Any) -> Any:
+    def _convert_content_to_llm_format(
+        self,
+        content: str | list[ContentBlock] | None,
+    ) -> str | list[dict[str, Any]]:
         """Convert MessageEntry.content to LLM API format.
 
         MessageEntry.content can be:
@@ -327,7 +340,10 @@ class ContextMixin:
 
         This is the task description formatted for an inherited context.
         """
-        return f"[Inherited Context] 你的任务：{task}\n\n请使用继承的上下文执行任务，并简洁地报告结果。"
+        return (
+            f"[Inherited Context] 你的任务：{task}\n\n"
+            "请使用继承的上下文执行任务，并简洁地报告结果。"
+        )
 
     @staticmethod
     def _format_context_snapshot(snapshot: SubagentContextSnapshot) -> str:
@@ -345,6 +361,7 @@ class ContextMixin:
 
     def _build_sub_context(self) -> ToolContext:
         from dataclasses import replace as _replace
+
         run_context = getattr(self, "_run_context", None)
         sub_session_id = (
             run_context.child_session_id
@@ -363,9 +380,11 @@ class ContextMixin:
     def _resolve_model(self) -> str:
         if self._manifest.model:
             return self._manifest.model
-        routed = self._settings.model_routing.get(self._manifest.name)
-        if routed:
-            return routed
+        routing = getattr(self._settings, "model_routing", None)
+        if isinstance(routing, dict):
+            routed = routing.get(self._manifest.name)
+            if isinstance(routed, str) and routed:
+                return routed
         if self._default_model:
             return self._default_model
         raise RuntimeError(f"sub-agent {self._manifest.name!r}: no model resolved")
@@ -383,7 +402,7 @@ class ContextMixin:
     def _resolve_allowed_tools(
         self,
         *,
-        manifest: Any,
+        manifest: AgentManifest,
         preload_ctx: PreloadedSkillContext,
         available: set[str] | None = None,
     ) -> set[str] | None:
@@ -404,7 +423,7 @@ class ContextMixin:
         *,
         parent_ctx: ToolContext,
         task: str,
-        manifest: Any,
+        manifest: AgentManifest,
     ) -> str:
         if self._memory_store is None:
             return ""
@@ -425,7 +444,7 @@ class ContextMixin:
         return self._render_memory_block(results)
 
     @staticmethod
-    def _render_memory_block(results: Any) -> str:
+    def _render_memory_block(results: object) -> str:
         if isinstance(results, str):
             return results
         if isinstance(results, list):
@@ -440,7 +459,7 @@ class ContextMixin:
         self,
         *,
         parent_ctx: ToolContext,
-        manifest: Any,
+        manifest: AgentManifest,
     ) -> PreloadedSkillContext:
         return resolve_preloaded_skill_context(
             parent_ctx=parent_ctx,
@@ -449,5 +468,3 @@ class ContextMixin:
         )
 
     # -- internal: main loop -----------------------------------------------------------
-
-

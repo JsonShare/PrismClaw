@@ -6,10 +6,14 @@ import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +78,11 @@ def split_sql(sql: str) -> list[str]:
                 continue
 
         if ch in ("'", '"'):
-            escaped = ch == "'" and i > 0 and sql[i - 1] in "Ee" and (
-                i < 2 or not (sql[i - 2].isalnum() or sql[i - 2] == "_")
+            escaped = (
+                ch == "'"
+                and i > 0
+                and sql[i - 1] in "Ee"
+                and (i < 2 or not (sql[i - 2].isalnum() or sql[i - 2] == "_"))
             )
             j = i + 1
             closed = False
@@ -114,15 +121,13 @@ def split_sql(sql: str) -> list[str]:
     return statements
 
 
-async def _ensure_extensions(executor: Any) -> None:
+async def _ensure_extensions(executor: AsyncConnection | AsyncSession) -> None:
     result = await executor.execute(text("SELECT extname FROM pg_extension"))
     installed = {row[0] for row in result}
     missing = [name for name in REQUIRED_EXTENSIONS if name not in installed]
     if missing:
         commands = "\n".join(f"CREATE EXTENSION IF NOT EXISTS {name} CASCADE;" for name in missing)
-        raise RuntimeError(
-            f"PostgreSQL 缺少必需扩展：{', '.join(missing)}。请先执行：\n{commands}"
-        )
+        raise RuntimeError(f"PostgreSQL 缺少必需扩展：{', '.join(missing)}。请先执行：\n{commands}")
 
 
 def _file_state(path: Path) -> tuple[str, bool]:
@@ -130,7 +135,7 @@ def _file_state(path: Path) -> tuple[str, bool]:
 
 
 @asynccontextmanager
-async def _connection(target: SchemaTarget) -> AsyncIterator[Any]:
+async def _connection(target: SchemaTarget) -> AsyncIterator[AsyncConnection | AsyncSession]:
     if isinstance(target, AsyncEngine):
         async with target.begin() as conn:
             yield conn

@@ -1,12 +1,14 @@
 """Auto-extracted Mixin from client_manager.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import logging
 
-from prismclaw.engine.mcp.adapter import MCPToolAdapter
-from prismclaw.engine.mcp.settings import McpServerConfig
+import mcp
 
 from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
+from prismclaw.engine.mcp.adapter import MCPToolAdapter
+from prismclaw.engine.mcp.settings import McpServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +18,7 @@ class AdapterMixin(_MCPBackendBase):
         self,
         server_name: str,
         config: McpServerConfig,
-        session,
+        session: mcp.ClientSession,
     ) -> list[MCPToolAdapter]:
         adapters: list[MCPToolAdapter] = []
         for sdk_key, tool in self._group.tools.items():

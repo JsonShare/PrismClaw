@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from prismclaw.engine.foundation.distributed_mutex import DistributedMutex
 from prismclaw.schema.shared.exceptions import LockAcquireError
 from prismclaw.schema.storage.persistence_types import LockManager
+
+if TYPE_CHECKING:
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 
 
 class DreamExecutionLease(Protocol):
@@ -14,7 +17,9 @@ class DreamExecutionLease(Protocol):
 
 
 class DreamLockProvider(Protocol):
-    async def try_acquire(self, session_key: str, *, owner_label: str) -> DreamExecutionLease | None: ...
+    async def try_acquire(
+        self, session_key: str, *, owner_label: str
+    ) -> DreamExecutionLease | None: ...
 
 
 class DistributedDreamLease:
@@ -37,7 +42,7 @@ class DistributedDreamLockProvider:
         self,
         lock_manager: LockManager,
         *,
-        task_manager,
+        task_manager: TaskManagerProtocol,
         ttl_ms: int = 300_000,
         heartbeat_interval_s: float = 30.0,
         key_prefix: str = "dream:session:",
@@ -48,7 +53,9 @@ class DistributedDreamLockProvider:
         self._heartbeat_interval_s = heartbeat_interval_s
         self._key_prefix = key_prefix
 
-    async def try_acquire(self, session_key: str, *, owner_label: str) -> DreamExecutionLease | None:
+    async def try_acquire(
+        self, session_key: str, *, owner_label: str
+    ) -> DreamExecutionLease | None:
         mutex = DistributedMutex(
             self._lock_manager,
             f"{self._key_prefix}{session_key}",

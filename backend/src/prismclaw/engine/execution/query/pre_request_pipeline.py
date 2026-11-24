@@ -1,33 +1,52 @@
-from dataclasses import dataclass
-from typing import Any, List, Optional
+from __future__ import annotations
+
 import copy
 import json
 import logging
 import time as _time
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.execution.query.state import QueryLoopState
-from prismclaw.engine.execution.query.builder import rebuild_query_loop_state
-from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.engine.execution.query._turn_helpers import TurnPreflightResult
-from prismclaw.engine.toolkit.registry.governance import resolve_registry_tool_governance
-from prismclaw.engine.execution.checkpoint import RequestAssemblySnapshot
-from prismclaw.engine.state.turn_state import ToolGovernanceState, TurnState
-from prismclaw.schema.session.types import SessionTree
-from prismclaw.schema.agent.session import ProjectionInputMessage, SystemReminderProjection
+from prismclaw.engine.compression.compaction import estimate_tokens
 from prismclaw.engine.compression.digest import build_prepared_turn_digest, build_tool_pool_id
-from prismclaw.engine.execution.query.context_preparation import build_static_context_for_runner
+from prismclaw.engine.compression.file_reinjection import (
+    build_file_reinjection_messages,
+)
 from prismclaw.engine.context.microcompact import (
     batch_cleanup_threshold,
     batch_microcompact_tick,
     microcompact_query_messages,
     resolve_microcompact_mode,
 )
-from prismclaw.engine.compression.compaction import estimate_tokens
+from prismclaw.engine.execution.checkpoint import RequestAssemblySnapshot
+from prismclaw.engine.execution.query._turn_helpers import TurnPreflightResult
+from prismclaw.engine.execution.query.builder import rebuild_query_loop_state
+from prismclaw.engine.execution.query.context_preparation import build_static_context_for_runner
+from prismclaw.engine.execution.query.state import QueryLoopState
+from prismclaw.engine.execution.query.turn_planner import TurnPlanner
 from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
+from prismclaw.engine.state.turn_state import ToolGovernanceState, TurnState
+from prismclaw.schema.agent.session import SystemReminderProjection
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.session.types import SessionTree
 from prismclaw.schema.shared.utils import count_image_parts
-from prismclaw.engine.compression.file_reinjection import (
-    build_file_reinjection_messages,
-)
+
+if TYPE_CHECKING:
+    import asyncio
+
+    from prismclaw.engine.compression.orchestrator import (
+        CompressionOrchestrator,
+        CompressionPreparation,
+    )
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.execution.query.turn_planner import TurnPlan
+    from prismclaw.engine.execution.request.system_prompt import PromptInputs
+    from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.services.skills import SkillInvocationState
+    from prismclaw.schema.session.cache_types import CompressionRuntimeState
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +61,7 @@ def _discovered_in_order(turn_state: TurnState) -> list[str]:
         key=lambda record: int(getattr(record, "discovery_order", 0) or 0),
     )
     return [
-        str(record.canonical_name)
-        for record in records
-        if getattr(record, "canonical_name", "")
+        str(record.canonical_name) for record in records if getattr(record, "canonical_name", "")
     ]
 
 
@@ -60,11 +77,7 @@ def order_visible_tools_append_only(
     不重排核心前缀。
     """
     discovered = set(discovered_ordered_names)
-    core = [
-        tool
-        for tool in sorted_visible_tools
-        if getattr(tool, "name", None) not in discovered
-    ]
+    core = [tool for tool in sorted_visible_tools if getattr(tool, "name", None) not in discovered]
     by_name = {getattr(tool, "name", ""): tool for tool in sorted_visible_tools}
     tail = [by_name[name] for name in discovered_ordered_names if name in by_name]
     return [*core, *tail]
@@ -75,7 +88,6 @@ def _build_request_snapshot(
     request_id: str | None,
     query_loop_state: QueryLoopState,
     effective_model: str,
-    request_mode: str | None,
     packed_request: PackedLLMRequest,
     tools_for_llm: list[Any],
 ) -> RequestAssemblySnapshot:
@@ -83,7 +95,6 @@ def _build_request_snapshot(
         request_id=str(request_id or ""),
         query_loop_revision_id=query_loop_state.loop_revision_id,
         model=effective_model,
-        request_mode=request_mode,
         messages_for_api=list(packed_request.messages),
         system=packed_request.system,
         context_payload=packed_request.context_payload,
@@ -92,34 +103,59 @@ def _build_request_snapshot(
     )
 
 
-def _collect_active_tool_call_ids(messages: list[ProjectionInputMessage]) -> set[str]:
+def _collect_active_tool_call_ids(
+    messages: Iterable[Mapping[str, Any] | SystemReminderProjection],
+) -> set[str]:
     active_tool_call_ids: set[str] = set()
     for msg in messages:
         if isinstance(msg, SystemReminderProjection):
             continue
-        if msg.get("role") == "tool" and "tool_call_id" in msg:
-            active_tool_call_ids.add(msg["tool_call_id"])
-        if msg.get("role") == "assistant" and "tool_calls" in msg:
-            for tool_call in msg["tool_calls"]:
-                if "id" in tool_call:
-                    active_tool_call_ids.add(tool_call["id"])
+        if msg.get("role") == "tool":
+            tool_call_id = msg.get("tool_call_id")
+            if isinstance(tool_call_id, str):
+                active_tool_call_ids.add(tool_call_id)
+        if msg.get("role") == "assistant":
+            tool_calls = msg.get("tool_calls")
+            if isinstance(tool_calls, list):
+                for tool_call in tool_calls:
+                    if isinstance(tool_call, dict):
+                        call_id = tool_call.get("id")
+                        if isinstance(call_id, str):
+                            active_tool_call_ids.add(call_id)
     return active_tool_call_ids
+
+
+def format_turn_plan_log(plan: TurnPlan) -> str:
+    """单行 `TurnPlan` 摘要（G4）。
+
+    抽成纯函数只为可测：字段清单就是「plan 的全部决策」，
+    新增字段必须同步进来，否则观测会与真实决策脱节。
+    """
+    return (
+        f"turn_plan complexity={plan.complexity} "
+        f"visible_tools={len(plan.toolset.visible_tools_for_llm)} "
+        f"searchable={len(plan.toolset.searchable_tools)} "
+        f"skip_compaction={plan.skip_history_compaction} "
+        f"l1={plan.include_l1_memory} "
+        f"headless={plan.headless}"
+    )
 
 
 @dataclass
 class PreparedTurn:
-    tools_for_llm: List[Any]
+    tools_for_llm: list[Any]
     turn_state_delta: TurnState
-    audit_trail: List[dict]
+    audit_trail: list[dict[str, Any]]
     prepared_turn_digest: str
     query_loop_state: QueryLoopState
-    prompt_inputs: Any
+    prompt_inputs: PromptInputs
     history_budget: int
     preflight: TurnPreflightResult | None = None
-    compression_preparation: Optional[Any] = None
+    compression_preparation: CompressionPreparation | None = None
     # SDD R-A2: measured tool wire cost (already deducted from history_budget),
     # forwarded to the drift sentinel in log_turn_token_usage.
     tools_wire_tokens: int = 0
+
 
 class PreRequestPipeline:
     """
@@ -127,37 +163,54 @@ class PreRequestPipeline:
     This pipeline MUST be functional: it should NOT mutate the provided `tree` or global state.
     It takes immutable snapshots as input and returns a `PreparedTurn`.
     """
+
     async def run(
         self,
         *,
-        request: Any,
-        deps: Any,
+        request: RunRequest,
+        deps: AgentRunnerDeps,
         tree: SessionTree,
         turn_state: TurnState,
-        tool_workspace_path: Any,
+        tool_workspace_path: str | None,
         effective_model: str,
-        tool_ctx: Any,
-        skill_invocation: Any,
-        attachment_guidance: Optional[str],
+        tool_ctx: ToolContext,
+        skill_invocation: SkillInvocationState | None,
+        attachment_guidance: str | None,
         query_loop_state: QueryLoopState,
-        compression_runtime: Any,
-        abort_event: Any,
-        compression_orchestrator: Any,
+        compression_runtime: CompressionRuntimeState,
+        abort_event: asyncio.Event,
+        compression_orchestrator: CompressionOrchestrator,
     ) -> PreparedTurn:
         _deepcopy_start = _time.monotonic()
         new_turn_state = copy.deepcopy(turn_state)
         _deepcopy_ms = (_time.monotonic() - _deepcopy_start) * 1000
         if _deepcopy_ms > 1.0:
             logger.debug("pre_request_deepcopy %.1fms", _deepcopy_ms)
-        audit_trail: List[dict] = []
-        # 减法：complexity=simple（RunPreparer 规则评估写入）视为简单路径，
-        # 跳过 microcompact / file_reinjection 等对短上下文无意义的重步骤。
-        # 只跳过管道步骤，不裁剪工具集（关键词打分不足以判断是否需要写工具）。
-        is_simple_path = getattr(request, "complexity", None) == "simple"
+        audit_trail: list[dict[str, Any]] = []
 
-        # Static shell ownership now lives on deps.static_shell_cache.
-        # The pipeline must resolve the current plan each run so plugin/session
-        # generation changes cannot be masked by instance-local state.
+        # ① 唯一决策点：governance / 熔断剔除 / simple 开关 / 无头 都在这里
+        # 算一次，后续静态壳与工具面共同消费，不再各自收窄（R3）。
+        _tls = query_loop_state.tracking.tool_loop_state
+        _frozen_tools = frozenset(_tls.frozen_tools) if _tls is not None else frozenset()
+        plan = TurnPlanner().plan(
+            request=request,
+            deps=deps,
+            turn_state=turn_state,
+            tool_ctx=tool_ctx,
+            skill_invocation=skill_invocation,
+            frozen_tools=_frozen_tools,
+        )
+        logger.info(format_turn_plan_log(plan))
+        skip_history_compaction = plan.skip_history_compaction
+        subagent_depth = tool_ctx.subagent_depth if tool_ctx else 0
+
+        # ② 工具面与静态壳共用 plan 的同一份终集（已含熔断剔除）。
+        # 任何二次收窄都会让 `<tools>` 与实发工具面分叉（D14）。
+        visible_tool_names = set(plan.toolset.visible_tools_for_llm)
+        _callable_tools = set(plan.toolset.callable_tools)
+
+        # ③ 静态壳：只消费 workspace 事实 + model + 本轮终集，不受复杂度
+        # 影响（R1）。
         static_plan = await build_static_context_for_runner(
             request=request,
             deps=deps,
@@ -166,37 +219,9 @@ class PreRequestPipeline:
             effective_model=effective_model,
             skill_invocation=skill_invocation,
             discovered_tools=turn_state.discovered_tool_names(),
-            subagent_depth=tool_ctx.subagent_depth,
-        )
-        
-        # 2. Tool Visibility & Assembly
-        subagent_depth = tool_ctx.subagent_depth if tool_ctx else 0
-
-        # 能否暂停等人回答，取决于是否持有会话队列（当前仅 Web 主循环具备）。
-        # CLI / 测试等无队列场景属无头执行，需交互用户的工具不下发给模型。
-        # 定时任务复用 Web 主链路，持有队列，因此与普通会话同等待遇。
-        headless = getattr(deps, "session_queue", None) is None
-
-        resolved_toolset = resolve_registry_tool_governance(
-            deps.tools,
-            skill_invocation=skill_invocation,
-            discovered_tools=turn_state.discovered_tool_names(),
             subagent_depth=subagent_depth,
-            headless=headless,
-            tool_scope=getattr(tool_ctx, "tool_scope", None) if tool_ctx else None,
+            visible_tool_names=visible_tool_names,
         )
-        visible_tool_names = set(resolved_toolset.visible_tools_for_llm)
-
-        # Force-freeze tools when the tool-loop policy has flagged them
-        # as runaway loops. Removing them
-        # from the visible set ensures the model literally cannot call
-        # them again, even if it ignores the guidance injection.
-        _tls = query_loop_state.tracking.tool_loop_state
-        _callable_tools = set(resolved_toolset.callable_tools)
-        if _tls is not None and _tls.frozen_tools:
-            for frozen_name in _tls.frozen_tools:
-                visible_tool_names.discard(frozen_name)
-                _callable_tools.discard(frozen_name)
 
         # 减法：simple 路径仅跳过重管道（microcompact / reinjection），
         # 不裁剪工具集——关键词打分不足以判断任务是否真的不需要写工具，
@@ -209,13 +234,10 @@ class PreRequestPipeline:
             subagent_depth=subagent_depth,
         )
         _tool_policy = (
-            getattr(getattr(deps, "config", None), "tool_mutation_policy", None)
-            or "append_only"
+            getattr(getattr(deps, "config", None), "tool_mutation_policy", None) or "append_only"
         )
         if _tool_policy == "unbounded":
-            tools_for_llm = [
-                deps.tools._to_openai_function(tool) for tool in _sorted_tools
-            ]
+            tools_for_llm = [deps.tools._to_openai_function(tool) for tool in _sorted_tools]
         else:
             if _tool_policy == "frozen":
                 logger.warning(
@@ -227,9 +249,7 @@ class PreRequestPipeline:
                 sorted_visible_tools=_sorted_tools,
                 discovered_ordered_names=_discovered,
             )
-            tools_for_llm = [
-                deps.tools._to_openai_function(tool) for tool in _ordered
-            ]
+            tools_for_llm = [deps.tools._to_openai_function(tool) for tool in _ordered]
             _tail_appended = [n for n in _discovered if n in visible_tool_names]
             if _tail_appended:
                 logger.info(
@@ -257,17 +277,14 @@ class PreRequestPipeline:
             declared_tools=declared_tool_names,
             visible_tools=visible_tool_names,
             callable_tools=list(_callable_tools),
-            gated_tools=resolved_toolset.denied_tools,
+            gated_tools=plan.toolset.denied_tools,
             discovered_tool_names=turn_state.discovered_tool_names(),
             active_skill_name=getattr(skill_invocation, "skill_name", None),
             restricted=(
-                visible_name_set != declared_tool_names
-                or _callable_tools != declared_tool_names
+                visible_name_set != declared_tool_names or _callable_tools != declared_tool_names
             ),
         )
-        new_turn_state.canonical_decision_state.tool_governance_state = (
-            governance_state
-        )
+        new_turn_state.canonical_decision_state.tool_governance_state = governance_state
         new_turn_state.capability_decision_bundle.tool_governance = governance_state
         new_turn_state.capability_decision_bundle.decision_digest = ""
         new_turn_state.tool_pool_id = build_tool_pool_id(tools_for_llm) if tools_for_llm else ""
@@ -284,10 +301,10 @@ class PreRequestPipeline:
         # 会把 tool_results mkdir 到 workspace 根，与 session 级隔离冲突。
         _mc_ws = tool_workspace_path
         _mc_sid = getattr(tool_ctx, "session_id", "") if tool_ctx else ""
+        mc_working_dir: str | None = None
         if _mc_ws and _mc_sid:
-            from pathlib import Path as _P
             _safe_sid = str(_mc_sid).replace("#", "-").replace(":", "-")
-            mc_working_dir = str(_P(str(_mc_ws)) / "sessions" / _safe_sid)
+            mc_working_dir = str(Path(str(_mc_ws)) / "sessions" / _safe_sid)
         else:
             mc_working_dir = str(_mc_ws) if _mc_ws else None
 
@@ -295,10 +312,9 @@ class PreRequestPipeline:
         microcompact_result = None
         # 减法：simple 路径且无工具结果时，microcompact 无事可做，直接跳过。
         _has_tool_results = any(
-            isinstance(m, dict) and m.get("role") == "tool"
-            for m in source_message_set.messages
+            isinstance(m, dict) and m.get("role") == "tool" for m in source_message_set.messages
         )
-        _skip_microcompact = is_simple_path and not _has_tool_results
+        _skip_microcompact = skip_history_compaction and not _has_tool_results
         if _skip_microcompact:
             pass
         elif _mc_mode == "batch":
@@ -321,9 +337,7 @@ class PreRequestPipeline:
             try:
                 _new_counter, _new_total, microcompact_result = batch_microcompact_tick(
                     messages=list(source_message_set.messages),
-                    counter=getattr(
-                        compression_runtime, "tool_result_chars_since_cleanup", 0
-                    ),
+                    counter=getattr(compression_runtime, "tool_result_chars_since_cleanup", 0),
                     prev_total=getattr(compression_runtime, "tool_result_chars_probe", 0),
                     threshold=_mc_threshold,
                     working_dir=mc_working_dir,
@@ -347,8 +361,8 @@ class PreRequestPipeline:
         # Layer 6: file re-injection — only after a compaction has occurred;
         # ephemeral (query-time rebuild, never persisted into the tree).
         # 减法：simple 路径跳过（无压缩发生，没有需要重注入的文件内容）。
-        reinjected: list = []
-        if not is_simple_path:
+        reinjected: list[Any] = []
+        if not skip_history_compaction:
             reinjected = build_file_reinjection_messages(
                 tree=tree,
                 estimate_tokens=estimate_tokens,
@@ -363,6 +377,7 @@ class PreRequestPipeline:
             deps=deps,
             tree=tree,
             static_result=static_plan,
+            include_l1_memory=plan.include_l1_memory,
             attachment_guidance=attachment_guidance,
             query_loop_state=rebuild_query_loop_state(
                 query_loop_state,
@@ -379,16 +394,16 @@ class PreRequestPipeline:
         if compression_preparation.preflight and compression_preparation.preflight.packed_request:
             preflight = compression_preparation.preflight
 
-        # 4. State Pruning (Lifecycle management for Replacement State)
-        # We prune the replacement state to avoid infinite memory growth.
-        # We only keep replacements for tool_call_ids that are actually present in the current LLM request.
+        # 4. State Pruning:替换状态只保留当前请求仍在使用的 tool_call_id，防止无界增长。
         if new_turn_state.replacement_state:
             request_messages = preflight.packed_request.messages if preflight is not None else []
             removed_ids = new_turn_state.replacement_state.retain_only(
                 _collect_active_tool_call_ids(request_messages)
             )
             for removed_id in removed_ids:
-                audit_trail.append({"action": "pruned_replacement_state", "tool_call_id": removed_id})
+                audit_trail.append(
+                    {"action": "pruned_replacement_state", "tool_call_id": removed_id}
+                )
 
         packed_request = preflight.packed_request if preflight is not None else None
         # 批 4b-2：为 client 填充 input_budget
@@ -398,12 +413,10 @@ class PreRequestPipeline:
             _image_tokens = 0
             try:
                 _tpr = int(
-                    getattr(getattr(deps.config, "vision", None), "tokens_per_image", 0)
-                    or 0
+                    getattr(getattr(deps.config, "vision", None), "tokens_per_image", 0) or 0
                 )
                 _cap = int(
-                    getattr(getattr(deps.config, "vision", None), "max_images_inline", 0)
-                    or 0
+                    getattr(getattr(deps.config, "vision", None), "max_images_inline", 0) or 0
                 )
                 _img_n = count_image_parts(packed_request.messages)
                 _image_tokens = min(_img_n, _cap) * _tpr
@@ -429,11 +442,10 @@ class PreRequestPipeline:
                 request_id=getattr(request, "request_id", None),
                 query_loop_state=prepared_query_loop_state,
                 effective_model=effective_model,
-                request_mode=preflight.request_mode,
                 packed_request=preflight.packed_request,
                 tools_for_llm=tools_for_llm,
             )
-        
+
         _twt = (
             static_plan.shell_snapshot.tools_wire_tokens
             if static_plan.shell_snapshot is not None

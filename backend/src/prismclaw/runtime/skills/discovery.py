@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 from pathspec import PathSpec
+from pathspec.patterns.gitignore.basic import GitIgnoreBasicPattern
 
+from prismclaw.infra.settings import SkillSettings
+from prismclaw.runtime.skills.parser import parse_skill_file, parse_skill_frontmatter
 from prismclaw.schema.agent.domains import SkillSource
+from prismclaw.schema.services.skills import SkillManifest
 from prismclaw.schema.shared import (
     SKILL_SCAN_MAX_DEPTH,
     CapabilityLocation,
     _scan_directory_v2,
 )
-from prismclaw.infra.settings import SkillSettings
-from prismclaw.schema.services.skills import SkillManifest
-from prismclaw.runtime.skills.parser import parse_skill_file, parse_skill_frontmatter
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class SkillCatalogState:
     Eliminates module-level globals so each DefaultSkillProvider instance
     maintains its own independent dynamic state.
     """
+
     discovered_dirs: dict[str, Path] = field(default_factory=dict)
     dynamic_skills: dict[str, SkillManifest] = field(default_factory=dict)
     conditional_skills: dict[str, SkillManifest] = field(default_factory=dict)
@@ -91,14 +93,14 @@ def _matches_skill_paths(
         return False
 
 
-def _get_merged_gitignore_spec(root_paths: list[Path]) -> PathSpec | None:
+def _get_merged_gitignore_spec(root_paths: list[Path]) -> PathSpec[GitIgnoreBasicPattern] | None:
     """Load and merge .gitignore rules from all provided root paths."""
     all_lines: list[str] = []
     for root in root_paths:
         p = root.resolve() / ".gitignore"
         if p.is_file():
             try:
-                with open(p, "r", encoding="utf-8") as f:
+                with open(p, encoding="utf-8") as f:
                     all_lines.extend(f.readlines())
                     all_lines.append("\n")
             except Exception:
@@ -223,10 +225,7 @@ def activate_conditional_skills_for_paths(
         if sname in state.activated_names:
             continue
 
-        if any(
-            _matches_skill_paths(fp, root_paths, skill.paths)
-            for fp in files
-        ):
+        if any(_matches_skill_paths(fp, root_paths, skill.paths) for fp in files):
             to_remove.append(sname)
             state.dynamic_skills[sname] = skill
             state.activated_names.add(sname)
@@ -341,7 +340,10 @@ def discover_skills(
         """条件式技能入 conditional 池（已激活/已成动态技能的不再重复挂）。"""
         if dynamic_state is None:
             return False
-        if skill.name in dynamic_state.activated_names or skill.name in dynamic_state.dynamic_skills:
+        if (
+            skill.name in dynamic_state.activated_names
+            or skill.name in dynamic_state.dynamic_skills
+        ):
             return True
         # 覆盖写入而非 setdefault：技能文件可能被编辑，conditional 池必须跟着刷新，
         # 否则首次扫描的旧 frontmatter 会一直存活到进程重启。

@@ -9,26 +9,28 @@
 输入：HTTP/Proxy 响应体
 输出：DlpDecision（ALLOW / MASK / BLOCK）+ 审计
 """
+
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
-from prismclaw.schema.shared.phi_sanitizer import apply_safe_harbor, get_all_pii_patterns
 from prismclaw.engine.security.dlp.sanitizer import dlp_preprocess
+from prismclaw.schema.shared.phi_sanitizer import apply_safe_harbor, get_all_pii_patterns
 
 
-class DlpAction(str, Enum):
-    ALLOW = "allow"     # 放行
-    MASK = "mask"       # 脱敏后放行
-    BLOCK = "block"     # 阻断（k-匿名 / 字节阈值 触发）
+class DlpAction(StrEnum):
+    ALLOW = "allow"  # 放行
+    MASK = "mask"  # 脱敏后放行
+    BLOCK = "block"  # 阻断（k-匿名 / 字节阈值 触发）
 
 
 @dataclass(frozen=True)
 class DlpDecision:
     """DLP 扫描决策。"""
+
     action: DlpAction
     sanitized_text: str
     phi_byte_ratio: float
@@ -45,6 +47,7 @@ class DlpScanResult:
     用于代理 inline 扫描请求/响应体，与 DlpDecision 解耦，
     提供代理层更简洁的 allowed/blocked 语义。
     """
+
     allowed: bool
     phi_count: int
     phi_ratio: float
@@ -143,7 +146,9 @@ class DlpScanner:
                 phi_byte_ratio=phi_byte_ratio,
                 masked_phi_count=total_phi_count,
                 rows_with_phi=rows_with_phi,
-                reason=f"k_anonymity_block: {rows_with_phi} rows with PHI (threshold {self._k_rows})",
+                reason=(
+                    f"k_anonymity_block: {rows_with_phi} rows with PHI (threshold {self._k_rows})"
+                ),
                 audit_event={"event_type": "phi_batch_block", **audit_event},
             )
 
@@ -155,7 +160,9 @@ class DlpScanner:
                 phi_byte_ratio=phi_byte_ratio,
                 masked_phi_count=total_phi_count,
                 rows_with_phi=rows_with_phi,
-                reason=f"phi_ratio_block: {phi_byte_ratio:.2%} PHI (threshold {self._phi_ratio:.0%})",
+                reason=(
+                    f"phi_ratio_block: {phi_byte_ratio:.2%} PHI (threshold {self._phi_ratio:.0%})"
+                ),
                 audit_event={"event_type": "phi_ratio_block", **audit_event},
             )
 

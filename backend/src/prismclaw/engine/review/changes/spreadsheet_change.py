@@ -3,7 +3,7 @@
 Reject All reverses only the rejected changes on the live workspace file
 (never a frozen backup blob), so edits made in later rounds are preserved.
 Drift (a later edit touched a rejected location) fails loud via
-``OfficeRevertConflict`` — inherited from the shared engine.
+``OfficeRevertConflictError`` — inherited from the shared engine.
 """
 
 from __future__ import annotations
@@ -31,12 +31,8 @@ class SpreadsheetChange:
 
     def reject(self, intent: ReviewIntent) -> dict[str, Any]:
         full = intent.workspace_path / intent.path
-        current = (
-            intent.current_bytes
-            if intent.current_bytes is not None
-            else full.read_bytes()
-        )
-        # OfficeRevertConflict propagates (drift detected) — caller maps to 409.
+        current = intent.current_bytes if intent.current_bytes is not None else full.read_bytes()
+        # OfficeRevertConflictError propagates (drift detected) — caller maps to 409.
         new = revert_office_ops(current, self.kind, intent.rejected)
 
         store = get_tracking_store(intent.workspace_path)

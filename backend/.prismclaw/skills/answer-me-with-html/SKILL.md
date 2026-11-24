@@ -62,10 +62,10 @@ If the context contains the `[answer-me-with-html always-on]` reminder (the user
 The CLI is bundled in this skill's directory: `scripts/am.mjs`, a single file with no dependencies to install; it needs only Node.js 20+. If `node` is not found or is older than v20, tell the user, show them the exact command to install the Node.js LTS (macOS `brew install node`, Windows `winget install OpenJS.NodeJS.LTS`, otherwise nvm, which adds lines to the shell profile), and run it only after they agree, then check `node --version` again. If they say no or it still fails, stop and tell them. Below, `am` always means:
 
 ```bash
-AM_HOME="${AM_HOME:-${PRISMCLAW_OUTPUT_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs
+AM_HOME="${AM_HOME:-${PRISMCLAW_OUTBOX_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs
 ```
 
-The Bash tool exports `PRISMCLAW_OUTPUT_DIR`, this session's outputs directory, and the file tools can reach the same place. Keep the prefix: the default `~/.answer-me-with-html` is outside the session workspace, so the `edit` tool can report `文件不存在` for a draft the CLI just saved. `$PWD` is only a fallback; in PrismClaw it may be the backend working directory, so do not rely on it when `PRISMCLAW_OUTPUT_DIR` is set.
+The Bash tool exports `PRISMCLAW_OUTBOX_DIR`, this session's outbox directory, and the file tools can reach the same place. Keep the prefix: the default `~/.answer-me-with-html` is outside the session workspace, so the `edit` tool can report `文件不存在` for a draft the CLI just saved. `$PWD` is only a fallback; in PrismClaw it may be the backend working directory, so do not rely on it when `PRISMCLAW_OUTBOX_DIR` is set.
 
 In Claude Code, `${CLAUDE_SKILL_DIR}` is replaced with this skill's directory. On this host that token is not defined: the skill runs from `~/.prismclaw/assets/skills/answer-me-with-html`, and every command and reference path in this file already uses that path. Run them as written, and check it once with `test -f ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs`. Do not put the directory in a shell variable and reuse it in a later call: the Bash tool keeps no variable between calls, so a `SKILL_DIR` set in one call is empty in the next.
 
@@ -77,7 +77,7 @@ Keep the `AM_HOME` prefix above and add no output flag: it keeps `drafts/` and `
 3. Render in one go with a heredoc:
 
 ````bash
-AM_HOME="${AM_HOME:-${PRISMCLAW_OUTPUT_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs render - <<'AM_EOF'
+AM_HOME="${AM_HOME:-${PRISMCLAW_OUTBOX_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs render - <<'AM_EOF'
 ---
 title: Title
 ---
@@ -106,7 +106,7 @@ AM_EOF
 When a page already exists and only one panel needs to change, do not rewrite the whole page. Take the source draft from the HTML's `#am-source`, replace only the matching `##` section, and overwrite the page in place:
 
 ````bash
-AM_HOME="${AM_HOME:-${PRISMCLAW_OUTPUT_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs patch page.html --panel "Panel title" <<'AM_EOF'
+AM_HOME="${AM_HOME:-${PRISMCLAW_OUTBOX_DIR:-$PWD}/.answer-me-with-html}" node ~/.prismclaw/assets/skills/answer-me-with-html/scripts/am.mjs patch page.html --panel "Panel title" <<'AM_EOF'
 ## A Panel title
 New content
 AM_EOF

@@ -1,4 +1,5 @@
 """todo_write 工具校验与回执契约，以及"工具写入 → 状态 → 下一轮渲染"闭环。"""
+
 from __future__ import annotations
 
 import asyncio
@@ -82,9 +83,7 @@ def test_multiple_in_progress_rejected() -> None:
 
 def test_more_than_20_rejected() -> None:
     ctx = _context()
-    todos = [
-        {"id": str(i), "content": f"步骤{i}", "status": "pending"} for i in range(1, 22)
-    ]
+    todos = [{"id": str(i), "content": f"步骤{i}", "status": "pending"} for i in range(1, 22)]
     result = _run(TodoWriteTool(), todos, ctx)
     assert result.is_error, "超过 20 项必须被拒绝"
     assert "最多 20 项" in result.content[0].text, f"错误文本不符：{result.content[0].text!r}"
@@ -96,9 +95,7 @@ def test_empty_content_rejected() -> None:
     todos = [{"id": "1", "content": "   ", "status": "pending"}]
     result = _run(TodoWriteTool(), todos, ctx)
     assert result.is_error, "空 content 必须被拒绝"
-    assert "content 不能为空" in result.content[0].text, (
-        f"错误文本不符：{result.content[0].text!r}"
-    )
+    assert "content 不能为空" in result.content[0].text, f"错误文本不符：{result.content[0].text!r}"
     assert ctx.session_state.todo_list == [], "校验失败不得写入 session_state"
 
 
@@ -107,9 +104,7 @@ def test_invalid_status_rejected() -> None:
     todos = [{"id": "1", "content": "甲", "status": "done"}]
     result = _run(TodoWriteTool(), todos, ctx)
     assert result.is_error, "非法 status 必须被拒绝"
-    assert "无效的待办条目" in result.content[0].text, (
-        f"错误文本不符：{result.content[0].text!r}"
-    )
+    assert "无效的待办条目" in result.content[0].text, f"错误文本不符：{result.content[0].text!r}"
     assert ctx.session_state.todo_list == [], "校验失败不得写入 session_state"
 
 
@@ -123,6 +118,4 @@ def test_tool_write_appears_in_next_turn_block() -> None:
     block = store.build_context_block("s")
     assert block is not None, "写入清单后 volatile 块必须存在"
     assert "<todos>" in block.content, f"下一轮块缺少清单：{block.content!r}"
-    assert "[~] 2/3 撰写初稿" in block.content, (
-        f"下一轮块缺少当前步骤：{block.content!r}"
-    )
+    assert "[~] 2/3 撰写初稿" in block.content, f"下一轮块缺少当前步骤：{block.content!r}"

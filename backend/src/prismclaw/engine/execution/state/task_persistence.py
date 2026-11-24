@@ -10,22 +10,41 @@ from prismclaw.engine.execution.checkpoint import (
     BatchRuntimeRecord,
     CommitState,
     EffectClass,
-    RunSnapshot,
     ResumeBoundary,
+    RunSnapshot,
     ToolEffectRecord,
     evaluate_resume_decision,
 )
 from prismclaw.engine.foundation.evidence_classify import is_recovery_probe_evidence
-from prismclaw.schema.agent.task_runtime import EvidenceRecord, ReviewDecisionRecord, TaskMutation, TaskRuntimeState
+from prismclaw.schema.agent.session import SessionEvent
+from prismclaw.schema.agent.task_runtime import (
+    EvidenceRecord,
+    ReviewDecisionRecord,
+    TaskMutation,
+    TaskRuntimeState,
+)
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.content.compaction import DecisionLedgerEvent
 from prismclaw.schema.content.content_types import ToolResult
-from prismclaw.schema.session.types import CustomEntry, DECISION_LEDGER_EVENT_CUSTOM_TYPE, EVIDENCE_LEDGER_CUSTOM_TYPE, REVIEW_DECISION_CUSTOM_TYPE, SessionTree, TASK_MUTATION_CUSTOM_TYPE, TASK_RUNTIME_CUSTOM_TYPE, TASK_SPEC_CUSTOM_TYPE, generate_entry_id, now_iso
 from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.session.projection import SessionProjectionEngine
+from prismclaw.schema.session.types import (
+    DECISION_LEDGER_EVENT_CUSTOM_TYPE,
+    EVIDENCE_LEDGER_CUSTOM_TYPE,
+    REVIEW_DECISION_CUSTOM_TYPE,
+    TASK_MUTATION_CUSTOM_TYPE,
+    TASK_RUNTIME_CUSTOM_TYPE,
+    TASK_SPEC_CUSTOM_TYPE,
+    CustomEntry,
+    SessionTree,
+    generate_entry_id,
+    now_iso,
+)
 
 if TYPE_CHECKING:
+    from prismclaw.engine.compression.result_compaction import ResultCompactionTurn
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
-    from prismclaw.engine.execution.dispatch.execution import ResultCompactionTurn
+    from prismclaw.engine.toolkit.registry.tool_runtime import Tool
 
 from prismclaw.engine.execution.dispatch.turn_utils import (
     _batch_effect_summary,
@@ -77,16 +96,11 @@ def evaluate_task_mutation(
             ),
         )
 
-    if (
-        task_runtime.entry_resolution_status != "ready"
-        and mutation.mutation_type != "task.block"
-    ):
+    if task_runtime.entry_resolution_status != "ready" and mutation.mutation_type != "task.block":
         return MutationDecision(
             accepted=False,
             reason_code=f"entry_resolution_{task_runtime.entry_resolution_status}",
-            error_message=(
-                "任务条目尚未就绪；在条目解析成功前，运行时变更被阻断"
-            ),
+            error_message=("任务条目尚未就绪；在条目解析成功前，运行时变更被阻断"),
         )
 
     if mutation.mutation_type == "task.review.record":
@@ -102,8 +116,7 @@ def evaluate_task_mutation(
         probe_records = [
             record
             for record in (evidence_records or [])
-            if record.task_id == task_runtime.task_id
-            and is_recovery_probe_evidence(record)
+            if record.task_id == task_runtime.task_id and is_recovery_probe_evidence(record)
         ]
         if not probe_records:
             return MutationDecision(
@@ -128,10 +141,21 @@ def _register_entry(tree: SessionTree, entry: CustomEntry) -> None:
     tree.entries[entry.id] = entry
     tree.leaf_id = entry.id
 
+
 _event_logger = SessionEventLogger()
 
 
-def _resolve_tool_effect_class(tool: Any) -> EffectClass:
+async def _commit_events(deps: AgentRunnerDeps, events: list[SessionEvent]) -> bool:
+    """提交事件到会话存储；未配置 session_store 时跳过（返回 False）。"""
+    store = deps.session_store
+    if store is None:
+        logger.debug("task_persistence: session_store unavailable; events dropped")
+        return False
+    await store.commit_events(events)
+    return True
+
+
+def _resolve_tool_effect_class(tool: Tool) -> EffectClass:
     from prismclaw.engine.toolkit.registry.tool_runtime import resolve_tool_effect_class as _impl
 
     return _impl(tool)
@@ -158,8 +182,10 @@ async def _persist_task_runtime_snapshot(
     *,
     task_runtime: TaskRuntimeState,
 ) -> None:
-    current = tree.get_latest_task_runtime()
-    if current is not None and current.model_dump(mode="json") == task_runtime.model_dump(mode="json"):
+    current = SessionProjectionEngine(tree).task.get_latest_task_runtime()
+    if current is not None and current.model_dump(mode="json") == task_runtime.model_dump(
+        mode="json"
+    ):
         return
     entry = CustomEntry(
         id=generate_entry_id(set(tree.entries.keys())),
@@ -169,7 +195,7 @@ async def _persist_task_runtime_snapshot(
         data=task_runtime.model_dump(mode="json"),
     )
     event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([event])
+    await _commit_events(deps, [event])
     _register_entry(tree, entry)
 
 
@@ -194,7 +220,7 @@ async def _persist_execution_evidence_batch(
         )
         events.append(_event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id))
         entries.append(entry)
-    await deps.session_store.commit_events(events)
+    await _commit_events(deps, events)
     for entry in entries:
         _register_entry(tree, entry)
 
@@ -205,7 +231,7 @@ async def _persist_task_spec_snapshot(
     *,
     task_spec: TaskSpec,
 ) -> None:
-    current = tree.get_latest_task_spec()
+    current = SessionProjectionEngine(tree).task.get_latest_task_spec()
     if current is not None and current.model_dump(mode="json") == task_spec.model_dump(mode="json"):
         return
     entry = CustomEntry(
@@ -216,7 +242,7 @@ async def _persist_task_spec_snapshot(
         data=task_spec.model_dump(mode="json"),
     )
     event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([event])
+    await _commit_events(deps, [event])
     _register_entry(tree, entry)
 
 
@@ -234,7 +260,7 @@ async def _persist_execution_evidence(
         data=evidence.model_dump(mode="json"),
     )
     event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([event])
+    await _commit_events(deps, [event])
     _register_entry(tree, entry)
 
 
@@ -252,7 +278,7 @@ async def _persist_review_decision_record(
         data=record.model_dump(mode="json"),
     )
     event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([event])
+    await _commit_events(deps, [event])
     _register_entry(tree, entry)
 
 
@@ -270,7 +296,7 @@ async def _persist_task_mutation(
         data=mutation.model_dump(mode="json"),
     )
     event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([event])
+    await _commit_events(deps, [event])
     _register_entry(tree, entry)
 
 
@@ -288,7 +314,7 @@ async def _persist_decision_ledger_event(
         data=event.model_dump(mode="json"),
     )
     session_event = _event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)
-    await deps.session_store.commit_events([session_event])
+    await _commit_events(deps, [session_event])
     _register_entry(tree, entry)
 
 
@@ -361,7 +387,9 @@ def _apply_task_mutation_to_runtime(
         if resume_state == "awaiting_confirmation":
             updated_runtime.state = "awaiting_confirmation"
             reason = mutation.patch.get("reason")
-            updated_runtime.pending_confirmation_reason = str(reason) if reason is not None else None
+            updated_runtime.pending_confirmation_reason = (
+                str(reason) if reason is not None else None
+            )
         else:
             updated_runtime.state = "executing"
             updated_runtime.pending_confirmation_reason = None
@@ -418,7 +446,7 @@ def _set_approval_pending(snapshot: RunSnapshot, *, pending: bool) -> None:
     snapshot.resume_disposition = evaluate_resume_decision(snapshot).disposition
 
 
-def _record_cache_strategy_projection(snapshot: RunSnapshot, cache_strategy: Any) -> None:
+def _record_cache_strategy_projection(snapshot: RunSnapshot, cache_strategy: object) -> None:
     if not isinstance(cache_strategy, dict):
         return
     compression_state = snapshot.run_state.compression_state
@@ -468,27 +496,27 @@ def _record_batch_runtime(
         return
     now_ms = int(time.time() * 1000)
     current = snapshot.latest_batch_runtime
-    reuse_current = (
-        current is not None
+    reusable = (
+        current
+        if current is not None
         and current.member_call_ids == tool_call_ids
         and current.status in {"prepared", "running"}
+        else None
     )
     error_count = sum(1 for result in results if result.is_error)
     if status == "failed" and not results:
         error_count = max(1, len(tool_call_ids))
     parallel_task_ids = _collect_batch_parallel_task_ids(results)
-    if reuse_current and not parallel_task_ids:
-        parallel_task_ids = list(current.parallel_task_ids)
+    if reusable is not None and not parallel_task_ids:
+        parallel_task_ids = list(reusable.parallel_task_ids)
     batch_runtime = BatchRuntimeRecord(
-        batch_id=current.batch_id if reuse_current else _new_batch_runtime_id(),
+        batch_id=reusable.batch_id if reusable is not None else _new_batch_runtime_id(),
         owner_session_id=session_id,
         batch_kind=_batch_runtime_kind(tool_names),
         status=status,
         member_call_ids=tool_call_ids,
         member_names=tool_names,
-        started_at_epoch_ms=(
-            current.started_at_epoch_ms if reuse_current else now_ms
-        ),
+        started_at_epoch_ms=(reusable.started_at_epoch_ms if reusable is not None else now_ms),
         completed_at_epoch_ms=None if status == "running" else now_ms,
         error_count=error_count,
         effect_summary=_batch_effect_summary(effect_classes),

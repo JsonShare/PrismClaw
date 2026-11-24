@@ -8,10 +8,10 @@ State machine:
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ReconcileState(str, Enum):
+class ReconcileState(StrEnum):
     MATCH = "match"
     DRIFTED = "drifted"
     MISSING = "missing"

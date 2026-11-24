@@ -103,10 +103,7 @@ def verify_and_demote(plugins: list[LoadedPlugin]) -> DependencyCheckResult:
                         result,
                         error=PluginError(
                             type=PluginErrorType.CROSS_MARKETPLACE_DEPENDENCY,
-                            message=(
-                                f"跨市场依赖 {dep_ref} 被阻止 "
-                                f"（插件来源：{plugin.source}）"
-                            ),
+                            message=(f"跨市场依赖 {dep_ref} 被阻止 （插件来源：{plugin.source}）"),
                         ),
                     )
                     continue

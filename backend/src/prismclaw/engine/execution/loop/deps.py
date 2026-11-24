@@ -5,19 +5,26 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from prismclaw.engine.compression.orchestrator import CompressionOrchestrator
+    from prismclaw.engine.compression.ports import HookInvocationResult
     from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    from prismclaw.engine.execution.checkpoint import RunSnapshot
     from prismclaw.engine.execution.handoff.supervisor import HandoffSupervisor
+    from prismclaw.engine.execution.output.output_compressor import CompressionStats
     from prismclaw.engine.execution.query._static_context_types import StaticTurnShellCache
     from prismclaw.engine.execution.skills.runtime import SkillRuntime
     from prismclaw.engine.hooks import (
+        CompactionContext,
         HookRegistry,
         SkillProvider,
     )
-    from prismclaw.engine.security.gate.types import SubagentProgressSink
+    from prismclaw.engine.security.gate.governance import ContextValidatorChain
     from prismclaw.engine.subagent.runtime.collaboration import (
         SubagentCollaborationService,
     )
+    from prismclaw.engine.subagent.runtime.parallel import ParallelTaskRuntimeRecord
     from prismclaw.engine.task_profile.interfaces import (
         TaskRequestPolicyProvider,
         TaskRuntimePolicyProvider,
@@ -34,6 +41,11 @@ if TYPE_CHECKING:
         HasCompactionSettings,
         MemoryContextProvider,
     )
+    from prismclaw.schema.agent.data_types import ContentBlock
+    from prismclaw.schema.content.compaction import CompactResult
+    from prismclaw.schema.content.content_types import ToolResult
+    from prismclaw.schema.content.streaming import SubagentProgressBatch
+    from prismclaw.schema.session.types import SessionTree
 
 from prismclaw.engine.hooks import HookDispatcher
 from prismclaw.engine.subagent.runtime.parallel import SessionParallelTaskStore
@@ -46,7 +58,6 @@ from prismclaw.schema.agent.bundles import (
     MCPManagerProtocol,
     PluginLifecycleProtocol,
     RunOwnershipStoreProtocol,
-    TrajectoryPersistenceProtocol,
 )
 from prismclaw.schema.agent.callbacks import AgentCallbacks
 from prismclaw.schema.agent.types import AgentDeps
@@ -58,25 +69,33 @@ from prismclaw.schema.services.session_queue import SessionQueueProtocol
 from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 from prismclaw.schema.storage.persistence_types import PersistenceContextProtocol, RunSnapshotStore
 from prismclaw.schema.storage.storage_types import SessionStore, WorkspaceStore
+from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
 
 
-def _lazy_ctx_engine():
+def _lazy_ctx_engine() -> ContextEngine:
     from prismclaw.engine.compression.context_engine import DefaultContextEngine
+
     return DefaultContextEngine()
 
-def _lazy_hook_registry():
+
+def _lazy_hook_registry() -> HookRegistry:
     from prismclaw.engine.hooks import HookRegistry
+
     return HookRegistry()
 
-def _lazy_static_shell():
+
+def _lazy_static_shell() -> StaticTurnShellCache:
     from prismclaw.engine.execution.query._static_context_types import StaticTurnShellCache
+
     return StaticTurnShellCache()
 
-def _lazy_compressor():
+
+def _lazy_compressor() -> CompressionOrchestrator:
     from prismclaw.engine.compression.orchestrator import CompressionOrchestrator
     from prismclaw.engine.execution.query.turn_preparation import (
         prepare_query_turn_from_static_context,
     )
+
     return CompressionOrchestrator(prepare_turn_callable=prepare_query_turn_from_static_context)
 
 
@@ -95,9 +114,9 @@ class ExecutionRuntimePorts:
     def __init__(
         self,
         *,
-        hook_dispatcher: Any = None,
-        task_profile_service: Any = None,
-        hook_registry: Any = None,
+        hook_dispatcher: HookDispatcher | None = None,
+        task_profile_service: TaskProfileService | None = None,
+        hook_registry: HookRegistry | None = None,
     ) -> None:
         self._hook_dispatcher = hook_dispatcher
         self._task_profile_service = task_profile_service
@@ -116,8 +135,9 @@ class ExecutionRuntimePorts:
         from prismclaw.engine.execution.request.model_fallback import (
             get_effective_context_window as _get_effective_context_window,
         )
+
         return _get_effective_context_window(
-            model_id,
+            model_id or "",
             max_output_tokens_for_summary=max_output_tokens_for_summary,
             fallback=fallback,
         )
@@ -127,20 +147,22 @@ class ExecutionRuntimePorts:
         from prismclaw.engine.execution.staging.tool_result_persistence import (
             is_persisted_content as _is_persisted_content,
         )
+
         return _is_persisted_content(content)
 
     def persist_tool_result_sync(
         self,
         *,
         tool_use_id: str,
-        content: Any,
+        content: list[ContentBlock],
         reason: str,
-        working_dir: Any | None,
+        working_dir: str | Path | None,
         tool_name: str,
     ) -> str | None:
         from prismclaw.engine.execution.staging.tool_result_persistence import (
             persist_tool_result_sync as _persist_tool_result_sync,
         )
+
         return _persist_tool_result_sync(
             tool_use_id=tool_use_id,
             content=content,
@@ -157,11 +179,12 @@ class ExecutionRuntimePorts:
         source: str,
         content: str,
         reason: str,
-        working_dir: Any | None = None,
+        working_dir: str | Path | None = None,
     ) -> str | None:
         from prismclaw.engine.execution.staging.context_block_persistence import (
             persist_context_block as _persist_context_block,
         )
+
         return _persist_context_block(
             block_id=block_id,
             source=source,
@@ -173,14 +196,15 @@ class ExecutionRuntimePorts:
     # ── execution.output.output_compressor ──
     def compress_tool_result(
         self,
-        content: Any,
+        content: ToolResult,
         tool_name: str | None = None,
-        tool_args: Any = None,
-    ) -> tuple[Any, Any]:
+        tool_args: dict[str, Any] | str | None = None,
+    ) -> tuple[ToolResult, CompressionStats]:
         from prismclaw.engine.execution.output.output_compressor import (
             compress_tool_result as _compress_tool_result,
         )
-        return _compress_tool_result(content, tool_name=tool_name, tool_args=tool_args)
+
+        return _compress_tool_result(content, tool_name or "", tool_args=tool_args)
 
     # ── hooks (HookEvent + CompactionContext + HookOutcome) ──
     def build_compaction_context(
@@ -191,8 +215,9 @@ class ExecutionRuntimePorts:
         agent_id: str,
         message_count: int,
         tokens_before: int,
-    ) -> Any:
+    ) -> CompactionContext:
         from prismclaw.engine.hooks import CompactionContext
+
         return CompactionContext(
             session_id=session_id,
             workspace_id=workspace_id,
@@ -201,28 +226,29 @@ class ExecutionRuntimePorts:
             tokens_before=tokens_before,
         )
 
-    def notify_before_compaction(self, ctx: Any) -> Any:
+    async def notify_before_compaction(self, ctx: CompactionContext) -> None:
         if self._hook_registry is None:
-            return None
-        return self._hook_registry.notify_before_compaction(ctx)
+            return
+        await self._hook_registry.notify_before_compaction(ctx)
 
-    def notify_after_compaction(self, ctx: Any, result: Any) -> Any:
+    async def notify_after_compaction(self, ctx: CompactionContext, result: CompactResult) -> None:
         if self._hook_registry is None:
-            return None
-        return self._hook_registry.notify_after_compaction(ctx, result)
+            return
+        await self._hook_registry.notify_after_compaction(ctx, result)
 
     async def invoke_compaction_hooks(
         self,
         *,
         event: str,
-        ctx: Any,
+        ctx: CompactionContext,
         payload: dict[str, Any] | None = None,
-    ) -> Any:
+    ) -> HookInvocationResult | None:
         if self._hook_dispatcher is None:
             return None
         from prismclaw.engine.compression.ports import HookInvocationResult
         from prismclaw.engine.hooks import HookEvent
         from prismclaw.engine.plugins.hooks.schema import HookOutcome
+
         event_map = {
             "PRE_COMPACT": HookEvent.PRE_COMPACT,
             "POST_COMPACT": HookEvent.POST_COMPACT,
@@ -241,26 +267,29 @@ class ExecutionRuntimePorts:
     # ── security.gate.governance ──
     def raise_circuit_breaker(self, *, message: str) -> None:
         from prismclaw.engine.security.gate.governance import (
-            CircuitBreakerException,
+            CircuitBreakerError,
         )
-        raise CircuitBreakerException(message)
 
-    def get_context_validator_chain(self) -> Any:
+        raise CircuitBreakerError(message)
+
+    def get_context_validator_chain(self) -> ContextValidatorChain:
         from prismclaw.engine.security.gate.governance import ContextValidatorChain
+
         return ContextValidatorChain()
 
     # ── execution.checkpoint ──
     async def persist_run_snapshot(
         self,
-        session_store: Any,
-        tree: Any,
-        snapshot: Any,
+        session_store: SessionStore,
+        tree: SessionTree,
+        snapshot: RunSnapshot,
         *,
-        snapshot_store: Any | None = None,
+        snapshot_store: RunSnapshotStore | None = None,
     ) -> None:
         from prismclaw.engine.execution.checkpoint import (
             persist_run_snapshot as _persist_run_snapshot,
         )
+
         await _persist_run_snapshot(
             session_store,
             tree,
@@ -276,6 +305,7 @@ class DreamBundle:
     将 3 个 Any 字段收敛为 1 个类型化 bundle，减少 deps 顶层字段数。
     仅在 wiring 层组装时赋值，core 运行时不直接访问。
     """
+
     review_service: DreamReviewServiceProtocol | None = None
     boundary: DreamBoundaryProtocol | None = None
     ops: DreamAdminOpsProtocol | None = None
@@ -288,6 +318,7 @@ class PluginBundle:
     extension_manager / runtime_mcp_manager / plugin_lifecycle_manager
     三者生命周期绑定（同时初始化、同时热重载），适合归入同一子容器。
     """
+
     extension_manager: ExtensionManagerProtocol | None = None
     runtime_mcp_manager: MCPManagerProtocol | None = None
     lifecycle_manager: PluginLifecycleProtocol | None = None
@@ -302,9 +333,10 @@ class PersistenceBundle:
     trajectory_persistence 提供封装好的 TrajectoryPersistence 实现，
     供 TrajectoryAuditService 使用，engine 层不再直接持有 session_factory。
     """
+
     run_snapshot_store: RunSnapshotStore | None = None
     run_ownership_store: RunOwnershipStoreProtocol | None = None
-    trajectory_persistence: TrajectoryPersistenceProtocol | None = None
+    trajectory_persistence: TrajectoryPersistence | None = None
 
 
 @dataclass
@@ -337,7 +369,9 @@ class AgentRunnerDeps:
     # 无法暂停等人，因此 AskUserQuestion 这类 requires_interactive_user 的工具
     # 会被 HeadlessModeReducer 直接从模型的工具清单中摘除（不可见、不可调用）。
     # 定时任务已复用 Web 主链路、持有队列，不属此类。
-    session_queue: SessionQueueProtocol | None = None  # channels/web 专属，避免 core→channels 反向依赖
+    session_queue: SessionQueueProtocol | None = (
+        None  # channels/web 专属，避免 core→channels 反向依赖
+    )
     # ── Runtime 客户端 ──
     # runtime_client: WorkspaceRuntimeClient | InProcessRuntimeClient 实例
     # 统一遵循 ExecutionEnv Protocol 契约
@@ -345,9 +379,7 @@ class AgentRunnerDeps:
     # The orchestrator is a strategy object, not a state owner.
     # It may be reused across queries, but cross-turn bookkeeping now
     # lives on ``RunSnapshot.compression_runtime`` instead of instance memory.
-    session_compressor: CompressionOrchestrator = field(
-        default_factory=_lazy_compressor
-    )
+    session_compressor: CompressionOrchestrator = field(default_factory=_lazy_compressor)
     # Per-result LLM summarization callback.
     # When set, result_compaction uses this instead of character truncation.
     summarize_fn: Callable[[str], Awaitable[str]] | None = None
@@ -416,8 +448,8 @@ class AgentRunnerDeps:
     def with_request_context(
         self,
         *,
-        progress_sink: SubagentProgressSink | None = None,
-        terminal_sink: Any = None,
+        progress_sink: Callable[[SubagentProgressBatch], Awaitable[None]] | None = None,
+        terminal_sink: Callable[[ParallelTaskRuntimeRecord], Awaitable[None]] | None = None,
         channel: str | None = None,
     ) -> AgentDeps:
         """创建注入了请求级上下文的 deps 变体。
@@ -427,6 +459,7 @@ class AgentRunnerDeps:
         AgentRunnerDeps 的内部字段名。
         """
         import dataclasses
+
         overrides: dict[str, Any] = {}
         if progress_sink is not None or terminal_sink is not None:
             base = self.callbacks if self.callbacks is not None else AgentCallbacks()
@@ -438,5 +471,3 @@ class AgentRunnerDeps:
         if channel is not None:
             overrides["channel"] = channel
         return dataclasses.replace(self, **overrides)
-
-

@@ -33,8 +33,8 @@ duck-typing in the runner's per-call tier evaluation.
 """
 
 from prismclaw.engine.mcp.adapter import MCPToolAdapter
-from prismclaw.schema.shared.exceptions import MCPServerDeadError
 from prismclaw.engine.mcp.settings import McpServerConfig, McpSettings
+from prismclaw.schema.shared.exceptions import MCPServerDeadError
 
 __all__ = [
     "MCPServerDeadError",

@@ -7,6 +7,7 @@
 3. 通道隔离：display 只放附件块与中性占位；policy 只在有附件或消息提到上传文件时出现
 4. 混合输入（2 图 + 1 文档 + 1 不支持格式 + 超预算）→ 只给引用清单
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -71,10 +72,14 @@ def _route(
 # 1. kind → path + 工具
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("unit", "must_contain"),
     [
-        (attachments_mod.AttachmentUnit(path="u/a.png", kind="image", image_index=2), ("u/a.png", "read 工具")),
+        (
+            attachments_mod.AttachmentUnit(path="u/a.png", kind="image", image_index=2),
+            ("u/a.png", "read 工具"),
+        ),
         (
             attachments_mod.AttachmentUnit(path="u/a.png", kind="image", image_index=2, chars=120),
             ("u/a.png", "read 工具", "120"),
@@ -108,9 +113,14 @@ def test_reference_carries_path_tool_and_no_completeness_claim(
 # 2. 降级 / 未提取附件 → 任何通道都无完整性断言
 # ---------------------------------------------------------------------------
 
-def test_no_completeness_claim_when_image_ocr_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_no_completeness_claim_when_image_ocr_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _stub_ocr(monkeypatch, {})
-    decision = _route(tmp_path, "", [{"type": "image", "source_path": "uploads/a.png", "mime_type": "image/png"}])
+    decision = _route(
+        tmp_path, "", [{"type": "image", "source_path": "uploads/a.png", "mime_type": "image/png"}]
+    )
 
     llm = _flat(decision.llm_content)
     assert "uploads/a.png" in llm and "read 工具" in llm
@@ -121,7 +131,9 @@ def test_no_completeness_claim_when_image_ocr_fails(monkeypatch: pytest.MonkeyPa
 def test_no_completeness_claim_when_file_not_extracted(tmp_path: Path) -> None:
     (tmp_path / "uploads").mkdir()
     (tmp_path / "uploads" / "blob.xyz").write_bytes(b"binary")
-    decision = _route(tmp_path, "看下这个文件", [{"type": "file", "path": "uploads/blob.xyz", "name": "blob.xyz"}])
+    decision = _route(
+        tmp_path, "看下这个文件", [{"type": "file", "path": "uploads/blob.xyz", "name": "blob.xyz"}]
+    )
 
     llm = _flat(decision.llm_content)
     assert "uploads/blob.xyz" in llm
@@ -133,6 +145,7 @@ def test_no_completeness_claim_when_file_not_extracted(tmp_path: Path) -> None:
 # 3. 通道隔离
 # ---------------------------------------------------------------------------
 
+
 def test_policy_only_when_attachments_or_uploaded_paths(tmp_path: Path) -> None:
     plain = _route(tmp_path, "今天天气如何", [])
     assert plain.attachment_guidance is None
@@ -143,9 +156,13 @@ def test_policy_only_when_attachments_or_uploaded_paths(tmp_path: Path) -> None:
     assert mentioned.attachment_guidance is not None
 
 
-def test_display_channel_has_no_policy_text(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_display_channel_has_no_policy_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     _stub_ocr(monkeypatch, {"uploads/a.png": "红色警示框"})
-    decision = _route(tmp_path, "", [{"type": "image", "source_path": "uploads/a.png", "mime_type": "image/png"}])
+    decision = _route(
+        tmp_path, "", [{"type": "image", "source_path": "uploads/a.png", "mime_type": "image/png"}]
+    )
 
     display = _flat(decision.display_content)
     assert "Attachment Handling" not in display
@@ -161,9 +178,11 @@ def test_display_channel_has_no_policy_text(monkeypatch: pytest.MonkeyPatch, tmp
 def test_display_truncation_never_leaks_into_llm(tmp_path: Path) -> None:
     """display 与 llm 两通道解耦：文档正文只进 llm 通道（完整），display 仅源文件卡，
     绝不把解析出的长正文铺进气泡（亦无截断泄漏）。"""
-    long_text = "y" * (attachments_mod._MAX_DISPLAY_TEXT_CHARS + 100)
+    long_text = "y" * 100_000
     doc = FileBlock(type="file", path="uploads/big.md", name="big.md")
-    projection = attachments_mod.project_blocks([doc], {"uploads/big.md": [TextBlock(type="text", text=long_text)]})
+    projection = attachments_mod.project_blocks(
+        [doc], {"uploads/big.md": [TextBlock(type="text", text=long_text)]}
+    )
 
     display_blocks = [b for unit in projection.entries for b in unit.display_blocks]
     llm_text = _flat(attachments_mod._render_llm(projection, inlined=True, char_budget=10**9))
@@ -198,7 +217,9 @@ def test_image_payload_without_path_is_not_announced_as_readable(tmp_path: Path)
     assert decision.downgraded_image_count == 0
 
 
-def test_inlined_ocr_images_need_no_tool_reference(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_inlined_ocr_images_need_no_tool_reference(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """有 OCR 文本且未超预算时，图片内容已在上下文，不应再要求调用工具。"""
     _stub_ocr(monkeypatch, {"u/a.png": "柱状图", "u/b.png": "折线图"})
     raw = [
@@ -262,7 +283,10 @@ def test_image_only_document_keeps_document_kind_and_image_references() -> None:
 # 4. 混合输入 + 超预算 → 仅引用清单
 # ---------------------------------------------------------------------------
 
-def test_mixed_input_over_budget_renders_reference_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+
+def test_mixed_input_over_budget_renders_reference_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     (tmp_path / "uploads").mkdir()
     (tmp_path / "uploads" / "spec.md").write_text("x" * 12_000, encoding="utf-8")
     (tmp_path / "uploads" / "blob.xyz").write_bytes(b"binary")

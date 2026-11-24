@@ -3,6 +3,7 @@
 只断言新路径：预算 → 恢复 → 契约 → 准则 → 修复额度。
 准则评估用真实 ``ArtifactScanner``（临时目录），不桩化文件系统。
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -39,11 +40,13 @@ def _kernel(
     return CompletionKernel(
         state=CompletionState(contract=contract),
         reviewer=CompletionReviewer(ArtifactScanner(root)),
-        budget=BudgetGuard(Budget(
-            max_iterations=max_iterations,
-            run_deadline_s=0.0,
-            run_started=0.0,
-        )),
+        budget=BudgetGuard(
+            Budget(
+                max_iterations=max_iterations,
+                run_deadline_s=0.0,
+                run_started=0.0,
+            )
+        ),
         recovery=RecoveryPolicy(limit=limit, chain=chain),
     )
 
@@ -71,6 +74,7 @@ def _evidence(path: str) -> list[EvidenceRecord]:
 # 预算：唯一先于一切的硬边界
 # ---------------------------------------------------------------------------
 
+
 def test_budget_iterations_terminates_before_completion(tmp_path: Path) -> None:
     kernel = _kernel(tmp_path, contract=None, max_iterations=5)
     decision = kernel.decide(LoopEvent(site="preflight", iteration=5))
@@ -78,9 +82,13 @@ def test_budget_iterations_terminates_before_completion(tmp_path: Path) -> None:
 
 
 def test_budget_warning_threshold_not_terminating() -> None:
-    guard = BudgetGuard(Budget(
-        max_iterations=5, run_deadline_s=0.0, run_started=0.0,
-    ))
+    guard = BudgetGuard(
+        Budget(
+            max_iterations=5,
+            run_deadline_s=0.0,
+            run_started=0.0,
+        )
+    )
     assert guard.warn(iteration=4) is None
     assert guard.warn(iteration=5) == "budget_iterations"
 
@@ -95,6 +103,7 @@ def test_budget_zero_iterations_never_fires(tmp_path: Path) -> None:
 # 恢复策略：可自愈故障产 RESTART，不可自愈故障只给一次重规划
 # ---------------------------------------------------------------------------
 
+
 def test_all_blocked_restarts_once_then_terminates(tmp_path: Path) -> None:
     """全拒不可自愈：第一次给一次重规划，第二次直接终态（旧实现空转至 limit）。"""
     kernel = _kernel(tmp_path, contract=None, limit=3)
@@ -108,9 +117,7 @@ def test_all_blocked_restarts_once_then_terminates(tmp_path: Path) -> None:
     assert [gap.code for gap in second.gaps] == ["all_tools_denied"]
 
     # 终态稳定：额度已用尽，后续全拒不得再回到 RESTART
-    assert kernel.decide(
-        LoopEvent(site="all_blocked", iteration=2)
-    ).verdict == "TERMINATE"
+    assert kernel.decide(LoopEvent(site="all_blocked", iteration=2)).verdict == "TERMINATE"
 
 
 def test_recovery_chain_cleared_only_by_executed_tool_turn(tmp_path: Path) -> None:
@@ -118,18 +125,16 @@ def test_recovery_chain_cleared_only_by_executed_tool_turn(tmp_path: Path) -> No
     kernel.decide(LoopEvent(site="all_blocked", iteration=0))  # 第一次 RESTART
     # preflight（未执行工具）不再清零，否则全拒熔断永远不触发
     kernel.decide(LoopEvent(site="preflight", iteration=1))
-    assert kernel.decide(
-        LoopEvent(site="all_blocked", iteration=1)
-    ).verdict == "TERMINATE"
+    assert kernel.decide(LoopEvent(site="all_blocked", iteration=1)).verdict == "TERMINATE"
     # 真正执行过工具的回合才清零：新的全拒重新获得一次重规划机会
     restarted = _kernel(
-        tmp_path, contract=None, limit=3,
+        tmp_path,
+        contract=None,
+        limit=3,
         chain=("all_tools_denied",),
     )
     restarted.decide(LoopEvent(site="post", iteration=0))
-    assert restarted.decide(
-        LoopEvent(site="all_blocked", iteration=1)
-    ).verdict == "RESTART"
+    assert restarted.decide(LoopEvent(site="all_blocked", iteration=1)).verdict == "RESTART"
 
 
 def test_self_healing_failures_share_global_limit() -> None:
@@ -171,10 +176,7 @@ def test_verdict_metric_labels_use_wire_code(tmp_path: Path) -> None:
     kernel = _kernel(tmp_path, contract=None, max_iterations=1)
     kernel.decide(LoopEvent(site="preflight", iteration=1))
 
-    keys = [
-        key for key in snapshot()["counters"]
-        if key.startswith("completion.verdict_total")
-    ]
+    keys = [key for key in snapshot()["counters"] if key.startswith("completion.verdict_total")]
     assert any("code=budget_iterations" in key for key in keys), keys
     assert all("TerminalReason." not in key for key in keys), keys
 
@@ -183,6 +185,7 @@ def test_verdict_metric_labels_use_wire_code(tmp_path: Path) -> None:
 # 完成契约
 # ---------------------------------------------------------------------------
 
+
 def test_no_contract_completes_on_first_stop(tmp_path: Path) -> None:
     kernel = _kernel(tmp_path, contract=None)
     decision = kernel.decide(LoopEvent(site="preflight", iteration=0, is_stop=True))
@@ -190,7 +193,7 @@ def test_no_contract_completes_on_first_stop(tmp_path: Path) -> None:
 
 
 def test_strict_contract_gap_repairs_once_then_terminates(tmp_path: Path) -> None:
-    contract = CompletionContract("strict", (Criterion("file_exists", "outputs/a.md"),))
+    contract = CompletionContract("strict", (Criterion("file_exists", "outbox/a.md"),))
     kernel = _kernel(tmp_path, contract=contract)
     first = kernel.decide(LoopEvent(site="preflight", iteration=0, is_stop=True))
     assert (first.verdict, first.code) == ("REPAIR", "repair")
@@ -200,17 +203,17 @@ def test_strict_contract_gap_repairs_once_then_terminates(tmp_path: Path) -> Non
 
 
 def test_strict_contract_accepted_completes_verified(tmp_path: Path) -> None:
-    _write(tmp_path, "outputs/a.md")
-    contract = CompletionContract("strict", (Criterion("file_exists", "outputs/a.md"),))
+    _write(tmp_path, "outbox/a.md")
+    contract = CompletionContract("strict", (Criterion("file_exists", "outbox/a.md"),))
     kernel = _kernel(tmp_path, contract=contract)
-    kernel.state.ledger = _evidence("outputs/a.md")
+    kernel.state.ledger = _evidence("outbox/a.md")
     decision = kernel.decide(LoopEvent(site="preflight", iteration=0, is_stop=True))
     assert (decision.verdict, decision.code) == ("COMPLETE", "complete_verified")
 
 
 def test_empty_file_is_unmet_not_accepted(tmp_path: Path) -> None:
-    _write(tmp_path, "outputs/a.md", "")
-    contract = CompletionContract("strict", (Criterion("file_nonempty", "outputs/a.md"),))
+    _write(tmp_path, "outbox/a.md", "")
+    contract = CompletionContract("strict", (Criterion("file_nonempty", "outbox/a.md"),))
     kernel = _kernel(tmp_path, contract=contract)
     decision = kernel.decide(LoopEvent(site="preflight", iteration=0, is_stop=True))
     assert (decision.verdict, decision.code) == ("REPAIR", "repair")
@@ -237,44 +240,66 @@ def test_unverifiable_does_not_block_completion(tmp_path: Path) -> None:
 # 阻塞申报
 # ---------------------------------------------------------------------------
 
+
 def test_declares_blocked_without_attempt_is_rejected_once(tmp_path: Path) -> None:
-    contract = CompletionContract("strict", (Criterion("file_exists", "outputs/a.md"),))
+    contract = CompletionContract("strict", (Criterion("file_exists", "outbox/a.md"),))
     kernel = _kernel(tmp_path, contract=contract)
-    first = kernel.decide(LoopEvent(
-        site="preflight", iteration=0, is_stop=True, declares_blocked=True,
-    ))
+    first = kernel.decide(
+        LoopEvent(
+            site="preflight",
+            iteration=0,
+            is_stop=True,
+            declares_blocked=True,
+        )
+    )
     assert (first.verdict, first.code) == ("REPAIR", "blocked_rejected")
     assert kernel.state.repairs == 1  # 拒绝也计数，防止反复申报
-    second = kernel.decide(LoopEvent(
-        site="preflight", iteration=1, is_stop=True, declares_blocked=True,
-    ))
+    second = kernel.decide(
+        LoopEvent(
+            site="preflight",
+            iteration=1,
+            is_stop=True,
+            declares_blocked=True,
+        )
+    )
     assert (second.verdict, second.code) == ("TERMINATE", "blocked_declared")
 
 
 def test_declares_blocked_with_attempt_is_accepted_immediately(tmp_path: Path) -> None:
-    contract = CompletionContract("strict", (Criterion("file_exists", "outputs/a.md"),))
+    contract = CompletionContract("strict", (Criterion("file_exists", "outbox/a.md"),))
     kernel = _kernel(tmp_path, contract=contract)
-    kernel.state.ledger = _evidence("outputs/a.md")
-    decision = kernel.decide(LoopEvent(
-        site="preflight", iteration=0, is_stop=True, declares_blocked=True,
-    ))
+    kernel.state.ledger = _evidence("outbox/a.md")
+    decision = kernel.decide(
+        LoopEvent(
+            site="preflight",
+            iteration=0,
+            is_stop=True,
+            declares_blocked=True,
+        )
+    )
     assert (decision.verdict, decision.code) == ("TERMINATE", "blocked_declared")
 
 
 def test_declares_blocked_but_review_accepted_completes(tmp_path: Path) -> None:
-    _write(tmp_path, "outputs/a.md")
-    contract = CompletionContract("strict", (Criterion("file_exists", "outputs/a.md"),))
+    _write(tmp_path, "outbox/a.md")
+    contract = CompletionContract("strict", (Criterion("file_exists", "outbox/a.md"),))
     kernel = _kernel(tmp_path, contract=contract)
-    kernel.state.ledger = _evidence("outputs/a.md")
-    decision = kernel.decide(LoopEvent(
-        site="preflight", iteration=0, is_stop=True, declares_blocked=True,
-    ))
+    kernel.state.ledger = _evidence("outbox/a.md")
+    decision = kernel.decide(
+        LoopEvent(
+            site="preflight",
+            iteration=0,
+            is_stop=True,
+            declares_blocked=True,
+        )
+    )
     assert (decision.verdict, decision.code) == ("COMPLETE", "complete_verified")
 
 
 # ---------------------------------------------------------------------------
 # Decision / LoopEvent 闭合
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     ("verdict", "expected"),
@@ -294,5 +319,8 @@ def test_loop_event_is_frozen_and_replaceable() -> None:
     event = LoopEvent(site="preflight", iteration=3)
     stop = replace(event, is_stop=True, declares_blocked=True)
     assert (stop.site, stop.iteration, stop.is_stop, stop.declares_blocked) == (
-        "preflight", 3, True, True,
+        "preflight",
+        3,
+        True,
+        True,
     )

@@ -9,7 +9,8 @@ from prismclaw.schema.llm.request import PackedLLMRequest
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_OPTIMIZER_SYSTEM = """你是用户本人的大脑。用户的输入是他想表达的内容，但可能不够完整、清晰或具体。
+_DEFAULT_OPTIMIZER_SYSTEM = """你是用户本人的大脑。
+用户的输入是他想表达的内容，但可能不够完整、清晰或具体。
 
 请站在用户的角度，想象他真正想表达什么，并用他的口吻把话说得更完整、更清晰、更具体，就像用户自己把话说完整一样。
 

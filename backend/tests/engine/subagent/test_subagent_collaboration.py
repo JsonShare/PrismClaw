@@ -198,9 +198,7 @@ async def test_finalize_and_send_race_starts_exactly_one_follow_up() -> None:
             await run_context.persist_assistant("follow-up done", [])
             second_seen.set()
 
-    _store_value, service, executor, launch, session_id = await _fixture(
-        handler=handler
-    )
+    _store_value, service, executor, launch, session_id = await _fixture(handler=handler)
     spawned = await service.spawn(
         launch,
         task="initial task",
@@ -306,9 +304,7 @@ async def test_concurrent_sync_spawn_replay_executes_once() -> None:
     outcomes = await asyncio.gather(first, second)
     assert executor.calls == 1
     assert {item.agent.agent_id for item in outcomes} == {outcomes[0].agent.agent_id}
-    assert {item.run.run_id for item in outcomes if item.run} == {
-        outcomes[0].run.run_id
-    }
+    assert {item.run.run_id for item in outcomes if item.run} == {outcomes[0].run.run_id}
     assert all(item.result is not None for item in outcomes)
     replay = await service.spawn(
         launch,
@@ -402,6 +398,7 @@ async def test_close_running_agent_cancels_run_and_rejects_resume() -> None:
         session_id=session_id,
         run_id=spawned.run.run_id,
     )
+
     async def wait_for_terminal():
         nonlocal run
         while run is None or run.finished_at is None:

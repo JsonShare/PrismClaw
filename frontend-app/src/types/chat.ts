@@ -41,6 +41,11 @@ export interface Message {
   timestamp: number
   metadata?: MessageMetadata
   timeline?: TimelineNode[]
+  /**
+   * 后端标记这一轮仍在产出（/messages 的 in_progress）。
+   * 存在对应 run 时该消息必须让位给 live 叠加层，否则同段正文会显示两遍。
+   */
+  inProgress?: boolean
 }
 
 export interface MessageMetadata {
@@ -189,8 +194,8 @@ export interface WSServerQuestions {
   data: { message_id?: string; questions: string[] }
 }
 
-export interface WSServerOutputs {
-  type: 'event:outputs'
+export interface WSServerOutbox {
+  type: 'event:outbox'
   conversation_id: string
   data: { message_id?: string; files: string[] }
 }
@@ -247,7 +252,7 @@ export type WSServerMessage =
   | WSServerChatQueued
   | WSServerReference
   | WSServerQuestions
-  | WSServerOutputs
+  | WSServerOutbox
   | WSServerTaskTimeline
   | WSServerRunSnapshot
   | WSServerRunKeepalive

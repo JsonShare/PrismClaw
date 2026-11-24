@@ -14,7 +14,7 @@ class RootSet:
         *,
         primary: str | Path | None,
         additional: list[str | Path] | None = None,
-    ) -> "RootSet":
+    ) -> RootSet:
         out: list[Path] = []
         seen: set[Path] = set()
         for raw in [primary, *(additional or [])]:

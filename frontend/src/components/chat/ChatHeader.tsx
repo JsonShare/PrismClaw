@@ -99,18 +99,11 @@ export function ChatHeader({
 
       {/* 标题 */}
       <div ref={titleBoxRef} className="flex-1 flex justify-center min-w-0 overflow-hidden px-2">
-        <div className="flex flex-col items-center min-w-0 max-w-full">
-          <div
-            className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)] text-center leading-tight truncate max-w-full"
-            title={title || undefined}
-          >
-            {displayTitle}
-          </div>
-          {!isLanding && (
-            <div className="mt-0.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]/80 whitespace-nowrap">
-              内容由 AI 生成，请仔细核查
-            </div>
-          )}
+        <div
+          className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)] text-center leading-tight truncate max-w-full"
+          title={title || undefined}
+        >
+          {displayTitle}
         </div>
       </div>
 

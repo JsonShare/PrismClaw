@@ -22,11 +22,11 @@ import hashlib
 import io
 import re
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from xml.etree.ElementTree import Element
 
-from prismclaw.schema.agent.data_types import TextBlock
-from prismclaw.schema.agent.data_types import ImageBlock
+from prismclaw.schema.agent.data_types import ImageBlock, TextBlock
 
 # ---- OOXML namespaces (XML namespace identifiers, NOT network URLs) ----------
 _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -54,7 +54,7 @@ def _local(tag: str) -> str:
     return tag
 
 
-def _attr_local(elem: Any, local_name: str) -> str | None:
+def _attr_local(elem: Element, local_name: str) -> str | None:
     """Fetch an attribute by local name regardless of its namespace prefix."""
     for key, value in elem.attrib.items():
         if _local(key) == local_name:
@@ -85,11 +85,7 @@ def to_model_path(rel_path: str) -> str:
     直接把物理路径写进提示会让它照抄后解析失败。
     """
     parts = Path(rel_path).parts
-    if (
-        len(parts) >= 4
-        and parts[0] == "sessions"
-        and parts[2] in _SESSION_VISIBLE_DIRS
-    ):
+    if len(parts) >= 4 and parts[0] == "sessions" and parts[2] in _SESSION_VISIBLE_DIRS:
         return Path(*parts[2:]).as_posix()
     return rel_path
 
@@ -174,14 +170,16 @@ _TYPOGRAPHIC_TRANSLATION = {
     0x2212: "-",  # MINUS SIGN
     0xFF0D: "-",  # FULLWIDTH HYPHEN-MINUS
     0x00A0: " ",  # NBSP
-    0x200B: "",   # ZERO WIDTH SPACE
-    0x200C: "",   # ZERO WIDTH NON-JOINER
-    0x200D: "",   # ZERO WIDTH JOINER
-    0xFEFF: "",   # BOM
+    0x200B: "",  # ZERO WIDTH SPACE
+    0x200C: "",  # ZERO WIDTH NON-JOINER
+    0x200D: "",  # ZERO WIDTH JOINER
+    0xFEFF: "",  # BOM
 }
 
 
-def _normalize_extracted_blocks(blocks: list[TextBlock | ImageBlock]) -> list[TextBlock | ImageBlock]:
+def _normalize_extracted_blocks(
+    blocks: list[TextBlock | ImageBlock],
+) -> list[TextBlock | ImageBlock]:
     """对二进制抽取文本做字符归一化；ImageBlock 原样保留。"""
     for block in blocks:
         if isinstance(block, TextBlock) and block.text:
@@ -225,7 +223,7 @@ def _extract_docx_blocks(
             import xml.etree.ElementTree as ET
 
             doc_root = ET.fromstring(zf.read("word/document.xml"))
-            body = None
+            body: Element | None = None
             for el in doc_root.iter():
                 if _local(el.tag) == "body":
                     body = el
@@ -249,9 +247,7 @@ def _extract_docx_blocks(
                 ext = Path(media_path).suffix.lower() or ".png"
                 img_counter += 1
                 blocks.append(
-                    _make_image_block(
-                        workspace_path, source_rel_path, img_counter, ext, data
-                    )
+                    _make_image_block(workspace_path, source_rel_path, img_counter, ext, data)
                 )
 
             _walk_docx(body, emit_image, blocks)
@@ -261,8 +257,8 @@ def _extract_docx_blocks(
 
 
 def _walk_docx(
-    node: Any,
-    emit_image,
+    node: Element,
+    emit_image: Callable[[str], None],
     blocks: list[TextBlock | ImageBlock],
 ) -> None:
     """Recursively emit text runs and inline images in document order."""
@@ -297,8 +293,8 @@ def _walk_docx(
 
 
 def _walk_paragraph_content(
-    node: Any,
-    emit_image,
+    node: Element,
+    emit_image: Callable[[str], None],
     blocks: list[TextBlock | ImageBlock],
     para_buf: list[str],
 ) -> None:
@@ -312,7 +308,7 @@ def _walk_paragraph_content(
             if para_buf:
                 blocks.append(_make_text_block("".join(para_buf)))
                 para_buf.clear()
-            blip = None
+            blip: Element | None = None
             for d in child.iter():
                 if _local(d.tag) == "blip":
                     blip = d
@@ -335,39 +331,31 @@ def _extract_pdf_blocks(
     workspace_path: Path,
 ) -> list[TextBlock | ImageBlock]:
     try:
-        import pypdf  # type: ignore
+        import pypdf
 
-        PdfReader = pypdf.PdfReader
+        pdf_reader_cls = pypdf.PdfReader
     except ImportError:
         try:
             import PyPDF2  # type: ignore
 
-            PdfReader = PyPDF2.PdfReader
+            pdf_reader_cls = PyPDF2.PdfReader
         except ImportError:
-            return [
-                _make_text_block(
-                    "[读取 PDF 需要 'pypdf' 或 'PyPDF2']"
-                )
-            ]
+            return [_make_text_block("[读取 PDF 需要 'pypdf' 或 'PyPDF2']")]
 
     try:
-        reader = PdfReader(io.BytesIO(raw))
+        reader = pdf_reader_cls(io.BytesIO(raw))
     except Exception as exc:  # noqa: BLE001
         return [_make_text_block(f"[解析 PDF 失败：{exc}]")]
 
     num_pages = len(reader.pages)
     blocks: list[TextBlock | ImageBlock] = [
-        _make_text_block(
-            f"[PDF 文档：{Path(source_rel_path).name} — 共 {num_pages} 页]\n"
-        )
+        _make_text_block(f"[PDF 文档：{Path(source_rel_path).name} — 共 {num_pages} 页]\n")
     ]
     img_counter = 0
     for i, page in enumerate(reader.pages):
         text = page.extract_text() or ""
         if text.strip():
-            blocks.append(
-                _make_text_block(f"--- 第 {i + 1} 页 ---\n{text}\n")
-            )
+            blocks.append(_make_text_block(f"--- 第 {i + 1} 页 ---\n{text}\n"))
         try:
             imgs = list(getattr(page, "images", []) or [])
         except Exception:  # noqa: BLE001
@@ -382,9 +370,7 @@ def _extract_pdf_blocks(
                 continue
             img_counter += 1
             blocks.append(
-                _make_image_block(
-                    workspace_path, source_rel_path, img_counter, ext, data
-                )
+                _make_image_block(workspace_path, source_rel_path, img_counter, ext, data)
             )
     return blocks
 
@@ -465,9 +451,7 @@ def extract_document_blocks(
         )
     if fmt == "pdf":
         return _normalize_extracted_blocks(
-            _extract_pdf_blocks(
-                raw, source_rel_path=source_rel_path, workspace_path=workspace_path
-            )
+            _extract_pdf_blocks(raw, source_rel_path=source_rel_path, workspace_path=workspace_path)
         )
     if fmt in ("markdown", "md"):
         try:

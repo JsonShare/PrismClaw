@@ -9,11 +9,12 @@
   - 存储：通过 CustomEntry("fact_sheet") 持久化到 ConversationTree
   - 注入：压缩时 + 查询时完整注入，不依赖摘要继承
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Protocol
 
 from prismclaw.schema.session import (
     CustomEntry,
@@ -21,11 +22,11 @@ from prismclaw.schema.session import (
     _CustomPayloadFactSheet,
     generate_entry_id,
 )
+from prismclaw.schema.shared.sanitize_injection import sanitize_before_context_injection
 
 logger = logging.getLogger(__name__)
 
 # P3-FUS-01: L3 Fact Sheet 推送前脱敏
-from prismclaw.schema.shared.sanitize_injection import sanitize_before_context_injection
 
 # ── Fact Sheet 提取 prompt ──────────────────────────────────────
 
@@ -59,6 +60,7 @@ _FACT_EXTRACTION_USER_TEMPLATE = """\
 
 
 # ── Fact Sheet 读写 ─────────────────────────────────────────────
+
 
 def load_fact_sheet(tree: SessionTree) -> dict[str, str]:
     """从 SessionTree 中加载最新的 Fact Sheet。
@@ -147,10 +149,24 @@ def render_fact_sheet_text(facts: dict[str, str]) -> str:
 
 # ── Fact Sheet 提取（LLM 调用）──────────────────────────────────
 
+
+class FactExtractorLLM(Protocol):
+    """事实提取所需的 LLM 简单对话接口。"""
+
+    async def chat(
+        self,
+        *,
+        system: str,
+        messages: list[dict[str, str]],
+        temperature: float = ...,
+        max_tokens: int = ...,
+    ) -> str: ...
+
+
 async def extract_facts_from_message(
     user_message: str,
     existing_facts: dict[str, str],
-    llm_adapter: Any,
+    llm_adapter: FactExtractorLLM,
 ) -> dict[str, str]:
     """用 LLM 从用户消息中提取结构化事实。
 
@@ -182,7 +198,7 @@ async def extract_facts_from_message(
 
         # 尝试解析 JSON
         # 容错：LLM 可能包裹在 ```json ... ``` 中
-        json_match = _re.search(r'\{[^{}]*\}', raw, _re.DOTALL)
+        json_match = _re.search(r"\{[^{}]*\}", raw, _re.DOTALL)
         if not json_match:
             return {}
         parsed = json.loads(json_match.group())

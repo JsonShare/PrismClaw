@@ -8,7 +8,7 @@ from typing import Literal
 ArtifactSignature = tuple[int, int]  # (mtime_ns, size)
 
 # 系统/隐藏条目不是交付物：bash 持久会话把 cwd 写进 .work/bash_state/_last_pwd，
-# 若 bash 的 cwd 落在 outputs/ 下，这些内部状态会混进产物面板。
+# 若 bash 的 cwd 落在 outbox/ 下，这些内部状态会混进产物面板。
 _INTERNAL_PARTS = frozenset({"_last_pwd", "_LAST_PWD", ".bash_state", ".work", "__pycache__"})
 
 

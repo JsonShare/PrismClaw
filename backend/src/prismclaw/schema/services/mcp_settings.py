@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -44,8 +44,8 @@ class McpSandboxConfig(BaseModel):
             "to override."
         ),
     )
-    filesystem: dict = Field(default_factory=dict)
-    network: dict = Field(default_factory=dict)
+    filesystem: dict[str, Any] = Field(default_factory=dict)
+    network: dict[str, Any] = Field(default_factory=dict)
     env_allowlist: list[str] | None = Field(default=None)
 
 
@@ -60,7 +60,10 @@ class McpServerConfig(BaseModel):
 
     command: str | None = Field(
         default=None,
-        description="Executable to spawn for stdio transport (e.g. the appropriate runtime for the server package).",
+        description=(
+            "Executable to spawn for stdio transport "
+            "(e.g. the appropriate runtime for the server package)."
+        ),
     )
     args: list[str] = Field(default_factory=list, description="Arguments passed to command.")
     env: dict[str, str] = Field(
@@ -131,19 +134,22 @@ class McpServerConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _resolve_sandbox_default(self) -> "McpServerConfig":
+    def _resolve_sandbox_default(self) -> McpServerConfig:
         if self.sandbox.enabled is None:
-            auto_exempt = _command_auto_exempts_sandbox(self.command)
+            auto_exempt = _command_auto_exempts_sandbox(self.command or "")
             resolved = (not auto_exempt) if self.transport == "stdio" else False
             object.__setattr__(self.sandbox, "enabled", resolved)
             logger.debug(
                 "mcp sandbox default resolved: command=%s transport=%s auto_exempt=%s enabled=%s",
-                self.command, self.transport, auto_exempt, resolved,
+                self.command,
+                self.transport,
+                auto_exempt,
+                resolved,
             )
         return self
 
     @model_validator(mode="after")
-    def _validate_transport_shape(self) -> "McpServerConfig":
+    def _validate_transport_shape(self) -> McpServerConfig:
         if self.transport == "stdio":
             if not self.command:
                 raise ValueError("stdio transport requires 'command'")
@@ -202,14 +208,14 @@ class McpSettings(BaseModel):
     servers: dict[str, McpServerConfig] = Field(default_factory=dict)
     plugin_overrides: dict[str, McpPluginOverride] = Field(
         default_factory=dict,
-        description=(
-            "插件声明的 MCP server 的凭据/开关补丁，键为 'plugin.server' 或裸 'server'。"
-        ),
+        description=("插件声明的 MCP server 的凭据/开关补丁，键为 'plugin.server' 或裸 'server'。"),
     )
 
     @field_validator("servers")
     @classmethod
-    def _validate_server_keys(cls, servers: dict[str, McpServerConfig]) -> dict[str, McpServerConfig]:
+    def _validate_server_keys(
+        cls, servers: dict[str, McpServerConfig]
+    ) -> dict[str, McpServerConfig]:
         for key in servers:
             for forbidden in _FORBIDDEN_KEY_CHARS:
                 if forbidden in key:

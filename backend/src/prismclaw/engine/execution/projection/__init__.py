@@ -4,6 +4,7 @@
 记忆组合缓存本体与内容键位于 compression / foundation 层
 （依赖方向：loop → compression → foundation/schema）。
 """
+
 from __future__ import annotations
 
 from prismclaw.engine.compression.memory_assembly_cache import (

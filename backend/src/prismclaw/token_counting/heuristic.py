@@ -30,9 +30,7 @@ MESSAGE_ENVELOPE_TOKENS = 8
 # 单个 tool_call 的 id/type/function 信封开销。
 TOOL_CALL_ENVELOPE_TOKENS = 5
 
-_CJK_RE = re.compile(
-    "[\u3400-\u4dbf\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]"
-)
+_CJK_RE = re.compile("[\u3400-\u4dbf\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]")
 
 _ESTIMATOR_V2_ENV = "PRISMCLAW_COMPACTION_ESTIMATOR_V2"
 
@@ -154,8 +152,7 @@ class HeuristicTokenCounter:
         image_tokens_each: int = 0,
     ) -> int:
         return sum(
-            self.count_message(message, image_tokens_each=image_tokens_each)
-            for message in messages
+            self.count_message(message, image_tokens_each=image_tokens_each) for message in messages
         )
 
     def count_tool_schemas(self, schemas: Sequence[Mapping[str, Any]]) -> int:

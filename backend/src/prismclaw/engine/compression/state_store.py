@@ -12,9 +12,9 @@ from prismclaw.engine.state.state_protocol import (
     session_memory_payload_from_state,
     state_payload_from_state,
 )
+from prismclaw.schema.agent.session import SessionContextState
 from prismclaw.schema.content.context import ContextBlock
 from prismclaw.schema.session.types import SessionTree
-from prismclaw.schema.agent.session import SessionContextState
 
 
 def _snippet(value: str, *, limit: int = 240) -> str:

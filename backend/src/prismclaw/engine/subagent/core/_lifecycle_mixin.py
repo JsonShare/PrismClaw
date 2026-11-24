@@ -1,12 +1,14 @@
 """Auto-extracted Mixin from instance.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
 from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
+from prismclaw.engine.subagent.core._instance_base import _InstanceBase
 from prismclaw.engine.subagent.core._result_types import (
     AgentRunResult,
 )
@@ -17,9 +19,11 @@ from prismclaw.engine.subagent.core.contract import (
 )
 from prismclaw.engine.subagent.core.evidence_inference import infer_domain_fields
 from prismclaw.engine.subagent.core.run_context import SubagentRunContext
+from prismclaw.engine.subagent.definition.manifest import AgentManifest
 from prismclaw.engine.subagent.prompting import (
     compose_subagent_system_prompt,
 )
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.engine.toolkit.registry.tool_classification import is_search_intent_tool
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 from prismclaw.schema.content.content_types import (
@@ -35,6 +39,12 @@ from prismclaw.schema.content.subagent import (
     SubagentResultEnvelope,
 )
 
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.skills.runtime import SkillRuntime
+    from prismclaw.schema.config.config import SubAgentConfig
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
+
 logger = logging.getLogger(__name__)
 
 # 非正常终止时合成的工具结果摘要总字符上限，防止并行多 agent 场景下
@@ -45,22 +55,22 @@ _SYNTHESIZED_RESULT_BUDGET = 6000
 _RESULT_TAIL_RESERVE = 40
 
 
-class LifecycleMixin:
+class LifecycleMixin(_InstanceBase):
     def __init__(
         self,
         *,
         run_id: str,
-        manifest: Any,  # AgentManifest
+        manifest: AgentManifest,
         parent_ctx: ToolContext,
-        tool_registry: Any,  # ToolRegistry
-        llm_client: Any,
-        settings: Any,  # SubAgentSettings
-        memory_store: Any = None,
-        session_store: Any = None,  # SessionStore for loading parent session
+        tool_registry: ToolRegistry,
+        llm_client: LLMClient,
+        settings: SubAgentConfig,
+        memory_store: MemoryStore | None = None,
+        session_store: SessionStore | None = None,  # SessionStore for loading parent session
         audit_logger: logging.Logger | None = None,
         default_model: str | None = None,
         channel: str = "web",
-        skill_runtime: Any = None,
+        skill_runtime: SkillRuntime | None = None,
         is_fork: bool = False,
         # 单工具时限：由 SubAgentExecutor 从 agent 配置 timeouts.tool_seconds 透传
         tool_timeout_s: float = 120.0,
@@ -108,11 +118,10 @@ class LifecycleMixin:
         return self._status
 
     @property
-    def manifest(self) -> Any:
+    def manifest(self) -> AgentManifest:
         return self._manifest
 
     # -- core -----------------------------------------------------------
-
 
     async def run(
         self,
@@ -120,7 +129,7 @@ class LifecycleMixin:
         *,
         call_id: str = "",
         context_snapshot: SubagentContextSnapshot | dict[str, Any] | None = None,
-    ) -> "AgentRunResult":
+    ) -> AgentRunResult:
         """Execute the sub-agent task.
 
         This method preserves the production `SubAgentExecutor.run()`
@@ -139,12 +148,7 @@ class LifecycleMixin:
                 tool_result=ToolResult(
                     tool_call_id=call_id,
                     content=[
-                        TextBlock(
-                            text=(
-                                f"[拒绝准入] 子代理嵌套深度 "
-                                f"已超过上限（{max_depth}）。"
-                            )
-                        )
+                        TextBlock(text=(f"[拒绝准入] 子代理嵌套深度 已超过上限（{max_depth}）。"))
                     ],
                     is_error=True,
                 ),
@@ -204,7 +208,7 @@ class LifecycleMixin:
         allowed_tools = self._resolve_allowed_tools(
             manifest=self._manifest,
             preload_ctx=preload_ctx,
-            available=self._tools.names(),
+            available=set(self._tools.names()),
         )
         settled_tool_surface = self._settle_tool_surface(
             allowed_tools,
@@ -335,18 +339,12 @@ class LifecycleMixin:
             subagent_envelope=SubagentEnvelopeArtifact(
                 agent_name=self._manifest.name,
                 agent_source=getattr(self._manifest, "source", None),
-                agent_id=(
-                    self._run_context.agent_id if self._run_context is not None else None
-                ),
+                agent_id=(self._run_context.agent_id if self._run_context is not None else None),
                 run_id=self._run_id,
                 child_session_id=(
-                    self._run_context.child_session_id
-                    if self._run_context is not None
-                    else None
+                    self._run_context.child_session_id if self._run_context is not None else None
                 ),
-                lifecycle=(
-                    self._run_context.lifecycle if self._run_context is not None else None
-                ),
+                lifecycle=(self._run_context.lifecycle if self._run_context is not None else None),
                 outcome=outcome,
                 final_text=final_text or None,
                 result_envelope=(
@@ -375,7 +373,6 @@ class LifecycleMixin:
         return result
 
     # -- internal: context & model -----------------------------------------
-
 
     async def _cleanup_light(self) -> None:
         """Full resource cleanup (Phase 5/6 implementation).
@@ -534,14 +531,14 @@ def _synthesize_tool_results(
         content = raw_content.strip()
         if not content:
             continue
-        MAX_HEAD = 600
-        MAX_TAIL = 300
-        OVERLAP = 20
+        _max_head = 600
+        _max_tail = 300
+        _overlap = 20
         total = len(content)
-        if total <= MAX_HEAD + MAX_TAIL + OVERLAP:
+        if total <= _max_head + _max_tail + _overlap:
             snippet = content
         else:
-            snippet = content[:MAX_HEAD] + "\n...[截断]...\n" + content[-MAX_TAIL:]
+            snippet = content[:_max_head] + "\n...[截断]...\n" + content[-_max_tail:]
         by_tool[tool_name].append(snippet)
 
     total_items = sum(len(items) for items in by_tool.values())
@@ -571,7 +568,7 @@ def _synthesize_tool_results(
 
 def _collect_evidence_from_messages(
     messages: list[dict[str, Any]],
-) -> list:
+) -> list[EvidenceRef]:
     """从 subagent 的对话历史中自动提取证据引用。
 
     扫描 messages 中的 assistant tool_use + tool result 对，
@@ -604,6 +601,7 @@ def _collect_evidence_from_messages(
             if isinstance(raw_args, str):
                 try:
                     import json
+
                     raw_args = json.loads(raw_args)
                 except Exception:
                     raw_args = {}
@@ -634,16 +632,15 @@ def _collect_evidence_from_messages(
                     if limit:
                         source_location += f"-L{offset + limit}"
 
-            evidence.append(EvidenceRef(
-                source_type=source_type,
-                source_path=source_path,
-                source_location=source_location,
-                quoted_text=quoted_text,
-                confidence="high",
-                domain_extensions=infer_domain_fields(source_type, source_path, result_text),
-            ))
+            evidence.append(
+                EvidenceRef(
+                    source_type=source_type,
+                    source_path=source_path,
+                    source_location=source_location,
+                    quoted_text=quoted_text,
+                    confidence="high",
+                    domain_extensions=infer_domain_fields(source_type, source_path, result_text),
+                )
+            )
 
     return evidence
-
-
-

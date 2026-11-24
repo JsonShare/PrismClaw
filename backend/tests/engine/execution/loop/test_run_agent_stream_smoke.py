@@ -6,6 +6,7 @@
 
 仅替换外部边界（LLM / hook 分发），其余走真实装配。
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace

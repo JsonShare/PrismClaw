@@ -12,8 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from prismclaw.app.auth.auth import get_current_user
-from prismclaw.app.web.deps import get_web_deps
 from prismclaw.app.web._routes_helpers import _clean_workspace_id
+from prismclaw.app.web.deps import get_web_deps
 from prismclaw.infra.workspace_paths import resolve_user_root
 
 logger = logging.getLogger(__name__)
@@ -23,31 +23,36 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _WORKSPACE_SESSIONS_DIR = "sessions"  # 🆕 session 级根目录
-_SESSION_OUTPUTS_SUBDIR = "outputs"    # 🆕 sessions/<sid>/outputs/
+_SESSION_OUTBOX_SUBDIR = "outbox"  # 🆕 sessions/<sid>/outbox/
 
 # Sub-directory names excluded from recursive output scanning (any depth).
-_EXCLUDED_OUTPUTS_SUBDIRS = frozenset({
-    ".git",
-    ".work",
-    "node_modules",
-    "tmp",
-    "inbox",
-})
+_EXCLUDED_OUTBOX_SUBDIRS = frozenset(
+    {
+        ".git",
+        ".work",
+        "node_modules",
+        "tmp",
+        "inbox",
+    }
+)
 
 # Names directly under user_root that are NOT custom workspaces.
 # workspace 根只剩 sessions/ biz_domain/ .work/ + 用户项目文件，
 # 系统子目录一律收进 .work/。
-_RESERVED_WORKSPACE_ROOT_NAMES = frozenset({
-    "default",
-    ".work",
-    _WORKSPACE_SESSIONS_DIR,
-    "biz_domain",
-})
+_RESERVED_WORKSPACE_ROOT_NAMES = frozenset(
+    {
+        "default",
+        ".work",
+        _WORKSPACE_SESSIONS_DIR,
+        "biz_domain",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Workspace metadata helpers
 # ---------------------------------------------------------------------------
+
 
 def _workspace_meta_file(user_root: Path) -> Path:
     """Path to the cloud workspace metadata store (``workspaces.json``).
@@ -91,7 +96,7 @@ def _load_workspace_meta(user_root: Path) -> dict[str, dict[str, str]]:
         created_value = v.get("created_at_ms")
         # create_workspace 写入的是数字字符串，这里必须同时接受 int/float 与
         # 数字字符串，否则 created_at_ms 在存取循环中被静默丢弃、永远取不回。
-        if not isinstance(created_value, bool):
+        if isinstance(created_value, str | int | float) and not isinstance(created_value, bool):
             try:
                 created_num = float(created_value)
             except (TypeError, ValueError):
@@ -137,6 +142,7 @@ def _workspace_created_ms(entry: dict[str, str], ws_dir: Path) -> float:
 # Pydantic models
 # ---------------------------------------------------------------------------
 
+
 class WorkspaceItem(BaseModel):
     id: str
     name: str
@@ -155,7 +161,7 @@ class CreateWorkspaceResponse(BaseModel):
     workspace: WorkspaceItem
 
 
-class OutputFileItem(BaseModel):
+class OutboxFileItem(BaseModel):
     workspace_id: str
     workspace_name: str
     rel_path: str
@@ -168,9 +174,9 @@ class OutputFileItem(BaseModel):
     source_session_title: str | None = None
 
 
-class OutputsResponse(BaseModel):
+class OutboxResponse(BaseModel):
     truncated: bool
-    items: list[OutputFileItem]
+    items: list[OutboxFileItem]
 
 
 # ---------------------------------------------------------------------------
@@ -217,14 +223,30 @@ async def list_workspaces(
 
 
 def _categorize_ext(ext: str) -> str:
-    """Map a file extension to a coarse category used by the outputs view."""
+    """Map a file extension to a coarse category used by the outbox view."""
     e = (ext or "").strip().lower().lstrip(".")
     docs = {"doc", "docx", "pdf", "md", "txt", "rtf"}
     sheets = {"xls", "xlsx", "csv", "tsv"}
     slides = {"ppt", "pptx", "key"}
     images = {"png", "jpg", "jpeg", "gif", "svg", "webp"}
     web = {"html", "htm"}
-    code = {"js", "jsx", "ts", "tsx", "mjs", "cjs", "py", "java", "jar", "css", "sql", "yml", "yaml", "xml", "json"}
+    code = {
+        "js",
+        "jsx",
+        "ts",
+        "tsx",
+        "mjs",
+        "cjs",
+        "py",
+        "java",
+        "jar",
+        "css",
+        "sql",
+        "yml",
+        "yaml",
+        "xml",
+        "json",
+    }
     if e in docs:
         return "document"
     if e in sheets:
@@ -240,13 +262,13 @@ def _categorize_ext(ext: str) -> str:
     return "other"
 
 
-@workspace_router.get("/workspaces/outputs", response_model=OutputsResponse)
-async def list_workspace_outputs(
+@workspace_router.get("/workspaces/outbox", response_model=OutboxResponse)
+async def list_workspace_outbox(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = Query(default="all"),
-) -> OutputsResponse:
-    """Aggregate deliverable files across workspaces (scans ``outputs/`` only).
+) -> OutboxResponse:
+    """Aggregate deliverable files across workspaces (scans ``outbox/`` only).
 
     - ``workspace_id=all`` (default) aggregates every workspace.
     - Excludes system sub-directories at any depth.
@@ -278,8 +300,8 @@ async def list_workspace_outputs(
                     continue
                 targets.append((wid, meta.get(wid, {}).get("name") or wid))
 
-    MAX_ITEMS = 2000
-    items: list[OutputFileItem] = []
+    MAX_ITEMS = 2000  # noqa: N806 - 函数内上限常量
+    items: list[OutboxFileItem] = []
     for wid, wname in targets:
         sessions_dir = user_root / wid / _WORKSPACE_SESSIONS_DIR
         if not sessions_dir.is_dir():
@@ -288,28 +310,27 @@ async def list_workspace_outputs(
             if not session_dir.is_dir():
                 continue
             sid = session_dir.name
-            outputs_dir = session_dir / _SESSION_OUTPUTS_SUBDIR
-            if not outputs_dir.is_dir():
+            outbox_dir = session_dir / _SESSION_OUTBOX_SUBDIR
+            if not outbox_dir.is_dir():
                 continue
-            for p in outputs_dir.rglob("*"):
+            for p in outbox_dir.rglob("*"):
                 if not p.is_file():
                     continue
-                rel = p.relative_to(outputs_dir)
-                if any(part in _EXCLUDED_OUTPUTS_SUBDIRS for part in rel.parts[:-1]):
+                rel = p.relative_to(outbox_dir)
+                if any(part in _EXCLUDED_OUTBOX_SUBDIRS for part in rel.parts[:-1]):
                     continue
                 try:
                     stat = p.stat()
                 except OSError:
                     continue
                 ext = rel.suffix.lstrip(".")
-                # 路径相对 workspace 根：sessions/<sid>/outputs/<相对路径>，
+                # 路径相对 workspace 根：sessions/<sid>/outbox/<相对路径>，
                 # 与 /api/files/raw、/api/files/download、导出接口解析口径一致。
                 rel_path = (
-                    f"{_WORKSPACE_SESSIONS_DIR}/{sid}/"
-                    f"{_SESSION_OUTPUTS_SUBDIR}/{rel.as_posix()}"
+                    f"{_WORKSPACE_SESSIONS_DIR}/{sid}/{_SESSION_OUTBOX_SUBDIR}/{rel.as_posix()}"
                 )
                 items.append(
-                    OutputFileItem(
+                    OutboxFileItem(
                         workspace_id=wid,
                         workspace_name=wname,
                         rel_path=rel_path,
@@ -318,7 +339,7 @@ async def list_workspace_outputs(
                         type=_categorize_ext(ext),
                         size_bytes=stat.st_size,
                         mtime_ms=int(stat.st_mtime * 1000),
-                        source_session_id=sid,   # 🆕 直接从目录名拿到！
+                        source_session_id=sid,  # 🆕 直接从目录名拿到！
                         source_session_title=None,  # 如需标题再补 Redis 查询
                     )
                 )
@@ -329,7 +350,7 @@ async def list_workspace_outputs(
         if len(items) >= MAX_ITEMS:
             break
 
-    return OutputsResponse(truncated=len(items) >= MAX_ITEMS, items=items)
+    return OutboxResponse(truncated=len(items) >= MAX_ITEMS, items=items)
 
 
 @workspace_router.post("/workspaces", response_model=CreateWorkspaceResponse)
@@ -389,7 +410,9 @@ async def delete_workspace(
     try:
         # 免除：通过 WebDeps 注入的函数引用获取，不再直接 import engine 内部
         _web_deps = get_web_deps(request)
-        _cleanup = getattr(_web_deps, "cleanup_working_dir_fn", None) if _web_deps is not None else None
+        _cleanup = (
+            getattr(_web_deps, "cleanup_working_dir_fn", None) if _web_deps is not None else None
+        )
         if _cleanup is not None:
             await _cleanup(ws_dir)
     except Exception as _err:  # best-effort; never block the delete

@@ -29,7 +29,7 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from prismclaw.engine.foundation.metrics import emit
@@ -38,6 +38,8 @@ from prismclaw.engine.observability.feature_flags import (
     FLAG_STREAMING_V2,
     is_enabled,
 )
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+from prismclaw.engine.toolkit.registry.tool_runtime import Tool, ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +47,7 @@ logger = logging.getLogger(__name__)
 _METRIC_TOOL_SCHEDULED = "streaming.tool.scheduled"
 _METRIC_TOOL_FIRST_COMPLETION_MS = "streaming.tool.first_completion_ms"
 _METRIC_TOOL_QUEUE_WAIT_MS = "streaming.tool.queue_wait_ms"
+
 
 def _lane_label(is_concurrency_safe: bool) -> str:
     """Render the lane name for a tool call, used as a metric label.
@@ -55,7 +58,7 @@ def _lane_label(is_concurrency_safe: bool) -> str:
     return "safe" if is_concurrency_safe else "non_safe"
 
 
-class ToolStatus(str, Enum):
+class ToolStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -66,6 +69,7 @@ class ToolStatus(str, Enum):
 @dataclass
 class ToolExecutionUpdate:
     """A single tool execution result update."""
+
     tool_call_id: str
     tool_name: str
     result: Any  # ToolResult
@@ -76,6 +80,7 @@ class ToolExecutionUpdate:
 @dataclass
 class TrackedTool:
     """Internal tracking structure for a tool being executed."""
+
     id: str
     block: dict[str, Any]
     status: ToolStatus = ToolStatus.PENDING
@@ -85,11 +90,12 @@ class TrackedTool:
 
     @property
     def tool_name(self) -> str:
-        fn = (self.block.get("function") or {})
-        return fn.get("name", "")
+        fn = self.block.get("function") or {}
+        raw_name = fn.get("name", "")
+        return raw_name if isinstance(raw_name, str) else ""
 
 
-def _resolve_is_concurrency_safe(tool: Any) -> bool:
+def _resolve_is_concurrency_safe(tool: Tool | None) -> bool:
     """Resolve concurrency safety from the tool's own declaration.
 
     Resolution order:
@@ -107,9 +113,7 @@ def _resolve_is_concurrency_safe(tool: Any) -> bool:
     # were previously treated as parallel-safe. Preserve that
     # behaviour unless the tool has explicitly opted out.
     side_effect = getattr(tool, "side_effect", None)
-    if isinstance(side_effect, bool) and not side_effect:
-        return True
-    return False
+    return bool(isinstance(side_effect, bool) and not side_effect)
 
 
 class StreamingExecutor:
@@ -124,8 +128,8 @@ class StreamingExecutor:
     def __init__(
         self,
         *,
-        tools: Any,
-        tool_ctx: Any,
+        tools: ToolRegistry,
+        tool_ctx: ToolContext,
         default_timeout_s: float = 120.0,
         safe_concurrency: int = 10,
     ) -> None:
@@ -137,13 +141,9 @@ class StreamingExecutor:
         # kept as a rollback lever for staged rollout.
         scheduler_v2 = is_enabled(FLAG_SCHEDULER_V2, default=True)
         self._safe_semaphore: asyncio.Semaphore | None = (
-            asyncio.Semaphore(max(1, int(safe_concurrency)))
-            if scheduler_v2
-            else None
+            asyncio.Semaphore(max(1, int(safe_concurrency))) if scheduler_v2 else None
         )
-        self._non_safe_lock: asyncio.Lock | None = (
-            asyncio.Lock() if scheduler_v2 else None
-        )
+        self._non_safe_lock: asyncio.Lock | None = asyncio.Lock() if scheduler_v2 else None
         # ``FLAG_STREAMING_V2`` controls whether metrics are emitted
         # for the streaming path. The FIRST_COMPLETED scheduler itself
         # is unconditionally active — the flag is observability-only
@@ -158,7 +158,7 @@ class StreamingExecutor:
     def add_tool(
         self,
         block: dict[str, Any],
-        assistant_message: Any | None = None,
+        assistant_message: object | None = None,
     ) -> TrackedTool:
         """Add a tool call to be executed.
 
@@ -167,7 +167,7 @@ class StreamingExecutor:
         FIFO non-safe lock.
         """
         tool_call_id = block.get("id", "")
-        fn = (block.get("function") or {})
+        fn = block.get("function") or {}
         tool_name = fn.get("name", "")
 
         tool = self._tools.get(tool_name) if hasattr(self._tools, "get") else None
@@ -203,13 +203,15 @@ class StreamingExecutor:
         results = []
         for tracked in self._tracked:
             if tracked.status == ToolStatus.COMPLETED and tracked.result is not None:
-                results.append(ToolExecutionUpdate(
-                    tool_call_id=tracked.id,
-                    tool_name=tracked.tool_name,
-                    result=tracked.result,
-                    status=tracked.status,
-                    is_concurrency_safe=tracked.is_concurrency_safe,
-                ))
+                results.append(
+                    ToolExecutionUpdate(
+                        tool_call_id=tracked.id,
+                        tool_name=tracked.tool_name,
+                        result=tracked.result,
+                        status=tracked.status,
+                        is_concurrency_safe=tracked.is_concurrency_safe,
+                    )
+                )
         return results
 
     async def get_remaining_results(self) -> AsyncIterator[ToolExecutionUpdate]:
@@ -239,18 +241,13 @@ class StreamingExecutor:
                     ToolStatus.COMPLETED,
                     ToolStatus.FAILED,
                     ToolStatus.DISCARDED,
-                ) and (
-                    tracked.result is not None
-                    or tracked.status == ToolStatus.DISCARDED
-                ):
+                ) and (tracked.result is not None or tracked.status == ToolStatus.DISCARDED):
                     emitted += 1
                     next_idx += 1
                     if tracked.status == ToolStatus.DISCARDED:
                         continue
                     if self._streaming_v2 and not first_completion_recorded:
-                        elapsed_ms = (
-                            time.monotonic() - self._executor_start_monotonic
-                        ) * 1000.0
+                        elapsed_ms = (time.monotonic() - self._executor_start_monotonic) * 1000.0
                         emit(
                             _METRIC_TOOL_FIRST_COMPLETION_MS,
                             elapsed_ms,
@@ -333,7 +330,7 @@ class StreamingExecutor:
             tracked.status = ToolStatus.DISCARDED
             return
 
-        fn = (tracked.block.get("function") or {})
+        fn = tracked.block.get("function") or {}
         tool_name = fn.get("name", "")
         tool_call_id = tracked.id
 
@@ -375,6 +372,7 @@ class StreamingExecutor:
         # in a spawned task (copy_context() is a shallow copy).
         try:
             from prismclaw.engine.trajectory.bus_context import current_runtime
+
             _rt = current_runtime()
             if _rt is not None:
                 _rt.tool_call_starts[tool_call_id] = int(time.time() * 1000)
@@ -387,6 +385,7 @@ class StreamingExecutor:
             if tool is None:
                 from prismclaw.schema.agent.data_types import TextBlock
                 from prismclaw.schema.content.content_types import ToolResult
+
                 tracked.result = ToolResult(
                     tool_call_id=tool_call_id,
                     content=[TextBlock(text=f"Unknown tool: {tool_name}")],
@@ -433,9 +432,14 @@ class StreamingExecutor:
             except TimeoutError:
                 from prismclaw.schema.agent.data_types import TextBlock
                 from prismclaw.schema.content.content_types import ToolResult
+
                 tracked.result = ToolResult(
                     tool_call_id=tool_call_id,
-                    content=[TextBlock(text=f"Tool '{tool_name}' timed out after {self._default_timeout_s}s")],
+                    content=[
+                        TextBlock(
+                            text=f"Tool '{tool_name}' timed out after {self._default_timeout_s}s"
+                        )
+                    ],
                     is_error=True,
                 )
                 tracked.status = ToolStatus.FAILED
@@ -468,7 +472,8 @@ class StreamingExecutor:
                             TextBlock(
                                 text=(
                                     f"MCP 服务 {exc.server_name!r} 当前不可用，"
-                                    f"已从本次对话中移除。如需重试，请使用 /mcp restart {exc.server_name}。"
+                                    f"已从本次对话中移除。如需重试，请使用 "
+                                    f"/mcp restart {exc.server_name}。"
                                 )
                             )
                         ],

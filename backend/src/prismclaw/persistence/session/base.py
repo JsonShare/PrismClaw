@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import secrets
-from typing import Callable
+from collections.abc import Callable
 
 from prismclaw.schema.session.types import SessionEntry
 from prismclaw.schema.storage.storage_types import SessionStore as SessionStore

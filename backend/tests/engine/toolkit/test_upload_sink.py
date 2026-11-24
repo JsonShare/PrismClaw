@@ -6,13 +6,14 @@
 在 macOS（``/var`` 是 ``/private/var`` 的符号链接）上 commit 必然抛
 ``ValueError``，而文件其实已经落盘，形成"写成功但报失败"。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
 
-from prismclaw.engine.toolkit.file.upload_pipeline import InvalidPath, LocalSink
+from prismclaw.engine.toolkit.file.upload_pipeline import InvalidPathError, LocalSink
 
 
 @pytest.mark.asyncio
@@ -57,7 +58,7 @@ def test_dest_root_outside_workspace_rejected(tmp_path: Path) -> None:
     ws.mkdir(parents=True)
     biz_inbox.mkdir(parents=True)
 
-    with pytest.raises(InvalidPath, match="不在工作区"):
+    with pytest.raises(InvalidPathError, match="不在工作区"):
         LocalSink(ws, biz_inbox)
 
 

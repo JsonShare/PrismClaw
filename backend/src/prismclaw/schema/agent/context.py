@@ -1,21 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from prismclaw.schema.llm.request_mode import RequestMode
 from prismclaw.schema.storage.storage_types import SessionStore
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from prismclaw.schema.config.config import CompactionConfig
-from prismclaw.schema.content.compaction import AssembleResult, CompactResult
 from prismclaw.schema.agent.session import (
+    AgentMessageDict,
     MessageEntry,
     SessionContextState,
 )
 from prismclaw.schema.agent.task_types import TaskSpec
+from prismclaw.schema.content.compaction import AssembleResult, CompactResult
 
 
 @runtime_checkable
@@ -52,10 +50,9 @@ class ContextAssembler(Protocol):
         self,
         *,
         session_id: str,
-        messages: list[MessageEntry],
+        messages: list[AgentMessageDict],
         token_budget: int | None = None,
         prompt: str | None = None,
-        request_mode: RequestMode | None = None,
         task_spec: TaskSpec | None = None,
     ) -> AssembleResult: ...
 
@@ -83,7 +80,8 @@ class ContextIngestor(Protocol):
 
 @runtime_checkable
 class ContextTurnFinalizer(Protocol):
-    async def after_turn(self, session_id: str, messages: list[MessageEntry]) -> None: ...
+    # 传入的是 LLM 视图的消息字典（含 __entry_id__），实现侧按 dict 归一化。
+    async def after_turn(self, session_id: str, messages: list[dict[str, Any]]) -> None: ...
 
 
 @runtime_checkable
@@ -92,7 +90,7 @@ class MemoryAftermathBoundary(Protocol):
 
     async def consolidate_session(self, session_id: str) -> bool: ...
 
-    def set_session_store(self, session_store: SessionStore) -> None: ...
+    def set_session_store(self, session_store: SessionStore | None) -> None: ...
 
 
 @runtime_checkable
@@ -120,8 +118,9 @@ class ContextEngine(
     从 subsystems/context/context_engine.py L49-63 移入。
     agent 层只导入此 Protocol，不导入 DefaultContextEngine 具体实现。
     """
+
     def set_result_compaction_config(self, compaction_config: CompactionConfig | None) -> None: ...
     def set_session_store(self, session_store: SessionStore | None) -> None: ...
-    def set_ports(self, ports: Any) -> None: ...
+    def set_ports(self, ports: object) -> None: ...
     def get_session_state(self, session_id: str) -> SessionContextState: ...
     async def consolidate_session(self, session_id: str) -> bool: ...

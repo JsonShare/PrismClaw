@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class RunStateMachine:
-    def __init__(self, state: RunState):
+    def __init__(self, state: RunState) -> None:
         self.state = state
 
     def retry_counts_view(self) -> dict[str, int]:

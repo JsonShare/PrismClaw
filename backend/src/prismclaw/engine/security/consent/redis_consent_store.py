@@ -15,15 +15,20 @@
     避免 Redis 不可用时静默放行 PHI 访问。
   - grant/revoke 与原 InMemoryConsentStore 语义对齐，ConsentGate 无需分支。
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import time
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.security.consent.consent_gate import ConsentRecord
 from prismclaw.engine.security.gate.types import ConsentStoreProtocol
+
+if TYPE_CHECKING:
+    import redis
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +47,9 @@ class RedisConsentStore(ConsentStoreProtocol):
             import redis
 
             self._client = redis.Redis.from_url(
-                self._redis_url, socket_timeout=2.0, socket_connect_timeout=2.0,
+                self._redis_url,
+                socket_timeout=2.0,
+                socket_connect_timeout=2.0,
             )
         else:
             logger.warning(
@@ -54,7 +61,7 @@ class RedisConsentStore(ConsentStoreProtocol):
     def available(self) -> bool:
         return self._client is not None
 
-    def _get_client(self):
+    def _get_client(self) -> redis.Redis:
         if self._client is None:
             # fail-closed：无客户端时调用方应处理为拒绝
             raise RuntimeError("RedisConsentStore not configured (no redis_url)")
@@ -64,8 +71,12 @@ class RedisConsentStore(ConsentStoreProtocol):
         self, session_id: str, purpose: str, tool_name: str, granted: bool, *, consent_id: str = ""
     ) -> None:
         self.grant(
-            session_id=session_id, user_id="", purpose=purpose, tool_name=tool_name,
-            granted=granted, consent_id=consent_id,
+            session_id=session_id,
+            user_id="",
+            purpose=purpose,
+            tool_name=tool_name,
+            granted=granted,
+            consent_id=consent_id,
         )
 
     def grant(
@@ -141,7 +152,12 @@ class RedisConsentStore(ConsentStoreProtocol):
                 rec = self._parse(raw)
                 if rec is None:
                     continue
-                if rec.session_id == session_id and rec.user_id == user_id and rec.granted and not rec.is_expired:
+                if (
+                    rec.session_id == session_id
+                    and rec.user_id == user_id
+                    and rec.granted
+                    and not rec.is_expired
+                ):
                     records.append(rec)
             return records
         except Exception as exc:  # noqa: BLE001
@@ -162,19 +178,31 @@ class RedisConsentStore(ConsentStoreProtocol):
                 rec = self._parse(raw)
                 if rec is not None and rec.consent_id == consent_id:
                     self.grant(
-                        session_id=rec.session_id, user_id=rec.user_id,
-                        purpose=rec.purpose, tool_name=rec.tool_name,
-                        scope=rec.scope, workspace_id=rec.workspace_id,
-                        granted=False, consent_id=rec.consent_id,
+                        session_id=rec.session_id,
+                        user_id=rec.user_id,
+                        purpose=rec.purpose,
+                        tool_name=rec.tool_name,
+                        scope=rec.scope,
+                        workspace_id=rec.workspace_id,
+                        granted=False,
+                        consent_id=rec.consent_id,
                     )
                     return
         except Exception as exc:  # noqa: BLE001
             logger.error("RedisConsentStore.revoke error: %s", exc)
 
     @staticmethod
-    def _parse(raw: bytes | str) -> ConsentRecord | None:
+    def _parse(raw: object) -> ConsentRecord | None:
         try:
-            data = json.loads(raw)
+            if isinstance(raw, bytes):
+                text = raw.decode("utf-8", errors="replace")
+            elif isinstance(raw, str):
+                text = raw
+            else:
+                return None
+            data = json.loads(text)
+            if not isinstance(data, dict):
+                return None
             return ConsentRecord(
                 consent_id=data.get("consent_id", ""),
                 session_id=data.get("session_id", ""),
@@ -185,7 +213,9 @@ class RedisConsentStore(ConsentStoreProtocol):
                 scope=data.get("scope", ""),
                 workspace_id=data.get("workspace_id", ""),
                 created_at=float(data.get("created_at", 0.0)),
-                expires_at=(float(data["expires_at"]) if data.get("expires_at") is not None else None),
+                expires_at=(
+                    float(data["expires_at"]) if data.get("expires_at") is not None else None
+                ),
             )
         except Exception:  # noqa: BLE001
             return None

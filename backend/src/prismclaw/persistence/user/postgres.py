@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import RowMapping, text
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from prismclaw.schema.services.user_types import User
 from prismclaw.persistence.user.hashing import hash_password, verify_password
 from prismclaw.persistence.user.models import ALL_COLUMNS, FROM_CLAUSE
-
-_UNSET = object()
+from prismclaw.schema.services.user_types import User
 
 # Columns written on INSERT into pc_users, in the same order as the VALUES placeholders.
 _USER_INSERT_COLUMNS = [
@@ -30,10 +28,10 @@ _USER_INSERT_COLUMNS = [
 
 def _utcnow() -> datetime:
     """Naive UTC timestamp — matches the naive timestamp columns in the DDL."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _coerce_dt(v: Any) -> datetime | None:
+def _coerce_dt(v: object) -> datetime | None:
     if v is None or isinstance(v, datetime):
         return v
     if isinstance(v, str):
@@ -53,9 +51,7 @@ def _fmt_dt(v: datetime | None) -> datetime | None:
     return v.replace(tzinfo=None)
 
 
-def _row_to_user(row: Any) -> User | None:
-    if row is None:
-        return None
+def _mapping_to_user(row: RowMapping) -> User:
     d = dict(row)
     return User(
         id=d["id"],
@@ -70,6 +66,12 @@ def _row_to_user(row: Any) -> User | None:
         created_at=_coerce_dt(d["created_at"]),
         updated_at=_coerce_dt(d["updated_at"]),
     )
+
+
+def _row_to_user(row: RowMapping | None) -> User | None:
+    if row is None:
+        return None
+    return _mapping_to_user(row)
 
 
 class PostgresUserRepository:
@@ -113,7 +115,7 @@ class PostgresUserRepository:
             sql += " WHERE u.disabled = false"
         async with self._sf() as s:
             res = await s.execute(text(sql))
-            return [_row_to_user(r) for r in res.mappings().all()]
+            return [_mapping_to_user(r) for r in res.mappings().all()]
 
     async def count(self) -> int:
         async with self._sf() as s:
@@ -134,21 +136,25 @@ class PostgresUserRepository:
         """
         async with self._sf() as s:
             row = (
-                await s.execute(
-                    text(
-                        f"SELECT {ALL_COLUMNS} FROM {FROM_CLAUSE} "
-                        "WHERE u.id = :identifier "
-                        "   OR lower(u.email) = lower(:identifier) "
-                        "   OR lower(u.nickname) = lower(:identifier) "
-                        "ORDER BY CASE "
-                        "    WHEN u.id = :identifier THEN 0 "
-                        "    WHEN lower(u.email) = lower(:identifier) THEN 1 "
-                        "    ELSE 2 END "
-                        "LIMIT 1"
-                    ),
-                    {"identifier": identifier},
+                (
+                    await s.execute(
+                        text(
+                            f"SELECT {ALL_COLUMNS} FROM {FROM_CLAUSE} "
+                            "WHERE u.id = :identifier "
+                            "   OR lower(u.email) = lower(:identifier) "
+                            "   OR lower(u.nickname) = lower(:identifier) "
+                            "ORDER BY CASE "
+                            "    WHEN u.id = :identifier THEN 0 "
+                            "    WHEN lower(u.email) = lower(:identifier) THEN 1 "
+                            "    ELSE 2 END "
+                            "LIMIT 1"
+                        ),
+                        {"identifier": identifier},
+                    )
                 )
-            ).mappings().first()
+                .mappings()
+                .first()
+            )
             if row is None:
                 return None
             user = _row_to_user(row)
@@ -212,28 +218,27 @@ class PostgresUserRepository:
         email: str | None = None,
         nickname: str | None = None,
     ) -> User:
-        async with self._sf() as s:
-            async with s.begin():
-                now = _utcnow()
-                user_params = {
-                    "id": user_id,
-                    "password_hash": hash_password(password, scheme=self._scheme),
-                    "email": email,
-                    "nickname": nickname,
-                    "disabled": False,
-                    "failed_attempts": 0,
-                    "locked_until": None,
-                    "last_login_at": None,
-                    "password_changed_at": now,
-                    "created_at": now,
-                    "updated_at": now,
-                }
-                cols = ", ".join(_USER_INSERT_COLUMNS)
-                placeholders = ", ".join(f":{c}" for c in _USER_INSERT_COLUMNS)
-                await s.execute(
-                    text(f"INSERT INTO pc_users ({cols}) VALUES ({placeholders})"),
-                    user_params,
-                )
+        async with self._sf() as s, s.begin():
+            now = _utcnow()
+            user_params = {
+                "id": user_id,
+                "password_hash": hash_password(password, scheme=self._scheme),
+                "email": email,
+                "nickname": nickname,
+                "disabled": False,
+                "failed_attempts": 0,
+                "locked_until": None,
+                "last_login_at": None,
+                "password_changed_at": now,
+                "created_at": now,
+                "updated_at": now,
+            }
+            cols = ", ".join(_USER_INSERT_COLUMNS)
+            placeholders = ", ".join(f":{c}" for c in _USER_INSERT_COLUMNS)
+            await s.execute(
+                text(f"INSERT INTO pc_users ({cols}) VALUES ({placeholders})"),
+                user_params,
+            )
         created = await self.get_by_id(user_id)
         assert created is not None
         return created
@@ -252,27 +257,28 @@ class PostgresUserRepository:
         Unlike :meth:`create`, this never raises on duplicate PK, making it
         safe for concurrent multi-worker startup seeding.
         """
-        async with self._sf() as s:
-            async with s.begin():
-                now = _utcnow()
-                user_params = {
-                    "id": user_id,
-                    "password_hash": hash_password(password, scheme=self._scheme),
-                    "email": email,
-                    "nickname": nickname,
-                    "disabled": False,
-                    "failed_attempts": 0,
-                    "locked_until": None,
-                    "last_login_at": None,
-                    "password_changed_at": now,
-                    "created_at": now,
-                    "updated_at": now,
-                }
-                cols = ", ".join(_USER_INSERT_COLUMNS)
-                placeholders = ", ".join(f":{c}" for c in _USER_INSERT_COLUMNS)
-                sql = f"INSERT INTO pc_users ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO NOTHING"
-                result = await s.execute(text(sql), user_params)
-                return result.rowcount > 0
+        async with self._sf() as s, s.begin():
+            now = _utcnow()
+            user_params = {
+                "id": user_id,
+                "password_hash": hash_password(password, scheme=self._scheme),
+                "email": email,
+                "nickname": nickname,
+                "disabled": False,
+                "failed_attempts": 0,
+                "locked_until": None,
+                "last_login_at": None,
+                "password_changed_at": now,
+                "created_at": now,
+                "updated_at": now,
+            }
+            cols = ", ".join(_USER_INSERT_COLUMNS)
+            placeholders = ", ".join(f":{c}" for c in _USER_INSERT_COLUMNS)
+            sql = (
+                f"INSERT INTO pc_users ({cols}) VALUES ({placeholders}) ON CONFLICT (id) DO NOTHING"
+            )
+            result = await s.execute(text(sql), user_params)
+            return isinstance(result, CursorResult) and result.rowcount > 0
 
     async def get_by_email(self, email: str) -> User | None:
         """按邮箱（忽略大小写）查用户，用于找回密码与邮箱唯一性校验。"""
@@ -298,8 +304,10 @@ class PostgresUserRepository:
     async def set_password(self, user_id: str, password: str) -> bool:
         async with self._sf() as s:
             exists = (
-                await s.execute(text("SELECT id FROM pc_users WHERE id = :id"), {"id": user_id})
-            ).mappings().first()
+                (await s.execute(text("SELECT id FROM pc_users WHERE id = :id"), {"id": user_id}))
+                .mappings()
+                .first()
+            )
             if exists is None:
                 return False
             now = _utcnow()
@@ -318,42 +326,29 @@ class PostgresUserRepository:
             await s.commit()
             return True
 
-    async def update_profile(
-        self,
-        user_id: str,
-        **kwargs: Any,
-    ) -> bool:
+    async def update_profile(self, user_id: str) -> bool:
         async with self._sf() as s:
             exists = (
-                await s.execute(text("SELECT id FROM pc_users WHERE id = :id"), {"id": user_id})
-            ).mappings().first()
+                (await s.execute(text("SELECT id FROM pc_users WHERE id = :id"), {"id": user_id}))
+                .mappings()
+                .first()
+            )
             if exists is None:
                 return False
-
-            user_sets: list[str] = []
-            params: dict[str, Any] = {"id": user_id}
-
-            if "disabled" in kwargs and kwargs["disabled"] is not _UNSET:
-                user_sets.append("disabled = :disabled")
-                params["disabled"] = bool(kwargs["disabled"])
-
-            if not user_sets:
-                return True
-
             async with s.begin():
-                now = _utcnow()
-                user_sets.append("updated_at = :now")
-                params["now"] = now
                 await s.execute(
-                    text(f"UPDATE pc_users SET {', '.join(user_sets)} WHERE id = :id"), params
+                    text("UPDATE pc_users SET updated_at = :now WHERE id = :id"),
+                    {"id": user_id, "now": _utcnow()},
                 )
             return True
 
     async def delete(self, user_id: str) -> bool:
         async with self._sf() as s:
             exists = (
-                await s.execute(text("SELECT id FROM pc_users WHERE id = :id"), {"id": user_id})
-            ).mappings().first()
+                (await s.execute(text("SELECT id FROM pc_users WHERE id = :id"), {"id": user_id}))
+                .mappings()
+                .first()
+            )
             if exists is None:
                 return False
             await s.execute(text("DELETE FROM pc_users WHERE id = :id"), {"id": user_id})

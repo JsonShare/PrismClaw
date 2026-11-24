@@ -9,6 +9,7 @@
 - guideline_to_vm:     指南 → GuidelineEntry
 - drug_to_vm:          药品 → DrugEntry
 """
+
 from __future__ import annotations
 
 import json
@@ -84,10 +85,7 @@ def report_to_vm(row: dict[str, Any]) -> dict[str, Any]:
     visit = row.get("visit_date")
     date_str = ""
     if visit:
-        if isinstance(visit, (datetime, date)):
-            date_str = visit.strftime("%Y-%m-%d")
-        else:
-            date_str = str(visit)
+        date_str = visit.strftime("%Y-%m-%d") if isinstance(visit, (datetime, date)) else str(visit)
 
     status = row.get("status", "排队中")
     state = "已解析" if status == "已解析" else "解析中"
@@ -98,10 +96,7 @@ def report_to_vm(row: dict[str, Any]) -> dict[str, Any]:
         # 已归档取档案姓名；尚未归档时退到 AI 识别出的姓名，
         # 待整理队列要靠它告诉医生「这份大概是张三的」
         "patientName": (
-            row.get("patient_name")
-            or row.get("patient_name_raw")
-            or row.get("patient_id")
-            or ""
+            row.get("patient_name") or row.get("patient_name_raw") or row.get("patient_id") or ""
         ),
         "matchReason": row.get("match_reason", "") or "",
         # 歧义归属时的同名候选患者（list_inbox 实时算出，.assign 复用抽屉也读它）
@@ -243,5 +238,7 @@ def consultation_to_vm(row: dict[str, Any]) -> dict[str, Any]:
         "patientId": row.get("patient_id", ""),
         "doctorId": row.get("doctor_id", ""),
         "title": row.get("title", ""),
-        "createdAt": created_at.isoformat() if isinstance(created_at, datetime) else str(created_at or ""),
+        "createdAt": created_at.isoformat()
+        if isinstance(created_at, datetime)
+        else str(created_at or ""),
     }

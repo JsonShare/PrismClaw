@@ -7,7 +7,7 @@ are pure functions and constants with no external dependencies.
 from __future__ import annotations
 
 import logging
-from typing import Iterable
+from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +79,7 @@ def _is_hardcoded_deny(name: str) -> bool:
     upper = name.upper()
     if any(upper.startswith(prefix) for prefix in HARDCODED_DENY_PREFIXES):
         return True
-    if any(sub in upper for sub in HARDCODED_DENY_SUBSTRINGS):
-        return True
-    return False
+    return bool(any(sub in upper for sub in HARDCODED_DENY_SUBSTRINGS))
 
 
 def validate_env_allowlist(allowlist: Iterable[str]) -> None:
@@ -102,7 +100,8 @@ def validate_env_allowlist(allowlist: Iterable[str]) -> None:
                 if entry.startswith(prefix):
                     logger.warning(
                         "env_allowlist rejected: glob %s matches hardcoded deny prefix %s",
-                        entry, prefix,
+                        entry,
+                        prefix,
                     )
                     raise ValueError(
                         f"env_allowlist glob pattern {entry!r} is not allowed because it "

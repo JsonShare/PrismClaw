@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
-from prismclaw.infra.settings import Settings
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 from prismclaw.assembly.bundles_data import AppRuntimeBundle
 from prismclaw.assembly.wiring.runtime_mode import apply_runtime_mode_state
+from prismclaw.infra.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
 async def build_plugin_reload_runtime_bundle(
-    app: Any,
+    app: FastAPI,
     *,
     settings: Settings | None = None,
-    runner_deps: Any | None = None,
+    runner_deps: AgentRunnerDeps | None = None,
 ) -> AppRuntimeBundle:
     state = getattr(app, "state", None)
     if state is None:

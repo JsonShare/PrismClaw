@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.foundation.metrics import emit
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.schema.config.config import PerResultSummaryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +51,14 @@ def _load_per_result_prompt() -> str:
     constant guarantees the feature works on a fresh checkout with
     no files read.
     """
-    candidate = (
-        Path(__file__).resolve().parent
-        / "prompts"
-        / "per_result_summary.md"
-    )
+    candidate = Path(__file__).resolve().parent / "prompts" / "per_result_summary.md"
     try:
         return candidate.read_text(encoding="utf-8")
     except OSError:
         return P2_2_PER_RESULT_PROMPT
 
 
-def _resolve_per_result_summary(deps: Any) -> Any | None:
+def _resolve_per_result_summary(deps: AgentRunnerDeps) -> PerResultSummaryConfig | None:
     """Return the per-result summary config, or None when the
     feature is disabled or unavailable.
 
@@ -78,7 +79,7 @@ def _per_result_should_skip(
     original_chars: int,
     tool_name: str,
     material_type: str,
-    prs: Any,
+    prs: PerResultSummaryConfig,
 ) -> str | None:
     """Gate check.  Returns a reason string when the result
     should NOT be summarized, None when summarization is allowed.
@@ -100,7 +101,7 @@ async def run_per_result_fork_agent(
     *,
     raw_text: str,
     tool_name: str,
-    deps: Any,
+    deps: AgentRunnerDeps,
 ) -> str | None:
     """逐结果 LLM 摘要——单次摘要变体。
 
@@ -112,36 +113,32 @@ async def run_per_result_fork_agent(
     """
     summarize_fn = getattr(deps, "summarize_fn", None)
     if summarize_fn is None:
-        try:
+        with contextlib.suppress(Exception):
             emit(_METRIC_PRS_FALLBACK, 1.0, kind="counter", labels={"reason": "no_summarize_fn"})
-        except Exception:
-            pass
         return None
-    prompt = f"{_load_per_result_prompt()}\n\nTool: {tool_name or '<unknown>'}\n\nResult:\n{raw_text}"
+    prompt = (
+        f"{_load_per_result_prompt()}\n\nTool: {tool_name or '<unknown>'}\n\nResult:\n{raw_text}"
+    )
     try:
         summarized = await summarize_fn(prompt)
     except Exception as exc:
         logger.warning("per_result_summary.llm_call_failed err=%s", exc)
-        try:
+        with contextlib.suppress(Exception):
             emit(
                 _METRIC_PRS_FALLBACK,
                 1.0,
                 kind="counter",
                 labels={"reason": type(exc).__name__},
             )
-        except Exception:
-            pass
         return None
     if not isinstance(summarized, str) or not summarized.strip():
-        try:
+        with contextlib.suppress(Exception):
             emit(
                 _METRIC_PRS_FALLBACK,
                 1.0,
                 kind="counter",
                 labels={"reason": "empty_output"},
             )
-        except Exception:
-            pass
         return None
     try:
         emit(

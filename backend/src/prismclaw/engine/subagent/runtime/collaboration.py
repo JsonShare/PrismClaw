@@ -7,7 +7,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.subagent.core._result_types import AgentRunResult
 from prismclaw.engine.subagent.core.contract import (
@@ -36,8 +36,12 @@ from prismclaw.engine.subagent.runtime.records import (
 from prismclaw.engine.subagent.runtime.recovery import assess_and_repair_recovery
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.subagent import SubagentContextSnapshot
+from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 from prismclaw.schema.session.types import MessageEntry, now_iso
 from prismclaw.schema.storage.storage_types import SessionStore
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +100,8 @@ class SubagentCollaborationService:
         self,
         *,
         session_store: SessionStore,
-        redis_client: Any = None,
-        task_manager: Any = None,
+        redis_client: aioredis.Redis | None = None,
+        task_manager: TaskManagerProtocol | None = None,
         lease_store: SubagentLeaseStore | None = None,
         worker_id: str | None = None,
     ) -> None:
@@ -337,9 +341,7 @@ class SubagentCollaborationService:
             boundary = "close_requested" if close else "interrupt_requested"
             run = await self._active_run(agent)
             if run is not None:
-                await self.records.append(
-                    run.model_copy(update={"safe_boundary": boundary})
-                )
+                await self.records.append(run.model_copy(update={"safe_boundary": boundary}))
             handle = self._handles.get(agent_id)
             if handle is not None:
                 handle.run_context.interrupt_event.set()
@@ -652,7 +654,7 @@ class SubagentCollaborationService:
         if not handle.started:
             handle.started = True
         try:
-            result = await handle.launch.executor.run(
+            raw_result: object = await handle.launch.executor.run(
                 handle.launch.manifest,
                 _latest_task_text(handle.persistence),
                 handle.launch.parent_ctx,
@@ -672,6 +674,7 @@ class SubagentCollaborationService:
             await self._finalize_handle(handle, outcome="error", error=exc)
             raise
         else:
+            result = raw_result if isinstance(raw_result, AgentRunResult) else None
             handle.result = result
             await self._finalize_handle(handle, result=result)
             return result
@@ -693,14 +696,20 @@ class SubagentCollaborationService:
         outcome: str | None = None,
         error: BaseException | None = None,
     ) -> None:
-        agent = await self.records.get_session(
-            session_id=handle.agent.owner_session_id,
-            agent_id=handle.agent.agent_id,
-        ) or handle.agent
-        run = await self.records.get_run(
-            session_id=handle.agent.owner_session_id,
-            run_id=handle.run.run_id,
-        ) or handle.run
+        agent = (
+            await self.records.get_session(
+                session_id=handle.agent.owner_session_id,
+                agent_id=handle.agent.agent_id,
+            )
+            or handle.agent
+        )
+        run = (
+            await self.records.get_run(
+                session_id=handle.agent.owner_session_id,
+                run_id=handle.run.run_id,
+            )
+            or handle.run
+        )
         lease_valid = await self._leases.validate(handle.lease)
         requested_boundary = run.safe_boundary
         resolved_outcome = outcome or (result.outcome if result else "error")
@@ -719,9 +728,7 @@ class SubagentCollaborationService:
             or requested_boundary == "interrupt_requested"
         ):
             run_status = (
-                "interrupted"
-                if requested_boundary == "interrupt_requested"
-                else "cancelled"
+                "interrupted" if requested_boundary == "interrupt_requested" else "cancelled"
             )
             agent_status = "closed" if agent.lifecycle == "one_shot" else "interrupted"
         elif resolved_outcome == "success":
@@ -744,9 +751,7 @@ class SubagentCollaborationService:
                     "safe_boundary": "finalized",
                     "recovery_reason": recovery_reason,
                     "result_envelope": (
-                        envelope.model_dump(mode="json", exclude_none=True)
-                        if envelope
-                        else None
+                        envelope.model_dump(mode="json", exclude_none=True) if envelope else None
                     ),
                     "error_summary": error_summary,
                     "finished_at": now_iso(),
@@ -871,7 +876,7 @@ class SubagentCollaborationService:
     async def _append_agent(
         self,
         agent: AgentSessionRecord,
-        **updates: Any,
+        **updates: object,
     ) -> AgentSessionRecord:
         updates["updated_at"] = now_iso()
         updated = agent.model_copy(update=updates)
@@ -910,8 +915,7 @@ class SubagentCollaborationService:
             return False
         persistence = await self._load_persistence(agent)
         return any(
-            entry.timestamp > started_at
-            for entry in persistence.get_unacked_user_messages()
+            entry.timestamp > started_at for entry in persistence.get_unacked_user_messages()
         )
 
     async def _spawn_outcome(
@@ -974,8 +978,9 @@ def _fingerprint(snapshot: dict[str, Any]) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _json_safe(value: Any) -> Any:
-    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+def _json_safe(value: object) -> dict[str, Any]:
+    normalized: dict[str, Any] = json.loads(json.dumps(value, ensure_ascii=False, default=str))
+    return normalized
 
 
 def _deterministic_agent_id(session_id: str, request_id: str, agent_name: str) -> str:

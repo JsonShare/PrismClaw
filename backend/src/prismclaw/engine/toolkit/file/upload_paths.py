@@ -18,7 +18,7 @@ Contents:
   - ``NOISE_NAMES`` / ``NOISE_DIRS`` / ``is_noise_file``: drop OS metadata
     artifacts (``.DS_Store``, ``__MACOSX``). Hidden directories such as
     ``.git/`` are intentionally KEPT (user wants hidden files preserved).
-  - ``DiskFull`` / ``TransferFailed`` / ``InvalidPath``: exceptions surfaced
+  - ``DiskFullError`` / ``TransferFailedError`` / ``InvalidPathError``: exceptions surfaced
     by sinks, mapped to ``skipped`` codes by the upload pipeline.
 """
 
@@ -28,28 +28,43 @@ from pathlib import Path
 
 # Executable / dangerous extensions. Defends against accidental upload, not
 # deliberate spoofing (see module docstring).
-BLOCKED_EXTS: frozenset[str] = frozenset({
-    ".exe", ".com", ".scr", ".msi",
-    ".so", ".dylib", ".dll",
-    ".reg", ".vbs", ".vbe", ".wsf", ".wsh", ".hta",
-    # Bytecode / app bundles (completion of the blocklist).
-    ".jar", ".class", ".pyc", ".app",
-})
+BLOCKED_EXTS: frozenset[str] = frozenset(
+    {
+        ".exe",
+        ".com",
+        ".scr",
+        ".msi",
+        ".so",
+        ".dylib",
+        ".dll",
+        ".reg",
+        ".vbs",
+        ".vbe",
+        ".wsf",
+        ".wsh",
+        ".hta",
+        # Bytecode / app bundles (completion of the blocklist).
+        ".jar",
+        ".class",
+        ".pyc",
+        ".app",
+    }
+)
 
 # OS metadata artifacts dropped on upload.
 NOISE_NAMES: frozenset[str] = frozenset({".DS_Store", "Thumbs.db", "desktop.ini"})
 NOISE_DIRS: frozenset[str] = frozenset({"__MACOSX"})
 
 
-class InvalidPath(Exception):
+class InvalidPathError(Exception):
     """Upload path is malformed or escapes the destination root."""
 
 
-class DiskFull(Exception):
+class DiskFullError(Exception):
     """Insufficient disk space to receive the upload."""
 
 
-class TransferFailed(Exception):
+class TransferFailedError(Exception):
     """A chunk transfer failed (RPC timeout / WS error / agent error)."""
 
 

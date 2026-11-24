@@ -10,6 +10,7 @@
    冷却/拦帧窗口（旧实现的冷却检查位于 ws_dead 快路径之前，死 socket
    后 5s 内非 force 帧全被丢弃，形成「重连后投递黑洞」；冷却机制已删除）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -86,9 +87,7 @@ def _state(ws: _Peer, user_id: str = "u1") -> ConnectionState:
 
 def _settings() -> SimpleNamespace:
     return SimpleNamespace(
-        affinity=SimpleNamespace(
-            ttl_seconds=300, forward_prefix="prismclaw:forward:"
-        )
+        affinity=SimpleNamespace(ttl_seconds=300, forward_prefix="prismclaw:forward:")
     )
 
 
@@ -104,8 +103,14 @@ def test_codec_roundtrip_and_session_key() -> None:
 
 @pytest.mark.parametrize(
     "bad",
-    [None, {}, {"user_id": "u1"}, {"frame": _ENVELOPE},
-     {"user_id": "", "frame": {}}, {"user_id": "u1", "frame": "nope"}],
+    [
+        None,
+        {},
+        {"user_id": "u1"},
+        {"frame": _ENVELOPE},
+        {"user_id": "", "frame": {}},
+        {"user_id": "u1", "frame": "nope"},
+    ],
 )
 def test_codec_rejects_malformed_payload(bad: object) -> None:
     assert decode_forward_event(bad) is None
@@ -119,9 +124,7 @@ async def test_forwarded_frame_is_delivered_locally_without_rewrapping() -> None
     peer = _Peer()
     registry.connect("u1", peer)
     app = _app(registry, _Router())
-    _router, consumer = build_gateway_components(
-        object(), "worker-A", _settings(), app=app
-    )
+    _router, consumer = build_gateway_components(object(), "worker-A", _settings(), app=app)
     handler = consumer._handler
 
     await handler(encode_forward_event("u1", _ENVELOPE))
@@ -136,9 +139,7 @@ async def test_forwarded_malformed_payload_is_dropped() -> None:
     peer = _Peer()
     registry.connect("u1", peer)
     app = _app(registry, _Router())
-    _router, consumer = build_gateway_components(
-        object(), "worker-A", _settings(), app=app
-    )
+    _router, consumer = build_gateway_components(object(), "worker-A", _settings(), app=app)
     await consumer._handler({"user_id": "u1"})
     assert peer.frames == []
 
@@ -149,16 +150,12 @@ async def test_dispatcher_uses_registry_from_current_web_deps() -> None:
     old_peer = _Peer()
     old_registry.connect("u1", old_peer)
     app = _app(old_registry, _Router())
-    _router, consumer = build_gateway_components(
-        object(), "worker-A", _settings(), app=app
-    )
+    _router, consumer = build_gateway_components(object(), "worker-A", _settings(), app=app)
 
     new_registry = ConnectionRegistry()
     new_peer = _Peer()
     new_registry.connect("u1", new_peer)
-    app.state.web_deps = SimpleNamespace(
-        connection_registry=new_registry, gateway_router=_Router()
-    )
+    app.state.web_deps = SimpleNamespace(connection_registry=new_registry, gateway_router=_Router())
 
     await consumer._handler(encode_forward_event("u1", _ENVELOPE))
     assert old_peer.frames == []
@@ -221,7 +218,9 @@ async def test_virtual_socket_forwards_once_and_still_reports_sent() -> None:
     assert len(router.calls) == 3
     assert all(call[0] == "web:u1" for call in router.calls)
     assert [call[1]["frame"]["type"] for call in router.calls] == [
-        "chat.delta", "task.timeline", "chat.done",
+        "chat.delta",
+        "task.timeline",
+        "chat.done",
     ]
     assert decode_forward_event(router.calls[0][1])[0] == "u1"
     assert state.ws_dead is False
@@ -252,9 +251,7 @@ async def test_broadcast_forwards_scheduled_task_event_when_no_local_ui() -> Non
     router = _Router()
     app = _app(ConnectionRegistry(), router)
 
-    sent = await broadcast_to_user(
-        app, "u1", "scheduled_task.started", {"task_id": "t1"}
-    )
+    sent = await broadcast_to_user(app, "u1", "scheduled_task.started", {"task_id": "t1"})
 
     assert sent == 0  # 仅统计本机投递
     assert len(router.calls) == 1
@@ -275,9 +272,7 @@ async def test_broadcast_with_local_ui_does_not_forward() -> None:
     router = _Router()
     app = _app(registry, router)
 
-    sent = await broadcast_to_user(
-        app, "u1", "scheduled_task.completed", {"task_id": "t1"}
-    )
+    sent = await broadcast_to_user(app, "u1", "scheduled_task.completed", {"task_id": "t1"})
 
     assert sent == 1
     assert peer.frames[0]["type"] == "scheduled_task.completed"
@@ -334,9 +329,7 @@ async def test_lifecycle_passes_app_to_gateway_factory(monkeypatch) -> None:
 
     app = SimpleNamespace(state=SimpleNamespace())
     settings = SimpleNamespace(
-        affinity=SimpleNamespace(
-            enabled=True, heartbeat_interval=10, stale_threshold=30
-        )
+        affinity=SimpleNamespace(enabled=True, heartbeat_interval=10, stale_threshold=30)
     )
     await lifecycle.build_app_lifecycle_bundle(
         app,
@@ -361,9 +354,7 @@ def test_routing_lives_in_fanout_and_never_in_send_event_hot_path() -> None:
     """删掉转发、或把 route 搬回 send_event 的每个事件之前，都必须失败。"""
     src = _CONNECTION_SRC.read_text(encoding="utf-8")
     send_body = src.split("async def send_event(")[1].split("\nasync def ")[0]
-    fanout_body = src.split("async def _fanout_to_peer_connections(")[1].split(
-        "\nasync def "
-    )[0]
+    fanout_body = src.split("async def _fanout_to_peer_connections(")[1].split("\nasync def ")[0]
     assert "router.route(" in fanout_body
     assert "router.route(" not in send_body
     assert "if delivered:" in fanout_body  # 本地优先不可退化为无条件转发

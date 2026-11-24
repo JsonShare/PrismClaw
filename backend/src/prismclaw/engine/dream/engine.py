@@ -1,40 +1,44 @@
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import logging
 import time
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.llm.types import LLMClient
-from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
-from prismclaw.schema.dream.dream import DreamAuditLogger
-from prismclaw.schema.dream.dream_types import DreamAuditEntry
 from prismclaw.engine.dream.candidates import DreamCandidateStore, DreamMemoryCandidate
 from prismclaw.engine.dream.compiler import DreamCompiler
-from prismclaw.schema.dream.dream import DreamGovernanceStore
+from prismclaw.engine.dream.governance.governance_runtime import DreamGovernanceRuntime
+from prismclaw.engine.dream.models import (
+    DreamArtifactPublishResult,
+    DreamPublishableArtifact,
+    DreamPublishableMemory,
+    DreamPublishResult,
+)
+from prismclaw.engine.dream.publishing import (
+    build_publishable_rem_artifacts as _build_publishable_rem_artifacts,
+)
+from prismclaw.engine.dream.publishing import (
+    build_rem_artifacts as _build_rem_artifacts,
+)
 from prismclaw.schema.dream import (
     DreamGovernanceRecord,
     DreamPublishChannel,
     DreamReviewStatus,
     DreamTargetType,
 )
-from prismclaw.engine.dream.governance.governance_runtime import DreamGovernanceRuntime
-from prismclaw.engine.dream.models import (
-    DreamArtifactPublishResult,
-    DreamPublishResult,
-    DreamPublishableArtifact,
-    DreamPublishableMemory,
-)
-from prismclaw.engine.dream.publishing import (
-    build_publishable_rem_artifacts as _build_publishable_rem_artifacts,
-    build_rem_artifacts as _build_rem_artifacts,
-)
+from prismclaw.schema.dream.dream import DreamAuditLogger, DreamGovernanceStore
+from prismclaw.schema.dream.dream_types import DreamAuditEntry, DreamAuditStatus
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.memory.classify import normalize_type
 from prismclaw.schema.memory.memory_types import MemoryEntry
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.storage.storage_types import SessionStore
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
+
+if TYPE_CHECKING:
+    from prismclaw.engine.dream.tiers import EdgeStorePort
 
 logger = logging.getLogger(__name__)
 _DREAM_MAX_SCAN = 200
@@ -45,11 +49,11 @@ _REM_FEEDBACK_LIMIT = 3
 class DreamEngine:
     """
     Dreaming Engine for Memory Consolidation.
-    
+
     Phases:
     1. Light Sleep: Deduplicate recent L1 entries and move solid facts to L2.
     2. Deep Sleep: Cluster L2 facts and L3 procedures. Prune contradictory or outdated facts.
-    3. REM Sleep: Generate knowledge graphs or higher-level abstractions from clustered facts, 
+    3. REM Sleep: Generate knowledge graphs or higher-level abstractions from clustered facts,
                   and archive them to L4.
     """
 
@@ -77,7 +81,7 @@ class DreamEngine:
         deep_merge_min_positive: int = 1,
         memory_forgetting_budget_entries: int = 0,
         correction_learning_enabled: bool = False,
-        edge_store: Any = None,
+        edge_store: EdgeStorePort | None = None,
     ) -> None:
         self._memory = memory_store
         self._session = session_store
@@ -86,7 +90,9 @@ class DreamEngine:
         self._candidate_store = candidate_store
         self._governance_store = governance_store
         resolved_shadow_memory = (
-            shadow_publish_enabled if shadow_memory_publish_enabled is None else shadow_memory_publish_enabled
+            shadow_publish_enabled
+            if shadow_memory_publish_enabled is None
+            else shadow_memory_publish_enabled
         )
         resolved_shadow_artifact = (
             shadow_publish_enabled
@@ -133,7 +139,7 @@ class DreamEngine:
         Manually or via cron trigger a full dream cycle for a given user/session_key.
         """
         logger.info("Starting dream cycle for %s", session_key)
-        start_time = datetime.now(timezone.utc).timestamp()
+        start_time = datetime.now(UTC).timestamp()
         batch_id = _build_dream_batch_id(session_key, trigger="manual")
 
         light_res = await self._run_phase_with_audit(
@@ -158,7 +164,7 @@ class DreamEngine:
             executor=self._rem_sleep_impl,
         )
 
-        end_time = datetime.now(timezone.utc).timestamp()
+        end_time = datetime.now(UTC).timestamp()
 
         return {
             "session_key": session_key,
@@ -167,7 +173,7 @@ class DreamEngine:
                 "light_sleep": light_res,
                 "deep_sleep": deep_res,
                 "rem_sleep": rem_res,
-            }
+            },
         }
 
     async def run_light(self, session_key: str) -> dict[str, Any]:
@@ -230,7 +236,7 @@ class DreamEngine:
 
     async def _light_sleep_impl(self, session_key: str) -> tuple[dict[str, Any], int]:
         """
-        Light Sleep: 
+        Light Sleep:
         - Scan L1 (Redis) for entries older than `light_sleep_threshold_s`.
         - Deduplicate them via LLM.
         - Promote valid facts to L2 (PostgreSQL).
@@ -255,16 +261,13 @@ class DreamEngine:
         if not l1_entries:
             return {"promoted_to_l2": 0, "deduplicated": 0}, 0
 
-        now = datetime.now(timezone.utc).timestamp()
-        
+        now = datetime.now(UTC).timestamp()
+
         # V4.1: 延迟活跃会话的 dream。等待时间显著拉长，让模型原生的 prefix caching
         # 无损承接短期历史；只有会话真正冷却才触发 dream（归档）。
         effective_threshold_s = max(self._light_sleep_threshold_s, 12 * 3600)  # 至少等 12 小时
-        
-        candidates = [
-            e for e in l1_entries
-            if now - e.created_at > effective_threshold_s
-        ]
+
+        candidates = [e for e in l1_entries if now - e.created_at > effective_threshold_s]
 
         if not candidates:
             return {"promoted_to_l2": 0, "deduplicated": 0}, 0
@@ -283,9 +286,12 @@ class DreamEngine:
             "你是一个记忆整理引擎（浅睡阶段）。请审视以下短期记忆，提取出确定的、长期有效的事实或规则。\n"
             "忽略闲聊、临时确认或无效信息。\n"
             "如果有重复内容，请合并。\n"
-            "【V4 架构要求：Contextual Chunking】在提取每个事实/规则时，必须在前置生成一段 `<context>...</context>`，"
+            "【V4 架构要求：Contextual Chunking】在提取每个事实/规则时，"
+            "必须在前置生成一段 `<context>...</context>`，"
             "简要说明这个事实产生的背景（比如：在解决某个报错时、在讨论某个特定的业务逻辑时），以便在脱离当前对话流后仍具有清晰的语境。\n"
-            "请以 JSON 格式输出，格式为一个列表：[{\"original_ids\": [\"id1\", \"id2\"], \"context\": \"...\", \"consolidated_fact\": \"...\", \"type\": \"fact|preference|constraint|observation|decision|procedure\"}]\n"
+            '请以 JSON 格式输出，格式为一个列表：[{"original_ids": ["id1", "id2"], '
+            '"context": "...", "consolidated_fact": "...", '
+            '"type": "fact|preference|constraint|observation|decision|procedure"}]\n'
             "type 必须取上述受控值之一；procedure 表示可复用工作流（写入 L3），其余类型写入 L2。\n"
             f"记忆列表:\n{contents}"
         )
@@ -304,17 +310,19 @@ class DreamEngine:
             )
             llm_cost = int(getattr(getattr(response, "usage", None), "total_tokens", 0) or 0)
             raw_text = response.text.strip()
-            
+
             # Robust JSON extraction
             import re
-            json_match = re.search(r'\[\s*\{.*?\}\s*\]', raw_text, re.DOTALL)
+
+            json_match = re.search(r"\[\s*\{.*?\}\s*\]", raw_text, re.DOTALL)
             if json_match:
                 raw_text = json_match.group(0)
             elif raw_text.startswith("```json"):
                 raw_text = raw_text[7:-3].strip()
-            
+
             actions = json.loads(raw_text)
             import uuid
+
             for action in actions:
                 fact_body = action.get("consolidated_fact")
                 context_prefix = action.get("context", "")
@@ -325,9 +333,13 @@ class DreamEngine:
                 orig_ids = action.get("original_ids", [])
                 if not fact_body:
                     continue
-                
+
                 # V4 Contextual Chunking: Combine context and body
-                contextual_fact = f"<context>{context_prefix}</context>\n{fact_body}" if context_prefix else fact_body
+                contextual_fact = (
+                    f"<context>{context_prefix}</context>\n{fact_body}"
+                    if context_prefix
+                    else fact_body
+                )
 
                 new_entry = MemoryEntry(
                     id=f"mem_{uuid.uuid4().hex[:12]}",
@@ -339,7 +351,7 @@ class DreamEngine:
                 )
                 await self._memory.store(session_key, new_entry)
                 promoted_count += 1
-                
+
                 # Cleanup: 下架被合并的原件——必须 archive（L2 status=archived
                 # + L1 驱逐），仅删 L1 索引会让原件继续 active、与合并件并存
                 # 制造副本（SDD D4）。
@@ -443,7 +455,9 @@ class DreamEngine:
             layers=["L2", "L3"],
             limit=_DREAM_MAX_SCAN,
         )
-        entries = [entry for entry in entries if _is_serving_visible_memory(entry, include_canary=False)]
+        entries = [
+            entry for entry in entries if _is_serving_visible_memory(entry, include_canary=False)
+        ]
         grouped: dict[tuple[str, str, str], list[MemoryEntry]] = {}
         for entry in entries:
             normalized = _normalize_memory_text(entry.content)
@@ -506,7 +520,9 @@ class DreamEngine:
             layers=["L2", "L3"],
             limit=_DREAM_MAX_SCAN,
         )
-        entries = [entry for entry in entries if _is_serving_visible_memory(entry, include_canary=False)]
+        entries = [
+            entry for entry in entries if _is_serving_visible_memory(entry, include_canary=False)
+        ]
         rem_candidates = [entry for entry in entries if _is_rem_candidate(entry)]
         archive_inputs: list[Any] = []
         if hasattr(self._memory, "search_l4_artifacts"):
@@ -561,7 +577,9 @@ class DreamEngine:
             {
                 "synthesized_archives": len(published_artifacts),
                 "synthesized_kinds": [artifact.artifact_kind for artifact in published_artifacts],
-                "published_artifact_ids": [artifact.artifact_id for artifact in published_artifacts],
+                "published_artifact_ids": [
+                    artifact.artifact_id for artifact in published_artifacts
+                ],
                 "feedback_updates": feedback_updates,
             },
             llm_cost,
@@ -586,7 +604,10 @@ class DreamEngine:
                 existing_candidate = await self._candidate_store.get_candidate(candidate_id)
             else:
                 existing_candidate = None
-            if existing_candidate is not None and existing_candidate.status in {"published", "discarded"}:
+            if existing_candidate is not None and existing_candidate.status in {
+                "published",
+                "discarded",
+            }:
                 await self._cleanup_light_sleep_source_ids(
                     session_key,
                     existing_candidate.source_entry_ids or [entry.id],
@@ -620,10 +641,13 @@ class DreamEngine:
                 "light_sleep_fallback_compiled_candidates": 0,
                 "light_sleep_fallback_recovered_candidates": recovered_candidates,
             }, 0
-        compile_result, llm_cost = await self._compiler.compile_candidates(session_key, fallback_candidates)
+        compile_result, llm_cost = await self._compiler.compile_candidates(
+            session_key, fallback_candidates
+        )
         await self._finalize_light_sleep_fallback_candidates(session_key, fallback_candidates)
         return {
-            "promoted_to_l2": int(compile_result.get("published_memory_count", 0)) + recovered_candidates,
+            "promoted_to_l2": int(compile_result.get("published_memory_count", 0))
+            + recovered_candidates,
             "deduplicated": len(fallback_candidates) + recovered_candidates,
             "light_sleep_fallback_spill_count": len(fallback_candidates),
             "light_sleep_fallback_compiled_candidates": int(
@@ -643,15 +667,20 @@ class DreamEngine:
                 stored_candidate = await self._candidate_store.get_candidate(candidate.candidate_id)
             else:
                 stored_candidate = candidate
-            if stored_candidate is None or stored_candidate.status not in {"published", "discarded"}:
+            if stored_candidate is None or stored_candidate.status not in {
+                "published",
+                "discarded",
+            }:
                 continue
-            await self._cleanup_light_sleep_source_ids(session_key, stored_candidate.source_entry_ids)
-
-    async def _cleanup_light_sleep_source_ids(self, session_key: str, source_ids: list[str]) -> None:
-        for source_id in source_ids:
-            await self._memory.archive_entry(
-                session_key, source_id, reason="light_sleep_merged"
+            await self._cleanup_light_sleep_source_ids(
+                session_key, stored_candidate.source_entry_ids
             )
+
+    async def _cleanup_light_sleep_source_ids(
+        self, session_key: str, source_ids: list[str]
+    ) -> None:
+        for source_id in source_ids:
+            await self._memory.archive_entry(session_key, source_id, reason="light_sleep_merged")
 
     async def _synthesize_archive_summary(
         self,
@@ -668,8 +697,7 @@ class DreamEngine:
         archive_items = [
             f"- [{getattr(archive, 'session_id', 'archive')}] {getattr(archive, 'summary', '')}"
             for archive in (archive_inputs or [])
-            if isinstance(getattr(archive, "summary", None), str)
-            and getattr(archive, "summary").strip()
+            if isinstance(getattr(archive, "summary", None), str) and archive.summary.strip()
         ]
         if not memory_items and not archive_items:
             return "", 0
@@ -696,16 +724,18 @@ class DreamEngine:
                 llm_cost = int(getattr(getattr(response, "usage", None), "total_tokens", 0) or 0)
                 return summary, llm_cost
         except Exception:
-            logger.warning("[%s] REM synthesis LLM failed; falling back to heuristic summary", session_key, exc_info=True)
+            logger.warning(
+                "[%s] REM synthesis LLM failed; falling back to heuristic summary",
+                session_key,
+                exc_info=True,
+            )
         return (
             "\n".join(
                 [
+                    *(f"- [{entry.layer}:{entry.type}] {entry.content}" for entry in entries[:4]),
                     *(
-                        f"- [{entry.layer}:{entry.type}] {entry.content}"
-                        for entry in entries[:4]
-                    ),
-                    *(
-                        f"- [archive:{getattr(archive, 'session_id', 'archive')}] {getattr(archive, 'summary', '')}"
+                        f"- [archive:{getattr(archive, 'session_id', 'archive')}] "
+                        f"{getattr(archive, 'summary', '')}"
                         for archive in (archive_inputs or [])[:2]
                     ),
                 ]
@@ -760,7 +790,7 @@ class DreamEngine:
         result: dict[str, Any] = {}
         llm_cost = 0
         failure_reason: str | None = None
-        status = "ok"
+        status: DreamAuditStatus = "ok"
         try:
             result, llm_cost = await executor(session_key)
             return result
@@ -780,9 +810,13 @@ class DreamEngine:
                     ended_at=time.time(),
                     duration_s=max(0.0, time.time() - started_at),
                     promoted_count=_audit_count(result, "promoted_to_l2", "promoted_count"),
-                    deduplicated_count=_audit_count(result, "deduplicated", "pruned_entries", "deduplicated_count"),
+                    deduplicated_count=_audit_count(
+                        result, "deduplicated", "pruned_entries", "deduplicated_count"
+                    ),
                     archived_count=_audit_count(result, "archived_count"),
-                    synthesized_count=_audit_count(result, "synthesized_archives", "synthesized_count"),
+                    synthesized_count=_audit_count(
+                        result, "synthesized_archives", "synthesized_count"
+                    ),
                     compiled_candidates=_audit_count(result, "compiled_candidates"),
                     extracted_candidates=_audit_count(result, "extracted_candidates"),
                     published_candidates=_audit_count(result, "published_candidates"),
@@ -828,12 +862,16 @@ class DreamEngine:
         return await self._governance_runtime.reject_governance_record(record_id, reason=reason)
 
     async def rollback_artifact_publication(self, record_id: str, *, reason: str = "") -> bool:
-        return await self._governance_runtime.rollback_artifact_publication(record_id, reason=reason)
+        return await self._governance_runtime.rollback_artifact_publication(
+            record_id, reason=reason
+        )
 
     async def request_artifact_rollback(self, record_id: str, *, reason: str = "") -> bool:
         return await self._governance_runtime.request_artifact_rollback(record_id, reason=reason)
 
-    async def list_pending_reviews(self, session_key: str | None = None) -> list[DreamGovernanceRecord]:
+    async def list_pending_reviews(
+        self, session_key: str | None = None
+    ) -> list[DreamGovernanceRecord]:
         return await self._governance_runtime.list_pending_reviews(session_key)
 
     async def list_governance_records(
@@ -883,12 +921,12 @@ def _normalize_memory_text(content: str) -> str:
 
 
 def _build_cluster_id(session_key: str, layer: str, type_: str, normalized: str) -> str:
-    digest = hashlib.sha1(f"{session_key}|{layer}|{type_}|{normalized}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(f"{session_key}|{layer}|{type_}|{normalized}".encode()).hexdigest()
     return f"cluster:{digest[:16]}"
 
 
 def _build_light_sleep_candidate_id(session_key: str, entry_id: str) -> str:
-    digest = hashlib.sha1(f"{session_key}|light-sleep|{entry_id}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(f"{session_key}|light-sleep|{entry_id}".encode()).hexdigest()
     return f"light-sleep:{digest[:16]}"
 
 
@@ -896,15 +934,17 @@ def _is_serving_visible_memory(entry: MemoryEntry, *, include_canary: bool) -> b
     publish_state = str(entry.publish_state or "").strip().lower()
     if publish_state in {"draft", "rejected"}:
         return False
-    if publish_state == "canary" and not include_canary:
-        return False
-    return True
+    return not (publish_state == "canary" and not include_canary)
 
 
-def _normalize_publish_channel(value: str | None, *, fallback_shadow: bool) -> str:
+def _normalize_publish_channel(value: str | None, *, fallback_shadow: bool) -> DreamPublishChannel:
     text = str(value or "").strip().lower()
-    if text in {"direct", "shadow", "canary"}:
-        return text
+    if text == "direct":
+        return "direct"
+    if text == "shadow":
+        return "shadow"
+    if text == "canary":
+        return "canary"
     return "shadow" if fallback_shadow else "direct"
 
 
@@ -916,7 +956,7 @@ def _estimate_stability_score(entry: MemoryEntry, cluster_size: int) -> float:
 
 
 def _build_dream_batch_id(session_key: str, *, trigger: str) -> str:
-    digest = hashlib.sha1(f"{session_key}|{trigger}|{time.time()}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(f"{session_key}|{trigger}|{time.time()}".encode()).hexdigest()
     return f"{trigger}:{digest[:16]}"
 
 
@@ -973,17 +1013,13 @@ def _select_rem_feedback_entries(entries: list[MemoryEntry]) -> list[MemoryEntry
 
 def _build_graph_group_id(session_key: str, entries: list[MemoryEntry]) -> str:
     anchors = sorted(
-        entry.cluster_id or entry.id
-        for entry in entries
-        if (entry.cluster_id or entry.id)
+        entry.cluster_id or entry.id for entry in entries if (entry.cluster_id or entry.id)
     )
-    digest = hashlib.sha1(f"{session_key}|{'|'.join(anchors[:8])}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(f"{session_key}|{'|'.join(anchors[:8])}".encode()).hexdigest()
     return f"graph:{digest[:16]}"
 
 
-
-
-def _is_rem_archive_candidate(archive: Any) -> bool:
+def _is_rem_archive_candidate(archive: object) -> bool:
     session_id = str(getattr(archive, "session_id", "") or "")
     if not session_id or ":dream:" in session_id:
         return False

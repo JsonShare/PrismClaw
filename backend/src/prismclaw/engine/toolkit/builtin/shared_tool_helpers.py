@@ -3,19 +3,25 @@
 Consolidates utility functions previously duplicated across builtin.py,
 read_office.py, grep.py, glob.py, read_image.py, etc.
 """
+
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import TYPE_CHECKING
+
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
+
+if TYPE_CHECKING:
+    from prismclaw.schema.services.env_types import ExecutionEnv
 
 
-def require_runtime(context: Any) -> Any:
+def require_runtime(context: ToolContext) -> ExecutionEnv:
     """Assert that the runtime execution client is injected on ToolContext.
 
     All tool execution must go through context.runtime (WorkspaceRuntimeClient
     or InProcessRuntimeClient). Raises RuntimeError if not configured.
     """
-    rt = getattr(context, "runtime", None)
+    rt = context.runtime
     if rt is None:
         raise RuntimeError(
             "ToolContext.runtime 未配置；所有工具执行都必须经由统一的 "
@@ -24,7 +30,7 @@ def require_runtime(context: Any) -> Any:
     return rt
 
 
-def ws_kind(context: Any) -> str:
+def ws_kind(context: ToolContext) -> str:
     """Return template_id for runtime routing, defaulting to __default__."""
     wt = getattr(context, "workspace_tag", None)
     if wt is not None and hasattr(wt, "template_id"):
@@ -32,7 +38,7 @@ def ws_kind(context: Any) -> str:
     return "__default__"
 
 
-def ws_root(context: Any) -> str:
+def ws_root(context: ToolContext) -> str:
     """Return workspace root path as string for runtime calls."""
     return str(context.workspace_path)
 

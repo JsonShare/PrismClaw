@@ -4,28 +4,34 @@ This module belongs to the engine layer because its only consumer is
 SkillRuntime (engine/agent/skills/runtime.py). It was previously in
 the skills package, creating an unnecessary engine→skills dependency.
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.execution.skills.doc_inline import _inline_referenced_docs
 from prismclaw.schema.shared.utils import estimate_tokens
 
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.skills.runtime import SkillRuntime
+    from prismclaw.schema.services.skills import SkillManifest
+
 logger = logging.getLogger(__name__)
 
 
-def _coerce_skill_manifest_preload(skill: Any):
+def _coerce_skill_manifest_preload(skill: object) -> SkillManifest:
     """Lightweight skill manifest normalization."""
     from prismclaw.schema.services.skills import SkillManifest
+
     if isinstance(skill, SkillManifest):
         return skill
     return SkillManifest.model_validate(skill)
 
 
 def _build_preload_messages(
-    runtime: Any,
+    runtime: SkillRuntime,
     preload_skills: list[str],
     *,
     workspace_path: Path,
@@ -51,7 +57,7 @@ def _build_preload_messages(
 
     for name in preload_skills:
         if used_tokens >= token_limit:
-            remaining_names = preload_skills[preload_skills.index(name):]
+            remaining_names = preload_skills[preload_skills.index(name) :]
             for rn in remaining_names:
                 skipped.append((rn, ""))
             break

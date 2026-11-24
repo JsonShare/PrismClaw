@@ -1,28 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from prismclaw.app.web.chat.chat_protocol import SessionQueue
+    from prismclaw.engine.subagent.runtime.parallel import ParallelTaskRuntimeRecord
 
 from prismclaw.app.auth import resolve_profile
-
-# Re-export helpers for backward compatibility
-from prismclaw.app.web.chat._chat_helpers import (  # noqa: F401
-    _EXECUTION_TIMELINE_ENTRY_TYPE,
+from prismclaw.app.web.chat._chat_helpers import (
     _REASONING_PUSH_INTERVAL_S,
     _SOFT_LANDING_CODES,
-    _build_execution_timeline_payload,
-    _build_task_runtime_idempotency_key,
-    _build_task_runtime_projection_payload,
-    _call_sync_tree_accessor,
-    _event_logger,
-    _extract_latest_recovery_probe_payload,
     _extract_tool_result_text,
     _get_runner_deps,
     _get_workspace_runner_deps,
-    _model_dump_if_supported,
+    _load_tree_for_write,
     _persist_execution_timeline,
     _persist_partial_assistant_message,
     _persist_run_projection,
@@ -31,7 +26,6 @@ from prismclaw.app.web.chat._chat_helpers import (  # noqa: F401
     _push_timeline_event,
     _resolve_tool_workspace_path,
     _sanitize_workspace_id,
-    _serialize_runtime_subagent_items,
     _spawn_background,
     invalidate_tree_cache,
 )
@@ -58,7 +52,7 @@ from prismclaw.app.web.protocol.messages import (
     SERVER_CHAT_START,
     SERVER_ERROR,
     SERVER_FILE_CHANGES,
-    SERVER_OUTPUTS,
+    SERVER_OUTBOX,
     SERVER_RUN_KEEPALIVE,
     SERVER_TOOL_CLARIFY_REQUEST,
     ChatSendMessage,
@@ -96,7 +90,7 @@ logger = logging.getLogger(__name__)
 async def _lifecycle_broadcaster(
     state: ConnectionState,
     deps: AgentDeps,
-    session_queue: Any,
+    session_queue: SessionQueue,
     conversation_id: str,
     session_id: str,
 ) -> None:
@@ -148,9 +142,7 @@ async def _lifecycle_broadcaster(
                 state,
                 conversation_id=conversation_id,
                 session_id=session_id,
-                patch=SetPhasePatch(
-                    phase=HeartbeatPayload(state=phase, elapsed_s=elapsed)
-                ),
+                patch=SetPhasePatch(phase=HeartbeatPayload(state=phase, elapsed_s=elapsed)),
             )
             await _push_run_snapshot(
                 state,
@@ -171,7 +163,7 @@ async def _run_projection_flusher(
     *,
     session_id: str,
     conversation_id: str,
-    session_queue: Any,
+    session_queue: SessionQueue,
 ) -> None:
     """周期把后端运行态投影落盘为 run_projection custom entry（审计留档）。
 
@@ -204,10 +196,23 @@ async def _run_chat(
     state: ConnectionState,
     msg: ChatSendMessage,
 ) -> None:
+    user_id = state.user_id
+    if not user_id:
+        await send_event(
+            state,
+            SERVER_ERROR,
+            msg.conversation_id,
+            {
+                "message": "未认证的连接不能发起对话",
+                "code": ProtocolErrorCode.AUTH_FAILED.value,
+            },
+        )
+        return
     session_queue = _get_session_queue(state)
     rc = session_queue.get_run_control(msg.conversation_id)
 
     from prismclaw.app.web.workspace_ids import InvalidWorkspaceIdError
+
     try:
         requested_workspace_id = _sanitize_workspace_id(getattr(msg, "workspace_id", None))
     except InvalidWorkspaceIdError:
@@ -237,23 +242,23 @@ async def _run_chat(
             return
         session_id = msg.conversation_id
     else:
-        session_key = build_web_session_key(state.user_id, requested_workspace_id)
+        session_key = build_web_session_key(user_id, requested_workspace_id)
         session_id = f"{session_key}:{msg.conversation_id}"
 
     web_deps = state.ws.app.state.web_deps
     redis_client = web_deps.redis_client
     user_profile = await resolve_profile(
         channel="web",
-        user_id=state.user_id,
+        user_id=user_id,
         redis_client=redis_client,
     )
 
     try:
-        deps = _get_runner_deps(state)
+        base_deps = _get_runner_deps(state)
     except AttributeError:
-        deps = None
+        base_deps = None
 
-    if deps is None:
+    if base_deps is None:
         await send_event(
             state,
             SERVER_ERROR,
@@ -267,7 +272,7 @@ async def _run_chat(
 
     effective_workspace_id = requested_workspace_id
     try:
-        tree = await deps.session_store.load(session_id)
+        tree = await _load_tree_for_write(base_deps, session_id)
         if tree is not None and getattr(tree, "header", None) is not None:
             try:
                 session_workspace_id = _sanitize_workspace_id(
@@ -279,9 +284,9 @@ async def _run_chat(
                     SERVER_ERROR,
                     msg.conversation_id,
                     {
-                    "message": "当前会话绑定的工作区 ID 非法，请新建会话后重试。",
-                    "code": ProtocolErrorCode.INVALID_REQUEST.value,
-                },
+                        "message": "当前会话绑定的工作区 ID 非法，请新建会话后重试。",
+                        "code": ProtocolErrorCode.INVALID_REQUEST.value,
+                    },
                 )
                 return
             if requested_workspace_id != session_workspace_id:
@@ -290,12 +295,12 @@ async def _run_chat(
                     SERVER_ERROR,
                     msg.conversation_id,
                     {
-                    "message": (
-                        "当前会话绑定的工作区与已选工作区不一致，请切换到对应工作区后继续，"
-                        "或新建会话再执行。"
-                    ),
-                    "code": ProtocolErrorCode.INVALID_REQUEST.value,
-                },
+                        "message": (
+                            "当前会话绑定的工作区与已选工作区不一致，请切换到对应工作区后继续，"
+                            "或新建会话再执行。"
+                        ),
+                        "code": ProtocolErrorCode.INVALID_REQUEST.value,
+                    },
                 )
                 return
             effective_workspace_id = session_workspace_id
@@ -311,7 +316,9 @@ async def _run_chat(
             },
         )
         return
-    deps = await _get_workspace_runner_deps(
+    # 显式标注为 AgentDeps：后续闭包（进度/终态 sink）会捕获它，
+    # 若沿用 Optional 推断会在嵌套函数里丢失收窄。
+    deps: AgentDeps = await _get_workspace_runner_deps(
         state,
         workspace_id=effective_workspace_id,
     )
@@ -335,13 +342,13 @@ async def _run_chat(
         client_message_id=msg.client_message_id,
         confirmation_decision=msg.confirmation_decision,
         attachments=msg.attachments,
-        user_id=state.user_id,
+        user_id=user_id,
         user_profile=user_profile,
         sandbox_policy=sandbox_policy,
         trajectory_audit_header=msg.trajectory,
         designated_skills=mention_skills,
         designated_plugins=mention_plugins,
-        referenced_files=mention_files or None,
+        referenced_files=mention_files or [],
         conversation_id=msg.conversation_id,
     )
 
@@ -372,7 +379,7 @@ async def _run_chat(
         except Exception:
             logger.warning("web.subagent_progress.send_failed", exc_info=True)
 
-    async def _subagent_terminal_sink(record: Any) -> None:
+    async def _subagent_terminal_sink(record: ParallelTaskRuntimeRecord) -> None:
         # 后台任务在父 run 之外结束：终态已落库，用前端已有的 subagent_trace
         # 契约推一条终态条目，避免任务面板永久停在「进行中」。
         partial_status = {
@@ -435,11 +442,12 @@ async def _run_chat(
     tool_call_meta: dict[str, tuple[str, dict[str, Any]]] = {}
     active_tool_call_ids: set[str] = set()
     output_files: list[str] = []
-    # session 级 outputs 扫描（只看本 session 的产出）
+    # session 级 outbox 扫描（只看本 session 的产出）
     from prismclaw.infra.workspace_paths import ensure_session_layout
+
     session_root = ensure_session_layout(tool_workspace_path, session_id)
-    _outputs_scope = Scope(kind="session", root=str(session_root), prefixes=("outputs",))
-    outputs_baseline = ArtifactScanner(session_root).scan(_outputs_scope)
+    _outbox_scope = Scope(kind="session", root=str(session_root), prefixes=("outbox",))
+    outbox_baseline = ArtifactScanner(session_root).scan(_outbox_scope)
     file_changes: list[dict[str, Any]] = []
     projector = TaskExecutionProjector(workspace_root=str(tool_workspace_path))
     last_reasoning_push = 0.0
@@ -465,7 +473,7 @@ async def _run_chat(
 
     async def _emit_terminal_done(
         *,
-        final_message: Any,
+        final_message: str | list[object],
         usage: dict[str, Any] | None,
         aborted: bool,
         message_id: str | None = None,
@@ -487,10 +495,8 @@ async def _run_chat(
         # 否则 done 后的对账会读到残留 active，把已结束的一轮判成运行中。
         if presence_task is not None:
             presence_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await presence_task
-            except asyncio.CancelledError:
-                pass
         if run_presence is not None:
             await run_presence.clear(msg.conversation_id)
         # 指数退避重试：覆盖 WS 短暂断开（网络抖动/VPN 切换/缓冲区满）。
@@ -517,10 +523,10 @@ async def _run_chat(
                 await asyncio.sleep(delay)
         if not terminal_done_sent:
             logger.warning(
-                "chat.done event permanently lost after %d attempts "
-                "(conversation_id=%s, seq=%d)",
+                "chat.done event permanently lost after %d attempts (conversation_id=%s, seq=%d)",
                 len(_backoff_schedule),
-                msg.conversation_id, seq,
+                msg.conversation_id,
+                seq,
             )
 
     async def _finalize_terminated_run(
@@ -563,12 +569,15 @@ async def _run_chat(
             # 在 done 里本地合成 partial 消息保住的，新契约下该兜底已删除）。
             if body or projector.has_content():
                 if assistant_message_id is None:
-                    assistant_message_id = await _persist_partial_assistant_message(
-                        deps,
-                        session_id=session_id,
-                        projector=projector,
-                        transcript_text=body,
-                    ) or assistant_message_id
+                    assistant_message_id = (
+                        await _persist_partial_assistant_message(
+                            deps,
+                            session_id=session_id,
+                            projector=projector,
+                            transcript_text=body,
+                        )
+                        or assistant_message_id
+                    )
                 if assistant_message_id and projector.has_content():
                     await _persist_execution_timeline(
                         deps,
@@ -604,19 +613,20 @@ async def _run_chat(
                     msg.conversation_id,
                     {"message": message or "任务已终止", "code": error_code},
                 )
-            await _emit_terminal_done(
-                final_message="", usage={}, aborted=aborted, message_id=None
-            )
+            await _emit_terminal_done(final_message="", usage={}, aborted=aborted, message_id=None)
             return
 
         content = body
         if assistant_message_id is None:
-            assistant_message_id = await _persist_partial_assistant_message(
-                deps,
-                session_id=session_id,
-                projector=projector,
-                transcript_text=content,
-            ) or assistant_message_id
+            assistant_message_id = (
+                await _persist_partial_assistant_message(
+                    deps,
+                    session_id=session_id,
+                    projector=projector,
+                    transcript_text=content,
+                )
+                or assistant_message_id
+            )
         # 与正常收尾同契约：done 之前把执行过程挂到 partial 上，否则中止/超时
         # 场景的 timeline 会错过客户端水位，只能靠手动刷新才看得到。
         if assistant_message_id and projector.has_content():
@@ -644,10 +654,8 @@ async def _run_chat(
                 max_turns=5,
             )
         )
-        try:
+        with contextlib.suppress(Exception):
             session_queue._track_detached(base_questions_task)
-        except Exception:
-            pass
     except Exception:
         base_questions_task = None
 
@@ -711,10 +719,8 @@ async def _run_chat(
                             max_turns=5,
                         )
                     )
-                    try:
+                    with contextlib.suppress(Exception):
                         session_queue._track_detached(refined_questions_task)
-                    except Exception:
-                        pass
                 except Exception:
                     refined_questions_task = None
 
@@ -728,9 +734,7 @@ async def _run_chat(
         rc.active = True
         if run_presence is not None:
             await run_presence.touch(msg.conversation_id)
-            presence_task = asyncio.create_task(
-                run_presence.heartbeat(msg.conversation_id)
-            )
+            presence_task = asyncio.create_task(run_presence.heartbeat(msg.conversation_id))
         _set_loading_active(
             session_queue,
             conversation_id=msg.conversation_id,
@@ -755,7 +759,10 @@ async def _run_chat(
                 state,
                 SERVER_ERROR,
                 msg.conversation_id,
-                {"message": "Chat service not available", "code": ProtocolErrorCode.INTERNAL_ERROR.value},
+                {
+                    "message": "Chat service not available",
+                    "code": ProtocolErrorCode.INTERNAL_ERROR.value,
+                },
             )
             return
         lifecycle_task = asyncio.create_task(
@@ -855,15 +862,19 @@ async def _run_chat(
                 web_runtime_proj = session_queue.get_or_create_web_runtime_projection(
                     msg.conversation_id
                 )
-                web_runtime_proj.tool_calls.append({
-                    "id": event.tool_call_id,
-                    "name": event.name,
-                    "status": "running",
-                    "arguments": event.arguments if isinstance(event.arguments, dict) else {},
-                    "startedAt": int(time.time() * 1000),
-                })
+                web_runtime_proj.tool_calls.append(
+                    {
+                        "id": event.tool_call_id,
+                        "name": event.name,
+                        "status": "running",
+                        "arguments": event.arguments if isinstance(event.arguments, dict) else {},
+                        "startedAt": int(time.time() * 1000),
+                    }
+                )
                 patch = projector.on_tool_call_start(event, str(tool_workspace_path))
-                web_runtime_proj.timeline_snapshot = projector.build_snapshot_dict(assistant_message_id)
+                web_runtime_proj.timeline_snapshot = projector.build_snapshot_dict(
+                    assistant_message_id
+                )
                 if patch is not None:
                     await _push_timeline_event(
                         state,
@@ -878,9 +889,7 @@ async def _run_chat(
                     session_id=session_id,
                 )
             elif isinstance(event, ToolCallEnd):
-                tool_name, tool_args = tool_call_meta.get(
-                    event.tool_call_id, ("", {})
-                )
+                tool_name, tool_args = tool_call_meta.get(event.tool_call_id, ("", {}))
                 if tool_name in ("present_files",) and not getattr(event.result, "is_error", False):
                     output_files.extend(
                         _extract_presented_paths(
@@ -910,14 +919,16 @@ async def _run_chat(
                         if not is_error:
                             tc["result"] = result_text[:2000] if result_text else None
                         break
-                patch = projector.on_tool_call_end(event, str(tool_workspace_path))
-                web_runtime_proj.timeline_snapshot = projector.build_snapshot_dict(assistant_message_id)
-                if patch is not None:
+                end_patch = projector.on_tool_call_end(event, str(tool_workspace_path))
+                web_runtime_proj.timeline_snapshot = projector.build_snapshot_dict(
+                    assistant_message_id
+                )
+                if end_patch is not None:
                     await _push_timeline_event(
                         state,
                         conversation_id=msg.conversation_id,
                         session_id=session_id,
-                        patch=patch,
+                        patch=end_patch,
                     )
                 active_tool_call_ids.discard(event.tool_call_id)
                 if not active_tool_call_ids:
@@ -953,9 +964,9 @@ async def _run_chat(
                 phase_patch = SetPhasePatch(
                     phase=HeartbeatPayload(
                         state=event.phase,
-                        partialToolName=event.detail.partial_tool_name,
-                        charsSoFar=event.detail.chars_so_far,
-                        elapsedS=event.elapsed_s,
+                        partial_tool_name=event.detail.partial_tool_name,
+                        chars_so_far=event.detail.chars_so_far,
+                        elapsed_s=event.elapsed_s,
                     )
                 )
                 await _push_timeline_event(
@@ -986,11 +997,7 @@ async def _run_chat(
                 # final_message 只保留**最后一轮迭代**的文本，仅用于审计与非 Web
                 # 通道；Web 端的正文一律来自展示消息投影（_build_display_messages
                 # 的全轮拼接），二者不再共用同一个字段，避免"刷新前后两套正文"。
-                final_msg = (
-                    full_transcript_parts[-1]
-                    if full_transcript_parts
-                    else ""
-                )
+                final_msg = full_transcript_parts[-1] if full_transcript_parts else ""
 
                 assistant_message_id = getattr(event, "assistant_message_id", None)
                 # 先把执行过程与交付物落库，再发 done。done 的契约是"本轮已完全
@@ -1010,14 +1017,14 @@ async def _run_chat(
                         )
                 # 交付物确定策略：
                 # - 优先：LLM 通过 present_files 主动声明的文件（LLM 知道哪些是最终交付物）
-                # - 验证：自动扫描 outputs/ 确认声明文件确实存在且有变更
-                # - 兜底：LLM 未调用 present_files 时，自动扫描 outputs/ 中有变更的文件
+                # - 验证：自动扫描 outbox/ 确认声明文件确实存在且有变更
+                # - 兜底：LLM 未调用 present_files 时，自动扫描 outbox/ 中有变更的文件
                 #   （覆盖 agent 遗忘/被 doom-loop 打断的场景，避免已生成的交付物不展示）
-                _current = ArtifactScanner(tool_workspace_path).scan(_outputs_scope)
+                _current = ArtifactScanner(tool_workspace_path).scan(_outbox_scope)
                 auto_scanned = [
                     path
                     for path, signature in _current.items()
-                    if outputs_baseline.get(path) != signature
+                    if outbox_baseline.get(path) != signature
                 ]
                 auto_set = set(auto_scanned)
                 if output_files:
@@ -1026,7 +1033,7 @@ async def _run_chat(
                     # 交集为空时退回信任 LLM 声明（可能是路径格式差异或 baseline 误判）
                     all_output_files = validated if validated else output_files
                 else:
-                    # 兜底：agent 未声明时，展示 outputs/ 中本次执行新生成/变更的文件
+                    # 兜底：agent 未声明时，展示 outbox/ 中本次执行新生成/变更的文件
                     all_output_files = auto_scanned
                 final_output_files = _filter_existing_output_files(
                     _dedupe_simple(all_output_files),
@@ -1036,7 +1043,7 @@ async def _run_chat(
                 if final_output_files:
                     await send_event(
                         state,
-                        SERVER_OUTPUTS,
+                        SERVER_OUTBOX,
                         msg.conversation_id,
                         {
                             "message_id": assistant_message_id,
@@ -1141,8 +1148,7 @@ async def _run_chat(
                 )
         if not terminal_done_sent:
             logger.warning(
-                "stream ended without Done event; forcing chat.done "
-                "(conversation_id=%s)",
+                "stream ended without Done event; forcing chat.done (conversation_id=%s)",
                 msg.conversation_id,
             )
             # 流式在无 Done 情况下结束：已实时推送的正文同样必须落库再 done，
@@ -1222,9 +1228,7 @@ async def _run_chat(
         # RUN_TTL_SECONDS 内自然过期，非 owner worker 最多短暂误判 active。
         if presence_task is not None:
             presence_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await presence_task
-            except asyncio.CancelledError:
-                pass
         if run_presence is not None:
             await run_presence.clear(msg.conversation_id)

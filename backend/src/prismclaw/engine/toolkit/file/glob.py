@@ -6,8 +6,8 @@ from typing import Any
 
 from prismclaw.engine.toolkit.builtin.file_helpers import session_root
 from prismclaw.engine.toolkit.builtin.shared_tool_helpers import require_runtime, ws_kind, ws_root
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
 from prismclaw.engine.toolkit.file.workspace import WorkspaceBoundaryError, WorkspaceResolver
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
 from prismclaw.schema.content.content_types import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -41,9 +41,7 @@ class GlobTool:
             },
             "path": {
                 "type": "string",
-                "description": (
-                    "相对于工作区扫描的目录，默认为 '.'。"
-                ),
+                "description": ("相对于工作区扫描的目录，默认为 '.'。"),
             },
             "max_results": {
                 "type": "integer",
@@ -79,7 +77,9 @@ class GlobTool:
 
         try:
             full_path = self._resolver.resolve_within(
-                context.workspace_path, path_arg, session_root=session_root(context),
+                context.workspace_path,
+                path_arg,
+                session_root=session_root(context),
             )
         except WorkspaceBoundaryError as exc:
             return error_result(call_id, f"glob：{exc}")

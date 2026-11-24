@@ -2,41 +2,61 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from prismclaw.app.session_router import SessionRouter
 from prismclaw.app.auth.auth import get_current_user
+from prismclaw.app.session_router import SessionRouter
+from prismclaw.app.web._routes_helpers import (
+    _clean_workspace_id,
+    _get_settings_full,
+    _resolve_workspace_root,
+)
 from prismclaw.app.web.chat._chat_helpers import _build_run_projection_payload
+from prismclaw.app.web.deps import get_web_deps, get_web_deps_from_app
+from prismclaw.app.web.routers._message_helpers import _build_display_messages
+from prismclaw.app.web.routers.config import config_router
+from prismclaw.app.web.routers.domains import router as domains_router
+from prismclaw.app.web.routers.files import files_router
+from prismclaw.app.web.routers.office import office_router
+from prismclaw.app.web.routers.settings import settings_router
+from prismclaw.app.web.routers.skills import skills_router
+from prismclaw.app.web.routers.speech import speech_router
+from prismclaw.app.web.routers.workspace import workspace_router
+from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+from prismclaw.schema.services.skills import SkillManifest
+from prismclaw.schema.session.event_logger import SessionEventLogger
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from prismclaw.app.web.chat.chat_protocol import SessionQueue
+    from prismclaw.app.web.chat.run_presence import RunPresence
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.hooks.memory_nudge_hook import MemoryNudgeHook
+    from prismclaw.engine.services.prompt_optimizer import PromptOptimizer
+    from prismclaw.infra.settings import Settings
+    from prismclaw.infra.settings._dream import EvolutionSettings
+    from prismclaw.infra.task_manager import TaskManager
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.storage.storage_types import MemoryStore
+    from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
+from prismclaw.schema.session.ids import build_web_session_key
 from prismclaw.schema.session.types import (
-    CustomEntry,
     EXECUTION_TIMELINE_CUSTOM_TYPE,
     FEEDBACK_CUSTOM_TYPE,
     FILE_CHANGES_CUSTOM_TYPE,
     OUTPUT_FILES_CUSTOM_TYPE,
+    CustomEntry,
     SessionTree,
     generate_entry_id,
     now_iso,
 )
 from prismclaw.schema.storage.storage_types import SessionStore
-from prismclaw.schema.services.skills import SkillManifest
-from prismclaw.schema.session.event_logger import SessionEventLogger
-from prismclaw.schema.session.ids import build_web_session_key
-
-from prismclaw.app.web.routers.files import files_router
-from prismclaw.app.web.routers.skills import skills_router
-from prismclaw.app.web.routers.speech import speech_router
-from prismclaw.app.web.routers.settings import settings_router
-from prismclaw.app.web.routers.workspace import workspace_router
-from prismclaw.app.web.routers.office import office_router
-from prismclaw.app.web.routers.domains import router as domains_router
-from prismclaw.app.web.routers.config import config_router
-from prismclaw.app.web._routes_helpers import _get_settings_full, _resolve_workspace_root, _clean_workspace_id
-from prismclaw.app.web.routers._message_helpers import _build_display_messages
-from prismclaw.app.web.deps import get_web_deps
 
 logger = logging.getLogger(__name__)
 
@@ -78,14 +98,14 @@ def set_web_deps(
     store: SessionStore,
     session_router: SessionRouter,
     *,
-    memory_store: Any = None,
-    task_manager: Any = None,
-    redis_client: Any = None,
-    session_factory: Any = None,
-    llm_client: Any = None,
-    evolution_settings: Any = None,
-    nudge_hook: Any = None,
-    trajectory_persistence: Any = None,
+    memory_store: MemoryStore | None = None,
+    task_manager: TaskManager | None = None,
+    redis_client: Redis | None = None,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    llm_client: LLMClient | None = None,
+    evolution_settings: EvolutionSettings | None = None,
+    nudge_hook: MemoryNudgeHook | None = None,
+    trajectory_persistence: TrajectoryPersistence | None = None,
 ) -> None:
     global _store, _session_router, _memory_store, _task_manager
     global _redis_client, _session_factory, _llm_client, _evolution_settings, _nudge_hook
@@ -170,6 +190,7 @@ class SessionModelUpdateRequest(BaseModel):
 def _available_model_options() -> list[DefaultModelOptionResponse]:
     """可选模型清单 —— 取自模型注册表（backend/configs/models.yaml），只列已启用条目。"""
     from prismclaw.infra.config.models_registry import list_models
+
     return [
         DefaultModelOptionResponse(
             id=row["model"],
@@ -181,8 +202,10 @@ def _available_model_options() -> list[DefaultModelOptionResponse]:
     ]
 
 
-async def _get_workspace_runner_deps(app: Any, *, user_id: str, workspace_root: Path) -> Any | None:
-    web_deps = app.state.web_deps
+async def _get_workspace_runner_deps(
+    app: FastAPI, *, user_id: str, workspace_root: Path
+) -> AgentRunnerDeps | None:
+    web_deps = get_web_deps_from_app(app)
     fn = web_deps.workspace_runner_deps_fn
     if fn is not None:
         return await fn(app, user_id=user_id, workspace_root=workspace_root, wait_for_ready=True)
@@ -194,8 +217,8 @@ async def _list_runtime_skills(
     *,
     user_id: str,
     workspace_root: Path,
-    settings_full: Any,
-) -> tuple[list[SkillManifest], Any | None]:
+    settings_full: Settings,
+) -> tuple[list[SkillManifest], ExtensionManager | None]:
     _ = settings_full
     runner_deps = await _get_workspace_runner_deps(
         request.app,
@@ -203,10 +226,11 @@ async def _list_runtime_skills(
         workspace_root=workspace_root,
     )
     if runner_deps is None:
-        raise RuntimeError(
-            "workspace runner deps are required for skill listing"
-        )
-    extension_manager = getattr(runner_deps, "extension_manager", None) if runner_deps is not None else None
+        raise RuntimeError("workspace runner deps are required for skill listing")
+    raw_extension_manager = runner_deps.plugin.extension_manager
+    extension_manager = (
+        raw_extension_manager if isinstance(raw_extension_manager, ExtensionManager) else None
+    )
     capability_catalog = (
         getattr(runner_deps, "capability_catalog", None) if runner_deps is not None else None
     )
@@ -215,8 +239,7 @@ async def _list_runtime_skills(
             "workspace runner deps must provide capability_catalog for skill listing"
         )
     return [
-        entry.manifest
-        for entry in capability_catalog.list_skill_entries(workspace_root)
+        entry.manifest for entry in capability_catalog.list_skill_entries(workspace_root)
     ], extension_manager
 
 
@@ -248,19 +271,21 @@ def _resolve_conversation_identity(
     if not resolved_session_id.startswith(f"{base_session_key}:s:"):
         candidates.append(
             resolved_session_id.replace(
-                f"{base_session_key}:", f"{base_session_key}:s:", 1,
+                f"{base_session_key}:",
+                f"{base_session_key}:s:",
+                1,
             )
         )
     return resolved_session_id, candidates
 
 
-def _get_session_queue(request: Request) -> Any | None:
+def _get_session_queue(request: Request) -> SessionQueue | None:
     web_deps = getattr(getattr(request, "app", None), "state", None)
     web_deps = getattr(web_deps, "web_deps", None)
     return getattr(web_deps, "session_queue", None)
 
 
-def _get_run_presence(request: Request) -> Any | None:
+def _get_run_presence(request: Request) -> RunPresence | None:
     web_deps = getattr(getattr(request, "app", None), "state", None)
     web_deps = getattr(web_deps, "web_deps", None)
     return getattr(web_deps, "run_presence", None)
@@ -324,8 +349,7 @@ def _mark_in_progress(messages: list[dict[str, Any]], run_state: str) -> None:
         candidates = [
             item
             for item in messages
-            if item.get("role") == "assistant"
-            and int(item.get("seq") or 0) > last_user_seq
+            if item.get("role") == "assistant" and int(item.get("seq") or 0) > last_user_seq
         ]
         if candidates:
             target = max(candidates, key=lambda item: int(item.get("seq") or 0))
@@ -378,8 +402,8 @@ def _build_conversation_messages(
 
     feedback_by_message: dict[str, str] = {}
     output_files_by_message: dict[str, list[str]] = {}
-    file_changes_by_message: dict[str, list[dict]] = {}
-    execution_timeline_by_message: dict[str, list[dict]] = {}
+    file_changes_by_message: dict[str, list[dict[str, Any]]] = {}
+    execution_timeline_by_message: dict[str, list[dict[str, Any]]] = {}
     # 单条消息可能挂着多条 CustomEntry（反馈、交付物、时间线各自独立落库）；
     # 取挂靠条目的最大 seq，才保证"后到的交付物/时间线"不被增量同步跳过。
     meta_seq_by_message: dict[str, int] = {}
@@ -405,9 +429,9 @@ def _build_conversation_messages(
         elif entry.custom_type == FILE_CHANGES_CUSTOM_TYPE:
             changes = data.get("changes")
             if isinstance(mid, str) and isinstance(changes, list):
-                cleaned = [c for c in changes if isinstance(c, dict)]
-                if cleaned:
-                    file_changes_by_message[mid] = cleaned
+                clean_changes = [c for c in changes if isinstance(c, dict)]
+                if clean_changes:
+                    file_changes_by_message[mid] = clean_changes
         elif entry.custom_type == EXECUTION_TIMELINE_CUSTOM_TYPE:
             nodes = data.get("nodes")
             if isinstance(mid, str) and isinstance(nodes, list):
@@ -468,7 +492,9 @@ async def get_conversation_run(
     """
     # Step 0: 归一化 session_id（与 trajectory 等兄弟端点同逻辑）。
     resolved_session_id, candidates = _resolve_conversation_identity(
-        user_id=user_id, workspace_id=workspace_id, session_id=session_id,
+        user_id=user_id,
+        workspace_id=workspace_id,
+        session_id=session_id,
     )
 
     # Step 1: 内存判活（含 "s:" 前缀回退候选）——非运行中直接 null。
@@ -481,6 +507,8 @@ async def get_conversation_run(
     # Step 2: 运行中——归属校验 + 树加载（task_runtime 构建需要），内存
     # 直读构建。构建失败（投影缺失，理论不可达）回落 null，宁缺毋陈旧。
     tree = await _load_and_verify(resolved_session_id, user_id)
+    if session_queue is None:
+        return {"run": None}
     payload = _build_run_projection_payload(tree, session_queue, resolved_session_id)
     if payload is not None:
         return {"run": payload.model_dump(mode="json")}
@@ -545,7 +573,9 @@ async def list_sessions(
     session_key = build_web_session_key(user_id, wid)
 
     # 多取 1 条来判断是否还有更多数据
-    summaries = await store.list_session_history(session_key, limit=limit + 1, offset=max(offset, 0))
+    summaries = await store.list_session_history(
+        session_key, limit=limit + 1, offset=max(offset, 0)
+    )
     has_more = len(summaries) > limit
     if has_more:
         summaries = summaries[:limit]
@@ -562,7 +592,8 @@ async def list_sessions(
         scheduler_store = getattr(web_deps, "scheduler_store", None)
         if scheduler_store is not None:
             scheduled_task_names = await scheduler_store.list_user_scheduled_session_task_names(
-                user_id=user_id, workspace_id=wid,
+                user_id=user_id,
+                workspace_id=wid,
             )
     except RuntimeError:
         # web_deps 尚未初始化（理论不应在请求路径上发生）
@@ -591,10 +622,12 @@ async def list_sessions(
 @web_router.post("/sessions")
 async def create_session(
     request: Request,
-    user_id: str = Depends(get_current_user),
-    body: CreateSessionRequest = CreateSessionRequest(),
+    user_id: Annotated[str, Depends(get_current_user)],
+    body: CreateSessionRequest | None = None,
 ) -> CreateSessionResponse:
     router = _get_router()
+    if body is None:
+        body = CreateSessionRequest()
     wid = _clean_workspace_id(body.workspace_id)
     session_key = build_web_session_key(user_id, wid)
     # 创建会话即写入标题，避免首条消息后的 PATCH 竞态导致列表刷新后回退"新对话"。
@@ -612,14 +645,12 @@ async def create_session(
 async def get_session(
     session_id: str,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     tree = await _load_and_verify(session_id, user_id)
     h = tree.header
     # 与 /messages 的列表同源：正文为空但有时间线的回合也计入，否则分页
     # 取最后一页时会被裁掉。
-    msg_count = len(
-        _build_display_messages(tree, retain_ids=_timeline_retain_ids(tree))
-    )
+    msg_count = len(_build_display_messages(tree, retain_ids=_timeline_retain_ids(tree)))
     return {
         "id": h.id,
         "workspace_id": h.workspace_id,
@@ -686,7 +717,9 @@ async def update_session_model_settings(
         model_id = default_model
     else:
         if target_override not in available_ids:
-            raise HTTPException(status_code=400, detail=f"Unknown configured model: {target_override}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown configured model: {target_override}"
+            )
         provider, _ps = resolve_provider_for_model(
             target_override,
             settings_full.models.providers,
@@ -725,7 +758,7 @@ async def get_messages(
     offset: int = 0,
     limit: int = 50,
     user_id: str = Depends(get_current_user),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     try:
         tree = await _load_and_verify(session_id, user_id)
         messages = _build_conversation_messages(request, tree, user_id=user_id)
@@ -787,7 +820,9 @@ async def sync_conversation(
       否则客户端会把没拿到正文的 seq 当成已定稿而永久跳过。
     """
     resolved_session_id, candidates = _resolve_conversation_identity(
-        user_id=user_id, workspace_id=workspace_id, session_id=session_id,
+        user_id=user_id,
+        workspace_id=workspace_id,
+        session_id=session_id,
     )
     run_state, running_id = await _resolve_run_state(request, candidates, turn_only=True)
     # 判活命中的可能是 "s:" 回退候选，以它为准加载，保证运行态与树同源。
@@ -814,9 +849,12 @@ async def sync_conversation(
     settled_seq = _settled_watermark(messages, after_seq)
 
     run: dict[str, Any] | None = None
-    if run_state == "active":
+    session_queue = _get_session_queue(request)
+    if run_state == "active" and session_queue is not None:
         payload = _build_run_projection_payload(
-            tree, _get_session_queue(request), resolved_session_id,
+            tree,
+            session_queue,
+            resolved_session_id,
         )
         if payload is not None:
             run = payload.model_dump(mode="json")
@@ -874,6 +912,7 @@ async def set_message_feedback(
 
 class FileReviewMarkRequest(BaseModel):
     """Persist a single file's review decision to the review registry."""
+
     message_id: str
     path: str
     decision: str  # 'accepted' | 'rejected'
@@ -926,7 +965,7 @@ async def delete_session(
     deleted = await store.delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Session not found")
-    # Redis 记录删除后，磁盘上的会话目录（inbox/outputs/tool_results/.work）也要
+    # Redis 记录删除后，磁盘上的会话目录（inbox/outbox/tool_results/.work）也要
     # 收掉：否则删会话只清元数据，文件会永久残留。
     import shutil
 
@@ -951,15 +990,16 @@ async def delete_session(
 # Empty records list if no trajectory captured (L0 OFF) or PostgreSQL data missing.
 # ================================================================
 
+
 @web_router.get("/sessions/{session_id}/trajectory")
 async def get_session_trajectory_audit(
+    request: Request,
     session_id: str,
     limit: int = Query(default=50, ge=0, le=1000),
     ascending: bool = False,
     workspace_id: str = "default",
-    request: Request = ...,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     # Step 0: Resolve full session_id from raw conversation_id.
     # Canonical session ids are "web:{user_id}:{workspace_id}:{conversation_id}".
     base_session_key = build_web_session_key(user_id, _clean_workspace_id(workspace_id))
@@ -977,7 +1017,9 @@ async def get_session_trajectory_audit(
     except Exception:
         if not resolved_session_id.startswith(f"{base_session_key}:s:"):
             alt_session_id = resolved_session_id.replace(
-                f"{base_session_key}:", f"{base_session_key}:s:", 1,
+                f"{base_session_key}:",
+                f"{base_session_key}:s:",
+                1,
             )
             await _load_and_verify(alt_session_id, user_id)
             resolved_session_id = alt_session_id
@@ -994,11 +1036,16 @@ async def get_session_trajectory_audit(
     if _persistence is None:
         # Degrade: return empty snapshot with clear diagnostic flag
         snap = TrajectorySnapshot(
-            session_id=resolved_session_id, records=[],
+            session_id=resolved_session_id,
+            records=[],
             meta=TrajectorySnapshotMeta(
-                record_count=0, turn_count_estimate=0,
-                gap_count=0, gap_ratio=0.0, orphan_count=0,
-                gap_warning=False, zstd_compressed_record_count=0,
+                record_count=0,
+                turn_count_estimate=0,
+                gap_count=0,
+                gap_ratio=0.0,
+                orphan_count=0,
+                gap_warning=False,
+                zstd_compressed_record_count=0,
             ),
         )
         object.__setattr__(snap, "_parse_warning", "no_trajectory_backend")
@@ -1006,19 +1053,27 @@ async def get_session_trajectory_audit(
         try:
             snap = await _persistence.read_snapshot(
                 resolved_session_id,
-                limit=limit, ascending=ascending,
+                limit=limit,
+                ascending=ascending,
             )
         except Exception as exc:  # SDD A2: return empty, never 500
             import logging as _log
+
             _log.getLogger(__name__).warning(
-                "web trajectory endpoint read_snapshot_v2_pg unexpected exc: %s", exc,
+                "web trajectory endpoint read_snapshot_v2_pg unexpected exc: %s",
+                exc,
             )
             snap = TrajectorySnapshot(
-                session_id=resolved_session_id, records=[],
+                session_id=resolved_session_id,
+                records=[],
                 meta=TrajectorySnapshotMeta(
-                    record_count=0, turn_count_estimate=0,
-                    gap_count=0, gap_ratio=0.0, orphan_count=0,
-                    gap_warning=False, zstd_compressed_record_count=0,
+                    record_count=0,
+                    turn_count_estimate=0,
+                    gap_count=0,
+                    gap_ratio=0.0,
+                    orphan_count=0,
+                    gap_warning=False,
+                    zstd_compressed_record_count=0,
                 ),
             )
             object.__setattr__(snap, "_parse_warning", f"read_error: {type(exc).__name__}")
@@ -1050,14 +1105,15 @@ async def get_session_trajectory_audit(
 # to render as cells (NOT per-LLM-iteration records).
 # ================================================================
 
+
 @web_router.get("/sessions/{session_id}/trajectory/cells")
 async def get_session_trajectory_cells(
+    request: Request,
     session_id: str,
     after_seq: int = 0,
     workspace_id: str = "default",
-    request: Request = ...,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     """per-conversation-event cells (one cell per tree node).
 
     Distinct from /sessions/{id}/trajectory (per-LLM-iteration records).
@@ -1080,7 +1136,9 @@ async def get_session_trajectory_cells(
     except Exception:
         if not resolved_session_id.startswith(f"{base_session_key}:s:"):
             alt_session_id = resolved_session_id.replace(
-                f"{base_session_key}:", f"{base_session_key}:s:", 1,
+                f"{base_session_key}:",
+                f"{base_session_key}:s:",
+                1,
             )
             await _load_and_verify(alt_session_id, user_id)
             resolved_session_id = alt_session_id
@@ -1095,17 +1153,22 @@ async def get_session_trajectory_cells(
 
     if _persistence is None:
         return TrajectoryCellSnapshot(
-            session_id=resolved_session_id, cells=[], latest_seq=after_seq,
+            session_id=resolved_session_id,
+            cells=[],
+            latest_seq=after_seq,
         ).model_dump(mode="json")
 
     try:
         cells = await _persistence.read_cells(
-            resolved_session_id, after_seq=after_seq,
+            resolved_session_id,
+            after_seq=after_seq,
         )
     except Exception as exc:
         import logging as _log
+
         _log.getLogger(__name__).warning(
-            "web trajectory cells endpoint read_cells_pg unexpected exc: %s", exc,
+            "web trajectory cells endpoint read_cells_pg unexpected exc: %s",
+            exc,
         )
         cells = []
 
@@ -1126,7 +1189,7 @@ async def patch_session(
     session_id: str,
     body: PatchSessionRequest,
     user_id: str = Depends(get_current_user),
-) -> dict:
+) -> dict[str, Any]:
     tree = await _load_and_verify(session_id, user_id)
     store = _get_store()
     if body.title is not None:
@@ -1186,6 +1249,7 @@ async def list_uploads(
         return UploadResponse(files=[])
 
     from prismclaw.infra.workspace_paths import resolve_session_inbox_dir
+
     target = resolve_session_inbox_dir(user_id, wid, session_id)
 
     if not target.is_dir():
@@ -1234,8 +1298,8 @@ async def trigger_learn(
     return await _do_extract(request, user_id, workspace_id)
 
 
-def _get_prompt_optimizer(request: Request) -> Any:
-    web_deps = request.app.state.web_deps
+def _get_prompt_optimizer(request: Request) -> PromptOptimizer:
+    web_deps = get_web_deps(request)
     factory = web_deps.prompt_optimizer_factory
     if factory is None:
         raise HTTPException(500, "Prompt optimizer not configured")
@@ -1262,7 +1326,7 @@ async def optimize_prompt(
         raise
     except Exception:
         logger.exception("optimize_prompt failed for user %s", user_id)
-        raise HTTPException(500, "提示词优化失败，请稍后重试")
+        raise HTTPException(500, "提示词优化失败，请稍后重试") from None
 
 
 async def _do_extract(request: Request, user_id: str, workspace_id: str) -> ExtractResponse:
@@ -1274,7 +1338,10 @@ async def _do_extract(request: Request, user_id: str, workspace_id: str) -> Extr
         if session_id is None:
             return ExtractResponse(
                 spawned=False,
-                message="当前会话还没有 tool 调用。先让 bot 执行一些实际操作（bash/read/write 等），再试 /extract。",
+                message=(
+                    "当前会话还没有 tool 调用。先让 bot 执行一些实际操作"
+                    "（bash/read/write 等），再试 /extract。"
+                ),
             )
 
         web_deps = request.app.state.web_deps

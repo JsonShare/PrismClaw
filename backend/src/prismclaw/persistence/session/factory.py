@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.schema.storage.persistence_types import LockManager
 from prismclaw.schema.storage.storage_types import SessionStore
 
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
 
 def create_session_store(
-    redis_client: Any,
+    redis_client: aioredis.Redis,
     lock_manager: LockManager,
     *,
     ttl_seconds: int = 604_800,

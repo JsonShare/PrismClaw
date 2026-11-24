@@ -6,6 +6,7 @@ import logging
 from prismclaw.app.web.chat.chat_protocol import (
     _get_session_queue,
 )
+from prismclaw.app.web.connection import ConnectionState, send_event
 from prismclaw.app.web.protocol.messages import (
     SERVER_CHAT_DONE,
     SERVER_CHAT_QUEUED,
@@ -13,7 +14,6 @@ from prismclaw.app.web.protocol.messages import (
     ChatAbortMessage,
     ChatSendMessage,
 )
-from prismclaw.app.web.connection import ConnectionState, send_event
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +96,7 @@ async def handle_abort(
         # 非 owner worker：本地没有这条 run 的控制块（get_run_control 会惰性
         # 造一个空块，is_active 恒为 False）。改发跨 worker 中止请求，由 owner
         # 的常驻监听转成本地 rc.stop()；否则多副本下停止按钮静默无效。
-        presence = getattr(
-            getattr(state.ws.app.state, "web_deps", None), "run_presence", None
-        )
+        presence = getattr(getattr(state.ws.app.state, "web_deps", None), "run_presence", None)
         if presence is not None:
             await presence.request_abort(msg.conversation_id)
     logger.info(

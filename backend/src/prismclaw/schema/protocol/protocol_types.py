@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 PROTOCOL_VERSION = 1
 
 
-class ProtocolErrorCode(str, Enum):
+class ProtocolErrorCode(StrEnum):
     VERSION_MISMATCH = "version_mismatch"
     AUTH_FAILED = "auth_failed"
     SESSION_NOT_FOUND = "session_not_found"

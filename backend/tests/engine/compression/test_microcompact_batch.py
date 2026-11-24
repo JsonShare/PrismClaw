@@ -6,6 +6,7 @@
 3. batch 计数超预算后触发一次清理，且计数器归零。
 4. 历史压缩事件边界复位计数器并把探针快照设为当前全量。
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -22,17 +23,19 @@ def _read_messages(n: int) -> list[dict]:
     """构造 n 组 assistant(tool_use=read) + tool_result 对。"""
     messages: list[dict] = []
     for i in range(n):
-        messages.append({
-            "role": "assistant",
-            "tool_calls": [
-                {"id": f"r{i}", "function": {"name": "read", "arguments": "{}"}}
-            ],
-        })
-        messages.append({
-            "role": "tool",
-            "tool_call_id": f"r{i}",
-            "content": f"content-{i}",
-        })
+        messages.append(
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": f"r{i}", "function": {"name": "read", "arguments": "{}"}}],
+            }
+        )
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": f"r{i}",
+                "content": f"content-{i}",
+            }
+        )
     return messages
 
 
@@ -41,6 +44,7 @@ def _tool_result_chars(messages: list[dict]) -> int:
 
 
 # ── 1. incremental 语义不变 ──────────────────────────────────────────────
+
 
 def test_incremental_mode_per_turn_rolling_cleanup():
     # read 分档 keep_recent=8；10 条结果 → 最旧 2 条被清除。
@@ -57,6 +61,7 @@ def test_incremental_mode_per_turn_rolling_cleanup():
 
 
 # ── 2/3. batch 单轮计数、超预算触发并归零 ────────────────────────────────
+
 
 def test_batch_single_turn_does_not_cleanup_only_accumulates():
     msgs = _read_messages(10)
@@ -100,13 +105,11 @@ def test_batch_threshold_sources():
 
     # aggregate_char_budget 缺省 → 回退 dynamic_zone_tokens×4（字符口径）
     tool_results_none = SimpleNamespace(aggregate_char_budget=None)
-    assert (
-        mc.batch_cleanup_threshold(budget=budget, tool_results=tool_results_none)
-        == 12_288 * 4
-    )
+    assert mc.batch_cleanup_threshold(budget=budget, tool_results=tool_results_none) == 12_288 * 4
 
 
 # ── 4. 历史压缩边界复位计数器并快照探针 ─────────────────────────────────
+
 
 def test_compaction_boundary_resets_counter_and_snapshots_probe(monkeypatch):
     """压缩边界不做投影清理（压缩已从树重建历史，投影清理冗余），只复位
@@ -116,9 +119,7 @@ def test_compaction_boundary_resets_counter_and_snapshots_probe(monkeypatch):
 
     msgs = [{"role": "tool", "tool_call_id": "t1", "content": "old-result"}]
     qls = SimpleNamespace(
-        query_view=SimpleNamespace(
-            messages_for_query=SimpleNamespace(messages=msgs)
-        )
+        query_view=SimpleNamespace(messages_for_query=SimpleNamespace(messages=msgs))
     )
     runtime = CompressionRuntimeState(
         tool_result_chars_since_cleanup=123, tool_result_chars_probe=999
@@ -133,7 +134,9 @@ def test_compaction_boundary_resets_counter_and_snapshots_probe(monkeypatch):
 def test_compaction_boundary_noop_when_incremental(monkeypatch):
     monkeypatch.setattr(mc, "resolve_microcompact_mode", lambda: "incremental")
 
-    qls = SimpleNamespace(query_view=SimpleNamespace(messages_for_query=SimpleNamespace(messages=[])))
+    qls = SimpleNamespace(
+        query_view=SimpleNamespace(messages_for_query=SimpleNamespace(messages=[]))
+    )
     runtime = CompressionRuntimeState(tool_result_chars_since_cleanup=7)
 
     orch._microcompact_at_compaction_boundary(qls, runtime)
@@ -172,9 +175,7 @@ async def test_prepare_turn_compaction_branch_calls_boundary_hook(monkeypatch):
         mode = "absolute"
         window_tokens = 131_072
 
-    deps = SimpleNamespace(
-        config=SimpleNamespace(context=SimpleNamespace(budget=_Budget()))
-    )
+    deps = SimpleNamespace(config=SimpleNamespace(context=SimpleNamespace(budget=_Budget())))
     static_result = SimpleNamespace(history_budget=50_000)
     qls = SimpleNamespace(
         query_view=SimpleNamespace(messages_for_query=SimpleNamespace(messages=[]))
@@ -186,6 +187,7 @@ async def test_prepare_turn_compaction_branch_calls_boundary_hook(monkeypatch):
         deps=deps,
         tree=SimpleNamespace(),
         static_result=static_result,
+        include_l1_memory=True,
         attachment_guidance=None,
         query_loop_state=qls,
         compression_runtime=runtime,

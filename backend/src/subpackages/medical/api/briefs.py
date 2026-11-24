@@ -9,13 +9,19 @@
 
 全部带 Depends(get_current_user) 鉴权 + create_by 归属校验。
 """
+
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
 from fastapi import (
-    APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request,
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
 )
 from pydantic import BaseModel
 
@@ -88,21 +94,24 @@ async def list_briefs(
     patient_id: str = Query("", description="按患者过滤"),
     status: str = Query("", description="按状态过滤"),
     page: int = Query(1, ge=1),
-    pageSize: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
     http_request: Request = None,
     user_id: str = Depends(get_current_user),
 ) -> dict:
     """简报分页列表（仅当前用户创建的简报）。"""
     brief_store = get_brief_store(http_request)
     items, total = await brief_store.list_briefs(
-        patient_id=patient_id, status=status, create_by=user_id,
-        page=page, page_size=pageSize,
+        patient_id=patient_id,
+        status=status,
+        create_by=user_id,
+        page=page,
+        page_size=page_size,
     )
     return {
         "items": [_brief_to_vm(b) for b in items],
         "total": total,
         "page": page,
-        "pageSize": pageSize,
+        "pageSize": page_size,
     }
 
 
@@ -158,8 +167,13 @@ async def create_brief(
     llm = get_medical_llm(http_request)
     vision = get_medical_vision(http_request)
     background_tasks.add_task(
-        run_analysis_pipeline, store, brief_store, kb_store, brief_id,
-        llm=llm, vision=vision,
+        run_analysis_pipeline,
+        store,
+        brief_store,
+        kb_store,
+        brief_id,
+        llm=llm,
+        vision=vision,
     )
 
     # 返回完整 VM（与 _brief_to_vm 对齐）
@@ -192,13 +206,22 @@ async def reanalyze_brief(
     llm = get_medical_llm(http_request)
     vision = get_medical_vision(http_request)
     background_tasks.add_task(
-        run_analysis_pipeline, store, brief_store, kb_store, brief_id,
-        llm=llm, vision=vision,
+        run_analysis_pipeline,
+        store,
+        brief_store,
+        kb_store,
+        brief_id,
+        llm=llm,
+        vision=vision,
     )
 
     # 返回完整 VM（与 create_brief 对齐）
     brief = await brief_store.get_brief(brief_id)
-    return _brief_to_vm(brief) if brief else {"id": brief_id, "version": new_version, "status": "分析中"}
+    return (
+        _brief_to_vm(brief)
+        if brief
+        else {"id": brief_id, "version": new_version, "status": "分析中"}
+    )
 
 
 @router.delete("/{brief_id}")

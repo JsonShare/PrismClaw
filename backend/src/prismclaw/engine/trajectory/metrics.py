@@ -16,17 +16,17 @@ and the record-size histogram (raw/zstd bytes) were removed together with
 the Redis persistence backend — PostgreSQL flush does not produce those
 events.
 """
+
 from __future__ import annotations
 
 import enum
 import threading
 import time
 
-
 _ENABLED = True
 
 
-class Stage(str, enum.Enum):
+class Stage(enum.StrEnum):
     PROJECTOR_INPUT = "projector_input"
     PROJECTOR = "projector"
     ASSEMBLE_ENTRY = "assemble_entry"
@@ -39,7 +39,7 @@ class Stage(str, enum.Enum):
     LLM_FAILURE_APPLY = "llm_failure_apply"
 
 
-class WriteMode(str, enum.Enum):
+class WriteMode(enum.StrEnum):
     LLM_RESPONSE_RECEIVED = "llm_response_received"
     LLM_REQUEST_FAILED = "llm_request_failed"
 
@@ -90,6 +90,7 @@ def write_counter_snapshot() -> dict[str, int]:
 
 # ---------- public stable API ----------
 
+
 def record_stage_duration(stage: str, duration_sec: float) -> None:
     if not _ENABLED:
         return
@@ -103,7 +104,7 @@ def record_stage_duration(stage: str, duration_sec: float) -> None:
         buf.append(duration_sec)
         if len(buf) > _MAX_SAMPLES_PER_KEY:
             # roll: drop oldest 1/4 to keep amortised insert O(1)
-            del buf[:_MAX_SAMPLES_PER_KEY // 4]
+            del buf[: _MAX_SAMPLES_PER_KEY // 4]
 
 
 def inc_write(mode: str) -> None:
@@ -126,21 +127,29 @@ class StageTimer:
     def __init__(self, stage: str) -> None:
         self.stage = stage
 
-    def __enter__(self):
+    def __enter__(self) -> StageTimer:
         self._t0 = time.perf_counter()
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object,
+    ) -> None:
         dt = time.perf_counter() - self._t0
         record_stage_duration(self.stage, dt)
-        return False  # don't suppress
 
 
 __all__ = [
-    "Stage", "WriteMode",
-    "record_stage_duration", "inc_write", "StageTimer",
+    "Stage",
+    "WriteMode",
+    "record_stage_duration",
+    "inc_write",
+    "StageTimer",
     "set_metrics_enabled",
     # debugging / test helpers
     "reset_all_for_tests",
-    "stage_hist_snapshot", "write_counter_snapshot",
+    "stage_hist_snapshot",
+    "write_counter_snapshot",
 ]

@@ -3,6 +3,7 @@
 清单是唯一随每步变化、且必须每轮都出现在 volatile 块里的状态；
 这些用例锁定渲染契约，防止重构把清单退回"仅首轮出现"的行为。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,6 +28,7 @@ from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.agent.session import SessionContextState, TodoItem
 from prismclaw.schema.content.compaction import CompactResult
 from prismclaw.schema.content.evidence import EvidenceStrategy
+from prismclaw.schema.session.projection import SessionProjectionEngine
 from prismclaw.schema.session.types import (
     SESSION_MEMORY_CUSTOM_TYPE,
     CustomEntry,
@@ -93,7 +95,9 @@ def test_delta_keeps_full_list_when_unchanged() -> None:
     state = _state(_three_items())
     payload = state_payload_from_state(state)
     delta = diff_state_payload(payload, session_memory_payload_from_state(state))
-    assert delta["todo_list"] == payload["todo_list"], "delta 必须输出当前全量清单，不能依赖 baseline"
+    assert delta["todo_list"] == payload["todo_list"], (
+        "delta 必须输出当前全量清单，不能依赖 baseline"
+    )
 
     delta_content = render_state_payload_block(wrapper="session_state", state_payload=delta)
     assert delta_content is not None, "无变化时渲染 delta 仍必须给出 session_state 块"
@@ -195,7 +199,7 @@ def test_compaction_snapshot_keeps_todo_list() -> None:
         )
     )
 
-    latest = tree.get_latest_session_memory_state()
+    latest = SessionProjectionEngine(tree).get_latest_session_memory_state()
     assert latest is not None, "压缩后必须产出新的记忆快照"
     assert [t.id for t in latest.todo_list] == ["1", "2", "3"], "压缩快照不得丢清单"
     assert latest.todo_list[1].status == "in_progress", "压缩后当前步骤状态必须保留"

@@ -13,9 +13,7 @@ class PluginSettings(BaseSettings):
 
     # Store specific configurations for individual plugins (e.g., API keys, feature flags)
     # The key is the plugin namespace (e.g., 'my-plugin'), and the value is a dict of options.
-    plugin_configs: dict[str, dict[str, Any]] = Field(
-        default_factory=dict
-    )
+    plugin_configs: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     # 配置驱动发现。
     # 显式启用的插件 ID 列表（name@source 格式）。
@@ -28,9 +26,7 @@ class PluginSettings(BaseSettings):
     blocked_sources: set[str] = Field(default_factory=set)
 
     # 白名单来源（非空时只允许白名单内的来源）。
-    strict_known_sources: set[str] | None = Field(
-        default=None
-    )
+    strict_known_sources: set[str] | None = Field(default=None)
 
     # 显式信任的插件 ID（name@source）。受信任插件即使在不受信任工作区也可加载
     # （绕过 local/session 来源的工作区信任门控）。由 ``/plugins trust <id>`` 写入。
@@ -46,28 +42,16 @@ class SubAgentSettings(BaseSettings):
     # 静态发现链：repo 管控、sync 到 assets/，绝对 home 路径。
     asset_subagents_dir: str = Field("~/.prismclaw/assets/agents")
 
-    model_routing: dict[str, str] = Field(
-        default_factory=dict
-    )
+    model_routing: dict[str, str] = Field(default_factory=dict)
     default_max_turns: int = Field(30)
     default_timeout_seconds: float = Field(300.0)
     max_depth: int = Field(1)
-    max_parallel_per_turn: int = Field(
-        5, ge=1, le=20
-    )
-    max_handoff_chain_length: int = Field(
-        5, ge=1, le=20
-    )
+    max_parallel_per_turn: int = Field(5, ge=1, le=20)
+    max_handoff_chain_length: int = Field(5, ge=1, le=20)
     handoff_enabled: bool = Field(True)
-    pending_handoff_ttl_turns: int = Field(
-        3, ge=1, le=10
-    )
-    handoff_reverse_lookup_enabled: bool = Field(
-        True
-    )
-    handoff_phase3_deploy_grace_window_s: int = Field(
-        1800, ge=0, le=86400
-    )
+    pending_handoff_ttl_turns: int = Field(3, ge=1, le=10)
+    handoff_reverse_lookup_enabled: bool = Field(True)
+    handoff_phase3_deploy_grace_window_s: int = Field(1800, ge=0, le=86400)
 
     model_config = SettingsConfigDict(
         env_prefix="PRISMCLAW_SUBAGENT_",

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
-
 from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.foundation.metrics import emit
-from prismclaw.schema.config.config import COMPACT_SUMMARY_DEFAULT_TEMPLATE
+from prismclaw.schema.config.config import COMPACT_SUMMARY_DEFAULT_TEMPLATE, CompactionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,14 @@ def _strip_md_frontmatter(text: str) -> str:
     if stripped.startswith("<!--"):
         end = stripped.find("-->")
         if end != -1:
-            stripped = stripped[end + 3:].lstrip()
+            stripped = stripped[end + 3 :].lstrip()
     elif stripped.startswith("---"):
         # YAML frontmatter
         end = stripped.find("\n---", 3)
         if end == -1:
             end = stripped.find("---\n", 3)
         if end != -1:
-            stripped = stripped[end + 4:].lstrip()
+            stripped = stripped[end + 4 :].lstrip()
     return stripped
 
 
@@ -88,14 +88,12 @@ def inject_no_tools_preamble(
     if not injected:
         # No user message to extend — synthesize one at the head.
         out.insert(0, {"role": "user", "content": preamble})
-    try:
+    with contextlib.suppress(Exception):
         emit(_METRIC_COMPACT_PREAMBLE_INJECTED, 1.0, kind="counter")
-    except Exception:
-        pass
     return out
 
 
-def _resolve_no_tools_preamble_enabled(config: Any) -> bool:
+def _resolve_no_tools_preamble_enabled(config: CompactionConfig | None) -> bool:
     """Resolve the ``FLAG_NO_TOOLS_PREAMBLE``-equivalent flag from
     the runtime config.  Defaults to on.  Accepts a few attribute
     names so it tolerates older config objects and Pydantic models.
@@ -160,10 +158,8 @@ def strip_analysis_block(text: str) -> str:
         return text
     stripped, n = _ANALYSIS_BLOCK_RE.subn("", text)
     if n > 0:
-        try:
+        with contextlib.suppress(Exception):
             emit(_METRIC_COMPACT_ANALYSIS_STRIPPED, float(n), kind="counter")
-        except Exception:
-            pass
         # Trim leading/trailing blank lines that the removal left
         # behind so the stored summary is clean.
         return stripped.strip()
@@ -175,7 +171,7 @@ def strip_analysis_block(text: str) -> str:
 
 
 def _resolve_prompt_template(
-    template: Any,
+    template: str | None,
     *,
     default: str,
     default_path: Path,
@@ -228,7 +224,7 @@ def _resolve_prompt_template(
         return template
 
 
-def resolve_compact_prompt(compaction_config: Any) -> str | None:
+def resolve_compact_prompt(compaction_config: CompactionConfig | None) -> str | None:
     """Resolve the active summarization system prompt.
 
     Returns the 9-section template when ``cfg.history.prompt.enabled``
@@ -263,7 +259,7 @@ def resolve_compact_prompt(compaction_config: Any) -> str | None:
     )
 
 
-def resolve_strip_analysis(compaction_config: Any) -> bool:
+def resolve_strip_analysis(compaction_config: CompactionConfig | None) -> bool:
     """Whether to strip the ``<analysis>`` block before storage.
 
     Safe default is True (SDD context-governance W5): every consumer of

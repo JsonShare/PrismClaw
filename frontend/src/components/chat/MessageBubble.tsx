@@ -1079,7 +1079,7 @@ export default function MessageBubble({
                   <div className="mt-6 px-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text-secondary)]/70">产物输出</span>
-                      {/* 仅在有 outputs 文件时提供下载入口：只有内联附件时无可下载内容 */}
+                      {/* 仅在有交付文件时提供下载入口：只有内联附件时无可下载内容 */}
                       {workspaceId && token && displayOutputFiles.length > 0 && (
                         <div className="flex flex-col items-end gap-1">
                           <button

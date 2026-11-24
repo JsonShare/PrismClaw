@@ -158,17 +158,11 @@ def normalize_state_payload(
                 if item.status == "active"
             ],
             "decisions": [
-                item.model_dump(mode="json")
-                for item in value.decisions
-                if item.status == "active"
+                item.model_dump(mode="json") for item in value.decisions if item.status == "active"
             ],
-            "todo_list": [
-                item.model_dump(mode="json") for item in value.todo_list
-            ],
+            "todo_list": [item.model_dump(mode="json") for item in value.todo_list],
             "facts": [
-                item.model_dump(mode="json")
-                for item in value.facts
-                if item.status == "active"
+                item.model_dump(mode="json") for item in value.facts if item.status == "active"
             ],
             "assumptions": [
                 item.model_dump(mode="json")
@@ -212,7 +206,11 @@ def merge_state_payloads(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     for payload in payloads:
         normalized = normalize_state_payload(payload)
         primary_goal = normalized.get("primary_goal")
-        if merged["primary_goal"] is None and isinstance(primary_goal, str) and primary_goal.strip():
+        if (
+            merged["primary_goal"] is None
+            and isinstance(primary_goal, str)
+            and primary_goal.strip()
+        ):
             merged["primary_goal"] = primary_goal.strip()
         for key in _STATE_PAYLOAD_LIST_KEYS:
             for item in normalized[key]:
@@ -318,7 +316,7 @@ def _snippet(value: str, *, limit: int = 240) -> str:
 
 
 def _stable_item_id(kind: str, content: str) -> str:
-    digest = hashlib.sha1(f"{kind}:{content}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(f"{kind}:{content}".encode()).hexdigest()
     return f"{kind[:3]}_{digest[:12]}"
 
 
@@ -349,7 +347,7 @@ def _item(content: str, *, kind: str, source_ref: str | None = None) -> SessionC
     )
 
 
-def _normalize_state_items(value: Any) -> list[dict[str, Any]]:
+def _normalize_state_items(value: object) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         return []
     normalized: list[dict[str, Any]] = []
@@ -370,7 +368,7 @@ def _normalize_state_items(value: Any) -> list[dict[str, Any]]:
     return normalized
 
 
-def _normalize_todo_list(value: Any) -> list[dict[str, str]]:
+def _normalize_todo_list(value: object) -> list[dict[str, str]]:
     if not isinstance(value, list):
         return []
     items: list[dict[str, str]] = []
@@ -389,7 +387,9 @@ def _normalize_todo_list(value: Any) -> list[dict[str, str]]:
             {
                 "id": str(candidate.get("id") or ""),
                 "content": content.strip(),
-                "status": status if status in {"pending", "in_progress", "completed"} else "pending",
+                "status": status
+                if status in {"pending", "in_progress", "completed"}
+                else "pending",
             }
         )
     return items
@@ -411,29 +411,29 @@ def _classify_item_disposition(content: str) -> tuple[str, str, float]:
     return "active", text, 1.0
 
 
-def _normalize_recent_messages(value: Any) -> list[str]:
+def _normalize_recent_messages(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
-    return [
-        item.strip() for item in value if isinstance(item, str) and item.strip()
-    ][-_RECENT_MESSAGE_LIMIT:]
+    return [item.strip() for item in value if isinstance(item, str) and item.strip()][
+        -_RECENT_MESSAGE_LIMIT:
+    ]
 
 
-def _extract_tool_result_sections(text: str) -> dict[str, list[str]]:
+def _extract_tool_result_sections(text: str) -> dict[str, list[Any]]:
     parsed_sections = _extract_structured_tool_result_sections(text)
     if parsed_sections is not None:
         return parsed_sections
     return _extract_subagent_result_sections(text)
 
 
-def _extract_structured_tool_result_sections(text: str) -> dict[str, list[str]] | None:
+def _extract_structured_tool_result_sections(text: str) -> dict[str, list[Any]] | None:
     try:
         payload = json.loads(text)
     except Exception:
         return None
     if not isinstance(payload, dict):
         return None
-    result = {
+    result: dict[str, list[Any]] = {
         "findings": _string_list(payload.get("findings")),
         "decisions": _string_list(payload.get("decisions")),
         "open_questions": _string_list(payload.get("open_questions")),
@@ -447,8 +447,8 @@ def _extract_structured_tool_result_sections(text: str) -> dict[str, list[str]] 
     return result
 
 
-def _extract_subagent_result_sections(text: str) -> dict[str, list[str]]:
-    sections: dict[str, list[str]] = {
+def _extract_subagent_result_sections(text: str) -> dict[str, list[Any]]:
+    sections: dict[str, list[Any]] = {
         "findings": [],
         "decisions": [],
         "open_questions": [],
@@ -478,7 +478,7 @@ def _extract_subagent_result_sections(text: str) -> dict[str, list[str]]:
     return sections
 
 
-def _string_list(value: Any) -> list[str]:
+def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
@@ -486,16 +486,18 @@ def _string_list(value: Any) -> list[str]:
 
 def _merge_subagent_result_update(
     update: SessionStateUpdate,
-    sections: dict[str, list[str]],
+    sections: dict[str, list[Any]],
     *,
     source_ref: str | None,
 ) -> None:
     for value in sections["findings"]:
-        update.facts.append(_item(value, kind="fact", source_ref=source_ref))
+        update.facts.append(_item(str(value), kind="fact", source_ref=source_ref))
     for value in sections["decisions"]:
-        update.decisions.append(_item(value, kind="decision", source_ref=source_ref))
+        update.decisions.append(_item(str(value), kind="decision", source_ref=source_ref))
     for value in sections["open_questions"]:
-        update.open_questions.append(_item(value, kind="question", source_ref=source_ref))
+        update.open_questions.append(_item(str(value), kind="question", source_ref=source_ref))
     # 写入 evidence（原始 dict 列表，由 _collect_prior_evidence 在下游解析）
     if "evidence" in sections:
-        update.evidence.extend(sections["evidence"])
+        update.evidence.extend(
+            item for item in sections["evidence"] if isinstance(item, dict)
+        )

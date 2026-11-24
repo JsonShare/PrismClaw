@@ -11,7 +11,12 @@ import logging
 import os
 import re
 
-from prismclaw.schema.services.mcp_settings import McpSettings, McpServerConfig, McpSandboxConfig, _command_auto_exempts_sandbox
+from prismclaw.schema.services.mcp_settings import (
+    McpSandboxConfig,
+    McpServerConfig,
+    McpSettings,
+    _command_auto_exempts_sandbox,
+)
 
 logger = logging.getLogger(__name__)
 

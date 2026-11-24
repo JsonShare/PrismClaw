@@ -15,10 +15,16 @@ from prismclaw.engine.execution.loop._bootstrap_helpers import (
 # 快照写入 / trajectory 发布 / 会话树 append 的可复用实现。
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.toolkit.builtin.tool_helpers import _entry_to_llm_dict
-from prismclaw.schema.agent.session import MessageEntry, SessionHeader, TurnRuntimeMetricsSnapshot
+from prismclaw.schema.agent.session import (
+    MessageEntry,
+    SessionContextState,
+    SessionHeader,
+    TurnRuntimeMetricsSnapshot,
+)
 from prismclaw.schema.agent.task_runtime import TaskRuntimeState
 from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.session.projection import SessionProjectionEngine
 from prismclaw.schema.session.types import (
     SESSION_MEMORY_CUSTOM_TYPE,
     TASK_RUNTIME_CUSTOM_TYPE,
@@ -55,7 +61,10 @@ async def ensure_session(
     workspace_id: str,
     agent_id: str,
 ) -> SessionTree:
-    existing = await deps.session_store.load(session_id)
+    store = deps.session_store
+    if store is None:
+        raise RuntimeError("session_store 未配置，无法建立会话")
+    existing = await store.load(session_id)
     if existing is not None:
         return existing
     header = SessionHeader(
@@ -65,10 +74,8 @@ async def ensure_session(
         session_key=_derive_session_key(session_id),
     )
     tree = SessionTree(header=header)
-    await deps.session_store.save_header(tree)
+    await store.save_header(tree)
     return tree
-
-
 
 
 def _publish_conversation_node(
@@ -91,19 +98,21 @@ def _publish_conversation_node(
         if bus is None or bus._is_noop:
             return
         now_ms = int(time.time() * 1000)
-        bus.publish(ConversationNodeAdded(
-            session_id=tree.header.id,
-            entry_id=entry_id,
-            seq=seq if seq is not None else _node_seq(tree, entry_id),
-            turn=max(1, _user_message_count(tree)),
-            role=role,
-            kind=kind,
-            content_preview=content_preview,
-            input_detail=input_detail,
-            output_detail=output_detail,
-            started_at_ms=now_ms,
-            completed_at_ms=now_ms,
-        ))
+        bus.publish(
+            ConversationNodeAdded(
+                session_id=tree.header.id,
+                entry_id=entry_id,
+                seq=seq if seq is not None else _node_seq(tree, entry_id),
+                turn=max(1, _user_message_count(tree)),
+                role=role,
+                kind=kind,
+                content_preview=content_preview,
+                input_detail=input_detail,
+                output_detail=output_detail,
+                started_at_ms=now_ms,
+                completed_at_ms=now_ms,
+            )
+        )
     except Exception:
         pass
 
@@ -129,7 +138,9 @@ def publish_context_node(
         kind="context",
         # 无 tree 节点（transient 注入）→ 排在当前末尾，与 compacted 同语义
         seq=len(tree.order),
-        content_preview=f"{label}: {content[:500]}" if len(content) > 500 else (f"{label}: {content}" if content else label),
+        content_preview=f"{label}: {content[:500]}"
+        if len(content) > 500
+        else (f"{label}: {content}" if content else label),
         input_detail=content or None,
     )
 
@@ -162,10 +173,10 @@ def publish_compaction_node(
     )
 
 
-
 # ---------------------------------------------------------------------------
 # 会话树写入：append / trajectory 发布
 # ---------------------------------------------------------------------------
+
 
 async def append_to_tree(
     deps: AgentRunnerDeps,
@@ -176,14 +187,21 @@ async def append_to_tree(
     if isinstance(entry, MessageEntry):
         events = _event_logger.message_entry(tree.header.id, entry, entry.id)
         tree.header.last_interaction_at = now_iso()
-        events.append(_event_logger.request_header(tree.header.id, {"last_interaction_at": tree.header.last_interaction_at}))
+        events.append(
+            _event_logger.request_header(
+                tree.header.id, {"last_interaction_at": tree.header.last_interaction_at}
+            )
+        )
         await deps.context_ingestor.ingest(tree.header.id, _entry_to_llm_dict(entry))
     else:
         events = [_event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)]
     # Keep the in-memory tree in sync with what we just committed.
     if entry.id not in tree.entries:
         tree.append(entry)
-    await deps.session_store.commit_events(events)
+    store = deps.session_store
+    if store is None:
+        raise RuntimeError("session_store 未配置，无法提交会话事件")
+    await store.commit_events(events)
 
 
 def _build_conversation_node(
@@ -192,6 +210,7 @@ def _build_conversation_node(
 ) -> ConversationNodeAdded:
     """纯函数：从 tree + entry 构建 ConversationNodeAdded 事件。"""
     from prismclaw.engine.trajectory.bus_events import ConversationNodeAdded
+
     _seq = _node_seq(tree, entry.id)
     _user_count = _user_message_count(tree)
     _turn = _user_count if entry.role == "user" else max(1, _user_count)
@@ -214,6 +233,7 @@ def _build_conversation_node(
     _completed_ms: int
     try:
         from prismclaw.engine.trajectory.bus_context import current_runtime
+
         _rt = current_runtime()
     except Exception:
         _rt = None
@@ -300,10 +320,7 @@ def _build_conversation_node(
         if _thinking_detail is None and _rt is not None:
             _thinking_detail = _rt.assistant_reasoning
     elif _role == "tool":
-        _input_detail = (
-            _tool_args_for_call(tree, entry.tool_call_id)
-            or entry.tool_call_id
-        )
+        _input_detail = _tool_args_for_call(tree, entry.tool_call_id) or entry.tool_call_id
         _output_detail = _full_text
     elif _role == "system":
         _input_detail = _full_text
@@ -313,12 +330,17 @@ def _build_conversation_node(
     _tcs = entry.tool_calls
     if _tcs:
         import json as _tc_json
+
         _summaries: list[str] = []
         for _tc in _tcs:
             try:
                 _tc_dict = _tc if isinstance(_tc, dict) else _tc.model_dump()
-                _tc_name = str(_tc_dict.get("name") or _tc_dict.get("function", {}).get("name") or "?")
-                _tc_args = _tc_dict.get("arguments") or _tc_dict.get("function", {}).get("arguments") or {}
+                _tc_name = str(
+                    _tc_dict.get("name") or _tc_dict.get("function", {}).get("name") or "?"
+                )
+                _tc_args = (
+                    _tc_dict.get("arguments") or _tc_dict.get("function", {}).get("arguments") or {}
+                )
                 if isinstance(_tc_args, str):
                     _tc_args_str = _tc_args
                 else:
@@ -369,6 +391,7 @@ async def publish_trajectory_node(
         import logging as _pub_log
 
         from prismclaw.engine.trajectory.bus import current_bus
+
         _pub_logger = _pub_log.getLogger(__name__)
 
         _bus = current_bus()
@@ -377,7 +400,9 @@ async def publish_trajectory_node(
     except Exception as _pub_exc:
         _pub_logger.warning(
             "publish_trajectory_node FAILED: entry_id=%s role=%s exc=%s",
-            getattr(entry, "id", "?"), getattr(entry, "role", "?"), _pub_exc,
+            getattr(entry, "id", "?"),
+            getattr(entry, "role", "?"),
+            _pub_exc,
         )
 
 
@@ -399,7 +424,7 @@ async def _persist_custom_snapshot(
     *,
     custom_type: str,
     data: dict[str, Any],
-    current: Any = None,
+    current: dict[str, Any] | None = None,
 ) -> None:
     """写入一条 CustomEntry 快照；current 与 data 相同时跳过。
 
@@ -417,7 +442,9 @@ async def _persist_custom_snapshot(
     await append_to_tree(deps, tree, entry)
 
 
-def _dump_model(value: Any) -> dict[str, Any] | None:
+def _dump_model(
+    value: SessionContextState | TaskRuntimeState | TaskSpec | None,
+) -> dict[str, Any] | None:
     return value.model_dump(mode="json") if value is not None else None
 
 
@@ -425,14 +452,12 @@ async def _persist_turn_runtime_metrics(
     deps: AgentRunnerDeps,
     tree: SessionTree,
     *,
-    request_mode: str | None = None,
     dynamic_payload: int,
     input_tokens: int,
     cache_read_tokens: int,
     result_payload_reduction: int,
 ) -> None:
     snapshot = TurnRuntimeMetricsSnapshot(
-        request_mode=request_mode or "",
         dynamic_payload=max(0, dynamic_payload),
         input_tokens=max(0, input_tokens),
         cache_read_tokens=max(0, cache_read_tokens),
@@ -461,8 +486,9 @@ async def _persist_session_memory_snapshot(
         tree,
         custom_type=SESSION_MEMORY_CUSTOM_TYPE,
         data=state.model_dump(mode="json"),
-        current=_dump_model(tree.get_latest_session_memory_state()),
+        current=_dump_model(SessionProjectionEngine(tree).get_latest_session_memory_state()),
     )
+
 
 # INTENTIONAL_RAW_WRITE: pre-governance bootstrap path only.
 # Do NOT call once the task-mutation guard is active — use the mutation API instead.
@@ -477,7 +503,7 @@ async def _persist_task_runtime_snapshot(
         tree,
         custom_type=TASK_RUNTIME_CUSTOM_TYPE,
         data=task_runtime.model_dump(mode="json"),
-        current=_dump_model(tree.get_latest_task_runtime()),
+        current=_dump_model(SessionProjectionEngine(tree).task.get_latest_task_runtime()),
     )
 
 
@@ -492,5 +518,5 @@ async def _persist_task_spec_snapshot(
         tree,
         custom_type=TASK_SPEC_CUSTOM_TYPE,
         data=task_spec.model_dump(mode="json"),
-        current=_dump_model(tree.get_latest_task_spec()),
+        current=_dump_model(SessionProjectionEngine(tree).task.get_latest_task_spec()),
     )

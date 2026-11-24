@@ -13,6 +13,7 @@ Layout produced (mirrors the main app policy):
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import zipfile
@@ -36,10 +37,17 @@ _FMT = (
 class _ZipRotatingFileHandler(RotatingFileHandler):
     """Roll by size and zip the rolled file as log-YYYYMMDD.log.zip."""
 
-    def __init__(self, filename: str | Path, *, max_bytes: int, **kwargs) -> None:
-        super().__init__(filename, maxBytes=max_bytes, **kwargs)
+    def __init__(
+        self,
+        filename: str | Path,
+        *,
+        max_bytes: int,
+        encoding: str = "utf-8",
+        delay: bool = False,
+    ) -> None:
+        super().__init__(filename, maxBytes=max_bytes, encoding=encoding, delay=delay)
 
-    def doRollover(self) -> None:  # noqa: D102
+    def doRollover(self) -> None:  # noqa: N802, D102 - 覆盖 stdlib
         if self.stream:
             self.stream.close()
             self.stream = None
@@ -68,10 +76,8 @@ class _ZipRotatingFileHandler(RotatingFileHandler):
         )
         excess = len(archives) - _ARCHIVE_KEEP
         for old in archives[:excess]:
-            try:
+            with contextlib.suppress(OSError):
                 old.unlink()
-            except OSError:
-                pass
 
 
 class _OncePerHandlerFilter(logging.Filter):
@@ -139,12 +145,14 @@ def install_from_env(env_var: str = "PRISMCLAW_MCP_SERVER_LOG_DIR") -> logging.L
     # 是否已自行配置过日志（basicConfig / setLevel）必须在挂 handler 之前检测，
     # 否则 handlers 非空会令该判断永远为假。
     had_own_config = bool(root.handlers) or root.level != logging.WARNING
-    for h in handlers:
-        root.addHandler(h)
+    for handler in handlers:
+        root.addHandler(handler)
 
     # stderr 仍保留（客户端 pump 会把子进程 stderr 收进 mcp_client_<name>）
-    if not any(isinstance(x, logging.StreamHandler) and not isinstance(x, RotatingFileHandler)
-               for x in root.handlers):
+    if not any(
+        isinstance(x, logging.StreamHandler) and not isinstance(x, RotatingFileHandler)
+        for x in root.handlers
+    ):
         stderr_h = logging.StreamHandler()
         stderr_h.setFormatter(formatter)
         root.addHandler(stderr_h)

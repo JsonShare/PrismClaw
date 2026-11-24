@@ -3,18 +3,20 @@
 通过 importlib.metadata.entry_points(group="prismclaw.domains") 发现域包，
 按配置 domains.enabled 加载，校验版本和依赖后按序注入启动流程。
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from importlib.metadata import entry_points
 from importlib.metadata import version as pkg_version
 from inspect import isawaitable
-from typing import Any
 
 from prismclaw.schema.services.domain import (
     DomainBundle,
     DomainInfrastructureContext,
     DomainLifecycleContext,
+    DomainRuntimeContext,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,7 @@ class DomainRegistry:
             if bundle.required_core_version:
                 try:
                     from packaging.specifiers import SpecifierSet
+
                     spec = SpecifierSet(bundle.required_core_version)
                     if core_version not in spec:
                         msg = f"requires core {bundle.required_core_version}, got {core_version}"
@@ -120,7 +123,7 @@ class DomainRegistry:
     def apply_runtime(
         self,
         bundles: list[DomainBundle],
-        ctx_factory: Any,  # Callable[[str], DomainRuntimeContext]
+        ctx_factory: Callable[[str], DomainRuntimeContext],
     ) -> None:
         """运行时阶段：注册工具、钩子、治理规则（事务性）"""
         for b in bundles:
@@ -179,6 +182,7 @@ class DomainRegistry:
             return
         try:
             from prismclaw.schema.services.domain_task_events import make_status_listener
+
             store.set_status_listener(make_status_listener(emitter, kind=bundle.name))
             logger.info("Domain '%s' 长任务 emitter 已自动接线 (kind=%s)", bundle.name, bundle.name)
         except Exception as e:

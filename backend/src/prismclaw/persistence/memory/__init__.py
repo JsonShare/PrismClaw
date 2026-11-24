@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from prismclaw.schema.memory.memory_types import ArchiveEntry, L4ArtifactEntry, MemoryEntry
 from prismclaw.persistence.memory.base import MemoryStore
 from prismclaw.persistence.memory.composite import CompositeMemoryStore
 from prismclaw.persistence.memory.factory import create_memory_store
+from prismclaw.schema.memory.memory_types import ArchiveEntry, L4ArtifactEntry, MemoryEntry
 
 __all__ = [
     "ArchiveEntry",

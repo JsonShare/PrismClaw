@@ -18,21 +18,24 @@ Architecture:
 All I/O goes through the injected TrajectoryPersistence Protocol —
 the engine layer never imports persistence directly.
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
+from prismclaw.schema.trajectory.trajectory_types import TrajectoryProjectionState
 
 logger = logging.getLogger(__name__)
 
 # Flush policy constants
-FLUSH_INTERVAL_S = 5.0       # Max seconds between flushes
-FLUSH_THRESHOLD = 3          # Queue depth that triggers immediate flush
-SHUTDOWN_TIMEOUT_S = 10.0    # Max time to wait for flush on shutdown
+FLUSH_INTERVAL_S = 5.0  # Max seconds between flushes
+FLUSH_THRESHOLD = 3  # Queue depth that triggers immediate flush
+SHUTDOWN_TIMEOUT_S = 10.0  # Max time to wait for flush on shutdown
 
 
 class TrajectoryFlushWorker:
@@ -63,10 +66,10 @@ class TrajectoryFlushWorker:
         self.flush_interval_s = flush_interval_s
         self.flush_threshold = flush_threshold
 
-        self._queue: asyncio.Queue = asyncio.Queue()
-        self._task: Optional[asyncio.Task] = None
+        self._queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._task: asyncio.Task[Any] | None = None
         self._stop_event = asyncio.Event()
-        self._state: Optional[Any] = None  # Latest state snapshot
+        self._state: Any | None = None  # Latest state snapshot
         self._submitted_count = 0
         self._flushed_count = 0
         self._last_flush_ms = 0
@@ -81,7 +84,9 @@ class TrajectoryFlushWorker:
         self._task = asyncio.create_task(self._consumer_loop())
         logger.info(
             "trajectory flush worker started: sid=%s interval=%.1fs threshold=%d",
-            self.session_id, self.flush_interval_s, self.flush_threshold,
+            self.session_id,
+            self.flush_interval_s,
+            self.flush_threshold,
         )
 
     async def stop(self) -> None:
@@ -96,10 +101,8 @@ class TrajectoryFlushWorker:
         self._stop_event.set()
 
         # Wake consumer by putting a sentinel (it's already waiting on queue.get)
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             self._queue.put_nowait(None)
-        except asyncio.QueueFull:
-            pass
 
         # Wait for consumer loop to exit (with timeout)
         try:
@@ -107,11 +110,11 @@ class TrajectoryFlushWorker:
                 self._task,
                 timeout=SHUTDOWN_TIMEOUT_S,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
-                "trajectory flush worker stop timeout: sid=%s "
-                "(%d pending items may be lost)",
-                self.session_id, self._queue.qsize(),
+                "trajectory flush worker stop timeout: sid=%s (%d pending items may be lost)",
+                self.session_id,
+                self._queue.qsize(),
             )
             if not self._task.done():
                 self._task.cancel()
@@ -119,12 +122,13 @@ class TrajectoryFlushWorker:
         self._task = None
         logger.info(
             "trajectory flush worker stopped: sid=%s flushed_total=%d",
-            self.session_id, self._flushed_count,
+            self.session_id,
+            self._flushed_count,
         )
 
     # ------------------------------------------------------------------ submit
 
-    def submit(self, state: Any) -> None:
+    def submit(self, state: TrajectoryProjectionState) -> None:
         """Non-blocking submit: signal that state needs flushing.
 
         O(1) — only pushes to queue, never awaits database I/O.
@@ -156,14 +160,12 @@ class TrajectoryFlushWorker:
         while not self._stop_event.is_set():
             try:
                 # Step 1: Wait for a signal (blocking, but cancellable via stop)
-                try:
+                # Timeout — check if we have state to flush
+                with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(
                         self._queue.get(),
                         timeout=self.flush_interval_s,
                     )
-                except asyncio.TimeoutError:
-                    # Timeout — check if we have state to flush
-                    pass
 
                 if self._stop_event.is_set():
                     break
@@ -200,8 +202,9 @@ class TrajectoryFlushWorker:
                 break
             except Exception as exc:
                 logger.warning(
-                    "trajectory flush worker consumer loop error: "
-                    "sid=%s: %s", self.session_id, exc,
+                    "trajectory flush worker consumer loop error: sid=%s: %s",
+                    self.session_id,
+                    exc,
                 )
                 await asyncio.sleep(1.0)
 
@@ -223,8 +226,7 @@ class TrajectoryFlushWorker:
                 self._flushed_count += 1
                 self._last_flush_ms = int(time.time() * 1000)
                 logger.info(
-                    "trajectory flush worker completed: sid=%s "
-                    "records=%d flushed_total=%d",
+                    "trajectory flush worker completed: sid=%s records=%d flushed_total=%d",
                     self.session_id,
                     len(self._state.records),
                     self._flushed_count,
@@ -232,7 +234,8 @@ class TrajectoryFlushWorker:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory flush worker flush failed: sid=%s: %s",
-                self.session_id, exc,
+                self.session_id,
+                exc,
             )
 
     # ------------------------------------------------------------------ stats

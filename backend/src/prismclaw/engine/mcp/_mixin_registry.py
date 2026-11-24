@@ -1,4 +1,5 @@
 """Auto-extracted Mixin from client_manager.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,19 +8,18 @@ from typing import Any
 
 import mcp
 
+from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
 from prismclaw.engine.mcp._types import (
     ConnectionSummary,
     ServerStatus,
 )
 from prismclaw.engine.mcp._utils import (
-    _ToolRegistryProto,
     _redact_config_value,
     _render_prompt_result_text,
+    _ToolRegistryProto,
 )
 from prismclaw.engine.mcp.settings import McpServerConfig
 from prismclaw.schema.shared.exceptions import MCPServerDeadError
-
-from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,8 @@ class RegistryMixin(_MCPBackendBase):
             try:
                 capture.flush()
                 capture.seek(0)
-                joined = capture.read()
+                raw_joined = capture.read()
+                joined = raw_joined if isinstance(raw_joined, str) else ""
             except Exception:
                 logger.debug("mcp.stderr_capture read error", exc_info=True)
                 joined = ""
@@ -131,8 +132,7 @@ class RegistryMixin(_MCPBackendBase):
         session = self.get_session(server_name)
         if session is None:
             raise MCPServerDeadError(
-                f"MCP server {server_name!r} is not connected; "
-                f"cannot fetch prompt {prompt_name!r}"
+                server_name, f"not connected; cannot fetch prompt {prompt_name!r}"
             )
         result = await session.get_prompt(prompt_name, arguments=arguments or None)
         return _render_prompt_result_text(result)
@@ -154,8 +154,8 @@ class RegistryMixin(_MCPBackendBase):
         loop = self._loop
         if loop is None or loop.is_closed():
             raise MCPServerDeadError(
-                f"MCP manager loop unavailable; cannot fetch prompt "
-                f"{prompt_name!r} from server {server_name!r}"
+                server_name,
+                f"manager loop unavailable; cannot fetch prompt {prompt_name!r}",
             )
         future = asyncio.run_coroutine_threadsafe(
             self.get_prompt_text(server_name, prompt_name, arguments), loop

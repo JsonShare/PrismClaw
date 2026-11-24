@@ -1,4 +1,5 @@
 """Dream dispatch — queue, lock, scheduling, and boundary."""
+
 from __future__ import annotations
 
 from .boundary import DreamBoundary, DreamEnqueueBoundary, DreamEnqueueResult

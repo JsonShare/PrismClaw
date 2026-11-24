@@ -3,15 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
-
-from prismclaw.schema.agent.run_control_types import RunControl
-from prismclaw.schema.content.streaming import IterationBoundary
-
-__all__ = ["run_agent_stream"]
-
-logger = logging.getLogger(__name__)
-
 
 from prismclaw.engine.execution.control.kernel import TerminalReason
 from prismclaw.engine.execution.loop.agent_loop import run_loop
@@ -25,14 +18,21 @@ from prismclaw.engine.execution.loop.preparer import (
 from prismclaw.engine.execution.loop.teardown import run_teardown
 from prismclaw.engine.execution.loop.types import IterationFrame, RunLedger, RunLoopState
 from prismclaw.engine.execution.loop.wiring import build_loop_config
-from prismclaw.schema.agent.types import RunRequest
+from prismclaw.schema.agent.run_control_types import RunControl
+from prismclaw.schema.agent.types import RunRequest as RunRequest
+from prismclaw.schema.content.streaming import IterationBoundary
+from prismclaw.schema.session.projection import SessionProjectionEngine
+
+__all__ = ["run_agent_stream"]
+
+logger = logging.getLogger(__name__)
 
 
 async def run_agent_stream(
     request: RunRequest,
     deps: AgentRunnerDeps,
     *,
-    tool_workspace_path,
+    tool_workspace_path: str | Path,
     control: RunControl | None = None,
     abort: asyncio.Event | None = None,
 ) -> AsyncIterator[Any]:
@@ -59,14 +59,17 @@ async def run_agent_stream(
     # ── Phase 2: 主循环（rt 是唯一 run 级容器）──
     rt = result
     snapshot = rt.snapshot
-    total_output_tokens = snapshot.total_output_tokens if isinstance(snapshot.total_output_tokens, int) else 0
+    total_output_tokens = (
+        snapshot.total_output_tokens if isinstance(snapshot.total_output_tokens, int) else 0
+    )
     total_cache_creation_tokens = (
-        snapshot.total_cache_creation_tokens if isinstance(snapshot.total_cache_creation_tokens, int) else 0
+        snapshot.total_cache_creation_tokens
+        if isinstance(snapshot.total_cache_creation_tokens, int)
+        else 0
     )
 
     try:
         async with rt.traj_scope:
-
             # ── 先原地装配 rt（build_runtime 填充 tool_loop_state / retry_counts /
             #    pipeline 等），再据此构建 RunLoopState —— 顺序不能反，否则
             #    RunLoopState 会拿到未装配的 None 字段。──
@@ -100,19 +103,27 @@ async def run_agent_stream(
                 # 轨迹追踪
                 if isinstance(event, IterationBoundary):
                     if event.kind == "llm_end":
-                        rt.traj_scope.publish_iteration_end(request.session_id, _loop_state.perf.llm_calls)
+                        rt.traj_scope.publish_iteration_end(
+                            request.session_id, _loop_state.perf.llm_calls
+                        )
                     elif event.kind == "llm_start":
-                        rt.traj_scope.publish_iteration_start(request.session_id, _loop_state.perf.llm_calls)
+                        rt.traj_scope.publish_iteration_start(
+                            request.session_id, _loop_state.perf.llm_calls
+                        )
 
             # ── Post-loop: abort 场景合成未启动工具的 ToolCallEnd ──
             if rt.terminated_by in (TerminalReason.ABORTED, TerminalReason.TIMEOUT):
                 _pending_ids = _loop_state.frame._pending_tool_call_ids or []
                 _completed_ids = {
-                    getattr(r, "tool_call_id", None) for r in (_loop_state.frame.last_tool_results or [])
+                    getattr(r, "tool_call_id", None)
+                    for r in (_loop_state.frame.last_tool_results or [])
                 }
                 for call_id in _pending_ids:
                     if call_id not in _completed_ids:
-                        from prismclaw.engine.execution.loop._loop_helpers import _create_aborted_tool_result
+                        from prismclaw.engine.execution.loop._loop_helpers import (
+                            _create_aborted_tool_result,
+                        )
+
                         yield _create_aborted_tool_result(call_id)
 
             # ── 写入 turn-end reason 到 trajectory scope ──
@@ -126,7 +137,11 @@ async def run_agent_stream(
             rt.tool_ctx = _loop_state.tool_ctx
             rt.ownership_lease = _loop_state.ownership_lease
             rt.profiler = _loop_state.profiler
-            rt.latest_review_decision = rt.tree.get_latest_review_decision() if rt.tree is not None else None
+            rt.latest_review_decision = (
+                SessionProjectionEngine(rt.tree).task.get_latest_review_decision()
+                if rt.tree is not None
+                else None
+            )
             rt.llm_start_monotonic = _loop_state.frame.llm_start_monotonic
             # 回合级计时聚合（度量用；异常路径下保持 None，teardown 会跳过）
             rt.perf = _loop_state.perf

@@ -31,12 +31,12 @@ def _extract_presented_paths(
     arguments: dict[str, Any],
     workspace_root: Path | None,
     *,
-    session_root: Path | None = None,
+    session_root: Path,
 ) -> list[str]:
-    """校验 Agent present_files 的输出路径。
+    """校验 Agent present_files 的输出路径，返回 ``outbox/<rel>`` 形式的会话相对键。
 
-    outputs 现在在 sessions/<sid>/outputs/，所以 outputs_root 从 session_root 算。
-    session_root 传了 → 精确匹配 session outputs；不传 → workspace 根回退（兼容）。
+    返回键与 ArtifactScanner 一致，便于和自动扫描结果求交集；写回消息
+    metadata 前由 ``_filter_existing_output_files`` 统一补 ``sessions/<sid>`` 前缀。
     """
     files = arguments.get("files", [])
     if not isinstance(files, list):
@@ -44,16 +44,7 @@ def _extract_presented_paths(
     if workspace_root is None:
         return []
 
-    # outputs_root: session 级优先
-    if session_root is not None:
-        base_root = session_root.resolve()
-        outputs_root = (base_root / "outputs").resolve()
-    else:
-        base_root = workspace_root.resolve()
-        outputs_root = (base_root / "outputs").resolve()
-    # 这里返回与 ArtifactScanner 一致的 session 相对键（outputs/<rel>），
-    # 便于和自动扫描结果求交集；写回消息 metadata 前由
-    # _filter_existing_output_files 统一补上 sessions/<sid> 前缀。
+    outbox_root = (session_root.resolve() / "outbox").resolve()
 
     validated: list[str] = []
     for raw in files:
@@ -61,22 +52,22 @@ def _extract_presented_paths(
             continue
         normalized = raw.strip().replace("\\", "/")
 
-        full = (base_root / normalized).resolve()
+        full = (outbox_root.parent / normalized).resolve()
         if not full.is_file():
-            # present_files 也可能直接收到 sessions/<sid>/outputs/... 形式
+            # 也接受显式的 sessions/<sid>/outbox/... 形式
             alt = (workspace_root / normalized).resolve()
             if alt.is_file():
                 full = alt
         try:
-            rel = full.relative_to(outputs_root)
+            rel = full.relative_to(outbox_root)
         except ValueError:
             continue
 
         if not full.is_file():
-            logger.warning("web.outputs.file_not_found: %s", str(full))
+            logger.warning("web.outbox.file_not_found: %s", str(full))
             continue
 
-        validated.append(f"outputs/{rel.as_posix()}")
+        validated.append(f"outbox/{rel.as_posix()}")
     return validated
 
 
@@ -84,36 +75,31 @@ def _filter_existing_output_files(
     paths: list[str],
     workspace_root: Path | None,
     *,
-    session_root: Path | None = None,
+    session_root: Path,
 ) -> list[str]:
+    """把会话相对键补成 ``sessions/<sid>/outbox/<rel>``，只保留磁盘上存在的文件。"""
     if workspace_root is None:
         return []
 
-    if session_root is not None:
-        base_root = session_root.resolve()
-        outputs_root = (base_root / "outputs").resolve()
-        rel_prefix = f"sessions/{session_root.name}/outputs/"
-    else:
-        base_root = workspace_root.resolve()
-        outputs_root = (base_root / "outputs").resolve()
-        rel_prefix = "outputs/"
+    outbox_root = (session_root.resolve() / "outbox").resolve()
+    rel_prefix = f"sessions/{session_root.name}/outbox/"
 
     validated: list[str] = []
     for raw in paths:
         if not isinstance(raw, str) or not raw.strip():
             continue
         normalized = raw.strip().replace("\\", "/")
-        full = (base_root / normalized).resolve()
+        full = (outbox_root.parent / normalized).resolve()
         if not full.is_file():
             alt = (workspace_root / normalized).resolve()
             if alt.is_file():
                 full = alt
         try:
-            rel = full.relative_to(outputs_root)
+            rel = full.relative_to(outbox_root)
         except ValueError:
             continue
         if not full.is_file():
-            logger.warning("web.outputs.file_missing_at_done: %s", str(full))
+            logger.warning("web.outbox.file_missing_at_done: %s", str(full))
             continue
         validated.append(f"{rel_prefix}{rel.as_posix()}")
     return _dedupe_simple(validated)
@@ -128,6 +114,8 @@ async def _persist_file_changes_metadata(
 ) -> None:
     normalized = [c for c in changes if isinstance(c, dict)]
     if not message_id or not normalized:
+        return
+    if session_store is None:
         return
     try:
         tree = await session_store.load(session_id)

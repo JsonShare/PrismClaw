@@ -4,9 +4,14 @@ from hashlib import sha256
 from typing import Any
 
 from prismclaw.schema.agent.session import MessageEntry
+from prismclaw.schema.dream.dream import DreamCandidateStore as DreamCandidateStore
+from prismclaw.schema.dream.dream_types import (
+    DreamCandidateKind,
+)
+from prismclaw.schema.dream.dream_types import (
+    DreamMemoryCandidate as DreamMemoryCandidate,
+)
 from prismclaw.schema.shared.utils import extract_text_from_content
-from prismclaw.schema.dream.dream import DreamCandidateStore
-from prismclaw.schema.dream.dream_types import DreamCandidateKind, DreamMemoryCandidate
 from prismclaw.schema.storage.storage_types import SessionStore
 
 _SESSION_SUMMARY_HEAD = 1_000
@@ -85,7 +90,7 @@ class DreamCandidateCollector:
 
 
 def _candidate_id(kind: DreamCandidateKind, session_id: str, anchor: str) -> str:
-    digest = sha256(f"{kind}:{session_id}:{anchor}".encode("utf-8")).hexdigest()[:16]
+    digest = sha256(f"{kind}:{session_id}:{anchor}".encode()).hexdigest()[:16]
     return f"{kind}:{digest}"
 
 

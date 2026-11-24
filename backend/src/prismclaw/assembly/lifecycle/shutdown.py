@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
 
@@ -36,14 +41,10 @@ async def _drain_remaining_pending_tasks(*, grace_s: float = 0.2) -> tuple[list[
         names,
     )
     for t in pending:
-        try:
+        with contextlib.suppress(Exception):
             t.cancel(msg="shutdown: draining leftover pending tasks")
-        except Exception:
-            pass
-    try:
+    with contextlib.suppress(Exception):
         await asyncio.wait(pending, timeout=grace_s, return_when=asyncio.ALL_COMPLETED)
-    except Exception:
-        pass
     cancelled = 0
     timed_out = 0
     for t in pending:
@@ -60,13 +61,14 @@ async def _drain_remaining_pending_tasks(*, grace_s: float = 0.2) -> tuple[list[
             pass
     if timed_out:
         logger.warning(
-            "shutdown.drain.unfinished count=%d (loop will reap them)", timed_out,
+            "shutdown.drain.unfinished count=%d (loop will reap them)",
+            timed_out,
         )
     return names, cancelled
 
 
 async def shutdown_app_runtime(
-    app: Any,
+    app: FastAPI,
     *,
     close_client_fn: Callable[[Any], Awaitable[None]],
 ) -> None:
@@ -109,7 +111,10 @@ async def shutdown_app_runtime(
     if task_manager is not None:
         report = await task_manager.shutdown()
         logger.info(
-            "shutdown drain complete: completed=%d cancelled=%d timed_out=%d failed=%d duration=%.2fs",
+            (
+                "shutdown drain complete: completed=%d "
+                "cancelled=%d timed_out=%d failed=%d duration=%.2fs"
+            ),
             report.completed,
             report.cancelled,
             report.timed_out,

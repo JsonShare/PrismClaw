@@ -8,6 +8,7 @@
     嫌疑标志，run 级终止由 CompletionKernel 统一裁决
   - checkpoint 序列化往返保持 frozen_call_signatures
 """
+
 from __future__ import annotations
 
 from prismclaw.engine.execution.dispatch.call_handling import (
@@ -147,7 +148,9 @@ def test_evaluate_is_read_only():
 def test_check_frozen_call_unfrozen_proceeds():
     ts = ToolLoopState()
     out = check_frozen_call(
-        state=ts, tool_signature="web_fetch:other", config=_cfg(),
+        state=ts,
+        tool_signature="web_fetch:other",
+        config=_cfg(),
     )
     assert out.action == "proceed"
 
@@ -184,8 +187,7 @@ def test_check_frozen_call_counts_once_per_turn():
 
     counted: set[str] = set()  # 模拟 run_loop 一回合内传递的集合
     outs = [
-        check_frozen_call(state=ts, tool_signature=sig, config=_cfg(),
-                          counted_this_turn=counted)
+        check_frozen_call(state=ts, tool_signature=sig, config=_cfg(), counted_this_turn=counted)
         for _ in range(5)  # 模型一回合并行发 5 个相同调用
     ]
     assert all(o.action == "freeze" for o in outs)
@@ -193,8 +195,7 @@ def test_check_frozen_call_counts_once_per_turn():
     assert ts.frozen_call_signatures[sig] == 1
 
     # 下一回合（新集合）再命中 → 计数 2
-    out = check_frozen_call(state=ts, tool_signature=sig, config=_cfg(),
-                            counted_this_turn=set())
+    out = check_frozen_call(state=ts, tool_signature=sig, config=_cfg(), counted_this_turn=set())
     assert out.action == "freeze"
     assert ts.frozen_call_signatures[sig] == 2
 

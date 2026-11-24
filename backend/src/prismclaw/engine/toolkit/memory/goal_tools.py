@@ -1,12 +1,13 @@
 """Goal management tool — create and track long-running goals."""
+
 from __future__ import annotations
 
 import uuid
 from typing import Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
-from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.agent.session import GoalRecord
+from prismclaw.schema.content.content_types import ToolResult
 
 _GOAL_ACTIONS = ("create", "edit", "pause", "resume", "complete", "blocked")
 
@@ -24,7 +25,9 @@ class GoalTool:
             "action": {
                 "type": "string",
                 "enum": list(_GOAL_ACTIONS),
-                "description": "create：新建目标；edit/pause/resume/complete/blocked：更新已有目标。",
+                "description": (
+                    "create：新建目标；edit/pause/resume/complete/blocked：更新已有目标。"
+                ),
             },
             "objective": {
                 "type": "string",
@@ -133,5 +136,9 @@ class GoalTool:
         return text_result(
             call_id,
             f"goal：已在 {goal_id} 上执行 {action}",
-            metadata={"goal_id": goal_id, "action": action, "objective": goal.objective if action == "edit" else None},
+            metadata={
+                "goal_id": goal_id,
+                "action": action,
+                "objective": goal.objective if action == "edit" else None,
+            },
         )

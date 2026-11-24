@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+from prismclaw.engine.execution.query.turn_planner import TurnPlanner
 from prismclaw.engine.security.gate.governance import _has_write_intent, assess_turn
-from prismclaw.engine.task_profile.service import TaskProfileService
+from prismclaw.engine.state.turn_state import TurnState
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.schema.agent.task_runtime import PreflightProbeResult
 from prismclaw.schema.agent.task_types import TaskSpec
 
@@ -102,6 +106,16 @@ def test_write_intent_uses_word_boundary_for_english() -> None:
     assert not _has_write_intent("additional context")
 
 
-def test_fast_path_only_when_complexity_is_simple() -> None:
-    service = TaskProfileService()
-    assert service.resolve_request_mode(tree=None, complexity="simple") == "fast_path"
+def test_complexity_switch_is_simple_only() -> None:
+    """TurnPlanner 的 simple 判定只认 complexity == "simple"。"""
+    planner = TurnPlanner()
+    deps = SimpleNamespace(tools=ToolRegistry(), session_queue=object())
+    simple = planner.plan(
+        request=SimpleNamespace(complexity="simple"),
+        deps=deps,
+        turn_state=TurnState(),
+        tool_ctx=SimpleNamespace(subagent_depth=0, tool_scope=None, headless=False),
+        skill_invocation=None,
+    )
+    assert simple.skip_history_compaction is True
+    assert simple.include_l1_memory is False

@@ -1,14 +1,40 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol, cast
 
 
-def redis_is_required(settings: Any = None) -> bool:
+class RuntimeModeSettings(Protocol):
+    @property
+    def evolution(self) -> EvolutionLike: ...
+    @property
+    def affinity(self) -> AffinityLike: ...
+
+
+class EvolutionLike(Protocol):
+    @property
+    def enabled(self) -> bool: ...
+    @property
+    def curator(self) -> EnabledLike: ...
+    @property
+    def dream(self) -> EnabledLike: ...
+
+
+class EnabledLike(Protocol):
+    @property
+    def enabled(self) -> bool: ...
+
+
+class AffinityLike(Protocol):
+    @property
+    def enabled(self) -> bool: ...
+
+
+def redis_is_required(settings: object = None) -> bool:
     """Whether Redis is required for the current runtime. Always True."""
     return True
 
 
-def build_runtime_mode_snapshot(app_or_state: Any, *, settings: Any = None) -> dict[str, Any]:
+def build_runtime_mode_snapshot(app_or_state: object, *, settings: object = None) -> dict[str, Any]:
     """Build a snapshot describing the current runtime mode.
 
     Args:
@@ -26,7 +52,10 @@ def build_runtime_mode_snapshot(app_or_state: Any, *, settings: Any = None) -> d
             If *None*, the settings are read from ``app_or_state.state.settings``.
     """
     state = getattr(app_or_state, "state", app_or_state)
-    effective_settings = settings or getattr(state, "settings", None)
+    effective_settings = cast(
+        "RuntimeModeSettings | None",
+        settings if settings is not None else getattr(state, "settings", None),
+    )
     redis_available = getattr(state, "redis_client", None) is not None
     disabled_capabilities: list[dict[str, str]] = []
     reason_codes: list[str] = []
@@ -77,7 +106,8 @@ def build_runtime_mode_snapshot(app_or_state: Any, *, settings: Any = None) -> d
             "lock": "redis",
             "memory": (
                 "postgres"
-                if effective_settings is not None and getattr(state, "memory_store", None) is not None
+                if effective_settings is not None
+                and getattr(state, "memory_store", None) is not None
                 else "disabled"
             ),
             "workspace": workspace_backend,
@@ -91,12 +121,10 @@ def format_runtime_mode_lines(snapshot: dict[str, Any] | None) -> list[str]:
     if not isinstance(snapshot, dict):
         return []
     mode = str(snapshot.get("mode", "unknown") or "unknown")
-    redis = snapshot.get("redis") if isinstance(snapshot.get("redis"), dict) else {}
-    disabled = (
-        snapshot.get("disabled_capabilities")
-        if isinstance(snapshot.get("disabled_capabilities"), list)
-        else []
-    )
+    raw_redis = snapshot.get("redis")
+    redis: dict[str, Any] = raw_redis if isinstance(raw_redis, dict) else {}
+    raw_disabled = snapshot.get("disabled_capabilities")
+    disabled: list[Any] = raw_disabled if isinstance(raw_disabled, list) else []
     lines = [
         "",
         "🧩 **运行模式**",

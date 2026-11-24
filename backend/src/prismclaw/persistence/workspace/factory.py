@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.persistence.workspace.base import WorkspaceStore
 
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
+    from prismclaw.infra.settings import Settings
+
 
 def create_workspace_store(
-    settings: Any,
-    redis_client: Any = None,
+    settings: Settings,
+    redis_client: aioredis.Redis | None = None,
 ) -> WorkspaceStore:
     if redis_client is None:
         raise ValueError(

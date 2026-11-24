@@ -3,36 +3,42 @@
 替代不可安装的 SrtPolicy，使用 Linux namespace + seccomp 内核级强制隔离。
 per-user workspace 隔离：每个用户只看到自己的 /workspace。
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING
 
+from prismclaw.engine.security.sandbox.policy import SandboxBackend
+from prismclaw.engine.security.sandbox.roots import runtime_readonly_roots
 from prismclaw.schema.config.config import SandboxConfig
 from prismclaw.schema.content.workspace import SandboxTier
-from prismclaw.engine.security.sandbox.roots import runtime_readonly_roots
+
+if TYPE_CHECKING:
+    from mcp import StdioServerParameters
 
 logger = logging.getLogger(__name__)
 
 # ── 硬编码安全底线：永不挂载到沙箱中的路径 ──────────────────────────────
 
 _HARDCODED_DENY_BIND: tuple[str, ...] = (
-    "/root",             # root 家目录
-    "/home",             # 所有用户家目录（工作区通过 --bind 单独挂载）
-    "/etc/ssh",          # SSH 配置
-    "/etc/shadow",       # 密码文件
+    "/root",  # root 家目录
+    "/home",  # 所有用户家目录（工作区通过 --bind 单独挂载）
+    "/etc/ssh",  # SSH 配置
+    "/etc/shadow",  # 密码文件
     "/etc/ssl/private",  # TLS 私钥
-    "/var/lib/docker",   # Docker 数据
+    "/var/lib/docker",  # Docker 数据
     "/var/lib/kubelet",  # K8s 数据
 )
 
 
-class BwrapBinaryNotFound(RuntimeError):
+class BwrapBinaryNotFoundError(RuntimeError):
     """Raised when ``bwrap`` is required but missing on $PATH."""
 
 
@@ -71,7 +77,7 @@ def _proc_mount_supported() -> bool:
     return probe.returncode == 0
 
 
-class BwrapCommandTooLong(RuntimeError):
+class BwrapCommandTooLongError(RuntimeError):
     """Raised when a bash command would exceed OS ARG_MAX after bwrap wrapping."""
 
 
@@ -85,13 +91,13 @@ class BwrapPolicy:
     - validate_path:    路径校验（原 srt_executor.SrtPolicy 能力合并）
     """
 
-    backend: Literal["bwrap"] = "bwrap"
+    backend: SandboxBackend = "bwrap"
 
     def __init__(self, *, settings: SandboxConfig) -> None:
         self._settings = settings
         path = shutil.which("bwrap")
         if path is None:
-            raise BwrapBinaryNotFound(
+            raise BwrapBinaryNotFoundError(
                 "bwrap binary not found on $PATH; install via "
                 "'apt install bubblewrap' (Debian/Ubuntu) or "
                 "'yum install bubblewrap' (RHEL/CentOS)"
@@ -105,9 +111,7 @@ class BwrapPolicy:
     def binary_path(self) -> str:
         return self._binary_path
 
-    def wrap_bash_command(
-        self, cmd: str, ctx: Any
-    ) -> tuple[str, list[str]]:
+    def wrap_bash_command(self, cmd: str, ctx: object) -> tuple[str, list[str]]:
         """包装 bash 命令，返回 (bwrap_path, [args..., /bin/sh, -c, cmd])。
 
         ctx 需包含 workspace_root 和 sandbox_tier 属性。
@@ -132,10 +136,10 @@ class BwrapPolicy:
 
     def wrap_mcp_stdio(
         self,
-        params: Any,
+        params: StdioServerParameters,
         server_name: str,
-        sandbox_config: Any,
-    ) -> Any:
+        sandbox_config: Mapping[str, object],
+    ) -> StdioServerParameters:
         """包装 MCP stdio 进程，在 bwrap 沙箱中启动。"""
         workspace_root = "/tmp"
         tier = SandboxTier.STANDARD
@@ -202,9 +206,7 @@ class BwrapPolicy:
 
     # ── 路径校验 ──────────────────────────────────────────────────────
 
-    def validate_path(
-        self, path: str, tier: SandboxTier, workspace_root: str
-    ) -> str | None:
+    def validate_path(self, path: str, tier: SandboxTier, workspace_root: str) -> str | None:
         """路径校验（原 srt_executor.SrtPolicy 能力合并）。
 
         返回 None=允许，str=拒绝原因。
@@ -245,9 +247,7 @@ class BwrapPolicy:
 
     # ── 核心：per-user bwrap 参数生成 ─────────────────────────────────
 
-    def _build_bwrap_args(
-        self, workspace_root: str, tier: SandboxTier
-    ) -> list[str]:
+    def _build_bwrap_args(self, workspace_root: str, tier: SandboxTier) -> list[str]:
         # 安全断言：workspace_root 不得落在敏感路径内
         try:
             resolved_ws = Path(workspace_root).resolve()
@@ -277,61 +277,82 @@ class BwrapPolicy:
             if root.name == "assets":
                 # 沙箱内 HOME=/workspace；把 assets 同时映射过去，让文档与技能
                 # 脚本里 `~/.prismclaw/assets/...` 的写法在隔离环境中仍可解析。
-                runtime_binds.extend(
-                    ["--ro-bind", str(root), "/workspace/.prismclaw/assets"]
-                )
+                runtime_binds.extend(["--ro-bind", str(root), "/workspace/.prismclaw/assets"])
 
         args = [
             # ── 系统目录只读挂载 ──
-            "--ro-bind", "/usr", "/usr",
-            "--ro-bind", "/lib", "/lib",
-            "--ro-bind", "/bin", "/bin",
-            "--ro-bind", "/sbin", "/sbin",
-
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--ro-bind",
+            "/lib",
+            "/lib",
+            "--ro-bind",
+            "/bin",
+            "/bin",
+            "--ro-bind",
+            "/sbin",
+            "/sbin",
             # ── 必要的系统配置文件（只读）──
-            "--ro-bind", "/etc/resolv.conf", "/etc/resolv.conf",
-            "--ro-bind", "/etc/ssl", "/etc/ssl",
-            "--ro-bind", "/etc/passwd", "/etc/passwd",
-            "--ro-bind", "/etc/group", "/etc/group",
-            "--ro-bind", "/etc/hosts", "/etc/hosts",
-            "--ro-bind", "/etc/nsswitch.conf", "/etc/nsswitch.conf",
-            "--ro-bind", "/etc/ld.so.cache", "/etc/ld.so.cache",
+            "--ro-bind",
+            "/etc/resolv.conf",
+            "/etc/resolv.conf",
+            "--ro-bind",
+            "/etc/ssl",
+            "/etc/ssl",
+            "--ro-bind",
+            "/etc/passwd",
+            "/etc/passwd",
+            "--ro-bind",
+            "/etc/group",
+            "/etc/group",
+            "--ro-bind",
+            "/etc/hosts",
+            "/etc/hosts",
+            "--ro-bind",
+            "/etc/nsswitch.conf",
+            "/etc/nsswitch.conf",
+            "--ro-bind",
+            "/etc/ld.so.cache",
+            "/etc/ld.so.cache",
         ]
 
         # lib64（部分 Linux 发行版需要）
         if os.path.isdir("/lib64"):
             args.extend(["--ro-bind", "/lib64", "/lib64"])
 
-        args.extend([
-            # ── 用户工作区读写挂载 ──
-            "--bind", workspace_root, "/workspace",
-
-            # ── 运行时卷与静态能力（只读，挂在 workspace 之后以覆盖嵌套路径）──
-            *runtime_binds,
-
-            # ── 隔离临时目录 ──
-            "--tmpfs", "/tmp",
-            "--tmpfs", "/run/user",
-
-            # ── 虚拟文件系统 ──
-            # Docker（含 Desktop 的 LinuxKit）可能拒绝在 sandbox 内 mount proc，
-            # 实测报 "Can't mount proc on /newroot/proc: Operation not permitted"。
-            # 不支持时退回容器自身的只读 /proc 视图：可见性不变，但不会让每条
-            # 命令都失败。
-            *(["--proc", "/proc"] if _proc_mount_supported() else []),
-            "--dev", "/dev",
-
-            # ── 进程隔离 ──
-            "--unshare-pid",
-            "--die-with-parent",
-            "--chdir", "/workspace",
-
-            # ── 网络隔离：STRICT 断网，其余共享 ──
-            *(["--unshare-net"] if tier == SandboxTier.STRICT else ["--share-net"]),
-
-            # ── 环境变量清零 ──
-            "--clearenv",
-        ])
+        args.extend(
+            [
+                # ── 用户工作区读写挂载 ──
+                "--bind",
+                workspace_root,
+                "/workspace",
+                # ── 运行时卷与静态能力（只读，挂在 workspace 之后以覆盖嵌套路径）──
+                *runtime_binds,
+                # ── 隔离临时目录 ──
+                "--tmpfs",
+                "/tmp",
+                "--tmpfs",
+                "/run/user",
+                # ── 虚拟文件系统 ──
+                # Docker（含 Desktop 的 LinuxKit）可能拒绝在 sandbox 内 mount proc，
+                # 实测报 "Can't mount proc on /newroot/proc: Operation not permitted"。
+                # 不支持时退回容器自身的只读 /proc 视图：可见性不变，但不会让每条
+                # 命令都失败。
+                *(["--proc", "/proc"] if _proc_mount_supported() else []),
+                "--dev",
+                "/dev",
+                # ── 进程隔离 ──
+                "--unshare-pid",
+                "--die-with-parent",
+                "--chdir",
+                "/workspace",
+                # ── 网络隔离：STRICT 断网，其余共享 ──
+                *(["--unshare-net"] if tier == SandboxTier.STRICT else ["--share-net"]),
+                # ── 环境变量清零 ──
+                "--clearenv",
+            ]
+        )
 
         # ── 白名单环境变量注入 ──
         args.extend(["--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin"])

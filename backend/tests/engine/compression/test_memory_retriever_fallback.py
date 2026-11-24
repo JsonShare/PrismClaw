@@ -31,14 +31,20 @@ class _FakeStore:
         self.list_mode = "ok"  # ok | hang
         self.entries: list[MemoryEntry] = [
             MemoryEntry(
-                id="e1", layer="L2", type="fact",
+                id="e1",
+                layer="L2",
+                type="fact",
                 content="kafka 部署需要先迁移 schema",
-                created_at=1.0, updated_at=1000.0,
+                created_at=1.0,
+                updated_at=1000.0,
             ),
             MemoryEntry(
-                id="e2", layer="L3", type="procedure",
+                id="e2",
+                layer="L3",
+                type="procedure",
                 content="完全无关的另一条记忆",
-                created_at=1.0, updated_at=900.0,
+                created_at=1.0,
+                updated_at=900.0,
             ),
         ]
 

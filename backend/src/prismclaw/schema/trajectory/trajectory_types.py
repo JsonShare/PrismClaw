@@ -4,11 +4,12 @@ Lives in contracts (L0) so that Protocol definitions can reference
 RequestAuditRecord, TrajectoryCell, etc. without depending on
 engine (L2) or persistence (L3).  See SDD §5.1.3.
 """
+
 from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import (
     BaseModel,
@@ -18,10 +19,10 @@ from pydantic import (
     model_validator,
 )
 
-
 # ---------------------------------------------------------------------------
 # Per-iteration audit record (4+1 layers side-by-side)
 # ---------------------------------------------------------------------------
+
 
 class RequestAuditRecord(BaseModel):
     """Strict schema-validated four-layer snapshot.
@@ -60,7 +61,7 @@ class RequestAuditRecord(BaseModel):
     projector_appended_msg_count: int = 0
     projector_user_message_preview: str | None = None
     projector_tool_results_preview: tuple[str, ...] = ()
-    projector_meta: dict = Field(default_factory=dict)
+    projector_meta: dict[str, Any] = Field(default_factory=dict)
 
     # ── ② AssembleCoordinator.assemble() entry messages ────────────────
     assemble_entry_msg_count: int = 0
@@ -120,16 +121,34 @@ class RequestAuditRecord(BaseModel):
     @model_validator(mode="after")
     def _consistent_counts(self) -> RequestAuditRecord:
         n = self.projector_input_order_count
-        if len(self.projector_input_entry_types) > 0 and len(self.projector_input_entry_types) != n:
+        if len(self.projector_input_entry_types) > 0 and len(
+            self.projector_input_entry_types
+        ) != n:
             raise ValueError(
-                f"projector_input: order_count={n} but len(entry_types)={len(self.projector_input_entry_types)}. "
+                f"projector_input: order_count={n} but "
+                f"len(entry_types)={len(self.projector_input_entry_types)}. "
                 "Rejecting to avoid false 'tree had X entries' conclusions."
             )
         four_layers = (
             ("projector_msg_count", "projector_msg_roles", "projector_head", "projector_tail"),
-            ("assemble_entry_msg_count", "assemble_entry_roles", "assemble_entry_head", "assemble_entry_tail"),
-            ("pipeline_out_msg_count", "pipeline_out_roles", "pipeline_out_head", "pipeline_out_tail"),
-            ("packer_final_msg_count", "packer_final_roles", "packer_final_head", "packer_final_tail"),
+            (
+                "assemble_entry_msg_count",
+                "assemble_entry_roles",
+                "assemble_entry_head",
+                "assemble_entry_tail",
+            ),
+            (
+                "pipeline_out_msg_count",
+                "pipeline_out_roles",
+                "pipeline_out_head",
+                "pipeline_out_tail",
+            ),
+            (
+                "packer_final_msg_count",
+                "packer_final_roles",
+                "packer_final_head",
+                "packer_final_tail",
+            ),
         )
         for cnt_field, roles_field, head_field, tail_field in four_layers:
             n = getattr(self, cnt_field)
@@ -145,10 +164,7 @@ class RequestAuditRecord(BaseModel):
                 raise ValueError(f"{roles_field}: head/tail longer than count={n}")
         if self.total_ms is not None and self.total_ms < 0:
             raise ValueError("total_ms cannot be negative")
-        if (
-            self.completed_at_ms is not None
-            and self.started_at_ms > self.completed_at_ms
-        ):
+        if self.completed_at_ms is not None and self.started_at_ms > self.completed_at_ms:
             raise ValueError("started_at_ms > completed_at_ms")
         return self
 
@@ -169,9 +185,15 @@ class RequestAuditRecord(BaseModel):
             )
         return v
 
-    @field_validator("error", "finish_reason", "llm_provider", "llm_model",
-                     "packer_final_model", "packer_final_system_prompt_sha1_16",
-                     "assemble_entry_meta_values_hash")
+    @field_validator(
+        "error",
+        "finish_reason",
+        "llm_provider",
+        "llm_model",
+        "packer_final_model",
+        "packer_final_system_prompt_sha1_16",
+        "assemble_entry_meta_values_hash",
+    )
     @classmethod
     def _cap_short(cls, v: str | None) -> str | None:
         if v is None:
@@ -210,6 +232,7 @@ class RequestAuditRecord(BaseModel):
 # Snapshot (session aggregate)
 # ---------------------------------------------------------------------------
 
+
 class TrajectorySnapshotMeta(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -234,8 +257,10 @@ class TrajectorySnapshot(BaseModel):
 # 对齐 per-conversation-event cell model
 # ---------------------------------------------------------------------------
 
+
 class TrajectoryCell(BaseModel):
     """One trajectory cell = one conversation-tree node."""
+
     model_config = ConfigDict(extra="forbid")
 
     cell_id: str
@@ -275,6 +300,7 @@ class TrajectoryCell(BaseModel):
 
 class TrajectoryCellSnapshot(BaseModel):
     """API response shape for GET /sessions/{id}/trajectory/cells."""
+
     model_config = {"extra": "forbid"}
 
     session_id: str
@@ -303,10 +329,7 @@ class TrajectoryProjectionState:
 
     def is_dirty(self) -> bool:
         """True iff view() output has changed since last mark_clean()."""
-        return (
-            len(self.records) != self.last_flushed_count
-            or self.pending is not None
-        )
+        return len(self.records) != self.last_flushed_count or self.pending is not None
 
     def mark_clean(self) -> None:
         self.last_flushed_count = len(self.records)
@@ -334,13 +357,9 @@ def _is_gap_record(r: RequestAuditRecord) -> bool:
     """A record is 'gapped' if it's missing at least one expected layer."""
     if r.status in {"running", "orphaned"}:
         return False
-    if not r.assemble_entry_msg_count:
-        return True
-    if not r.pipeline_out_msg_count:
-        return True
-    if not r.packer_final_msg_count:
-        return True
-    return False
+    return not (
+        r.assemble_entry_msg_count and r.pipeline_out_msg_count and r.packer_final_msg_count
+    )
 
 
 def view(
@@ -367,9 +386,8 @@ def view(
             key=lambda r: (-(r.turn or -1), r.iteration),
         )
 
-    if limit is not None and limit > 0:
-        if limit < len(sorted_records):
-            sorted_records = sorted_records[:limit]
+    if limit is not None and 0 < limit < len(sorted_records):
+        sorted_records = sorted_records[:limit]
 
     total = len(sorted_records)
     gap_cnt = sum(1 for r in sorted_records if _is_gap_record(r))

@@ -1,4 +1,5 @@
 """批 4b-2：历史压缩触发 + 工具数组 append_only + 图像 token 估计测试。"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -11,11 +12,15 @@ def test_absolute_zero_drift():
     orch = BudgetOrchestrator()
     # 判定以 history_tokens>history_budget 为准，last_prompt_tokens 不参与判定。
     a = orch.assess_history_compaction(
-        history_tokens=12000, history_budget=10000, last_prompt_tokens=999999,
+        history_tokens=12000,
+        history_budget=10000,
+        last_prompt_tokens=999999,
     )
     assert a.should_compact is True
     b = orch.assess_history_compaction(
-        history_tokens=5000, history_budget=10000, last_prompt_tokens=999999,
+        history_tokens=5000,
+        history_budget=10000,
+        last_prompt_tokens=999999,
     )
     assert b.should_compact is False
     c = orch.assess_history_compaction(history_tokens=5000, history_budget=0)

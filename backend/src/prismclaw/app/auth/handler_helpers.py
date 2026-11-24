@@ -22,7 +22,7 @@ def register_default_user_profile_store(store: UserProfileStore | None) -> None:
 def _build_default_store(
     *,
     channel: Literal["web"],
-    redis_client: "Redis | None",
+    redis_client: Redis | None,
     user_configs: list[Any],
     open_id_attr: str = "id",
 ) -> UserProfileStore:
@@ -48,7 +48,7 @@ def _build_default_store(
                 user_id=str(user_id),
             )
         )
-    json_source = {channel: profiles} if profiles else {}
+    json_source: dict[str, list[UserProfile]] = {channel: profiles} if profiles else {}
     return RedisJsonStore(redis_client=redis_client, json_source=json_source)
 
 
@@ -56,7 +56,7 @@ async def resolve_profile(
     *,
     channel: Literal["web"],
     user_id: str,
-    redis_client: "Redis | None",
+    redis_client: Redis | None,
     store: UserProfileStore | None = None,
 ) -> UserProfile:
     """Look up the user's profile."""

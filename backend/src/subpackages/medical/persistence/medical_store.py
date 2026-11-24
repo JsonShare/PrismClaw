@@ -6,10 +6,12 @@
 - pc_medical_patients          患者档案 + 画像（合并原 patients + patients_extended）
 - pc_medical_patient_reports   统一临床文档表（合并原 patient_reports + processing_tasks + records）
 - pc_medical_consultations     咨询会话登记（域侧记录，核心不感知）
-- v_patient_timeline           派生视图（从 patient_reports 聚合，不存表；get_timeline 直接查询 patient_reports）
+- v_patient_timeline           派生视图（从 patient_reports 聚合，不存表；
+                               get_timeline 直接查询 patient_reports）
 
 KB 三表由独立的 KbStore 承载（见 kb_store.py）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -73,7 +75,11 @@ class MedicalStore:
     # ── 患者操作 ─────────────────────────────────────────────
 
     async def upsert_patient(
-        self, patient_id: str, data: dict[str, Any], *, user_id: str,
+        self,
+        patient_id: str,
+        data: dict[str, Any],
+        *,
+        user_id: str,
     ) -> None:
         """创建或更新患者信息（合并档案 + 画像字段）。
 
@@ -82,9 +88,7 @@ class MedicalStore:
         now = datetime.utcnow()
         values = {k: data[k] for k in PATIENT_COLUMNS if k in data}
         async with self._engine.begin() as conn:
-            existing = await conn.execute(
-                select(patients.c.id).where(patients.c.id == patient_id)
-            )
+            existing = await conn.execute(select(patients.c.id).where(patients.c.id == patient_id))
             if existing.fetchone():
                 values["update_at"] = now
                 values["update_by"] = user_id
@@ -142,9 +146,7 @@ class MedicalStore:
         """按 ID 查询患者信息（逻辑删除的记录不可见）。"""
         async with self._engine.connect() as conn:
             result = await conn.execute(
-                select(patients).where(
-                    (patients.c.id == patient_id) & (patients.c.is_deleted == 0)
-                )
+                select(patients).where((patients.c.id == patient_id) & (patients.c.is_deleted == 0))
             )
             row = result.fetchone()
             return dict(row_to_dict(row)) if row else None
@@ -219,9 +221,7 @@ class MedicalStore:
     ) -> int:
         """患者总数（与 list_patients 同一套过滤条件），供分页算总页数。"""
         async with self._engine.connect() as conn:
-            stmt = select(func.count()).select_from(patients).where(
-                patients.c.is_deleted == 0
-            )
+            stmt = select(func.count()).select_from(patients).where(patients.c.is_deleted == 0)
             if create_by:
                 stmt = stmt.where(patients.c.create_by == create_by)
             if search:
@@ -236,9 +236,7 @@ class MedicalStore:
                     stmt = stmt.where(patients.c.tags_json.cast(String).ilike(f'%"{tag}"%'))
             return (await conn.execute(stmt)).scalar() or 0
 
-    async def count_reports_by_patients(
-        self, patient_ids: list[str]
-    ) -> dict[str, int]:
+    async def count_reports_by_patients(self, patient_ids: list[str]) -> dict[str, int]:
         """按患者 ID 批量统计临床文档数（逻辑删除的不计入）。
 
         返回 {patient_id: count}，未出现在结果中的患者视为 0。
@@ -262,24 +260,22 @@ class MedicalStore:
     async def get_stats(self, *, create_by: str | None = None) -> dict[str, Any]:
         """统计条指标。create_by: 行级过滤，仅统计该用户的患者。"""
         async with self._engine.connect() as conn:
-            patient_where = (patients.c.is_deleted == 0)
+            patient_where = patients.c.is_deleted == 0
             if create_by:
                 patient_where = patient_where & (patients.c.create_by == create_by)
 
             total_patients = (
-                await conn.execute(
-                    select(func.count()).select_from(patients).where(patient_where)
-                )
+                await conn.execute(select(func.count()).select_from(patients).where(patient_where))
             ).scalar() or 0
             high_risk = (
                 await conn.execute(
-                    select(func.count()).select_from(patients).where(
-                        patient_where & (patients.c.risk_level == "高危")
-                    )
+                    select(func.count())
+                    .select_from(patients)
+                    .where(patient_where & (patients.c.risk_level == "高危"))
                 )
             ).scalar() or 0
 
-            report_where = (patient_reports.c.is_deleted == 0)
+            report_where = patient_reports.c.is_deleted == 0
             if create_by:
                 report_where = report_where & (patient_reports.c.create_by == create_by)
 
@@ -290,16 +286,22 @@ class MedicalStore:
             ).scalar() or 0
             parsed = (
                 await conn.execute(
-                    select(func.count()).select_from(patient_reports).where(
-                        report_where & (patient_reports.c.status == "已解析")
-                    )
+                    select(func.count())
+                    .select_from(patient_reports)
+                    .where(report_where & (patient_reports.c.status == "已解析"))
                 )
             ).scalar() or 0
             parsing = (
                 await conn.execute(
-                    select(func.count()).select_from(patient_reports).where(
+                    select(func.count())
+                    .select_from(patient_reports)
+                    .where(
                         report_where
-                        & (patient_reports.c.status.in_(["排队中", "OCR识别", "结构化提取", "语音转写"]))
+                        & (
+                            patient_reports.c.status.in_(
+                                ["排队中", "OCR识别", "结构化提取", "语音转写"]
+                            )
+                        )
                     )
                 )
             ).scalar() or 0
@@ -451,7 +453,9 @@ class MedicalStore:
             return items, total
 
     async def get_queue(
-        self, *, create_by: str | None = None,
+        self,
+        *,
+        create_by: str | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, int]]:
         """获取处理队列（非终态文档）+ 汇总。
 
@@ -461,7 +465,7 @@ class MedicalStore:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         async with self._engine.connect() as conn:
-            report_where = (patient_reports.c.is_deleted == 0)
+            report_where = patient_reports.c.is_deleted == 0
             if create_by:
                 report_where = report_where & (patient_reports.c.create_by == create_by)
 
@@ -469,10 +473,7 @@ class MedicalStore:
             active_statuses = ["排队中", "OCR识别", "结构化提取", "语音转写"]
             active_stmt = (
                 select(patient_reports)
-                .where(
-                    report_where
-                    & patient_reports.c.status.in_(active_statuses)
-                )
+                .where(report_where & patient_reports.c.status.in_(active_statuses))
                 .order_by(patient_reports.c.create_at.desc())
             )
             active_result = await conn.execute(active_stmt)
@@ -481,7 +482,9 @@ class MedicalStore:
             # 今日汇总
             done_today = (
                 await conn.execute(
-                    select(func.count()).select_from(patient_reports).where(
+                    select(func.count())
+                    .select_from(patient_reports)
+                    .where(
                         report_where
                         & (patient_reports.c.status == "已解析")
                         & (patient_reports.c.finished_at >= today_start)
@@ -491,26 +494,26 @@ class MedicalStore:
 
             failed = (
                 await conn.execute(
-                    select(func.count()).select_from(patient_reports).where(
-                        report_where
-                        & (patient_reports.c.status == "失败")
-                    )
+                    select(func.count())
+                    .select_from(patient_reports)
+                    .where(report_where & (patient_reports.c.status == "失败"))
                 )
             ).scalar() or 0
 
             retried = (
                 await conn.execute(
-                    select(func.count()).select_from(patient_reports).where(
-                        report_where
-                        & (patient_reports.c.retry_count > 0)
-                    )
+                    select(func.count())
+                    .select_from(patient_reports)
+                    .where(report_where & (patient_reports.c.retry_count > 0))
                 )
             ).scalar() or 0
 
             # 待归档：已解析但未归属到任何患者
             unassigned = (
                 await conn.execute(
-                    select(func.count()).select_from(patient_reports).where(
+                    select(func.count())
+                    .select_from(patient_reports)
+                    .where(
                         report_where
                         & (patient_reports.c.status == "已解析")
                         & (patient_reports.c.patient_id.is_(None))
@@ -518,11 +521,19 @@ class MedicalStore:
                 )
             ).scalar() or 0
 
-        summary = {"doneToday": done_today, "failed": failed, "retried": retried, "unassigned": unassigned}
+        summary = {
+            "doneToday": done_today,
+            "failed": failed,
+            "retried": retried,
+            "unassigned": unassigned,
+        }
         return tasks, summary
 
     async def search_reports(
-        self, criteria: dict[str, Any], limit: int = 20, offset: int = 0,
+        self,
+        criteria: dict[str, Any],
+        limit: int = 20,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         """条件查询文档列表（支持 patient_id / diagnosis / report_type）。"""
         async with self._engine.connect() as conn:
@@ -558,18 +569,27 @@ class MedicalStore:
             return [dict(row_to_dict(row)) for row in result.fetchall()]
 
     async def list_patient_reports(
-        self, patient_id: str, limit: int = 100, offset: int = 0,
+        self,
+        patient_id: str,
+        limit: int = 100,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         """某患者的临床文档（时间线「报告解析」卡用）。
 
         limit 默认 100；分页场景调用方需显式传 limit/offset。
         """
         return await self.search_reports(
-            {"patient_id": patient_id}, limit=limit, offset=offset,
+            {"patient_id": patient_id},
+            limit=limit,
+            offset=offset,
         )
 
     async def update_report(
-        self, report_id: str, data: dict[str, Any], *, user_id: str,
+        self,
+        report_id: str,
+        data: dict[str, Any],
+        *,
+        user_id: str,
     ) -> None:
         """更新文档记录。user_id: 写入 update_by。"""
         now = datetime.utcnow()
@@ -584,7 +604,10 @@ class MedicalStore:
         logger.info("临床文档更新成功: %s", report_id)
 
     async def delete_report(
-        self, report_id: str, *, user_id: str,
+        self,
+        report_id: str,
+        *,
+        user_id: str,
     ) -> bool:
         """逻辑删除文档（is_deleted = 1）。user_id: 写入 update_by。"""
         now = datetime.utcnow()
@@ -601,9 +624,7 @@ class MedicalStore:
 
     # ── 时间线（派生，不存表）─────────────────────────────────────
 
-    async def get_timeline(
-        self, patient_id: str, limit: int = 50
-    ) -> list[dict[str, Any]]:
+    async def get_timeline(self, patient_id: str, limit: int = 50) -> list[dict[str, Any]]:
         """患者时间线 = patient_reports 按患者聚合投影（event_id/type/date/title/detail）。"""
         async with self._engine.connect() as conn:
             stmt = (

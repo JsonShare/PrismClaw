@@ -4,8 +4,9 @@ import copy
 import hashlib
 import json
 from dataclasses import asdict, is_dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from prismclaw.engine.context.projection_models import ProjectionMessageSet
 from prismclaw.engine.execution.query.state import (
     QueryLoopState,
     QueryLoopTracking,
@@ -13,10 +14,20 @@ from prismclaw.engine.execution.query.state import (
     QueryView,
     QueryViewDiagnostics,
 )
-from prismclaw.engine.context.projection_models import ProjectionMessageSet
 from prismclaw.schema.agent.session import SystemReminderProjection
 
-_UNSET = object()
+if TYPE_CHECKING:
+    from prismclaw.engine.compression.orchestrator import CompressionPreparation
+    from prismclaw.engine.state.tool_loop_state import ToolLoopState
+
+
+class _UnsetType:
+    """哨兵类型：区分「未传该参数」与「显式传 None」。"""
+
+    __slots__ = ()
+
+
+_UNSET = _UnsetType()
 
 
 def build_query_loop_state(
@@ -24,9 +35,9 @@ def build_query_loop_state(
     source_messages: ProjectionMessageSet,
     messages_for_query: ProjectionMessageSet | None = None,
     runtime_context: QueryRuntimeContext | None = None,
-    tool_loop_state: Any | None = None,
-    compression_state: Any | None = None,
-    attachment_state: Any | None = None,
+    tool_loop_state: ToolLoopState | None = None,
+    compression_state: CompressionPreparation | None = None,
+    attachment_state: dict[str, Any] | None = None,
 ) -> QueryLoopState:
     source_snapshot = _clone_message_set(source_messages)
     query_snapshot = _clone_message_set(messages_for_query or source_messages)
@@ -73,41 +84,41 @@ def build_query_loop_state(
 def rebuild_query_loop_state(
     query_loop_state: QueryLoopState,
     *,
-    source_messages: ProjectionMessageSet | object = _UNSET,
-    messages_for_query: ProjectionMessageSet | object = _UNSET,
-    runtime_context: QueryRuntimeContext | object = _UNSET,
-    tool_loop_state: Any | object = _UNSET,
-    compression_state: Any = _UNSET,
-    attachment_state: Any = _UNSET,
+    source_messages: ProjectionMessageSet | _UnsetType = _UNSET,
+    messages_for_query: ProjectionMessageSet | None | _UnsetType = _UNSET,
+    runtime_context: QueryRuntimeContext | None | _UnsetType = _UNSET,
+    tool_loop_state: ToolLoopState | None | _UnsetType = _UNSET,
+    compression_state: CompressionPreparation | None | _UnsetType = _UNSET,
+    attachment_state: dict[str, Any] | None | _UnsetType = _UNSET,
 ) -> QueryLoopState:
     effective_source_messages = (
         query_loop_state.query_view.source_messages
-        if source_messages is _UNSET
+        if isinstance(source_messages, _UnsetType)
         else source_messages
     )
     effective_messages_for_query = (
         query_loop_state.query_view.messages_for_query
-        if messages_for_query is _UNSET
+        if isinstance(messages_for_query, _UnsetType)
         else messages_for_query
     )
     effective_runtime_context = (
         query_loop_state.runtime_context
-        if runtime_context is _UNSET
+        if isinstance(runtime_context, _UnsetType)
         else runtime_context
     )
     effective_tool_loop_state = (
         query_loop_state.tracking.tool_loop_state
-        if tool_loop_state is _UNSET
+        if isinstance(tool_loop_state, _UnsetType)
         else tool_loop_state
     )
     effective_compression_state = (
         query_loop_state.query_view.compression_state
-        if compression_state is _UNSET
+        if isinstance(compression_state, _UnsetType)
         else compression_state
     )
     effective_attachment_state = (
         query_loop_state.query_view.attachment_state
-        if attachment_state is _UNSET
+        if isinstance(attachment_state, _UnsetType)
         else attachment_state
     )
     return build_query_loop_state(
@@ -136,7 +147,7 @@ def _message_set_payload(message_set: ProjectionMessageSet) -> dict[str, Any]:
     }
 
 
-def _stable_digest(payload: Any) -> str:
+def _stable_digest(payload: object) -> str:
     normalized = json.dumps(
         _normalize_digest_payload(payload),
         sort_keys=True,
@@ -146,7 +157,7 @@ def _stable_digest(payload: Any) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def _normalize_digest_payload(payload: Any) -> Any:
+def _normalize_digest_payload(payload: object) -> object:
     if payload is None or isinstance(payload, str | int | float | bool):
         return payload
     if isinstance(payload, dict):
@@ -160,7 +171,9 @@ def _normalize_digest_payload(payload: Any) -> Any:
         normalized_items = [_normalize_digest_payload(item) for item in payload]
         return sorted(
             normalized_items,
-            key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
+            key=lambda item: json.dumps(
+                item, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            ),
         )
     if isinstance(payload, SystemReminderProjection):
         return {
@@ -170,7 +183,7 @@ def _normalize_digest_payload(payload: Any) -> Any:
     model_dump = getattr(payload, "model_dump", None)
     if callable(model_dump):
         return _normalize_digest_payload(model_dump(mode="python"))
-    if is_dataclass(payload):
+    if is_dataclass(payload) and not isinstance(payload, type):
         return _normalize_digest_payload(asdict(payload))
     if hasattr(payload, "__dict__"):
         return {

@@ -4,7 +4,8 @@ import secrets
 
 import redis.asyncio as aioredis
 
-from prismclaw.schema.shared.exceptions import LockAcquireError
+from prismclaw.infra.redis import resolve
+from prismclaw.schema.shared.exceptions import LockAcquireError as LockAcquireError
 
 _RELEASE_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
@@ -68,10 +69,10 @@ class RedisLockManager:
 
     async def release(self, key: str, token: str) -> bool:
         full = self._full_key(key)
-        result = await self._client.eval(_RELEASE_SCRIPT, 1, full, token)
+        result = await resolve(self._client.eval(_RELEASE_SCRIPT, 1, full, token))
         return bool(result)
 
     async def renew(self, key: str, token: str, ttl_ms: int = 30_000) -> bool:
         full = self._full_key(key)
-        result = await self._client.eval(_RENEW_SCRIPT, 1, full, token, str(ttl_ms))
+        result = await resolve(self._client.eval(_RENEW_SCRIPT, 1, full, token, str(ttl_ms)))
         return bool(result)

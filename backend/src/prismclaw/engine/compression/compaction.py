@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any
 
 from prismclaw.schema.config import (
     DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
     DEFAULT_KEEP_RECENT_TOKENS,
     DEFAULT_THRESHOLD,
 )
+
 
 def _image_token_estimate() -> int:
     """单张内联图片的 token 估算——唯一来源：models.yaml 的 vision.tokens_per_image。
@@ -24,16 +25,14 @@ def _image_token_estimate() -> int:
     except Exception:
         return 1024
 
-_T = TypeVar("_T")
 
-
-async def compact_with_safety_timeout(
-    fn: Callable[[], Awaitable[_T]],
+async def compact_with_safety_timeout[T](
+    fn: Callable[[], Awaitable[T]],
     *,
     timeout_s: float = DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
     abort_event: asyncio.Event | None = None,
     on_cancel: Callable[[], None] | None = None,
-) -> _T:
+) -> T:
     from prismclaw.engine.foundation.runtime_util import with_safety_timeout
 
     return await with_safety_timeout(
@@ -59,7 +58,7 @@ def estimate_message_tokens(msg: dict[str, Any]) -> int:
     return count_message(msg, image_tokens_each=_image_token_estimate())
 
 
-def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
+def estimate_messages_tokens(messages: Sequence[Mapping[str, Any]]) -> int:
     from prismclaw.token_counting import count_messages
 
     return count_messages(messages, image_tokens_each=_image_token_estimate())
@@ -156,12 +155,12 @@ def extract_identifiers(text: str) -> set[str]:
     """Extract physical identifiers (paths, UUIDs/Hashes) from text for immune preservation."""
     identifiers = set()
     # Match absolute paths
-    path_matches = re.finditer(r'(/(?:[\w.-]+/)*[\w.-]+\.\w+)', text)
+    path_matches = re.finditer(r"(/(?:[\w.-]+/)*[\w.-]+\.\w+)", text)
     for m in path_matches:
         identifiers.add(m.group(1))
 
     # Match UUIDs/Hashes (8 to 64 hex chars bounded by word boundaries)
-    hash_matches = re.finditer(r'\b[0-9a-fA-F]{8,64}\b', text)
+    hash_matches = re.finditer(r"\b[0-9a-fA-F]{8,64}\b", text)
     for m in hash_matches:
         # filter out simple numbers
         if not m.group(0).isdigit():
@@ -188,10 +187,7 @@ def build_summarizer_payload(messages: list[dict[str, Any]]) -> list[dict[str, A
             )
 
     transcript = "\n".join(transcript_lines) if transcript_lines else "(empty)"
-    user_prompt = (
-        "请总结以下对话，使助手能够在不丢失上下文的情况下继续：\n\n"
-        + transcript
-    )
+    user_prompt = "请总结以下对话，使助手能够在不丢失上下文的情况下继续：\n\n" + transcript
     return [
         {"role": "system", "content": SUMMARIZER_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},

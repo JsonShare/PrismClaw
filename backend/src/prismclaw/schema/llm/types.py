@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Protocol
+from typing import Any, Protocol
+
+from prismclaw.schema.llm.request import PackedLLMRequest
 
 
 @dataclass
@@ -17,6 +21,7 @@ class LLMUsage:
 @dataclass
 class LLMStreamChunk:
     """LLM 流式输出块（纯数据）。"""
+
     text_delta: str = ""
     reasoning_delta: str = ""
     tool_call_deltas: list[dict[str, Any]] = field(default_factory=list)
@@ -45,29 +50,29 @@ class LLMClient(Protocol):
 
     default_model: str
 
-    async def stream(
+    def stream(
         self,
         *,
-        request: Any,
+        request: PackedLLMRequest,
         model: str | None = None,
-        tools: list[dict] | None = None,
-        prompt_cache_runtime: Any | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        prompt_cache_runtime: object | None = None,
         idle_seconds: float = 0.0,
-        abort_event: Any | None = None,
+        abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
     ) -> AsyncIterator[LLMStreamChunk]: ...
 
     async def complete(
         self,
         *,
-        request: Any,
+        request: PackedLLMRequest,
         model: str | None = None,
-        tools: list[dict] | None = None,
-        prompt_cache_runtime: Any | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        prompt_cache_runtime: object | None = None,
         idle_seconds: float = 0.0,
-        abort_event: Any | None = None,
+        abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
-    ) -> Any: ...
+    ) -> LLMResponse: ...
 
 
 __all__ = ["LLMStreamChunk", "LLMClient", "LLMUsage", "LLMResponse"]

@@ -28,12 +28,11 @@ from prismclaw.engine.state.state_protocol import (
     normalize_state_payload,
 )
 from prismclaw.schema.agent.data_types import TextBlock
-from prismclaw.schema.content.compaction import CompactionArtifact
+from prismclaw.schema.content.compaction import CompactionArtifact, parse_compaction_artifact
 from prismclaw.schema.content.content_types import ReferenceArtifact, ToolResult, UiArtifact
 from prismclaw.schema.content.context import ContextBlock
-from prismclaw.schema.content.replacement_store import replacement_decision_from_artifact
-from prismclaw.schema.content.compaction import parse_compaction_artifact
 from prismclaw.schema.content.replacement_state import ReplacementDecisionState
+from prismclaw.schema.content.replacement_store import replacement_decision_from_artifact
 
 
 def _attach_compaction_metadata(
@@ -123,8 +122,7 @@ def _result_replacement_state(
         ui_artifact = artifact.result.ui_artifact
         compaction_meta = (
             ui_artifact.result_compaction_preview
-            if ui_artifact is not None
-            and ui_artifact.artifact_type == "result_compaction_preview"
+            if ui_artifact is not None and ui_artifact.artifact_type == "result_compaction_preview"
             else None
         )
         parsed_artifact = parse_compaction_artifact(compaction_meta)
@@ -179,7 +177,10 @@ def _attach_context_block_compaction_metadata(
         source_id=block.id,
         source_text=block.content,
         state_updates=state_updates,
-        source_refs=[block.id, *[str(ref) for ref in (next_metadata.get("evidence_packet_ids") or [])]],
+        source_refs=[
+            block.id,
+            *[str(ref) for ref in (next_metadata.get("evidence_packet_ids") or [])],
+        ],
         loss_budget=_loss_budget_for_strategies(strategies),
     )
     semantic_capsule = build_semantic_capsule(
@@ -275,7 +276,9 @@ def _extract_result_state_updates(text: str) -> dict[str, Any] | None:
     return derive_state_payload([{"role": "tool", "content": text}])
 
 
-def _extract_block_state_updates(block: ContextBlock, _compacted_text: str) -> dict[str, Any] | None:
+def _extract_block_state_updates(
+    block: ContextBlock, _compacted_text: str
+) -> dict[str, Any] | None:
     if block.state_payload:
         normalized = normalize_state_payload(block.state_payload)
         return normalized if has_state_update_payload(normalized) else None

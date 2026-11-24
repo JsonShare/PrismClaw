@@ -3,16 +3,28 @@
 职责：SessionBus 创建、auditor 安装、teardown 闭包注册、
 SessionTurnStarted/Finished 与 iteration 起止事件发布。
 """
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from contextlib import AsyncExitStack
+from contextvars import Token
 from dataclasses import dataclass, field
-from typing import Any
+from types import TracebackType
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.execution.control.kernel import TerminalReason
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.trajectory.bus import SessionBus
+    from prismclaw.engine.trajectory.bus_context import TrajectoryRuntimeCtx
+    from prismclaw.engine.trajectory.service import TrajectoryAuditService
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.session.types import SessionTree
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +32,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # TrajectoryScope: trajectory 生命周期
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TrajectoryScope:
@@ -39,17 +52,17 @@ class TrajectoryScope:
                 scope.publish_iteration_end(session_id, iteration)
     """
 
-    bus: Any  # SessionBus
+    bus: SessionBus | None
     turn_counter: int
     uncommitted_iter: int | None = None
     # 跨闭包传递 turn-end reason（由 runner 在 run_loop 结束后写入，teardown 时读取）
     terminated_by: TerminalReason | None = None
-    _auditor_svc: Any = None
+    _auditor_svc: TrajectoryAuditService | None = None
     _stack: AsyncExitStack = field(default_factory=AsyncExitStack)
 
     # ── 主初始化：noop fallback + 3 个闭包 + SessionTurnStarted ──
 
-    def setup_main(self, request: Any) -> None:
+    def setup_main(self, request: RunRequest) -> None:
         """注册 teardown 闭包 + 发布 SessionTurnStarted。
 
         应在早期初始化之后、进入主循环之前调用。
@@ -57,19 +70,22 @@ class TrajectoryScope:
         # Noop fallback: if early setup failed, bus is already noop.
         if self.bus is None:
             from prismclaw.engine.trajectory.bus import SessionBus
+
             self.bus = SessionBus(is_noop=True)
 
         try:
             # 1) Async teardown: close auditor + drain bus
             async def _traj_async_teardown(
-                svc_ref=self._auditor_svc,
-                bus_ref=self.bus,
+                svc_ref: TrajectoryAuditService | None = self._auditor_svc,
+                bus_ref: SessionBus | None = self.bus,
             ) -> None:
                 try:
                     if svc_ref is not None:
                         await svc_ref.close(force_flush=True)
                 except Exception as _te:
                     logger.debug("trajectory: service.close teardown failed: %s", _te)
+                if bus_ref is None:
+                    return
                 try:
                     await bus_ref.wait_drained(timeout_s=3.0)
                 except Exception as _te:
@@ -82,6 +98,7 @@ class TrajectoryScope:
                 TrajectoryRuntimeCtx,
                 trajectory_runtime,
             )
+
             _runtime_reset_token = trajectory_runtime.set(
                 TrajectoryRuntimeCtx(
                     session_id=request.session_id,
@@ -90,57 +107,69 @@ class TrajectoryScope:
                 ),
             )
 
-            def _reset_runtime_tok(_tok=_runtime_reset_token) -> None:
+            def _reset_runtime_tok(
+                _tok: Token[TrajectoryRuntimeCtx | None] = _runtime_reset_token,
+            ) -> None:
                 if _tok is not None:
                     from prismclaw.engine.trajectory.bus_context import trajectory_runtime
-                    try:
+
+                    # 同 bus.py _BusCtxManager.__exit__ — 跨 async context
+                    # 关闭时 token 无法 reset，让 context 自己销毁清理。
+                    with contextlib.suppress(ValueError):
                         trajectory_runtime.reset(_tok)
-                    except ValueError:
-                        # 同 bus.py _BusCtxManager.__exit__ — 跨 async context
-                        # 关闭时 token 无法 reset，让 context 自己销毁清理。
-                        pass
 
             self._stack.callback(_reset_runtime_tok)
 
             # 3) Publish SessionTurnStarted
             try:
                 from prismclaw.engine.trajectory.bus_events import SessionTurnStarted
-                self.bus.publish(SessionTurnStarted(
-                    session_id=request.session_id,
-                    turn_counter=self.turn_counter,
-                    started_at_ms=int(time.time() * 1000),
-                ))
+
+                self.bus.publish(
+                    SessionTurnStarted(
+                        session_id=request.session_id,
+                        turn_counter=self.turn_counter,
+                        started_at_ms=int(time.time() * 1000),
+                    )
+                )
             except Exception:
                 pass
 
             # 4) Register turn-finished sync callback (LIFO: pushed last = first run)
             def _turn_finished_sync(
-                sid=request.session_id,
-                tc=self.turn_counter,
-                bus_ref=self.bus,
-                scope=self,
+                sid: str = request.session_id,
+                tc: int = self.turn_counter,
+                bus_ref: SessionBus = self.bus,
+                scope: TrajectoryScope = self,
             ) -> None:
                 # Commit any uncommitted last iter before turn ends.
                 _last_iter = scope.uncommitted_iter
                 if _last_iter is not None:
                     try:
                         from prismclaw.engine.trajectory.bus_events import SessionIterationFinished
-                        bus_ref.publish(SessionIterationFinished(
-                            session_id=sid, turn_counter=tc,
-                            iteration=_last_iter,
-                            finished_at_ms=int(time.time() * 1000),
-                        ))
+
+                        bus_ref.publish(
+                            SessionIterationFinished(
+                                session_id=sid,
+                                turn_counter=tc,
+                                iteration=_last_iter,
+                                finished_at_ms=int(time.time() * 1000),
+                            )
+                        )
                     except Exception:
                         pass
                     scope.uncommitted_iter = None
                 # Publish SessionTurnFinished (带 terminated_by)
                 try:
                     from prismclaw.engine.trajectory.bus_events import SessionTurnFinished
-                    bus_ref.publish(SessionTurnFinished(
-                        session_id=sid, turn_counter=tc,
-                        finished_at_ms=int(time.time() * 1000),
-                        terminated_by=scope.terminated_by,
-                    ))
+
+                    bus_ref.publish(
+                        SessionTurnFinished(
+                            session_id=sid,
+                            turn_counter=tc,
+                            finished_at_ms=int(time.time() * 1000),
+                            terminated_by=scope.terminated_by,
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -155,8 +184,13 @@ class TrajectoryScope:
         await self._stack.__aenter__()
         return self
 
-    async def __aexit__(self, *exc_info: Any) -> Any:
-        return await self._stack.__aexit__(*exc_info)
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool | None:
+        return await self._stack.__aexit__(exc_type, exc, tb)
 
     # ── Iteration 追踪 ──
 
@@ -181,30 +215,36 @@ class TrajectoryScope:
             if _prev_uncommitted is not None:
                 try:
                     _bus_lazy = current_bus()
-                    _bus_lazy.publish(SessionIterationFinished(
-                        session_id=session_id,
-                        turn_counter=self.turn_counter,
-                        iteration=_prev_uncommitted,
-                        finished_at_ms=int(time.time() * 1000),
-                    ))
+                    _bus_lazy.publish(
+                        SessionIterationFinished(
+                            session_id=session_id,
+                            turn_counter=self.turn_counter,
+                            iteration=_prev_uncommitted,
+                            finished_at_ms=int(time.time() * 1000),
+                        )
+                    )
                 except Exception:
                     pass
                 self.uncommitted_iter = None
 
             # Update identity context var (fresh mutable ctx per iteration).
-            trajectory_runtime.set(TrajectoryRuntimeCtx(
-                session_id=session_id,
-                turn=self.turn_counter,
-                iteration=iteration,
-            ))
+            trajectory_runtime.set(
+                TrajectoryRuntimeCtx(
+                    session_id=session_id,
+                    turn=self.turn_counter,
+                    iteration=iteration,
+                )
+            )
 
             _bus_iter = current_bus()
-            _bus_iter.publish(SessionIterationStarted(
-                session_id=session_id,
-                turn_counter=self.turn_counter,
-                iteration=iteration,
-                started_at_ms=int(time.time() * 1000),
-            ))
+            _bus_iter.publish(
+                SessionIterationStarted(
+                    session_id=session_id,
+                    turn_counter=self.turn_counter,
+                    iteration=iteration,
+                    started_at_ms=int(time.time() * 1000),
+                )
+            )
             # Mark this iter as uncommitted.
             self.uncommitted_iter = iteration
         except Exception:
@@ -219,19 +259,23 @@ class TrajectoryScope:
             from prismclaw.engine.trajectory.bus import current_bus
             from prismclaw.engine.trajectory.bus_events import SessionIterationFinished
 
-            current_bus().publish(SessionIterationFinished(
-                session_id=session_id,
-                turn_counter=self.turn_counter,
-                iteration=iteration,
-                finished_at_ms=int(time.time() * 1000),
-            ))
+            current_bus().publish(
+                SessionIterationFinished(
+                    session_id=session_id,
+                    turn_counter=self.turn_counter,
+                    iteration=iteration,
+                    finished_at_ms=int(time.time() * 1000),
+                )
+            )
             # Clear the uncommitted marker — happy-path commit done.
             self.uncommitted_iter = None
         except Exception:
             pass
 
 
-def setup_trajectory_early(tree: Any, request: Any, deps: Any) -> TrajectoryScope:
+def setup_trajectory_early(
+    tree: SessionTree, request: RunRequest, deps: AgentRunnerDeps
+) -> TrajectoryScope:
     """早期初始化 trajectory bus + auditor。
 
     MUST be called BEFORE _append() so tree_writer._append()'s current_bus()
@@ -255,9 +299,12 @@ def setup_trajectory_early(tree: Any, request: Any, deps: Any) -> TrajectoryScop
             _entries = getattr(tree, "entries", {}) or {}
             _order = getattr(tree, "order", ()) or ()
             _user_count = sum(
-                1 for _eid in _order
-                if (_entries.get(_eid) is not None
-                    and getattr(_entries.get(_eid), "role", None) == "user")
+                1
+                for _eid in _order
+                if (
+                    _entries.get(_eid) is not None
+                    and getattr(_entries.get(_eid), "role", None) == "user"
+                )
             )
             _traj_turn_counter = (_user_count + 1) & 0xFFFFFFFF
     except Exception:
@@ -274,9 +321,13 @@ def setup_trajectory_early(tree: Any, request: Any, deps: Any) -> TrajectoryScop
         # Resolve trajectory_persistence from deps.persistence
         _traj_persistence = None
         try:
-            _traj_persistence = deps.persistence.trajectory_persistence if deps.persistence is not None else None
+            _traj_persistence = (
+                deps.persistence.trajectory_persistence if deps.persistence is not None else None
+            )
         except Exception:
-            logger.debug("trajectory: failed to resolve trajectory_persistence from persistence bundle")
+            logger.debug(
+                "trajectory: failed to resolve trajectory_persistence from persistence bundle"
+            )
 
         _traj_header = None
         try:
@@ -293,7 +344,8 @@ def setup_trajectory_early(tree: Any, request: Any, deps: Any) -> TrajectoryScop
         )
         logger.warning(
             "trajectory audit setup (early): sid=%s header=%s persistence=%s svc_created=%s",
-            request.session_id, _traj_header,
+            request.session_id,
+            _traj_header,
             "YES" if _traj_persistence is not None else "NO",
             _auditor_svc is not None,
         )

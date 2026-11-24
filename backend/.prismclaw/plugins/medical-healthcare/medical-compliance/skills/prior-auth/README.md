@@ -60,7 +60,7 @@ This skill helps automate the health insurance payer professional's prior author
 **Output:**
 
 - `waypoints/decision.json` - Final decision record
-- `outputs/notification_letter.txt` - Provider notification
+- `outbox/notification_letter.txt` - Provider notification
 
 **Human Decision Point:** The professional must explicitly confirm, reject, or override the AI recommendation. No decision is finalized without human action.
 

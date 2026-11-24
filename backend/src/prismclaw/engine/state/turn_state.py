@@ -1,7 +1,8 @@
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, Literal, Set
+from typing import Any, Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -25,7 +26,7 @@ class ToolGovernanceState(BaseModel):
     active_skill_name: str | None = None
     restricted: bool = False
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, __context: object) -> None:
         callable_names = _sorted_unique_strings(self.callable_tools)
         self.callable_tools = callable_names
 
@@ -77,7 +78,7 @@ class SandboxPolicyDecision(BaseModel):
     @classmethod
     def from_policy(
         cls,
-        policy: Any | None,
+        policy: object | None,
         *,
         source: str = "default",
     ) -> "SandboxPolicyDecision":
@@ -163,24 +164,6 @@ class ForkPolicyDecision(BaseModel):
             replacement_inheritance_mode=manifest.replacement_inheritance_mode,
             digest=_build_policy_digest(payload),
         )
-
-
-class FastPathEligibility(BaseModel):
-    schema_version: str = Field(default="fast_path_eligibility.v1")
-    eligible: bool = False
-    decision: str = Field(default="ineligible")
-    eligible_stages: list[str] = Field(default_factory=list)
-    reason_codes: list[str] = Field(default_factory=list)
-    explanation: str = Field(default="")
-    baseline_valid: bool = False
-    recovery_clean: bool = True
-    request_mode_unchanged: bool = False
-    static_inputs_unchanged: bool = False
-    permission_unchanged: bool = False
-    tool_pool_unchanged: bool = False
-    provider_capability_unchanged: bool = False
-    memory_admissibility_unchanged: bool = False
-    fork_inheritance_unchanged: bool = False
 
 
 def build_fork_memory_hint_policy(
@@ -337,13 +320,13 @@ class CanonicalDecisionState(BaseModel):
     )
     tool_governance_state: ToolGovernanceState = Field(default_factory=ToolGovernanceState)
     sandbox_policy_decision: SandboxPolicyDecision = Field(default_factory=SandboxPolicyDecision)
-    policy_latches: Dict[str, Any] = Field(default_factory=dict)
+    policy_latches: dict[str, Any] = Field(default_factory=dict)
 
 
 class ReplacementState(BaseModel):
     schema_version: str = Field(default="replacement_state.v1")
-    seen_ids: Set[str] = Field(default_factory=set)
-    replacements: Dict[str, str] = Field(default_factory=dict)
+    seen_ids: set[str] = Field(default_factory=set)
+    replacements: dict[str, str] = Field(default_factory=dict)
 
     def has_entries(self) -> bool:
         return bool(self.seen_ids or self.replacements)
@@ -361,7 +344,7 @@ class ReplacementState(BaseModel):
     def get_frozen_replacement(self, source_id: str) -> str | None:
         return self.replacements.get(source_id)
 
-    def retain_only(self, active_ids: Set[str]) -> list[str]:
+    def retain_only(self, active_ids: set[str]) -> list[str]:
         removed = sorted(
             {
                 *[source_id for source_id in self.seen_ids if source_id not in active_ids],
@@ -399,7 +382,7 @@ class ToolDiscoveryLedger(BaseModel):
     schema_version: str = Field(default="tool_discovery_ledger.v1")
     records: list[ToolDiscoveryRecord] = Field(default_factory=list)
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, __context: object) -> None:
         next_order = 1
         deduped: list[ToolDiscoveryRecord] = []
         seen: set[str] = set()
@@ -477,7 +460,7 @@ class TurnState(BaseModel):
     )
     discovered_tool_ledger: ToolDiscoveryLedger = Field(default_factory=ToolDiscoveryLedger)
     replacement_state: ReplacementState = Field(default_factory=ReplacementState)
-    policy_latches: Dict[str, Any] = Field(default_factory=dict)
+    policy_latches: dict[str, Any] = Field(default_factory=dict)
     canonical_decision_state: CanonicalDecisionState = Field(default_factory=CanonicalDecisionState)
     capability_decision_bundle: CapabilityDecisionBundle = Field(
         default_factory=CapabilityDecisionBundle
@@ -489,7 +472,7 @@ class TurnState(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _migrate_payload(cls, value: Any) -> Any:
+    def _migrate_payload(cls, value: object) -> object:
         if not isinstance(value, dict):
             return value
         from prismclaw.engine.state.versioning import migrate_turn_state_payload
@@ -579,7 +562,7 @@ def _build_tool_governance_state_digest(
 
 
 def resolve_capability_decision_bundle(
-    state: "TurnState | Dict[str, Any] | None",
+    state: "TurnState | dict[str, Any] | None",
 ) -> CapabilityDecisionBundle:
     if isinstance(state, TurnState):
         bundle = state.capability_decision_bundle
@@ -602,7 +585,7 @@ def resolve_capability_decision_bundle(
 
 
 def restore_replacement_state(
-    state: ReplacementState | Dict[str, Any] | None,
+    state: ReplacementState | dict[str, Any] | None,
 ) -> ReplacementState:
     if isinstance(state, ReplacementState):
         return ReplacementState.model_validate(state.model_dump(mode="json"))
@@ -626,13 +609,13 @@ def restore_replacement_state(
 
 
 def clone_replacement_state(
-    state: ReplacementState | Dict[str, Any] | None,
+    state: ReplacementState | dict[str, Any] | None,
 ) -> ReplacementState:
     return restore_replacement_state(state)
 
 
 def fork_replacement_inheritance_policy(
-    state: ReplacementState | Dict[str, Any] | None,
+    state: ReplacementState | dict[str, Any] | None,
     *,
     fork_policy: ForkPolicyDecision | None = None,
     source_is_fork: bool = False,
@@ -657,7 +640,7 @@ def fork_replacement_inheritance_policy(
 
 
 def build_isolated_turn_state(
-    state: TurnState | Dict[str, Any] | None,
+    state: TurnState | dict[str, Any] | None,
     *,
     fork_policy: ForkPolicyDecision | None = None,
     source_is_fork: bool = False,

@@ -221,7 +221,7 @@ export function ChatMessage({
           </View>
         ) : null}
         {outputFiles.length > 0 ? (
-          <View className='msg-outputs'>
+          <View className='msg-outbox'>
             {outputFiles.map((path) => (
               <View key={path} className='msg-output' onClick={() => onOpenFile(path)}>
                 <Text className='msg-output-name'>{displayTitle({ path })}</Text>

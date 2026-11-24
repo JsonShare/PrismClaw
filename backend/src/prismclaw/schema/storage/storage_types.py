@@ -1,5 +1,18 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+from prismclaw.schema.agent.session import (
+    SessionEvent,
+    SessionHistorySummary,
+)
+from prismclaw.schema.memory import (
+    ArchiveEntry,
+    L4ArtifactEntry,
+    MemoryEntry,
+)
+from prismclaw.schema.services.user_types import User
+
 """Storage Protocol 自建定义——让 contracts 不直接依赖 storage 包。
 
 此处重新定义 SessionStore / MemoryStore / WorkspaceStore 的 Protocol 签名，
@@ -8,26 +21,15 @@ from __future__ import annotations
 只复制 Protocol 定义，不复制辅助函数（emit_commit_metrics 等）。
 """
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 # 方法签名中引用的 kernel 类型 — TYPE_CHECKING to avoid kernel↔contracts circular import
 if TYPE_CHECKING:
     from prismclaw.schema.session.types import SessionTree
-from prismclaw.schema.agent.session import (
-    SessionEvent,
-    SessionHistorySummary,
-)
-
 
 # ── 类型别名 + Pydantic 模型（来自 contracts.infra.memory_types）────
-from prismclaw.schema.memory import (
-    MemoryEntry,
-    ArchiveEntry,
-    L4ArtifactEntry,
-)
-
 
 # ── SessionStore Protocol ────────────────────────────────────────
+
 
 @runtime_checkable
 class SessionStore(Protocol):
@@ -49,7 +51,9 @@ class SessionStore(Protocol):
 
     # ── Event Log Queries ──────────────────────────────────────
     async def get_events(self, session_id: str, *, since_seq: int = 0) -> list[SessionEvent]: ...
-    async def get_events_by_time(self, session_id: str, *, since_ms: int = 0, until_ms: int = 0) -> list[SessionEvent]: ...
+    async def get_events_by_time(
+        self, session_id: str, *, since_ms: int = 0, until_ms: int = 0
+    ) -> list[SessionEvent]: ...
     async def get_event_count(self, session_id: str) -> int: ...
     async def rebuild_tree(self, session_id: str) -> SessionTree | None: ...
 
@@ -65,12 +69,13 @@ class SessionStore(Protocol):
         title: str | None = None,
     ) -> SessionTree: ...
     async def list_session_history(
-        self, session_key: str, limit: int = 20
+        self, session_key: str, limit: int = 20, offset: int = 0
     ) -> list[SessionHistorySummary]: ...
     async def delete_session(self, session_id: str) -> bool: ...
 
 
 # ── MemoryStore Protocol ─────────────────────────────────────────
+
 
 @runtime_checkable
 class MemoryStore(Protocol):
@@ -98,7 +103,11 @@ class MemoryStore(Protocol):
     # ── Archive Operations ─────────────────────────────────────
     async def archive_entry(self, session_key: str, entry_id: str, *, reason: str = "") -> bool: ...
     async def archive_session(
-        self, session_key: str, session_id: str, summary: str, *,
+        self,
+        session_key: str,
+        session_id: str,
+        summary: str,
+        *,
         payload: dict[str, Any] | None = None,
         demote_entries: bool = True,
     ) -> None: ...
@@ -176,12 +185,12 @@ class MemoryStore(Protocol):
         self, session_key: str, updates: list[tuple[str, dict[str, Any]]]
     ) -> int: ...
 
-    async def verify_integrity(
-        self, session_key: str, *, limit: int = 10000
-    ) -> dict[str, Any]: ...
+    async def verify_integrity(self, session_key: str, *, limit: int = 10000) -> dict[str, Any]: ...
 
     async def get_entry_id_by_entity_key(
-        self, session_key: str, entity_key: str,
+        self,
+        session_key: str,
+        entity_key: str,
     ) -> str | None: ...
 
     # ── Lifecycle ──────────────────────────────────────────────
@@ -189,6 +198,7 @@ class MemoryStore(Protocol):
 
 
 # ── WorkspaceStore Protocol ──────────────────────────────────────
+
 
 @runtime_checkable
 class WorkspaceStore(Protocol):
@@ -199,8 +209,6 @@ class WorkspaceStore(Protocol):
 
 
 # ── UserStore Protocol ───────────────────────────────────────────
-
-from prismclaw.schema.services.user_types import User
 
 
 @runtime_checkable
@@ -230,7 +238,7 @@ class UserStore(Protocol):
         nickname: str | None = None,
     ) -> bool: ...
     async def set_password(self, user_id: str, password: str) -> bool: ...
-    async def update_profile(self, user_id: str, **kwargs: Any) -> bool: ...
+    async def update_profile(self, user_id: str) -> bool: ...
     async def delete(self, user_id: str) -> bool: ...
 
 

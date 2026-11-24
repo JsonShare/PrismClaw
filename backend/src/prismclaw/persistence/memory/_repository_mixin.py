@@ -1,4 +1,5 @@
 """Auto-extracted Mixin from postgres.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import hashlib
@@ -6,22 +7,21 @@ import json
 import logging
 from typing import Any
 
+from prismclaw.persistence.memory._base_mixin import _PostgresBackendBase
+from prismclaw.persistence.memory._helpers import (
+    _sql_text,
+)
+from prismclaw.persistence.memory._row_mapping import (
+    _entries_from_rows,
+)
 from prismclaw.schema.memory.entry import (
     L4ArtifactEntry,
     MemoryEntry,
     build_archive_artifact_entry,
     build_archive_artifact_id,
 )
-from prismclaw.persistence.memory._helpers import (
-    _sql_text,
-)
-from prismclaw.persistence.memory._row_mapping import (
-    _memory_entry_from_row,
-)
 
 logger = logging.getLogger(__name__)
-
-from prismclaw.persistence.memory._base_mixin import _PostgresBackendBase
 
 
 class RepositoryMixin(_PostgresBackendBase):
@@ -30,14 +30,14 @@ class RepositoryMixin(_PostgresBackendBase):
         assert self._async_sessionmaker is not None
         async with self._async_sessionmaker() as session:
             await session.execute(
-                _sql_text("DELETE FROM pc_memory_entries WHERE session_key = :session_key AND id = :id"),
+                _sql_text(
+                    "DELETE FROM pc_memory_entries WHERE session_key = :session_key AND id = :id"
+                ),
                 {"session_key": session_key, "id": entry_id},
             )
             await session.commit()
 
-    async def archive_entry(
-        self, session_key: str, entry_id: str, *, reason: str = ""
-    ) -> bool:
+    async def archive_entry(self, session_key: str, entry_id: str, *, reason: str = "") -> bool:
         """Soft-archive one entry: ``status='archived'`` + bump ``updated_at``.
 
         Returns ``True`` iff a row was actually transitioned from ``active``.
@@ -151,7 +151,8 @@ class RepositoryMixin(_PostgresBackendBase):
                 ) VALUES (
                     :id, :session_key, :session_id, :artifact_kind, :summary,
                     :created_at, :updated_at, :graph_group_id, CAST(:source_refs_json AS jsonb),
-                    :origin_stage, :publish_state, CAST(:payload_json AS jsonb), :low_confidence, :embedding
+                    :origin_stage, :publish_state, CAST(:payload_json AS jsonb),
+                    :low_confidence, :embedding
                 )
                 ON CONFLICT (id) DO UPDATE SET
                     session_id = EXCLUDED.session_id,
@@ -204,7 +205,6 @@ class RepositoryMixin(_PostgresBackendBase):
             await session.commit()
             return bool(getattr(result, "rowcount", 0) and getattr(result, "rowcount", 0) > 0)
 
-
     async def get_archive_storage_stats(self, session_key: str) -> dict[str, int]:
         await self._init_db()
         assert self._async_sessionmaker is not None
@@ -233,22 +233,29 @@ class RepositoryMixin(_PostgresBackendBase):
         await self._init_db()
         assert self._async_sessionmaker is not None
         async with self._async_sessionmaker() as session:
-            rows = (await session.execute(
-                _sql_text(
-                    "SELECT layer, COUNT(*) FROM pc_memory_entries "
-                    "WHERE session_key = :session_key "
-                    "AND status NOT IN ('archived', 'contested', 'decayed') "
-                    "GROUP BY layer"
-                ),
-                {"session_key": session_key},
-            )).fetchall()
-            archive_count = int((await session.execute(
-                _sql_text(
-                    "SELECT COUNT(*) FROM pc_memory_l4_artifacts "
-                    "WHERE session_key = :session_key AND artifact_kind = 'archive'"
-                ),
-                {"session_key": session_key},
-            )).scalar_one() or 0)
+            rows = (
+                await session.execute(
+                    _sql_text(
+                        "SELECT layer, COUNT(*) FROM pc_memory_entries "
+                        "WHERE session_key = :session_key "
+                        "AND status NOT IN ('archived', 'contested', 'decayed') "
+                        "GROUP BY layer"
+                    ),
+                    {"session_key": session_key},
+                )
+            ).fetchall()
+            archive_count = int(
+                (
+                    await session.execute(
+                        _sql_text(
+                            "SELECT COUNT(*) FROM pc_memory_l4_artifacts "
+                            "WHERE session_key = :session_key AND artifact_kind = 'archive'"
+                        ),
+                        {"session_key": session_key},
+                    )
+                ).scalar_one()
+                or 0
+            )
         counts = {"l2": 0, "l3": 0}
         for row in rows:
             layer = str(row[0]).lower()
@@ -257,9 +264,7 @@ class RepositoryMixin(_PostgresBackendBase):
         counts["l4"] = archive_count
         return counts
 
-    async def get_contents_by_ids(
-        self, session_key: str, entry_ids: list[str]
-    ) -> dict[str, str]:
+    async def get_contents_by_ids(self, session_key: str, entry_ids: list[str]) -> dict[str, str]:
         """Batch-resolve entry ids to full contents (active entries only).
 
         SDD docs/memory-dream-sdd.md §5.0 (A1): L1 mirrors carry previews;
@@ -269,7 +274,7 @@ class RepositoryMixin(_PostgresBackendBase):
         """
         if not entry_ids:
             return {}
-        from sqlalchemy import bindparam  # type: ignore[import-not-found]
+        from sqlalchemy import bindparam
 
         await self._init_db()
         assert self._async_sessionmaker is not None
@@ -279,10 +284,12 @@ class RepositoryMixin(_PostgresBackendBase):
             "AND status = 'active'"
         ).bindparams(bindparam("ids", expanding=True))
         async with self._async_sessionmaker() as session:
-            rows = (await session.execute(
-                stmt,
-                {"session_key": session_key, "ids": list(entry_ids)},
-            )).fetchall()
+            rows = (
+                await session.execute(
+                    stmt,
+                    {"session_key": session_key, "ids": list(entry_ids)},
+                )
+            ).fetchall()
         return {str(row[0]): str(row[1]) for row in rows}
 
     async def get_entries_by_ids(
@@ -297,7 +304,7 @@ class RepositoryMixin(_PostgresBackendBase):
         """
         if not entry_ids:
             return []
-        from sqlalchemy import bindparam  # type: ignore[import-not-found]
+        from sqlalchemy import bindparam
 
         await self._init_db()
         assert self._async_sessionmaker is not None
@@ -312,16 +319,16 @@ class RepositoryMixin(_PostgresBackendBase):
         ).bindparams(bindparam("ids", expanding=True))
         try:
             async with self._async_sessionmaker() as session:
-                rows = (await session.execute(
-                    stmt,
-                    {"session_key": session_key, "ids": list(entry_ids)},
-                )).fetchall()
+                rows = (
+                    await session.execute(
+                        stmt,
+                        {"session_key": session_key, "ids": list(entry_ids)},
+                    )
+                ).mappings().all()
         except Exception:
-            logger.warning(
-                "get_entries_by_ids failed for %s", session_key, exc_info=True
-            )
+            logger.warning("get_entries_by_ids failed for %s", session_key, exc_info=True)
             return []
-        return [_memory_entry_from_row(row, score=0.0) for row in rows]
+        return _entries_from_rows(rows, score=0.0)
 
     async def record_memory_references(
         self, session_key: str, records: list[dict[str, Any]]
@@ -369,9 +376,7 @@ class RepositoryMixin(_PostgresBackendBase):
             )
         return inserted
 
-    async def record_validation_events(
-        self, session_key: str, events: list[dict[str, Any]]
-    ) -> int:
+    async def record_validation_events(self, session_key: str, events: list[dict[str, Any]]) -> int:
         """Insert validation-event rows (correction / task outcome signals).
 
         SDD docs/memory-dream-sdd.md §5.1: strong = explicit user correction,
@@ -391,7 +396,8 @@ class RepositoryMixin(_PostgresBackendBase):
                             "(id, session_key, entry_id, signal_type, polarity, "
                             " attribution, source_ref, occurred_at, payload_json) "
                             "VALUES (:id, :session_key, :entry_id, :signal_type, :polarity, "
-                            " :attribution, :source_ref, :occurred_at, CAST(:payload_json AS jsonb))"
+                            " :attribution, :source_ref, :occurred_at, "
+                            "CAST(:payload_json AS jsonb))"
                         ),
                         {
                             "id": ev["id"],
@@ -474,7 +480,7 @@ class RepositoryMixin(_PostgresBackendBase):
         """
         if not entry_ids:
             return {}
-        from sqlalchemy import bindparam  # type: ignore[import-not-found]
+        from sqlalchemy import bindparam
 
         await self._init_db()
         assert self._async_sessionmaker is not None
@@ -485,9 +491,11 @@ class RepositoryMixin(_PostgresBackendBase):
         ).bindparams(bindparam("ids", expanding=True))
         try:
             async with self._async_sessionmaker() as session:
-                rows = (await session.execute(
-                    stmt, {"session_key": session_key, "ids": list(entry_ids)}
-                )).fetchall()
+                rows = (
+                    await session.execute(
+                        stmt, {"session_key": session_key, "ids": list(entry_ids)}
+                    )
+                ).fetchall()
         except Exception:
             logger.warning(
                 "validation-signal aggregation failed (%d ids)", len(entry_ids), exc_info=True
@@ -516,7 +524,7 @@ class RepositoryMixin(_PostgresBackendBase):
         """
         if not statuses:
             return []
-        from sqlalchemy import bindparam  # type: ignore[import-not-found]
+        from sqlalchemy import bindparam
 
         await self._init_db()
         assert self._async_sessionmaker is not None
@@ -532,16 +540,16 @@ class RepositoryMixin(_PostgresBackendBase):
         ).bindparams(bindparam("statuses", expanding=True))
         try:
             async with self._async_sessionmaker() as session:
-                rows = (await session.execute(
-                    stmt,
-                    {"session_key": session_key, "statuses": list(statuses), "limit": limit},
-                )).fetchall()
+                rows = (
+                    await session.execute(
+                        stmt,
+                        {"session_key": session_key, "statuses": list(statuses), "limit": limit},
+                    )
+                ).mappings().all()
         except Exception:
-            logger.warning(
-                "list_entries_by_status failed for %s", session_key, exc_info=True
-            )
+            logger.warning("list_entries_by_status failed for %s", session_key, exc_info=True)
             return []
-        return [_memory_entry_from_row(row, score=0.0) for row in rows]
+        return _entries_from_rows(rows, score=0.0)
 
     async def aggregate_validation_signals(
         self, session_key: str, *, since: float | None = None
@@ -568,18 +576,24 @@ class RepositoryMixin(_PostgresBackendBase):
             async with self._async_sessionmaker() as session:
                 rows = (await session.execute(_sql_text(sql), params)).fetchall()
         except Exception:
-            logger.warning(
-                "aggregate_validation_signals failed for %s", session_key, exc_info=True
-            )
+            logger.warning("aggregate_validation_signals failed for %s", session_key, exc_info=True)
             return {}
         counts: dict[str, dict[str, int]] = {}
         for row in rows:
             entry_id, polarity, attribution, n = (
-                str(row[0]), str(row[1]), str(row[2]), int(row[3] or 0)
+                str(row[0]),
+                str(row[1]),
+                str(row[2]),
+                int(row[3] or 0),
             )
             bucket = counts.setdefault(
                 entry_id,
-                {"strong_negative": 0, "weak_negative": 0, "strong_positive": 0, "weak_positive": 0},
+                {
+                    "strong_negative": 0,
+                    "weak_negative": 0,
+                    "strong_positive": 0,
+                    "weak_positive": 0,
+                },
             )
             key = f"{attribution}_{polarity}"
             if key in bucket:
@@ -626,11 +640,19 @@ class RepositoryMixin(_PostgresBackendBase):
         counts: dict[str, dict[str, int]] = {}
         for row in rows:
             entry_id, polarity, attribution, n = (
-                str(row[0]), str(row[1]), str(row[2]), int(row[3] or 0)
+                str(row[0]),
+                str(row[1]),
+                str(row[2]),
+                int(row[3] or 0),
             )
             bucket = counts.setdefault(
                 entry_id,
-                {"strong_negative": 0, "weak_negative": 0, "strong_positive": 0, "weak_positive": 0},
+                {
+                    "strong_negative": 0,
+                    "weak_negative": 0,
+                    "strong_positive": 0,
+                    "weak_positive": 0,
+                },
             )
             key = f"{attribution}_{polarity}"
             if key in bucket:
@@ -645,23 +667,27 @@ class RepositoryMixin(_PostgresBackendBase):
         assert self._async_sessionmaker is not None
         async with self._async_sessionmaker() as session:
             if prefix_match:
-                rows = (await session.execute(
-                    _sql_text(
-                        "SELECT id, content FROM pc_memory_entries "
-                        "WHERE session_key = :sk AND id LIKE :eid "
-                        "AND status = 'active'"
-                    ),
-                    {"sk": session_key, "eid": f"{entry_id}%"},
-                )).fetchall()
+                rows = (
+                    await session.execute(
+                        _sql_text(
+                            "SELECT id, content FROM pc_memory_entries "
+                            "WHERE session_key = :sk AND id LIKE :eid "
+                            "AND status = 'active'"
+                        ),
+                        {"sk": session_key, "eid": f"{entry_id}%"},
+                    )
+                ).fetchall()
             else:
-                rows = (await session.execute(
-                    _sql_text(
-                        "SELECT id, content FROM pc_memory_entries "
-                        "WHERE session_key = :sk AND id = :eid "
-                        "AND status = 'active'"
-                    ),
-                    {"sk": session_key, "eid": entry_id},
-                )).fetchall()
+                rows = (
+                    await session.execute(
+                        _sql_text(
+                            "SELECT id, content FROM pc_memory_entries "
+                            "WHERE session_key = :sk AND id = :eid "
+                            "AND status = 'active'"
+                        ),
+                        {"sk": session_key, "eid": entry_id},
+                    )
+                ).fetchall()
         if len(rows) == 0:
             return None, f"memory: 未找到 ID 匹配 '{entry_id}' 的活跃条目"
         if len(rows) > 1:
@@ -669,7 +695,9 @@ class RepositoryMixin(_PostgresBackendBase):
         return str(rows[0][0]), str(rows[0][1])
 
     async def get_entry_id_by_entity_key(
-        self, session_key: str, entity_key: str,
+        self,
+        session_key: str,
+        entity_key: str,
     ) -> str | None:
         """E6: 精确查询 entity_key 对应的最新 active entry_id（IG1）。
 
@@ -680,23 +708,23 @@ class RepositoryMixin(_PostgresBackendBase):
         await self._init_db()
         assert self._async_sessionmaker is not None
         async with self._async_sessionmaker() as session:
-            rows = (await session.execute(
-                _sql_text(
-                    "SELECT id FROM pc_memory_entries "
-                    "WHERE session_key = :sk AND entity_key = :ek AND status = 'active' "
-                    "ORDER BY updated_at DESC LIMIT 1"
-                ),
-                {"sk": session_key, "ek": entity_key},
-            )).fetchall()
+            rows = (
+                await session.execute(
+                    _sql_text(
+                        "SELECT id FROM pc_memory_entries "
+                        "WHERE session_key = :sk AND entity_key = :ek AND status = 'active' "
+                        "ORDER BY updated_at DESC LIMIT 1"
+                    ),
+                    {"sk": session_key, "ek": entity_key},
+                )
+            ).fetchall()
         return str(rows[0][0]) if rows else None
 
     async def close(self) -> None:
         if self._engine is not None:
             await self._engine.dispose()
 
-    async def verify_integrity(
-        self, session_key: str, *, limit: int = 10000
-    ) -> dict[str, Any]:
+    async def verify_integrity(self, session_key: str, *, limit: int = 10000) -> dict[str, Any]:
         """E2: 校验记忆条目的内容完整性（IE2：只读操作）。
 
         遍历所有条目，验证 content_hash 与实际哈希是否一致。
@@ -707,14 +735,16 @@ class RepositoryMixin(_PostgresBackendBase):
         assert self._async_sessionmaker is not None
         try:
             async with self._async_sessionmaker() as session:
-                rows = (await session.execute(
-                    _sql_text(
-                        "SELECT id, content, entity_key, scope, content_hash "
-                        "FROM pc_memory_entries WHERE session_key = :session_key "
-                        "LIMIT :limit"
-                    ),
-                    {"session_key": session_key, "limit": limit},
-                )).fetchall()
+                rows = (
+                    await session.execute(
+                        _sql_text(
+                            "SELECT id, content, entity_key, scope, content_hash "
+                            "FROM pc_memory_entries WHERE session_key = :session_key "
+                            "LIMIT :limit"
+                        ),
+                        {"session_key": session_key, "limit": limit},
+                    )
+                ).fetchall()
         except Exception:
             logger.warning("verify_integrity query failed for %s", session_key, exc_info=True)
             return {"valid": False, "total": 0, "broken_ids": []}
@@ -722,7 +752,11 @@ class RepositoryMixin(_PostgresBackendBase):
         broken: list[str] = []
         for row in rows:
             eid, content, entity_key, scope, stored_hash = (
-                str(row[0]), str(row[1] or ""), row[2], row[3], row[4]
+                str(row[0]),
+                str(row[1] or ""),
+                row[2],
+                row[3],
+                row[4],
             )
             if stored_hash is None:
                 continue  # 无 content_hash 的条目跳过校验
@@ -737,4 +771,3 @@ class RepositoryMixin(_PostgresBackendBase):
             "total": len(rows),
             "broken_ids": broken,
         }
-

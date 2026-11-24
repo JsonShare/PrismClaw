@@ -3,6 +3,7 @@
 Lives in contracts (L0) so that Protocol definitions can reference these
 types without depending on engine (L2).  See SDD §5.1.5.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

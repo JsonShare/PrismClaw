@@ -7,30 +7,38 @@ condition TEXT 字段存储自然语言条件（空字符串=无条件），LLM 
 
 from __future__ import annotations
 
+import asyncio as _asyncio
+import hashlib as _hashlib
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.sql.elements import TextClause
 
+from prismclaw.schema.llm.types import LLMClient
 from prismclaw.schema.memory import (
     DIRECTION_SENSITIVE_PREDICATES,
     VALID_PREDICATES,
     MemoryEdge,
 )
 
+if TYPE_CHECKING:
+    from prismclaw.engine.security.dlp.scanner import DlpScanner
+
 logger = logging.getLogger(__name__)
 
 
-def _sql_text(sql: str):
+def _sql_text(sql: str) -> TextClause:
     from sqlalchemy import text as sa_text
+
     return sa_text(sql)
 
 
 class EdgeStore:
     """记忆图谱边存储（PG 邻接表 + 递归 CTE 遍历）。"""
 
-    def __init__(self, engine: AsyncEngine, *, dlp_scanner: Any = None) -> None:
+    def __init__(self, engine: AsyncEngine, *, dlp_scanner: DlpScanner | None = None) -> None:
         self._engine = engine
         self._dlp = dlp_scanner
 
@@ -47,7 +55,7 @@ class EdgeStore:
         # 在写入事务内检查反向边，避免额外连接和 TOCTOU 竞态
 
         condition = edge.condition or ""
-        evidence = edge.evidence
+        evidence = edge.evidence or ""
 
         # E1 联动：DLP 脱敏 condition 和 evidence
         if self._dlp is not None:
@@ -76,7 +84,10 @@ class EdgeStore:
                     if rev.fetchone():
                         logger.warning(
                             "[E8] %s: reverse edge exists for %s→%s (%s), writing anyway",
-                            session_key, edge.target_id, edge.source_id, edge.predicate,
+                            session_key,
+                            edge.target_id,
+                            edge.source_id,
+                            edge.predicate,
                         )
                 except Exception:
                     pass  # best-effort
@@ -121,7 +132,10 @@ class EdgeStore:
                 if "idx_edges_unique" in err_msg or "unique" in err_msg:
                     logger.info(
                         "[E5] %s: duplicate active edge skipped (%s→%s %s)",
-                        session_key, edge.source_id, edge.target_id, edge.predicate,
+                        session_key,
+                        edge.source_id,
+                        edge.target_id,
+                        edge.predicate,
                     )
                 else:
                     raise
@@ -157,7 +171,9 @@ class EdgeStore:
             if count:
                 logger.info(
                     "[E5] %s: deactivated %d edges for entry %s",
-                    session_key, count, entry_id,
+                    session_key,
+                    count,
+                    entry_id,
                 )
             return count
 
@@ -222,8 +238,12 @@ class EdgeStore:
             return int(row[0]) if row else 0
 
     async def traverse(
-        self, session_key: str, source_ids: list[str], *,
-        max_hops: int = 2, max_edges: int = 100,
+        self,
+        session_key: str,
+        source_ids: list[str],
+        *,
+        max_hops: int = 2,
+        max_edges: int = 100,
     ) -> list[MemoryEdge]:
         """N 跳遍历：递归 CTE，每步 JOIN entries 过滤 active 条目。
 
@@ -286,18 +306,20 @@ class EdgeStore:
             )
             edges: list[MemoryEdge] = []
             for row in result.fetchall():
-                edges.append(MemoryEdge(
-                    id=row[0],
-                    source_id=row[1],
-                    target_id=row[2],
-                    predicate=row[3],
-                    condition=row[4] or "",
-                    confidence=float(row[5] or 1.0),
-                    evidence=row[6],
-                    status=row[7] or "active",
-                    created_at=float(row[8] or 0),
-                    updated_at=float(row[9]) if row[9] is not None else None,
-                ))
+                edges.append(
+                    MemoryEdge(
+                        id=row[0],
+                        source_id=row[1],
+                        target_id=row[2],
+                        predicate=row[3],
+                        condition=row[4] or "",
+                        confidence=float(row[5] or 1.0),
+                        evidence=row[6],
+                        status=row[7] or "active",
+                        created_at=float(row[8] or 0),
+                        updated_at=float(row[9]) if row[9] is not None else None,
+                    )
+                )
             return edges
 
     async def edges_from(self, session_key: str, source_id: str) -> list[MemoryEdge]:
@@ -330,23 +352,25 @@ class EdgeStore:
             )
             edges: list[MemoryEdge] = []
             for row in result.fetchall():
-                edges.append(MemoryEdge(
-                    id=row[0],
-                    source_id=row[1],
-                    target_id=row[2],
-                    predicate=row[3],
-                    condition=row[4] or "",
-                    confidence=float(row[5] or 1.0),
-                    evidence=row[6],
-                    status=row[7] or "active",
-                    created_at=float(row[8] or 0),
-                    updated_at=float(row[9]) if row[9] is not None else None,
-                ))
+                edges.append(
+                    MemoryEdge(
+                        id=row[0],
+                        source_id=row[1],
+                        target_id=row[2],
+                        predicate=row[3],
+                        condition=row[4] or "",
+                        confidence=float(row[5] or 1.0),
+                        evidence=row[6],
+                        status=row[7] or "active",
+                        created_at=float(row[8] or 0),
+                        updated_at=float(row[9]) if row[9] is not None else None,
+                    )
+                )
             return edges
 
     def _sanitize_field(self, text: str, field_name: str) -> str:
         """DLP 脱敏单个字段。fail-open：脱敏失败返回原文。"""
-        if not text or not text.strip():
+        if not text or not text.strip() or self._dlp is None:
             return text
         try:
             decision = self._dlp.scan(text)
@@ -356,7 +380,10 @@ class EdgeStore:
             return text
 
     async def edges_applicable_in_context(
-        self, edges: list[MemoryEdge], context: str, llm_client: Any,
+        self,
+        edges: list[MemoryEdge],
+        context: str,
+        llm_client: LLMClient,
     ) -> list[MemoryEdge]:
         """从候选边中筛选出在当前上下文中生效的边（IE6）。
 
@@ -373,6 +400,7 @@ class EdgeStore:
 
         # 注入检测：复用 notary 的注入关键词列表
         from prismclaw.persistence.memory.notary import MemoryNotary
+
         notary = MemoryNotary()  # 仅用于注入检测，无 DLP
 
         safe_conditional: list[MemoryEdge] = []
@@ -381,7 +409,8 @@ class EdgeStore:
             if injection_result.injection_score >= 0.3:
                 logger.warning(
                     "[E5] Edge %s condition has injection score %.2f, skipping",
-                    edge.id, injection_result.injection_score,
+                    edge.id,
+                    injection_result.injection_score,
                 )
                 continue
             safe_conditional.append(edge)
@@ -408,7 +437,7 @@ class EdgeStore:
                 "判断以下条件在当前上下文中是否成立。每条只回答 true 或 false。\n\n"
                 f"上下文：{context}\n\n"
             )
-            for idx, (i, edge) in enumerate(uncached):
+            for idx, (_i, edge) in enumerate(uncached):
                 prompt += f"{idx + 1}. 条件「{edge.condition}」→ true/false\n"
 
             try:
@@ -463,9 +492,6 @@ def _merge_applicable(
 # ---------------------------------------------------------------------------
 # 条件边求值缓存（IG3：内存 TTL 缓存，5min）
 # ---------------------------------------------------------------------------
-
-import asyncio as _asyncio
-import hashlib as _hashlib
 
 
 class _ConditionCache:

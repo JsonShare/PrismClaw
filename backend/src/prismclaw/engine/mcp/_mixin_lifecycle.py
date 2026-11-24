@@ -1,14 +1,14 @@
 """Auto-extracted Mixin from client_manager.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 
+from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
 from prismclaw.engine.mcp._types import (
     _TOOL_COUNT_WARN_THRESHOLD,
 )
-
-from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +52,7 @@ class LifecycleMixin(_MCPBackendBase):
                 try:
                     await self._connect_one(name, config)
                 except Exception:
-                    logger.exception(
-                        "MCP server %r connect_all raised unexpectedly", name
-                    )
+                    logger.exception("MCP server %r connect_all raised unexpectedly", name)
             self._log_startup_summary()
         except Exception:
             logger.exception("MCP connect_all crashed unexpectedly; marking ready anyway")
@@ -86,9 +84,7 @@ class LifecycleMixin(_MCPBackendBase):
     def _log_startup_summary(self) -> None:
         summary = self.connection_summary()
         level = (
-            logging.WARNING
-            if summary.total_tools > _TOOL_COUNT_WARN_THRESHOLD
-            else logging.INFO
+            logging.WARNING if summary.total_tools > _TOOL_COUNT_WARN_THRESHOLD else logging.INFO
         )
         logger.log(
             level,
@@ -132,7 +128,7 @@ class LifecycleMixin(_MCPBackendBase):
                 if path and not isinstance(path, int):
                     from pathlib import Path
 
-                    Path(path).unlink(missing_ok=True)
+                    Path(path).unlink(missing_ok=True)  # noqa: ASYNC240 - 关闭期一次性清理
             except Exception:
                 logger.debug("mcp.stderr_capture shutdown close error", exc_info=True)
         self._stderr_files.clear()

@@ -1,7 +1,178 @@
 """Agent sub-contracts: types, context, memory, dream, session routing, security, review."""
+
 from __future__ import annotations
 
-def __getattr__(name):
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prismclaw.schema.agent.capability import (
+        CapabilityKind as CapabilityKind,
+    )
+    from prismclaw.schema.agent.capability import (
+        CapabilityStatus as CapabilityStatus,
+    )
+    from prismclaw.schema.agent.context import (
+        BootstrapContextProvider as BootstrapContextProvider,
+    )
+    from prismclaw.schema.agent.context import (
+        ContextAssembler as ContextAssembler,
+    )
+    from prismclaw.schema.agent.context import (
+        ContextCompactor as ContextCompactor,
+    )
+    from prismclaw.schema.agent.context import (
+        ContextEngine as ContextEngine,
+    )
+    from prismclaw.schema.agent.context import (
+        ContextIngestor as ContextIngestor,
+    )
+    from prismclaw.schema.agent.context import (
+        ContextTurnFinalizer as ContextTurnFinalizer,
+    )
+    from prismclaw.schema.agent.context import (
+        HasBootstrapProvider as HasBootstrapProvider,
+    )
+    from prismclaw.schema.agent.context import (
+        HasCompactionSettings as HasCompactionSettings,
+    )
+    from prismclaw.schema.agent.context import (
+        HasMemoryProvider as HasMemoryProvider,
+    )
+    from prismclaw.schema.agent.context import (
+        MemoryAftermathBoundary as MemoryAftermathBoundary,
+    )
+    from prismclaw.schema.agent.context import (
+        MemoryContextProvider as MemoryContextProvider,
+    )
+    from prismclaw.schema.agent.curator import (
+        CuratorSopRepository as CuratorSopRepository,
+    )
+    from prismclaw.schema.agent.curator_types import (
+        ArchivedSopRow as ArchivedSopRow,
+    )
+    from prismclaw.schema.agent.curator_types import (
+        ReviewDecision as ReviewDecision,
+    )
+    from prismclaw.schema.agent.curator_types import (
+        ReviewOutcome as ReviewOutcome,
+    )
+    from prismclaw.schema.agent.curator_types import (
+        SopRow as SopRow,
+    )
+    from prismclaw.schema.agent.domains import (
+        InvocationPolicy as InvocationPolicy,
+    )
+    from prismclaw.schema.agent.domains import (
+        PluginErrorType as PluginErrorType,
+    )
+    from prismclaw.schema.agent.domains import (
+        SkillSource as SkillSource,
+    )
+    from prismclaw.schema.agent.dream import (
+        DreamDispatchProtocol as DreamDispatchProtocol,
+    )
+    from prismclaw.schema.agent.memory import (
+        MemoryGatewayProtocol as MemoryGatewayProtocol,
+    )
+    from prismclaw.schema.agent.review import (
+        ContentRef as ContentRef,
+    )
+    from prismclaw.schema.agent.review import (
+        ContentStore as ContentStore,
+    )
+    from prismclaw.schema.agent.review import (
+        ReviewServiceProtocol as ReviewServiceProtocol,
+    )
+    from prismclaw.schema.agent.run_control_types import (
+        RunControl as RunControl,
+    )
+    from prismclaw.schema.agent.run_control_types import (
+        SteerMessage as SteerMessage,
+    )
+    from prismclaw.schema.agent.security import (
+        AllowedToolsPolicy as AllowedToolsPolicy,
+    )
+    from prismclaw.schema.agent.security import (
+        ConsentProtocol as ConsentProtocol,
+    )
+    from prismclaw.schema.agent.security import (
+        RuntimeMode as RuntimeMode,
+    )
+    from prismclaw.schema.agent.security import (
+        SignerProtocol as SignerProtocol,
+    )
+    from prismclaw.schema.agent.security_store import (
+        ConsentStoreProtocol as ConsentStoreProtocol,
+    )
+    from prismclaw.schema.agent.session import (
+        GoalRecord as GoalRecord,
+    )
+    from prismclaw.schema.agent.session import (
+        SessionContextItem as SessionContextItem,
+    )
+    from prismclaw.schema.agent.session import (
+        SessionContextState as SessionContextState,
+    )
+    from prismclaw.schema.agent.session_router import (
+        SessionRouterProtocol as SessionRouterProtocol,
+    )
+    from prismclaw.schema.agent.task_runtime import (
+        AcceptanceEvaluation as AcceptanceEvaluation,
+    )
+    from prismclaw.schema.agent.task_runtime import (
+        EvidenceRecord as EvidenceRecord,
+    )
+    from prismclaw.schema.agent.task_runtime import (
+        ReviewDecisionRecord as ReviewDecisionRecord,
+    )
+    from prismclaw.schema.agent.task_runtime import (
+        TaskRuntimeState as TaskRuntimeState,
+    )
+    from prismclaw.schema.agent.task_types import (
+        TaskSpec as TaskSpec,
+    )
+    from prismclaw.schema.agent.types import (
+        AgentDeps as AgentDeps,
+    )
+    from prismclaw.schema.agent.types import (
+        RunRequest as RunRequest,
+    )
+    from prismclaw.schema.content.compaction import (
+        DecisionLedgerEvent as DecisionLedgerEvent,
+    )
+    from prismclaw.schema.content.streaming import (
+        Done as Done,
+    )
+    from prismclaw.schema.content.streaming import (
+        ErrorEvent as ErrorEvent,
+    )
+    from prismclaw.schema.content.streaming import (
+        HeartbeatEvent as HeartbeatEvent,
+    )
+    from prismclaw.schema.content.streaming import (
+        IterationBoundary as IterationBoundary,
+    )
+    from prismclaw.schema.content.streaming import (
+        ReasoningChunk as ReasoningChunk,
+    )
+    from prismclaw.schema.content.streaming import (
+        SubagentProgressBatch as SubagentProgressBatch,
+    )
+    from prismclaw.schema.content.streaming import (
+        TextChunk as TextChunk,
+    )
+    from prismclaw.schema.content.streaming import (
+        ToolCallEnd as ToolCallEnd,
+    )
+    from prismclaw.schema.content.streaming import (
+        ToolCallStart as ToolCallStart,
+    )
+    from prismclaw.schema.content.streaming import (
+        ToolClarifyRequest as ToolClarifyRequest,
+    )
+
+
+def __getattr__(name: str) -> object:
     """Lazy re-export to avoid circular imports."""
     _lazy = {
         "AgentDeps": ("prismclaw.schema.agent.types", "AgentDeps"),
@@ -26,8 +197,14 @@ def __getattr__(name):
         "AllowedToolsPolicy": ("prismclaw.schema.agent.security", "AllowedToolsPolicy"),
         "RuntimeMode": ("prismclaw.schema.agent.security", "RuntimeMode"),
         "SignerProtocol": ("prismclaw.schema.agent.security", "SignerProtocol"),
-        "AggregateStoreProtocol": ("prismclaw.schema.agent.security_store", "AggregateStoreProtocol"),
-        "BreakGlassStoreProtocol": ("prismclaw.schema.agent.security_store", "BreakGlassStoreProtocol"),
+        "AggregateStoreProtocol": (
+            "prismclaw.schema.agent.security_store",
+            "AggregateStoreProtocol",
+        ),
+        "BreakGlassStoreProtocol": (
+            "prismclaw.schema.agent.security_store",
+            "BreakGlassStoreProtocol",
+        ),
         "ConsentStoreProtocol": ("prismclaw.schema.agent.security_store", "ConsentStoreProtocol"),
         "ContentRef": ("prismclaw.schema.agent.review", "ContentRef"),
         "ContentStore": ("prismclaw.schema.agent.review", "ContentStore"),
@@ -65,6 +242,7 @@ def __getattr__(name):
     }
     if name in _lazy:
         import importlib
+
         mod = importlib.import_module(_lazy[name][0])
         return getattr(mod, _lazy[name][1])
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

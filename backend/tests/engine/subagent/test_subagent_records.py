@@ -118,7 +118,13 @@ async def test_message_metadata_round_trip_for_all_roles() -> None:
             parent_id="user",
             role="assistant",
             content="working",
-            tool_calls=[{"id": "call:1", "type": "function", "function": {"name": "read", "arguments": "{}"}}],
+            tool_calls=[
+                {
+                    "id": "call:1",
+                    "type": "function",
+                    "function": {"name": "read", "arguments": "{}"},
+                }
+            ],
             metadata=metadata[1],
         ),
         MessageEntry(
@@ -131,10 +137,7 @@ async def test_message_metadata_round_trip_for_all_roles() -> None:
         ),
     ]
     logger = SessionEventLogger()
-    events = [
-        logger.message_entry(session_id, entry, entries[-1].id)[0]
-        for entry in entries
-    ]
+    events = [logger.message_entry(session_id, entry, entries[-1].id)[0] for entry in entries]
     await store.commit_events(events)
 
     loaded = await store.load(session_id)
@@ -406,9 +409,21 @@ async def test_unacked_messages_tool_effects_and_cold_rebuild() -> None:
 @pytest.mark.asyncio
 async def test_custom_subagent_payloads_accept_generic_dicts() -> None:
     entries: list[SessionEntry] = [
-        CustomEntry(id="session", parent_id=None, custom_type="subagent_session", data={"agent_id": "ag:one"}),
-        CustomEntry(id="run", parent_id="session", custom_type="subagent_run", data={"run_id": "ar:one"}),
-        CustomEntry(id="effect", parent_id="run", custom_type="subagent_tool_effect", data={"state": "committed"}),
+        CustomEntry(
+            id="session",
+            parent_id=None,
+            custom_type="subagent_session",
+            data={"agent_id": "ag:one"},
+        ),
+        CustomEntry(
+            id="run", parent_id="session", custom_type="subagent_run", data={"run_id": "ar:one"}
+        ),
+        CustomEntry(
+            id="effect",
+            parent_id="run",
+            custom_type="subagent_tool_effect",
+            data={"state": "committed"},
+        ),
     ]
     assert [entry.get_typed_data() for entry in entries] == [
         {"agent_id": "ag:one"},
@@ -453,8 +468,7 @@ async def test_inherited_context_drops_parent_tool_calls() -> None:
     inherited = [
         entry
         for entry in child.tree.get_branch()
-        if isinstance(entry, MessageEntry)
-        and (entry.metadata or {}).get("kind") == "inherited"
+        if isinstance(entry, MessageEntry) and (entry.metadata or {}).get("kind") == "inherited"
     ]
     assert len(inherited) == 1
     assert inherited[0].content == "parent did work"
@@ -467,9 +481,11 @@ def test_allowed_tools_expand_server_prefix_wildcard():
     from prismclaw.engine.subagent.prompting import expand_allowed_tool_names
 
     available = {"read", "write", "yuandian:search", "yuandian:get", "Slack:post"}
-    assert expand_allowed_tool_names(
-        ["read", "yuandian:*"], available
-    ) == {"read", "yuandian:search", "yuandian:get"}
+    assert expand_allowed_tool_names(["read", "yuandian:*"], available) == {
+        "read",
+        "yuandian:search",
+        "yuandian:get",
+    }
     # 未匹配到任何工具的前缀不应退化成「全部工具」
     assert expand_allowed_tool_names(["nope:*"], available) == set()
     assert expand_allowed_tool_names(["read"], available) == {"read"}

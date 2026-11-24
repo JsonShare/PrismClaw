@@ -1,10 +1,10 @@
 """能力目录路径解析的回归测试。
 
-覆盖两处收敛后的单一真源：
+覆盖收敛后的单一真源：
 - ``canonicalize_fs_path``：模型省略 ``assets`` 段时的纠正
 - ``resolve_capability_command``：command 被误当技能目录时的回退
-- ``_normalize_extracted_blocks``：二进制文档抽取文本的排版字符归一
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,10 +18,6 @@ from prismclaw.engine.toolkit.file.workspace import (
     is_remote_url,
     resolve_capability_command,
 )
-from prismclaw.engine.toolkit.office.document_image_extract import (
-    _normalize_extracted_blocks,
-)
-from prismclaw.schema.agent.data_types import TextBlock
 
 
 @pytest.fixture()
@@ -95,21 +91,12 @@ def test_resolve_capability_command_ignores_workspace_shapes(tmp_path: Path) -> 
     assert resolve_capability_command(plugin / "skills" / "x" / "SKILL.md") is None
 
 
-def test_normalize_extracted_blocks_folds_dashes_but_keeps_em_dash() -> None:
-    src = "5\u2010year range 45%\u2013100% \u2014\u2014 \u4e2d\u6587 A\u00a0B\u200bC"
-    out = _normalize_extracted_blocks([TextBlock(type="text", text=src)])[0].text
-
-    assert out.startswith("5-year range 45%-100% ")
-    assert "\u2014\u2014" in out  # 中文破折号保留
-    assert "A BC" in out  # NBSP 归一 + 零宽清除
-
-
 def test_is_remote_url_distinguishes_urls_from_paths() -> None:
     assert is_remote_url("https://pmc.ncbi.nlm.nih.gov/articles/PMC11023754")
     assert is_remote_url("file:///tmp/a")
     assert is_remote_url("git+ssh://host/repo")
     assert not is_remote_url("C:/Users/x")
-    assert not is_remote_url("outputs/a.md")
+    assert not is_remote_url("outbox/a.md")
     assert not is_remote_url("/tmp/a")
 
 

@@ -3,28 +3,19 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Protocol
 
-from prismclaw.schema.dream.dream_types import DreamAuditEntry, DreamBatchHealthMetrics
-from prismclaw.schema.dream.dream import DreamGovernanceStore
-from prismclaw.schema.dream.dream_types import DreamGovernanceRecord
-from prismclaw.schema.dream.dream import DreamStateStore
-from prismclaw.schema.dream.dream_types import DreamSessionState
+from prismclaw.schema.dream.dream import (
+    DreamAuditReader,
+    DreamGovernanceStore,
+    DreamStateStore,
+)
+from prismclaw.schema.dream.dream_types import (
+    DreamAuditEntry,
+    DreamBatchHealthMetrics,
+    DreamGovernanceRecord,
+    DreamSessionState,
+)
 from prismclaw.schema.storage.storage_types import MemoryStore
 
-class DreamAuditReader(Protocol):
-    async def list_entries(
-        self,
-        *,
-        session_key: str | None = None,
-        batch_id: str | None = None,
-        phase: str | None = None,
-    ) -> list[DreamAuditEntry]: ...
-
-    async def latest_batch_metrics(
-        self,
-        *,
-        trigger: str | None = None,
-        session_key: str | None = None,
-    ) -> DreamBatchHealthMetrics | None: ...
 
 class DreamDispatchReader(Protocol):
     async def list_dead_letters(
@@ -40,6 +31,7 @@ class DreamDispatchReader(Protocol):
         session_key: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, object]]: ...
+
 
 @dataclass(slots=True)
 class DreamStateWatermarks:
@@ -60,6 +52,7 @@ class DreamStateWatermarks:
     compile_cursor: str | None = None
     last_compile_started_at: float | None = None
     last_compile_finished_at: float | None = None
+
 
 @dataclass(slots=True)
 class DreamQualityMetrics:
@@ -87,6 +80,7 @@ class DreamQualityMetrics:
     latest_dispatch_replay_block_reason: str | None = None
     latest_compile_status: str | None = None
 
+
 @dataclass(slots=True)
 class DreamPublicationMetrics:
     total_records: int = 0
@@ -108,6 +102,7 @@ class DreamPublicationMetrics:
     dispatch_blocked_replay_count: int = 0
     archive_artifact_count: int = 0
 
+
 @dataclass(slots=True)
 class DreamStatusSnapshot:
     session_key: str
@@ -124,6 +119,7 @@ class DreamStatusSnapshot:
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
 
 class DreamStatusService:
     def __init__(
@@ -210,6 +206,7 @@ class DreamStatusService:
                 items.append(snapshot)
         return items
 
+
 def _build_status_snapshot(
     *,
     session_key: str,
@@ -251,6 +248,7 @@ def _build_status_snapshot(
         publications=publications,
     )
 
+
 def _build_watermarks(
     state: DreamSessionState | None,
     audit_entries: list[DreamAuditEntry],
@@ -287,6 +285,7 @@ def _build_watermarks(
         last_compile_started_at=getattr(state, "last_compile_started_at", None),
         last_compile_finished_at=getattr(state, "last_compile_finished_at", None),
     )
+
 
 def _build_publication_metrics(
     governance_records: list[DreamGovernanceRecord],
@@ -325,8 +324,12 @@ def _build_publication_metrics(
             for record in governance_records
             if record.publish_channel == "canary" and record.review_status == "pending_review"
         ),
-        memory_record_count=sum(1 for record in governance_records if record.target_type == "memory"),
-        artifact_record_count=sum(1 for record in governance_records if record.target_type == "artifact"),
+        memory_record_count=sum(
+            1 for record in governance_records if record.target_type == "memory"
+        ),
+        artifact_record_count=sum(
+            1 for record in governance_records if record.target_type == "artifact"
+        ),
         dispatch_dead_letter_count=len(dead_letters),
         dispatch_replayable_dead_letter_count=sum(
             1 for item in replay_candidates if item.get("replayable") is True
@@ -336,6 +339,7 @@ def _build_publication_metrics(
         ),
         archive_artifact_count=int(archive_stats.get("archive_artifact_count", 0) or 0),
     )
+
 
 def _build_quality_metrics(
     *,
@@ -361,7 +365,8 @@ def _build_quality_metrics(
         if latest_batch.total_llm_cost > 0:
             score -= min(10, latest_batch.total_llm_cost // 5000)
     if watermarks.last_failure_at is not None and (
-        watermarks.last_success_at is None or watermarks.last_failure_at >= watermarks.last_success_at
+        watermarks.last_success_at is None
+        or watermarks.last_failure_at >= watermarks.last_success_at
     ):
         score -= 15
     if publications.pending_review_count > 0:
@@ -396,13 +401,16 @@ def _build_quality_metrics(
         latest_discarded_candidate_count=int(getattr(latest_batch, "discarded_candidates", 0) or 0),
         latest_merged_entry_count=int(getattr(latest_batch, "merged_entries", 0) or 0),
         latest_temporal_update_count=int(getattr(latest_batch, "temporal_updates", 0) or 0),
-        latest_gate_rejected_entry_count=int(getattr(latest_batch, "gate_rejected_entries", 0) or 0),
+        latest_gate_rejected_entry_count=int(
+            getattr(latest_batch, "gate_rejected_entries", 0) or 0
+        ),
         latest_published_memory_count=int(getattr(latest_batch, "published_memory_count", 0) or 0),
         latest_failure_reason=latest_failure_reason,
         latest_dispatch_dead_letter_error=_latest_dispatch_dead_letter_error(dead_letters),
         latest_dispatch_replay_block_reason=_latest_dispatch_replay_block_reason(replay_candidates),
         latest_compile_status=getattr(state, "last_compile_status", None),
     )
+
 
 def _derive_health_status(
     *,
@@ -418,7 +426,8 @@ def _derive_health_status(
     if publications.dispatch_dead_letter_count > 0:
         return "degraded"
     if watermarks.last_failure_at is not None and (
-        watermarks.last_success_at is None or watermarks.last_failure_at >= watermarks.last_success_at
+        watermarks.last_success_at is None
+        or watermarks.last_failure_at >= watermarks.last_success_at
     ):
         return "degraded"
     if publications.pending_review_count > 0:
@@ -426,6 +435,7 @@ def _derive_health_status(
     if getattr(state, "dream_pending", False):
         return "queued"
     return "healthy"
+
 
 def _derive_state_label(
     state: DreamSessionState | None,
@@ -442,20 +452,37 @@ def _derive_state_label(
         return "queued"
     return "idle"
 
+
 def _none_if_zero(value: float | None) -> float | None:
-    if value in (None, 0, 0.0):
+    if value is None or value == 0:
         return None
     return float(value)
+
+
+def _epoch_seconds(value: object) -> float:
+    """把松散的入队时间戳收窄为 float 排序键。"""
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
 
 def _latest_dispatch_dead_letter_error(dead_letters: list[dict[str, object]]) -> str | None:
     if not dead_letters:
         return None
     latest = max(
         dead_letters,
-        key=lambda item: float(item.get("enqueued_at", 0.0) or 0.0),
+        key=lambda item: _epoch_seconds(item.get("enqueued_at", 0.0)),
     )
     text = str(latest.get("last_error", "") or "").strip()
     return text or None
+
 
 def _latest_dispatch_replay_block_reason(
     replay_candidates: list[dict[str, object]],
@@ -470,7 +497,7 @@ def _latest_dispatch_replay_block_reason(
         return None
     latest = max(
         blocked,
-        key=lambda item: float(item.get("enqueued_at", 0.0) or 0.0),
+        key=lambda item: _epoch_seconds(item.get("enqueued_at", 0.0)),
     )
     text = str(latest.get("replay_block_reason", "") or "").strip()
     return text or None

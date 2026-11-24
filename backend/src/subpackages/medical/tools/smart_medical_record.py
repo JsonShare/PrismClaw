@@ -3,6 +3,7 @@
 符合 Tool Protocol：name / description / parameters / tool_class /
 side_effect / effect_class + async execute()。
 """
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from .._protocols import ToolContext, text_result, error_result
+from .._protocols import ToolContext, error_result, text_result
 
 
 @dataclass
@@ -25,29 +26,31 @@ class SmartMedicalRecordTool:
 
     name: str = "smart_medical_record"
     description: str = "智能病历工具 — 结构化录入、查询与摘要生成"
-    parameters: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["create", "query", "summarize"],
-                "description": "操作类型：create=录入, query=查询, summarize=摘要",
+    parameters: dict[str, Any] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "query", "summarize"],
+                    "description": "操作类型：create=录入, query=查询, summarize=摘要",
+                },
+                "patient_id": {
+                    "type": "string",
+                    "description": "患者 ID",
+                },
+                "record_data": {
+                    "type": "object",
+                    "description": "病历数据（录入时必填）",
+                },
+                "query_criteria": {
+                    "type": "object",
+                    "description": "查询条件（查询时必填）",
+                },
             },
-            "patient_id": {
-                "type": "string",
-                "description": "患者 ID",
-            },
-            "record_data": {
-                "type": "object",
-                "description": "病历数据（录入时必填）",
-            },
-            "query_criteria": {
-                "type": "object",
-                "description": "查询条件（查询时必填）",
-            },
-        },
-        "required": ["action"],
-    })
+            "required": ["action"],
+        }
+    )
     tool_class: str = "write"
     side_effect: bool = True
     effect_class: str = "medical_record"
@@ -93,7 +96,10 @@ class SmartMedicalRecordTool:
 
         return text_result(
             call_id,
-            json.dumps({"record_id": record_id, "patient_id": patient_id, "status": "created"}, ensure_ascii=False),
+            json.dumps(
+                {"record_id": record_id, "patient_id": patient_id, "status": "created"},
+                ensure_ascii=False,
+            ),
         )
 
     async def _handle_query(self, args: dict[str, Any], call_id: str) -> Any:
@@ -105,7 +111,9 @@ class SmartMedicalRecordTool:
         records = await self.store.search_reports(criteria)
         return text_result(
             call_id,
-            json.dumps({"records": records, "count": len(records)}, ensure_ascii=False, default=str),
+            json.dumps(
+                {"records": records, "count": len(records)}, ensure_ascii=False, default=str
+            ),
         )
 
     async def _handle_summarize(self, args: dict[str, Any], call_id: str) -> Any:
@@ -117,7 +125,9 @@ class SmartMedicalRecordTool:
         # 查询该患者所有文档
         records = await self.store.search_reports({"patient_id": patient_id})
         if not records:
-            return text_result(call_id, json.dumps({"summary": "未找到病历记录"}, ensure_ascii=False))
+            return text_result(
+                call_id, json.dumps({"summary": "未找到病历记录"}, ensure_ascii=False)
+            )
 
         # 基于文档数据生成结构化摘要（新 schema：diagnosis / report_type / summary）
         diagnoses = set()
@@ -135,4 +145,6 @@ class SmartMedicalRecordTool:
             "diagnoses": sorted(diagnoses),
             "latest_summary": records[0].get("summary", "") if records else "",
         }
-        return text_result(call_id, json.dumps({"summary": summary}, ensure_ascii=False, default=str))
+        return text_result(
+            call_id, json.dumps({"summary": summary}, ensure_ascii=False, default=str)
+        )

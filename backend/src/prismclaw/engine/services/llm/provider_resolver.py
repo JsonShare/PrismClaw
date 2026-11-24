@@ -55,40 +55,43 @@ def _should_retry_transient_provider_error(exc: Exception) -> bool:
         return True
     if "jsondecodeerror" in msg and ("openaiexception" in msg or "openai" in msg):
         return True
-    if "openaiexception" in msg and "expecting" in msg:
-        return True
-    return False
+    return bool("openaiexception" in msg and "expecting" in msg)
 
 
 # 连接/传输层异常族：流式响应被截断（代理/上游切断 SSE 流）或连接建立失败时，
 # aiohttp / httpx / litellm 抛出的底层异常。按异常类型（而非消息子串）判定，
 # 因为 camelCase 的 "APIConnectionError" 与传输层包装器无法被子串启发式命中。
 # classify_error 与 client 共用同一判定。
-_CONNECTION_ERROR_TYPES: tuple[type, ...] = ()
+_CONNECTION_ERROR_TYPES: tuple[type[BaseException], ...] = ()
 
 
-def _connection_error_types() -> tuple[type, ...]:
+def _connection_error_types() -> tuple[type[BaseException], ...]:
     """Lazily resolve the connection/transport exception family (cached)."""
     global _CONNECTION_ERROR_TYPES
     if _CONNECTION_ERROR_TYPES:
         return _CONNECTION_ERROR_TYPES
     # builtin ConnectionError 覆盖 ConnectionRefusedError/ResetError。
-    types: list[type] = [ConnectionError]
+    types: list[type[BaseException]] = [ConnectionError]
     try:
         from litellm.exceptions import (
             APIConnectionError as _LiteLLMAPIConnectionError,
+        )
+        from litellm.exceptions import (
             MidStreamFallbackError as _LiteLLMMidStream,
         )
+
         types.extend([_LiteLLMAPIConnectionError, _LiteLLMMidStream])
     except Exception:
         pass
     try:
         import httpx
+
         types.extend([httpx.ReadError, httpx.TransportError])
     except Exception:
         pass
     try:
         import aiohttp
+
         types.extend([aiohttp.ClientPayloadError, aiohttp.ClientConnectionError])
     except Exception:
         pass
@@ -116,7 +119,12 @@ def classify_error(exc: Exception) -> str:
         return LLMErrorCode.RATE_LIMIT
     if "auth" in message or "api key" in message or "unauthorized" in message or "401" in message:
         return LLMErrorCode.AUTH_ERROR
-    if "connection error" in message or "server disconnected" in message or "connection refused" in message or "connecterror" in message:
+    if (
+        "connection error" in message
+        or "server disconnected" in message
+        or "connection refused" in message
+        or "connecterror" in message
+    ):
         return LLMErrorCode.CONNECTION_ERROR
     if "timeout" in message or "timed out" in message:
         return LLMErrorCode.TIMEOUT

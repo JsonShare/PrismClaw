@@ -10,22 +10,26 @@ RuleGate 是工具调用前的第一层静态检查：先做快速静态规则�
   4. workspace_tag：allow_external_write=False + EXTERNAL_WRITE → deny；bash/python → 统一 TIGHT
   5. mcp_meta：未注册 MCP → fail-closed 最严分类
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
 from prismclaw.engine.security.gate.policies import WorkspaceTag
-from prismclaw.engine.security.gate.routing.risk_router import ToolSafetyMeta, SideEffectScope
+from prismclaw.engine.security.gate.routing._extension_registry import (
+    get_domain_sensitive_extensions,
+)
+from prismclaw.engine.security.gate.routing.risk_router import SideEffectScope, ToolSafetyMeta
 from prismclaw.schema.content.workspace import SandboxTier
-from prismclaw.engine.security.gate.routing._extension_registry import get_domain_sensitive_extensions
 
 
 @dataclass(frozen=True)
 class RuleGateResult:
     """RuleGate 检查结果。"""
+
     allowed: bool
     reason: str = ""
     tier_override: SandboxTier | None = None  # workspace_tag 规则可能升级 tier
@@ -33,27 +37,61 @@ class RuleGateResult:
 
 # ── 敏感路径列表 ────────────────────────────────────────────────────────
 
-_SENSITIVE_PATHS = frozenset({
-    "/etc/passwd", "/etc/shadow", "/etc/ssh",
-    "/proc", "/sys", "/dev",
-    "~/.ssh", "~/.gnupg", "~/.aws",
-})
+_SENSITIVE_PATHS = frozenset(
+    {
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/ssh",
+        "/proc",
+        "/sys",
+        "/dev",
+        "~/.ssh",
+        "~/.gnupg",
+        "~/.aws",
+    }
+)
 
-_SENSITIVE_EXTENSIONS = frozenset({
-    # Cryptographic keys & signatures (domain-agnostic, security-critical)
-    ".pem", ".key", ".p12", ".pfx", ".sig", ".p7s", ".psig",
-    # Digitally signed documents (domain-agnostic)
-    ".odt-cert", ".docx-sign",
-})
+_SENSITIVE_EXTENSIONS = frozenset(
+    {
+        # Cryptographic keys & signatures (domain-agnostic, security-critical)
+        ".pem",
+        ".key",
+        ".p12",
+        ".pfx",
+        ".sig",
+        ".p7s",
+        ".psig",
+        # Digitally signed documents (domain-agnostic)
+        ".odt-cert",
+        ".docx-sign",
+    }
+)
 
 _SENSITIVE_PREFIXES = ("/etc/", "/proc/", "/sys/", "/dev/")
 
 # SSRF 目标
 _SSRF_HOSTS = frozenset({"169.254.169.254", "metadata.google.internal"})
-_SSRF_IP_PREFIXES = ("127.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
-                      "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
-                      "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
-                      "172.30.", "172.31.", "192.168.")
+_SSRF_IP_PREFIXES = (
+    "127.",
+    "10.",
+    "172.16.",
+    "172.17.",
+    "172.18.",
+    "172.19.",
+    "172.20.",
+    "172.21.",
+    "172.22.",
+    "172.23.",
+    "172.24.",
+    "172.25.",
+    "172.26.",
+    "172.27.",
+    "172.28.",
+    "172.29.",
+    "172.30.",
+    "172.31.",
+    "192.168.",
+)
 
 
 class RuleGate:
@@ -113,9 +151,13 @@ class RuleGate:
             p = PurePosixPath(path)
             if ".." in p.parts:
                 return RuleGateResult(allowed=False, reason="path_escape：路径中包含 '..'")
-            if p.is_absolute() and workspace_root:
-                if not path.startswith(workspace_root.rstrip("/") + "/") and path != workspace_root.rstrip("/"):
-                    return RuleGateResult(allowed=False, reason="path_escape：绝对路径位于工作区之外")
+            if (
+                p.is_absolute()
+                and workspace_root
+                and not path.startswith(workspace_root.rstrip("/") + "/")
+                and path != workspace_root.rstrip("/")
+            ):
+                return RuleGateResult(allowed=False, reason="path_escape：绝对路径位于工作区之外")
         except Exception:
             pass
         return RuleGateResult(allowed=True)
@@ -133,16 +175,22 @@ class RuleGate:
         # 前缀匹配
         for prefix in _SENSITIVE_PREFIXES:
             if path.startswith(prefix):
-                return RuleGateResult(allowed=False, reason=f"sensitive_path: {path} under {prefix}")
+                return RuleGateResult(
+                    allowed=False, reason=f"sensitive_path: {path} under {prefix}"
+                )
         # ~/.ssh 等
-        if path.startswith("~/") and any(path.startswith(f"~/{sp}") for sp in (".ssh/", ".gnupg/", ".aws/")):
+        if path.startswith("~/") and any(
+            path.startswith(f"~/{sp}") for sp in (".ssh/", ".gnupg/", ".aws/")
+        ):
             return RuleGateResult(allowed=False, reason=f"sensitive_path: {path}")
         # 敏感扩展名匹配（核心通用 + 域注册）
         lower_path = path.lower()
         all_extensions = _SENSITIVE_EXTENSIONS | get_domain_sensitive_extensions()
         for ext in all_extensions:
             if lower_path.endswith(ext):
-                return RuleGateResult(allowed=False, reason=f"sensitive_extension: {path} (extension {ext})")
+                return RuleGateResult(
+                    allowed=False, reason=f"sensitive_extension: {path} (extension {ext})"
+                )
         return RuleGateResult(allowed=True)
 
     # ── Rule 3: SSRF ──────────────────────────────────────────────────
@@ -178,15 +226,23 @@ class RuleGate:
             return RuleGateResult(allowed=True)
 
         # allow_external_write=False + EXTERNAL_WRITE → deny
-        if not workspace_tag.allow_external_write:
-            if meta.side_effect_scope in (SideEffectScope.EXTERNAL_WRITE, SideEffectScope.EXTERNAL_IRREVERSIBLE):
-                return RuleGateResult(
-                    allowed=False,
-                    reason=f"external_write_deny：{tool_name} 在 allow_external_write=False 的工作区中具有 {meta.side_effect_scope.value} 副作用",
-                )
+        if not workspace_tag.allow_external_write and meta.side_effect_scope in (
+            SideEffectScope.EXTERNAL_WRITE,
+            SideEffectScope.EXTERNAL_IRREVERSIBLE,
+        ):
+            return RuleGateResult(
+                allowed=False,
+                reason=(
+                    f"external_write_deny：{tool_name} 在 allow_external_write=False "
+                    f"的工作区中具有 {meta.side_effect_scope.value} 副作用"
+                ),
+            )
 
         # bash/python → 统一升级为 TIGHT（不再仅限 PHI 工作区）
-        if tool_name in ("bash", "python") and meta.side_effect_scope == SideEffectScope.LOCAL_WORKSPACE:
+        if (
+            tool_name in ("bash", "python")
+            and meta.side_effect_scope == SideEffectScope.LOCAL_WORKSPACE
+        ):
             return RuleGateResult(allowed=True, tier_override=SandboxTier.TIGHT)
 
         return RuleGateResult(allowed=True)

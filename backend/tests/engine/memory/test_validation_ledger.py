@@ -21,8 +21,12 @@ from prismclaw.schema.agent.session import MessageEntry
 
 def _msg(entry_id: str, role: str, *, is_error: bool = False) -> MessageEntry:
     return MessageEntry(
-        id=entry_id, parent_id=None, type="message", role=role,  # type: ignore[arg-type]
-        content="x", is_error=is_error,
+        id=entry_id,
+        parent_id=None,
+        type="message",
+        role=role,  # type: ignore[arg-type]
+        content="x",
+        is_error=is_error,
     )
 
 
@@ -31,9 +35,7 @@ class _FakeStore:
         self.validation_events: list[dict[str, Any]] = []
         self.use_bumped: list[list[str]] = []
 
-    async def record_validation_events(
-        self, session_key: str, events: list[dict[str, Any]]
-    ) -> int:
+    async def record_validation_events(self, session_key: str, events: list[dict[str, Any]]) -> int:
         self.validation_events.extend(events)
         return len(events)
 
@@ -57,8 +59,8 @@ async def test_aftermath_shadow_path_produces_signals_and_use_counts() -> None:
 
     branch: list[MessageEntry] = [
         _msg("u1", "user"),
-        _msg("t1", "tool"),            # 成功工具
-        _msg("a1", "assistant"),       # 有回复 → task_success
+        _msg("t1", "tool"),  # 成功工具
+        _msg("a1", "assistant"),  # 有回复 → task_success
     ]
     fake_tree = SimpleNamespace(get_branch=lambda: branch)
 
@@ -69,7 +71,7 @@ async def test_aftermath_shadow_path_produces_signals_and_use_counts() -> None:
     boundary = DefaultMemoryAftermathBoundary(
         memory_store=store,
         session_store=_FakeSessions(),
-        attribution_recorder=None,     # ← 无归因环境（生产默认）
+        attribution_recorder=None,  # ← 无归因环境（生产默认）
         validation_ledger=ledger,
     )
     await boundary._record_attribution_signals("web:test")

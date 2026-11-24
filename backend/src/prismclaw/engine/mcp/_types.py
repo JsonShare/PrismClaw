@@ -3,10 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
-
-if TYPE_CHECKING:
-    pass
+from typing import Literal
 
 _STDERR_BUFFER_LINES = 200
 _TOOL_COUNT_WARN_THRESHOLD = 100

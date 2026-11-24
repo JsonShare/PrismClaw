@@ -15,12 +15,13 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from prismclaw.engine.toolkit.registry.tool_classification import is_search_intent_tool
+from prismclaw.schema.content.streaming import IterationBoundary, ToolCallEnd, ToolCallStart
 
 # --------------------------------------------------------------------------- #
 # 底层明细与合并组
@@ -136,7 +137,9 @@ class HeartbeatPayload(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    state: Literal["generating", "executing", "compacting", "waiting_llm", "awaiting_clarification"] = Field(alias="state")
+    state: Literal[
+        "generating", "executing", "compacting", "waiting_llm", "awaiting_clarification"
+    ] = Field(alias="state")
     partial_tool_name: str | None = Field(default=None, alias="partialToolName")
     chars_so_far: int | None = Field(default=None, alias="charsSoFar")
     elapsed_s: float = Field(alias="elapsedS")
@@ -189,7 +192,7 @@ def _is_search_tool(low: str) -> bool:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _format_args_text(arguments: dict[str, Any] | None) -> str | None:
@@ -232,12 +235,14 @@ def _kind_for_tool(name: str) -> str:
 def _rel_path(path: str, workspace_root: str | None) -> str:
     s = str(path)
     if workspace_root and s.startswith(workspace_root):
-        rel = s[len(workspace_root):].lstrip("/")
+        rel = s[len(workspace_root) :].lstrip("/")
         return rel or s
     return s
 
 
-def _normalize_target(name: str, arguments: dict[str, Any] | None, workspace_root: str | None) -> str:
+def _normalize_target(
+    name: str, arguments: dict[str, Any] | None, workspace_root: str | None
+) -> str:
     """§5.2 ``normalized_target`` 规则：文件路径取 workspace 相对路径；bash 取命令首词；
     skill/agent 取名字/描述；其余尽量取路径，否则回退工具名。"""
     args = arguments or {}
@@ -264,7 +269,7 @@ def _normalize_target(name: str, arguments: dict[str, Any] | None, workspace_roo
     return name
 
 
-def _extract_error_text(result: Any) -> str | None:
+def _extract_error_text(result: object) -> str | None:
     """从 ``ToolResult.content`` 提取错误文本（不依赖 chat.py，保持模型自包含）。"""
     if result is None:
         return None
@@ -349,7 +354,7 @@ class TaskExecutionProjector:
 
     # -- 分段信号 ----------------------------------------------------------- #
 
-    def on_iteration_boundary(self, boundary: Any) -> UpsertNodePatch | None:
+    def on_iteration_boundary(self, boundary: IterationBoundary) -> UpsertNodePatch | None:
         """处理 IterationBoundary：llm_start 切换当前段；llm_end 结束当前段的 spinner。
         当前实现只消费 llm_start（切段）；llm_end 作为可选标记不返回 patch（随下一次工具
         执行 patch 会自然把 reasoning 定下来）。"""
@@ -394,7 +399,7 @@ class TaskExecutionProjector:
         store[seg_id] = content
 
     def on_tool_call_start(
-        self, event: Any, workspace_root: str | None = None
+        self, event: ToolCallStart, workspace_root: str | None = None
     ) -> list[TimelinePatch]:
         step_id = event.step_id
         seg = self._current_segment
@@ -416,7 +421,7 @@ class TaskExecutionProjector:
         # 扁平化：直接 append 到 _operations，按 call_id upsert（O(1)）。
         detail = OperationDetail(
             call_id=event.tool_call_id,
-            segmentId=seg,
+            segment_id=seg,
             status="running",
             started_at=_now_iso(),
             tool_name=event.name,
@@ -438,12 +443,12 @@ class TaskExecutionProjector:
             patches.append(UpsertNodePatch(node=self._build_orphan_node()))
         # 段从"独立 reasoning 节点"晋升到卡片 → 消掉前端已渲染的独立节点。
         if newly_attached:
-            patches.append(
-                UpsertNodePatch(node=ReasoningNode(segmentId=seg, content=""))
-            )
+            patches.append(UpsertNodePatch(node=ReasoningNode(segmentId=seg, content="")))
         return patches
 
-    def on_tool_call_end(self, event: Any, workspace_root: str | None = None) -> list[TimelinePatch] | None:
+    def on_tool_call_end(
+        self, event: ToolCallEnd, workspace_root: str | None = None
+    ) -> list[TimelinePatch] | None:
         # 扁平化：直接按 call_id 在 _operations 里定位
         idx = self._op_index.get(event.tool_call_id)
         if idx is None:
@@ -500,14 +505,12 @@ class TaskExecutionProjector:
                         continue
                     # 去重/幂等：_upsert_reasoning_segment_to_card 内部以 seg_id 做
                     # bucket 去重，多次调用安全。
-                    self._upsert_reasoning_segment_to_card(
-                        step_id, seg, new_content
-                    )
+                    self._upsert_reasoning_segment_to_card(step_id, seg, new_content)
                 # 后续 reasoning_patch() 会以 card 内嵌形式 upsert 给前端，
                 # 同时把 seg 从"独立 ReasoningNode 兜底"晋升为 card 内嵌形态。
 
             # 已有 card-attached entry：保持增量同步（原逻辑不变）
-            for card_key, store in self._node_reasoning_segments.items():
+            for _card_key, store in self._node_reasoning_segments.items():
                 if seg in store:
                     store[seg] = new_content
 
@@ -555,7 +558,8 @@ class TaskExecutionProjector:
         OperationGroup 折叠/展开往返造成的"乱窜"）。
         """
         filtered_ops = [
-            op for op in self._operations
+            op
+            for op in self._operations
             if self._op_index.get(op.call_id) is not None
             and self._tool_segment.get(op.call_id, (None, None))[1] == step_id_filter
         ]
@@ -589,7 +593,7 @@ class TaskExecutionProjector:
                 continue
             out.append(
                 IterationUnit(
-                    segmentId=sid,
+                    segment_id=sid,
                     reasoning=reasoning,
                     text=text,
                     operations=ops,
@@ -603,7 +607,7 @@ class TaskExecutionProjector:
             iterations=self._build_iterations(step_id_filter=None, seg_store=seg_store),
         )
 
-    def build_snapshot_dict(self, assistant_message_id: str | None) -> dict:
+    def build_snapshot_dict(self, assistant_message_id: str | None) -> dict[str, Any]:
         """完整 timeline 快照，供 RunProjection 持久化 + 前端 hydrateRun 重建。
 
         扁平重构后结构简化：messageId + nodes。nodes 里的 OrphanOperationsNode /
@@ -618,7 +622,7 @@ class TaskExecutionProjector:
 
     def to_nodes(self) -> list[TimelineNode]:
         # step 节点（扁平结构下直接从 _step_ops 的 key 集合取）
-        step_ids = [sid for sid in self._step_ops.keys() if sid is not None]
+        step_ids = [sid for sid in self._step_ops if sid is not None]
         step_nodes: list[TimelineNode] = [
             self._build_step_node(step_id) for step_id in sorted(step_ids)
         ]
@@ -640,6 +644,7 @@ class TaskExecutionProjector:
         reasoning_nodes: list[TimelineNode] = [
             ReasoningNode(segmentId=sid, content=text) for sid, text in orphan_segs
         ]
+
         # 关键修复：不再把独立 reasoning 无条件甩到末尾，而是按真实时间序
         # （segmentId）交错插入到 step / orphan 之间。否则纯推理段（如发生在
         # 两个执行步骤之间的"换思路"思考）会被错误排到所有执行之后，造成
@@ -657,7 +662,9 @@ class TaskExecutionProjector:
         all_nodes.sort(key=time_key)
         return all_nodes
 
-    def _derive_step_status(self, step_id: str) -> Literal["completed", "current", "pending", "failed"]:
+    def _derive_step_status(
+        self, step_id: str
+    ) -> Literal["completed", "current", "pending", "failed"]:
         """根据扁平 operations 的运行状态自动推导步骤状态。"""
         calls = self._step_ops.get(step_id, set())
         all_details = [

@@ -30,9 +30,7 @@ _CANDIDATE = DreamMemoryCandidate(
 def test_compiler_normalizes_type_and_derives_layer(
     raw_type: str, expected_type: str, expected_layer: str
 ) -> None:
-    normalized = _normalize_candidate_memories(
-        [{"type": raw_type, "content": "c", "layer": "L2"}]
-    )
+    normalized = _normalize_candidate_memories([{"type": raw_type, "content": "c", "layer": "L2"}])
 
     assert normalized[0]["type"] == expected_type
     assert normalized[0]["layer"] == expected_layer

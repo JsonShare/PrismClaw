@@ -1,8 +1,10 @@
 """Dream governance — re-exports from contracts + local implementations."""
+
 from __future__ import annotations
 
 from prismclaw.schema.dream.dream import DreamAdminOps, DreamGovernanceStore, DreamStatusOps
 from prismclaw.schema.dream.dream_types import DreamDecisionAuditRecord, DreamGovernanceRecord
+
 from .governance_runtime import DreamGovernanceRuntime
 from .ops import InProcessDreamAdminOps
 

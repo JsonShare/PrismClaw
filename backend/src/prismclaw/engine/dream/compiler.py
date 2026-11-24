@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from prismclaw.schema.llm.types import LLMClient
-from prismclaw.schema.llm.request import PackedLLMRequest
 from prismclaw.engine.dream.candidates import DreamCandidateStore, DreamMemoryCandidate
-from prismclaw.engine.dream.models import DreamPublishResult, DreamPublishableMemory
+from prismclaw.engine.dream.models import DreamPublishableMemory, DreamPublishResult
 from prismclaw.engine.dream.publishing import (
     append_unique_ref,
     build_publishable_memory,
@@ -18,9 +17,11 @@ from prismclaw.engine.dream.publishing import (
     normalize_steps,
     preferred_str,
 )
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.memory.classify import normalize_type
 from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.storage.storage_types import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,9 @@ class DreamCompiler:
             llm_cost += extract_cost
             if not extracted:
                 await self._update_candidate_status(
-                    _replace_candidate_status(candidate, "discarded", reason="no_structured_memories")
+                    _replace_candidate_status(
+                        candidate, "discarded", reason="no_structured_memories"
+                    )
                 )
                 discarded_candidates += 1
                 continue
@@ -215,7 +218,9 @@ class DreamCompiler:
             layers=[layer],
             limit=5,
         )
-        existing = [entry for entry in existing if _is_visible_memory_entry(entry, include_canary=False)]
+        existing = [
+            entry for entry in existing if _is_visible_memory_entry(entry, include_canary=False)
+        ]
         if not existing:
             now = time.time()
             published = await self._publish_memory(
@@ -247,7 +252,10 @@ class DreamCompiler:
         action = str(decision.get("action", "new"))
         target_id = str(decision.get("target_id", "") or "")
         merged_content = str(decision.get("merged_content", "") or "").strip()
-        confidence = coerce_confidence(decision.get("confidence"), extracted.get("confidence"))
+        confidence = coerce_confidence(
+            decision.get("confidence"),
+            coerce_confidence(extracted.get("confidence"), 0.75),
+        )
         target = next((entry for entry in existing if entry.id == target_id), existing[0])
         now = time.time()
         memory_type = str(extracted.get("type", "fact"))
@@ -264,7 +272,9 @@ class DreamCompiler:
                             _safe_float(target.stability_score),
                             self._stability_score_fn(target, 2),
                         ),
-                        "source_refs": append_unique_ref(target.source_refs, candidate.candidate_id),
+                        "source_refs": append_unique_ref(
+                            target.source_refs, candidate.candidate_id
+                        ),
                         "last_validated_at": now,
                         "valid_from": target.valid_from or target.created_at,
                         "valid_to": None,
@@ -278,7 +288,9 @@ class DreamCompiler:
                 "merged_entries": 1,
                 "temporal_updates": 0,
                 "published_memory_ids": [target.id],
-                "published_memory_kinds": [infer_memory_kind(None, layer=target.layer, type_=target.type)],
+                "published_memory_kinds": [
+                    infer_memory_kind(None, layer=target.layer, type_=target.type)
+                ],
             }, llm_cost
 
         if action == "refine":
@@ -288,14 +300,18 @@ class DreamCompiler:
                     update={
                         "type": memory_type,
                         "content": merged_content or content,
-                        "entity_key": preferred_str(decision.get("entity_key"), extracted.get("entity_key")),
+                        "entity_key": preferred_str(
+                            decision.get("entity_key"), extracted.get("entity_key")
+                        ),
                         "origin_stage": "candidate_merge",
                         "confidence": max(_safe_float(target.confidence), confidence),
                         "stability_score": max(
                             _safe_float(target.stability_score),
                             confidence,
                         ),
-                        "source_refs": append_unique_ref(target.source_refs, candidate.candidate_id),
+                        "source_refs": append_unique_ref(
+                            target.source_refs, candidate.candidate_id
+                        ),
                         "last_validated_at": now,
                         "valid_from": target.valid_from or target.created_at,
                         "valid_to": None,
@@ -309,7 +325,9 @@ class DreamCompiler:
                 "merged_entries": 1,
                 "temporal_updates": 0,
                 "published_memory_ids": [target.id],
-                "published_memory_kinds": [infer_memory_kind(None, layer=target.layer, type_=target.type)],
+                "published_memory_kinds": [
+                    infer_memory_kind(None, layer=target.layer, type_=target.type)
+                ],
             }, llm_cost
 
         if action == "contradict":
@@ -395,7 +413,8 @@ class DreamCompiler:
         ]
         prompt = (
             "你是一个长期记忆 merge judge。请判断新的记忆候选与现有记忆的关系。"
-            "只输出 JSON，对象字段包含 action(target_id 可选，值为 duplicate/refine/contradict/new)、"
+            "只输出 JSON，对象字段包含 action"
+            "(target_id 可选，值为 duplicate/refine/contradict/new)、"
             "merged_content、entity_key、confidence。\n"
             f"session_key: {session_key}\n"
             f"candidate_id: {candidate.candidate_id}\n"
@@ -484,7 +503,7 @@ def _parse_json_object(raw: str) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _parse_json_fragment(raw: str) -> Any:
+def _parse_json_fragment(raw: str) -> object:
     text = str(raw or "").strip()
     if not text:
         return None
@@ -639,9 +658,7 @@ def _is_visible_memory_entry(entry: MemoryEntry, *, include_canary: bool) -> boo
     publish_state = str(entry.publish_state or "").strip().lower()
     if publish_state in {"draft", "rejected"}:
         return False
-    if publish_state == "canary" and not include_canary:
-        return False
-    return True
+    return not (publish_state == "canary" and not include_canary)
 
 
 def _normalize_memory_text(content: str) -> str:
@@ -655,12 +672,12 @@ def _safe_float(value: float | None) -> float:
     return float(value)
 
 
-def _parse_optional_float(value: Any) -> float | None:
-    if value is None:
+def _parse_optional_float(value: object) -> float | None:
+    if not isinstance(value, (int, float, str)):
         return None
     try:
         return float(value)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 

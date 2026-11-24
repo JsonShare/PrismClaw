@@ -4,12 +4,18 @@
 - 入口：``register_loaded_plugin`` / ``load_from_load_result``
 - v5 渐进式披露：skill 注册时传递 ``pipeline_context`` 和 ``marketplace_name``
 """
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from prismclaw.engine.commands.plugin.plugin_runtime import (
+    PluginCommandRuntime,
+    build_plugin_command_runtime,
+)
+from prismclaw.engine.plugins.registry import DescriptorRegistry
 from prismclaw.engine.plugins.registry.descriptors import (
     AgentDescriptor,
     CommandDescriptor,
@@ -17,19 +23,18 @@ from prismclaw.engine.plugins.registry.descriptors import (
     PluginDescriptor,
     SkillDescriptor,
 )
-from prismclaw.engine.plugins.registry import DescriptorRegistry
 from prismclaw.engine.plugins.registry.runtime_views import (
     DeclarativePluginCapabilityView,
     DeclarativePluginRuntimeView,
     HookBindingView,
     HookExtensionView,
 )
-from prismclaw.engine.commands.plugin.plugin_runtime import build_plugin_command_runtime
+from prismclaw.schema.agent.capability import PluginCapabilityGraph, RuntimeCapabilities
 from prismclaw.schema.services.skills import SkillManifest
 
 if TYPE_CHECKING:
-    from prismclaw.engine.plugins.registry.identity import PluginID
     from prismclaw.engine.plugins.loading.load_result import LoadedPlugin, PluginLoadResult
+    from prismclaw.engine.plugins.registry.identity import PluginID
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +55,16 @@ class ExtensionManager:
 
     def register_loaded_plugin(
         self,
-        loaded_plugin: "LoadedPlugin",
+        loaded_plugin: LoadedPlugin,
     ) -> None:
         """注册一个已加载插件。
 
         直接从 LoadedPlugin 结构化字段构建 PluginDescriptor，
         通过 plugin_id.priority_rank 确定优先级。
         """
+        from prismclaw.engine.plugins.lifecycle.state import PluginLifecycleState
         from prismclaw.engine.plugins.registry.identity import PluginID
         from prismclaw.engine.plugins.trust import trust_tier_for_source
-        from prismclaw.engine.plugins.lifecycle.state import PluginLifecycleState
 
         plugin_id = PluginID(name=loaded_plugin.name, source=loaded_plugin.source)
         descriptor = self._build_plugin_descriptor(loaded_plugin, plugin_id)
@@ -74,7 +79,7 @@ class ExtensionManager:
         self._register_declarative_components(descriptor)
         self._register_native_components(descriptor, loaded_plugin)
 
-    def load_from_load_result(self, result: "PluginLoadResult") -> None:
+    def load_from_load_result(self, result: PluginLoadResult) -> None:
         """从 PluginLoadResult 批量注册插件。"""
         for plugin in result.enabled:
             self.register_loaded_plugin(plugin)
@@ -85,8 +90,8 @@ class ExtensionManager:
 
     def _build_plugin_descriptor(
         self,
-        loaded: "LoadedPlugin",
-        plugin_id: "PluginID",
+        loaded: LoadedPlugin,
+        plugin_id: PluginID,
     ) -> PluginDescriptor | None:
         """从 LoadedPlugin 结构化字段直接构建 PluginDescriptor。"""
         plugin_name = loaded.name
@@ -175,18 +180,15 @@ class ExtensionManager:
             )
             if enabled_agents is not None and namespaced_name not in enabled_agents:
                 continue
-            from prismclaw.engine.subagent.definition.manifest import AgentManifest
             from prismclaw.engine.execution.skills.agent_adapter import derive_skill_agent_name
+            from prismclaw.engine.subagent.definition.manifest import AgentManifest
 
             runtime_name = derive_skill_agent_name(
                 namespaced_name,
                 explicit_name=f"{plugin_namespace}-{getattr(agent, 'name', '')}",
             )
             model_dump = getattr(agent, "model_dump", None)
-            if callable(model_dump):
-                payload = model_dump(mode="json", exclude_none=True)
-            else:
-                payload = {}
+            payload = model_dump(mode="json", exclude_none=True) if callable(model_dump) else {}
             if not isinstance(payload, dict):
                 payload = {}
             payload["name"] = runtime_name
@@ -197,7 +199,7 @@ class ExtensionManager:
                     plugin_name=plugin_namespace,
                     origin="plugin",
                     manifest=copied_agent,
-                    # v5 渐进式披露：marketplace_name / marketplace_description 从 PluginDescriptor 传递
+                    # 市场信息透传，供提示词按包聚合
                     marketplace_name=descriptor.marketplace_name,
                     marketplace_description=descriptor.marketplace_description,
                     plugin_description=descriptor.plugin_description,
@@ -216,7 +218,7 @@ class ExtensionManager:
                     plugin_name=plugin_namespace,
                     origin="plugin",
                     capability=command,
-                    # v5 渐进式披露：marketplace_name / marketplace_description 从 PluginDescriptor 传递
+                    # 市场信息透传，供提示词按包聚合
                     marketplace_name=descriptor.marketplace_name,
                     marketplace_description=descriptor.marketplace_description,
                     plugin_description=descriptor.plugin_description,
@@ -249,7 +251,7 @@ class ExtensionManager:
         )
 
     def _register_native_components(
-        self, descriptor: PluginDescriptor, loaded: "LoadedPlugin"
+        self, descriptor: PluginDescriptor, loaded: LoadedPlugin
     ) -> None:
         """注册 Python 原生插件的 hooks（来自 plugin_sdk 注册）。
 
@@ -280,7 +282,7 @@ class ExtensionManager:
             )
 
     @staticmethod
-    def _runtime_capability_name_set(runtime: Any, attr: str) -> set[str] | None:
+    def _runtime_capability_name_set(runtime: object, attr: str) -> set[str] | None:
         names = getattr(runtime, attr, None)
         if names is None or not isinstance(names, tuple):
             return None
@@ -316,7 +318,7 @@ class ExtensionManager:
         """按插件名查找（跨源，返回最高优先级）。"""
         return self._descriptor_registry.by_name(plugin_name)
 
-    def get_plugin_descriptor_by_id(self, plugin_id: "PluginID") -> PluginDescriptor | None:
+    def get_plugin_descriptor_by_id(self, plugin_id: PluginID) -> PluginDescriptor | None:
         """按 PluginID 精确查找。"""
         return self._descriptor_registry.by_id(plugin_id)
 
@@ -460,22 +462,20 @@ class ExtensionManager:
     def iter_hook_descriptors(self) -> list[HookDescriptor]:
         return list(self._descriptor_registry.hooks.values())
 
-    def get_plugin_command_runtime(self, command_name: str) -> Any | None:
+    def get_plugin_command_runtime(self, command_name: str) -> PluginCommandRuntime | None:
         descriptor = self._resolve_command_descriptor(command_name)
         if descriptor is not None and descriptor.capability is not None and descriptor.plugin_name:
             return build_plugin_command_runtime(descriptor.plugin_name, descriptor.capability)
         return None
 
-    def get_plugin_capability_graph(self, plugin_name: str) -> Any | None:
+    def get_plugin_capability_graph(self, plugin_name: str) -> PluginCapabilityGraph | None:
         descriptor = self._descriptor_registry.by_name(plugin_name)
         return descriptor.capability_graph if descriptor is not None else None
 
     def iter_plugin_capability_graphs(self) -> list[Any]:
-        return [
-            view.capability_graph for view in self.iter_declarative_plugin_capability_views()
-        ]
+        return [view.capability_graph for view in self.iter_declarative_plugin_capability_views()]
 
-    def get_plugin_runtime_capabilities(self, plugin_name: str) -> Any | None:
+    def get_plugin_runtime_capabilities(self, plugin_name: str) -> RuntimeCapabilities | None:
         descriptor = self._descriptor_registry.by_name(plugin_name)
         return descriptor.runtime_capabilities if descriptor is not None else None
 

@@ -11,12 +11,13 @@
 
 此摘要作为 additional_context 注入首轮对话（transient，不入历史）。
 """
+
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
 
-from ..._protocols import HookHandler, HookContext, HookResult, HookOutcome
+from ..._protocols import HookContext, HookHandler, HookOutcome, HookResult
 
 if TYPE_CHECKING:
     from ...persistence.medical_store import MedicalStore
@@ -69,9 +70,7 @@ class ConsultationContextHook(HookHandler):
         try:
             summary = await self._build_report_summary(patient_id, doctor_id)
         except Exception:
-            logger.exception(
-                "构建报告摘要失败: patient=%s doctor=%s", patient_id, doctor_id
-            )
+            logger.exception("构建报告摘要失败: patient=%s doctor=%s", patient_id, doctor_id)
             return HookResult(
                 outcome=HookOutcome.NON_BLOCKING_ERROR,
                 system_message="报告摘要构建异常",
@@ -79,16 +78,12 @@ class ConsultationContextHook(HookHandler):
 
         if not summary:
             return HookResult(
-                additional_context=(
-                    f"[患者咨询上下文] 患者ID={patient_id}，暂无报告记录。"
-                ),
+                additional_context=(f"[患者咨询上下文] 患者ID={patient_id}，暂无报告记录。"),
             )
 
         return HookResult(additional_context=summary)
 
-    async def _build_report_summary(
-        self, patient_id: str, doctor_id: str
-    ) -> str | None:
+    async def _build_report_summary(self, patient_id: str, doctor_id: str) -> str | None:
         """构建报告清单摘要文本。"""
         from sqlalchemy import select
 
@@ -125,8 +120,6 @@ class ConsultationContextHook(HookHandler):
             report_type = row.report_type or "未知类型"
             visit_date = str(row.visit_date) if row.visit_date else "未知日期"
             diagnosis = row.diagnosis or "无"
-            lines.append(
-                f"  {i}. {file_name} ({report_type}, {visit_date}, 诊断: {diagnosis})"
-            )
+            lines.append(f"  {i}. {file_name} ({report_type}, {visit_date}, 诊断: {diagnosis})")
 
         return "\n".join(lines)

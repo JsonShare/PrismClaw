@@ -139,8 +139,13 @@ class TaskManager:
                     logger.exception("on_error callback itself failed for task %s", task_id)
             raise
 
-    async def cancel(self, task_id: str, *, timeout: float = 5.0) -> bool:
-        """Cancel a running task; returns True if cancellation was initiated."""
+    async def cancel(self, task_id: str, *, timeout: float = 5.0) -> bool:  # noqa: ASYNC109
+        """Cancel a running task; returns True if cancellation was initiated.
+
+        ``timeout`` 是等待任务真正退出的上限；这里必须把它传给
+        ``asyncio.wait``（而不是包一层 ``asyncio.timeout``），
+        因为超时后仍需拿到「任务未结束」这个状态来打 warning。
+        """
         handle = self._tasks.get(task_id)
         if handle is None or handle.asyncio_task.done():
             return False

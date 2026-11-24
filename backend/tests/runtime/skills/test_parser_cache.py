@@ -5,6 +5,7 @@
 2. 每次返回独立深拷贝，调用方原地修改不污染缓存；
 3. 文件内容变化后缓存自动失效（按 mtime_ns + size 的内容身份）。
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,19 +16,12 @@ from prismclaw.runtime.skills import parser as skill_parser
 
 def _write_skill(path: Path, body: str = "正文", extra: str = "") -> None:
     path.write_text(
-        "---\n"
-        "name: cache-probe\n"
-        "description: 缓存测试\n"
-        f"{extra}"
-        "---\n"
-        f"{body}\n",
+        f"---\nname: cache-probe\ndescription: 缓存测试\n{extra}---\n{body}\n",
         encoding="utf-8",
     )
 
 
-def test_repeated_parse_warns_once_per_file_version(
-    tmp_path: Path, caplog
-) -> None:
+def test_repeated_parse_warns_once_per_file_version(tmp_path: Path, caplog) -> None:
     path = tmp_path / "SKILL.md"
     _write_skill(path, extra="unknown_key: 1\n")
 
@@ -36,8 +30,7 @@ def test_repeated_parse_warns_once_per_file_version(
             skill_parser.parse_skill_file(path)
 
     warnings = [
-        record for record in caplog.records
-        if "unknown frontmatter keys" in record.getMessage()
+        record for record in caplog.records if "unknown frontmatter keys" in record.getMessage()
     ]
     assert len(warnings) == 1
 

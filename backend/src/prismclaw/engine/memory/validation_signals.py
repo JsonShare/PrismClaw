@@ -15,15 +15,27 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+import time
+import uuid
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from prismclaw.schema.storage.storage_types import MemoryStore
 
 logger = logging.getLogger(__name__)
+
+# validation_label → 事件极性；flagged 既非通过也非拒绝，不参与正负计数。
+_LABEL_POLARITY = {
+    "pass": "positive",
+    "rejected": "negative",
+    "flagged": "neutral",
+}
 
 
 class ValidationSignalLedger:
     """Per-session injection bookkeeping + signal flush, decoupled from B1."""
 
-    def __init__(self, memory_store: Any) -> None:
+    def __init__(self, memory_store: MemoryStore) -> None:
         self._memory_store = memory_store
         self._pending: dict[str, list[str]] = {}
 
@@ -43,6 +55,48 @@ class ValidationSignalLedger:
         except Exception:
             logger.warning("validation ledger signal flush failed", exc_info=True)
             return 0
+
+    async def record_validation(
+        self,
+        *,
+        session_key: str,
+        session_id: str,
+        entry_id: str | None,
+        entry_type: str,
+        fact_content: str,
+        validation_label: str,
+        confidence_before: float,
+        confidence_after: float,
+        reason: str,
+    ) -> None:
+        """把 validator 判定记进 pc_memory_validation_events（审计污染率）。
+
+        rejected 候选没有 entry（从未写入记忆层），而该表 entry_id 非空，
+        因此只在已落库条目上记事件；其余失败一律 best-effort，不影响抽取。
+        """
+        if entry_id is None:
+            return
+        await self.record_events(
+            session_key,
+            [
+                {
+                    "id": f"vs_{uuid.uuid4().hex[:12]}",
+                    "entry_id": entry_id,
+                    "signal_type": "validator_verdict",
+                    "polarity": _LABEL_POLARITY.get(validation_label, "neutral"),
+                    "attribution": "weak",
+                    "source_ref": f"{session_id}:{entry_type}",
+                    "occurred_at": time.time(),
+                    "payload": {
+                        "fact": fact_content,
+                        "validation_label": validation_label,
+                        "confidence_before": confidence_before,
+                        "confidence_after": confidence_after,
+                        "reason": reason,
+                    },
+                }
+            ],
+        )
 
     async def bump_use_counts(self, session_key: str, entry_ids: list[str]) -> int:
         if not entry_ids:

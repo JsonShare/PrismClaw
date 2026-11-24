@@ -17,8 +17,10 @@ from prismclaw.schema.content.content_types import (
     RuntimeControlArtifact,
     StateDeltaArtifact,
     SubagentEnvelopeArtifact,
-    ToolResult,
     UiArtifact,
+)
+from prismclaw.schema.content.content_types import (
+    ToolResult as ToolResult,
 )
 from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.schema.services.env_types import ExecutionEnv
@@ -40,7 +42,7 @@ class GoalBlockIntent:
 class ToolContext:
     workspace_id: str
     workspace_path: Path
-    workspace_root: str = ""        # per-user 工作区根路径（BwrapPolicy 用于沙箱隔离）
+    workspace_root: str = ""  # per-user 工作区根路径（BwrapPolicy 用于沙箱隔离）
     session_id: str = ""
     sandbox_policy: SandboxPolicy | None = None
     abort: asyncio.Event = field(default_factory=asyncio.Event)
@@ -65,13 +67,15 @@ class ToolContext:
     progress_batch_id: str | None = None
     subagent_progress_emitter: Any = None
     hook_registry: HookRegistry | None = None
-    hook_dispatcher: Any = None  # HookDispatcher（插件 hooks.json 声明式钩子；运行时引用，deepcopy 排除后由 sub_agent 按引用回填）
+    hook_dispatcher: Any = None  # 插件声明式钩子分发器；deepcopy 时排除，由 sub_agent 回填
     capability_catalog: Any = None
     total_output_tokens: int = 0
     total_cache_creation_tokens: int = 0
 
     current_sandbox_tier: SandboxTier = SandboxTier.STANDARD
-    runtime: ExecutionEnv | None = None  # WorkspaceRuntimeClient | InProcessRuntimeClient（统一 ExecutionEnv 契约）
+    runtime: ExecutionEnv | None = (
+        None  # WorkspaceRuntimeClient | InProcessRuntimeClient（统一 ExecutionEnv 契约）
+    )
     workspace_tag: Any = None  # P1-SEC-04: will become WorkspaceTag
     task_manager: Any = None
     mcp_death_handler: Any = None
@@ -114,29 +118,31 @@ class ToolContext:
     #   (2) 类型注解为 Any 且默认值为 None 的字段——这些是运行时注入的
     #       TaskManager/MCP stdio 客户端/分布式锁等对象，含 Future/Lock/Task，
     #       绝不能传给子 agent（子 agent 有独立运行时）
-    _DEEPCOPY_EXCLUDE = frozenset({
-        # 显式 asyncio / 线程对象
-        "abort",
-        # 显式 runtime
-        "runtime",
-        "hook_registry",
-        "hook_dispatcher",
-        "task_manager",
-        "mcp_death_handler",
-        "mcp_runtime_manager",
-        "scheduler_engine",
-        "scheduler_dispatch",
-        "scheduler_store",
-        "scheduler_redis_client",
-        "scheduler_broadcast",
-        "session_store",
-        "context_engine",
-        "session_state",
-        "read_file_state",
-        "subagent_catalog",
-        "subagent_manifest",
-        "goal_block_intent",
-    })
+    _DEEPCOPY_EXCLUDE = frozenset(
+        {
+            # 显式 asyncio / 线程对象
+            "abort",
+            # 显式 runtime
+            "runtime",
+            "hook_registry",
+            "hook_dispatcher",
+            "task_manager",
+            "mcp_death_handler",
+            "mcp_runtime_manager",
+            "scheduler_engine",
+            "scheduler_dispatch",
+            "scheduler_store",
+            "scheduler_redis_client",
+            "scheduler_broadcast",
+            "session_store",
+            "context_engine",
+            "session_state",
+            "read_file_state",
+            "subagent_catalog",
+            "subagent_manifest",
+            "goal_block_intent",
+        }
+    )
 
     def __deepcopy__(self, memo: dict[int, Any]) -> ToolContext:
         import copy as _copy
@@ -153,6 +159,7 @@ class ToolContext:
         except Exception:
             hints = {}
         import dataclasses as _dc
+
         for f in _dc.fields(self):
             if f.name in exclude:
                 continue

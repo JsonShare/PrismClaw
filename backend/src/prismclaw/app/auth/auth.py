@@ -71,21 +71,21 @@ def verify_jwt(token: str, secret: str) -> str | None:
 
 def get_current_user(request: Request) -> str:
     """FastAPI dependency — extract Bearer token, verify, return user_id.
-    
+
     Supports both Authorization header and _token query param (for file downloads).
     """
     settings: WebSettings = get_web_deps(request).web_settings
     auth_header = request.headers.get("authorization", "")
     token: str | None = None
-    
+
     if auth_header.lower().startswith("bearer "):
         token = auth_header[7:]
     else:
         token = request.query_params.get("_token", "")
-    
+
     if not token:
         raise HTTPException(status_code=401, detail="Missing bearer token")
-    
+
     user_id = verify_jwt(token, settings.jwt_secret)
     if user_id is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")

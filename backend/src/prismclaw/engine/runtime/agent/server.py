@@ -23,6 +23,7 @@
   - 入口层 HMAC 校验 + workspace_id 匹配（容器外不接受请求）；
   - 执行层 RuleGate + BwrapPolicy 在 RuntimeExecutor 内再次校验。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -31,8 +32,10 @@ import hashlib
 import hmac
 import logging
 import os
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
 from prismclaw.engine.runtime.agent.executor import RuntimeExecutor
@@ -103,14 +106,17 @@ def _verify_hmac(body: bytes, signature: str) -> bool:
         parts = signature.split(":", 1)
         if len(parts) != 2 or not parts[0].startswith("v"):
             return False
-        expected = f"v{HMAC_KEY_VERSION}:{hmac.new(HMAC_SECRET.encode(), body, hashlib.sha256).hexdigest()}"
+        digest = hmac.new(HMAC_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        expected = f"v{HMAC_KEY_VERSION}:{digest}"
         return hmac.compare_digest(signature, expected)
     except Exception:
         return False
 
 
 @app.middleware("http")
-async def verify_hmac_middleware(request: Request, call_next):
+async def verify_hmac_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
     if request.url.path == "/health":
         return await call_next(request)
 
@@ -134,7 +140,7 @@ async def verify_hmac_middleware(request: Request, call_next):
 
 
 @app.post("/bash")
-async def exec_bash(request: Request):
+async def exec_bash(request: Request) -> dict[str, Any]:
     body = await request.json()
     tier_str = body.get("tier", "standard")
     try:
@@ -152,12 +158,12 @@ async def exec_bash(request: Request):
 
 
 @app.get("/bash/jobs")
-async def list_jobs():
+async def list_jobs() -> dict[str, Any]:
     return {"jobs": executor.list_jobs()}
 
 
 @app.get("/bash/jobs/{pid}")
-async def job_status(pid: int):
+async def job_status(pid: int) -> dict[str, Any] | JSONResponse:
     status = executor.job_status(pid)
     if status is None:
         return JSONResponse(status_code=404, content={"error": "no such job", "pid": pid})
@@ -165,7 +171,7 @@ async def job_status(pid: int):
 
 
 @app.post("/bash/jobs/{pid}/kill")
-async def job_kill(pid: int):
+async def job_kill(pid: int) -> dict[str, Any]:
     ok = executor.job_kill(pid)
     return {"killed": ok, "pid": pid}
 
@@ -174,7 +180,7 @@ async def job_kill(pid: int):
 
 
 @app.post("/read")
-async def read_file(request: Request):
+async def read_file(request: Request) -> dict[str, Any]:
     body = await request.json()
     path = body.get("path", "")
     root = body.get("workspace_root")
@@ -189,7 +195,7 @@ async def read_file(request: Request):
 
 
 @app.post("/write")
-async def write_file(request: Request):
+async def write_file(request: Request) -> dict[str, Any]:
     body = await request.json()
     path = body.get("path", "")
     root = body.get("workspace_root")
@@ -209,7 +215,7 @@ async def write_file(request: Request):
 
 
 @app.post("/write_stream")
-async def write_stream(request: Request):
+async def write_stream(request: Request) -> dict[str, Any]:
     body = await request.json()
     action = body.get("action", "")
     if action == "begin":
@@ -230,7 +236,7 @@ async def write_stream(request: Request):
 
 
 @app.post("/http_get")
-async def http_get(request: Request):
+async def http_get(request: Request) -> dict[str, Any]:
     body = await request.json()
     url = body.get("url", "")
     tier_str = body.get("tier", "standard")
@@ -245,7 +251,7 @@ async def http_get(request: Request):
 
 
 @app.post("/mcp/spawn")
-async def mcp_spawn(request: Request):
+async def mcp_spawn(request: Request) -> dict[str, Any]:
     body = await request.json()
     return await executor.mcp_spawn(
         body.get("server_name", ""),
@@ -259,7 +265,7 @@ async def mcp_spawn(request: Request):
 
 
 @app.post("/mcp/call")
-async def mcp_call(request: Request):
+async def mcp_call(request: Request) -> dict[str, Any]:
     body = await request.json()
     return await executor.mcp_call(
         body.get("server_name", ""), body.get("tool_name", ""), body.get("arguments")
@@ -270,7 +276,7 @@ async def mcp_call(request: Request):
 
 
 @app.post("/fs/list")
-async def fs_list(request: Request):
+async def fs_list(request: Request) -> dict[str, Any]:
     body = await request.json()
     return await executor.fs_list(
         body.get("path", "."),
@@ -284,7 +290,7 @@ async def fs_list(request: Request):
 
 
 @app.post("/fs/glob")
-async def fs_glob(request: Request):
+async def fs_glob(request: Request) -> dict[str, Any]:
     body = await request.json()
     return await executor.fs_glob(
         body.get("pattern", "*"),
@@ -298,7 +304,7 @@ async def fs_glob(request: Request):
 
 
 @app.post("/fs/grep")
-async def fs_grep(request: Request):
+async def fs_grep(request: Request) -> dict[str, Any]:
     body = await request.json()
     return await executor.fs_grep(
         body.get("pattern", ""),
@@ -314,7 +320,7 @@ async def fs_grep(request: Request):
 
 
 @app.post("/http_post")
-async def http_post(request: Request):
+async def http_post(request: Request) -> dict[str, Any]:
     body = await request.json()
     url = body.get("url", "")
     req_body = body.get("body")
@@ -322,32 +328,59 @@ async def http_post(request: Request):
     content_type = body.get("content_type", "application/json")
     timeout_seconds = int(body.get("timeout_seconds", 15))
     if not ALLOW_NET:
-        return {"success": False, "error": "network_access_disabled", "http_status_code": 0, "http_headers": {}}
+        return {
+            "success": False,
+            "error": "network_access_disabled",
+            "http_status_code": 0,
+            "http_headers": {},
+        }
     try:
         import httpx
+
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             req_headers = headers or {}
             if content_type and "content-type" not in {k.lower() for k in req_headers}:
                 req_headers["content-type"] = content_type
-            resp = await client.post(url, json=req_body if isinstance(req_body, dict) else None, content=req_body if isinstance(req_body, str) else None, headers=req_headers)
-            return {"success": 200 <= resp.status_code < 300, "content": resp.text, "error": None if 200 <= resp.status_code < 300 else resp.reason_phrase, "http_status_code": resp.status_code, "http_headers": dict(resp.headers)}
+            resp = await client.post(
+                url,
+                json=req_body if isinstance(req_body, dict) else None,
+                content=req_body if isinstance(req_body, str) else None,
+                headers=req_headers,
+            )
+            return {
+                "success": 200 <= resp.status_code < 300,
+                "content": resp.text,
+                "error": None if 200 <= resp.status_code < 300 else resp.reason_phrase,
+                "http_status_code": resp.status_code,
+                "http_headers": dict(resp.headers),
+            }
     except Exception as exc:
-        return {"success": False, "content": None, "error": str(exc), "http_status_code": 0, "http_headers": {}}
+        return {
+            "success": False,
+            "content": None,
+            "error": str(exc),
+            "http_status_code": 0,
+            "http_headers": {},
+        }
 
 
 # ── Endpoint: /archive ─────────────────────────────────────────────────
 
 
 @app.post("/archive/create")
-async def archive_create(request: Request):
+async def archive_create(request: Request) -> dict[str, Any]:
     body = await request.json()
     name = body.get("name", "snapshot")
     safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
     tag = f"prismclaw/archive:{safe_name}"
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "commit", os.environ.get("PRISMCLAW_CONTAINER_ID", os.environ.get("HOSTNAME", "")), tag,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "docker",
+            "commit",
+            os.environ.get("PRISMCLAW_CONTAINER_ID", os.environ.get("HOSTNAME", "")),
+            tag,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
         if proc.returncode != 0:
@@ -355,8 +388,14 @@ async def archive_create(request: Request):
         size_mb = 0
         try:
             inspect_proc = await asyncio.create_subprocess_exec(
-                "docker", "image", "inspect", tag, "--format", "{{.Size}}",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                "docker",
+                "image",
+                "inspect",
+                tag,
+                "--format",
+                "{{.Size}}",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
             out, _ = await asyncio.wait_for(inspect_proc.communicate(), timeout=10)
             if inspect_proc.returncode == 0:
@@ -369,16 +408,21 @@ async def archive_create(request: Request):
 
 
 @app.post("/archive/restore")
-async def archive_restore(request: Request):
+async def archive_restore(request: Request) -> dict[str, Any]:
     return {"restored": False, "error": "restore requires external orchestration"}
 
 
 @app.get("/archive/list")
-async def archive_list():
+async def archive_list() -> dict[str, Any]:
     try:
         proc = await asyncio.create_subprocess_exec(
-            "docker", "images", "prismclaw/archive", "--format", "{{.Repository}}:{{.Tag}}\t{{.Size}}",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            "docker",
+            "images",
+            "prismclaw/archive",
+            "--format",
+            "{{.Repository}}:{{.Tag}}\t{{.Size}}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
         archives = []
@@ -394,5 +438,5 @@ async def archive_list():
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, Any]:
     return {"status": "ok", "workspace_id": WORKSPACE_ID}

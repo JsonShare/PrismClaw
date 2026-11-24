@@ -28,7 +28,6 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Final
 
-
 # The single source of truth for the Anthropic ephemeral cache marker.
 # Frozen dict semantics are emulated via Final + a helper for the few
 # places that need to copy. Never mutate this object.

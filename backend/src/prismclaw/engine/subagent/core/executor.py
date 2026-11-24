@@ -14,6 +14,7 @@ import uuid
 from dataclasses import replace
 from typing import Any, Literal
 
+from prismclaw.engine.execution.skills.runtime import SkillRuntime
 from prismclaw.engine.subagent.core._result_types import AgentRunResult
 from prismclaw.engine.subagent.core.instance import AgentInstance
 from prismclaw.engine.subagent.core.run_context import SubagentRunContext
@@ -21,6 +22,7 @@ from prismclaw.engine.subagent.definition.manifest import AgentManifest
 from prismclaw.engine.subagent.runtime.parallel import (
     PARALLEL_TASK_TERMINAL_STATUSES,
     ParallelTaskRuntimeRecord,
+    ParallelTaskStore,
     build_parallel_task_terminal_record,
     new_parallel_task_id,
 )
@@ -30,6 +32,8 @@ from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.config.config import SubAgentConfig
 from prismclaw.schema.content.content_types import SubagentEnvelopeArtifact
 from prismclaw.schema.content.subagent import SubagentContextSnapshot
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
 
 _AUDIT_LOGGER_NAME = "prismclaw.audit.subagent"
 logger = logging.getLogger(__name__)
@@ -52,13 +56,13 @@ class SubAgentExecutor:
         *,
         tool_registry: ToolRegistry,
         settings: SubAgentConfig,
-        llm_client: Any,
-        memory_store: Any = None,
-        session_store: Any = None,
+        llm_client: LLMClient,
+        memory_store: MemoryStore | None = None,
+        session_store: SessionStore | None = None,
         audit_logger: logging.Logger | None = None,
         default_model: str | None = None,
         channel: str = "web",
-        skill_runtime: Any = None,
+        skill_runtime: SkillRuntime | None = None,
         # 子代理内部工具调用的单工具时限，应继承 agent 配置的
         # timeouts.tool_seconds（默认 120.0 与 execute_preflighted_tool_calls 的
         # 签名默认一致，保证未透传时行为不变）。
@@ -69,9 +73,7 @@ class SubAgentExecutor:
         self._llm = llm_client
         self._memory_store = memory_store
         self._session_store = session_store
-        self._default_model = default_model or getattr(
-            llm_client, "default_model", None
-        )
+        self._default_model = default_model or getattr(llm_client, "default_model", None)
         self._audit = audit_logger or logging.getLogger(_AUDIT_LOGGER_NAME)
         self._channel = channel
         self._skill_runtime = skill_runtime
@@ -114,8 +116,7 @@ class SubAgentExecutor:
             return (
                 None,
                 None,
-                f"本会话正在执行的子代理任务已达上限（{limit}）。"
-                "请等待已有任务完成后再派发。",
+                f"本会话正在执行的子代理任务已达上限（{limit}）。请等待已有任务完成后再派发。",
             )
 
         task_id = new_parallel_task_id()
@@ -168,9 +169,7 @@ class SubAgentExecutor:
             )
         )
         abort = parent_ctx.abort
-        watcher = (
-            asyncio.create_task(abort.wait()) if abort is not None else None
-        )
+        watcher = asyncio.create_task(abort.wait()) if abort is not None else None
         try:
             if watcher is None:
                 await run_task
@@ -225,9 +224,7 @@ class SubAgentExecutor:
         # 每条 Runtime 记录都必须携带 agent_id（与 task_id 组成唯一键）；
         # 进程内同步派发没有外部注入身份时，就地生成一个。
         resolved_agent_id = (
-            run_context.agent_id
-            if run_context is not None
-            else (agent_id or new_agent_id())
+            run_context.agent_id if run_context is not None else (agent_id or new_agent_id())
         )
         store = parent_ctx.task_runtime.parallel_task_store
 
@@ -309,14 +306,10 @@ class SubAgentExecutor:
                     background=background,
                 )
             except Exception:
-                logger.exception(
-                    "subagent.cancel.finalize_failed task_id=%s", resolved_task_id
-                )
+                logger.exception("subagent.cancel.finalize_failed task_id=%s", resolved_task_id)
             raise
         except Exception as exc:
-            logger.exception(
-                "subagent.run_crashed name=%s run_id=%s", manifest.name, run_id
-            )
+            logger.exception("subagent.run_crashed name=%s run_id=%s", manifest.name, run_id)
             try:
                 await self._finalize(
                     store,
@@ -328,9 +321,7 @@ class SubAgentExecutor:
                     background=background,
                 )
             except Exception:
-                logger.exception(
-                    "subagent.failure.finalize_failed task_id=%s", resolved_task_id
-                )
+                logger.exception("subagent.failure.finalize_failed task_id=%s", resolved_task_id)
             raise
 
         # Stamp runtime identity before persisting the terminal projection.
@@ -392,7 +383,7 @@ class SubAgentExecutor:
 
     async def _finalize(
         self,
-        store: Any,
+        store: ParallelTaskStore | None,
         parent_ctx: ToolContext,
         task_id: str | None,
         *,
@@ -436,7 +427,8 @@ class SubAgentExecutor:
             await sink(record)
         except Exception:
             logger.warning(
-                "subagent.background.notify_failed task_id=%s", record.task_id,
+                "subagent.background.notify_failed task_id=%s",
+                record.task_id,
                 exc_info=True,
             )
 

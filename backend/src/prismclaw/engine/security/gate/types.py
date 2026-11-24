@@ -4,6 +4,7 @@ Protocol definitions live in ``prismclaw.contracts.agent.security_store`` and
 ``prismclaw.contracts.agent.security``; this module re-exports them for
 backward-compatibility and keeps the engine-internal stubs / data models.
 """
+
 from __future__ import annotations
 
 import secrets
@@ -13,15 +14,20 @@ from typing import Any, Literal, Protocol
 
 # ── Re-exports from contracts ──────────────────────────────────────────────
 from prismclaw.schema.agent.security import (
-    AllowedToolsPolicy,  # noqa: F401
-    RuntimeMode,  # noqa: F401
+    AllowedToolsPolicy as AllowedToolsPolicy,
+)
+from prismclaw.schema.agent.security import (
+    RuntimeMode as RuntimeMode,
 )
 from prismclaw.schema.agent.security_store import (
-    AggregateStoreProtocol,
-    BreakGlassStoreProtocol,
-    ConsentStoreProtocol,  # noqa: F401
+    AggregateStoreProtocol as AggregateStoreProtocol,
 )
-
+from prismclaw.schema.agent.security_store import (
+    BreakGlassStoreProtocol as BreakGlassStoreProtocol,
+)
+from prismclaw.schema.agent.security_store import (
+    ConsentStoreProtocol as ConsentStoreProtocol,
+)
 
 # ── actor_identity ──────────────────────────────────────────────────────────
 
@@ -29,6 +35,7 @@ ActorIdentity = Literal["main", "subagent"]
 
 
 # ── runtime_context ─────────────────────────────────────────────────────────
+
 
 @dataclass(frozen=True)
 class TaskRuntimeContext:
@@ -66,6 +73,7 @@ class ParallelTaskExtras:
 
 # ── stubs (import Protocol base from contracts) ────────────────────────────
 
+
 class InMemoryAggregateStore(AggregateStoreProtocol):
     """内存计数 SessionAggregateGuard stub。"""
 
@@ -84,7 +92,9 @@ class InMemoryAggregateStore(AggregateStoreProtocol):
     def reset(self, session_id: str) -> None:
         self._data.pop(session_id, None)
 
-    def check_and_incr(self, session_id: str, counter: str, threshold: int, window_seconds: int, delta: int = 1) -> tuple[int, bool]:
+    def check_and_incr(
+        self, session_id: str, counter: str, threshold: int, window_seconds: int, delta: int = 1
+    ) -> tuple[int, bool]:
         new_count = self.increment(session_id, counter, delta)
         return new_count, new_count > threshold
 

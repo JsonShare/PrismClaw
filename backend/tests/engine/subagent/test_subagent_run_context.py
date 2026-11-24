@@ -1,6 +1,16 @@
 from __future__ import annotations
 
 import pytest
+from tests.engine.subagent.test_loop_characterization import (
+    LoopHarness,
+    MockLLM,
+    MockResponse,
+    MockTool,
+    MockToolRegistry,
+    _run,
+    _tc,
+)
+from tests.engine.subagent.test_subagent_records import _store
 
 from prismclaw.engine.execution.checkpoint.models import CommitState
 from prismclaw.engine.subagent.core.persistence import SubagentPersistence
@@ -10,16 +20,6 @@ from prismclaw.engine.subagent.core.run_context import (
 )
 from prismclaw.schema.content.content_types import TextBlock, ToolResult
 from prismclaw.schema.session.types import CustomEntry, MessageEntry
-from tests.engine.subagent.test_loop_characterization import (
-    _run,
-    _tc,
-    LoopHarness,
-    MockLLM,
-    MockResponse,
-    MockTool,
-    MockToolRegistry,
-)
-from tests.engine.subagent.test_subagent_records import _store
 
 
 async def _persistence(store, *, task: str = "initial task") -> SubagentPersistence:
@@ -71,10 +71,12 @@ async def test_steering_is_injected_once_and_acknowledged() -> None:
                 content=[TextBlock(text="tool done")],
             )
 
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="done"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="done"),
+        ]
+    )
     harness = _harness(
         llm,
         MockToolRegistry([SteeringTool("noop")]),
@@ -89,9 +91,7 @@ async def test_steering_is_injected_once_and_acknowledged() -> None:
     )
 
     assert outcome == "success"
-    second_call_contents = [
-        str(message.get("content")) for message in llm.calls[1]["messages"]
-    ]
+    second_call_contents = [str(message.get("content")) for message in llm.calls[1]["messages"]]
     assert sum("new constraint" in content for content in second_call_contents) == 1
     assert all(
         sum("new constraint" in str(message.get("content")) for message in call["messages"]) <= 1
@@ -116,10 +116,12 @@ async def test_tool_result_and_committed_effect_share_a_batch() -> None:
     store = _store()
     persistence = await _persistence(store)
     run_context = _run_context(persistence)
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="done"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="done"),
+        ]
+    )
     harness = _harness(
         llm,
         MockToolRegistry([MockTool("noop")]),
@@ -167,8 +169,7 @@ async def test_tool_result_commit_failure_records_commit_unknown(monkeypatch) ->
 
     async def fail_result_batch(entries):
         if any(
-            isinstance(entry, MessageEntry) and entry.role == "tool"
-            for entry in entries
+            isinstance(entry, MessageEntry) and entry.role == "tool" for entry in entries
         ) and any(isinstance(entry, CustomEntry) for entry in entries):
             raise RuntimeError("simulated lost commit response")
         return await original_commit(entries)

@@ -41,12 +41,22 @@ def _candidates() -> list[MemoryEntry]:
     now = time.time()
     return [
         MemoryEntry(
-            id="m1", layer="L2", type="fact", content="候选事实一",
-            created_at=now, updated_at=now, confidence=0.8,
+            id="m1",
+            layer="L2",
+            type="fact",
+            content="候选事实一",
+            created_at=now,
+            updated_at=now,
+            confidence=0.8,
         ),
         MemoryEntry(
-            id="m2", layer="L3", type="procedure", content="候选流程二",
-            created_at=now, updated_at=now, confidence=0.7,
+            id="m2",
+            layer="L3",
+            type="procedure",
+            content="候选流程二",
+            created_at=now,
+            updated_at=now,
+            confidence=0.7,
         ),
     ]
 

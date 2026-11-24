@@ -8,15 +8,20 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.execution.dispatch.streaming_executor import (
     _resolve_is_concurrency_safe,
 )
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
+from prismclaw.engine.toolkit.registry.tool_runtime import Tool, ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
 from prismclaw.schema.content.content_types import ToolResult
+
+if TYPE_CHECKING:
+    from prismclaw.engine.toolkit.subagent.subagent_progress_emitter import (
+        SubagentProgressEmitter,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +98,8 @@ async def _apply_post_tool_hooks(
     dispatcher = getattr(context, "hook_dispatcher", None)
     if dispatcher is None:
         return
-    from prismclaw.engine.hooks import HookContext, HookEvent, _log_hook_outcome
+    from prismclaw.engine.hooks import HookEvent, _log_hook_outcome
+    from prismclaw.engine.plugins.hooks.schema import HookContext
 
     if not getattr(dispatcher, "_hooks", {}).get(HookEvent.POST_TOOL):
         return
@@ -116,7 +122,9 @@ async def _apply_post_tool_hooks(
             )
         except Exception:
             logger.warning(
-                "post_tool_hook.dispatch_failed tool=%s", name, exc_info=True,
+                "post_tool_hook.dispatch_failed tool=%s",
+                name,
+                exc_info=True,
             )
             continue
         _log_hook_outcome(HookEvent.POST_TOOL, hook_result)
@@ -130,7 +138,8 @@ async def _apply_post_tool_hooks(
                 new_text = json.dumps(rewritten, ensure_ascii=False)
             except (TypeError, ValueError):
                 logger.warning(
-                    "post_tool_hook.rewrite_not_serializable tool=%s", name,
+                    "post_tool_hook.rewrite_not_serializable tool=%s",
+                    name,
                 )
                 continue
         if new_text == _result_text(result):
@@ -149,7 +158,7 @@ async def _apply_post_tool_hooks(
         )
 
 
-def _run_tool_validate(tool: Any, args: dict[str, Any], context: ToolContext) -> str | None:
+def _run_tool_validate(tool: Tool, args: dict[str, Any], context: ToolContext) -> str | None:
     """Call a tool's validate() hook if it exists.
 
     Returns None if validation passes or the tool has no validate method.
@@ -193,7 +202,7 @@ class SubagentParallelRuntime:
     progress_batch_id: str | None
 
 
-def _tool_timeout_seconds(tool: Any, default_s: float) -> float:
+def _tool_timeout_seconds(tool: Tool, default_s: float) -> float:
     override = getattr(tool, "timeout_seconds", None)
     if override is None:
         return default_s
@@ -204,7 +213,7 @@ def _tool_timeout_seconds(tool: Any, default_s: float) -> float:
     return value if value > 0 else 0.0
 
 
-def _resolve_dispatch_timeout(tool: Any, args: Any, default_s: float) -> float:
+def _resolve_dispatch_timeout(tool: Tool, args: dict[str, Any], default_s: float) -> float:
     """子代理分发超时：优先用 SubAgentTool 自身的解析（按 manifest 上限），
     其余工具退回通用 ``tool_seconds``。仅 SubAgentTool 暴露
     ``resolve_dispatch_timeout_seconds``，故对非子代理工具无副作用。
@@ -318,8 +327,7 @@ async def execute_preflighted_tool_calls(
             _owner = getattr(_tool, "plugin_name", None) if _tool is not None else None
             if _owner is not None and _owner not in _scope:
                 _denied_call_ids[call_id] = (
-                    f"tool_scope_denied:{_owner}"
-                    f"（该工具属于插件「{_owner}」，请先 @ 该插件）"
+                    f"tool_scope_denied:{_owner}（该工具属于插件「{_owner}」，请先 @ 该插件）"
                 )
 
     for idx, call in enumerate(tool_calls):
@@ -331,8 +339,7 @@ async def execute_preflighted_tool_calls(
     approved_slots = [
         (idx, call)
         for idx, call in enumerate(tool_calls)
-        if id(call) in approved_call_tokens
-        and call.get("id", "") not in _denied_call_ids
+        if id(call) in approved_call_tokens and call.get("id", "") not in _denied_call_ids
     ]
 
     if approved_slots:
@@ -347,11 +354,12 @@ async def execute_preflighted_tool_calls(
             results[idx] = result
 
     final: list[ToolResult] = []
-    for idx, result in enumerate(results):
-        if result is None:
+    for idx, slot_result in enumerate(results):
+        if slot_result is None:
             call_id = tool_calls[idx].get("id", "")
-            result = _error(call_id, "内部错误：缺少派发结果")
-        final.append(result)
+            final.append(_error(call_id, "内部错误：缺少派发结果"))
+            continue
+        final.append(slot_result)
     return final
 
 
@@ -417,9 +425,7 @@ def plan_subagent_parallel_dispatch(
     requested_n = len(subagent_parallel)
     accepted = subagent_parallel[:max_parallel_per_turn]
     rejected = subagent_parallel[max_parallel_per_turn:]
-    handoff_extras_by_call_id = (
-        parent_context.pending_handoff_dispatch_extras or {}
-    )
+    handoff_extras_by_call_id = parent_context.pending_handoff_dispatch_extras or {}
     has_accepted_chain_dispatch = any(
         call.get("id") in handoff_extras_by_call_id for _, call in accepted
     )
@@ -440,7 +446,7 @@ def prepare_subagent_parallel_runtime(
     subagent_plan: SubagentParallelDispatchPlan,
     *,
     parent_context: ToolContext,
-    progress_emitter: Any | None,
+    progress_emitter: SubagentProgressEmitter | None,
 ) -> SubagentParallelRuntime:
     prepared_calls = [
         PreparedSubagentCall(
@@ -506,7 +512,7 @@ def _build_subagent_call_context(
     call: dict[str, Any],
     batch_id: str | None,
     handoff_extras_by_call_id: dict[str, dict[str, Any]],
-    progress_emitter: Any | None,
+    progress_emitter: SubagentProgressEmitter | None,
 ) -> ToolContext:
     from dataclasses import replace as _replace
 
@@ -525,7 +531,7 @@ async def _subagent_progress_emitter_scope(
     *,
     parent_context: ToolContext,
     batch_id: str | None,
-) -> AsyncIterator[Any | None]:
+) -> AsyncIterator[SubagentProgressEmitter | None]:
     if batch_id is None:
         yield None
         return
@@ -556,11 +562,8 @@ async def _execute_subagent_with_failsoft(
     *,
     default_timeout_s: float,
 ) -> ToolResult:
-    from prismclaw.engine.foundation.runtime_util import (
-        AgentAbortedError,
-        AgentTimeoutError,
-        run_with_timeout,
-    )
+    from prismclaw.engine.foundation.runtime_util import run_with_timeout
+    from prismclaw.schema.shared.exceptions import AgentAbortedError, AgentTimeoutError
 
     call_id = call.get("id", "")
     name = _function_name(call) or "sub_agent"
@@ -579,7 +582,13 @@ async def _execute_subagent_with_failsoft(
             depth=context.subagent_depth,
         )
 
-    log_tool_call("start", session_id=context.session_id, name=name, call_id=call_id, depth=context.subagent_depth)
+    log_tool_call(
+        "start",
+        session_id=context.session_id,
+        name=name,
+        call_id=call_id,
+        depth=context.subagent_depth,
+    )
 
     tool = registry.get(name)
     if tool is None:
@@ -671,12 +680,9 @@ async def _dispatch_single(
     *,
     default_timeout_s: float = 120.0,
 ) -> ToolResult:
-    from prismclaw.engine.foundation.runtime_util import (
-        AgentAbortedError,
-        AgentTimeoutError,
-        run_with_timeout,
-    )
+    from prismclaw.engine.foundation.runtime_util import run_with_timeout
     from prismclaw.schema.shared import MCPServerDeadError
+    from prismclaw.schema.shared.exceptions import AgentAbortedError, AgentTimeoutError
 
     call_id = call.get("id", "")
     name = _function_name(call)
@@ -695,7 +701,13 @@ async def _dispatch_single(
             depth=context.subagent_depth,
         )
 
-    log_tool_call("start", session_id=context.session_id, name=name or "<unknown>", call_id=call_id, depth=context.subagent_depth)
+    log_tool_call(
+        "start",
+        session_id=context.session_id,
+        name=name or "<unknown>",
+        call_id=call_id,
+        depth=context.subagent_depth,
+    )
 
     if not name:
         _log_end("no_name")
@@ -775,9 +787,9 @@ async def _dispatch_single(
             truncated_text, extra_meta = output_bound(text_content, config=config, tool_name=name)
 
             if truncated_text != text_content:
-                new_blocks = []
+                new_blocks: list[Any] = []
                 for block in result.content:
-                    if hasattr(block, "text"):
+                    if isinstance(block, TextBlock):
                         new_blocks.append(TextBlock(text=truncated_text))
                     else:
                         new_blocks.append(block)
@@ -891,12 +903,10 @@ async def _run_parallel_fail_soft(
     )
 
     use_streaming = (
-        registry is not None
-        and context is not None
-        and is_enabled(FLAG_STREAMING_V2, default=True)
+        registry is not None and context is not None and is_enabled(FLAG_STREAMING_V2, default=True)
     )
 
-    if not use_streaming:
+    if not use_streaming or registry is None or context is None:
         await _run_parallel_fail_soft_gather(parallel, run_one, results)
         return
 
@@ -933,14 +943,12 @@ async def _run_parallel_fail_soft(
         executor.add_tool(block)
 
     try:
-        abort_task: asyncio.Task | None = None
+        abort_task: asyncio.Task[Any] | None = None
         if context is not None and getattr(context, "abort", None) is not None:
 
             async def _discard_on_abort() -> None:
-                try:
+                with contextlib.suppress(Exception):
                     await context.abort.wait()
-                except Exception:
-                    pass
                 executor.discard()
 
             abort_task = asyncio.create_task(_discard_on_abort())
@@ -961,10 +969,8 @@ async def _run_parallel_fail_soft(
             if abort_task is not None:
                 if not abort_task.done():
                     abort_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError, BaseException):
                     await abort_task
-                except (asyncio.CancelledError, BaseException):
-                    pass
     except Exception as exc:
         logger.warning(
             "tool.streaming_executor.iterator_failed exc=%r",
@@ -992,9 +998,10 @@ def _needs_legacy_parallel_path(
     name = _function_name(call)
     if name:
         tool = registry.get(name)
-        if tool is not None and getattr(tool, "timeout_seconds", None) is not None:
+        override_raw = getattr(tool, "timeout_seconds", None) if tool is not None else None
+        if override_raw is not None:
             try:
-                override = float(tool.timeout_seconds)
+                override = float(override_raw)
             except (TypeError, ValueError):
                 override = None
             if override is not None and override != default_tool_timeout_s:
@@ -1011,7 +1018,7 @@ async def _run_parallel_fail_soft_gather(
     if not parallel:
         return
     outcomes = await asyncio.gather(
-        *(run_one(i, c) for i, c in parallel),
+        *(run_one(i, c, None) for i, c in parallel),
         return_exceptions=True,
     )
     for (i, call), outcome in zip(parallel, outcomes, strict=True):

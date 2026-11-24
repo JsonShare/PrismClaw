@@ -16,19 +16,18 @@ from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.review.changes.intent import ReviewIntent
-from prismclaw.schema.agent.review_errors import (
-    DocxArtifactMismatch,
-    DocxSourceDrift,
-    OfficeBlobNotFound,
-    OfficeEditError,
-)
-from prismclaw.engine.toolkit.office.docx_review_native import build_docx_review_artifact
 from prismclaw.engine.toolkit.file.tracking import (
     DocxReviewArtifactRecord,
     FileEditRecord,
     get_tracking_store,
 )
-
+from prismclaw.engine.toolkit.office.docx_review_native import build_docx_review_artifact
+from prismclaw.schema.agent.review_errors import (
+    DocxArtifactMismatchError,
+    DocxSourceDriftError,
+    OfficeBlobNotFoundError,
+    OfficeEditError,
+)
 
 
 def _sha(data: bytes) -> str:
@@ -51,8 +50,7 @@ class DocxChange:
     def accept(self, intent: ReviewIntent) -> dict[str, Any]:
         # docx accept is an explicit save of the reviewed payload (save_reviewed).
         raise OfficeEditError(
-            "docx 的 accept 需要已审查的载荷；请通过 /file-docx-save-reviewed "
-            "调用 save_reviewed()"
+            "docx 的 accept 需要已审查的载荷；请通过 /file-docx-save-reviewed 调用 save_reviewed()"
         )
 
     # -- native flow ----------------------------------------------------------
@@ -69,7 +67,7 @@ class DocxChange:
         store = get_tracking_store(workspace_path)
         before_bytes = store.read_blob_bytes(before_ref)
         if before_bytes is None:
-            raise OfficeBlobNotFound(f"Backup blob not found: {before_ref}")
+            raise OfficeBlobNotFoundError(f"Backup blob not found: {before_ref}")
         # docx-specific unsupported-change / geometry / engine-gap errors
         # propagate untouched to the caller for HTTP mapping.
         result = build_docx_review_artifact(
@@ -129,24 +127,21 @@ class DocxChange:
             session_id=session_id, review_docx_ref=review_docx_ref
         )
         if artifact is None:
-            raise OfficeBlobNotFound(f"DOCX review artifact not found: {review_docx_ref}")
+            raise OfficeBlobNotFoundError(f"DOCX review artifact not found: {review_docx_ref}")
         if artifact.path != path or artifact.before_ref != before_ref:
-            raise DocxArtifactMismatch(
-                "DOCX 审查产物已与当前审查会话不一致"
-            )
+            raise DocxArtifactMismatchError("DOCX 审查产物已与当前审查会话不一致")
         full = (workspace_path / path).resolve()
         try:
             full.relative_to(workspace_path.resolve())
         except ValueError:
-            raise OfficeEditError("无效路径：超出工作区根目录")
+            raise OfficeEditError("无效路径：超出工作区根目录") from None
         if not full.exists():
             raise OfficeEditError("工作区中未找到 docx 文件")
         current_bytes = full.read_bytes()
         current_sha = _sha(current_bytes)
         if current_sha != before_sha:
-            raise DocxSourceDrift(
-                "DOCX 源文件在审查产物生成之后已发生变更；"
-                "请重新打开审查后再试"
+            raise DocxSourceDriftError(
+                "DOCX 源文件在审查产物生成之后已发生变更；请重新打开审查后再试"
             )
         try:
             reviewed_bytes = base64.b64decode(content_base64, validate=True)

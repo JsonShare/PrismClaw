@@ -59,6 +59,7 @@ def __getattr__(name: str):
     module_path = _LAZY_IMPORTS.get(name)
     if module_path is not None:
         import importlib
+
         module = importlib.import_module(module_path, __name__)
         value = getattr(module, name)
         globals()[name] = value

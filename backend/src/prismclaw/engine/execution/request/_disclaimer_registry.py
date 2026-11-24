@@ -14,6 +14,7 @@ Usage:
         body="<domain-specific mandatory advisory text>",
     ))
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,9 +27,10 @@ class DomainAdvisoryRule:
     Rendered as numbered items in the dynamic ``<domain_advisory>`` section
     by ``_prompt_advisory.domain_advisory_section()``.
     """
+
     domain: str
-    title: str   # e.g., "<Domain> disclaimer (MANDATORY)"
-    body: str    # Full rule body after the bold title
+    title: str  # e.g., "<Domain> disclaimer (MANDATORY)"
+    body: str  # Full rule body after the bold title
 
 
 _RULES: list[DomainAdvisoryRule] = []

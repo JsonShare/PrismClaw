@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -18,8 +19,7 @@ from prismclaw.schema.session import SessionTree
 from prismclaw.schema.shared.path_sanitizer import redact_server_paths
 from prismclaw.schema.shared.tool_markup import strip_tool_markup
 
-
-# OOXML 段落锚点前缀：document_image_extract 在每段前加 ``[w14:paraId] `` 供 docx
+# OOXML 段落锚点前缀：document_reader 在每段前加 ``[w14:paraId] `` 供 docx
 # 编辑工具按段落定位。这是内部编辑句柄，对用户无意义——display 渲染（含刷新重放）
 # 时剥离，避免气泡里冒出 ``[4B0CD5D4]`` 这类十六进制 ID 污染正文。
 _PARA_ID_PREFIX_RE = re.compile(r"^\[[0-9A-Fa-f]{8}\]\s*")
@@ -58,7 +58,7 @@ def build_raw_file_url(workspace_id: str, source_path: str) -> str:
     )
 
 
-def _message_has_visible_content(content: Any) -> bool:
+def _message_has_visible_content(content: object) -> bool:
     if isinstance(content, str):
         return bool(content.strip())
     if not isinstance(content, list):
@@ -77,17 +77,27 @@ def _message_has_visible_content(content: Any) -> bool:
                 return True
         elif isinstance(block, dict):
             t = block.get("type")
-            if t == "text" and isinstance(block.get("text"), str) and str(block.get("text")).strip():
+            if (
+                t == "text"
+                and isinstance(block.get("text"), str)
+                and str(block.get("text")).strip()
+            ):
                 return True
             if t == "image":
                 return True
-            if t == "file" and isinstance(block.get("path"), str) and str(block.get("path")).strip():
+            if (
+                t == "file"
+                and isinstance(block.get("path"), str)
+                and str(block.get("path")).strip()
+            ):
                 return True
     return False
 
 
 _THINKING_BLOCK = re.compile(r"<thinking>.*?</thinking>", re.IGNORECASE | re.DOTALL)
-_SYSTEM_REMINDER_BLOCK = re.compile(r"<system-reminder>.*?</system-reminder>", re.IGNORECASE | re.DOTALL)
+_SYSTEM_REMINDER_BLOCK = re.compile(
+    r"<system-reminder>.*?</system-reminder>", re.IGNORECASE | re.DOTALL
+)
 
 
 def _sanitize_text(text: str) -> str:
@@ -153,7 +163,7 @@ def _try_recover_repr_blocks(raw: str) -> list[dict[str, Any]] | None:
     return blocks
 
 
-def _sanitize_content(content: Any, *, workspace_id: str | None = None) -> Any:
+def _sanitize_content(content: object, *, workspace_id: str | None = None) -> object:
     if isinstance(content, str):
         # Backward-compat: old sessions may have Python repr strings from
         # the buggy str(list[ContentBlock]) in event_logger.message_entry().
@@ -185,10 +195,10 @@ def _sanitize_content(content: Any, *, workspace_id: str | None = None) -> Any:
             continue
         b_type = getattr(block, "type", None)
         if b_type == "text":
-            text = getattr(block, "text", None)
-            if isinstance(text, str):
+            block_text = getattr(block, "text", None)
+            if isinstance(block_text, str):
                 # 去 OOXML 段落锚点前缀 [w14:paraId]（同 dict 分支）
-                sanitized = _PARA_ID_PREFIX_RE.sub("", text, count=1)
+                sanitized = _PARA_ID_PREFIX_RE.sub("", block_text, count=1)
                 sanitized = _sanitize_text(sanitized)
                 if sanitized:
                     cleaned.append({"type": "text", "text": sanitized})
@@ -227,7 +237,7 @@ def _sanitize_content(content: Any, *, workspace_id: str | None = None) -> Any:
     return cleaned
 
 
-def _content_to_text(content: Any) -> str:
+def _content_to_text(content: object) -> str:
     """把 content block 投影为纯文本——两个调用方：
 
     1. assistant 正文拼接 → 后续走 _sanitize_text，那里统一过滤服务器路径
@@ -249,7 +259,9 @@ def _content_to_text(content: Any) -> str:
                 name = block.get("name")
                 path = block["path"].strip()
                 if path:
-                    display_name = name.strip() if isinstance(name, str) and name.strip() else Path(path).name
+                    display_name = (
+                        name.strip() if isinstance(name, str) and name.strip() else Path(path).name
+                    )
                     parts.append(f"[附件] {display_name} ({path})")
             continue
         b_type = getattr(block, "type", None)
@@ -261,12 +273,14 @@ def _content_to_text(content: Any) -> str:
             path = getattr(block, "path", None)
             if isinstance(path, str) and path.strip():
                 name = getattr(block, "name", None)
-                display_name = name.strip() if isinstance(name, str) and name.strip() else Path(path).name
+                display_name = (
+                    name.strip() if isinstance(name, str) and name.strip() else Path(path).name
+                )
                 parts.append(f"[附件] {display_name} ({path.strip()})")
     return "\n".join([p for p in parts if p is not None])
 
 
-def _coerce_tool_arguments(args: Any) -> dict[str, Any]:
+def _coerce_tool_arguments(args: object) -> dict[str, Any]:
     if isinstance(args, dict):
         return args
     if isinstance(args, str):
@@ -284,7 +298,7 @@ def _coerce_tool_arguments(args: Any) -> dict[str, Any]:
 def _build_display_messages(
     tree: SessionTree,
     *,
-    review_utils: Any = None,
+    review_utils: dict[str, Callable[..., object]] | None = None,
     retain_ids: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     """把会话树投影为展示消息。
@@ -328,7 +342,14 @@ def _build_display_messages(
     last_user_ts_ms: int | None = None
 
     def flush_assistant() -> None:
-        nonlocal pending_tool_calls, pending_assistant_text_parts, pending_assistant_last_raw_final, pending_assistant_id, pending_assistant_ts, pending_assistant_partial, pending_assistant_seq
+        nonlocal \
+            pending_tool_calls, \
+            pending_assistant_text_parts, \
+            pending_assistant_last_raw_final, \
+            pending_assistant_id, \
+            pending_assistant_ts, \
+            pending_assistant_partial, \
+            pending_assistant_seq
         if (
             not pending_assistant_text_parts
             and not pending_tool_calls
@@ -382,7 +403,8 @@ def _build_display_messages(
                 if not isinstance(tc, dict):
                     continue
                 tc_id = tc.get("id")
-                fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                raw_fn = tc.get("function")
+                fn: dict[str, Any] = raw_fn if isinstance(raw_fn, dict) else {}
                 name = fn.get("name")
                 args = fn.get("arguments")
                 if isinstance(tc_id, str) and isinstance(name, str) and name:
@@ -392,10 +414,18 @@ def _build_display_messages(
                     # （缺 description / 字符串选项 / value/name 别名）。在此一次性
                     # 归一成可信 JSON，与实时 clarify_request 共用同一真相源，
                     # 前端只做直读渲染。
-                    if "ask_user" in name.lower() and isinstance(coerced_args, dict) and "questions" in coerced_args:
+                    if (
+                        "ask_user" in name.lower()
+                        and isinstance(coerced_args, dict)
+                        and "questions" in coerced_args
+                    ):
                         coerced_args = dict(coerced_args)
                         _ncq = (review_utils or {}).get("normalize_clarify_questions")
-                        coerced_args["questions"] = _ncq(coerced_args.get("questions")) if _ncq else coerced_args.get("questions")
+                        coerced_args["questions"] = (
+                            _ncq(coerced_args.get("questions"))
+                            if _ncq
+                            else coerced_args.get("questions")
+                        )
                     simplified.append(
                         {
                             "id": tc_id,
@@ -430,7 +460,9 @@ def _build_display_messages(
                     if _tc.get("id") != entry.tool_call_id:
                         continue
                     _fn = _tc.get("function")
-                    _name = str((_fn or {}).get("name") or "").lower() if isinstance(_fn, dict) else ""
+                    _name = (
+                        str((_fn or {}).get("name") or "").lower() if isinstance(_fn, dict) else ""
+                    )
                     _is_ask_result = "ask_user" in _name or "askuser" in _name
                     break
             if _is_ask_result:
@@ -444,15 +476,25 @@ def _build_display_messages(
         # 会让刷新后执行过程永久丢失（timeline 挂在无人引用的 id 上）。
         has_tool_calls = entry.role == "assistant" and bool(entry.tool_calls)
         is_partial_assistant = entry.role == "assistant" and entry.partial
-        is_retained = entry.role == "assistant" and retain_ids is not None and entry.id in retain_ids
-        if not has_visible_content and not has_tool_calls and not is_partial_assistant and not is_retained:
+        is_retained = (
+            entry.role == "assistant" and retain_ids is not None and entry.id in retain_ids
+        )
+        if (
+            not has_visible_content
+            and not has_tool_calls
+            and not is_partial_assistant
+            and not is_retained
+        ):
             continue
 
         if entry.role == "user":
             # 仅历史会话：旧版本把 HITL 答案落成独立 user entry。新会话不再
             # 产生该形态；读取时仍抑制为气泡，避免旧会话出现重复用户消息。
             _legacy_meta = getattr(entry, "metadata", None)
-            if isinstance(_legacy_meta, dict) and _legacy_meta.get("kind") == "clarification_answer":
+            if (
+                isinstance(_legacy_meta, dict)
+                and _legacy_meta.get("kind") == "clarification_answer"
+            ):
                 flush_assistant()
                 last_user_ts_ms = _iso_to_ms(entry.timestamp)
                 continue

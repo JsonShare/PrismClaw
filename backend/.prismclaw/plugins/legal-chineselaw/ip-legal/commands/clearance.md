@@ -341,7 +341,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 
 ## 输出位置
 
-如果事项工作区已启用且事项活跃,将输出写入 `${PRISMCLAW_PLUGIN_DATA}/matters/<matter-slug>/outputs/clearance-<mark-slug>-YYYY-MM-DD.md`。否则写入 `${PRISMCLAW_PLUGIN_DATA}/outputs/clearance-<mark-slug>-YYYY-MM-DD.md` 并向用户展示路径。
+如果事项工作区已启用且事项活跃,将输出写入 `${PRISMCLAW_PLUGIN_DATA}/matters/<matter-slug>/outbox/clearance-<mark-slug>-YYYY-MM-DD.md`。否则写入 `${PRISMCLAW_PLUGIN_DATA}/outbox/clearance-<mark-slug>-YYYY-MM-DD.md` 并向用户展示路径。
 
 如果事项活跃,向事项的 `history.md` 附加一行。
 

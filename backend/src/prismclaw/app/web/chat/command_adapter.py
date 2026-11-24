@@ -15,6 +15,7 @@ Flow:
   7. Runner initialization reads pending_command_identity and projects it
      via project_active_skill_invocation()
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,11 @@ _event_logger = SessionEventLogger()
 # fully handled the message locally (reply already delivered over the WS).
 # Distinct from None (= "not a command, fall through to normal chat") so the
 # websocket dispatch loop can swallow the original message.
-COMMAND_HANDLED = object()
+class CommandHandled:
+    """内置命令已在本地处理完毕的哨兵类型。"""
+
+
+COMMAND_HANDLED = CommandHandled()
 
 # Matches /command_name followed by optional arguments
 _SLASH_COMMAND_RE = re.compile(r"^/([a-zA-Z0-9_:-]+)(?:\s+(.*))?$")
@@ -52,7 +57,7 @@ def _split_command(text: str) -> tuple[str, str] | None:
 async def try_handle_slash_command(
     state: ConnectionState,
     msg: ChatSendMessage,
-) -> ChatSendMessage | None:
+) -> ChatSendMessage | None | CommandHandled:
     """Attempt to intercept a slash-command message.
 
     If the message matches a registered plugin command, builds the invocation
@@ -87,7 +92,7 @@ async def try_handle_slash_command(
     if runner_deps is None:
         return None
 
-    extension_manager = getattr(runner_deps, "extension_manager", None)
+    extension_manager = runner_deps.plugin.extension_manager
     if extension_manager is None:
         return None
 
@@ -148,6 +153,8 @@ async def _persist_command_turn(
         return None
     from prismclaw.app.web.workspace_ids import clean_workspace_id
 
+    if state.user_id is None:
+        return None
     try:
         session_key = build_web_session_key(
             state.user_id, clean_workspace_id(getattr(msg, "workspace_id", None))
@@ -172,10 +179,12 @@ async def _persist_command_turn(
     user_entry_id = generate_entry_id(tree.all_entry_ids())
     reply_entry_id = generate_entry_id(tree.all_entry_ids() | {user_entry_id})
     try:
-        await store.commit_events([
-            _event_logger.user_message(session_id, msg.content, user_entry_id),
-            _event_logger.assistant_message(session_id, reply, reply_entry_id),
-        ])
+        await store.commit_events(
+            [
+                _event_logger.user_message(session_id, msg.content, user_entry_id),
+                _event_logger.assistant_message(session_id, reply, reply_entry_id),
+            ]
+        )
     except Exception:
         logger.warning("command.persist.commit_failed session=%s", session_id, exc_info=True)
         return None
@@ -203,16 +212,29 @@ async def _handle_builtin_mcp_command(
             servers = mcp_manager.list_servers()
             lines = []
             for s in servers:
-                lines.append(f"- {s.name}: {s.status}" + (f" ({s.reason})" if getattr(s, "reason", None) else ""))
-            reply = "[mcp] Server status:\n" + "\n".join(lines) if lines else "[mcp] No MCP servers configured."
+                lines.append(
+                    f"- {s.name}: {s.status}"
+                    + (f" ({s.reason})" if getattr(s, "reason", None) else "")
+                )
+            reply = (
+                "[mcp] Server status:\n" + "\n".join(lines)
+                if lines
+                else "[mcp] No MCP servers configured."
+            )
         elif sub == "restart" and len(parts) >= 2:
             server_name = parts[1]
             try:
                 result = await mcp_manager.restart_server(server_name)
                 if getattr(result, "ok", False):
-                    reply = f"[mcp] Server '{server_name}' restarted ({getattr(result, 'tool_count', 0)} tools)."
+                    reply = (
+                        f"[mcp] Server '{server_name}' restarted "
+                        f"({getattr(result, 'tool_count', 0)} tools)."
+                    )
                 else:
-                    reply = f"[mcp] Restart failed for '{server_name}': {getattr(result, 'reason', 'unknown')}"
+                    reply = (
+                        f"[mcp] Restart failed for '{server_name}': "
+                        f"{getattr(result, 'reason', 'unknown')}"
+                    )
             except Exception as exc:
                 reply = f"[mcp] Restart failed for '{server_name}': {exc}"
         else:
@@ -223,7 +245,7 @@ async def _handle_builtin_mcp_command(
 
     try:
         from prismclaw.app.web.connection import send_event
-        from prismclaw.app.web.protocol.protocol import SERVER_CHAT_DONE
+        from prismclaw.app.web.protocol.protocol import SERVER_CHAT_DONE as SERVER_CHAT_DONE
 
         await send_event(
             state,

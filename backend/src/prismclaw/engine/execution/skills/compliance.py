@@ -4,6 +4,7 @@ Moved from contracts.services.skills to break the contracts→engine
 dependency cycle. This is a pure computation function that belongs in
 the engine layer alongside its consumers.
 """
+
 from __future__ import annotations
 
 from typing import Any

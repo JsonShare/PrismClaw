@@ -1,4 +1,5 @@
 """完成准则契约：goal + 声明的 targets → 冻结准则，逐条机械评估，无法核验不阻塞。"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -11,7 +12,11 @@ from prismclaw.engine.execution.control.completion import (
     build_completion_contract,
     build_review_record,
 )
-from prismclaw.schema.agent.task_runtime import EvidenceRecord, PreflightProbeResult, TaskRuntimeState
+from prismclaw.schema.agent.task_runtime import (
+    EvidenceRecord,
+    PreflightProbeResult,
+    TaskRuntimeState,
+)
 from prismclaw.schema.agent.task_types import TaskSpec
 
 
@@ -94,7 +99,9 @@ def test_production_goal_with_declared_targets_is_strict():
 
 def test_edit_goal_with_declared_targets_is_strict():
     """edit 类 goal + declared targets → 同样 strict 完整三准则（edit/create 不再区分）。"""
-    contract = build_completion_contract(_spec(goal="修改 README.md 加一句", declared=("README.md",)))
+    contract = build_completion_contract(
+        _spec(goal="修改 README.md 加一句", declared=("README.md",))
+    )
     assert contract is not None
     assert contract.enforcement == "strict"
     assert len(contract.criteria) == 3

@@ -6,6 +6,7 @@
 - 被发现（discovered_tools）的工具下一轮恢复可见可调；
 - 显式 allowed_tools 白名单优先于核心集隐藏（subagent 分派不受影响）。
 """
+
 from __future__ import annotations
 
 import sys
@@ -23,6 +24,7 @@ from prismclaw.engine.observability.feature_flags import (  # noqa: E402
     clear_static_flags,
     set_static_flag,
 )
+from prismclaw.engine.security.gate.types import AllowedToolsPolicy  # noqa: E402
 from prismclaw.engine.toolkit.registry.governance import (  # noqa: E402
     _CORE_VISIBLE_TOOLS,
     GovernanceInput,
@@ -33,7 +35,6 @@ from prismclaw.engine.toolkit.registry.specs import (  # noqa: E402
     ToolPermissionTraits,
     ToolSpec,
 )
-from prismclaw.engine.security.gate.types import AllowedToolsPolicy  # noqa: E402
 
 
 def _spec(name: str, *, deferred: bool = False) -> ToolSpec:
@@ -91,9 +92,7 @@ def test_flag_on_explicit_allowlist_overrides_core_hiding():
     catalog = [_spec("read"), _spec("goal")]
     resolved = _resolve(
         catalog,
-        allowed_tools_policy=AllowedToolsPolicy(
-            allow_all=False, allowed_names=("read", "goal")
-        ),
+        allowed_tools_policy=AllowedToolsPolicy(allow_all=False, allowed_names=("read", "goal")),
     )
     assert set(resolved.visible_tools_for_llm) == {"read", "goal"}
 
@@ -146,9 +145,51 @@ def test_server_read_only_hides_write_tools_but_keeps_read_only_capable():
 
 
 def test_core_set_matches_expected_baseline():
-    assert _CORE_VISIBLE_TOOLS == frozenset({
-        "read", "write", "edit", "bash", "ls", "grep", "glob",
-        "todo_write", "ask_user_question",
-        "tool_search", "skill_search", "subagent_search", "activate_skill",
-        "present_files",
-    })
+    assert (
+        frozenset(
+            {
+                "read",
+                "write",
+                "edit",
+                "bash",
+                "ls",
+                "grep",
+                "glob",
+                "todo_write",
+                "ask_user_question",
+                "tool_search",
+                "skill_search",
+                "subagent_search",
+                "activate_skill",
+                "present_files",
+                "sub_agent",
+            }
+        )
+        == _CORE_VISIBLE_TOOLS
+    )
+
+
+def test_sub_agent_is_universal_and_core():
+    """D6 两条路径：委派既不能被技能白名单吞掉，也不能被核心集隐藏。"""
+    from prismclaw.engine.toolkit.registry.governance import _UNIVERSAL_TOOLS
+
+    assert "sub_agent" in _UNIVERSAL_TOOLS
+    assert "sub_agent" in _CORE_VISIBLE_TOOLS
+
+
+def test_skill_allowlist_keeps_sub_agent():
+    """D6 路径一：技能声明 allowed_tools 后，<delegation> 依赖的 sub_agent 仍在。"""
+    resolved = _resolve(
+        [_spec("read"), _spec("sub_agent")],
+        allowed_tools_policy=AllowedToolsPolicy(allow_all=False, allowed_names=("read",)),
+    )
+    assert "sub_agent" in resolved.visible_tools_for_llm
+    assert "sub_agent" not in resolved.denied_tools
+
+
+def test_core_visible_flag_keeps_sub_agent():
+    """D6 路径二：core_visible_only 开启时委派入口不被视作 deferred。"""
+    set_static_flag(FLAG_CORE_VISIBLE_TOOLS, True)
+    resolved = _resolve([_spec("read"), _spec("sub_agent"), _spec("goal")])
+    assert "sub_agent" in resolved.visible_tools_for_llm
+    assert "goal" not in resolved.visible_tools_for_llm

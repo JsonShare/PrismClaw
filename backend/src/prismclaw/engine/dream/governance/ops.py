@@ -1,10 +1,105 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from prismclaw.engine.dream.governance.review_service import DreamGovernanceRecord
+
+    class DreamReviewServicePort(Protocol):
+        async def list_pending_reviews(self, session_key: str | None = None) -> list[Any]: ...
+        async def list_governance_records(
+            self,
+            *,
+            session_key: str | None = None,
+            review_status: str | None = None,
+            publish_channel: str | None = None,
+            target_type: str | None = None,
+            target_id: str | None = None,
+            limit: int = 100,
+        ) -> list[Any]: ...
+        async def approve(
+            self,
+            record_id: str,
+            *,
+            reviewer: str = ...,
+            comment: str = ...,
+            expected_target_id: str | None = ...,
+            expected_evidence_fingerprint: str | None = ...,
+        ) -> DreamGovernanceRecord | None: ...
+        async def reject(
+            self,
+            record_id: str,
+            *,
+            reviewer: str = ...,
+            comment: str = ...,
+            reason: str = ...,
+            expected_target_id: str | None = ...,
+            expected_evidence_fingerprint: str | None = ...,
+        ) -> DreamGovernanceRecord | None: ...
+        async def rollback_artifact(self, record_id: str, *, reason: str = ...) -> bool: ...
+        async def rollback_memory(self, session_key: str, memory_id: str) -> bool: ...
+        async def get_governance_summary(
+            self, session_key: str | None = None
+        ) -> dict[str, object]: ...
+        async def get_archive_storage(self, session_key: str) -> dict[str, int]: ...
+        async def plan_canary_actions(
+            self,
+            *,
+            session_key: str | None = None,
+            limit: int = 100,
+            trigger: str = ...,
+        ) -> dict[str, object]: ...
+        async def reconcile_canary_actions(
+            self,
+            *,
+            session_key: str | None = None,
+            limit: int = 100,
+            dry_run: bool = False,
+            trigger: str = ...,
+        ) -> dict[str, object]: ...
+        async def list_canary_decision_audits(
+            self,
+            *,
+            session_key: str | None = None,
+            batch_id: str | None = None,
+            limit: int = 100,
+        ) -> list[dict[str, object]]: ...
+        async def list_statuses(
+            self, session_key: str | None = None
+        ) -> list[dict[str, object]]: ...
+        async def get_dispatch_status(self) -> dict[str, object]: ...
+        async def list_dispatch_dead_letters(
+            self,
+            *,
+            session_key: str | None = None,
+            limit: int = 50,
+        ) -> list[dict[str, object]]: ...
+        async def list_dispatch_audit_events(
+            self,
+            *,
+            session_key: str | None = None,
+            limit: int = 50,
+        ) -> list[dict[str, object]]: ...
+        async def replay_dispatch_dead_letter(
+            self, dead_letter_stream_id: str
+        ) -> dict[str, object]: ...
+        async def list_dispatch_replay_candidates(
+            self,
+            *,
+            session_key: str | None = None,
+            limit: int = 50,
+        ) -> list[dict[str, object]]: ...
+        async def replay_dispatch_dead_letters(
+            self,
+            *,
+            session_key: str | None = None,
+            limit: int = 50,
+            dry_run: bool = False,
+        ) -> dict[str, object]: ...
 
 
 class InProcessDreamAdminOps:
-    def __init__(self, review_service: Any) -> None:
+    def __init__(self, review_service: DreamReviewServicePort) -> None:
         self._review_service = review_service
 
     async def list_pending_reviews(self, session_key: str | None = None) -> list[Any]:
@@ -132,7 +227,7 @@ class InProcessDreamAdminOps:
         comment: str = "",
         expected_target_id: str | None = None,
         expected_evidence_fingerprint: str | None = None,
-    ) -> Any | None:
+    ) -> DreamGovernanceRecord | None:
         return await self._review_service.approve(
             record_id,
             reviewer=reviewer,
@@ -150,7 +245,7 @@ class InProcessDreamAdminOps:
         reason: str = "",
         expected_target_id: str | None = None,
         expected_evidence_fingerprint: str | None = None,
-    ) -> Any | None:
+    ) -> DreamGovernanceRecord | None:
         return await self._review_service.reject(
             record_id,
             reviewer=reviewer,

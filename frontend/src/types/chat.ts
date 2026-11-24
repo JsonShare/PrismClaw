@@ -219,8 +219,8 @@ export interface WSServerQuestions {
   data: { message_id?: string; questions: string[] }
 }
 
-export interface WSServerOutputs {
-  type: 'event:outputs'
+export interface WSServerOutbox {
+  type: 'event:outbox'
   conversation_id: string
   data: { message_id?: string; files: string[] }
 }
@@ -329,7 +329,7 @@ export type WSServerMessage =
   | WSServerChatQueued
   | WSServerReference
   | WSServerQuestions
-  | WSServerOutputs
+  | WSServerOutbox
   | WSServerFileChanges
   | WSServerTaskRuntime
   | WSServerTaskTimeline

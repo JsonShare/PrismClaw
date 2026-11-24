@@ -2,17 +2,32 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.schema.agent.capability import (
-    CapabilityGraph,
-    CapabilityKind,
-    RuntimeCapabilities,
-)
 from prismclaw.engine.toolkit.registry.governance import resolve_registry_tool_governance
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.schema.services.skills import SkillInvocationState
-from prismclaw.schema.services.skills import normalize_skill_ref, resolve_skill_name
+from prismclaw.schema.agent.capability import (
+    CapabilityGraph,
+    RuntimeCapabilities,
+)
+from prismclaw.schema.agent.capability import (
+    CapabilityKind as CapabilityKind,
+)
+from prismclaw.schema.services.skills import (
+    SkillInvocationState,
+    normalize_skill_ref,
+    resolve_skill_name,
+)
+
+if TYPE_CHECKING:
+    from prismclaw.engine.toolkit.registry.tool_runtime import Tool
+    from prismclaw.schema.services.skills import SkillManifest
+
+
+def _meta_str(metadata: dict[str, Any], key: str) -> str | None:
+    """读取能力节点 metadata 中的字符串字段；非字符串一律视为缺失。"""
+    value = metadata.get(key)
+    return value if isinstance(value, str) else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,13 +103,15 @@ class CapabilityCatalogService:
     capability_graph: CapabilityGraph | None = None
     runtime_capabilities: RuntimeCapabilities | None = None
 
-    def list_skill_entries(self, workspace_path: str | Path | None = None) -> list[SkillCatalogEntry]:
+    def list_skill_entries(
+        self, workspace_path: str | Path | None = None
+    ) -> list[SkillCatalogEntry]:
         _ = workspace_path
         graph = self.capability_graph
         if graph is None:
             return []
-        # runtime_capabilities.skills 若已声明,仅用作启用过滤器(同名 canonical_id 的所有 plugin 版本视为一体启用)。
-        # 否则直接从 enabled_nodes() 拿所有 SKILL 类型。
+        # 声明了 runtime_capabilities.skills 时仅作启用过滤器（同名 canonical_id
+        # 的各 plugin 版本整体启用），否则取 enabled_nodes() 中全部 SKILL 节点。
         if self.runtime_capabilities is not None:
             enabled_id_set = set(self.runtime_capabilities.skills)
         else:
@@ -103,16 +120,13 @@ class CapabilityCatalogService:
         seen: set[tuple[str, str | None]] = set()
         entries: list[SkillCatalogEntry] = []
         from prismclaw.schema.services.skills import SkillManifest
+
         for node in graph.enabled_nodes():
             if node.kind != CapabilityKind.SKILL:
                 continue
             if enabled_id_set is not None and node.canonical_id not in enabled_id_set:
                 continue
-            plugin_name = (
-                node.metadata.get("plugin_name")
-                if isinstance(node.metadata.get("plugin_name"), str)
-                else None
-            )
+            plugin_name = _meta_str(node.metadata, "plugin_name")
             key = (node.canonical_id, plugin_name)
             if key in seen:
                 continue
@@ -120,7 +134,8 @@ class CapabilityCatalogService:
             payload = node.metadata.get("manifest")
             if not isinstance(payload, dict):
                 raise RuntimeError(
-                    f"CapabilityCatalogService: missing skill manifest payload for {node.canonical_id!r}"
+                    f"CapabilityCatalogService: missing skill "
+                    f"manifest payload for {node.canonical_id!r}"
                 )
             manifest = SkillManifest.model_validate(payload)
             entries.append(
@@ -131,18 +146,12 @@ class CapabilityCatalogService:
                     instructions=manifest.body or "",
                     manifest=manifest,
                     plugin_name=plugin_name,
-                    origin=node.metadata.get("origin")
-                    if isinstance(node.metadata.get("origin"), str)
-                    else None,
-                    marketplace_name=node.metadata.get("marketplace_name")
-                    if isinstance(node.metadata.get("marketplace_name"), str)
-                    else None,
-                    marketplace_description=node.metadata.get("marketplace_description")
-                    if isinstance(node.metadata.get("marketplace_description"), str)
-                    else None,
-                    plugin_description=node.metadata.get("plugin_description")
-                    if isinstance(node.metadata.get("plugin_description"), str)
-                    else None,
+                    origin=_meta_str(node.metadata, "origin"),
+                    marketplace_name=_meta_str(node.metadata, "marketplace_name"),
+                    marketplace_description=_meta_str(
+                        node.metadata, "marketplace_description"
+                    ),
+                    plugin_description=_meta_str(node.metadata, "plugin_description"),
                 )
             )
         entries.sort(key=lambda item: (item.name, item.plugin_name or ""))
@@ -237,7 +246,8 @@ class CapabilityCatalogService:
     def get_skill_entry(
         self, skill_name: str, *, plugin_prefer: str | None = None
     ) -> SkillCatalogEntry | None:
-        """按名字解析 skill,支持按 plugin_prefer 在同 canonical_id 多版本中优先命中归属 plugin 的版本。
+        """按名字解析 skill；plugin_prefer 用于在同 canonical_id 多版本中
+        优先命中归属 plugin 的版本。
 
         委托 resolve_skill_reference：技能名直取，marketplace 别名按其规则
         （唯一成员直取 / 多成员视为未命中）解析，非 resolved 一律返回 None。
@@ -247,7 +257,7 @@ class CapabilityCatalogService:
 
     def resolve_skill_manifest(
         self, skill_name: str, *, plugin_prefer: str | None = None
-    ) -> Any | None:
+    ) -> SkillManifest | None:
         entry = self.get_skill_entry(skill_name, plugin_prefer=plugin_prefer)
         return entry.manifest if entry is not None else None
 
@@ -267,23 +277,20 @@ class CapabilityCatalogService:
     def list_visible_tool_entries(
         self,
         *,
-        skill_invocation: SkillInvocationState | None = None,
-        discovered_tools: set[str] | None = None,
+        visible_names: set[str],
         subagent_depth: int = 0,
-        headless: bool = False,
     ) -> list[ToolCatalogEntry]:
+        """按本轮可见集列举工具条目。
+
+        ``visible_names`` 来自 ``TurnPlan.toolset.visible_tools_for_llm``——
+        唯一治理点算出的结果。此处不再重跑 governance：那会是一次重复计算，
+        且历史实现漏传 ``tool_scope``，导致 ``<tools>`` 段列出模型实际
+        调不到的工具（SDD D14）。
+        """
         if self.tool_registry is None:
             return []
-        resolved_toolset = resolve_registry_tool_governance(
-            self.tool_registry,
-            skill_invocation=skill_invocation,
-            discovered_tools=discovered_tools,
-            subagent_depth=subagent_depth,
-            headless=headless,
-        )
-        allowed_names = set(resolved_toolset.visible_tools_for_llm)
         tools = self.tool_registry.list_tools(
-            allowed_names=allowed_names,
+            allowed_names=set(visible_names),
             subagent_depth=subagent_depth,
         )
         return [self._tool_entry_from_tool(tool, subagent_depth=subagent_depth) for tool in tools]
@@ -327,6 +334,7 @@ class CapabilityCatalogService:
             )
         entries: list[AgentCatalogEntry] = []
         from prismclaw.engine.subagent.definition.manifest import AgentManifest
+
         for canonical_id in enabled_ids:
             node = graph.get(canonical_id)
             if node is None or node.kind != CapabilityKind.AGENT:
@@ -340,9 +348,7 @@ class CapabilityCatalogService:
             raw_plugin_name = node.metadata.get("plugin_name")
             # 空字符串统一收敛为 None：核心/插件子代理的判定口径只认 None。
             plugin_name = (
-                raw_plugin_name
-                if isinstance(raw_plugin_name, str) and raw_plugin_name
-                else None
+                raw_plugin_name if isinstance(raw_plugin_name, str) and raw_plugin_name else None
             )
             entries.append(
                 AgentCatalogEntry(
@@ -351,15 +357,11 @@ class CapabilityCatalogService:
                     can_handoff_to=tuple(manifest.can_handoff_to or ()),
                     manifest=manifest,
                     plugin_name=plugin_name,
-                    origin=node.metadata.get("origin")
-                    if isinstance(node.metadata.get("origin"), str)
-                    else None,
-                    marketplace_name=node.metadata.get("marketplace_name")
-                    if isinstance(node.metadata.get("marketplace_name"), str)
-                    else None,
-                    marketplace_description=node.metadata.get("marketplace_description")
-                    if isinstance(node.metadata.get("marketplace_description"), str)
-                    else None,
+                    origin=_meta_str(node.metadata, "origin"),
+                    marketplace_name=_meta_str(node.metadata, "marketplace_name"),
+                    marketplace_description=_meta_str(
+                        node.metadata, "marketplace_description"
+                    ),
                 )
             )
         entries.sort(key=lambda item: item.name)
@@ -382,7 +384,7 @@ class CapabilityCatalogService:
 
     def _tool_entry_from_tool(
         self,
-        tool: Any,
+        tool: Tool,
         *,
         subagent_depth: int,
     ) -> ToolCatalogEntry:

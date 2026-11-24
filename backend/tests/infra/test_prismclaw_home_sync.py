@@ -3,6 +3,7 @@
 历史 bug：拷贝失败只写 debug 日志，启动照常，运行时继续用旧 agents，
 导致 repo 里的修改静默失效。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -115,8 +116,15 @@ def test_sync_preserves_user_data_in_assets(tmp_path: Path, monkeypatch) -> None
     )
 
     user_matter = (
-        home / ".prismclaw" / "assets" / "plugins" / "pkg" / "sub"
-        / "matters" / "acme" / "matter.md"
+        home
+        / ".prismclaw"
+        / "assets"
+        / "plugins"
+        / "pkg"
+        / "sub"
+        / "matters"
+        / "acme"
+        / "matter.md"
     )
     user_matter.parent.mkdir(parents=True)
     user_matter.write_text("用户事项", encoding="utf-8")

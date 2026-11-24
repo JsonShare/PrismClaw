@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from prismclaw.engine.execution.capabilities.graph_assembler import CapabilityAssembler
+from prismclaw.engine.plugins.manifest import PluginManifest
 from prismclaw.schema.agent.capability import (
     CapabilityKind,
     PluginCapabilityGraph,
@@ -12,8 +14,6 @@ from prismclaw.schema.agent.capability import (
     SourceKind,
     TrustLevel,
 )
-from prismclaw.engine.execution.capabilities.graph_assembler import CapabilityAssembler
-from prismclaw.engine.plugins.manifest import PluginManifest
 
 
 def _normalize_commands(commands: list[Any]) -> list[PluginCommandCapability]:
@@ -37,7 +37,7 @@ def build_plugin_capability_graph(
     *,
     plugin_name: str,
     namespace: str,
-    root_path: "Path",
+    root_path: Path,
     manifest: PluginManifest,
     hooks_config: dict[str, Any],
     commands: list[Any],
@@ -94,7 +94,7 @@ def build_plugin_capability_graph(
                 )
             )
 
-    for event_name in hooks_config.keys():
+    for event_name in hooks_config:
         if not isinstance(event_name, str) or not event_name:
             continue
         nodes.append(
@@ -108,7 +108,7 @@ def build_plugin_capability_graph(
             )
         )
 
-    for server_name in mcp_servers.keys():
+    for server_name in mcp_servers:
         if not isinstance(server_name, str) or not server_name:
             continue
         nodes.append(
@@ -122,7 +122,7 @@ def build_plugin_capability_graph(
             )
         )
 
-    for style_name in output_styles.keys():
+    for style_name in output_styles:
         if not isinstance(style_name, str) or not style_name:
             continue
         nodes.append(
@@ -164,7 +164,7 @@ def build_plugin_capability_graph(
 def _plugin_source_ref(
     plugin_name: str,
     namespace: str,
-    root_path: "Path",
+    root_path: Path,
     manifest: PluginManifest,
 ) -> PluginSourceRef:
     source_kind = SourceKind.LOCAL_PLUGIN

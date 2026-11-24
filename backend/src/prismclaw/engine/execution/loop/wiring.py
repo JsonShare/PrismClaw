@@ -3,11 +3,12 @@
 run_loop 不知道任何子系统的存在，只消费 LoopConfig 的三端口 + 两个插槽。
 LoopRuntime 的装配在 ``runtime.build_runtime``；本文件只做端口绑定。
 """
+
 from __future__ import annotations
 
 import logging
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.execution.loop import continue_ as _continue
 from prismclaw.engine.execution.loop import stream as _stream
@@ -22,6 +23,11 @@ from prismclaw.engine.execution.loop.types import (
     RunLoopState,
     StreamPort,
 )
+from prismclaw.schema.llm.types import LLMResponse
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
+    from prismclaw.schema.content.streaming import ToolCallEnd
 
 logger = logging.getLogger(__name__)
 
@@ -33,21 +39,25 @@ def build_loop_config(rt: LoopRuntime) -> LoopConfig:
     # persist_turn 不消费 state；端口签名首参是 state，用薄适配丢弃。
     async def _persist_denied(
         state: RunLoopState,
-        response: Any,
-        blocked_events: list[Any],
+        response: LLMResponse,
+        blocked_events: list[ToolCallEnd],
     ) -> None:
         await _terminal.persist_turn(rt, response, "denied", blocked_events=blocked_events)
 
     async def _persist_clarified(
         state: RunLoopState,
-        response: Any,
-        allowed_calls: list[Any],
+        response: LLMResponse,
+        allowed_calls: list[ParsedToolCall],
         ask_call_id: str,
         answer: str | None,
     ) -> None:
         await _terminal.persist_turn(
-            rt, response, "clarified",
-            allowed_calls=allowed_calls, ask_call_id=ask_call_id, answer=answer,
+            rt,
+            response,
+            "clarified",
+            allowed_calls=allowed_calls,
+            ask_call_id=ask_call_id,
+            answer=answer,
         )
 
     return LoopConfig(

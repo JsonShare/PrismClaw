@@ -50,7 +50,6 @@ from prismclaw.schema.content.subagent import (
     SubagentResultEnvelope,
 )
 
-
 # ═══════════════════════════════════════════════════════════════
 # 医疗场景数据
 # ═══════════════════════════════════════════════════════════════
@@ -77,8 +76,10 @@ CKD_DOSING = "eGFR 30-45: 减量至500mg bid，每3个月监测eGFR。"
 # MockLLM —— 模拟 LLM 的响应行为
 # ═══════════════════════════════════════════════════════════════
 
+
 class MockLLMResponse:
     """模拟 LLM 的单次响应。"""
+
     def __init__(
         self,
         *,
@@ -89,10 +90,14 @@ class MockLLMResponse:
     ):
         self.text = text
         self.tool_calls = tool_calls or []
-        self.usage = type("Usage", (), {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-        })()
+        self.usage = type(
+            "Usage",
+            (),
+            {
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            },
+        )()
 
 
 class MockLLM:
@@ -103,12 +108,16 @@ class MockLLM:
             # 第 1 轮：调用 read 工具
             MockLLMResponse(tool_calls=[{
                 "id": "tc_1", "type": "function",
-                "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug.txt"})}
+                "function": {
+                    "name": "read",
+                    "arguments": json.dumps({"file_path": "/data/drug.txt"}),
+                }
             }]),
             # 第 2 轮：直接回答
             MockLLMResponse(text=envelope_json),
         ])
     """
+
     def __init__(self, responses: list[MockLLMResponse], default_model: str = "test-model"):
         self._responses = list(responses)
         self._call_index = 0
@@ -152,8 +161,10 @@ class TaskRoutedMockLLM(MockLLM):
 # MockToolRegistry —— 模拟工具注册表
 # ═══════════════════════════════════════════════════════════════
 
+
 class MockTool:
     """模拟单个工具。"""
+
     def __init__(self, name: str, execute_fn=None):
         self.name = name
         self.description = f"Mock {name} tool"
@@ -179,6 +190,7 @@ class MockTool:
 
 class MockToolRegistry:
     """模拟工具注册表。"""
+
     def __init__(self, tools: list[MockTool] | None = None):
         self._tools: dict[str, MockTool] = {}
         if tools:
@@ -195,14 +207,16 @@ class MockToolRegistry:
         result = []
         for name, tool in self._tools.items():
             if allowed_names is None or name in allowed_names:
-                result.append({
-                    "type": "function",
-                    "function": {
-                        "name": name,
-                        "description": tool.description,
-                        "parameters": tool.parameters,
-                    },
-                })
+                result.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "description": tool.description,
+                            "parameters": tool.parameters,
+                        },
+                    }
+                )
         return result
 
     def list_tools(self, allowed_names=None, subagent_depth=0):
@@ -212,6 +226,7 @@ class MockToolRegistry:
 # ═══════════════════════════════════════════════════════════════
 # MockCapabilityCatalogService
 # ═══════════════════════════════════════════════════════════════
+
 
 class AgentCatalogEntry:
     def __init__(self, name: str, description: str, manifest: AgentManifest):
@@ -239,6 +254,7 @@ class MockCapabilityCatalog:
 # ═══════════════════════════════════════════════════════════════
 # 辅助函数
 # ═══════════════════════════════════════════════════════════════
+
 
 def _make_envelope_json(
     *,
@@ -276,10 +292,9 @@ def _make_subagent_tool(
     from prismclaw.engine.subagent.core.executor import SubAgentExecutor
     from prismclaw.engine.subagent.definition.registry import SubAgentRegistry
 
-    catalog = MockCapabilityCatalog([
-        AgentCatalogEntry(name=m.name, description=m.description, manifest=m)
-        for m in manifests
-    ])
+    catalog = MockCapabilityCatalog(
+        [AgentCatalogEntry(name=m.name, description=m.description, manifest=m) for m in manifests]
+    )
 
     settings = SubAgentConfig(
         enabled=True,
@@ -314,6 +329,7 @@ def _make_subagent_tool(
 
 def _make_read_tool(content_map: dict[str, str]) -> MockTool:
     """构造模拟 read 工具，根据 file_path 返回预设内容。"""
+
     def execute_fn(args):
         return content_map.get(args.get("file_path", ""), "[file not found]")
 
@@ -338,6 +354,7 @@ def _make_web_fetch_tool(content_map: dict[str, str]) -> MockTool:
 # 测试场景 1：单 researcher 1 轮完成
 # ═══════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 async def test_integration_single_researcher_one_turn():
     """单 researcher 调用 read → 直接回答。
@@ -356,22 +373,33 @@ async def test_integration_single_researcher_one_turn():
     """
     file_contents = {"/data/drug_labels/metformin.txt": DRUG_LABEL_METFORMIN}
 
-    llm = MockLLM(responses=[
-        # 第 1 轮：调用 read
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_read_1", "type": "function",
-            "function": {
-                "name": "read",
-                "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"}),
-            },
-        }]),
-        # 第 2 轮：返回 envelope
-        MockLLMResponse(text=_make_envelope_json(
-            summary="检索到二甲双胍禁忌症",
-            findings=["[HIGH] eGFR<30禁用", "[HIGH] 碘化造影前后48h暂停"],
-            confidence="high",
-        )),
-    ])
+    llm = MockLLM(
+        responses=[
+            # 第 1 轮：调用 read
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_read_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps(
+                                {"file_path": "/data/drug_labels/metformin.txt"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+            # 第 2 轮：返回 envelope
+            MockLLMResponse(
+                text=_make_envelope_json(
+                    summary="检索到二甲双胍禁忌症",
+                    findings=["[HIGH] eGFR<30禁用", "[HIGH] 碘化造影前后48h暂停"],
+                    confidence="high",
+                )
+            ),
+        ]
+    )
 
     manifest = AgentManifest(
         name="researcher",
@@ -409,8 +437,9 @@ async def test_integration_single_researcher_one_turn():
     assert result_envelope.confidence_assessment == "high"
 
     # ---- 验证 evidence ----
-    assert len(result_envelope.evidence) >= 1, \
+    assert len(result_envelope.evidence) >= 1, (
         f"Expected >=1 evidence, got {len(result_envelope.evidence)}"
+    )
 
     ev = result_envelope.evidence[0]
     assert ev.source_type == "file"
@@ -425,14 +454,17 @@ async def test_integration_single_researcher_one_turn():
     assert "confidence: high" in handover
     assert "[HIGH]" in handover
 
-    print(f"✅ 场景1: evidence={len(result_envelope.evidence)}条, "
-          f"confidence={result_envelope.confidence_assessment}, "
-          f"handover_len={len(handover)}")
+    print(
+        f"✅ 场景1: evidence={len(result_envelope.evidence)}条, "
+        f"confidence={result_envelope.confidence_assessment}, "
+        f"handover_len={len(handover)}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
 # 测试场景 2：单 researcher 2 轮完成（多工具调用）
 # ═══════════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_integration_researcher_multi_tool_calls():
@@ -449,34 +481,52 @@ async def test_integration_researcher_multi_tool_calls():
     file_contents = {"/data/drug_labels/metformin.txt": DRUG_LABEL_METFORMIN}
     web_contents = {"https://guidelines.diabetes.cn/t2dm-2024": GUIDELINE_T2DM}
 
-    llm = MockLLM(responses=[
-        # 第 1 轮：read
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_read_1", "type": "function",
-            "function": {
-                "name": "read",
-                "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"}),
-            },
-        }]),
-        # 第 2 轮：web_fetch
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_web_1", "type": "function",
-            "function": {
-                "name": "web_fetch",
-                "arguments": json.dumps({"url": "https://guidelines.diabetes.cn/t2dm-2024"}),
-            },
-        }]),
-        # 第 3 轮：回答
-        MockLLMResponse(text=_make_envelope_json(
-            summary="药品说明书+指南检索完成",
-            findings=[
-                "[HIGH] eGFR<30禁用",
-                "[HIGH] 碘化造影前后48h暂停",
-                "[HIGH] eGFR 30-45减量",
-            ],
-            confidence="high",
-        )),
-    ])
+    llm = MockLLM(
+        responses=[
+            # 第 1 轮：read
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_read_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps(
+                                {"file_path": "/data/drug_labels/metformin.txt"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+            # 第 2 轮：web_fetch
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_web_1",
+                        "type": "function",
+                        "function": {
+                            "name": "web_fetch",
+                            "arguments": json.dumps(
+                                {"url": "https://guidelines.diabetes.cn/t2dm-2024"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+            # 第 3 轮：回答
+            MockLLMResponse(
+                text=_make_envelope_json(
+                    summary="药品说明书+指南检索完成",
+                    findings=[
+                        "[HIGH] eGFR<30禁用",
+                        "[HIGH] 碘化造影前后48h暂停",
+                        "[HIGH] eGFR 30-45减量",
+                    ],
+                    confidence="high",
+                )
+            ),
+        ]
+    )
 
     manifest = AgentManifest(
         name="researcher",
@@ -487,10 +537,12 @@ async def test_integration_researcher_multi_tool_calls():
         timeout_seconds=30.0,
     )
 
-    tool_reg = MockToolRegistry([
-        _make_read_tool(file_contents),
-        _make_web_fetch_tool(web_contents),
-    ])
+    tool_reg = MockToolRegistry(
+        [
+            _make_read_tool(file_contents),
+            _make_web_fetch_tool(web_contents),
+        ]
+    )
     subagent_tool = _make_subagent_tool(llm, [manifest], tool_reg)
     context = _make_tool_context(session_state=SessionContextState(session_id="test-session-002"))
 
@@ -507,8 +559,10 @@ async def test_integration_researcher_multi_tool_calls():
     envelope = result.subagent_envelope.result_envelope
 
     # evidence 应包含 2 条（1 file + 1 web）
-    assert len(envelope.evidence) == 2, \
-        f"Expected 2 evidence, got {len(envelope.evidence)}: {[e.source_type for e in envelope.evidence]}"
+    assert len(envelope.evidence) == 2, (
+        f"Expected 2 evidence, got {len(envelope.evidence)}: "
+        f"{[e.source_type for e in envelope.evidence]}"
+    )
 
     types = {e.source_type for e in envelope.evidence}
     assert types == {"file", "web"}
@@ -519,13 +573,16 @@ async def test_integration_researcher_multi_tool_calls():
     assert "[high] file:" in handover
     assert "[high] web:" in handover
 
-    print(f"✅ 场景2: evidence={len(envelope.evidence)}条, "
-          f"types={types}, confidence={envelope.confidence_assessment}")
+    print(
+        f"✅ 场景2: evidence={len(envelope.evidence)}条, "
+        f"types={types}, confidence={envelope.confidence_assessment}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
 # 测试场景 3：并行 2 researcher + 1 architect
 # ═══════════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_integration_parallel_researchers_with_architect():
@@ -539,49 +596,94 @@ async def test_integration_parallel_researchers_with_architect():
     web_contents = {"https://guidelines.diabetes.cn/t2dm-2024": GUIDELINE_T2DM}
 
     # 并行 Agent 共用一个 LLM，按任务文本路由到各自响应队列，避免调度顺序串扰。
-    llm = TaskRoutedMockLLM({
-        "检索药品说明书": [
-            MockLLMResponse(tool_calls=[{
-                "id": "tc_r1", "type": "function",
-                "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
-            }]),
-            MockLLMResponse(text=_make_envelope_json(
-                summary="药品说明书检索完成",
-                findings=["[HIGH] eGFR<30禁用", "[HIGH] 碘化造影前后48h暂停"],
-                confidence="high",
-            )),
-        ],
-        "检索临床指南": [
-            MockLLMResponse(tool_calls=[{
-                "id": "tc_r2", "type": "function",
-                "function": {"name": "web_fetch", "arguments": json.dumps({"url": "https://guidelines.diabetes.cn/t2dm-2024"})},
-            }]),
-            MockLLMResponse(text=_make_envelope_json(
-                summary="指南检索完成",
-                findings=["[HIGH] eGFR 30-45减量", "[HIGH] 联合SGLT2i优先"],
-                confidence="high",
-            )),
-        ],
-        "基于检索结果推理药物交互": [
-            MockLLMResponse(text=_make_envelope_json(
-                summary="基于检索结果推理药物交互",
-                findings=["[MEDIUM] 碘化造影剂存在严重交互需暂停", "[MEDIUM] eGFR 30-45建议减量至500mg bid"],
-                confidence="medium",
-            )),
-        ],
-    })
+    llm = TaskRoutedMockLLM(
+        {
+            "检索药品说明书": [
+                MockLLMResponse(
+                    tool_calls=[
+                        {
+                            "id": "tc_r1",
+                            "type": "function",
+                            "function": {
+                                "name": "read",
+                                "arguments": json.dumps(
+                                    {"file_path": "/data/drug_labels/metformin.txt"}
+                                ),
+                            },
+                        }
+                    ]
+                ),
+                MockLLMResponse(
+                    text=_make_envelope_json(
+                        summary="药品说明书检索完成",
+                        findings=["[HIGH] eGFR<30禁用", "[HIGH] 碘化造影前后48h暂停"],
+                        confidence="high",
+                    )
+                ),
+            ],
+            "检索临床指南": [
+                MockLLMResponse(
+                    tool_calls=[
+                        {
+                            "id": "tc_r2",
+                            "type": "function",
+                            "function": {
+                                "name": "web_fetch",
+                                "arguments": json.dumps(
+                                    {"url": "https://guidelines.diabetes.cn/t2dm-2024"}
+                                ),
+                            },
+                        }
+                    ]
+                ),
+                MockLLMResponse(
+                    text=_make_envelope_json(
+                        summary="指南检索完成",
+                        findings=["[HIGH] eGFR 30-45减量", "[HIGH] 联合SGLT2i优先"],
+                        confidence="high",
+                    )
+                ),
+            ],
+            "基于检索结果推理药物交互": [
+                MockLLMResponse(
+                    text=_make_envelope_json(
+                        summary="基于检索结果推理药物交互",
+                        findings=[
+                            "[MEDIUM] 碘化造影剂存在严重交互需暂停",
+                            "[MEDIUM] eGFR 30-45建议减量至500mg bid",
+                        ],
+                        confidence="medium",
+                    )
+                ),
+            ],
+        }
+    )
 
     manifests = [
-        AgentManifest(name="researcher", description="检索", model="test-model",
-                      allowed_tools=["read", "web_fetch"], max_turns=5, timeout_seconds=30.0),
-        AgentManifest(name="architect", description="推理", model="test-model",
-                      allowed_tools=["read"], max_turns=3, timeout_seconds=30.0),
+        AgentManifest(
+            name="researcher",
+            description="检索",
+            model="test-model",
+            allowed_tools=["read", "web_fetch"],
+            max_turns=5,
+            timeout_seconds=30.0,
+        ),
+        AgentManifest(
+            name="architect",
+            description="推理",
+            model="test-model",
+            allowed_tools=["read"],
+            max_turns=3,
+            timeout_seconds=30.0,
+        ),
     ]
 
-    tool_reg = MockToolRegistry([
-        _make_read_tool(file_contents),
-        _make_web_fetch_tool(web_contents),
-    ])
+    tool_reg = MockToolRegistry(
+        [
+            _make_read_tool(file_contents),
+            _make_web_fetch_tool(web_contents),
+        ]
+    )
     subagent_tool = _make_subagent_tool(llm, manifests, tool_reg)
     context = _make_tool_context(session_state=SessionContextState(session_id="test-session-003"))
 
@@ -616,11 +718,7 @@ async def test_integration_parallel_researchers_with_architect():
     assert architects[0].envelope.confidence_assessment == "medium"
     assert len(architects[0].envelope.findings) == 2
 
-    evidence = [
-        evidence
-        for item in researchers
-        for evidence in item.envelope.evidence
-    ]
+    evidence = [evidence for item in researchers for evidence in item.envelope.evidence]
     assert {item.source_type for item in evidence} == {"file", "web"}
     assert all(len(item.envelope.findings) == 2 for item in researchers)
 
@@ -638,6 +736,7 @@ async def test_integration_parallel_researchers_with_architect():
 # 测试场景 4：researcher 超时退出
 # ═══════════════════════════════════════════════════════════════
 
+
 @pytest.mark.asyncio
 async def test_integration_researcher_timeout():
     """researcher 超时退出，但已有工具调用的 evidence 不丢失。
@@ -654,17 +753,39 @@ async def test_integration_researcher_timeout():
 
     # LLM 会调用 read 但不会返回最终回答（模拟超时）
     # 我们用 max_turns=1 来触发 max_turns_exceeded
-    llm = MockLLM(responses=[
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_read_1", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
-        }]),
-        # 第 2 轮仍调用工具，但 max_turns=1 已到，会触发 max_turns_exceeded
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_read_2", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
-        }]),
-    ])
+    llm = MockLLM(
+        responses=[
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_read_1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps(
+                                {"file_path": "/data/drug_labels/metformin.txt"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+            # 第 2 轮仍调用工具，但 max_turns=1 已到，会触发 max_turns_exceeded
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_read_2",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps(
+                                {"file_path": "/data/drug_labels/metformin.txt"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+        ]
+    )
 
     manifest = AgentManifest(
         name="researcher",
@@ -690,8 +811,7 @@ async def test_integration_researcher_timeout():
     # ---- 验证 ----
     # 单 subagent 时直接返回其 ToolResult（不经过 _aggregate_results）
     # max_turns_exceeded 但有工具内容交付 → is_error = False（P1 修复）
-    assert not result.is_error, \
-        "max_turns_exceeded with tool results should NOT be marked as error"
+    assert not result.is_error, "max_turns_exceeded with tool results should NOT be marked as error"
 
     envelope = result.subagent_envelope
     assert envelope is not None
@@ -703,8 +823,9 @@ async def test_integration_researcher_timeout():
     assert result_envelope is not None
 
     # 关键：evidence 仍被收集
-    assert len(result_envelope.evidence) >= 1, \
+    assert len(result_envelope.evidence) >= 1, (
         f"Expected >=1 evidence on timeout, got {len(result_envelope.evidence)}"
+    )
 
     ev = result_envelope.evidence[0]
     assert ev.source_type == "file"
@@ -714,14 +835,17 @@ async def test_integration_researcher_timeout():
     # 主 Agent 应结合执行状态判断，且不得据此改写其他 Agent 的置信度。
     assert result_envelope.confidence_assessment == ""
 
-    print(f"✅ 场景4: outcome={envelope.outcome}, "
-          f"evidence={len(result_envelope.evidence)}条, "
-          f"confidence={result_envelope.confidence_assessment}")
+    print(
+        f"✅ 场景4: outcome={envelope.outcome}, "
+        f"evidence={len(result_envelope.evidence)}条, "
+        f"confidence={result_envelope.confidence_assessment}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
 # 测试场景 5：3 轮追问（跨轮次 prior_evidence）
 # ═══════════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_integration_three_round_consultation():
@@ -751,20 +875,38 @@ async def test_integration_three_round_consultation():
     tool_reg = MockToolRegistry([_make_read_tool(file_contents)])
 
     # ---- Round 1: 检索药品说明书 ----
-    llm_r1 = MockLLM(responses=[
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r1", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
-        }]),
-        MockLLMResponse(text=_make_envelope_json(
-            summary="药品说明书检索完成",
-            findings=["[HIGH] eGFR<30禁用，30-45需评估", "[HIGH] 碘化造影前后48h暂停"],
-            confidence="high",
-        )),
-    ])
+    llm_r1 = MockLLM(
+        responses=[
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_r1",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps(
+                                {"file_path": "/data/drug_labels/metformin.txt"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+            MockLLMResponse(
+                text=_make_envelope_json(
+                    summary="药品说明书检索完成",
+                    findings=["[HIGH] eGFR<30禁用，30-45需评估", "[HIGH] 碘化造影前后48h暂停"],
+                    confidence="high",
+                )
+            ),
+        ]
+    )
     manifest_r = AgentManifest(
-        name="researcher", description="检索", model="test-model",
-        allowed_tools=["read"], max_turns=5, timeout_seconds=30.0,
+        name="researcher",
+        description="检索",
+        model="test-model",
+        allowed_tools=["read"],
+        max_turns=5,
+        timeout_seconds=30.0,
     )
     subagent_tool_r1 = _make_subagent_tool(llm_r1, [manifest_r], tool_reg)
     ctx_r1 = _make_tool_context(session_state=state)
@@ -792,17 +934,31 @@ async def test_integration_three_round_consultation():
     assert len(state.evidence) >= 1, f"Round 1: state.evidence={len(state.evidence)}"
 
     # ---- Round 2: 追问 CKD 剂量调整 ----
-    llm_r2 = MockLLM(responses=[
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r2", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/guidelines/ckd_dosing.txt"})},
-        }]),
-        MockLLMResponse(text=_make_envelope_json(
-            summary="CKD剂量调整建议",
-            findings=["[HIGH] eGFR 30-45减量至500mg bid"],
-            confidence="high",
-        )),
-    ])
+    llm_r2 = MockLLM(
+        responses=[
+            MockLLMResponse(
+                tool_calls=[
+                    {
+                        "id": "tc_r2",
+                        "type": "function",
+                        "function": {
+                            "name": "read",
+                            "arguments": json.dumps(
+                                {"file_path": "/data/guidelines/ckd_dosing.txt"}
+                            ),
+                        },
+                    }
+                ]
+            ),
+            MockLLMResponse(
+                text=_make_envelope_json(
+                    summary="CKD剂量调整建议",
+                    findings=["[HIGH] eGFR 30-45减量至500mg bid"],
+                    confidence="high",
+                )
+            ),
+        ]
+    )
     subagent_tool_r2 = _make_subagent_tool(llm_r2, [manifest_r], tool_reg)
     ctx_r2 = _make_tool_context(session_state=state)
 
@@ -829,6 +985,7 @@ async def test_integration_three_round_consultation():
 
     # 验证 prior_evidence 可提取
     from prismclaw.engine.subagent.core.contract import _collect_prior_evidence
+
     prior = _collect_prior_evidence(state)
     assert len(prior) >= 2, f"prior_evidence={len(prior)}"
     prior_paths = {e.source_path for e in prior}
@@ -836,28 +993,38 @@ async def test_integration_three_round_consultation():
     assert "/data/guidelines/ckd_dosing.txt" in prior_paths
 
     # ---- Round 3: architect 给出最终建议 ----
-    llm_r3 = MockLLM(responses=[
-        MockLLMResponse(text=_make_envelope_json(
-            summary="最终建议：eGFR=35患者可使用二甲双胍，需减量至500mg bid",
-            findings=[
-                "[HIGH] eGFR 30-45可使用但需减量",
-                "[HIGH] 建议起始500mg bid",
-                "[HIGH] 每3个月监测eGFR",
-                "[HIGH] 碘化造影前后48h暂停",
-            ],
-            confidence="high",
-        )),
-    ])
+    llm_r3 = MockLLM(
+        responses=[
+            MockLLMResponse(
+                text=_make_envelope_json(
+                    summary="最终建议：eGFR=35患者可使用二甲双胍，需减量至500mg bid",
+                    findings=[
+                        "[HIGH] eGFR 30-45可使用但需减量",
+                        "[HIGH] 建议起始500mg bid",
+                        "[HIGH] 每3个月监测eGFR",
+                        "[HIGH] 碘化造影前后48h暂停",
+                    ],
+                    confidence="high",
+                )
+            ),
+        ]
+    )
     manifest_a = AgentManifest(
-        name="architect", description="推理", model="test-model",
-        allowed_tools=["read"], max_turns=3, timeout_seconds=30.0,
+        name="architect",
+        description="推理",
+        model="test-model",
+        allowed_tools=["read"],
+        max_turns=3,
+        timeout_seconds=30.0,
     )
     subagent_tool_r3 = _make_subagent_tool(llm_r3, [manifest_a], tool_reg)
     ctx_r3 = _make_tool_context(session_state=state)
 
     result_r3 = await subagent_tool_r3.execute(
         args={
-            "agents": [{"agent_name": "architect", "task": "基于已有证据给出eGFR=35患者的最终建议"}],
+            "agents": [
+                {"agent_name": "architect", "task": "基于已有证据给出eGFR=35患者的最终建议"}
+            ],
             "execution_mode": "sync",
         },
         context=ctx_r3,
@@ -874,16 +1041,19 @@ async def test_integration_three_round_consultation():
     assert "[HIGH]" in handover
     assert "confidence: high" in handover
 
-    print(f"✅ 场景5: R1 evidence={len(envelope_r1.evidence)}, "
-          f"R2 evidence={len(envelope_r2.evidence)}, "
-          f"state.evidence={len(state.evidence)}, "
-          f"prior={len(prior)}, "
-          f"R3 findings={len(envelope_r3.findings)}")
+    print(
+        f"✅ 场景5: R1 evidence={len(envelope_r1.evidence)}, "
+        f"R2 evidence={len(envelope_r2.evidence)}, "
+        f"state.evidence={len(state.evidence)}, "
+        f"prior={len(prior)}, "
+        f"R3 findings={len(envelope_r3.findings)}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
 # 测试场景 6：混合场景 1 成功 + 1 超时 + 1 错误
 # ═══════════════════════════════════════════════════════════════
+
 
 @pytest.mark.asyncio
 async def test_integration_mixed_success_timeout_error():
@@ -898,59 +1068,27 @@ async def test_integration_mixed_success_timeout_error():
       - success / timeout / error 三项结果独立保留
       - timeout 的 low 不改写 success 的 high
     """
-    file_contents = {
-        "/data/drug_labels/metformin.txt": DRUG_LABEL_METFORMIN,
-        "/data/guidelines/t2dm.txt": GUIDELINE_T2DM,
-    }
-
-    llm = MockLLM(responses=[
-        # --- researcher-1 (success) ---
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r1", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/drug_labels/metformin.txt"})},
-        }]),
-        MockLLMResponse(text=_make_envelope_json(
-            summary="药品说明书检索完成",
-            findings=["[HIGH] eGFR<30禁用"],
-            confidence="high",
-        )),
-        # --- researcher-2 (timeout via max_turns) ---
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r2", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/guidelines/t2dm.txt"})},
-        }]),
-        # 第 2 轮仍调用工具 → max_turns=1 到期
-        MockLLMResponse(tool_calls=[{
-            "id": "tc_r2_2", "type": "function",
-            "function": {"name": "read", "arguments": json.dumps({"file_path": "/data/guidelines/t2dm.txt"})},
-        }]),
-        # --- researcher-3 (error - LLM crash) ---
-        # MockLLM 没有更多 responses → 会返回兜底响应
-    ])
-
-    manifests = [
-        AgentManifest(name="researcher", description="检索", model="test-model",
-                      allowed_tools=["read"], max_turns=5, timeout_seconds=30.0),
-    ]
-
-    tool_reg = MockToolRegistry([_make_read_tool(file_contents)])
-    subagent_tool = _make_subagent_tool(llm, manifests, tool_reg)
-
     # 使用 3 个 researcher，其中 researcher-2 用 max_turns=1 模拟超时
     # 但 SubAgentTool 不支持 per-agent max_turns，所以这里用 context 配合
     # 简化方案：直接测试 _aggregate_results 的输入
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
     # 构造成功 subagent 的 result
-    r1_msg = _make_read_messages_for_collect("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN)
+    r1_msg = _make_read_messages_for_collect(
+        "/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN
+    )
     ev1 = _collect_evidence_from_messages(r1_msg)
     r1_tool_result = ToolResult(
         tool_call_id="tc_r1",
-        content=[TextBlock(text=_make_envelope_json(
-            summary="药品说明书检索完成",
-            findings=["[HIGH] eGFR<30禁用"],
-            confidence="high",
-        ))],
+        content=[
+            TextBlock(
+                text=_make_envelope_json(
+                    summary="药品说明书检索完成",
+                    findings=["[HIGH] eGFR<30禁用"],
+                    confidence="high",
+                )
+            )
+        ],
         is_error=False,
     )
     r1_tool_result.subagent_envelope = SubagentEnvelopeArtifact(
@@ -1033,11 +1171,13 @@ def _make_read_messages_for_collect(file_path: str, content: str) -> list[dict[s
         {
             "role": "assistant",
             "content": "",
-            "tool_calls": [{
-                "id": f"tc_{hash(file_path) % 10000:04d}",
-                "type": "function",
-                "function": {"name": "read", "arguments": json.dumps({"file_path": file_path})},
-            }],
+            "tool_calls": [
+                {
+                    "id": f"tc_{hash(file_path) % 10000:04d}",
+                    "type": "function",
+                    "function": {"name": "read", "arguments": json.dumps({"file_path": file_path})},
+                }
+            ],
         },
         {"role": "tool", "tool_call_id": f"tc_{hash(file_path) % 10000:04d}", "content": content},
     ]

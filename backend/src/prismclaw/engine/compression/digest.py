@@ -20,17 +20,19 @@ _UNSTABLE_KEYS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class PreparedTurnDigestInput:
-    messages_for_llm: list[Any]
-    system_blocks: list[Any]
-    tools_for_llm: list[Any]
-    context_payload: Any | None = None
+    messages_for_llm: Sequence[object]
+    system_blocks: Sequence[object]
+    tools_for_llm: Sequence[object]
+    context_payload: object | None = None
 
 
-def canonicalize_for_digest(value: Any, *, excluded_keys: frozenset[str] | None = None) -> Any:
+def canonicalize_for_digest(
+    value: object, *, excluded_keys: frozenset[str] | None = None
+) -> object:
     excluded = _UNSTABLE_KEYS if excluded_keys is None else excluded_keys
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json", exclude_none=True)
-    elif is_dataclass(value):
+    elif is_dataclass(value) and not isinstance(value, type):
         value = asdict(value)
     elif hasattr(value, "__dict__") and not isinstance(value, type):
         value = vars(value)
@@ -54,7 +56,7 @@ def canonicalize_for_digest(value: Any, *, excluded_keys: frozenset[str] | None 
     return value
 
 
-def canonical_json_dumps(value: Any, *, excluded_keys: frozenset[str] | None = None) -> str:
+def canonical_json_dumps(value: object, *, excluded_keys: frozenset[str] | None = None) -> str:
     normalized = canonicalize_for_digest(value, excluded_keys=excluded_keys)
     return json.dumps(
         normalized,
@@ -65,7 +67,7 @@ def canonical_json_dumps(value: Any, *, excluded_keys: frozenset[str] | None = N
 
 
 def digest_hex(
-    value: Any,
+    value: object,
     *,
     algorithm: str = "sha256",
     length: int | None = None,
@@ -78,10 +80,10 @@ def digest_hex(
 
 def build_prepared_turn_digest(
     *,
-    messages_for_llm: list[Any],
-    system_blocks: list[Any],
-    tools_for_llm: list[Any],
-    context_payload: Any | None = None,
+    messages_for_llm: Sequence[object],
+    system_blocks: Sequence[object],
+    tools_for_llm: Sequence[object],
+    context_payload: object | None = None,
 ) -> str:
     extra_excluded = _UNSTABLE_KEYS | {"id", "index"}
     normalized_messages = _normalized_list(messages_for_llm, excluded_keys=extra_excluded)
@@ -116,26 +118,23 @@ def build_replacement_state_digest(decisions: list[dict[str, Any]]) -> str | Non
     )
 
 
-def _stable_sort_key(value: Any) -> str:
+def _stable_sort_key(value: object) -> str:
     return canonical_json_dumps(value)
 
 
 def _sorted_normalized_list(
-    values: list[Any],
+    values: Sequence[object],
     *,
     excluded_keys: frozenset[str] | None = None,
-) -> list[Any]:
+) -> list[object]:
     normalized = _normalized_list(values, excluded_keys=excluded_keys)
     return sorted(normalized, key=_stable_sort_key)
 
 
 def _normalized_list(
-    values: list[Any],
+    values: Sequence[object],
     *,
     excluded_keys: frozenset[str] | None = None,
-) -> list[Any]:
-    normalized = [
-        canonicalize_for_digest(value, excluded_keys=excluded_keys)
-        for value in values
-    ]
+) -> list[object]:
+    normalized = [canonicalize_for_digest(value, excluded_keys=excluded_keys) for value in values]
     return normalized

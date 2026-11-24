@@ -4,8 +4,12 @@ from typing import cast
 
 from prismclaw.engine.context.projection_models import ProjectionMessageSet, PromptProjection
 from prismclaw.engine.state.projection_rendering import projected_context_block
+from prismclaw.schema.agent.session import (
+    AgentMessageDict,
+    ProjectionInputMessage,
+    SystemReminderProjection,
+)
 from prismclaw.schema.content.context import ContextPackLayout
-from prismclaw.schema.agent.session import AgentMessageDict, ProjectionInputMessage, SystemReminderProjection
 
 
 def _render_reminder_body(reminder: SystemReminderProjection) -> str:
@@ -42,13 +46,23 @@ class ContextProjectionEngine:
     ) -> PromptProjection:
         projected_messages = [_project_message(message) for message in message_set.messages]
         projected_meta = [_project_message(message) for message in message_set.meta_messages]
-        projected_appended = [_project_message(message) for message in message_set.appended_messages]
+        projected_appended = [
+            _project_message(message) for message in message_set.appended_messages
+        ]
         return PromptProjection(
-            system_blocks=[projected_context_block(block) for block in turn_context_layout.static_blocks],
-            dynamic_projection=[projected_context_block(block) for block in turn_context_layout.dynamic_blocks],
+            system_blocks=[
+                projected_context_block(block) for block in turn_context_layout.static_blocks
+            ],
+            dynamic_projection=[
+                projected_context_block(block) for block in turn_context_layout.dynamic_blocks
+            ],
             meta_messages=projected_meta,
             messages=projected_messages,
             appended_messages=projected_appended,
-            history_projection=[projected_context_block(block) for block in turn_context_layout.history_blocks],
-            tool_projection=[projected_context_block(block) for block in turn_context_layout.result_blocks],
+            history_projection=[
+                projected_context_block(block) for block in turn_context_layout.history_blocks
+            ],
+            tool_projection=[
+                projected_context_block(block) for block in turn_context_layout.result_blocks
+            ],
         )

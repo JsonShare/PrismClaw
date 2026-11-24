@@ -3,9 +3,10 @@
 提供泛型 get_domain_store(name, type[T]) -> T，
 让路由函数签名自文档化，消除裸字符串 + Any 类型。
 """
+
 from __future__ import annotations
 
-from typing import Any, TypeVar
+from typing import TypeVar, cast
 
 from fastapi import Request
 
@@ -16,11 +17,11 @@ class AppState:
     """类型化的应用状态容器，替代裸 app.state 属性访问。"""
 
     def __init__(self) -> None:
-        self._domain_stores: dict[str, Any] = {}
+        self._domain_stores: dict[str, object] = {}
 
     # -- domain stores --------------------------------------------------
 
-    def register_domain_store(self, name: str, store: Any) -> None:
+    def register_domain_store(self, name: str, store: object) -> None:
         self._domain_stores[name] = store
 
     def get_domain_store(self, name: str, store_type: type[T]) -> T:
@@ -53,4 +54,4 @@ def get_app_state(request: Request) -> AppState:
     state = getattr(request.app.state, "_app_state", None)
     if state is None:
         raise RuntimeError("AppState 未初始化，请检查 lifespan 配置")
-    return state
+    return cast(AppState, state)

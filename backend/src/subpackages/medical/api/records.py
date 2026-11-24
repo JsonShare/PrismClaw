@@ -17,16 +17,22 @@
 _run_parse_then_maybe_analysis——解析成功且已归属患者后自动触发分析流水线。
 分析失败不影响解析结果（报告已存库），用户可稍后在简报 API 手动重试。
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
-
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import (
-    APIRouter, Body, Depends, HTTPException, Request, Query, BackgroundTasks,
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
 )
 from fastapi.responses import FileResponse
 
@@ -34,17 +40,25 @@ from prismclaw.app.auth.auth import get_current_user
 
 from ..integration.llm_access import MEDICAL_LLM_SEMAPHORE, get_medical_llm, get_medical_vision
 from ..models.enums import ReportStatus
-from ..models.view_models import report_to_vm, queue_task_to_vm
+from ..models.view_models import queue_task_to_vm, report_to_vm
 from ..persistence.helpers import get_brief_store, get_kb_store, get_medical_store
 from ..services.analysis_pipeline import trigger_analysis_for_patient
 from ..services.parse_pipeline import run_parse_pipeline
 from ..services.patient_service import get_patient_detail
 from ..services.record_service import (
-    list_records as _list_records,
-    list_inbox as _list_inbox,
     assign_report as _assign_report,
-    get_queue as _get_queue,
+)
+from ..services.record_service import (
     create_reports_from_upload,
+)
+from ..services.record_service import (
+    get_queue as _get_queue,
+)
+from ..services.record_service import (
+    list_inbox as _list_inbox,
+)
+from ..services.record_service import (
+    list_records as _list_records,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,9 +92,12 @@ async def _run_parse_then_maybe_analysis(
     """
     # 1. 解析流水线——传入 Semaphore（内部已处理全部异常）
     await run_parse_pipeline(
-        store, report_id, llm=llm, vision=vision,
-        ocr_sem=asyncio.Semaphore(3),          # OCR 并发上限
-        llm_sem=MEDICAL_LLM_SEMAPHORE,         # 全局 LLM 并发上限
+        store,
+        report_id,
+        llm=llm,
+        vision=vision,
+        ocr_sem=asyncio.Semaphore(3),  # OCR 并发上限
+        llm_sem=MEDICAL_LLM_SEMAPHORE,  # 全局 LLM 并发上限
     )
 
     # 2. 检查解析是否成功 + 是否已归属患者
@@ -96,22 +113,33 @@ async def _run_parse_then_maybe_analysis(
     # 3. 自动触发分析（异常不阻塞，记日志即可）
     try:
         await trigger_analysis_for_patient(
-            store, brief_store, kb_store, patient_id,
-            user_id=user_id, llm=llm, vision=vision,
+            store,
+            brief_store,
+            kb_store,
+            patient_id,
+            user_id=user_id,
+            llm=llm,
+            vision=vision,
         )
     except Exception:  # noqa: BLE001
         logger.exception(
-            "解析后自动分析失败 report_id=%s patient_id=%s", report_id, patient_id,
+            "解析后自动分析失败 report_id=%s patient_id=%s",
+            report_id,
+            patient_id,
         )
 
 
 @router.get("/")
 async def list_records(
     keyword: str = Query("", description="搜索关键词（患者名/诊断/摘要/文件名）"),
-    reportType: str = Query("", description="报告类型过滤（report_type 原始值）"),
+    report_type: str = Query(
+        "",
+        description="报告类型过滤（report_type 原始值）",
+        alias="reportType",
+    ),
     status: str = Query("", description="解析状态过滤（已解析/解析中/失败）"),
     page: int = Query(1, ge=1),
-    pageSize: int = Query(6, ge=1, le=100),
+    page_size: int = Query(6, ge=1, le=100, alias="pageSize"),
     http_request: Request = None,
     user_id: str = Depends(get_current_user),
 ) -> dict:
@@ -120,17 +148,22 @@ async def list_records(
     """
     store = get_medical_store(http_request)
     items_raw, total = await _list_records(
-        store, keyword=keyword, page=page, page_size=pageSize,
-        create_by=user_id, report_type=reportType, status=status,
+        store,
+        keyword=keyword,
+        page=page,
+        page_size=page_size,
+        create_by=user_id,
+        report_type=report_type,
+        status=status,
     )
     items = [report_to_vm(r) for r in items_raw]
-    return {"items": items, "total": total, "page": page, "pageSize": pageSize}
+    return {"items": items, "total": total, "page": page, "pageSize": page_size}
 
 
 @router.get("/inbox")
 async def list_inbox(
     page: int = Query(1, ge=1),
-    pageSize: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
     http_request: Request = None,
     user_id: str = Depends(get_current_user),
 ) -> dict:
@@ -140,13 +173,16 @@ async def list_inbox(
     """
     store = get_medical_store(http_request)
     items_raw, total = await _list_inbox(
-        store, page=page, page_size=pageSize, create_by=user_id,
+        store,
+        page=page,
+        page_size=page_size,
+        create_by=user_id,
     )
     return {
         "items": [report_to_vm(r) for r in items_raw],
         "total": total,
         "page": page,
-        "pageSize": pageSize,
+        "pageSize": page_size,
     }
 
 
@@ -155,8 +191,8 @@ async def assign_report(
     report_id: str,
     http_request: Request,
     background_tasks: BackgroundTasks,
-    body: dict[str, Any] = Body(..., description="目标患者：{ patientId: string }"),
-    user_id: str = Depends(get_current_user),
+    body: Annotated[dict[str, Any], Body(..., description="目标患者：{ patientId: string }")],
+    user_id: Annotated[str, Depends(get_current_user)],
 ) -> dict:
     """把文档指派给患者（报告与患者均须属于当前用户）。
 
@@ -168,7 +204,10 @@ async def assign_report(
     if not patient_id:
         raise HTTPException(status_code=400, detail="patientId 必填")
     updated, err = await _assign_report(
-        store, report_id, patient_id, user_id=user_id,
+        store,
+        report_id,
+        patient_id,
+        user_id=user_id,
     )
     if err:
         raise HTTPException(
@@ -191,14 +230,20 @@ async def assign_report(
     if report_status == ReportStatus.PARSED.value:
         try:
             from ..services.analysis_pipeline import trigger_analysis_for_patient as _trigger
+
             brief_store = get_brief_store(http_request)
             kb_store = get_kb_store(http_request)
             llm = get_medical_llm(http_request)
             vision = get_medical_vision(http_request)
             background_tasks.add_task(
                 _trigger,
-                store, brief_store, kb_store, patient_id,
-                user_id=user_id, llm=llm, vision=vision,
+                store,
+                brief_store,
+                kb_store,
+                patient_id,
+                user_id=user_id,
+                llm=llm,
+                vision=vision,
             )
         except Exception:  # noqa: BLE001
             logger.exception("指派后触发分析失败 report_id=%s", report_id)
@@ -236,7 +281,7 @@ async def get_report_attachment(
 
     att = attachments[index]
     path = att.get("path") if isinstance(att, dict) else None
-    if not path or not os.path.isfile(path):
+    if not path or not os.path.isfile(path):  # noqa: ASYNC240 - 单次 stat，随即交 FileResponse
         raise HTTPException(status_code=404, detail="附件文件缺失")
 
     return FileResponse(
@@ -290,14 +335,21 @@ async def upload_records(
             raise HTTPException(status_code=403, detail="无权向该患者上传报告")
 
     report_ids = await create_reports_from_upload(
-        store, files, create_by=user_id, patient_id=patient_id,
+        store,
+        files,
+        create_by=user_id,
+        patient_id=patient_id,
     )
 
     for report_id in report_ids:
         background_tasks.add_task(
             _run_parse_then_maybe_analysis,
-            store, brief_store, kb_store, report_id,
-            user_id=user_id, llm=llm,
+            store,
+            brief_store,
+            kb_store,
+            report_id,
+            user_id=user_id,
+            llm=llm,
             vision=vision,
         )
 

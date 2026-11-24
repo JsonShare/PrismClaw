@@ -16,7 +16,10 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from ruamel.yaml import YAML
 
 YAML_SUFFIXES = (".yaml", ".yml")
 
@@ -25,7 +28,7 @@ def is_yaml(path: Path) -> bool:
     return path.suffix.lower() in YAML_SUFFIXES
 
 
-def _ruamel_yaml() -> Any | None:
+def _ruamel_yaml() -> YAML | None:
     """构造 ruamel round-trip 实例；未安装返回 None。"""
     try:
         from ruamel.yaml import YAML

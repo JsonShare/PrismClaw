@@ -12,19 +12,21 @@ Key interfaces:
   load_state_from_pg(session_id, session_factory) -> TrajectoryProjectionState
   read_snapshot_v2_pg(session_id, session_factory, *, limit, ascending) -> TrajectorySnapshot
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import time
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import text
+from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.persistence.sql_runner import apply_core_schema
 from prismclaw.persistence.trajectory import sql_models
+from prismclaw.schema.agent.capability import JsonValue
 from prismclaw.schema.trajectory import (
     RequestAuditRecord,
     TrajectoryCell,
@@ -42,6 +44,7 @@ logger = logging.getLogger(__name__)
 # Schema init (idempotent, called once at app startup)
 # ---------------------------------------------------------------------------
 
+
 async def init_pg_schema(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """创建轨迹表；DDL 见 deploy/sql/init_postgres.sql。"""
     await apply_core_schema(session_factory)
@@ -51,7 +54,8 @@ async def init_pg_schema(session_factory: async_sessionmaker[AsyncSession]) -> N
 # RequestAuditRecord → PostgreSQL row
 # ---------------------------------------------------------------------------
 
-def _to_jsonb(obj: Any) -> str:
+
+def _to_jsonb(obj: object) -> str:
     """Serialize a Python list/dict to a JSON string for PostgreSQL JSONB columns.
 
     asyncpg cannot directly serialize Python objects to PostgreSQL JSONB —
@@ -107,7 +111,7 @@ def _record_to_params(record: RequestAuditRecord) -> dict[str, Any]:
         # Fix F: appended msg count (messages injected downstream via
         # appended_messages_override). Stored as INTEGER NOT NULL DEFAULT 0.
         "projector_appended_msg_count": record.projector_appended_msg_count,
- # actual content previews
+        # actual content previews
         "projector_user_message_preview": record.projector_user_message_preview,
         "projector_tool_results_preview": _to_jsonb(list(record.projector_tool_results_preview)),
         "projector_meta": _to_jsonb(record.projector_meta),
@@ -160,7 +164,7 @@ def _record_to_params(record: RequestAuditRecord) -> dict[str, Any]:
     }
 
 
-def _parse_jsonb(val: Any) -> Any:
+def _parse_jsonb(val: object) -> JsonValue:
     """Parse a JSONB column value back to Python object.
 
     asyncpg may return JSONB as:
@@ -172,10 +176,27 @@ def _parse_jsonb(val: Any) -> Any:
         return None
     if isinstance(val, str):
         try:
-            return json.loads(val)
+            decoded: JsonValue = json.loads(val)
         except (json.JSONDecodeError, TypeError):
             return val
-    return val
+        return decoded
+    if isinstance(val, (dict, list)):
+        return cast(JsonValue, val)
+    if isinstance(val, (str, int, float, bool)):
+        return val
+    return str(val)
+
+
+def _parse_jsonb_list(val: object) -> list[JsonValue]:
+    """JSONB 数组列 → list；非数组值一律回退为空列表。"""
+    parsed = _parse_jsonb(val)
+    return parsed if isinstance(parsed, list) else []
+
+
+def _parse_jsonb_dict(val: object) -> dict[str, JsonValue]:
+    """JSONB 对象列 → dict；非对象值一律回退为空字典。"""
+    parsed = _parse_jsonb(val)
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
@@ -195,40 +216,44 @@ def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
         status=row["status"],
         # Layer 0.5 (JSONB → parse to list)
         projector_input_order_count=row["projector_input_order_count"],
-        projector_input_entry_types=tuple(_parse_jsonb(row["projector_input_entry_types"]) or []),
-        projector_input_head_seq=tuple(_parse_jsonb(row["projector_input_head_seq"]) or []),
-        projector_input_tail_seq=tuple(_parse_jsonb(row["projector_input_tail_seq"]) or []),
-        projector_input_tail_types=tuple(_parse_jsonb(row["projector_input_tail_types"]) or []),
+        projector_input_entry_types=tuple(_parse_jsonb_list(row["projector_input_entry_types"])),
+        projector_input_head_seq=tuple(_parse_jsonb_list(row["projector_input_head_seq"])),
+        projector_input_tail_seq=tuple(_parse_jsonb_list(row["projector_input_tail_seq"])),
+        projector_input_tail_types=tuple(_parse_jsonb_list(row["projector_input_tail_types"])),
         # Layer ①
         projector_msg_count=row["projector_msg_count"],
-        projector_msg_roles=tuple(_parse_jsonb(row["projector_msg_roles"]) or []),
-        projector_head=tuple(_parse_jsonb(row["projector_head"]) or []),
-        projector_tail=tuple(_parse_jsonb(row["projector_tail"]) or []),
+        projector_msg_roles=tuple(_parse_jsonb_list(row["projector_msg_roles"])),
+        projector_head=tuple(_parse_jsonb_list(row["projector_head"])),
+        projector_tail=tuple(_parse_jsonb_list(row["projector_tail"])),
         projector_appended_msg_count=row["projector_appended_msg_count"] or 0,
         projector_user_message_preview=row["projector_user_message_preview"],
-        projector_tool_results_preview=tuple(_parse_jsonb(row["projector_tool_results_preview"]) or []),
-        projector_meta=_parse_jsonb(row["projector_meta"]) or {},
+        projector_tool_results_preview=tuple(
+            _parse_jsonb_list(row["projector_tool_results_preview"])
+        ),
+        projector_meta=_parse_jsonb_dict(row["projector_meta"]),
         # Layer ②
         assemble_entry_msg_count=row["assemble_entry_msg_count"],
-        assemble_entry_roles=tuple(_parse_jsonb(row["assemble_entry_roles"]) or []),
-        assemble_entry_head=tuple(_parse_jsonb(row["assemble_entry_head"]) or []),
-        assemble_entry_tail=tuple(_parse_jsonb(row["assemble_entry_tail"]) or []),
-        assemble_entry_meta_keys=tuple(_parse_jsonb(row["assemble_entry_meta_keys"]) or []),
+        assemble_entry_roles=tuple(_parse_jsonb_list(row["assemble_entry_roles"])),
+        assemble_entry_head=tuple(_parse_jsonb_list(row["assemble_entry_head"])),
+        assemble_entry_tail=tuple(_parse_jsonb_list(row["assemble_entry_tail"])),
+        assemble_entry_meta_keys=tuple(_parse_jsonb_list(row["assemble_entry_meta_keys"])),
         assemble_entry_meta_values_hash=row["assemble_entry_meta_values_hash"],
         # Layer ③
         pipeline_out_msg_count=row["pipeline_out_msg_count"],
-        pipeline_out_roles=tuple(_parse_jsonb(row["pipeline_out_roles"]) or []),
-        pipeline_out_head=tuple(_parse_jsonb(row["pipeline_out_head"]) or []),
-        pipeline_out_tail=tuple(_parse_jsonb(row["pipeline_out_tail"]) or []),
-        pipeline_out_budget_summary=_parse_jsonb(row["pipeline_out_budget_summary"]) or {},
-        pipeline_out_compressors_used=tuple(_parse_jsonb(row["pipeline_out_compressors_used"]) or []),
+        pipeline_out_roles=tuple(_parse_jsonb_list(row["pipeline_out_roles"])),
+        pipeline_out_head=tuple(_parse_jsonb_list(row["pipeline_out_head"])),
+        pipeline_out_tail=tuple(_parse_jsonb_list(row["pipeline_out_tail"])),
+        pipeline_out_budget_summary=_parse_jsonb_dict(row["pipeline_out_budget_summary"]),
+        pipeline_out_compressors_used=tuple(
+            _parse_jsonb_list(row["pipeline_out_compressors_used"])
+        ),
         pipeline_out_compaction_happened=row["pipeline_out_compaction_happened"],
         pipeline_out_compaction_summary=row["pipeline_out_compaction_summary"],
         # Layer ④
         packer_final_msg_count=row["packer_final_msg_count"],
-        packer_final_roles=tuple(_parse_jsonb(row["packer_final_roles"]) or []),
-        packer_final_head=tuple(_parse_jsonb(row["packer_final_head"]) or []),
-        packer_final_tail=tuple(_parse_jsonb(row["packer_final_tail"]) or []),
+        packer_final_roles=tuple(_parse_jsonb_list(row["packer_final_roles"])),
+        packer_final_head=tuple(_parse_jsonb_list(row["packer_final_head"])),
+        packer_final_tail=tuple(_parse_jsonb_list(row["packer_final_tail"])),
         packer_final_tokens=row["packer_final_tokens"],
         packer_final_model=row["packer_final_model"],
         packer_final_system_prompt_len=row["packer_final_system_prompt_len"],
@@ -250,7 +275,7 @@ def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
         ttft_ms=row["ttft_ms"],
         total_ms=row["total_ms"],
         assistant_text_preview=row["assistant_text_preview"],
-        tool_calls_summary=tuple(_parse_jsonb(row["tool_calls_summary"]) or []),
+        tool_calls_summary=tuple(_parse_jsonb_list(row["tool_calls_summary"])),
         # Error
         error=row["error"],
         error_stack=row["error_stack"],
@@ -260,6 +285,7 @@ def _row_to_record(row: dict[str, Any]) -> RequestAuditRecord:
 # ---------------------------------------------------------------------------
 # Flush (state → PostgreSQL)
 # ---------------------------------------------------------------------------
+
 
 async def flush_state_to_pg(
     state: TrajectoryProjectionState,
@@ -296,9 +322,9 @@ async def flush_state_to_pg(
                 {
                     "session_id": sid,
                     "record_count": len(state.records),
-                    "turn_count_estimate": len(set(
-                        r.turn for r in state.records if r.turn is not None
-                    )),
+                    "turn_count_estimate": len(
+                        set(r.turn for r in state.records if r.turn is not None)
+                    ),
                     "gap_count": state.gap_count,
                     "gap_ratio": 0.0,
                     "orphan_count": state.orphan_count,
@@ -340,12 +366,17 @@ async def flush_state_to_pg(
         state.mark_clean()
         logger.info(
             "trajectory flush_to_pg: sid=%s total=%d inserted=%d updated=%d",
-            sid, len(state.records), inserted_count, updated_count,
+            sid,
+            len(state.records),
+            inserted_count,
+            updated_count,
         )
         return True
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "trajectory flush_state_to_pg failed sid=%s: %s", sid, exc,
+            "trajectory flush_state_to_pg failed sid=%s: %s",
+            sid,
+            exc,
         )
         return False
 
@@ -353,6 +384,7 @@ async def flush_state_to_pg(
 # ---------------------------------------------------------------------------
 # Load (PostgreSQL → state)
 # ---------------------------------------------------------------------------
+
 
 async def load_state_from_pg(
     session_id: str,
@@ -366,7 +398,10 @@ async def load_state_from_pg(
     NEVER raises.
     """
     if state_initializer is None:
-        raise ValueError("state_initializer is required — callers must provide init_state from engine.trajectory.projection")
+        raise ValueError(
+            "state_initializer is required — callers must "
+            "provide init_state from engine.trajectory.projection"
+        )
 
     if session_factory is None:
         return state_initializer(session_id)
@@ -390,8 +425,9 @@ async def load_state_from_pg(
                     records.append(_row_to_record(row))
                 except Exception as exc:
                     logger.warning(
-                        "trajectory load_state_from_pg: failed to parse record "
-                        "id=%s: %s", row.get("id", "?"), exc,
+                        "trajectory load_state_from_pg: failed to parse record id=%s: %s",
+                        row.get("id", "?"),
+                        exc,
                     )
 
             # Load session meta
@@ -420,7 +456,8 @@ async def load_state_from_pg(
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "trajectory load_state_from_pg failed sid=%s: %s",
-            session_id, exc,
+            session_id,
+            exc,
         )
         return state_initializer(session_id)
 
@@ -428,6 +465,7 @@ async def load_state_from_pg(
 # ---------------------------------------------------------------------------
 # Read snapshot (PostgreSQL → TrajectorySnapshot)
 # ---------------------------------------------------------------------------
+
 
 def _empty_snapshot(
     session_id: str,
@@ -438,9 +476,13 @@ def _empty_snapshot(
         session_id=session_id,
         records=[],
         meta=TrajectorySnapshotMeta(
-            record_count=0, turn_count_estimate=0,
-            gap_count=0, gap_ratio=0.0, orphan_count=0,
-            gap_warning=False, zstd_compressed_record_count=0,
+            record_count=0,
+            turn_count_estimate=0,
+            gap_count=0,
+            gap_ratio=0.0,
+            orphan_count=0,
+            gap_warning=False,
+            zstd_compressed_record_count=0,
         ),
     )
     object.__setattr__(snap, "_parse_warning", parse_warning)
@@ -471,12 +513,15 @@ async def read_snapshot_v2_pg(
 
     try:
         state = await load_state_from_pg(
-            session_id, session_factory, state_initializer=state_initializer,
+            session_id,
+            session_factory,
+            state_initializer=state_initializer,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "trajectory read_snapshot_v2_pg: load_state failed sid=%s: %s",
-            session_id, exc,
+            session_id,
+            exc,
         )
         return _empty_snapshot(
             session_id,
@@ -487,13 +532,16 @@ async def read_snapshot_v2_pg(
         return _empty_snapshot(session_id, parse_warning=None)
 
     if view_fn is None:
-        raise ValueError("view_fn is required — callers must provide view from engine.trajectory.projection")
+        raise ValueError(
+            "view_fn is required — callers must provide view from engine.trajectory.projection"
+        )
     return view_fn(state, limit=limit, ascending=ascending)
 
 
 # ============================================================================
 # 对齐 per-conversation-event cell persistence
 # ============================================================================
+
 
 def _cell_to_params(cell: TrajectoryCell) -> dict[str, Any]:
     """Serialize a TrajectoryCell to SQL params."""
@@ -509,7 +557,7 @@ def _cell_to_params(cell: TrajectoryCell) -> dict[str, Any]:
         "tool_calls_summary": _to_jsonb(list(cell.tool_calls_summary)),
         "tool_call_id": cell.tool_call_id,
         "tool_name": cell.tool_name,
- # full-content + metric fields
+        # full-content + metric fields
         "input_detail": cell.input_detail,
         "output_detail": cell.output_detail,
         "thinking_detail": cell.thinking_detail,
@@ -531,7 +579,7 @@ def _cell_to_params(cell: TrajectoryCell) -> dict[str, Any]:
     }
 
 
-def _row_to_cell(row: Any) -> TrajectoryCell:
+def _row_to_cell(row: RowMapping) -> TrajectoryCell:
     """Deserialize a DB row back to a TrajectoryCell."""
     return TrajectoryCell(
         cell_id=str(row["cell_id"]),
@@ -542,7 +590,7 @@ def _row_to_cell(row: Any) -> TrajectoryCell:
         kind=str(row["kind"]),
         role=str(row["role"]),
         content_preview=row["content_preview"],
-        tool_calls_summary=tuple(_parse_jsonb(row["tool_calls_summary"]) or []),
+        tool_calls_summary=tuple(_parse_jsonb_list(row["tool_calls_summary"])),
         tool_call_id=row["tool_call_id"],
         tool_name=row["tool_name"],
         input_detail=row["input_detail"],
@@ -611,7 +659,7 @@ async def mark_or_synthesize_error_pg(
     try:
         async with session_factory() as session, session.begin():
             result = _cast(
-                _CursorResult,
+                _CursorResult[Any],
                 await session.execute(
                     text(sql_models.MARK_CELL_ERROR),
                     {
@@ -628,7 +676,9 @@ async def mark_or_synthesize_error_pg(
                 logger.info(
                     "trajectory: no partial cell for sid=%s turn=%s "
                     "iter=%s — synthesizing error cell",
-                    session_id, turn, iteration,
+                    session_id,
+                    turn,
+                    iteration,
                 )
                 await session.execute(
                     text(sql_models.INSERT_ERROR_CELL),
@@ -639,9 +689,7 @@ async def mark_or_synthesize_error_pg(
                         # via the (session_id, entry_id) unique key
                         "entry_id": f"llm_error_{turn}_{iteration}",
                         "turn": turn,
-                        "content_preview": (
-                            f"LLM request failed: {error_message[:200]}"
-                        ),
+                        "content_preview": (f"LLM request failed: {error_message[:200]}"),
                         "output_detail": error_message,
                         "model": model,
                         "ttft_ms": ttft_ms,
@@ -653,9 +701,11 @@ async def mark_or_synthesize_error_pg(
                 )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "trajectory mark_or_synthesize_error_pg failed sid=%s turn=%s "
-            "iter=%s: %s",
-            session_id, turn, iteration, exc,
+            "trajectory mark_or_synthesize_error_pg failed sid=%s turn=%s iter=%s: %s",
+            session_id,
+            turn,
+            iteration,
+            exc,
         )
 
 
@@ -686,9 +736,7 @@ async def insert_system_cell_pg(
                     "session_id": session_id,
                     "entry_id": f"system_{turn}",
                     "turn": turn,
-                    "content_preview": (
-                        f"System prompt sha1={sha1_16} ({len(full_text)} chars)"
-                    ),
+                    "content_preview": (f"System prompt sha1={sha1_16} ({len(full_text)} chars)"),
                     "input_detail": full_text,
                     "iteration": iteration,
                     "started_at_ms": now_ms,
@@ -698,7 +746,9 @@ async def insert_system_cell_pg(
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "trajectory insert_system_cell_pg failed sid=%s turn=%s: %s",
-            session_id, turn, exc,
+            session_id,
+            turn,
+            exc,
         )
 
 
@@ -716,8 +766,7 @@ async def read_cells_pg(
     """
     incremental = after_seq > 0
     statement = (
-        sql_models.SELECT_CELLS_INCREMENTAL if incremental
-        else sql_models.SELECT_CELLS_BY_SESSION
+        sql_models.SELECT_CELLS_INCREMENTAL if incremental else sql_models.SELECT_CELLS_BY_SESSION
     )
     params: dict[str, object] = {"session_id": session_id}
     if incremental:
@@ -731,6 +780,7 @@ async def read_cells_pg(
 # ---------------------------------------------------------------------------
 # TrajectoryPersistence Protocol implementation
 # ---------------------------------------------------------------------------
+
 
 class PgTrajectoryPersistence:
     """PostgreSQL-backed implementation of TrajectoryPersistence.
@@ -825,8 +875,12 @@ class PgTrajectoryPersistence:
         ascending: bool = True,
     ) -> TrajectorySnapshot:
         return await read_snapshot_v2_pg(
-            session_id, self._sf, limit=limit, ascending=ascending,
-            view_fn=self._view, state_initializer=self._init,
+            session_id,
+            self._sf,
+            limit=limit,
+            ascending=ascending,
+            view_fn=self._view,
+            state_initializer=self._init,
         )
 
     async def read_cells(

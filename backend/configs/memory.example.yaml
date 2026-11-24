@@ -23,9 +23,6 @@ memory:
     requires_grounding_l2: 3
     requires_grounding_archive: 2
     requires_grounding_l3: -1
-    cold_start_l3: 1
-    follow_up_l2: -2
-    follow_up_l3: -1
 
 evolution:
   enabled: true

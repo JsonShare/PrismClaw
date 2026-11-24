@@ -170,9 +170,7 @@ async def test_interrupt_and_resume_through_control() -> None:
             await run_context.interrupt_event.wait()
         await run_context.persist_assistant(f"done-{call_number}", [])
 
-    _store_, service, executor, launch, tool, session_id = await _control_fixture(
-        handler=handler
-    )
+    _store_, service, executor, launch, tool, session_id = await _control_fixture(handler=handler)
     spawned = await service.spawn(
         launch,
         task="interrupt",
@@ -282,9 +280,7 @@ async def test_control_is_isolated_by_parent_session() -> None:
     assert status.is_error
     assert not status.metadata or "agent" not in status.metadata
 
-    listed = await tool.execute(
-        {"_call_id": "foreign-list", "action": "list"}, other_context
-    )
+    listed = await tool.execute({"_call_id": "foreign-list", "action": "list"}, other_context)
     assert not listed.is_error
     assert listed.metadata["agents"] == []
     original = await service.records.get_session(
@@ -418,9 +414,7 @@ async def test_parallel_task_store_rejects_task_reassignment() -> None:
 
     # 同 task_id 换 agent_id 违反组合唯一
     with pytest.raises(ValueError):
-        await parallel_store.append(
-            scheduled.model_copy(update={"agent_id": "ag:2"})
-        )
+        await parallel_store.append(scheduled.model_copy(update={"agent_id": "ag:2"}))
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ Dialect handling:
     BARE_SKILLS → copied, then a minimal canonical manifest is synthesized;
     UNKNOWN     → rejected with ``IngestError``.
 """
+
 from __future__ import annotations
 
 import json

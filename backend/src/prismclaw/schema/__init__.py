@@ -5,4 +5,5 @@ Import from specific sub-packages:
   from prismclaw.schema.content.compaction import CompactionArtifact
   from prismclaw.schema.shared.exceptions import AgentAbortedError
 """
+
 from __future__ import annotations

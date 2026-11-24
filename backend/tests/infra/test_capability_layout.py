@@ -11,6 +11,7 @@
 conftest 会 autouse 注入 PRISMCLAW_ROOT，因此涉及 marker / cwd_fallback 的
 用例必须显式 monkeypatch.delenv 接管环境。
 """
+
 from __future__ import annotations
 
 import json
@@ -45,6 +46,7 @@ def _make_marker_tree(root: Path) -> Path:
 # 项目根分层解析
 # --------------------------------------------------------------------------- #
 
+
 def test_root_source_env_is_confirmed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     target = tmp_path / "explicit_root"
     target.mkdir()
@@ -69,9 +71,7 @@ def test_root_source_marker_walks_up(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert resolved.path == repo.resolve()
 
 
-def test_root_source_cwd_fallback_is_unconfirmed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-):
+def test_root_source_cwd_fallback_is_unconfirmed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("PRISMCLAW_ROOT", raising=False)
     # /var/folders 之上无任何项目 marker，扫描必然落空
     monkeypatch.chdir(tmp_path)
@@ -86,6 +86,7 @@ def test_root_source_cwd_fallback_is_unconfirmed(
 # --------------------------------------------------------------------------- #
 # 健康 / 缺失 / 全空 的诊断分级
 # --------------------------------------------------------------------------- #
+
 
 def test_healthy_layout_has_no_diagnostics_and_locates_three_kinds(tmp_path: Path):
     root = _make_marker_tree(tmp_path / "repo")
@@ -178,6 +179,7 @@ def test_unconfirmed_root_all_empty_only_warns(tmp_path: Path, monkeypatch):
 # --------------------------------------------------------------------------- #
 # RootSet 有序去重
 # --------------------------------------------------------------------------- #
+
 
 def test_roots_are_deduped_first_wins_and_ordered(tmp_path: Path):
     root = _make_marker_tree(tmp_path / "repo")

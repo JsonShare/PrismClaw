@@ -13,11 +13,16 @@
   - 结果写入 origin_stage 后缀，不新增 MemoryEntry 字段
   - notary=None 时 store() 零开销
 """
+
 from __future__ import annotations
 
-import re
 import logging
+import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prismclaw.engine.security.dlp.scanner import DlpScanner
 
 logger = logging.getLogger(__name__)
 
@@ -52,24 +57,27 @@ _INJECTION_SCORE_CAP = 1.0
 @dataclass
 class NotaryResult:
     """公证器检查结果。"""
-    content: str             # 清除/脱敏后的内容
-    injection_score: float   # 注入评分 0-1
+
+    content: str  # 清除/脱敏后的内容
+    injection_score: float  # 注入评分 0-1
     has_hidden_unicode: bool
-    redacted_by_dlp: bool    # 是否经 DLP 脱敏
+    redacted_by_dlp: bool  # 是否经 DLP 脱敏
 
 
 class MemoryNotary:
     """记忆写入前安全拦截器。"""
 
-    def __init__(self, *, dlp_scanner=None) -> None:
+    def __init__(self, *, dlp_scanner: DlpScanner | None = None) -> None:
         self._dlp_scanner = dlp_scanner
 
     def inspect(self, content: str) -> NotaryResult:
         """对内容执行安全检查 + 脱敏。返回修改后的内容和标记。"""
         if not content:
             return NotaryResult(
-                content=content, injection_score=0.0,
-                has_hidden_unicode=False, redacted_by_dlp=False,
+                content=content,
+                injection_score=0.0,
+                has_hidden_unicode=False,
+                redacted_by_dlp=False,
             )
 
         result = content

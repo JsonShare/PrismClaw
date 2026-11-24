@@ -2,25 +2,27 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from prismclaw.engine.compression.budget_orchestrator import BudgetOrchestrator
-from prismclaw.engine.hooks import HookRegistry, PromptBuildContext
+from prismclaw.engine.compression.ports import ContextRuntimePorts
 from prismclaw.engine.execution.request._prompt_advisory import (
     domain_advisory_section,
     handoff_advisory_section,
 )
 from prismclaw.engine.execution.request._prompt_budget import _block_from_text
 from prismclaw.engine.execution.request._prompt_types import (
-    AvailableSubagentEntry,  # noqa: F401  # re-export for tests/downstream
-    MarketplaceSummary,  # noqa: F401  # re-export for tests/downstream
-    PromptInputs,
+    PromptInputs as PromptInputs,
+)
+from prismclaw.engine.execution.request._prompt_types import (
     PromptSectionSpec,
-    SystemPromptResult,
     _wrap_xml,
 )
+from prismclaw.engine.execution.request._prompt_types import (
+    SystemPromptResult as SystemPromptResult,
+)
+from prismclaw.engine.hooks import HookRegistry, PromptBuildContext
 from prismclaw.schema.content.context import ContextPackLayout
 from prismclaw.schema.shared.utils import truncate_by_tokens
 
@@ -36,7 +38,8 @@ _L1_TRUNCATION_NOTE = "…（另有 {n} 条，使用记忆检索工具获取）"
 
 
 def _l1_rough_token_count(text: str) -> int:
-    """L1 截断的 token 估算口径：ASCII/4 + CJK/1.5（与 _catalog_builder._rough_token_count 一致）。"""
+    """L1 截断的 token 估算口径：ASCII/4 + CJK/1.5
+    （与 _catalog_builder._rough_token_count 一致）。"""
     if not text:
         return 0
     cjk_count = sum(1 for c in text if ord(c) > 0x4E00)
@@ -61,13 +64,12 @@ def _truncate_l1_snapshot(text: str, token_cap: int) -> str:
     kept = list(body)
     while kept:
         omitted = total - len(kept)
-        candidate = "\n".join(
-            [header, *kept, _L1_TRUNCATION_NOTE.format(n=omitted), footer]
-        )
+        candidate = "\n".join([header, *kept, _L1_TRUNCATION_NOTE.format(n=omitted), footer])
         if _l1_rough_token_count(candidate) <= token_cap:
             return candidate
         kept.pop()
     return "\n".join([header, _L1_TRUNCATION_NOTE.format(n=total), footer])
+
 
 _PROFILE_MAX_CHARS = 4000
 _PROFILE_CACHE: dict[str, tuple[float, str]] = {}
@@ -111,6 +113,7 @@ def _read_profile_md(name: str) -> str:
     _PROFILE_CACHE[str(path)] = (mtime, text)
     return text
 
+
 # 铁律与工作循环合成一段：先定冲突裁决与绝对禁止，再给默认工作方式。
 # 两者语义不同（裁决 vs 行为），但同属"模型必须按此行事"的层级，
 # 拆成两段会让模型把它们当成并列的两组建议。
@@ -134,7 +137,7 @@ _PRINCIPLES_BODY = (
     "## 数据口径\n"
     "- 任务数据中显式声明的规范（时区、单位、参考区间、时间窗口、配对口径、精度要求）"
     "与自身领域先验冲突时，一律按声明执行并说明依据；"
-    "不得以\"更符合采集惯例/领域常理/设备习惯\"等理由重新解释或覆盖声明。\n"
+    '不得以"更符合采集惯例/领域常理/设备习惯"等理由重新解释或覆盖声明。\n'
     "- 涉及时区声明时，必须先把每条带时间戳的记录折算到声明时区，"
     "再按声明窗口筛选、归日、配对和计算。\n"
     "- 不得按 UTC 字面日期字段筛选或配对，也不得将 UTC 口径作为主答案或备选结果。\n"
@@ -292,11 +295,15 @@ def packages_section(inputs: PromptInputs) -> str | None:
     lines: list[str] = []
     for name in package_names[:_PACKAGE_LIST_LIMIT]:
         summary = summaries.get(name)
-        raw_desc = (summary.description if summary is not None else "") or agent_descriptions.get(name, "")
+        raw_desc = (summary.description if summary is not None else "") or agent_descriptions.get(
+            name, ""
+        )
         desc = _truncate_by_tokens(raw_desc, _PACKAGE_DESC_TOKENS) if raw_desc else ""
         counts: list[str] = []
         if summary is not None and summary.skill_count:
-            counts.append(f"{summary.skill_count} skill" + ("s" if summary.skill_count != 1 else ""))
+            counts.append(
+                f"{summary.skill_count} skill" + ("s" if summary.skill_count != 1 else "")
+            )
         agent_count = agent_counts.get(name, 0)
         if agent_count:
             counts.append(f"{agent_count} subagent" + ("s" if agent_count != 1 else ""))
@@ -335,10 +342,7 @@ def skills_section(inputs: PromptInputs) -> str | None:
     if not names:
         return None
     content = "项目技能：" + ", ".join(f"`{name}`" for name in names)
-    footer = (
-        "用 `skill_search` 检索插件技能；用精确名称 `activate_skill` 激活；"
-        "技能列出 ≠ 已激活。"
-    )
+    footer = "用 `skill_search` 检索插件技能；用精确名称 `activate_skill` 激活；技能列出 ≠ 已激活。"
     return _wrap_xml("skills", f"{content}\n{footer}")
 
 
@@ -395,9 +399,11 @@ def subagents_section(inputs: PromptInputs) -> str | None:
         for entry in core:
             desc = f" — {entry.description}" if entry.description else ""
             lines.append(f"- `{entry.name}`{desc}")
+        lines.append("插件子代理用 `subagent_search` 按领域/任务检索；用精确名称调用 `sub_agent`。")
     else:
-        lines.append("工作区未定义核心子代理。")
-    lines.append("插件子代理用 `subagent_search` 按领域/任务检索；用精确名称调用 `sub_agent`。")
+        # 本段只负责索引；索引为空不等于工作区没有子代理（可能全部来自插件，
+        # 或注册表尚未加载）。断言"未定义"会阻止模型用 subagent_search 兜底（D8）。
+        lines.append("未在索引中列出核心子代理；用 `subagent_search` 按领域/任务检索可用子代理。")
     lines.append("名称逐字复制自本段或 `subagent_search` 结果；不要构造名称。")
     return _wrap_xml("subagents", "\n".join(lines))
 
@@ -418,10 +424,13 @@ def workspace_section(inputs: PromptInputs) -> str | None:
     # 去掉宿主绝对路径暴露，模型只需要知道虚拟前缀语义。
     vocab = [
         "### 虚拟路径前缀契约（所有文件工具共用）",
-        "- `project/<rel>` — 用户项目文件，直达原件（读写）。禁止写入 `sessions/`、`biz_domain/` 和 `.work/` 子树。",
-        "- `outputs/<rel>` — **当前会话交付物目录**（最终交付物必须落在这里）。",
-        "- `inbox/<rel>`、`context_blocks/<rel>`、`tool_results/<rel>` — 当前会话私有临时区（读写）。",
-        "- 无前缀 — 读：按当前会话交付物目录解析（等价 `outputs/`）；写：禁止（必须明确 `project/` 或 `outputs/`）。",
+        "- `project/<rel>` — 用户项目文件，直达原件（读写）。"
+        "禁止写入 `sessions/`、`biz_domain/` 和 `.work/` 子树。",
+        "- `outbox/<rel>` — **当前会话交付物目录**（最终交付物必须落在这里）。",
+        "- `inbox/<rel>`、`context_blocks/<rel>`、`tool_results/<rel>` — "
+        "当前会话私有临时区（读写）。",
+        "- 无前缀 — 读：按当前会话交付物目录解析（等价 `outbox/`）；"
+        "写：禁止（必须明确 `project/` 或 `outbox/`）。",
     ]
     lines.extend(vocab)
 
@@ -431,7 +440,7 @@ def workspace_section(inputs: PromptInputs) -> str | None:
             "",
             "### bash 环境变量",
             "- `$PRISMCLAW_WORKSPACE` — 工作区根（bash 内可用的绝对路径变量，不暴露具体挂载点）。",
-            "- `$PRISMCLAW_OUTPUT_DIR` — 当前会话交付物目录（等价于 `outputs/` 前缀的物理落点）。",
+            "- `$PRISMCLAW_OUTBOX_DIR` — 当前会话交付物目录（等价于 `outbox/` 前缀的物理落点）。",
             "- `$PRISMCLAW_UPLOADS_DIR` — 当前会话输入目录（等价于 `inbox/` 前缀的物理落点）。",
         ]
         lines.extend(env)
@@ -446,10 +455,17 @@ def _section(
     priority: str = "high",
     stability: str = "stable",
     truncatable: bool = True,
+    evict_rank: int | None = None,
 ) -> PromptSectionSpec | None:
-    """统一构造 static section；内容为空返回 None，由调用方过滤。"""
+    """统一构造 static section；内容为空返回 None，由调用方过滤。
+
+    ``evict_rank`` 随段自带（越小越先撤），经 metadata 传到 ``ContextBlock``，
+    预算编排按此排序。不新增 ``PromptSectionSpec`` / ``ContextBlock`` 字段：
+    metadata 已在承载同类语义，且只服务静态段的排序（SDD DD-7）。
+    """
     if not text:
         return None
+    metadata: dict[str, object] = {"evict_rank": evict_rank} if evict_rank is not None else {}
     return PromptSectionSpec(
         name=name,
         text=text,
@@ -458,6 +474,7 @@ def _section(
         cacheable=True,
         priority=priority,
         stability=stability,
+        metadata=metadata,
     )
 
 
@@ -509,12 +526,12 @@ def build_frozen_prompt_sections(
             priority="critical",
             truncatable=False,
         ),
-        # L2 能力路由。
-        _section("tools", tooling_section(inputs)),
+        # L2 能力路由。tools 是唯一工具入口，最后撤。
+        _section("tools", tooling_section(inputs), evict_rank=3),
         # L2.1 委派规则：稳定策略，与 semi_stable 的子代理索引分离。
         _section("delegation", delegation_section(inputs), truncatable=False),
-        # L3 环境契约（精确路径，条款式保留）。
-        _section("workspace", workspace_section(inputs)),
+        # L3 环境契约（精确路径，条款式保留）。路径信息可由工具重建。
+        _section("workspace", workspace_section(inputs), evict_rank=1),
         # L4 安全（不可截断）：外部文本不可信、OCR 数值、敏感数据外发。
         # 恒注入——这三条是通用底线，不依赖任何工作区标签。
         _section(
@@ -524,12 +541,15 @@ def build_frozen_prompt_sections(
             truncatable=False,
         ),
         # L5 能力索引：注册表变化时失效，放在缓存断点之后。
+        # 撤除后 skill_search 仍可用，故早于 tools。
         _section(
             "catalogs",
             _wrap_xml("catalogs", catalog_body) if catalog_body else None,
             stability="semi_stable",
+            evict_rank=2,
         ),
-        _section("bootstrap", bootstrap, stability="semi_stable"),
+        # bootstrap 是项目约定，可重读磁盘且无上限，先撤。
+        _section("bootstrap", bootstrap, stability="semi_stable", evict_rank=0),
     ]
 
     # l1_snapshot（<memory_index>）已移至 per-turn 动态区（SDD D3 方案 A）：
@@ -538,7 +558,7 @@ def build_frozen_prompt_sections(
 
 
 def runtime_context_section(inputs: PromptInputs) -> str | None:
-    now_iso_str = inputs.now_iso or datetime.now(timezone.utc).isoformat()
+    now_iso_str = inputs.now_iso or datetime.now(UTC).isoformat()
     # 解析 UTC ISO 时间，生成人类可读的本地化日期时间
     try:
         utc_dt = datetime.fromisoformat(now_iso_str.replace("Z", "+00:00"))
@@ -548,7 +568,8 @@ def runtime_context_section(inputs: PromptInputs) -> str | None:
         weekday = weekday_map[local_dt.weekday()]
         time_str = local_dt.strftime("%H:%M:%S")
         time_lines = [
-            f"<system_time>{date_str} {weekday} {time_str}（本地时区）| UTC：{now_iso_str}</system_time>",
+            f"<system_time>{date_str} {weekday} {time_str}（本地时区）"
+            f"| UTC：{now_iso_str}</system_time>",
             "<time_rule>当前日期与时间以此为准；历史日期与已发生事件不受此限制。</time_rule>",
         ]
     except (ValueError, IndexError):
@@ -568,8 +589,7 @@ def runtime_context_section(inputs: PromptInputs) -> str | None:
             lines.append(f"<allowed_tools>{tools}</allowed_tools>")
     if inputs.task_spec is not None:
         lines.append(
-            f'<task_spec id="{inputs.task_spec.task_id}" '
-            f'risk="{inputs.task_spec.risk_level}">'
+            f'<task_spec id="{inputs.task_spec.task_id}" risk="{inputs.task_spec.risk_level}">'
         )
         lines.append(f"<goal>{inputs.task_spec.goal}</goal>")
         if inputs.task_spec.preflight_probe is not None:
@@ -577,6 +597,7 @@ def runtime_context_section(inputs: PromptInputs) -> str | None:
         if inputs.task_spec.constraints:
             try:
                 from prismclaw.infra.settings import load_settings
+
                 max_constraints = load_settings().agent.context.budget.subcaps.max_constraints
             except Exception:
                 max_constraints = 4
@@ -714,7 +735,7 @@ def build_frozen_prefix(
     budget: int | None = None,
     *,
     bootstrap: str | None = None,
-    ports: Any = None,
+    ports: ContextRuntimePorts | None = None,
 ) -> SystemPromptResult:
     blocks = [
         _block_from_text(
@@ -739,14 +760,18 @@ def build_frozen_prefix(
         # working_dir 必须是 session 根，不是 workspace 根 —— 否则 context_blocks
         # / tool_results 会被 mkdir 到 workspace 根，与重构后 session 级隔离冲突。
         from pathlib import Path as _Path
+
         _ws = inputs.workspace_path
         _sid = inputs.session_id
+        _working_dir: str | None
         if _ws and _sid:
             _safe_sid = _sid.replace("#", "-").replace(":", "-")
             _working_dir = str(_Path(_ws) / "sessions" / _safe_sid)
         else:
             _working_dir = _ws
-        budgeted = BudgetOrchestrator(working_dir=_working_dir, ports=ports).apply_context_layout_budgets(
+        budgeted = BudgetOrchestrator(
+            working_dir=_working_dir, ports=ports
+        ).apply_context_layout_budgets(
             ContextPackLayout(static_blocks=list(blocks)),
             system_budget=budget,
             dynamic_budget=0,

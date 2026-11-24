@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from prismclaw.schema.storage.storage_types import UserStore
 from prismclaw.schema.services.auth import UserProfile
+from prismclaw.schema.storage.storage_types import UserStore
 
 
 def _make_profile(

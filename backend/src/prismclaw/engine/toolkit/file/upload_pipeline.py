@@ -17,16 +17,17 @@ FastAPI's ``UploadFile`` satisfies without the pipeline importing FastAPI.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import shutil
 import uuid
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from prismclaw.engine.toolkit.file.upload_paths import (
-    DiskFull,
-    InvalidPath,
-    TransferFailed,
+    DiskFullError,
+    InvalidPathError,
+    TransferFailedError,
     is_blocked_type,
     is_noise_file,
     split_rel_path,
@@ -61,7 +62,7 @@ class UploadSink(Protocol):
 
     async def write_chunk(self, upload_id: str, seq: int, data: bytes) -> None: ...
 
-    async def commit(self, upload_id: str) -> dict: ...
+    async def commit(self, upload_id: str) -> dict[str, Any]: ...
 
     async def abort(self, upload_id: str) -> None: ...
 
@@ -77,8 +78,9 @@ def _unique_dest(dest: Path) -> Path:
     文件（如两页报告的连续截图 `image.png` + `image.png`），后者会静默覆盖
     前者——两个文件最终落到同一条 ``path``，前端据此回填的 ``source_path``
     也相同，导致图片预览「无法切换」、模型识别「两张一样」（都只读到被覆盖
-    的那一张）。域包的 ``save_upload_bytes`` 已有相同先例（同名加序号）。序号加在扩展名前（`image (1).png`），既不改扩展
-    名语义，也不影响 ``split_rel_path`` 的路径安全约束。
+    的那一张）。域包的 ``save_upload_bytes`` 已有相同先例（同名加序号）。序号加在
+    扩展名前（`image (1).png`），既不改扩展名语义，也不影响 ``split_rel_path``
+    的路径安全约束。
     """
     if not dest.exists():
         return dest
@@ -94,33 +96,29 @@ def _unique_dest(dest: Path) -> Path:
 
 
 def _skip_code(exc: Exception) -> str:
-    if isinstance(exc, DiskFull):
+    if isinstance(exc, DiskFullError):
         return "disk_full"
-    if isinstance(exc, InvalidPath):
+    if isinstance(exc, InvalidPathError):
         return "invalid_path"
-    if isinstance(exc, TransferFailed):
+    if isinstance(exc, TransferFailedError):
         return "transfer_failed"
     return "transfer_failed"
 
 
 async def _close(uf: UploadInput) -> None:
-    try:
+    with contextlib.suppress(Exception):
         await uf.close()
-    except Exception:
-        pass
 
 
 async def _safe_abort(sink: UploadSink, upload_id: str) -> None:
-    try:
+    with contextlib.suppress(Exception):
         await sink.abort(upload_id)
-    except Exception:
-        pass
 
 
 async def upload_files(
     files: list[UploadInput],
     sink: UploadSink,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Upload ``files`` through ``sink``.
 
     Returns ``(uploaded, skipped)``:
@@ -133,8 +131,8 @@ async def upload_files(
     does not abort the batch. Each file's ``UploadInput`` is closed regardless
     of outcome.
     """
-    uploaded: list[dict] = []
-    skipped: list[dict] = []
+    uploaded: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
 
     for uf in files:
         rel = (uf.filename or "file").replace("\x00", "")
@@ -160,7 +158,7 @@ async def upload_files(
                 result.setdefault("original_name", rel)
                 result.setdefault("mime_type", uf.content_type)
                 uploaded.append(result)
-            except (DiskFull, InvalidPath, TransferFailed) as exc:
+            except (DiskFullError, InvalidPathError, TransferFailedError) as exc:
                 await _safe_abort(sink, upload_id)
                 skipped.append({"name": rel, "code": _skip_code(exc)})
             except Exception as exc:
@@ -203,10 +201,10 @@ class LocalSink:
         try:
             self._dest_root.relative_to(self._workspace_root)
         except ValueError as exc:
-            raise InvalidPath(
+            raise InvalidPathError(
                 f"上传落点 {self._dest_root} 不在工作区 {self._workspace_root} 内"
             ) from exc
-        self._open: dict[str, dict] = {}
+        self._open: dict[str, dict[str, Any]] = {}
 
     async def begin(self, upload_id: str, rel: str, total_size: int | None) -> None:
         parts, basename = split_rel_path(rel)
@@ -223,13 +221,13 @@ class LocalSink:
         try:
             dest.resolve().relative_to(self._dest_root.resolve())
         except ValueError as exc:
-            raise InvalidPath(f"路径越出上传目录：{rel}") from exc
+            raise InvalidPathError(f"路径越出上传目录：{rel}") from exc
 
         # Disk pre-check when size is known.
         if total_size is not None and total_size > 0:
             free = shutil.disk_usage(self._dest_root).free
             if free < total_size:
-                raise DiskFull(f"磁盘空间不足：需要 {total_size} 字节，可用 {free} 字节")
+                raise DiskFullError(f"磁盘空间不足：需要 {total_size} 字节，可用 {free} 字节")
 
         fh = dest.open("wb")
         self._open[upload_id] = {"fh": fh, "dest": dest, "size": 0}
@@ -242,10 +240,10 @@ class LocalSink:
         session["fh"].write(data)
         session["size"] += len(data)
 
-    async def commit(self, upload_id: str) -> dict:
+    async def commit(self, upload_id: str) -> dict[str, Any]:
         session = self._open.pop(upload_id, None)
         if session is None:
-            raise InvalidPath("上传会话不存在")
+            raise InvalidPathError("上传会话不存在")
         session["fh"].close()
         dest: Path = session["dest"]
         # 返回值是 workspace 根相对路径（前端 + 附件解析都按它拼接）。
@@ -255,7 +253,7 @@ class LocalSink:
         try:
             rel_path = dest.relative_to(self._workspace_root)
         except ValueError as exc:
-            raise InvalidPath(
+            raise InvalidPathError(
                 f"上传落点越出工作区：{dest} 不在 {self._workspace_root} 内"
             ) from exc
         return {"path": str(rel_path), "size": session["size"]}
@@ -264,11 +262,7 @@ class LocalSink:
         session = self._open.pop(upload_id, None)
         if session is None:
             return
-        try:
+        with contextlib.suppress(Exception):
             session["fh"].close()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             session["dest"].unlink(missing_ok=True)
-        except Exception:
-            pass

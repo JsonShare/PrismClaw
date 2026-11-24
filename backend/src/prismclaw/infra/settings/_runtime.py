@@ -4,6 +4,7 @@
 所有用户共用，node_modules、pip --target 包、fonts 等重资产存这里，
 一次安装全 workspace 生效。
 """
+
 from __future__ import annotations
 
 from pydantic import Field

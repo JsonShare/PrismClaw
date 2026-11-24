@@ -4,9 +4,11 @@ Protocols for skill invocation and descriptor access,
 and shared Pydantic data models moved from skills.models to break
 the engine → skills import dependency.
 """
+
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Protocol
+from collections.abc import Callable, Sequence
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
@@ -16,10 +18,10 @@ from prismclaw.schema.agent.domains import (
     SkillSource,
 )
 
-
 # ---------------------------------------------------------------------------
 # Protocol definitions
 # ---------------------------------------------------------------------------
+
 
 class SkillOriginDescriptorProtocol(Protocol):
     """Duck-typing compatible with skills.origin.SkillOriginDescriptor."""
@@ -34,6 +36,7 @@ class SkillOriginDescriptorProtocol(Protocol):
 # ---------------------------------------------------------------------------
 # Shared data models (moved from skills.models to break engine → skills dep)
 # ---------------------------------------------------------------------------
+
 
 class SkillInvocation(BaseModel):
     skill_name: str
@@ -132,8 +135,16 @@ class SkillManifest(BaseModel):
     source: SkillSource = SkillSource.BUNDLED
     loaded_from: str = ""
     priority: int = Field(default=0, description="Higher = more important in budget allocation")
-    editable: bool = Field(default=False, description="When False (default) the skill cannot be edited via the skill editor; set 'editable: true' in SKILL.md frontmatter to opt in")
-    customizes: str | None = Field(default=None, description="For customize commands: the sub-plugin this command customizes")
+    editable: bool = Field(
+        default=False,
+        description=(
+            "When False (default) the skill cannot be edited via the skill editor; "
+            "set 'editable: true' in SKILL.md frontmatter to opt in"
+        ),
+    )
+    customizes: str | None = Field(
+        default=None, description="For customize commands: the sub-plugin this command customizes"
+    )
     # ---- 编排遵从度埋点:加载期预提取 ----
     # body 内显式声明的子技能调用名序列,按出现顺序
     declared_invoke_sequence: list[str] = Field(default_factory=list)
@@ -145,7 +156,7 @@ class SkillManifest(BaseModel):
 
     @field_validator("source", mode="before")
     @classmethod
-    def _coerce_source_before(cls, v: Any) -> Any:
+    def _coerce_source_before(cls, v: object) -> object:
         if isinstance(v, SkillSource):
             return v
         coerced = SkillSource.coerce(v)
@@ -153,32 +164,36 @@ class SkillManifest(BaseModel):
 
     @field_validator("source", mode="after")
     @classmethod
-    def _coerce_source_after(cls, v: Any) -> SkillSource:
+    def _coerce_source_after(cls, v: object) -> SkillSource:
         if isinstance(v, SkillSource):
             return v
         coerced = SkillSource.coerce(v)
         return coerced if coerced is not None else SkillSource.BUNDLED
 
     @field_serializer("source")
-    def _serialize_source_safe(self, v: Any) -> SkillSource:
+    def _serialize_source_safe(self, v: object) -> SkillSource:
         if isinstance(v, SkillSource):
             return v
         coerced = SkillSource.coerce(v)
         return coerced if coerced is not None else SkillSource.BUNDLED
 
     @field_serializer("execution_mode")
-    def _serialize_execution_mode_safe(self, v: Any) -> SkillExecutionMode:
+    def _serialize_execution_mode_safe(self, v: object) -> SkillExecutionMode:
         if isinstance(v, SkillExecutionMode):
             return v
+        if not isinstance(v, str):
+            return SkillExecutionMode.INLINE
         try:
             return SkillExecutionMode(v)
         except (ValueError, TypeError):
             return SkillExecutionMode.INLINE
 
     @field_serializer("invocation_policy")
-    def _serialize_invocation_policy_safe(self, v: Any) -> InvocationPolicy:
+    def _serialize_invocation_policy_safe(self, v: object) -> InvocationPolicy:
         if isinstance(v, InvocationPolicy):
             return v
+        if not isinstance(v, str):
+            return InvocationPolicy.AUTO
         try:
             return InvocationPolicy(v)
         except (ValueError, TypeError):
@@ -189,15 +204,12 @@ class SkillManifest(BaseModel):
 # Skill name resolver (moved from skills.resolver to break engine → skills dep)
 # ---------------------------------------------------------------------------
 
-from collections.abc import Sequence
-from dataclasses import dataclass
 
-
-@dataclass(frozen=True, slots=True)
-class ResolvableEntry:
+class ResolvableEntry(Protocol):
     """Minimal interface needed for resolution: a canonical ``name``."""
 
-    name: str
+    @property
+    def name(self) -> str: ...
 
 
 def normalize_skill_ref(name: str) -> str:
@@ -294,7 +306,7 @@ def mcp_prompt_name(skill_name: str, server_name: str) -> str:
             f"MCP skill name {skill_name!r} is not namespaced under "
             f"server {server_name!r} (expected prefix {prefix!r})"
         )
-    return skill_name[len(prefix):]
+    return skill_name[len(prefix) :]
 
 
 # Signature: (server_name, prompt_name, arguments, *, timeout_s=...) -> rendered text.

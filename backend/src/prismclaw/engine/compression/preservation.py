@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.compression.retention import (
     SectionRetention,
@@ -11,12 +11,18 @@ from prismclaw.schema.services.skills import SkillInvocationState
 
 if TYPE_CHECKING:
     # 类型注解所需，runtime 通过 ports 访问。
+    from prismclaw.engine.compression.ports import ContextRuntimePorts
     from prismclaw.engine.execution.checkpoint import RunSnapshot
+    from prismclaw.engine.execution.checkpoint.models import SystemPromptSectionState
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.session import SessionTree
+    from prismclaw.schema.storage.persistence_types import RunSnapshotStore
+    from prismclaw.schema.storage.storage_types import SessionStore
 
 
 def project_preservation_runtime(
     *,
-    request: Any,
+    request: RunRequest,
     snapshot: RunSnapshot,
     tool_ctx: ToolContext,
 ) -> None:
@@ -28,10 +34,10 @@ def project_preservation_runtime(
 
 def _apply_active_sections_from_preflight(
     *,
-    request: Any,
+    request: RunRequest,
     snapshot: RunSnapshot,
     tool_ctx: ToolContext,
-    system_prompt_sections: Any,
+    system_prompt_sections: SystemPromptSectionState,
     retention: SectionRetention,
 ) -> None:
     snapshot.system_prompt_sections = apply_section_retention(
@@ -47,10 +53,10 @@ def _apply_active_sections_from_preflight(
 
 def apply_section_retention_outcome(
     *,
-    request: Any,
+    request: RunRequest,
     snapshot: RunSnapshot,
     tool_ctx: ToolContext | None,
-    outcome: Any,
+    outcome: object,
 ) -> None:
     retention = getattr(outcome, "section_retention", SectionRetention.unchanged())
     if not isinstance(retention, SectionRetention):
@@ -60,7 +66,9 @@ def apply_section_retention_outcome(
             raise ValueError("preflight section retention requires tool context")
         preflight = getattr(outcome, "preflight", None)
         if preflight is None:
-            raise ValueError("preflight section retention requires preflight system prompt sections")
+            raise ValueError(
+                "preflight section retention requires preflight system prompt sections"
+            )
         _apply_active_sections_from_preflight(
             request=request,
             snapshot=snapshot,
@@ -83,7 +91,7 @@ def apply_section_retention_outcome(
 
 def project_active_skill_invocation(
     *,
-    request: Any,
+    request: RunRequest,
     snapshot: RunSnapshot,
     tool_ctx: ToolContext,
     skill_invocation: SkillInvocationState | None,
@@ -98,7 +106,7 @@ def project_active_skill_invocation(
 
 def _apply_durable_static_sections(
     *,
-    request: Any,
+    request: RunRequest,
     snapshot: RunSnapshot,
     tool_ctx: ToolContext | None,
     retention: SectionRetention,
@@ -118,13 +126,13 @@ def _apply_durable_static_sections(
 
 async def cleanup_preservation_runtime_on_terminal_exit(
     *,
-    session_store: Any,
-    run_snapshot_store: Any,
-    request: Any,
-    tree: Any,
+    session_store: SessionStore | None,
+    run_snapshot_store: RunSnapshotStore | None,
+    request: RunRequest,
+    tree: SessionTree | None,
     snapshot: RunSnapshot | None,
     tool_ctx: ToolContext | None,
-    ports: Any,
+    ports: ContextRuntimePorts,
 ) -> SkillInvocationState | None:
     if snapshot is None or tool_ctx is None:
         return None
@@ -159,4 +167,3 @@ async def cleanup_preservation_runtime_on_terminal_exit(
         snapshot_store=run_snapshot_store,
     )
     return cleaned_invocation
-

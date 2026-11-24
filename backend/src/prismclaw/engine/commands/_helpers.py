@@ -2,41 +2,47 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.services.llm import DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS
 from prismclaw.engine.services.sop_extraction import SOP_LLM_MAX_ATTEMPTS
 
 if TYPE_CHECKING:
-    from prismclaw.engine.services.sop_extraction import ExtractionResult
+    import redis.asyncio as aioredis
+
+    from prismclaw.engine.hooks.memory_nudge_hook import MemoryNudgeHook
+    from prismclaw.engine.services.sop_extraction import ExtractionResult, SopExtractionSettings
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
 
 logger = logging.getLogger(__name__)
 
 EXTRACT_TIMEOUT_HEADROOM_SECONDS = 30.0
 EXTRACT_TIMEOUT_SECONDS = (
-    DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS * SOP_LLM_MAX_ATTEMPTS
-    + EXTRACT_TIMEOUT_HEADROOM_SECONDS
+    DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS * SOP_LLM_MAX_ATTEMPTS + EXTRACT_TIMEOUT_HEADROOM_SECONDS
 )
 
 
 async def run_extract(
     *,
-    redis_client: Any,
-    memory_store: Any,
-    session_store: Any,
-    llm_client: Any,
+    redis_client: aioredis.Redis,
+    memory_store: MemoryStore,
+    session_store: SessionStore,
+    llm_client: LLMClient,
     session_id: str,
-    settings: Any,
-    nudge_hook: Any = None,
-    timeout: float = EXTRACT_TIMEOUT_SECONDS,
+    settings: SopExtractionSettings,
+    nudge_hook: MemoryNudgeHook | None = None,
 ) -> ExtractionResult | None:
-    """Run SOP extraction with timeout. Returns ExtractionResult, or None if timed out, or a synthetic disabled result if any dep is missing."""
-    from prismclaw.schema.session.ids import derive_memory_session_key
+    """
+    Run SOP extraction with timeout. Returns ExtractionResult, or None if timed out, or a
+    synthetic disabled result if any dep is missing.
+    """
     from prismclaw.engine.services.sop_extraction import (
         ExtractionResult,
         _check_user_ratelimit,
         extract_sops_sync,
     )
+    from prismclaw.schema.session.ids import derive_memory_session_key
 
     if (
         redis_client is None
@@ -52,8 +58,8 @@ async def run_extract(
         return ExtractionResult(spawned=False, skip_reason="rate_limited")
 
     try:
-        return await asyncio.wait_for(
-            extract_sops_sync(
+        async with asyncio.timeout(EXTRACT_TIMEOUT_SECONDS):
+            return await extract_sops_sync(
                 memory_store=memory_store,
                 session_store=session_store,
                 redis_client=redis_client,
@@ -62,8 +68,6 @@ async def run_extract(
                 settings=settings,
                 min_tool_calls=1,
                 nudge_hook=nudge_hook,
-            ),
-            timeout=timeout,
-        )
+            )
     except TimeoutError:
         return None

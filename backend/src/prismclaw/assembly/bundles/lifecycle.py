@@ -1,7 +1,19 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    import redis.asyncio as aioredis
+    from fastapi import FastAPI
+
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.schema.services.lock import LockManagerProtocol
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
+    from prismclaw.schema.storage.storage_types import MemoryStore
 
 from prismclaw.assembly.bundles_data import AppLifecycleBundle
 from prismclaw.infra.settings import Settings
@@ -10,17 +22,17 @@ logger = logging.getLogger(__name__)
 
 
 async def build_app_lifecycle_bundle(
-    app: Any,
+    app: FastAPI,
     *,
     settings: Settings,
-    redis_client: Any,
+    redis_client: aioredis.Redis,
     worker_id: str,
-    task_manager: Any,
-    runner_deps: Any,
-    lock_manager: Any,
-    workspace_base: Any,
-    memory_store: Any,
-    gateway_factory: Any = None,
+    task_manager: TaskManagerProtocol,
+    runner_deps: AgentRunnerDeps,
+    lock_manager: LockManagerProtocol,
+    workspace_base: Path,
+    memory_store: MemoryStore | None,
+    gateway_factory: Callable[..., tuple[Any, Any]] | None = None,
 ) -> AppLifecycleBundle:
     gateway_router = None
     forward_consumer = None
@@ -28,7 +40,10 @@ async def build_app_lifecycle_bundle(
     if settings.affinity.enabled:
         if gateway_factory is not None:
             gateway_router, forward_consumer = gateway_factory(
-                redis_client, worker_id, settings, app=app,
+                redis_client,
+                worker_id,
+                settings,
+                app=app,
             )
         if forward_consumer is not None:
             task_manager.spawn(
@@ -60,6 +75,7 @@ async def build_app_lifecycle_bundle(
 
     # Curator 后台循环（运行时服务已迁移至 runtime.curator_starter）
     from prismclaw.runtime.curator_starter import start_curator_if_enabled
+
     await start_curator_if_enabled(
         app=app,
         settings=settings,
@@ -78,7 +94,7 @@ async def build_app_lifecycle_bundle(
     )
 
 
-def apply_app_lifecycle_bundle(app: Any, bundle: AppLifecycleBundle) -> None:
+def apply_app_lifecycle_bundle(app: FastAPI, bundle: AppLifecycleBundle) -> None:
     state = getattr(app, "state", None)
     if state is None:
         raise RuntimeError("app.state is not available")

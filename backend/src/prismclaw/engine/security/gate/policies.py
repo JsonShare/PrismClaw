@@ -1,18 +1,24 @@
 """policies — 工作区标签、聚合防护。"""
+
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.engine.security.gate.types import AggregateStoreProtocol
+from prismclaw.schema.content.workspace import SandboxTier
 
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
 
 # ── workspace_tag ───────────────────────────────────────────────────────────
 
-class DataResidency(str, Enum):
+
+class DataResidency(StrEnum):
     """数据驻留区域。"""
+
     CN = "CN"
     EU = "EU"
     US = "US"
@@ -34,6 +40,7 @@ class WorkspaceTag:
       sandbox_tier: 容器安全等级
       template_id: 容器模板标识（替代 kind 作为资源分配键）
     """
+
     workspace_id: str
     owner_id: str
     data_residency: DataResidency
@@ -69,27 +76,31 @@ class WorkspaceTagValidator:
 
 # ── aggregate_guard ─────────────────────────────────────────────────────────
 
-class AggregateAction(str, Enum):
+
+class AggregateAction(StrEnum):
     """聚合防护动作。"""
-    ALLOW = "allow"         # 未超阈值
-    WARN = "warn"           # 接近阈值（80%）
-    ESCALATE = "escalate"   # 超过阈值，升档
-    BLOCK = "block"         # 超过硬上限，阻断
+
+    ALLOW = "allow"  # 未超阈值
+    WARN = "warn"  # 接近阈值（80%）
+    ESCALATE = "escalate"  # 超过阈值，升档
+    BLOCK = "block"  # 超过硬上限，阻断
 
 
 @dataclass(frozen=True)
 class AggregateThreshold:
     """单个计数器的阈值配置。"""
+
     counter: str
-    soft_threshold: int     # 超过此值 → WARN → ESCALATE
-    hard_threshold: int     # 超过此值 → BLOCK
-    window_seconds: int     # 滑动窗口时长
+    soft_threshold: int  # 超过此值 → WARN → ESCALATE
+    hard_threshold: int  # 超过此值 → BLOCK
+    window_seconds: int  # 滑动窗口时长
     escalate_tier: SandboxTier = SandboxTier.TIGHT  # 升档目标
 
 
 @dataclass(frozen=True)
 class AggregateDecision:
     """聚合防护决策。"""
+
     action: AggregateAction
     counter: str
     current_count: int
@@ -117,7 +128,7 @@ DEFAULT_THRESHOLDS: list[AggregateThreshold] = [
     ),
     AggregateThreshold(
         counter="network_bytes_out_1h",
-        soft_threshold=50_000_000,   # 50MB
+        soft_threshold=50_000_000,  # 50MB
         hard_threshold=100_000_000,  # 100MB
         window_seconds=3600,
         escalate_tier=SandboxTier.TIGHT,
@@ -185,7 +196,10 @@ class SessionAggregateGuard:
                 counter=counter,
                 current_count=current_count,
                 threshold=threshold_config.hard_threshold,
-                reason=f"aggregate_block: {counter}={current_count} > hard_threshold={threshold_config.hard_threshold}",
+                reason=(
+                    f"aggregate_block: {counter}={current_count} > "
+                    f"hard_threshold={threshold_config.hard_threshold}"
+                ),
             )
 
         # 软阈值升档
@@ -196,7 +210,10 @@ class SessionAggregateGuard:
                 current_count=current_count,
                 threshold=threshold_config.soft_threshold,
                 escalate_tier=threshold_config.escalate_tier,
-                reason=f"aggregate_escalate: {counter}={current_count} > soft_threshold={threshold_config.soft_threshold}",
+                reason=(
+                    f"aggregate_escalate: {counter}={current_count} > "
+                    f"soft_threshold={threshold_config.soft_threshold}"
+                ),
             )
 
         # 接近阈值告警（80%）
@@ -207,7 +224,10 @@ class SessionAggregateGuard:
                 counter=counter,
                 current_count=current_count,
                 threshold=warn_threshold,
-                reason=f"aggregate_warn: {counter}={current_count} approaching soft_threshold={threshold_config.soft_threshold}",
+                reason=(
+                    f"aggregate_warn: {counter}={current_count} approaching "
+                    f"soft_threshold={threshold_config.soft_threshold}"
+                ),
             )
 
         return AggregateDecision(
@@ -233,24 +253,29 @@ class RedisAggregateStore(AggregateStoreProtocol):
     确保多节点部署下的计数一致性。
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379/0", *, key_prefix: str = "prismclaw:agg:"):
+    def __init__(
+        self, redis_url: str = "redis://localhost:6379/0", *, key_prefix: str = "prismclaw:agg:"
+    ) -> None:
         self._redis_url = redis_url
         self._key_prefix = key_prefix
-        self._redis: Any = None
+        self._redis: aioredis.Redis | None = None
 
-    async def _get_redis(self):
+    async def _get_redis(self) -> aioredis.Redis:
         if self._redis is None:
             try:
                 import redis.asyncio as aioredis
+
                 self._redis = aioredis.from_url(self._redis_url)
             except ImportError:
-                raise RuntimeError("redis package not installed; run: pip install redis")
+                raise RuntimeError("redis package not installed; run: pip install redis") from None
         return self._redis
 
     # ── Sync AggregateStoreProtocol 接口（fallback，不适用于 Redis）──────
 
     def increment(self, session_id: str, counter: str, delta: int = 1) -> int:
-        raise NotImplementedError("RedisAggregateStore does not support sync increment; use async_check_and_incr")
+        raise NotImplementedError(
+            "RedisAggregateStore does not support sync increment; use async_check_and_incr"
+        )
 
     def get(self, session_id: str, counter: str) -> int:
         raise NotImplementedError("RedisAggregateStore does not support sync get")
@@ -258,18 +283,27 @@ class RedisAggregateStore(AggregateStoreProtocol):
     def reset(self, session_id: str) -> None:
         raise NotImplementedError("RedisAggregateStore does not support sync reset")
 
-    def check_and_incr(self, session_id: str, counter: str, threshold: int, window_seconds: int, delta: int = 1) -> tuple[int, bool]:
-        raise NotImplementedError("RedisAggregateStore does not support sync check_and_incr; use async_check_and_incr")
+    def check_and_incr(
+        self, session_id: str, counter: str, threshold: int, window_seconds: int, delta: int = 1
+    ) -> tuple[int, bool]:
+        raise NotImplementedError(
+            "RedisAggregateStore does not support sync check_and_incr; use async_check_and_incr"
+        )
 
     # ── Async 接口 ──────────────────────────────────────────────────────
 
-    async def async_check_and_incr(self, key: str, window_seconds: int, threshold: int) -> tuple[int, bool]:
+    async def async_check_and_incr(
+        self, key: str, window_seconds: int, threshold: int
+    ) -> tuple[int, bool]:
         """原子递增 + 阈值检查（Redis Pipeline）。"""
         r = await self._get_redis()
         full_key = f"{self._key_prefix}{key}"
         async with r.pipeline() as pipe:
-            count = await pipe.incrby(full_key, 1).expire(full_key, window_seconds).execute()
-            current = count[0]
+            pipe.incrby(full_key, 1)
+            pipe.expire(full_key, window_seconds)
+            executed: Awaitable[list[Any]] = pipe.execute()
+            results = await executed
+            current = int(results[0])
             exceeded = current > threshold
             return current, exceeded
 
@@ -278,9 +312,12 @@ class RedisAggregateStore(AggregateStoreProtocol):
             await self._redis.close()
 
 
-def create_aggregate_store(store_type: str = "memory", *, redis_url: str = "", **kwargs) -> AggregateStoreProtocol:
+def create_aggregate_store(
+    store_type: str = "memory", *, redis_url: str = "", key_prefix: str = "prismclaw:agg:"
+) -> AggregateStoreProtocol:
     """聚合存储工厂。"""
     if store_type == "redis":
-        return RedisAggregateStore(redis_url=redis_url, **kwargs)
+        return RedisAggregateStore(redis_url=redis_url, key_prefix=key_prefix)
     from prismclaw.engine.security.gate.types import InMemoryAggregateStore
-    return InMemoryAggregateStore(**kwargs)
+
+    return InMemoryAggregateStore()

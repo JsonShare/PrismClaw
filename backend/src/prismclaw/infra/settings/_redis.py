@@ -27,6 +27,7 @@ class RedisSettings(BaseSettings):
             return self.url
         if self.password:
             import urllib.parse
+
             # URL-encode the password to handle special characters like '#'
             encoded_password = urllib.parse.quote(self.password)
             return f"redis://:{encoded_password}@{self.host}:{self.port}/{self.database}"

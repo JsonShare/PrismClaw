@@ -69,7 +69,7 @@ ${PRISMCLAW_PLUGIN_DATA}/
     │   ├── matter.md               # 客户、对手方、事项类型、关键事实、覆盖
     │   ├── history.md              # 事件、决定、草案、审查的日期记录
     │   ├── notes.md                # 自由格式的工作笔记
-    │   └── outputs/                # 此事项的 skill 输出（可选子文件夹）
+    │   └── outbox/                 # 此事项的 skill 输出（可选子文件夹）
     └── _archived/
         └── <slug>/                 # 已关闭的事项——可读但不活跃
 ```

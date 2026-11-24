@@ -4,19 +4,20 @@
 - ``PluginDescriptor`` 直接持有 ``plugin_id`` 作为身份
 - v5 渐进式披露：``SkillDescriptor`` 持有 ``pipeline_context`` 和 ``marketplace_name``
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from prismclaw.engine.plugins.lifecycle.state import PluginLifecycleState
+from prismclaw.engine.plugins.registry.identity import PluginID
 from prismclaw.schema.agent.capability import (
     PluginCapabilityGraph,
     PluginCommandCapability,
     RuntimeCapabilities,
 )
-from prismclaw.engine.plugins.registry.identity import PluginID
-from prismclaw.engine.plugins.lifecycle.state import PluginLifecycleState
 
 if TYPE_CHECKING:
     # Skill/Agent manifest 类型只用于 descriptor 字段注解,不做运行时引用
@@ -75,7 +76,7 @@ class PluginDescriptor(BaseDescriptor):
 @dataclass(slots=True)
 class SkillDescriptor(BaseDescriptor):
     kind: Literal["skill"] = field(default="skill", init=False)
-    manifest: "SkillManifest | None" = None
+    manifest: SkillManifest | None = None
     # v5 渐进式披露:延迟 content pipeline 参数
     # 从 SkillManifest.pipeline_context 复制，供 body 按需加载时使用。
     pipeline_context: dict[str, Any] = field(default_factory=dict)
@@ -102,7 +103,7 @@ class CommandDescriptor(BaseDescriptor):
 @dataclass(slots=True)
 class AgentDescriptor(BaseDescriptor):
     kind: Literal["agent"] = field(default="agent", init=False)
-    manifest: "AgentManifest | None" = None
+    manifest: AgentManifest | None = None
     # v5 渐进式披露：所属 marketplace 名称与描述
     marketplace_name: str | None = None
     marketplace_description: str | None = None

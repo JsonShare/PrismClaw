@@ -1,14 +1,25 @@
 """agent_loop 辅助函数 — 不依赖类实例(self)的纯函数和辅助函数。"""
+
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.content.content_types import ToolResult
+    from prismclaw.schema.content.streaming import ToolCallEnd, ToolCallStart, ToolClarifyRequest
+    from prismclaw.schema.llm.types import LLMResponse
+    from prismclaw.schema.session.types import SessionTree
 
 # ---------------------------------------------------------------------------
 # run_loop 使用的内部辅助函数 (无 deps 子系统知识)
 # ---------------------------------------------------------------------------
 
-def compute_tool_signature(tool_name: str, args: dict | None) -> str:
+
+def compute_tool_signature(tool_name: str, args: dict[str, Any] | None) -> str:
     """Compute a doom-loop signature from tool name + argument values.
 
     The signature includes a short hash of the argument values (not just keys)
@@ -29,7 +40,7 @@ def compute_tool_signature(tool_name: str, args: dict | None) -> str:
     return f"{tool_name}:{digest}"
 
 
-def compute_result_fingerprint(result: Any) -> str:
+def compute_result_fingerprint(result: ToolResult | None) -> str:
     """结果指纹：内容 digest + 错误位。同签名不同结果 → 不同指纹。
 
     None（无结果，如被拦截/未执行）返回空串，record 侧退化为纯签名。
@@ -41,26 +52,26 @@ def compute_result_fingerprint(result: Any) -> str:
     from prismclaw.schema.agent.data_types import TextBlock
 
     content = getattr(result, "content", None) or []
-    text = "".join(
-        block.text for block in content if isinstance(block, TextBlock)
-    )
+    text = "".join(block.text for block in content if isinstance(block, TextBlock))
     digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
     return f"{digest}{'e' if getattr(result, 'is_error', False) else 'n'}"
 
 
-def _parse_tool_calls(tool_calls: list[Any]) -> list[Any]:
+def _parse_tool_calls(tool_calls: list[dict[str, Any]]) -> list[ParsedToolCall]:
     """Parse raw tool calls into ParsedToolCall list."""
     from prismclaw.engine.execution.dispatch.call_handling import parse_tool_calls
+
     return parse_tool_calls(tool_calls)
 
 
-def _tool_call_start_events(parsed_calls: list[Any]) -> list[Any]:
+def _tool_call_start_events(parsed_calls: list[ParsedToolCall]) -> list[ToolCallStart]:
     """Emit ToolCallStart events for each parsed tool call."""
     from prismclaw.engine.execution.dispatch.call_handling import tool_call_start_events
+
     return tool_call_start_events(parsed_calls)
 
 
-def _create_blocked_tool_result(call: Any, reason: str) -> Any:
+def _create_blocked_tool_result(call: ParsedToolCall, reason: str) -> ToolCallEnd:
     """Create a tool result for a blocked tool call.
 
     返回 ToolCallEnd 而非 ErrorEvent，前端可区分"工具被阻止"和"运行终止"。
@@ -82,7 +93,7 @@ def _create_blocked_tool_result(call: Any, reason: str) -> Any:
     )
 
 
-def _build_all_blocked_guidance(blocked_results: Any) -> str:
+def _build_all_blocked_guidance(blocked_results: list[ToolCallEnd] | None) -> str:
     """把「全拒」结果翻译成一次可执行的重规划指令。
 
     模型在 all_blocked 回合只看到自己被拒（落树的 tool 结果），但不知道
@@ -108,7 +119,7 @@ def _build_all_blocked_guidance(blocked_results: Any) -> str:
     )
 
 
-def _create_aborted_tool_result(call_id: str) -> Any:
+def _create_aborted_tool_result(call_id: str) -> ToolCallEnd:
     """Create a synthetic ToolCallEnd for an abort scenario.
 
     用于维持 ToolCallStart ↔ ToolCallEnd 配对：abort 时已 yield ToolCallStart，
@@ -128,7 +139,7 @@ def _create_aborted_tool_result(call_id: str) -> Any:
     )
 
 
-def _create_clarify_tool_end(call_id: str, answer: str) -> Any:
+def _create_clarify_tool_end(call_id: str, answer: str) -> ToolCallEnd:
     """Create a synthetic ToolCallEnd closing the AskUserQuestion HITL call.
 
     HITL 不走 execute_tools：ToolCallStart 已在 3a 统一发出，但 ask_user_question
@@ -152,10 +163,10 @@ def _create_clarify_tool_end(call_id: str, answer: str) -> Any:
 
 async def _persist_clarified_turn(
     *,
-    deps: Any,
-    tree: Any,
-    response: Any,
-    allowed_calls: list[Any],
+    deps: AgentRunnerDeps,
+    tree: SessionTree,
+    response: LLMResponse,
+    allowed_calls: list[ParsedToolCall],
     ask_call_id: str,
     answer: str | None,
 ) -> None:
@@ -185,12 +196,12 @@ async def _persist_clarified_turn(
         append_assistant_response,
     )
     from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
+    from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.engine.execution.output.tool_result_rendering import (
         tool_result_to_llm_content,
     )
-    from prismclaw.engine.execution.loop.tree_writer import _append
-    from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.agent.data_types import TextBlock
+    from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.content.content_types import ToolResult
     from prismclaw.schema.session.types import generate_entry_id, now_iso
 
@@ -201,21 +212,12 @@ async def _persist_clarified_turn(
         text=strip_noise(response.text or ""),
         tool_calls=response.tool_calls,
     )
-    _ask_text = (
-        answer
-        if answer is not None
-        else "（等待用户回答期间执行已中止，未收到作答）"
-    )
-    _skip_text = (
-        "（该调用在等待用户回答提问期间未执行，已跳过；"
-        "如仍需要请根据用户回答重新发起）"
-    )
+    _ask_text = answer if answer is not None else "（等待用户回答期间执行已中止，未收到作答）"
+    _skip_text = "（该调用在等待用户回答提问期间未执行，已跳过；如仍需要请根据用户回答重新发起）"
     entry_ids = set(tree.entries.keys())
     for call in allowed_calls:
         cid = getattr(call, "call_id", None) or (
-            call.call.get("id", "")
-            if isinstance(getattr(call, "call", None), dict)
-            else ""
+            call.call.get("id", "") if isinstance(getattr(call, "call", None), dict) else ""
         )
         if not cid:
             continue
@@ -242,9 +244,9 @@ async def _persist_clarified_turn(
 
 async def _persist_blocked_tool_results(
     *,
-    deps: Any,
-    tree: Any,
-    blocked_events: list[Any],
+    deps: AgentRunnerDeps,
+    tree: SessionTree,
+    blocked_events: list[ToolCallEnd],
 ) -> None:
     """Persist blocked tool-call results as ``role="tool"`` entries.
 
@@ -255,12 +257,12 @@ async def _persist_blocked_tool_results(
     tool_name），content 走 tool_result_to_llm_content 保证模型可见
     "[Blocked] …" 提示。
     """
+    from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.engine.execution.output.tool_result_rendering import (
         tool_result_to_llm_content,
     )
     from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.session.types import generate_entry_id, now_iso
-    from prismclaw.engine.execution.loop.tree_writer import _append
 
     entry_ids = set(tree.entries.keys())
     for event in blocked_events:
@@ -286,9 +288,9 @@ async def _persist_blocked_tool_results(
 
 async def _close_orphaned_tool_calls(
     *,
-    deps: Any,
-    tree: Any,
-    tool_calls: list[Any],
+    deps: AgentRunnerDeps,
+    tree: SessionTree,
+    tool_calls: list[dict[str, Any]],
 ) -> None:
     """execute_tools 异常路径的配对闭合。
 
@@ -307,9 +309,9 @@ async def _close_orphaned_tool_calls(
         _tcid = getattr(entry, "tool_call_id", None)
         if _tcid:
             _covered_ids.add(_tcid)
+    from prismclaw.engine.execution.loop.tree_writer import _append
     from prismclaw.schema.agent.session import MessageEntry
     from prismclaw.schema.session.types import generate_entry_id, now_iso
-    from prismclaw.engine.execution.loop.tree_writer import _append
 
     _synth_content = "[错误] 工具在执行前即失败"
     entry_ids = set(tree.entries.keys())
@@ -335,23 +337,34 @@ async def _close_orphaned_tool_calls(
 # stage 模块（terminal / tools）使用的辅助函数
 # ---------------------------------------------------------------------------
 
-def _build_clarify_request(ask_call: Any, tool_ctx: Any, deps: Any, request: Any) -> Any:
+
+def _build_clarify_request(
+    ask_call: ParsedToolCall,
+    tool_ctx: ToolContext,
+    deps: AgentRunnerDeps,
+    request: RunRequest,
+) -> ToolClarifyRequest:
     """构建 AskUserQuestion 的 ToolClarifyRequest 事件。"""
-    from prismclaw.schema.content.streaming import ToolClarifyRequest
-    from prismclaw.engine.execution.query.clarify_normalize import normalize_clarify_questions as _normalize
     from prismclaw.engine.execution.dispatch.call_handling import _resolve_approval_runtime_ids
+    from prismclaw.engine.execution.query.clarify_normalize import (
+        normalize_clarify_questions as _normalize,
+    )
+    from prismclaw.schema.content.streaming import ToolClarifyRequest
 
     _ac_args = ask_call.arguments or {}
     _ac_tool_call_id = (
-        ask_call.call.get("id", "")
-        if isinstance(getattr(ask_call, "call", None), dict)
-        else ""
+        ask_call.call.get("id", "") if isinstance(getattr(ask_call, "call", None), dict) else ""
     )
     _ac_run_id, _ac_turn_id = _resolve_approval_runtime_ids(tool_ctx)
     _ac_questions = _normalize(
         _ac_args.get("questions") if isinstance(_ac_args, dict) else None,
     )
-    _ac_pending = deps.session_queue.create_pending(
+    _ac_queue = deps.session_queue
+    if _ac_queue is None:
+        raise RuntimeError(
+            "AskUserQuestion 被调用，但 deps.session_queue 为 None：澄清通道缺失。"
+        )
+    _ac_pending = _ac_queue.create_pending(
         conversation_id=request.session_id,
         tool_call_id=_ac_tool_call_id,
         tool_name="ask_user_question",

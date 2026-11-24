@@ -1,22 +1,26 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.infra.settings import Settings
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from sqlalchemy.ext.asyncio import AsyncEngine
 
 from prismclaw.assembly.bundles_data import AppInfrastructureBundle, AppRuntimeBundle
+from prismclaw.infra.settings import Settings
 
 
 async def build_app_runtime_bundle(
-    app: Any,
+    app: FastAPI,
     *,
     settings: Settings,
     infra: AppInfrastructureBundle,
     project_root: Path | str | None,
-    dream_health_loop: Callable[..., Awaitable[None]],
+    dream_health_loop: Callable[..., Coroutine[Any, Any, None]],
     dream_health_interval_s: float,
-    db_engine: Any = None,
+    db_engine: AsyncEngine | None = None,
 ) -> AppRuntimeBundle:
     from prismclaw.assembly.workspace.runner_assembly import create_agent_runner_deps
 
@@ -88,7 +92,7 @@ async def build_app_runtime_bundle(
     )
 
 
-def apply_app_runtime_bundle(app: Any, bundle: AppRuntimeBundle) -> None:
+def apply_app_runtime_bundle(app: FastAPI, bundle: AppRuntimeBundle) -> None:
     state = getattr(app, "state", None)
     if state is None:
         raise RuntimeError("app.state is not available")

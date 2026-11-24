@@ -1,10 +1,15 @@
 """Auto-extracted Mixin from postgres.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any
 
+from sqlalchemy import RowMapping
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from prismclaw.persistence.memory._base_mixin import _PostgresBackendBase
 from prismclaw.persistence.memory._helpers import (
     _build_layer_filter_sql,
     _sql_text,
@@ -12,19 +17,17 @@ from prismclaw.persistence.memory._helpers import (
 
 logger = logging.getLogger(__name__)
 
-from prismclaw.persistence.memory._base_mixin import _PostgresBackendBase
-
 
 class QueriesMixin(_PostgresBackendBase):
     async def _search_memory_text_rows(
         self,
         *,
-        session: Any,
+        session: AsyncSession,
         session_key: str,
         query: str,
         layers: list[str] | None,
         limit: int,
-    ) -> list[Any]:
+    ) -> list[RowMapping]:
         layer_sql, layer_params = _build_layer_filter_sql(layers)
         base_params: dict[str, Any] = {
             "session_key": session_key,
@@ -36,7 +39,8 @@ class QueriesMixin(_PostgresBackendBase):
                 _sql_text(
                     f"""
                     SELECT id, layer, type, content, source_session_id, created_at, updated_at,
-                           scope, entity_key, source_refs_json, last_used_at, use_count, status, origin_stage, confidence,
+                           scope, entity_key, source_refs_json, last_used_at,
+                           use_count, status, origin_stage, confidence,
                            stability_score, cluster_id, supersedes_json, last_validated_at,
                            graph_group_id, version_chain_id, publish_state, valid_from,
                            valid_to, expires_at, winner_flag, low_confidence, 0.0 AS retrieval_score
@@ -59,7 +63,8 @@ class QueriesMixin(_PostgresBackendBase):
             _sql_text(
                 f"""
                 SELECT id, layer, type, content, source_session_id, created_at, updated_at,
-                       scope, entity_key, source_refs_json, last_used_at, use_count, status, origin_stage, confidence,
+                       scope, entity_key, source_refs_json, last_used_at,
+                       use_count, status, origin_stage, confidence,
                        stability_score, cluster_id, supersedes_json, last_validated_at,
                        graph_group_id, version_chain_id, publish_state, valid_from,
                        valid_to, expires_at, winner_flag, low_confidence,
@@ -85,18 +90,19 @@ class QueriesMixin(_PostgresBackendBase):
     async def _search_memory_vector_rows(
         self,
         *,
-        session: Any,
+        session: AsyncSession,
         session_key: str,
         query_vec: list[float],
         layers: list[str] | None,
         limit: int,
-    ) -> list[Any]:
+    ) -> list[RowMapping]:
         layer_sql, layer_params = _build_layer_filter_sql(layers)
         result = await session.execute(
             _sql_text(
                 f"""
                 SELECT id, layer, type, content, source_session_id, created_at, updated_at,
-                       scope, entity_key, source_refs_json, last_used_at, use_count, status, origin_stage, confidence,
+                       scope, entity_key, source_refs_json, last_used_at,
+                       use_count, status, origin_stage, confidence,
                        stability_score, cluster_id, supersedes_json, last_validated_at,
                        graph_group_id, version_chain_id, publish_state, valid_from,
                        valid_to, expires_at, winner_flag, low_confidence,
@@ -121,18 +127,16 @@ class QueriesMixin(_PostgresBackendBase):
     async def _search_l4_text_rows(
         self,
         *,
-        session: Any,
+        session: AsyncSession,
         session_key: str,
         query: str,
         artifact_kinds: list[str] | None,
         limit: int,
-    ) -> list[Any]:
+    ) -> list[RowMapping]:
         kind_sql, kind_params = _build_layer_filter_sql(artifact_kinds)
         # Replace column name and param prefix from 'layer' to 'artifact_kind'
         filter_sql = kind_sql.replace("layer", "artifact_kind")
-        filter_params = {
-            k.replace("layer_", "artifact_kind_"): v for k, v in kind_params.items()
-        }
+        filter_params = {k.replace("layer_", "artifact_kind_"): v for k, v in kind_params.items()}
         base_params: dict[str, Any] = {
             "session_key": session_key,
             "limit": limit,
@@ -144,7 +148,8 @@ class QueriesMixin(_PostgresBackendBase):
                     f"""
                     SELECT id, session_id, artifact_kind AS layer, artifact_kind, summary,
                            created_at, updated_at, graph_group_id, source_refs_json,
-                           origin_stage, publish_state, payload_json, low_confidence, 0.0 AS retrieval_score
+                           origin_stage, publish_state, payload_json, low_confidence,
+                           0.0 AS retrieval_score
                     FROM pc_memory_l4_artifacts
                     WHERE session_key = :session_key{filter_sql}
                     ORDER BY updated_at DESC, created_at DESC
@@ -184,18 +189,16 @@ class QueriesMixin(_PostgresBackendBase):
     async def _search_l4_vector_rows(
         self,
         *,
-        session: Any,
+        session: AsyncSession,
         session_key: str,
         query_vec: list[float],
         artifact_kinds: list[str] | None,
         limit: int,
         min_similarity: float,
-    ) -> list[Any]:
+    ) -> list[RowMapping]:
         kind_sql, kind_params = _build_layer_filter_sql(artifact_kinds)
         filter_sql = kind_sql.replace("layer", "artifact_kind")
-        filter_params = {
-            k.replace("layer_", "artifact_kind_"): v for k, v in kind_params.items()
-        }
+        filter_params = {k.replace("layer_", "artifact_kind_"): v for k, v in kind_params.items()}
         result = await session.execute(
             _sql_text(
                 f"""
@@ -220,4 +223,3 @@ class QueriesMixin(_PostgresBackendBase):
             },
         )
         return list(result.mappings().all())
-

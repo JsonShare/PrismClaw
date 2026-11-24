@@ -13,11 +13,28 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Protocol
+
+from prismclaw.schema.memory.memory_graph import (
+    DIRECTION_SENSITIVE_PREDICATES,
+    VALID_PREDICATES,
+    MemoryEdge,
+)
+
+if TYPE_CHECKING:
+    from prismclaw.schema.llm.types import LLMClient
+
+    class EdgeStorePort(Protocol):
+        async def store_edge(self, session_key: str, edge: MemoryEdge) -> None: ...
+
+    class EntityLookupPort(Protocol):
+        async def get_entry_id_by_entity_key(
+            self, session_key: str, entity_key: str
+        ) -> str | None: ...
+
 
 logger = logging.getLogger(__name__)
 
-from prismclaw.schema.memory.memory_graph import VALID_PREDICATES, DIRECTION_SENSITIVE_PREDICATES
 
 _EXTRACTION_PROMPT = """从以下文本中抽取核心语义关系。仅抽取高置信度（>= 0.7）的关系。
 
@@ -30,7 +47,8 @@ _EXTRACTION_PROMPT = """从以下文本中抽取核心语义关系。仅抽取�
 - conflicts: A 与 B 矛盾/冲突（互斥）
 
 输出 JSON 数组，每条关系格式：
-[{{"source": "实体A", "target": "实体B", "predicate": "causes", "condition": "条件（空字符串=无条件）", "confidence": 0.9}}]
+[{{"source": "实体A", "target": "实体B", "predicate": "causes",
+  "condition": "条件（空字符串=无条件）", "confidence": 0.9}}]
 
 如果文本中没有明确的关系，输出空数组 []。
 只输出 JSON，不要任何解释。
@@ -42,10 +60,11 @@ _EXTRACTION_PROMPT = """从以下文本中抽取核心语义关系。仅抽取�
 @dataclass
 class ExtractedRelation:
     """LLM 抽取的关系（entity_key 级别，非 entry id 级别）。"""
+
     source_entity_key: str
     target_entity_key: str
     predicate: str
-    condition: str          # 无条件时为空字符串 ''（F1 修正：不用 None）
+    condition: str  # 无条件时为空字符串 ''（F1 修正：不用 None）
     confidence: float
 
 
@@ -58,7 +77,7 @@ class RelationExtractor:
     def __init__(self, *, min_confidence: float = 0.7) -> None:
         self._min_confidence = min_confidence
 
-    async def extract(self, text: str, *, llm_client: Any) -> list[ExtractedRelation]:
+    async def extract(self, text: str, *, llm_client: LLMClient) -> list[ExtractedRelation]:
         """LLM 抽取关系，predicate 限制为 6 种，confidence >= min_confidence。"""
         if not text or not text.strip():
             return []
@@ -83,7 +102,7 @@ class RelationExtractor:
             return []
 
         # 提取 JSON
-        json_match = re.search(r'\[\s*\{.*?\}\s*\]', raw, re.DOTALL)
+        json_match = re.search(r"\[\s*\{.*?\}\s*\]", raw, re.DOTALL)
         if not json_match:
             return []
 
@@ -115,13 +134,15 @@ class RelationExtractor:
                 continue
             condition = str(item.get("condition", "") or "").strip()
 
-            relations.append(ExtractedRelation(
-                source_entity_key=source,
-                target_entity_key=target,
-                predicate=predicate,
-                condition=condition,
-                confidence=confidence,
-            ))
+            relations.append(
+                ExtractedRelation(
+                    source_entity_key=source,
+                    target_entity_key=target,
+                    predicate=predicate,
+                    condition=condition,
+                    confidence=confidence,
+                )
+            )
 
         return relations
 
@@ -130,8 +151,8 @@ class RelationExtractor:
         session_key: str,
         relations: list[ExtractedRelation],
         *,
-        memory: Any,
-        edge_store: Any,
+        memory: EntityLookupPort,
+        edge_store: EdgeStorePort,
     ) -> int:
         """将 ExtractedRelation 解析为 MemoryEdge 并写入。
 
@@ -150,21 +171,24 @@ class RelationExtractor:
             # IG1：精确查询 entity_key → entry_id
             try:
                 source_id = await memory.get_entry_id_by_entity_key(
-                    session_key, rel.source_entity_key,
+                    session_key,
+                    rel.source_entity_key,
                 )
                 target_id = await memory.get_entry_id_by_entity_key(
-                    session_key, rel.target_entity_key,
+                    session_key,
+                    rel.target_entity_key,
                 )
             except Exception:
-                logger.warning(
-                    "relation resolve failed for %s", session_key, exc_info=True
-                )
+                logger.warning("relation resolve failed for %s", session_key, exc_info=True)
                 continue
 
             if source_id is None or target_id is None:
                 logger.debug(
                     "[E6] entity_key not resolved: source=%s→%s, target=%s→%s",
-                    rel.source_entity_key, source_id, rel.target_entity_key, target_id,
+                    rel.source_entity_key,
+                    source_id,
+                    rel.target_entity_key,
+                    target_id,
                 )
                 continue
 
@@ -184,8 +208,6 @@ class RelationExtractor:
                 await edge_store.store_edge(session_key, edge)
                 stored += 1
             except Exception:
-                logger.warning(
-                    "relation store_edge failed for %s", session_key, exc_info=True
-                )
+                logger.warning("relation store_edge failed for %s", session_key, exc_info=True)
 
         return stored

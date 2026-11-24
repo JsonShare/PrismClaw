@@ -11,6 +11,7 @@
 本模块不依赖任何执行器或沙箱实现，供 ``RuntimeExecutor`` 与
 ``BwrapPolicy`` 共用，避免两处各写一份、逐渐漂移。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

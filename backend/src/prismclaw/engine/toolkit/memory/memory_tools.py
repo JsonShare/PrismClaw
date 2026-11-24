@@ -1,4 +1,5 @@
 """Memory tool — persist durable memories and archive outdated ones."""
+
 from __future__ import annotations
 
 import time
@@ -6,12 +7,12 @@ import uuid
 from typing import Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
-from prismclaw.schema.session.ids import derive_memory_session_key
+from prismclaw.schema.agent.memory import MemoryGatewayProtocol
 from prismclaw.schema.content.content_types import ToolResult
-from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
-from prismclaw.schema.memory.memory_types import MemoryEntry
 from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
+from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.session.ids import derive_memory_session_key
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
 
 _MEMORY_ACTIONS = ("save", "archive")
 
@@ -61,7 +62,9 @@ class MemoryTool:
             },
             "entry_id": {
                 "type": "string",
-                "description": "要归档的记忆 ID：8 字符短 ID 或 memory_context 中可见的完整 UUID（archive）。",
+                "description": (
+                    "要归档的记忆 ID：8 字符短 ID，或 memory_context 中可见的完整 UUID（archive）。"
+                ),
             },
             "reason": {
                 "type": "string",
@@ -81,7 +84,7 @@ class MemoryTool:
         memory_store: MemoryStore,
         session_store: SessionStore,
         *,
-        gateway: Any = None,
+        gateway: MemoryGatewayProtocol | None = None,
     ) -> None:
         self._memory_store = memory_store
         self._session_store = session_store
@@ -168,16 +171,11 @@ class MemoryTool:
                 from prismclaw.engine.memory.gateway import GatewayLockError
 
                 try:
-                    result = await self._gateway.submit(
-                        session_key, entry, source="memorize"
-                    )
+                    result = await self._gateway.submit(session_key, entry, source="memorize")
                 except GatewayLockError as exc:
-                    return error_result(
-                        call_id, f"memory：仲裁锁繁忙，请重试：{exc}"
-                    )
-                summary = (
-                    f"已记忆（{layer}/{entry_type}，id={entry.id[:8]}）：{content[:80]}"
-                    + ("..." if len(content) > 80 else "")
+                    return error_result(call_id, f"memory：仲裁锁繁忙，请重试：{exc}")
+                summary = f"已记忆（{layer}/{entry_type}，id={entry.id[:8]}）：{content[:80]}" + (
+                    "..." if len(content) > 80 else ""
                 )
                 if result.notes:
                     summary += f" [{','.join(result.notes)}]"
@@ -185,9 +183,7 @@ class MemoryTool:
                 # shadow the legacy store ALWAYS ran, so "skipped" would lie
                 # to the model about what actually happened.
                 if result.decision == "NOOP" and result.mode == "active":
-                    summary = (
-                        f"已跳过记忆（与既有记忆重复）：{content[:80]}"
-                    )
+                    summary = f"已跳过记忆（与既有记忆重复）：{content[:80]}"
                 return text_result(call_id, summary)
             await self._memory_store.store(session_key, entry)
         except Exception as exc:
@@ -201,7 +197,9 @@ class MemoryTool:
 
     # ── archive ────────────────────────────────────────────────────────
 
-    async def _archive(self, call_id: str, args: dict[str, Any], context: ToolContext) -> ToolResult:
+    async def _archive(
+        self, call_id: str, args: dict[str, Any], context: ToolContext
+    ) -> ToolResult:
         entry_id = args.get("entry_id", "").strip()
         reason = args.get("reason", "").strip()
 
@@ -215,7 +213,7 @@ class MemoryTool:
         full_id, content_preview = await self._memory_store.get_entry_by_id(
             session_key, entry_id, prefix_match=prefix_match
         )
-        if full_id is None:
+        if full_id is None or content_preview is None:
             return error_result(call_id, content_preview or "memory：条目查询失败")
 
         archived = await self._memory_store.archive_entry(session_key, full_id, reason=reason)

@@ -34,6 +34,7 @@ EPHEMERAL_SUBDIRS: tuple[tuple[str, ...], ...] = (
     ("cache", "ocr"),
     ("cache", "extracted"),
     ("cache", "previews"),
+    ("cache", "doc"),
     ("run", "spills"),
 )
 

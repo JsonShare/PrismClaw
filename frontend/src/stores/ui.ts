@@ -16,7 +16,7 @@ export const CHAT_WIDTH_MAX = 1200
 export const CHAT_WIDTH_DEFAULT = 1000
 
 /** 内置 section 或动态域 section（domain:xxx 格式） */
-export type AppSection = 'chat' | 'experts' | 'files' | 'outputs' | `domain:${string}`
+export type AppSection = 'chat' | 'experts' | 'files' | 'outbox' | `domain:${string}`
 
 function resolveSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light'
@@ -61,7 +61,7 @@ function persistChatWidth(w: ChatWidth): void {
 }
 
 /** 有实际渲染分支的 section（'tasks'/'settings' 已删除，避免 localStorage 残留旧值导致空白） */
-const VALID_SECTIONS = new Set(['chat', 'experts', 'files', 'outputs'])
+const VALID_SECTIONS = new Set(['chat', 'experts', 'files', 'outbox'])
 
 function loadInitialSection(): AppSection {
   if (typeof window === 'undefined') return 'chat'

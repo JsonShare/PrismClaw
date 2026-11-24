@@ -26,6 +26,7 @@ TextChunk/ReasoningChunk 置 loading_active=False → LLM 流式生成阶段四�
    → 判活；run 结束（rc.active=False + finish）→ 不判活；/run 内存直读时
    投影实时正文胜出树内旧值
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -58,6 +59,7 @@ def _add_running_tool(sq: SessionQueue, cid: str, name: str = "sub_agent") -> No
 # 1. 空投影不判活
 # ---------------------------------------------------------------------------
 
+
 def test_empty_projection_inactive():
     sq = SessionQueue()
     cid = "web:admin:s:aaa"
@@ -68,6 +70,7 @@ def test_empty_projection_inactive():
 # ---------------------------------------------------------------------------
 # 2. 运行中工具调用判活（无子代理的长工具场景）
 # ---------------------------------------------------------------------------
+
 
 def test_running_tool_call_activates():
     sq = SessionQueue()
@@ -88,6 +91,7 @@ def test_done_tool_call_does_not_activate():
 # 3. finish_web_runtime 收尾 running 工具 → 不再判活
 # ---------------------------------------------------------------------------
 
+
 def test_finish_flips_running_tool_to_error():
     sq = SessionQueue()
     cid = "web:admin:s:ccc"
@@ -101,9 +105,7 @@ def test_finish_flips_running_tool_to_error():
     if proj is not None:
         assert all(tc.get("status") != "running" for tc in proj.tool_calls)
         assert all(
-            tc.get("status") == "error"
-            for tc in proj.tool_calls
-            if tc.get("name") == "sub_agent"
+            tc.get("status") == "error" for tc in proj.tool_calls if tc.get("name") == "sub_agent"
         )
     assert cid not in sq.list_running_conversations()
 
@@ -111,6 +113,7 @@ def test_finish_flips_running_tool_to_error():
 # ---------------------------------------------------------------------------
 # 4. 非终态子代理判活；finish 清空后不再判活
 # ---------------------------------------------------------------------------
+
 
 def test_subagent_item_activates_and_finish_clears():
     sq = SessionQueue()
@@ -127,11 +130,10 @@ def test_subagent_item_activates_and_finish_clears():
 # 5. 路由层用户前缀过滤
 # ---------------------------------------------------------------------------
 
+
 def _fake_request(sq: SessionQueue) -> SimpleNamespace:
     return SimpleNamespace(
-        app=SimpleNamespace(
-            state=SimpleNamespace(web_deps=SimpleNamespace(session_queue=sq))
-        )
+        app=SimpleNamespace(state=SimpleNamespace(web_deps=SimpleNamespace(session_queue=sq)))
     )
 
 
@@ -152,9 +154,7 @@ def test_route_filters_by_user_prefix():
 def test_route_without_session_queue_returns_empty():
     async def run():
         request = SimpleNamespace(
-            app=SimpleNamespace(
-                state=SimpleNamespace(web_deps=SimpleNamespace(session_queue=None))
-            )
+            app=SimpleNamespace(state=SimpleNamespace(web_deps=SimpleNamespace(session_queue=None)))
         )
         res = await get_running_conversations(request, user_id="admin")
         assert res == {"conversations": []}
@@ -219,7 +219,9 @@ def test_get_run_null_when_no_live_projection():
         try:
             sq = SessionQueue()  # 无内存投影
             req = _fake_request(sq)
-            res = await get_conversation_run(req, session_id=cid, workspace_id="default", user_id="admin")
+            res = await get_conversation_run(
+                req, session_id=cid, workspace_id="default", user_id="admin"
+            )
             assert res == {"run": None}, res
         finally:
             routes_mod._load_and_verify = original
@@ -242,7 +244,9 @@ def test_get_run_returns_when_live_projection_active():
             proj = sq.get_or_create_web_runtime_projection(cid)
             proj.loading_active = True  # 模拟 run 仍活跃
             req = _fake_request(sq)
-            res = await get_conversation_run(req, session_id=cid, workspace_id="default", user_id="admin")
+            res = await get_conversation_run(
+                req, session_id=cid, workspace_id="default", user_id="admin"
+            )
             assert res.get("run") is not None, res
             assert res["run"]["state"] == "active"
         finally:
@@ -328,7 +332,9 @@ def test_get_run_returns_memory_payload_when_run_control_active():
             rc = sq.get_run_control(cid)
             rc.active = True  # 判活唯一依据：RunControl
             req = _fake_request(sq)
-            res = await get_conversation_run(req, session_id=cid, workspace_id="default", user_id="admin")
+            res = await get_conversation_run(
+                req, session_id=cid, workspace_id="default", user_id="admin"
+            )
             assert res.get("run") is not None, res
             assert res["run"]["streaming_text"] == "内存实时正文"
         finally:
@@ -358,7 +364,9 @@ def test_get_run_idle_short_circuits_without_tree_load():
         try:
             sq = SessionQueue()  # 无投影、无 RunControl → 非运行中
             req = _fake_request(sq)
-            res = await get_conversation_run(req, session_id=cid, workspace_id="default", user_id="admin")
+            res = await get_conversation_run(
+                req, session_id=cid, workspace_id="default", user_id="admin"
+            )
             assert res == {"run": None}, res
         finally:
             routes_mod._load_and_verify = original
@@ -390,7 +398,9 @@ def test_get_run_bare_session_id_resolves_s_prefix_candidate():
             rc.active = True
             req = _fake_request(sq)
             # 裸 id + 正确 workspace → 第二候选 {base}:s:{id} 命中
-            res = await get_conversation_run(req, session_id="bare1", workspace_id="default", user_id="admin")
+            res = await get_conversation_run(
+                req, session_id="bare1", workspace_id="default", user_id="admin"
+            )
             assert res.get("run") is not None, res
         finally:
             routes_mod._load_and_verify = original

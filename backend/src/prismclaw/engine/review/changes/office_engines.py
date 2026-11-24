@@ -11,16 +11,30 @@ from __future__ import annotations
 import io
 import re
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from prismclaw.schema.agent.review_errors import OfficeEditError, OfficeRevertConflict
 from prismclaw.engine.toolkit.file.workspace import clean_rel_path
+from prismclaw.schema.agent.review_errors import OfficeEditError, OfficeRevertConflictError
+
+if TYPE_CHECKING:
+    from pptx.presentation import Presentation
+    from pptx.text.text import TextFrame, _Paragraph
+
+    class _AddParagraphCapable(Protocol):
+        def add_paragraph(self) -> _Paragraph: ...
+
 
 _OFFICE_FMT_BY_SUFFIX = {
     ".docx": "docx",
     ".xlsx": "xlsx",
     ".pptx": "pptx",
 }
+
+
+def _as_str(value: object) -> str:
+    """把操作字段宽松收敛为字符串（None 视作空串）。"""
+    return value if isinstance(value, str) else ""
+
 
 _STRUCTURED_OFFICE_FMT_BY_SUFFIX = {
     ".xlsx": "xlsx",
@@ -58,12 +72,11 @@ def structured_office_fmt_from_path(path: str) -> str | None:
 def _ensure_structured_office_fmt(fmt: str) -> None:
     if fmt not in ("xlsx", "pptx"):
         raise OfficeEditError(
-            "结构化办公引擎仅支持 .xlsx/.pptx；"
-            ".docx 请使用原生 docx 审查产物流程"
+            "结构化办公引擎仅支持 .xlsx/.pptx；.docx 请使用原生 docx 审查产物流程"
         )
 
 
-def _set_tf_text_preserve(tf: Any, text: str) -> None:
+def _set_tf_text_preserve(tf: TextFrame, text: str) -> None:
     """Set a PowerPoint text frame's text, keeping the first run alive."""
     if tf.paragraphs:
         para = tf.paragraphs[0]
@@ -71,14 +84,18 @@ def _set_tf_text_preserve(tf: Any, text: str) -> None:
         if runs:
             runs[0].text = text
             for r in runs[1:]:
-                r._r.getparent().remove(r._r)
+                element = r._r
+                parent = element.getparent()
+                if parent is not None:
+                    parent.remove(element)
         else:
             para.add_run().text = text
     else:
-        tf.add_paragraph().add_run().text = text
+        # python-pptx 的 add_paragraph 未标注返回类型，经最小协议调用避免 untyped-call。
+        cast("_AddParagraphCapable", tf).add_paragraph().add_run().text = text
 
 
-def _apply_xlsx(base_bytes: bytes, operations: list[dict]) -> bytes:
+def _apply_xlsx(base_bytes: bytes, operations: list[dict[str, Any]]) -> bytes:
     import openpyxl
 
     wb = openpyxl.load_workbook(io.BytesIO(base_bytes))
@@ -101,8 +118,8 @@ def _apply_xlsx(base_bytes: bytes, operations: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def _pptx_tf_map(prs):
-    tf_map: dict[str, Any] = {}
+def _pptx_tf_map(prs: Presentation) -> dict[str, TextFrame]:
+    tf_map: dict[str, TextFrame] = {}
     for si, slide in enumerate(prs.slides, start=1):
         tf_index = 0
         for shape in slide.shapes:
@@ -113,7 +130,7 @@ def _pptx_tf_map(prs):
     return tf_map
 
 
-def _apply_pptx(base_bytes: bytes, operations: list[dict]) -> bytes:
+def _apply_pptx(base_bytes: bytes, operations: list[dict[str, Any]]) -> bytes:
     from pptx import Presentation
 
     prs = Presentation(io.BytesIO(base_bytes))
@@ -122,13 +139,13 @@ def _apply_pptx(base_bytes: bytes, operations: list[dict]) -> bytes:
     for op in operations or []:
         if not isinstance(op, dict):
             continue
-        ref = op.get("ref")
+        ref = _as_str(op.get("ref"))
         o = op.get("op")
         tf = tf_map.get(ref)
         if tf is None:
             raise OfficeEditError(f"pptx ref not found: {ref}")
         if o in ("set_text_frame", "replace_run", "replace_paragraph"):
-            _set_tf_text_preserve(tf, op.get("text") or "")
+            _set_tf_text_preserve(tf, _as_str(op.get("text")))
         elif o == "delete_text_frame":
             _set_tf_text_preserve(tf, "")
         else:
@@ -139,7 +156,7 @@ def _apply_pptx(base_bytes: bytes, operations: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def apply_office_ops(base_bytes: bytes, fmt: str, operations: list[dict]) -> bytes:
+def apply_office_ops(base_bytes: bytes, fmt: str, operations: list[dict[str, Any]]) -> bytes:
     """Apply a list of structured operations to ``base_bytes`` (the current file).
 
     Fail-loud: a bad ``ref``/``op`` raises ``OfficeEditError`` (the caller turns it
@@ -159,7 +176,7 @@ def _overlap_decision(cur: str, before: str, after: str, ref: str, fmt: str) -> 
     Returns ``True``  → apply the revert (restore ``before``); the location still
                          holds this change's result (``after``).
     Returns ``False`` → skip (idempotent); the location already equals ``before``.
-    Raises ``OfficeRevertConflict`` → the location holds neither ``before`` nor
+    Raises ``OfficeRevertConflictError`` → the location holds neither ``before`` nor
                          ``after``, i.e. a later edit changed it; reverting would
                          destroy that newer edit.
     """
@@ -167,20 +184,20 @@ def _overlap_decision(cur: str, before: str, after: str, ref: str, fmt: str) -> 
         return True
     if cur == before:
         return False  # already reverted / never diverged
-    raise OfficeRevertConflict(
+    raise OfficeRevertConflictError(
         f"{fmt} 引用 {ref} 已被后续编辑改动"
         f"（当前内容既不匹配本次改动的 before，也不匹配 after）；"
         f"若拒绝本次审查会覆盖那次更新的编辑——请重新审查最新改动。"
     )
 
 
-def _revert_xlsx(current_bytes: bytes, rejected: list[dict]) -> bytes:
+def _revert_xlsx(current_bytes: bytes, rejected: list[dict[str, Any]]) -> bytes:
     import openpyxl
 
     wb = openpyxl.load_workbook(io.BytesIO(current_bytes))
     for d in reversed(rejected):
         o = d.get("op")
-        ref = d.get("ref") or ""
+        ref = _as_str(d.get("ref"))
         m = re.match(r"s#(\d+)!r#(\d+)c#(\d+)", ref)
         if not m or o != "set_cell":
             raise OfficeEditError(f"xlsx unsupported revert ref/op: {ref}/{o}")
@@ -198,14 +215,14 @@ def _revert_xlsx(current_bytes: bytes, rejected: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def _revert_pptx(current_bytes: bytes, rejected: list[dict]) -> bytes:
+def _revert_pptx(current_bytes: bytes, rejected: list[dict[str, Any]]) -> bytes:
     from pptx import Presentation
 
     prs = Presentation(io.BytesIO(current_bytes))
     tf_map = _pptx_tf_map(prs)
     for d in reversed(rejected):
         o = d.get("op")
-        ref = d.get("ref")
+        ref = _as_str(d.get("ref"))
         tf = tf_map.get(ref)
         if tf is None:
             raise OfficeEditError(f"pptx ref not found on revert: {ref}")
@@ -223,7 +240,7 @@ def _revert_pptx(current_bytes: bytes, rejected: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def revert_office_ops(current_bytes: bytes, fmt: str, rejected: list[dict]) -> bytes:
+def revert_office_ops(current_bytes: bytes, fmt: str, rejected: list[dict[str, Any]]) -> bytes:
     """Reverse only the **rejected** changes on the CURRENT file.
 
     ``rejected`` is the subset of ``officeDetail`` entries whose decision was
@@ -235,7 +252,7 @@ def revert_office_ops(current_bytes: bytes, fmt: str, rejected: list[dict]) -> b
     Overlap safety: if a rejected location was subsequently changed by a *later*
     edit, reversing it would silently destroy that newer edit. We detect this
     (the location holds neither ``before`` nor ``after``) and raise
-    ``OfficeRevertConflict`` (fail-loud) instead of corrupting data.
+    ``OfficeRevertConflictError`` (fail-loud) instead of corrupting data.
     """
     if not rejected:
         return current_bytes
@@ -272,7 +289,9 @@ def _read_ref_value(base_bytes: bytes, fmt: str, ref: str) -> str | None:
     return None
 
 
-def build_office_detail(base_bytes: bytes, fmt: str, operations: list[dict]) -> list[dict]:
+def build_office_detail(
+    base_bytes: bytes, fmt: str, operations: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Build the ``officeDetail`` list (1:1 with ``operations``) for the review UI.
 
     Each entry mirrors the frontend ``OfficeChangeDetail`` shape and adds a
@@ -281,7 +300,7 @@ def build_office_detail(base_bytes: bytes, fmt: str, operations: list[dict]) -> 
       {ref, op, before, after, inserted_chars, deleted_chars, locator}
     """
     _ensure_structured_office_fmt(fmt)
-    details: list[dict] = []
+    details: list[dict[str, Any]] = []
     for op in operations or []:
         if not isinstance(op, dict):
             continue

@@ -136,9 +136,7 @@ def _scan_workspace_tree(root: Path) -> _WorkspaceScan:
     top_level_roots: list[str] = []
     for current_root, dirnames, filenames in os.walk(root):
         current_path = Path(current_root)
-        dirnames[:] = sorted(
-            dirname for dirname in dirnames if dirname not in _IGNORED_SCAN_DIRS
-        )
+        dirnames[:] = sorted(dirname for dirname in dirnames if dirname not in _IGNORED_SCAN_DIRS)
         if current_path != root:
             dir_count += 1
         for dirname in dirnames:

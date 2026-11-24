@@ -34,6 +34,7 @@ Design invariants (verified against the real scanner):
   Caveat (surfaced to users): a plugin update/reinstall can overwrite an
   edited SKILL.md and silently drop both the edits and the opt-in flag.
 """
+
 from __future__ import annotations
 
 import json
@@ -41,14 +42,16 @@ import logging
 import os
 import shutil
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import yaml
 
 from prismclaw.schema.agent.domains import SkillSource
+from prismclaw.schema.services.skills import SkillManifest
 from prismclaw.schema.shared import _extract_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -71,7 +74,7 @@ _READONLY_ORIGINS: frozenset[SkillSource] = frozenset(
 )
 
 
-def _relative_capability_dirs(settings: Any) -> list[str]:
+def _relative_capability_dirs(settings: object) -> list[str]:
     """Relative capability directory names from settings (skills + plugins).
 
     Tolerates partial settings objects (tests pass ``SimpleNamespace`` with
@@ -103,17 +106,17 @@ class SkillEditError(Exception):
         self.status_code = status_code
 
 
-class EditForbidden(SkillEditError):
+class EditForbiddenError(SkillEditError):
     def __init__(self, message: str) -> None:
         super().__init__(message, status_code=403)
 
 
-class SkillNotFound(SkillEditError):
+class SkillNotFoundError(SkillEditError):
     def __init__(self, message: str) -> None:
         super().__init__(message, status_code=404)
 
 
-class EditFailed(SkillEditError):
+class EditFailedError(SkillEditError):
     def __init__(self, message: str) -> None:
         super().__init__(message, status_code=500)
 
@@ -191,13 +194,13 @@ class BackupManager:
         self._prune()
         return entry
 
-    def list(self) -> list[BackupEntry]:
+    def list_backups(self) -> list[BackupEntry]:
         return sorted(self._read_manifest(), key=lambda e: e.ts, reverse=True)
 
     def restore_into(self, backup_id: str) -> None:
         src = self.backups_dir / backup_id
         if not src.is_dir():
-            raise SkillNotFound(f"backup {backup_id!r} not found")
+            raise SkillNotFoundError(f"backup {backup_id!r} not found")
         # Clean replace: drop current contents (except .backups) then copy the
         # snapshot in, so the directory matches the backup exactly.
         for child in self.skill_dir.iterdir():
@@ -216,9 +219,7 @@ class BackupManager:
 
     @staticmethod
     def _make_id(ts_ms: int) -> str:
-        stamp = datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).strftime(
-            "%Y%m%dT%H%M%S"
-        )
+        stamp = datetime.fromtimestamp(ts_ms / 1000.0, tz=UTC).strftime("%Y%m%dT%H%M%S")
         return f"{stamp}_{ts_ms % 1000:03d}"
 
     def _read_manifest(self) -> list[BackupEntry]:
@@ -267,7 +268,7 @@ class BackupManager:
 # ---------------------------------------------------------------------------
 
 
-def _origin_label(origin: Any) -> str:
+def _origin_label(origin: object) -> str:
     value = getattr(origin, "value", origin)
     return str(value) if value is not None else "unknown"
 
@@ -283,11 +284,11 @@ class SkillEditor:
     def __init__(
         self,
         workspace_root: Path | str,
-        settings: Any,
+        settings: object,
         *,
-        parse_fn: Callable[[Path], Any],
-        classify_origin_fn: Callable[..., Any],
-        extension_manager: Any | None = None,
+        parse_fn: Callable[[Path], object],
+        classify_origin_fn: Callable[..., object],
+        extension_manager: object | None = None,
         invalidate_fn: Callable[[], None] | None = None,
         project_root: Path | str | None = None,
     ) -> None:
@@ -332,30 +333,27 @@ class SkillEditor:
 
     # ---- path resolution / guards -------------------------------------
 
-    def _skill_dir(self, manifest: Any) -> Path:
+    def _skill_dir(self, manifest: SkillManifest) -> Path:
         raw = getattr(manifest, "file_path", "") or ""
         if not raw:
-            raise SkillNotFound("skill has no file path")
+            raise SkillNotFoundError("skill has no file path")
         try:
             mp = Path(raw).expanduser().resolve()
         except Exception as exc:  # noqa: BLE001 - surface as 404
-            raise SkillNotFound(f"invalid skill path: {exc}") from exc
+            raise SkillNotFoundError(f"invalid skill path: {exc}") from exc
         if not mp.is_file():
-            raise SkillNotFound(f"SKILL.md not found: {mp}")
+            raise SkillNotFoundError(f"SKILL.md not found: {mp}")
         skill_dir = mp.parent
-        if not any(
-            skill_dir == root or root in skill_dir.parents
-            for root in self._allowed_roots
-        ):
+        if not any(skill_dir == root or root in skill_dir.parents for root in self._allowed_roots):
             allowed = ", ".join(str(r) for r in self._allowed_roots)
-            raise EditForbidden(
+            raise EditForbiddenError(
                 f"skill is outside the managed skill roots (allowed: {allowed})"
             )
         return skill_dir
 
-    def _guard(self, manifest: Any) -> Path:
+    def _guard(self, manifest: SkillManifest) -> Path:
         if not bool(getattr(manifest, "editable", False)):
-            raise EditForbidden(
+            raise EditForbiddenError(
                 f"skill {getattr(manifest, 'name', '?')!r} is not editable — "
                 "set 'editable: true' in SKILL.md"
             )
@@ -367,14 +365,14 @@ class SkillEditor:
             extension_manager=self._extension_manager,
         )
         if isinstance(origin, SkillSource) and origin in _READONLY_ORIGINS:
-            raise EditForbidden(f"{_origin_label(origin)} skill is read-only")
+            raise EditForbiddenError(f"{_origin_label(origin)} skill is read-only")
         return skill_dir
 
     # ---- operations ----------------------------------------------------
 
     def edit(
         self,
-        manifest: Any,
+        manifest: SkillManifest,
         *,
         description: str | None = None,
         body: str | None = None,
@@ -392,45 +390,35 @@ class SkillEditor:
         try:
             backup = backups.snapshot(reason="edit")
         except Exception as exc:  # noqa: BLE001 - unwrap OSError into 500
-            raise EditFailed(
-                f"backup failed, edit aborted before any write: {exc}"
-            ) from exc
+            raise EditFailedError(f"backup failed, edit aborted before any write: {exc}") from exc
         try:
-            self._write_back(
-                skill_file, description=description, body=body, fields=edit_fields
-            )
+            self._write_back(skill_file, description=description, body=body, fields=edit_fields)
             self._parse(skill_file)
         except SkillEditError:
             backups.restore_into(backup.id)
             raise
         except Exception as exc:  # noqa: BLE001 - any failure → rollback + 500
             backups.restore_into(backup.id)
-            raise EditFailed(
-                f"edit failed, rolled back to {backup.id}: {exc}"
-            ) from exc
+            raise EditFailedError(f"edit failed, rolled back to {backup.id}: {exc}") from exc
 
         self._invalidate_safe()
         new_desc = (
-            description
-            if description is not None
-            else (getattr(manifest, "description", "") or "")
+            description if description is not None else (getattr(manifest, "description", "") or "")
         )
-        return EditResult(
-            ok=True, name=manifest.name, backup_id=backup.id, description=new_desc
-        )
+        return EditResult(ok=True, name=manifest.name, backup_id=backup.id, description=new_desc)
 
-    def backups(self, manifest: Any) -> list[BackupEntry]:
+    def backups(self, manifest: SkillManifest) -> list[BackupEntry]:
         # Read-only listing: no editable/origin guard, just resolve the dir.
         skill_dir = self._skill_dir(manifest)
-        return BackupManager(skill_dir).list()
+        return BackupManager(skill_dir).list_backups()
 
-    def restore(self, manifest: Any, backup_id: str) -> RestoreResult:
+    def restore(self, manifest: SkillManifest, backup_id: str) -> RestoreResult:
         skill_dir = self._guard(manifest)
         backups = BackupManager(skill_dir)
         try:
             pre = backups.snapshot(reason="pre-restore")
         except Exception as exc:  # noqa: BLE001 - unwrap OSError into 500
-            raise EditFailed(
+            raise EditFailedError(
                 f"backup failed, restore aborted before any write: {exc}"
             ) from exc
         try:
@@ -441,9 +429,7 @@ class SkillEditor:
             raise
         except Exception as exc:  # noqa: BLE001 - any failure → rollback + 500
             backups.restore_into(pre.id)
-            raise EditFailed(
-                f"restore failed, rolled back to {pre.id}: {exc}"
-            ) from exc
+            raise EditFailedError(f"restore failed, rolled back to {pre.id}: {exc}") from exc
 
         self._invalidate_safe()
         return RestoreResult(
@@ -505,9 +491,9 @@ __all__ = [
     "EditResult",
     "RestoreResult",
     "SkillEditError",
-    "EditForbidden",
-    "SkillNotFound",
-    "EditFailed",
+    "EditForbiddenError",
+    "SkillNotFoundError",
+    "EditFailedError",
     "BACKUPS_DIRNAME",
     "BACKUP_KEEP_LIMIT",
 ]

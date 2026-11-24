@@ -3,11 +3,16 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.engine.foundation.tool_output import resolve_max_output_chars
 from prismclaw.engine.compression._helpers import _result_text
+from prismclaw.engine.foundation.tool_output import resolve_max_output_chars
 from prismclaw.engine.toolkit.registry.tool_classification import is_network_read_tool
+from prismclaw.schema.content.content_types import ToolResult
+from prismclaw.schema.content.context import ContextBlock
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 ResultMaterialType = Literal[
     "command_output",
@@ -17,6 +22,23 @@ ResultMaterialType = Literal[
     "structured_dataset_preview",
     "generic_text",
 ]
+
+_MATERIAL_TYPES: tuple[ResultMaterialType, ...] = (
+    "command_output",
+    "retrieval_list",
+    "long_web_page",
+    "document_extraction",
+    "structured_dataset_preview",
+    "generic_text",
+)
+
+
+def coerce_result_material_type(value: object) -> ResultMaterialType:
+    """把持久化产物里的字符串材料类型收敛到 Literal，未知值归 generic_text。"""
+    for candidate in _MATERIAL_TYPES:
+        if candidate == value:
+            return candidate
+    return "generic_text"
 
 
 @dataclass(frozen=True)
@@ -32,22 +54,82 @@ class ResultCompactionPolicy:
 # 走无损 head/tail 截断而不是"取以 ':' 结尾的行"的文档启发式摘要——
 # 后者对源码严重退化（Python 源码行极少以 ':' 结尾且多数 <40 字符），
 # 是 read 同参重读死循环故障的根因。
-_SOURCE_CODE_SUFFIXES = frozenset({
-    # 源代码
-    ".py", ".pyi", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx",
-    ".go", ".rs", ".java", ".kt", ".kts", ".c", ".h", ".cpp", ".cc",
-    ".hpp", ".cs", ".rb", ".php", ".swift", ".m", ".mm", ".scala",
-    ".clj", ".ex", ".exs", ".erl", ".hs", ".lua", ".pl", ".pm", ".r",
-    ".dart", ".zig", ".vue", ".svelte", ".astro",
-    # 脚本 / 构建
-    ".sh", ".bash", ".zsh", ".fish", ".ps1", ".sql", ".gradle", ".cmake",
-    ".mk", ".makefile", ".proto", ".thrift", ".tf", ".tfvars",
-    # 标记 / 样式
-    ".html", ".htm", ".css", ".scss", ".less",
-    # 数据 / 配置
-    ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
-    ".properties", ".xml", ".env",
-})
+_SOURCE_CODE_SUFFIXES = frozenset(
+    {
+        # 源代码
+        ".py",
+        ".pyi",
+        ".js",
+        ".mjs",
+        ".cjs",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".kts",
+        ".c",
+        ".h",
+        ".cpp",
+        ".cc",
+        ".hpp",
+        ".cs",
+        ".rb",
+        ".php",
+        ".swift",
+        ".m",
+        ".mm",
+        ".scala",
+        ".clj",
+        ".ex",
+        ".exs",
+        ".erl",
+        ".hs",
+        ".lua",
+        ".pl",
+        ".pm",
+        ".r",
+        ".dart",
+        ".zig",
+        ".vue",
+        ".svelte",
+        ".astro",
+        # 脚本 / 构建
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".fish",
+        ".ps1",
+        ".sql",
+        ".gradle",
+        ".cmake",
+        ".mk",
+        ".makefile",
+        ".proto",
+        ".thrift",
+        ".tf",
+        ".tfvars",
+        # 标记 / 样式
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".less",
+        # 数据 / 配置
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".properties",
+        ".xml",
+        ".env",
+    }
+)
 
 # 结构化 Office 格式：read 读到这些文件时输出带编辑锚点的文本（非散文），
 # 语义摘要器会破坏锚点，必须走 generic_text 的无损截断。
@@ -55,19 +137,55 @@ _STRUCTURED_OFFICE_SUFFIXES = frozenset({".xlsx", ".pptx"})
 
 # 已知"文档"扩展名：read 读到这些扩展名时归 document_extraction
 # （散文提取摘要）。不在此集合的未知扩展名（.txt/.log/…）也走
-# 内容嗅探兜底，避免把源码误摘。
-_DOCUMENT_SUFFIXES = frozenset({
-    ".md", ".markdown", ".rst", ".docx", ".pdf", ".doc", ".rtf", ".epub",
-    ".txt",
-})
+# 内容嗅探兜底，避免把源码误摘。注意：
+#   - .html/.htm 在上面的源码集合里，判定顺序源码优先，故不在此重复
+#     （重复会被静默忽略，形成假配置）。
+#   - .doc/.ppt 不可读（read 直接报「另存为 .docx/.pptx」），不列。
+_DOCUMENT_SUFFIXES = frozenset(
+    {
+        ".md",
+        ".markdown",
+        ".rst",
+        ".docx",
+        ".pdf",
+        ".rtf",
+        ".epub",
+        ".odt",
+        ".ods",
+        ".odp",
+        ".ofd",
+        ".mhtml",
+        ".mht",
+        ".csv",
+        ".tsv",
+        ".xls",
+        ".txt",
+    }
+)
 
 # 无扩展名 / 未知扩展名文件的内容兜底：前 200 字符内命中源码特征才
 # 归 generic_text。保守集合，避免把散文 Markdown 误判为源码（误判的
 # 后果也仅是"不做文档摘要"，无损截断仍然保底）。
 _SOURCE_CODE_SNIFF_PATTERNS = (
-    "def ", "class ", "import ", "from ", "function ", "const ", "let ",
-    "var ", "func ", "fn ", "package ", "pub ", "use ", "struct ",
-    "impl ", "type ", "#!/usr/bin/env", "#!/bin/", "<?php",
+    "def ",
+    "class ",
+    "import ",
+    "from ",
+    "function ",
+    "const ",
+    "let ",
+    "var ",
+    "func ",
+    "fn ",
+    "package ",
+    "pub ",
+    "use ",
+    "struct ",
+    "impl ",
+    "type ",
+    "#!/usr/bin/env",
+    "#!/bin/",
+    "<?php",
 )
 _SNIFF_WINDOW = 200
 
@@ -111,7 +229,7 @@ def _looks_like_source_code(text: str, file_path: str | None) -> bool:
 
 def _detect_material_type(
     tool_name: str,
-    result: Any,
+    result: ToolResult,
     call: dict[str, Any] | None = None,
 ) -> ResultMaterialType:
     text = _result_text(result).lower()
@@ -133,7 +251,7 @@ def _detect_material_type(
     return "generic_text"
 
 
-def _detect_context_block_material_type(block: Any) -> ResultMaterialType:
+def _detect_context_block_material_type(block: ContextBlock) -> ResultMaterialType:
     text = block.content.lower()
     if block.source == "memory_archives":
         return "retrieval_list"
@@ -167,10 +285,11 @@ def _looks_like_structured_json(text: str) -> bool:
 
 def _policy_for(
     call: dict[str, Any],
-    result: Any,
-    deps: Any,
+    result: ToolResult,
+    deps: AgentRunnerDeps,
 ) -> ResultCompactionPolicy:
     from prismclaw.engine.compression._result_budget import _resolve_default_max_chars
+
     tool_name = ((call or {}).get("function") or {}).get("name") or ""
     # deps.tools 可能未注入（mock/桩）；显式 None 检查比嵌套 getattr 清晰。
     tools = getattr(deps, "tools", None)
@@ -200,7 +319,7 @@ def _policy_for(
 
 def _context_block_policy_for(
     *,
-    block: Any,
+    block: ContextBlock,
     aggregate_budget_chars: int,
     block_count: int,
 ) -> ResultCompactionPolicy:

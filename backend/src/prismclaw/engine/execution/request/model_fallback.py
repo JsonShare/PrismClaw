@@ -16,6 +16,7 @@ budget-aware compaction.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from dataclasses import dataclass
@@ -28,22 +29,25 @@ logger = logging.getLogger(__name__)
 
 # Thinking signature patterns to strip on model switch
 _THINKING_PATTERNS = [
-    re.compile(r'<thinking>.*?</thinking>', re.DOTALL),
-    re.compile(r'<antml:thinking>.*?</antml:thinking>', re.DOTALL),
-    re.compile(r'<thinking>\s*</thinking>'),  # empty thinking blocks
+    re.compile(r"<thinking>.*?</thinking>", re.DOTALL),
+    re.compile(r"<antml:thinking>.*?</antml:thinking>", re.DOTALL),
+    re.compile(r"<thinking>\s*</thinking>"),  # empty thinking blocks
 ]
 
 # Error codes that trigger fallback
-FALLBACK_ERROR_CODES = frozenset({
-    "rate_limit",
-    "overloaded",
-    "server_error",
-})
+FALLBACK_ERROR_CODES = frozenset(
+    {
+        "rate_limit",
+        "overloaded",
+        "server_error",
+    }
+)
 
 
 @dataclass
 class FallbackConfig:
     """Configuration for model fallback chain."""
+
     primary_model: str
     fallback_model: str | None = None
     max_fallback_count: int = 2
@@ -97,9 +101,7 @@ class ModelFallbackChain:
             return False
         if self._fallback_count >= self.config.max_fallback_count:
             return False
-        if self.config.fallback_model is None:
-            return False
-        return True
+        return self.config.fallback_model is not None
 
     def get_fallback_model(self) -> str:
         """Switch to the fallback model and return its name.
@@ -178,7 +180,9 @@ class ModelFallbackChain:
                 result.append(msg)
 
         if changed:
-            logger.info("stripped thinking signatures from %d messages for model switch", len(messages))
+            logger.info(
+                "stripped thinking signatures from %d messages for model switch", len(messages)
+            )
         return result
 
     def reset(self) -> None:
@@ -290,6 +294,7 @@ def register_model_spec(spec: ModelSpec) -> None:
     """
     _SPEC_REGISTRY[spec.model_id] = spec
 
+
 def _normalize_model_id(model: str) -> str:
     """Strip common provider prefixes so ``anthropic/claude-sonnet-4-...``
     resolves to the bare ``claude-sonnet-4-...`` spec.
@@ -303,7 +308,7 @@ def _normalize_model_id(model: str) -> str:
         "azure/",
     ):
         if lowered.startswith(prefix):
-            return model[len(prefix):]
+            return model[len(prefix) :]
     return model
 
 
@@ -322,15 +327,13 @@ def get_model_spec(model: str) -> ModelSpec:
     # Also try the raw id (in case caller passes the canonical name).
     if model in _SPEC_REGISTRY:
         return _SPEC_REGISTRY[model]
-    try:
+    with contextlib.suppress(Exception):
         emit(
             _METRIC_BUDGET_SPEC_MISS,
             1.0,
             kind="counter",
             labels={"model": normalized},
         )
-    except Exception:
-        pass
     raise UnknownModelError(
         f"no ModelSpec registered for model {model!r}; "
         f"register one via prismclaw.engine.execution.request.model_fallback.register_model_spec"
@@ -355,27 +358,23 @@ def get_effective_context_window(
     except UnknownModelError:
         if fallback is None:
             raise
-        try:
+        with contextlib.suppress(Exception):
             emit(
                 _METRIC_BUDGET_SPEC_MISS,
                 1.0,
                 kind="counter",
                 labels={"model": _normalize_model_id(model)},
             )
-        except Exception:
-            pass
         return int(fallback)
     reserved_for_summary = min(spec.max_output_tokens, max_output_tokens_for_summary)
     effective = spec.context_window - reserved_for_summary
-    try:
+    with contextlib.suppress(Exception):
         emit(
             _METRIC_BUDGET_EFFECTIVE,
             float(effective),
             kind="gauge",
             labels={"model": spec.model_id},
         )
-    except Exception:
-        pass
     return effective
 
 

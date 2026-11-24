@@ -10,19 +10,22 @@
 因此 ``decide`` 是单一决策点，但只对「完成」负责——宣称它统一一切会把
 工具执行策略拖进完成内核。
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from prismclaw.engine.execution.control.completion import (
     CompletionContract,
-    CompletionReviewer,
     ReviewResult,
+)
+from prismclaw.engine.execution.control.completion import (
+    CompletionReviewer as CompletionReviewer,
 )
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.agent.task_runtime import EvidenceRecord
@@ -48,7 +51,7 @@ def _code_value(code: str) -> str:
     return value if isinstance(value, str) else str(code)
 
 
-class TerminalReason(str, Enum):
+class TerminalReason(StrEnum):
     """run 终态标签的闭集词汇（``rt.terminated_by`` / teardown / 轨迹通道）。
 
     与 ``ErrorEvent.error_code`` 严格区分：error_code 是开放集（LLMError
@@ -140,7 +143,7 @@ class RunBudget:
     converge_tools: int
 
 
-def resolve_run_budget(*, config: "RunBudgetConfig") -> RunBudget:
+def resolve_run_budget(*, config: RunBudgetConfig) -> RunBudget:
     """按配置上限解析生效预算。
 
     派生值不配置：reserve_s = clamp(hard_s*0.25, 20, 120)，
@@ -184,7 +187,7 @@ class ControlDecision:
 
 def evaluate_loop_control(
     *,
-    run_state: "RunState",
+    run_state: RunState,
     run_budget: RunBudget,
     now: float,
     phase: str,
@@ -208,31 +211,15 @@ def evaluate_loop_control(
     remaining_soft = ls.soft_at - now
     remaining_hard = ls.hard_at - now
     _wrapup_target = ls.steps_spent + 1 if phase == "prepare" else ls.steps_spent
-    if (
-        tools_left <= 0
-        and turns_left > 0
-        and remaining_hard > run_budget.reserve_s
-    ):
+    if tools_left <= 0 and turns_left > 0 and remaining_hard > run_budget.reserve_s:
         if phase == "prepare" and ls.tool_wrapup_step < 0:
             ls.tool_wrapup_step = _wrapup_target
         wrapup_turn = ls.tool_wrapup_step == _wrapup_target
     else:
         wrapup_turn = False
-    wrapping = (
-        turns_left <= 2
-        or remaining_soft <= 0
-        or tools_left <= run_budget.converge_tools
-    )
-    last_turn = (
-        turns_left <= 1
-        or remaining_hard <= run_budget.reserve_s
-        or wrapup_turn
-    )
-    should_stop = (
-        turns_left <= 0
-        or remaining_hard <= 0
-        or (tools_left <= 0 and not wrapup_turn)
-    )
+    wrapping = turns_left <= 2 or remaining_soft <= 0 or tools_left <= run_budget.converge_tools
+    last_turn = turns_left <= 1 or remaining_hard <= run_budget.reserve_s or wrapup_turn
+    should_stop = turns_left <= 0 or remaining_hard <= 0 or (tools_left <= 0 and not wrapup_turn)
     return ControlDecision(
         should_stop=should_stop,
         freeze_tools=wrapping or last_turn,
@@ -254,9 +241,10 @@ class BudgetGuard:
         budget = self._budget
         if budget.max_iterations > 0 and iteration >= budget.max_iterations:
             return TerminalReason.BUDGET_ITERATIONS
-        if budget.run_deadline_s > 0 and (
-            time.monotonic() - budget.run_started
-        ) > budget.run_deadline_s:
+        if (
+            budget.run_deadline_s > 0
+            and (time.monotonic() - budget.run_started) > budget.run_deadline_s
+        ):
             return TerminalReason.BUDGET_SECONDS
         return None
 
@@ -321,8 +309,7 @@ class RecoveryPolicy:
             per_code_cap is not None and self._counts[code] > per_code_cap
         ):
             logger.warning(
-                "recovery_chain_exhausted: chain=%s code=%s count=%d "
-                "per_code_cap=%s global_cap=%d",
+                "recovery_chain_exhausted: chain=%s code=%s count=%d per_code_cap=%s global_cap=%d",
                 self._chain,
                 code,
                 self._counts[code],
@@ -402,15 +389,17 @@ class CompletionKernel:
         # 上一次的 last_review，否则治理层会为未评估的裁决写下陈旧留痕。
         self.last_review = None
 
-        if (code := self._budget.check(
-            iteration=event.iteration,
-        )) is not None:
+        if (
+            code := self._budget.check(
+                iteration=event.iteration,
+            )
+        ) is not None:
             return Decision("TERMINATE", code)
 
         if not event.is_stop:
             if event.site == "all_blocked":
-                code = self._recovery.consult("all_tools_denied")
-                if code is None:
+                recovery_code = self._recovery.consult("all_tools_denied")
+                if recovery_code is None:
                     # 全拒是不可自愈故障：额度用尽即终态，不再回到顶部重发。
                     return Decision(
                         "TERMINATE",
@@ -419,7 +408,7 @@ class CompletionKernel:
                     )
                 return Decision(
                     "RESTART",
-                    code,
+                    recovery_code,
                     (Gap("all_tools_denied_retry", "全拒后给予一次重规划机会。"),),
                 )
             if event.site == "post":
@@ -455,9 +444,7 @@ class CompletionKernel:
         if review.accepted:
             return Decision("COMPLETE", "complete_verified")
 
-        gaps = tuple(
-            Gap(outcome.code, outcome.describe()) for outcome in review.gaps
-        )
+        gaps = tuple(Gap(outcome.code, outcome.describe()) for outcome in review.gaps)
 
         if self._state.contract.enforcement == "advisory":
             if self._state.advisory_nudged:

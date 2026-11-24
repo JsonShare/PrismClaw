@@ -12,6 +12,7 @@ execute_tools 闭包中 `state.pending_meta_messages` 的消费/写回对象
 - resolved invocation state 来自 modifier，并经
   project_active_skill_invocation 投影
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -43,9 +44,7 @@ def _make_result(active_skill_name: str, append_text: str | None = None) -> Tool
         allowed_tools_override=None,
         clear_after_terminal_result=False,
         invocation_context="skill",
-        append_messages=(
-            [{"role": "user", "content": append_text}] if append_text else []
-        ),
+        append_messages=([{"role": "user", "content": append_text}] if append_text else []),
     )
     return ToolResult.model_construct(
         content=[],
@@ -81,7 +80,8 @@ def _run(messages_override, skill_invocation, results, monkeypatch=None):
 def test_skill_switch_appends_switch_and_activation_messages():
     prior = [{"role": "user", "content": "earlier-injection"}]
     invocation = SkillInvocationState.model_construct(
-        skill_name="skill_a", is_active=True,
+        skill_name="skill_a",
+        is_active=True,
     )
     resolved, updated, injections = _run(
         prior,
@@ -104,7 +104,8 @@ def test_skill_switch_appends_switch_and_activation_messages():
 
 def test_same_skill_reassert_appends_but_no_new_injection():
     invocation = SkillInvocationState.model_construct(
-        skill_name="skill_b", is_active=True,
+        skill_name="skill_b",
+        is_active=True,
     )
     _, updated, injections = _run(
         None,

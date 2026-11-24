@@ -757,7 +757,7 @@ create_domain_session(domain, message, files, skill_hint)
 **1. AppSection 动态化**（`stores/ui.ts`）
 
 ```typescript
-// 改前：type AppSection = 'chat' | 'experts' | 'tasks' | 'files' | 'settings' | 'outputs'
+// 改前：type AppSection = 'chat' | 'experts' | 'tasks' | 'files' | 'settings' | 'outbox'
 // 改后：
 export type AppSection = string
 ```

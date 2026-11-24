@@ -1,4 +1,5 @@
 """LLM provider model type definitions — pure data, no env-var binding."""
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -63,7 +64,7 @@ class ProviderConfig(BaseModel):
 
     @field_validator("base_url", mode="before")
     @classmethod
-    def _sanitize_base_url(cls, value):
+    def _sanitize_base_url(cls, value: object) -> str | None:
         if value is None:
             return None
         s = str(value)
@@ -80,7 +81,7 @@ class ProviderConfig(BaseModel):
 
     @field_validator("api_key", mode="before")
     @classmethod
-    def _empty_api_key_to_none(cls, value):
+    def _empty_api_key_to_none(cls, value: object) -> object:
         if value is None:
             return None
         if isinstance(value, str) and not value.strip():
@@ -89,7 +90,7 @@ class ProviderConfig(BaseModel):
 
     @field_validator("models", mode="before")
     @classmethod
-    def _reject_list_form(cls, value):
+    def _reject_list_form(cls, value: object) -> object:
         if isinstance(value, list):
             raise ValueError(
                 "ProviderConfig.models must be a dict {model_id: ModelEntry}, got list. "

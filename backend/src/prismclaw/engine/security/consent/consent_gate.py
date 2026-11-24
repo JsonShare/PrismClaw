@@ -11,6 +11,7 @@ HIPAA 164.508 / GDPR Art.6 合规：工具必须声明用途（declared_purposes
 Phase 2 基础版使用 InMemoryConsentStore。
 Phase 2b 替换为 PostgresConsentStore。
 """
+
 from __future__ import annotations
 
 import time
@@ -22,6 +23,7 @@ from prismclaw.engine.security.gate.types import ConsentStoreProtocol
 @dataclass(frozen=True)
 class ConsentRecord:
     """单次同意记录。"""
+
     consent_id: str
     session_id: str
     user_id: str
@@ -43,6 +45,7 @@ class ConsentRecord:
 @dataclass
 class ConsentCheckResult:
     """ConsentGate 检查结果。"""
+
     allowed: bool
     reason: str = ""
     consent_id: str = ""
@@ -55,7 +58,9 @@ class InMemoryConsentStore(ConsentStoreProtocol):
     def __init__(self) -> None:
         self._records: dict[str, ConsentRecord] = {}
 
-    def record_consent(self, session_id: str, purpose: str, tool_name: str, granted: bool, *, consent_id: str = "") -> None:
+    def record_consent(
+        self, session_id: str, purpose: str, tool_name: str, granted: bool, *, consent_id: str = ""
+    ) -> None:
         record = ConsentRecord(
             consent_id=consent_id or self.generate_consent_id(),
             session_id=session_id,
@@ -68,24 +73,37 @@ class InMemoryConsentStore(ConsentStoreProtocol):
 
     def has_consent(self, session_id: str, purpose: str, tool_name: str) -> bool:
         for r in self._records.values():
-            if (r.session_id == session_id
-                    and r.purpose == purpose
-                    and (r.tool_name == tool_name or r.tool_name == "*")
-                    and r.granted
-                    and not r.is_expired):
+            if (
+                r.session_id == session_id
+                and r.purpose == purpose
+                and (r.tool_name == tool_name or r.tool_name == "*")
+                and r.granted
+                and not r.is_expired
+            ):
                 return True
         return False
 
-    def grant(self, *, session_id: str, user_id: str, purpose: str, tool_name: str,
-              scope: str = "", workspace_id: str = "", ttl_seconds: int | None = None) -> ConsentRecord:
+    def grant(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        purpose: str,
+        tool_name: str,
+        scope: str = "",
+        workspace_id: str = "",
+        ttl_seconds: int | None = None,
+        granted: bool = True,
+        consent_id: str = "",
+    ) -> ConsentRecord:
         """授予同意。"""
         record = ConsentRecord(
-            consent_id=self.generate_consent_id(),
+            consent_id=consent_id or self.generate_consent_id(),
             session_id=session_id,
             user_id=user_id,
             purpose=purpose,
             tool_name=tool_name,
-            granted=True,
+            granted=granted,
             scope=scope,
             workspace_id=workspace_id,
             expires_at=time.time() + ttl_seconds if ttl_seconds else None,
@@ -96,8 +114,12 @@ class InMemoryConsentStore(ConsentStoreProtocol):
     def list_active(self, session_id: str, user_id: str) -> list[ConsentRecord]:
         """列出 session 下所有有效的同意记录。"""
         return [
-            r for r in self._records.values()
-            if r.session_id == session_id and r.user_id == user_id and r.granted and not r.is_expired
+            r
+            for r in self._records.values()
+            if r.session_id == session_id
+            and r.user_id == user_id
+            and r.granted
+            and not r.is_expired
         ]
 
     def revoke(self, consent_id: str) -> None:
@@ -213,9 +235,7 @@ class ConsentGate:
             return ""
         sorted_purposes = sorted(purposes)
         lines = [
-            "[CONSENT INJECTION: 当前数据使用目的限于 "
-            + ", ".join(sorted_purposes)
-            + "]",
+            "[CONSENT INJECTION: 当前数据使用目的限于 " + ", ".join(sorted_purposes) + "]",
             "[CONSENT TIP: 工具访问 PHI 前必须声明用途；禁止访问未在上述目的列表中声明的数据用途。"
             "若 LLM 尝试声明未授权的用途，ConsentGate 将自动阻断该操作。]",
         ]

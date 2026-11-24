@@ -6,6 +6,7 @@
 2. matcher 未命中 → 结果原样通过；
 3. hook 抛异常/超时 → 不阻断不改写（non_blocking）。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -17,8 +18,8 @@ from typing import Any
 import pytest
 
 from prismclaw.engine.execution.dispatch.execution_entry import (
-    execute_tool_calls,
     execute_preflighted_tool_calls,
+    execute_tool_calls,
 )
 from prismclaw.engine.hooks import HookDispatcher, HookEvent
 from prismclaw.engine.plugins.hooks.handlers import (
@@ -29,7 +30,6 @@ from prismclaw.engine.plugins.hooks.schema import HookContext, HookOutcome, Hook
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
 from prismclaw.schema.content.content_types import ToolResult
-
 
 # ── 测试桩 ────────────────────────────────────────────────────────────────
 
@@ -110,21 +110,25 @@ def _text(result: ToolResult) -> str:
     return "".join(b.text for b in result.content if hasattr(b, "text"))
 
 
-LONG_OUTPUT = json.dumps({
-    "query": "test",
-    "results": [
-        {"title": "paper-1", "abstract": "a" * 500},
-        {"title": "paper-2", "abstract": "b" * 300},
-    ],
-})
+LONG_OUTPUT = json.dumps(
+    {
+        "query": "test",
+        "results": [
+            {"title": "paper-1", "abstract": "a" * 500},
+            {"title": "paper-2", "abstract": "b" * 300},
+        ],
+    }
+)
 
-SLIMMED_OUTPUT = json.dumps({
-    "query": "test",
-    "results": [
-        {"title": "paper-1", "abstract": "a" * 200 + "…"},
-        {"title": "paper-2", "abstract": "b" * 200 + "…"},
-    ],
-})
+SLIMMED_OUTPUT = json.dumps(
+    {
+        "query": "test",
+        "results": [
+            {"title": "paper-1", "abstract": "a" * 200 + "…"},
+            {"title": "paper-2", "abstract": "b" * 200 + "…"},
+        ],
+    }
+)
 
 
 # ── 用例 ──────────────────────────────────────────────────────────────────
@@ -145,13 +149,17 @@ async def test_matcher_hit_rewrites_result_on_main_loop_path():
         MatcherFilteredHandler(recorder, r"tech-mining\.demo-tools__fanout_search"),
     )
 
-    registry = _StubRegistry([
-        _StubTool("tech-mining.demo-tools:fanout_search", LONG_OUTPUT),
-    ])
+    registry = _StubRegistry(
+        [
+            _StubTool("tech-mining.demo-tools:fanout_search", LONG_OUTPUT),
+        ]
+    )
     ctx = _make_ctx(dispatcher)
 
     results = await execute_tool_calls(
-        registry, [_call("tech-mining.demo-tools__fanout_search", "c1")], ctx,
+        registry,
+        [_call("tech-mining.demo-tools__fanout_search", "c1")],
+        ctx,
     )
 
     assert len(results) == 1
@@ -167,9 +175,7 @@ async def test_matcher_hit_rewrites_result_on_main_loop_path():
 @pytest.mark.asyncio
 async def test_matcher_miss_passes_through():
     """matcher 不匹配的工具 → hook 不触发，结果原样。"""
-    recorder = _RecordingHandler(
-        result=HookResult(updated_mcp_tool_output="SHOULD_NOT_APPLY")
-    )
+    recorder = _RecordingHandler(result=HookResult(updated_mcp_tool_output="SHOULD_NOT_APPLY"))
     dispatcher = HookDispatcher()
     dispatcher.register(HookEvent.POST_TOOL, MatcherFilteredHandler(recorder, r"^Bash$"))
 
@@ -210,22 +216,24 @@ async def test_no_dispatcher_is_zero_overhead():
 @pytest.mark.asyncio
 async def test_subagent_preflighted_path_also_rewrites():
     """子代理路径（execute_preflighted_tool_calls）同样消费 hook 改写。"""
-    recorder = _RecordingHandler(
-        result=HookResult(updated_mcp_tool_output=SLIMMED_OUTPUT)
-    )
+    recorder = _RecordingHandler(result=HookResult(updated_mcp_tool_output=SLIMMED_OUTPUT))
     dispatcher = HookDispatcher()
     dispatcher.register(
         HookEvent.POST_TOOL,
         MatcherFilteredHandler(recorder, r"demo-tools__fanout_search"),
     )
 
-    registry = _StubRegistry([
-        _StubTool("tech-mining.demo-tools:fanout_search", LONG_OUTPUT),
-    ])
+    registry = _StubRegistry(
+        [
+            _StubTool("tech-mining.demo-tools:fanout_search", LONG_OUTPUT),
+        ]
+    )
     ctx = _make_ctx(dispatcher)
 
     results = await execute_preflighted_tool_calls(
-        registry, [_call("tech-mining.demo-tools__fanout_search", "c1")], ctx,
+        registry,
+        [_call("tech-mining.demo-tools__fanout_search", "c1")],
+        ctx,
     )
 
     assert _text(results[0]) == SLIMMED_OUTPUT
@@ -240,9 +248,7 @@ async def test_hook_dispatcher_survives_deepcopy_via_reference_refill():
     """
     dispatcher = HookDispatcher()
     ctx = _make_ctx(dispatcher)
-    child = asyncio.get_event_loop().run_in_executor(
-        None, lambda: __import__("copy").deepcopy(ctx)
-    )
+    child = asyncio.get_event_loop().run_in_executor(None, lambda: __import__("copy").deepcopy(ctx))
     copied = await child
     assert copied.hook_dispatcher is None  # deepcopy 排除
     copied.hook_dispatcher = ctx.hook_dispatcher  # tool.py 回填模式
@@ -273,9 +279,7 @@ async def test_hook_cancel_during_shutdown_is_absorbed():
     dispatcher.register(HookEvent.POST_TOOL, _HangingHandler())
     mark_shutting_down()
     try:
-        task = asyncio.create_task(
-            dispatcher.dispatch(HookEvent.POST_TOOL, _hook_context())
-        )
+        task = asyncio.create_task(dispatcher.dispatch(HookEvent.POST_TOOL, _hook_context()))
         await asyncio.sleep(0.05)  # 让 dispatch 真正进入 wait_for 的挂起态
         task.cancel()
         result = await task
@@ -294,9 +298,7 @@ async def test_hook_cancel_outside_shutdown_propagates():
     dispatcher = HookDispatcher()
     dispatcher.register(HookEvent.POST_TOOL, _HangingHandler())
 
-    task = asyncio.create_task(
-        dispatcher.dispatch(HookEvent.POST_TOOL, _hook_context())
-    )
+    task = asyncio.create_task(dispatcher.dispatch(HookEvent.POST_TOOL, _hook_context()))
     await asyncio.sleep(0.05)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):

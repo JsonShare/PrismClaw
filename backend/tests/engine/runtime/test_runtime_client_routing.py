@@ -7,6 +7,7 @@
   4. 从 PRISMCLAW_RUNTIME_AGENT_URLS 环境变量 JSON 构造映射
   5. _post 实际路由到对应 URL（mock httpx 验证 X-Template-ID 头与 base_url）
 """
+
 from __future__ import annotations
 
 import os
@@ -52,7 +53,9 @@ def test_resolve_falls_back_to_first_value_without_default():
 
 
 def test_env_json_map():
-    env = {"PRISMCLAW_RUNTIME_AGENT_URLS": '{"general":"http://g:9001","medical_phi":"http://p:9001"}'}
+    env = {
+        "PRISMCLAW_RUNTIME_AGENT_URLS": '{"general":"http://g:9001","medical_phi":"http://p:9001"}'
+    }
     with patch.dict(os.environ, env, clear=True):
         c = WorkspaceRuntimeClient()
     assert c._resolve_agent_url("medical_phi") == "http://p:9001"

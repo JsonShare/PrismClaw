@@ -21,7 +21,7 @@ def test_normal_values_pass_through():
     assert not _is_unfilled_placeholder("my-client-id-123")
     assert not _is_unfilled_placeholder("")
     assert not _is_unfilled_placeholder("${FHIR_BASE_URL}")  # env 引用走既有解析
-    assert not _is_unfilled_placeholder("<REDACTED>") is False or True  # redact 值不参与判定
+    assert _is_unfilled_placeholder("<REDACTED>") is not False or True  # redact 值不参与判定
 
 
 def test_placeholder_env_marks_server_disabled_without_spawn():
@@ -43,7 +43,9 @@ def test_placeholder_env_marks_server_disabled_without_spawn():
             MCPClientManager, "_build_server_params", side_effect=AssertionError("should not spawn")
         ):
             cfg = McpServerConfig(
-                name="FHIR", command="node", args=["x"],
+                name="FHIR",
+                command="node",
+                args=["x"],
                 env={"FHIR_BASE_URL": "<在本地填入 EHR FHIR R4 基础 URL>"},
             )
             await mgr._connect_one("medical.FHIR", cfg)

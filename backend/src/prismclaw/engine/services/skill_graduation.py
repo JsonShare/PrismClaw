@@ -5,12 +5,21 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
-from prismclaw.schema.shared.async_utils import await_or_abort
+from prismclaw.infra.settings import SkillSettings
 from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.shared.async_utils import await_or_abort
+
+if TYPE_CHECKING:
+    from prismclaw.infra.settings import Settings
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.services.skills import SkillManifest
+
+    SkillDiscoverer = Callable[..., list[SkillManifest]]
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +37,21 @@ def _content_body_unchanged(old_text: str, new_text: str) -> bool:
     return old_body.strip() == new_body.strip()
 
 
-def _nested(settings: Any, attr: str, default: Any) -> Any:
+def _nested(
+    settings: Settings | SkillSettings | None,
+    attr: str,
+    default: SkillSettings,
+) -> SkillSettings:
     """从完整 Settings 或扁平 section settings 取属性。
 
     调用方可能传完整 Settings（字段在 ``.skills`` 下）或直接传 SkillSettings。
     """
     nested = getattr(settings, attr, None) if settings is not None else None
-    return nested if nested is not None else (settings if settings is not None else default)
+    if isinstance(nested, SkillSettings):
+        return nested
+    if isinstance(settings, SkillSettings):
+        return settings
+    return default
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -55,7 +72,7 @@ def _strip_frontmatter(text: str) -> str:
 def _backup_previous_version(skill_file: Path) -> Path:
     history_dir = skill_file.parent / "skill_history"
     history_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     backup_name = f"SKILL.md.{timestamp}"
     backup_path = history_dir / backup_name
     backup_path.write_text(skill_file.read_text(encoding="utf-8"), encoding="utf-8")
@@ -103,7 +120,7 @@ def generate_skill_md_template(
     session_key: str,
 ) -> str:
     """Generate SKILL.md content using pure template (no LLM)."""
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     safe_desc = description.replace('"', '\\"')
 
@@ -131,7 +148,7 @@ async def generate_skill_md_enrich(
     description: str,
     procedure: str,
     session_key: str,
-    llm_client: Any,
+    llm_client: LLMClient,
     model: str | None,
     *,
     abort_event: asyncio.Event | None = None,
@@ -188,8 +205,8 @@ def graduate_single_sop(
     workspace_base_dir: Path,
     mode: str = "template",
     *,
-    skill_discoverer: Any | None = None,
-    settings: Any | None = None,
+    skill_discoverer: SkillDiscoverer | None = None,
+    settings: Settings | SkillSettings | None = None,
 ) -> tuple[bool, str | None]:
     """Attempt to graduate a single SOP to SKILL.md.
 
@@ -215,12 +232,14 @@ def graduate_single_sop(
     uid, wid = segments[1], segments[2] if len(segments) > 2 else segments[-1]
     if len(segments) >= 3:
         from prismclaw.infra.workspace_paths import resolve_user_root
+
         workspace_path = resolve_user_root(uid, base=workspace_base_dir) / wid
     else:
         workspace_path = workspace_base_dir
 
     # —— 能力目录字段从 settings 取（双来源的 workspace 级落点）——
     from prismclaw.infra.settings import SkillSettings
+
     skill_settings = _nested(settings, "skills", SkillSettings())
     skill_dir = workspace_path / skill_settings.workspace_skills_dir / name
     skill_file = skill_dir / "SKILL.md"
@@ -228,13 +247,9 @@ def graduate_single_sop(
     if skill_file.exists():
         existing_text = skill_file.read_text(encoding="utf-8")
         if not _is_auto_generated(existing_text):
-            logger.debug(
-                "SKILL.md at %s is user-authored, skipping overwrite", skill_file
-            )
+            logger.debug("SKILL.md at %s is user-authored, skipping overwrite", skill_file)
             return False, None
-        new_content = generate_skill_md_template(
-            name, description, procedure, session_key
-        )
+        new_content = generate_skill_md_template(name, description, procedure, session_key)
         if _content_body_unchanged(existing_text, new_content):
             logger.debug("SKILL.md at %s unchanged, skipping", skill_file)
             return False, None
@@ -260,7 +275,9 @@ def graduate_single_sop(
                 settings=skill_settings,
             )
             if any(s.name == name for s in existing_skills):
-                logger.info("Skill '%s' already exists from another source, skipping graduation", name)
+                logger.info(
+                    "Skill '%s' already exists from another source, skipping graduation", name
+                )
                 return False, None
         except Exception:
             pass  # Discovery failure should not block graduation

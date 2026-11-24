@@ -15,10 +15,16 @@ class TextChange:
         self._registry = registry
 
     def reject(self, intent: ReviewIntent) -> dict[str, Any]:
+        conversation_id = intent.conversation_id
+        if conversation_id is None:
+            return {"status": "error", "path": intent.path, "error": "missing conversation_id"}
         return self._registry.reject_path(
-            intent.conversation_id, intent.path, force=intent.force
+            conversation_id, intent.path, force=intent.force
         )
 
     def accept(self, intent: ReviewIntent) -> dict[str, Any]:
-        self._registry.confirm_path(intent.conversation_id, intent.path)
+        conversation_id = intent.conversation_id
+        if conversation_id is None:
+            return {"status": "error", "path": intent.path, "error": "missing conversation_id"}
+        self._registry.confirm_path(conversation_id, intent.path)
         return {"status": "ok", "path": intent.path}

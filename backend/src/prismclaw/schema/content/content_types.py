@@ -8,7 +8,9 @@ from prismclaw.schema.agent.data_types import ContentBlock as ContentBlock  # no
 from prismclaw.schema.agent.data_types import FileBlock as FileBlock  # noqa: F401
 from prismclaw.schema.agent.data_types import ImageBlock as ImageBlock  # noqa: F401
 from prismclaw.schema.agent.data_types import TextBlock as TextBlock  # noqa: F401
-from prismclaw.schema.content.subagent import SubagentResultEnvelope as SubagentResultEnvelope  # noqa: F401
+from prismclaw.schema.content.subagent import (
+    SubagentResultEnvelope as SubagentResultEnvelope,  # noqa: F401
+)
 
 
 class ToolCall(BaseModel):

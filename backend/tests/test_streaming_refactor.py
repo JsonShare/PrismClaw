@@ -6,6 +6,7 @@ Locks the two riskiest contract changes:
 Doom-loop guard tests moved to test_doom_loop_guard.py (record/evaluate
 two-phase contract).
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -28,11 +29,20 @@ def test_reload_body_is_full_transcript():
             parent_id="u1",
             role="assistant",
             content="我先检索一下天气资料。",
-            tool_calls=[{"id": "c1", "function": {"name": "read", "arguments": '{"file_path":"weather.txt"}'}}],
+            tool_calls=[
+                {
+                    "id": "c1",
+                    "function": {"name": "read", "arguments": '{"file_path":"weather.txt"}'},
+                }
+            ],
         ),
-        "t1": MessageEntry(id="t1", parent_id="a1", role="tool", content="晴 25°C", tool_call_id="c1"),
+        "t1": MessageEntry(
+            id="t1", parent_id="a1", role="tool", content="晴 25°C", tool_call_id="c1"
+        ),
         "a2": MessageEntry(
-            id="a2", parent_id="t1", role="assistant",
+            id="a2",
+            parent_id="t1",
+            role="assistant",
             content="根据检索结果，北京今天晴，25°C。",
         ),
     }
@@ -59,20 +69,40 @@ def test_assistant_bubbles_around_hitl_tool_not_merged():
     """
     entries = {
         # 上传记录：普通 user 气泡，必须照常出现
-        "u1": MessageEntry(id="u1", parent_id=None, role="user",
-                           content=[{"type": "file", "path": "/w/x.docx", "name": "x.docx"}]),
+        "u1": MessageEntry(
+            id="u1",
+            parent_id=None,
+            role="user",
+            content=[{"type": "file", "path": "/w/x.docx", "name": "x.docx"}],
+        ),
         # 助手提问（AskUserQuestion）
         "a1": MessageEntry(
-            id="a1", parent_id="u1", role="assistant", content="请选择处理方式。",
-            tool_calls=[{"id": "c1", "function": {"name": "ask_user_question",
-                       "arguments": '{"questions":[{"question":"如何处理？","header":"处理"}]}'}}],
+            id="a1",
+            parent_id="u1",
+            role="assistant",
+            content="请选择处理方式。",
+            tool_calls=[
+                {
+                    "id": "c1",
+                    "function": {
+                        "name": "ask_user_question",
+                        "arguments": '{"questions":[{"question":"如何处理？","header":"处理"}]}',
+                    },
+                }
+            ],
         ),
         # 用户作答只作为 ask 工具结果存在，不落独立 user entry
-        "t1": MessageEntry(id="t1", parent_id="a1", role="tool",
-                           content="排期文档处理：评估排期合理性", tool_call_id="c1"),
+        "t1": MessageEntry(
+            id="t1",
+            parent_id="a1",
+            role="tool",
+            content="排期文档处理：评估排期合理性",
+            tool_call_id="c1",
+        ),
         # 答案之后 agent 的后续回复（真实 HITL 流程必有）
-        "a2": MessageEntry(id="a2", parent_id="t1", role="assistant",
-                           content="已按排期处理，请查收。"),
+        "a2": MessageEntry(
+            id="a2", parent_id="t1", role="assistant", content="已按排期处理，请查收。"
+        ),
     }
     tree = _tree(entries, ["u1", "a1", "t1", "a2"])
     msgs = _build_display_messages(tree, review_utils=None)

@@ -3,14 +3,15 @@
 delivery 层通过此 Protocol 启动 agent 运行，不依赖 engine 内部实现。
 Pi 先例：agent-core 定义 AgentRunner 接口，coding-agent 注入实现。
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
-from prismclaw.schema.agent.types import RunRequest
 from prismclaw.schema.agent.run_control_types import RunControl
+from prismclaw.schema.agent.types import RunRequest
 from prismclaw.schema.storage.storage_types import SessionStore
 
 __all__ = ["ChatService"]

@@ -4,6 +4,7 @@
 ratio 模式已删除（v4 §3.2 配比求解整体移除），本模块只保留 absolute
 固定四键的分区映射与夹紧工具函数。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ class ContextZones:
 
 def resolve_runtime_zones(
     *,
-    budget: "ContextBudgetConfig",
+    budget: ContextBudgetConfig,
     tools_wire: int,
 ) -> ContextZones:
     """absolute 模式分区入口。"""
@@ -41,7 +42,7 @@ def resolve_runtime_zones(
     )
 
 
-def zone_of(budget: "ContextBudgetConfig", key: str) -> int:
+def zone_of(budget: ContextBudgetConfig, key: str) -> int:
     """取单个分区预算（absolute 模式）。
 
     dynamic/result → dynamic_zone_tokens；其余 → system_zone_tokens。

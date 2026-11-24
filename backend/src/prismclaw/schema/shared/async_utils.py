@@ -14,9 +14,10 @@ re-export for backward compatibility.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator, Awaitable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from prismclaw.schema.shared.exceptions import AgentAbortedError, AgentTimeoutError
 
@@ -42,14 +43,18 @@ class AbortRaceError(RuntimeError):
         self.reason = reason
 
 
-async def await_or_abort(
+async def await_or_abort[T](
     awaitable: Awaitable[T],
     abort_event: asyncio.Event | None,
     *,
-    timeout: float | None = None,
+    timeout: float | None = None,  # noqa: ASYNC109 - 三方竞速（任务/abort/timeout）需内置超时
 ) -> T:
     """Run ``awaitable`` racing against ``abort_event`` and (optionally)
     a wall-clock ``timeout``.
+
+    ``timeout`` 与 ``abort_event`` 是同一场 ``asyncio.wait`` 竞速的两个分支，
+    必须在本函数内参与 select；改由调用方 ``asyncio.timeout`` 包裹会改变
+    「哪一方先触发」的判定，且无法在超时时区分「abort 还是 timeout」。
 
     Behaviour:
 
@@ -74,21 +79,18 @@ async def await_or_abort(
         finally:
             if not inner.done():
                 inner.cancel()
-                try:
+                # 清理阶段：任务已取消，其异常（含 CancelledError）一律忽略。
+                with contextlib.suppress(BaseException):
                     await inner
-                except (asyncio.CancelledError, BaseException):  # noqa: BLE001
-                    pass
 
-    waiters: list[asyncio.Future[object]] = [inner]
+    waiters: list[asyncio.Future[Any]] = [inner]
     if abort_event is not None:
         waiters.append(asyncio.ensure_future(abort_event.wait()))
     if timeout is not None:
         waiters.append(asyncio.ensure_future(asyncio.sleep(timeout)))
 
     try:
-        done, pending = await asyncio.wait(
-            waiters, return_when=asyncio.FIRST_COMPLETED
-        )
+        done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
     except BaseException:
         # The outer coroutine itself was cancelled (e.g. task.cancel()).
         # Propagate the cancellation to the inner task and re-raise.
@@ -99,10 +101,9 @@ async def await_or_abort(
 
     for pending_task in pending:
         pending_task.cancel()
-        try:
+        # 同上：取消后的等待只为回收任务，异常一律忽略。
+        with contextlib.suppress(BaseException):
             await pending_task
-        except (asyncio.CancelledError, BaseException):  # noqa: BLE001
-            pass
 
     if inner in done:
         # Inner completed first. The other tasks were *cancelled* (if
@@ -118,9 +119,7 @@ async def await_or_abort(
     if abort_event is not None and abort_event.is_set():
         raise AbortRaceError("abort_event set before awaitable completed")
     if timeout is not None:
-        raise asyncio.TimeoutError(
-            f"await_or_abort: timeout of {timeout}s exceeded"
-        )
+        raise TimeoutError(f"await_or_abort: timeout of {timeout}s exceeded")
     # Should be unreachable, but keep the contract explicit.
     raise RuntimeError("await_or_abort: no waiter satisfied")
 
@@ -130,7 +129,7 @@ async def await_or_abort(
 # ---------------------------------------------------------------------------
 
 
-async def iterate_with_idle_timeout(
+async def iterate_with_idle_timeout[T](
     source: AsyncIterator[T],
     *,
     idle_seconds: float,
@@ -185,7 +184,8 @@ async def iterate_with_idle_timeout(
             if drain_grace_seconds > 0:
                 logger.debug(
                     "idle timeout fired, drain phase for %.1fs (kind=%s)",
-                    drain_grace_seconds, kind,
+                    drain_grace_seconds,
+                    kind,
                 )
                 drain_done, _ = await asyncio.wait(
                     [next_task],
@@ -203,10 +203,8 @@ async def iterate_with_idle_timeout(
 
             # Both idle and drain timed out — genuine timeout
             next_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, BaseException):
                 await next_task
-            except (asyncio.CancelledError, BaseException):
-                pass
             raise AgentTimeoutError(kind=kind, limit_seconds=idle_seconds)
 
         except asyncio.CancelledError:

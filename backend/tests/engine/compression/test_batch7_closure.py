@@ -1,8 +1,8 @@
 """批 7 收尾闭环测试：G1 附件预算 / G3 l1 截断 / G4 埋点 / G5 T5 不落库。"""
+
 from __future__ import annotations
 
 import json
-
 
 from prismclaw.engine.execution.request.attachments import (
     _compute_attachment_char_budget,
@@ -13,10 +13,10 @@ from prismclaw.engine.execution.request.system_prompt import (
 )
 from prismclaw.schema.config.config import ContextBudgetConfig
 
-
 # ---------------------------------------------------------------------------
 # G1：附件预算（absolute）
 # ---------------------------------------------------------------------------
+
 
 def test_g1_absolute_zero_drift():
     budget = ContextBudgetConfig()
@@ -27,6 +27,7 @@ def test_g1_absolute_zero_drift():
 # ---------------------------------------------------------------------------
 # G3：l1_snapshot token 截断
 # ---------------------------------------------------------------------------
+
 
 def test_g3_l1_snapshot_truncation():
     long_line = "- " + ("记忆片段内容" * 30)  # 每行约 180 字符，超 500 token 限额
@@ -47,6 +48,7 @@ def test_g3_l1_snapshot_short_untouched():
 # ---------------------------------------------------------------------------
 # G4：埋点（caplog 验证超窗计数 1 处）
 # ---------------------------------------------------------------------------
+
 
 def test_g4_context_window_pressure_warning(caplog):
     import logging
@@ -92,11 +94,12 @@ def test_g4_compute_max_tokens_clamp_smoke():
 # G5：T5（context_payload）不落库
 # ---------------------------------------------------------------------------
 
+
 def test_g5_context_payload_stays_out_of_message_tree():
-    from prismclaw.schema.llm.request import PackedLLMRequest
-    from prismclaw.schema.llm.request_format import render_context_payload_text
     from prismclaw.engine.services.llm.client import _PROVIDER_REQUEST_ADAPTER
     from prismclaw.schema.agent.session import MessageEntry
+    from prismclaw.schema.llm.request import PackedLLMRequest
+    from prismclaw.schema.llm.request_format import render_context_payload_text
 
     payload = {
         "type": "prism_context_payload",

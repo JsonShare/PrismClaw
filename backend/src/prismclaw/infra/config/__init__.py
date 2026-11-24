@@ -1,7 +1,8 @@
 """配置体系基础设施。
 
 Layer 0: 模型基建 (backend/configs/models.yaml) — 服务商凭据 + 模型能力 + 全局默认模型
-Layer 1: 域默认 (backend/src/subpackages/{domain}/configs/{domain}.json) + 工作区覆盖 ({ws}/.work/state/configs/{domain}.json)
+Layer 1: 域默认 (src/subpackages/{domain}/configs/{domain}.json) + 工作区覆盖
+         ({ws}/.work/state/configs/{domain}.json)
 
 模型基建只有一份，主系统与所有业务域共享：域不再自己解析模型名，直接用核心
 LLM 客户端（其 `default_model` 由 models.yaml 的 `default_model` 同步而来）。

@@ -68,7 +68,9 @@ def _compact_web_page_text(text: str, *, max_chars: int) -> str:
 def _compact_document_extraction_text(text: str, *, max_chars: int) -> str:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     title = lines[0][:160] if lines else ""
-    sections = [line for line in lines[1:] if line.endswith(":") or line.startswith(("1.", "2.", "3."))][:8]
+    sections = [
+        line for line in lines[1:] if line.endswith(":") or line.startswith(("1.", "2.", "3."))
+    ][:8]
     evidence = [line for line in lines if len(line) > 40][:5]
     summary_lines = ["[文档抽取摘要]"]
     if title:

@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import hashlib
-from typing import Any, Protocol, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Protocol
 
-from prismclaw.schema.llm.cache_types import EPHEMERAL_CACHE_CONTROL
 from prismclaw.engine.foundation.telemetry.observability import CacheBreakDetector
-from prismclaw.schema.content.replacement_state import ReplacementDecisionState
-from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.agent.data_types import CacheStrategySnapshot
 from prismclaw.schema.content.context import ContextBlock, ContextPackLayout
+from prismclaw.schema.content.replacement_state import ReplacementDecisionState
+from prismclaw.schema.llm.cache_types import EPHEMERAL_CACHE_CONTROL
 
 if TYPE_CHECKING:
-    from prismclaw.schema.llm.types import LLMUsage
     # 仅类型注解所需，runtime 不依赖 execution。
     from prismclaw.engine.execution.checkpoint import PromptCacheRuntimeState
+    from prismclaw.schema.llm.types import LLMUsage
 
 _ANTHROPIC_PREFIXES = (
     "anthropic/",
@@ -23,14 +22,6 @@ _ANTHROPIC_PREFIXES = (
     "vertex_ai/claude-",
 )
 MIN_CACHE_TOKENS = 1024
-
-# Cache-reuse observability — pure metrics, no behavior change.
-_METRIC_DESCRIBED = "cache.strategy.described"
-_METRIC_REUSED = "cache.strategy.reused_prior"
-_METRIC_REUSED_BY_MODEL = "cache.strategy.reused_prior_by_model"
-_METRIC_BREACH = "cache.strategy.breach"
-_METRIC_BREACH_BY_REASON = "cache.strategy.breach_by_reason"
-_METRIC_RS_REUSED = "cache.replacement_state.reused"
 
 
 @dataclass(frozen=True)
@@ -98,42 +89,6 @@ class AnthropicCacheAdapter:
         return blocks
 
 
-def _breach_reason(
-    *,
-    request_mode: str | None,
-    prior_adapter: str | None,
-    adapter_name: str,
-    prior_strategy_kind: str | None,
-    strategy_kind: str,
-    prior_static_digest: str | None,
-    static_digest: str,
-    prior_model_supports_cache_blocks: bool | None,
-    current_model_supports_cache_blocks: bool,
-    replacement_state_required: bool,
-    replacement_state_reused: bool,
-) -> str:
-    """Return the first reason that prevented ``reused_prior_strategy``.
-
-    Order matches the conjunction in :meth:`CacheBlockPacker.describe_strategy`
-    so the most upstream cause is reported (request_mode → adapter → kind →
-    digest → model → replacement_state).  ``"unknown"`` is the fallback when
-    no specific check failed (should not happen in practice).
-    """
-    if request_mode != "follow_up":
-        return "request_mode"
-    if prior_adapter != adapter_name:
-        return "adapter"
-    if prior_strategy_kind != strategy_kind:
-        return "strategy_kind"
-    if prior_static_digest != static_digest:
-        return "static_digest"
-    if prior_model_supports_cache_blocks != current_model_supports_cache_blocks:
-        return "model_supports_cache_blocks"
-    if replacement_state_required and not replacement_state_reused:
-        return "replacement_state"
-    return "unknown"
-
-
 class CacheBlockPacker:
     def __init__(self, *, min_cache_tokens: int = MIN_CACHE_TOKENS) -> None:
         self._min_cache_tokens = min_cache_tokens
@@ -143,18 +98,10 @@ class CacheBlockPacker:
         *,
         plan: ContextPackLayout,
         model: str,
-        request_mode: str | None = None,
-        previous_cache_strategy: CacheStrategySnapshot | None = None,
-        replacement_state: ReplacementDecisionState | None = None,
-        previous_replacement_state: ReplacementDecisionState | None = None,
     ) -> str | list[dict[str, Any]]:
         static_segments, trailing_parts, adapter_name = self._prepare(
             plan=plan,
             model=model,
-            request_mode=request_mode,
-            previous_cache_strategy=previous_cache_strategy,
-            replacement_state=replacement_state,
-            previous_replacement_state=previous_replacement_state,
         )
         adapter = self._adapter_for_name(adapter_name)
         return adapter.pack(
@@ -167,18 +114,11 @@ class CacheBlockPacker:
         *,
         plan: ContextPackLayout,
         model: str,
-        request_mode: str | None = None,
-        previous_cache_strategy: CacheStrategySnapshot | None = None,
         replacement_state: ReplacementDecisionState | None = None,
-        previous_replacement_state: ReplacementDecisionState | None = None,
     ) -> CacheStrategySnapshot:
         static_segments, trailing_parts, adapter_name = self._prepare(
             plan=plan,
             model=model,
-            request_mode=request_mode,
-            previous_cache_strategy=previous_cache_strategy,
-            replacement_state=replacement_state,
-            previous_replacement_state=previous_replacement_state,
         )
         current_model_supports_cache_blocks = is_anthropic_model(model)
         cacheable_segments = self._cacheable_segments(
@@ -190,74 +130,18 @@ class CacheBlockPacker:
             if adapter_name == "anthropic" and cacheable_segments > 0
             else "flat_string"
         )
-        section_hashes = {
-            segment.sources[0]: hashlib.sha1(segment.text.encode("utf-8")).hexdigest()[:16]
-            for segment in static_segments if len(segment.sources) > 0
-        }
         digest_input = [
             f"{segment.stability}:{int(segment.cacheable)}:{segment.text}"
             for segment in static_segments
         ]
-        static_digest = hashlib.sha1("\n--SEG--\n".join(digest_input).encode("utf-8")).hexdigest()[:16]
-        prior_adapter = _string_field(previous_cache_strategy, "provider_adapter")
-        prior_strategy_kind = _string_field(previous_cache_strategy, "strategy_kind")
-        prior_static_digest = _string_field(previous_cache_strategy, "static_digest")
+        static_digest = hashlib.sha1("\n--SEG--\n".join(digest_input).encode("utf-8")).hexdigest()[
+            :16
+        ]
         replacement_state_digest = (
             replacement_state.state_digest() if replacement_state is not None else None
         )
-        prior_replacement_state_digest = (
-            previous_replacement_state.state_digest()
-            if previous_replacement_state is not None
-            else _string_field(previous_cache_strategy, "replacement_state_digest")
-        )
-        prior_model_supports_cache_blocks = _bool_field(
-            previous_cache_strategy,
-            "model_supports_cache_blocks",
-        )
-        replacement_state_reused = (
-            replacement_state_digest is not None
-            and replacement_state_digest == prior_replacement_state_digest
-        )
-        replacement_state_required = (
-            replacement_state_digest is not None
-            or prior_replacement_state_digest is not None
-            or (
-                replacement_state is not None
-                and replacement_state.decision_count() > 0
-            )
-        )
-        reused_prior_strategy = (
-            request_mode == "follow_up"
-            and prior_adapter == adapter_name
-            and prior_strategy_kind == strategy_kind
-            and prior_static_digest == static_digest
-            and prior_model_supports_cache_blocks == current_model_supports_cache_blocks
-            and (not replacement_state_required or replacement_state_reused)
-        )
-
-        # Cache-reuse observability.  Pure metrics, never alters the
-        # returned snapshot or the upstream cache decision.  Designed
-        # to be safe to emit on the hot describe_strategy path
-        # (target < 1ms).
-        self._emit_cache_metrics(
-            model=model,
-            request_mode=request_mode,
-            reused_prior_strategy=reused_prior_strategy,
-            prior_strategy_found=previous_cache_strategy is not None,
-            prior_adapter=prior_adapter,
-            adapter_name=adapter_name,
-            prior_strategy_kind=prior_strategy_kind,
-            strategy_kind=strategy_kind,
-            prior_static_digest=prior_static_digest,
-            static_digest=static_digest,
-            prior_model_supports_cache_blocks=prior_model_supports_cache_blocks,
-            current_model_supports_cache_blocks=current_model_supports_cache_blocks,
-            replacement_state_required=replacement_state_required,
-            replacement_state_reused=replacement_state_reused,
-        )
 
         return {
-            "request_mode": request_mode,
             "strategy_kind": strategy_kind,
             "provider_adapter": adapter_name,
             "static_digest": static_digest,
@@ -265,144 +149,26 @@ class CacheBlockPacker:
             "cacheable_segment_count": cacheable_segments,
             "trailing_part_count": len([part for part in trailing_parts if part]),
             "model_supports_cache_blocks": current_model_supports_cache_blocks,
-            "prior_strategy_found": previous_cache_strategy is not None,
-            "prior_static_digest": prior_static_digest,
-            "reused_prior_strategy": reused_prior_strategy,
             "replacement_state_digest": replacement_state_digest,
             "replacement_decision_count": (
                 replacement_state.decision_count() if replacement_state is not None else 0
             ),
-            "prior_replacement_state_digest": prior_replacement_state_digest,
-            "reused_replacement_state": (
-                request_mode == "follow_up"
-                and replacement_state_reused
-            ),
-            "section_hashes": section_hashes,
         }
-
-    def _emit_cache_metrics(
-        self,
-        model: str,
-        request_mode: str | None,
-        reused_prior_strategy: bool,
-        prior_strategy_found: bool,
-        prior_adapter: str | None,
-        adapter_name: str,
-        prior_strategy_kind: str | None,
-        strategy_kind: str,
-        prior_static_digest: str | None,
-        static_digest: str,
-        prior_model_supports_cache_blocks: bool | None,
-        current_model_supports_cache_blocks: bool,
-        replacement_state_required: bool,
-        replacement_state_reused: bool,
-    ) -> None:
-        """Emit cache-strategy observability counters.
-
-        All emissions are fire-and-forget; metric failures must
-        never propagate to the caller.
-        """
-        try:
-            emit(_METRIC_DESCRIBED, 1.0, kind="counter")
-            if reused_prior_strategy:
-                emit(_METRIC_REUSED, 1.0, kind="counter")
-                emit(
-                    _METRIC_REUSED_BY_MODEL,
-                    1.0,
-                    kind="counter",
-                    labels={"model": model, "request_mode": request_mode or "unknown"},
-                )
-                if request_mode == "follow_up" and replacement_state_required:
-                    emit(
-                        _METRIC_RS_REUSED,
-                        1.0,
-                        kind="counter",
-                        labels={"model": model},
-                    )
-            elif prior_strategy_found:
-                emit(_METRIC_BREACH, 1.0, kind="counter")
-                reason = _breach_reason(
-                    request_mode=request_mode,
-                    prior_adapter=prior_adapter,
-                    adapter_name=adapter_name,
-                    prior_strategy_kind=prior_strategy_kind,
-                    strategy_kind=strategy_kind,
-                    prior_static_digest=prior_static_digest,
-                    static_digest=static_digest,
-                    prior_model_supports_cache_blocks=prior_model_supports_cache_blocks,
-                    current_model_supports_cache_blocks=current_model_supports_cache_blocks,
-                    replacement_state_required=replacement_state_required,
-                    replacement_state_reused=replacement_state_reused,
-                )
-                emit(
-                    _METRIC_BREACH_BY_REASON,
-                    1.0,
-                    kind="counter",
-                    labels={"reason": reason, "model": model},
-                )
-        except Exception:  # pragma: no cover - observability must never crash callers
-            # Observability is best-effort; failures are silenced to keep the
-            # hot path deterministic.  Tests can opt in via ``strict_metrics``.
-            return
 
     def _prepare(
         self,
         *,
         plan: ContextPackLayout,
         model: str,
-        request_mode: str | None = None,
-        previous_cache_strategy: CacheStrategySnapshot | None = None,
-        replacement_state: ReplacementDecisionState | None = None,
-        previous_replacement_state: ReplacementDecisionState | None = None,
     ) -> tuple[list[CacheSegment], list[str], str]:
-        del replacement_state, previous_replacement_state
         static_segments = self._build_static_segments(plan.static_blocks)
         trailing_parts = [
             block.content
             for block in [*plan.dynamic_blocks, *plan.history_blocks, *plan.result_blocks]
             if block.content
         ]
-        current_static_digest = self._static_digest(static_segments)
-        adapter_name = self._resolve_adapter_name(
-            model=model,
-            request_mode=request_mode,
-            previous_cache_strategy=previous_cache_strategy,
-            current_static_digest=current_static_digest,
-        )
+        adapter_name = "anthropic" if is_anthropic_model(model) else "flat"
         return static_segments, trailing_parts, adapter_name
-
-    @staticmethod
-    def _static_digest(static_segments: list[CacheSegment]) -> str:
-        digest_input = [
-            f"{segment.stability}:{int(segment.cacheable)}:{segment.text}"
-            for segment in static_segments
-        ]
-        return hashlib.sha1("\n--SEG--\n".join(digest_input).encode("utf-8")).hexdigest()[:16]
-
-    def _resolve_adapter_name(
-        self,
-        *,
-        model: str,
-        request_mode: str | None,
-        previous_cache_strategy: CacheStrategySnapshot | None,
-        current_static_digest: str,
-    ) -> str:
-        current_model_supports_cache_blocks = is_anthropic_model(model)
-        default_adapter = "anthropic" if current_model_supports_cache_blocks else "flat"
-        if request_mode != "follow_up" or previous_cache_strategy is None:
-            return default_adapter
-        if previous_cache_strategy.get("static_digest") != current_static_digest:
-            return default_adapter
-        if previous_cache_strategy.get("model_supports_cache_blocks") != (
-            current_model_supports_cache_blocks
-        ):
-            return default_adapter
-        prior_adapter = previous_cache_strategy.get("provider_adapter")
-        if prior_adapter == "flat":
-            return "flat"
-        if prior_adapter == "anthropic" and current_model_supports_cache_blocks:
-            return "anthropic"
-        return default_adapter
 
     def _adapter_for_name(self, adapter_name: str) -> CachePackingAdapter:
         if adapter_name == "anthropic":
@@ -435,9 +201,8 @@ class CacheBlockPacker:
                 if block.zone == "static" and block.stability == "volatile"
                 else block.stability
             )
-            cache_candidate = (
-                effective_stability in {"stable", "semi_stable"}
-                and (block.cacheable or block.zone == "static")
+            cache_candidate = effective_stability in {"stable", "semi_stable"} and (
+                block.cacheable or block.zone == "static"
             )
             segment = CacheSegment(
                 text=block.content,
@@ -467,35 +232,12 @@ class CacheBlockPacker:
 
     @staticmethod
     def _can_merge_segments(left: CacheSegment, right: CacheSegment) -> bool:
-        return (
-            left.cacheable == right.cacheable
-            and left.stability == right.stability
-        )
+        return left.cacheable == right.cacheable and left.stability == right.stability
 
 
 def is_anthropic_model(model: str) -> bool:
     lowered = model.lower()
     return any(lowered.startswith(prefix) for prefix in _ANTHROPIC_PREFIXES)
-
-
-def _string_field(
-    strategy: CacheStrategySnapshot | None,
-    key: str,
-) -> str | None:
-    if strategy is None:
-        return None
-    value = strategy.get(key)
-    return value if isinstance(value, str) else None
-
-
-def _bool_field(
-    strategy: CacheStrategySnapshot | None,
-    key: str,
-) -> bool | None:
-    if strategy is None:
-        return None
-    value = strategy.get(key)
-    return value if isinstance(value, bool) else None
 
 
 class PromptCacheRuntimeContract(Protocol):

@@ -2,13 +2,15 @@
 
 三阶段注册：
 1. on_build_infrastructure — 注册持久化存储（MedicalStore + KbStore）+ DDL
-2. on_build_runtime — 注册 8 个医疗工具（5 原有 + 3 咨询只读）+ PHI 脱敏钩子 + 咨询上下文注入钩子 + HIPAA 治理规则
+2. on_build_runtime — 注册 8 个医疗工具（5 原有 + 3 咨询只读）
+                       + PHI 脱敏钩子 + 咨询上下文注入钩子 + HIPAA 治理规则
                        + 证据推断器 + 免责声明 + 敏感扩展 + PHI 模式
 3. on_build_lifecycle — 注册 5 组 REST 路由
 
 此文件是医疗域与 PrismClaw 核心引擎的唯一集成点（integration 层），
 其他层（config/models/domain/persistence/services/api）不直接导入核心。
 """
+
 from __future__ import annotations
 
 import logging
@@ -150,14 +152,16 @@ class MedicalBundle:
             unregister_advisory_rules,
         )
 
-        register_advisory_rule(DomainAdvisoryRule(
-            domain="medical",
-            title="医疗免责声明（强制）",
-            body='当任务涉及医疗信息（药物剂量、禁忌证、治疗建议、诊断标准）时，'
-                 '必须在回答末尾附加免责声明：'
-                 '"以上信息仅供参考，不构成医疗建议。具体用药请遵医嘱。" '
-                 '无论置信度高低都必须附加此声明——即使是 [HIGH] 证据也不例外。',
-        ))
+        register_advisory_rule(
+            DomainAdvisoryRule(
+                domain="medical",
+                title="医疗免责声明（强制）",
+                body="当任务涉及医疗信息（药物剂量、禁忌证、治疗建议、诊断标准）时，"
+                "必须在回答末尾附加免责声明："
+                '"以上信息仅供参考，不构成医疗建议。具体用药请遵医嘱。" '
+                "无论置信度高低都必须附加此声明——即使是 [HIGH] 证据也不例外。",
+            )
+        )
         ctx.defer_registry_cleanup(lambda: unregister_advisory_rules("medical"))
 
         # 敏感扩展
@@ -166,9 +170,21 @@ class MedicalBundle:
             unregister_sensitive_extensions,
         )
 
-        register_sensitive_extensions("medical", frozenset({
-            ".dcm", ".dicom", ".hl7", ".nifti", ".nii", ".phi", ".emr", ".ehr",
-        }))
+        register_sensitive_extensions(
+            "medical",
+            frozenset(
+                {
+                    ".dcm",
+                    ".dicom",
+                    ".hl7",
+                    ".nifti",
+                    ".nii",
+                    ".phi",
+                    ".emr",
+                    ".ehr",
+                }
+            ),
+        )
         ctx.defer_registry_cleanup(lambda: unregister_sensitive_extensions("medical"))
 
         # PHI 模式
@@ -203,4 +219,5 @@ class MedicalBundle:
     def get_manifest(self) -> DomainManifest:
         """返回医疗域前端菜单与页面描述。"""
         from .._manifest_generated import MANIFEST
+
         return MANIFEST

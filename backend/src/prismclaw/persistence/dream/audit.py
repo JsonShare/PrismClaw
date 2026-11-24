@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-from sqlalchemy import text
+from typing import Any
+
+from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.persistence.sql_runner import apply_core_schema
-from prismclaw.schema.dream.dream_types import DreamAuditEntry, DreamBatchHealthMetrics
+from prismclaw.schema.dream.dream_types import (
+    DreamAuditEntry,
+    DreamAuditStatus,
+    DreamBatchHealthMetrics,
+)
 
 _SELECT_COLUMNS = """
     id, session_key, batch_id, phase, trigger, status, started_at, ended_at, duration_s,
@@ -94,11 +100,7 @@ class PostgresDreamAuditLog:
             if trigger is not None and entry.trigger != trigger:
                 continue
             grouped.setdefault(entry.batch_id, []).append(entry)
-        metrics = [
-            _summarize_batch(items)
-            for _batch_id, items in grouped.items()
-            if items
-        ]
+        metrics = [_summarize_batch(items) for _batch_id, items in grouped.items() if items]
         return sorted(metrics, key=lambda item: item.started_at, reverse=True)
 
     async def latest_batch_metrics(
@@ -111,13 +113,15 @@ class PostgresDreamAuditLog:
         return metrics[0] if metrics else None
 
 
-def _row_to_entry(row) -> DreamAuditEntry:
+def _row_to_entry(row: RowMapping) -> DreamAuditEntry:
+    raw_status = str(row["status"])
+    status: DreamAuditStatus = "failed" if raw_status == "failed" else "ok"
     return DreamAuditEntry(
         session_key=str(row["session_key"]),
         batch_id=str(row["batch_id"]),
         phase=str(row["phase"]),
         trigger=str(row["trigger"]),
-        status=str(row["status"]),  # type: ignore[arg-type]
+        status=status,
         started_at=float(row["started_at"]),
         ended_at=float(row["ended_at"]),
         duration_s=float(row["duration_s"]),
@@ -138,7 +142,7 @@ def _row_to_entry(row) -> DreamAuditEntry:
     )
 
 
-def _entry_to_params(entry: DreamAuditEntry) -> dict:
+def _entry_to_params(entry: DreamAuditEntry) -> dict[str, Any]:
     return {
         "session_key": entry.session_key,
         "batch_id": entry.batch_id,

@@ -3,12 +3,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from prismclaw.schema.content import (
+from prismclaw.schema.content.compaction import CompactionArtifact, parse_compaction_artifact
+from prismclaw.schema.content.context import ContextBlock
+from prismclaw.schema.content.replacement_state import (
     ReplacementDecision,
     ReplacementDecisionState,
 )
-from prismclaw.schema.content.compaction import CompactionArtifact, parse_compaction_artifact
-from prismclaw.schema.content.context import ContextBlock
 from prismclaw.schema.session import (
     REPLACEMENT_DECISION_CUSTOM_TYPE,
     RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE,
@@ -43,8 +43,15 @@ def collect_replacement_decision_state(branch: list[Any]) -> ReplacementDecision
     else:
         state = ReplacementDecisionState(decisions=[*legacy, *explicit])
     logger.debug(
-        "replacement state collected: branch_entries=%d explicit=%d legacy=%d unique_sources=%d digest=%s",
-        len(branch), len(explicit), len(legacy), state.decision_count(), state.state_digest(),
+        (
+            "replacement state collected: branch_entries=%d "
+            "explicit=%d legacy=%d unique_sources=%d digest=%s"
+        ),
+        len(branch),
+        len(explicit),
+        len(legacy),
+        state.decision_count(),
+        state.state_digest(),
     )
     return state
 
@@ -58,13 +65,18 @@ def replacement_decision_from_artifact(
     decision = ReplacementDecision.from_artifact(artifact)
     if decision is None:
         logger.debug(
-            "replacement decision skipped: from_artifact rejected artifact_id=%s scope=%s source_id=%s",
-            artifact.artifact_id, artifact.scope, artifact.source_id or artifact.tool_call_id,
+            (
+                "replacement decision skipped: from_artifact "
+                "rejected artifact_id=%s scope=%s source_id=%s"
+            ),
+            artifact.artifact_id,
+            artifact.scope,
+            artifact.source_id or artifact.tool_call_id,
         )
     return decision
 
 
-def parse_replacement_decision(data: Any) -> ReplacementDecision | None:
+def parse_replacement_decision(data: object) -> ReplacementDecision | None:
     if isinstance(data, ReplacementDecision):
         return data
     if not isinstance(data, dict):
@@ -96,7 +108,8 @@ def extract_replacement_decisions_from_blocks(
     state = ReplacementDecisionState(decisions=decisions)
     logger.debug(
         "replacement decisions extracted from blocks: blocks=%d decisions=%d",
-        len(blocks), len(decisions),
+        len(blocks),
+        len(decisions),
     )
     return state
 
@@ -111,6 +124,8 @@ def append_replacement_decisions(
     merged = base.merged_with(update)
     logger.debug(
         "replacement states merged: base=%d update=%d merged=%d",
-        base.decision_count(), update.decision_count(), merged.decision_count(),
+        base.decision_count(),
+        update.decision_count(),
+        merged.decision_count(),
     )
     return merged

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -12,20 +12,20 @@ class ToolLoopState:
     # streak；结果一变 token 即不同，streak 自动归 1——"结果在变则
     # 放宽"无需任何额外阈值。每回合只 append 一次（由
     # record_tool_call_observation 唯一写入）。
-    recent_tool_signatures: list[str] = None
+    recent_tool_signatures: list[str] = field(default_factory=list)
     # Set of tool names frozen due to loop detection (wrapping/last_turn
     # 冻结搜索类/非写入类 + doom-loop Check 4 search-loop freeze).
     # When a tool is frozen, pre_request_pipeline removes it from
     # the visible tool names so the model cannot call it again.
     # Cleared only on terminate — a frozen tool stays frozen for the rest
     # of the run (that is the point of the intervention).
-    frozen_tools: set[str] = None
+    frozen_tools: set[str] = field(default_factory=set)
     # 调用签名 → 连续被冻结阻止的次数（按回合归一：同一签名每回合
     # 至多 +1）。Check 2 判定"同调用同结果重复超过 absolute_max"后
     # 写入（初始 0），下一回合 before_tool_call 命中即 block 并计数；
     # 计数达 escalate_above 才置 frozen_call_defied 嫌疑标志。仅在
     # terminate 时清除。结果变化 → token 变 → streak 归 1 → 冻结自动失效。
-    frozen_call_signatures: dict[str, int] = None
+    frozen_call_signatures: dict[str, int] = field(default_factory=dict)
     # 归因分流计数：external 失败
     # 不进 recent_tool_signatures——外部数据源挂掉不是模型空转
     # （科研检索高频场景，logs/mcp_server_* 实证）。
@@ -36,7 +36,7 @@ class ToolLoopState:
     # 台账不变量（吸收 Pi failToolCallsFromTruncatedMessage 纪律）：
     # 每一次工具尝试（成功/失败/截断）都确定性落账，消除"失败/截断静默
     # 跳过导致证据失真"的盲区。截断（消息被截断无 tool_result）伪造 error 入账。
-    tool_attempt_events: list[dict[str, Any]] = None
+    tool_attempt_events: list[dict[str, Any]] = field(default_factory=list)
     _TOOL_ATTEMPT_CAP = 128
     # 模型无视签名冻结重试达 escalate_above（此处只作嫌疑信号，
     # 不产生终态）。
@@ -47,16 +47,6 @@ class ToolLoopState:
     # 信息不是催促，模型收到后仍不停止则尊重其自治（终态只在停止时
     # 由 CompletionKernel 裁决）。
     convergence_advisory_sent: bool = False
-
-    def __post_init__(self):
-        if self.recent_tool_signatures is None:
-            self.recent_tool_signatures = []
-        if self.frozen_tools is None:
-            self.frozen_tools = set()
-        if self.frozen_call_signatures is None:
-            self.frozen_call_signatures = {}
-        if self.tool_attempt_events is None:
-            self.tool_attempt_events = []
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,7 +63,7 @@ class ToolLoopState:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ToolLoopState":
+    def from_dict(cls, data: dict[str, Any]) -> ToolLoopState:
         frozen = set(data.get("frozen_tools") or [])
         return cls(
             compaction_failures=data.get("compaction_failures", 0),

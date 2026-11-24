@@ -4,6 +4,7 @@ Moved from kernel.user to contracts so that contracts.infra.storage_types
 can reference User without creating a kernel→contracts→kernel circular dependency.
 kernel.user re-exports for backward compatibility.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

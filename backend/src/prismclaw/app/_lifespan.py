@@ -1,13 +1,24 @@
 """Application lifespan management — startup/shutdown orchestration."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+    from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+    from prismclaw.app.gateway.worker_registry import WorkerRegistry
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.infra.settings import Settings
+    from prismclaw.schema.agent.bundles import DreamAdminOpsProtocol
 
 logger = logging.getLogger(__name__)
 _DREAM_DISPATCH_HEALTH_LOG_INTERVAL_S = 60.0
@@ -58,7 +69,7 @@ async def _sweep_ephemeral(workspace_base: Path) -> None:
         )
 
 
-def _publish_capability_layout(app: FastAPI, runner_deps: Any) -> None:
+def _publish_capability_layout(app: FastAPI, runner_deps: AgentRunnerDeps) -> None:
     """从冷启动 plugin lifecycle 取出唯一能力布局：挂到 app.state 并聚合记录日志。
 
     布局是驱动冷启动 skills/plugins/agents 发现的同一份对象；health 端点直接
@@ -85,12 +96,19 @@ def _publish_capability_layout(app: FastAPI, runner_deps: Any) -> None:
         if diag.level is DiagnosticLevel.ERROR:
             logger.error("capability layout [%s] %s: %s", diag.level.value, diag.code, diag.message)
         elif diag.level is DiagnosticLevel.WARN:
-            logger.warning("capability layout [%s] %s: %s", diag.level.value, diag.code, diag.message)
+            logger.warning(
+                "capability layout [%s] %s: %s", diag.level.value, diag.code, diag.message
+            )
         else:
             logger.info("capability layout [%s] %s: %s", diag.level.value, diag.code, diag.message)
 
 
-async def _init_user_store(app: FastAPI, settings: Any, redis_client: Any, session_factory: Any) -> None:
+async def _init_user_store(
+    app: FastAPI,
+    settings: Settings,
+    redis_client: Redis,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     """Build the DB-backed web user store and register it as the default.
 
     PostgreSQL only, using the application-wide shared session_factory. On first run
@@ -118,8 +136,8 @@ async def _init_user_store(app: FastAPI, settings: Any, redis_client: Any, sessi
         return
 
     try:
+        from prismclaw.persistence.user.factory import create_user_profile_store, create_user_store
         from prismclaw.persistence.user.models import init_schema
-        from prismclaw.persistence.user.factory import create_user_store, create_user_profile_store
         from prismclaw.persistence.user.seed import seed_from_config
 
         engine = app.state.db_engine
@@ -162,8 +180,8 @@ async def _init_user_store(app: FastAPI, settings: Any, redis_client: Any, sessi
 
 
 async def _startup_health_gate(
-    redis_client: Any,
-    db_engine: Any,
+    redis_client: Redis,
+    db_engine: AsyncEngine,
     *,
     max_attempts: int = 15,
     interval_seconds: float = 2.0,
@@ -181,13 +199,9 @@ async def _startup_health_gate(
     from prismclaw.infra.redis import ping
 
     if redis_client is None:
-        raise RuntimeError(
-            "Redis is not configured. Redis is required — aborting startup."
-        )
+        raise RuntimeError("Redis is not configured. Redis is required — aborting startup.")
     if db_engine is None:
-        raise RuntimeError(
-            "PostgreSQL engine not initialised. Aborting startup."
-        )
+        raise RuntimeError("PostgreSQL engine not initialised. Aborting startup.")
 
     last_redis_err = last_pg_err = None
     for attempt in range(1, max_attempts + 1):
@@ -201,6 +215,7 @@ async def _startup_health_gate(
 
         try:
             from sqlalchemy import text
+
             async with db_engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             pg_ok = True
@@ -209,8 +224,7 @@ async def _startup_health_gate(
 
         if redis_ok and pg_ok:
             logger.info(
-                "Startup health gate passed after %d attempt(s): "
-                "Redis + PostgreSQL reachable.",
+                "Startup health gate passed after %d attempt(s): Redis + PostgreSQL reachable.",
                 attempt,
             )
             return
@@ -223,7 +237,10 @@ async def _startup_health_gate(
                 parts.append("PostgreSQL unreachable")
             logger.warning(
                 "Startup health gate attempt %d/%d: %s — retrying in %.0fs",
-                attempt, max_attempts, " + ".join(parts), interval_seconds,
+                attempt,
+                max_attempts,
+                " + ".join(parts),
+                interval_seconds,
             )
             await asyncio.sleep(interval_seconds)
 
@@ -236,7 +253,7 @@ async def _startup_health_gate(
     )
 
 
-async def _worker_heartbeat_loop(registry) -> None:
+async def _worker_heartbeat_loop(registry: WorkerRegistry) -> None:
     try:
         while True:
             await asyncio.sleep(registry._heartbeat_interval)
@@ -249,7 +266,7 @@ async def _worker_heartbeat_loop(registry) -> None:
 
 
 async def _dream_dispatch_health_loop(
-    dream_ops: Any,
+    dream_ops: DreamAdminOpsProtocol,
     *,
     interval_s: float = _DREAM_DISPATCH_HEALTH_LOG_INTERVAL_S,
 ) -> None:
@@ -261,7 +278,7 @@ async def _dream_dispatch_health_loop(
         return
 
 
-async def _log_dream_dispatch_health(dream_ops: Any) -> None:
+async def _log_dream_dispatch_health(dream_ops: DreamAdminOpsProtocol) -> None:
     try:
         status = await dream_ops.get_dispatch_status()
     except Exception:
@@ -291,6 +308,7 @@ async def _log_dream_dispatch_health(dream_ops: Any) -> None:
     )
 
 
+@asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from prismclaw.infra.db import create_shared_engine
     from prismclaw.infra.redis import close_client, get_client
@@ -314,8 +332,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     sync_result = sync_prismclaw_home(project_root)
     if not sync_result.ok:
         raise RuntimeError(
-            f"启动资产同步失败：failed={sync_result.failed} "
-            f"drifted={sync_result.drifted[:10]}"
+            f"启动资产同步失败：failed={sync_result.failed} drifted={sync_result.drifted[:10]}"
         )
 
     # ── 容器模式自检：assets / runtime 卷 ────────────────────────────────
@@ -336,14 +353,11 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from prismclaw.infra.deployment_checks import is_container
 
     if is_container():
-        workspace_base = Path(settings.workspaces.default).expanduser()
-        app.state.blob_gc_task = asyncio.create_task(
-            _sweep_review_blobs(workspace_base)
-        )
+        # expanduser 只做 ~ 字符串替换，无 IO。
+        container_base = Path(settings.workspaces.default).expanduser()  # noqa: ASYNC240
+        app.state.blob_gc_task = asyncio.create_task(_sweep_review_blobs(container_base))
         # .work/cache/* 与 run/spills 只写不删，启动时按 mtime 收一遍。
-        app.state.workspace_gc_task = asyncio.create_task(
-            _sweep_ephemeral(workspace_base)
-        )
+        app.state.workspace_gc_task = asyncio.create_task(_sweep_ephemeral(container_base))
 
     # Shared PostgreSQL engine — used by user store, memory store, scheduler,
     # dream, curator, and context audit subsystems.
@@ -352,6 +366,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shared session_factory — created once, consumed by all persistence
     # factory functions. Replaces per-site `make_session_factory(db_engine)`.
     from sqlalchemy.ext.asyncio import async_sessionmaker
+
     session_factory = async_sessionmaker(app.state.db_engine, expire_on_commit=False)
     app.state.session_factory = session_factory
 
@@ -371,18 +386,18 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("sandbox: %s", sandbox_state.warning)
 
     # Wire app-level callbacks for assembly to invoke (avoids assembly→app imports)
-    from prismclaw.app.state.runtime_state import apply_app_runtime_state
-    from prismclaw.app.state.web_state import sync_web_runtime_state
-    from prismclaw.app.state.deps import build_app_web_deps
-    from prismclaw.app.state.web_globals import (
-        reset_web_channel_runtime_globals,
-        shutdown_web_channel_runtime_globals,
-    )
-    from prismclaw.app.gateway.takeover import auto_takeover_loop
     from prismclaw.app.gateway.factory import (
         build_gateway_components,
         build_run_ownership_store,
     )
+    from prismclaw.app.gateway.takeover import auto_takeover_loop
+    from prismclaw.app.state.deps import build_app_web_deps
+    from prismclaw.app.state.runtime_state import apply_app_runtime_state
+    from prismclaw.app.state.web_globals import (
+        reset_web_channel_runtime_globals,
+        shutdown_web_channel_runtime_globals,
+    )
+    from prismclaw.app.state.web_state import sync_web_runtime_state
 
     app.state.apply_runtime_state_fn = apply_app_runtime_state
     app.state.sync_web_state_fn = sync_web_runtime_state
@@ -390,6 +405,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.shutdown_web_globals_fn = shutdown_web_channel_runtime_globals
     app.state.auto_takeover_loop_fn = auto_takeover_loop
 
+    from prismclaw.app.gateway.worker_registry import WorkerRegistry, generate_worker_id
     from prismclaw.assembly.runtime_coordinator import (
         apply_app_infrastructure_bundle,
         apply_app_lifecycle_bundle,
@@ -400,10 +416,8 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         build_app_runtime_bundle,
         shutdown_app_runtime,
     )
-    from prismclaw.runtime.facade.dream import RedisDreamDispatchQueue
-    from prismclaw.app.gateway.worker_registry import WorkerRegistry, generate_worker_id
-
     from prismclaw.persistence.memory.factory import create_memory_store
+    from prismclaw.runtime.facade.dream import RedisDreamDispatchQueue
 
     create_memory_store_fn = create_memory_store
 
@@ -442,6 +456,8 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     task_manager = infra_bundle.task_manager
     worker_id = infra_bundle.worker_id
     workspace_base = infra_bundle.workspace_base
+    if workspace_base is None:
+        raise RuntimeError("infrastructure bundle 缺少 workspace_base")
     memory_store = infra_bundle.memory_store
 
     # ── Health gate: verify Redis + PostgreSQL reachability before domain
@@ -485,6 +501,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.domain_stores = infra_ctx.domain_stores
         # 类型化 AppState（新路径，供 Depends 注入）
         from prismclaw.infra.app_state import AppState
+
         _app_state = AppState()
         for _name, _store in infra_ctx.domain_stores.items():
             _app_state.register_domain_store(_name, _store)
@@ -515,7 +532,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         apply_app_runtime_bundle(app, runtime_bundle)
         runner_deps = runtime_bundle.runner_deps
         runner_deps.worker_id = worker_id
-        runner_deps.persistence.run_ownership_store = getattr(infra_bundle, "run_ownership_store", None)
+        runner_deps.persistence.run_ownership_store = getattr(
+            infra_bundle, "run_ownership_store", None
+        )
         if runner_deps.subagent_collaboration is not None:
             runner_deps.subagent_collaboration.set_worker_id(worker_id)
             runner_deps.subagent_collaboration.start()
@@ -530,9 +549,10 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
                 def _make_runtime_ctx(domain_name: str) -> DomainRuntimeContext:
                     from prismclaw.runtime.facade.foundation import (
-                        DomainIsolatedTool,
                         DomainIsolatedHook,
+                        DomainIsolatedTool,
                     )
+
                     return DomainRuntimeContext(
                         domain_name=domain_name,
                         tool_registry=runner_deps.tools,
@@ -543,6 +563,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         hook_wrapper=DomainIsolatedHook,
                         domain_stores=infra_bundle.domain_stores,
                     )
+
                 domain_registry.apply_runtime(domain_bundles, _make_runtime_ctx)
                 # 将域 governance reducers 追加到 ToolGovernance
                 if runner_deps.governance is not None and runtime_bundle.domain_governance_reducers:
@@ -585,7 +606,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 # 否则 SPAStaticFiles 会先匹配所有路径并返回 404，
                 # 导致域 API 路由永远不可达。
                 from starlette.routing import Mount
+
                 from prismclaw.app.web.spa import SPAStaticFiles
+
                 spa_mount_idx = None
                 for i, route in enumerate(app.routes):
                     if isinstance(route, Mount) and isinstance(route.app, SPAStaticFiles):
@@ -613,7 +636,8 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # ── Trajectory audit tables (PostgreSQL) ───────────────────────────
         try:
             from prismclaw.persistence.trajectory.pg_persistence import PgTrajectoryPersistence
-            from prismclaw.schema.trajectory import init_state as _traj_init, view as _traj_view
+            from prismclaw.schema.trajectory import init_state as _traj_init
+            from prismclaw.schema.trajectory import view as _traj_view
 
             trajectory_persistence = PgTrajectoryPersistence(
                 session_factory,
@@ -638,6 +662,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # API fallback `_trajectory_persistence` stays consistent.
             try:
                 import prismclaw.app.web.routes as _routes_mod
+
                 _routes_mod._trajectory_persistence = trajectory_persistence
             except Exception:
                 pass
@@ -654,14 +679,14 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         app.state.scheduler_dispatch_queue = None
         app.state.scheduler_broadcast = None
         if settings.scheduler.enabled:
-            from prismclaw.runtime.facade.scheduler import (
-                RedisSchedulerDispatchQueue,
-                SchedulerDispatchConsumer,
-            )
-            from prismclaw.runtime.facade.scheduler import SchedulerEngine
-            from prismclaw.runtime.facade.scheduler import ScheduledRunExecutor
             from prismclaw.persistence.scheduler.factory import create_scheduler_store
             from prismclaw.persistence.scheduler.store import init_schema
+            from prismclaw.runtime.facade.scheduler import (
+                RedisSchedulerDispatchQueue,
+                ScheduledRunExecutor,
+                SchedulerDispatchConsumer,
+                SchedulerEngine,
+            )
 
             await init_schema(app.state.db_engine)
             scheduler_store = create_scheduler_store(session_factory)
@@ -680,14 +705,21 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 )
                 app.state.scheduler_dispatch_queue = dispatch_queue
 
-                async def _scheduler_broadcast(user_id: str, event_type: str, data: dict) -> None:
+                async def _scheduler_broadcast(
+                    user_id: str, event_type: str, data: dict[str, Any]
+                ) -> None:
                     from prismclaw.app.web.websocket.websocket import broadcast_to_user
+
                     await broadcast_to_user(app, user_id, event_type, data)
 
                 app.state.scheduler_broadcast = _scheduler_broadcast
 
                 async def _run_scheduled_chat(
-                    *, user_id: str, conversation_id: str, content: str, workspace_id: str,
+                    *,
+                    user_id: str,
+                    conversation_id: str,
+                    content: str,
+                    workspace_id: str,
                 ) -> None:
                     """定时任务的执行入口 = 一次普通 chat turn。
 
@@ -715,7 +747,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                         user_id=user_id,
                     )
 
-                    async def _virtual_socket_send(envelope: dict) -> None:
+                    async def _virtual_socket_send(envelope: dict[str, Any]) -> None:
                         await _fanout_to_peer_connections(state, envelope)
 
                     state.ws.send_json = _virtual_socket_send
@@ -751,8 +783,12 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     max_per_user=settings.scheduler.max_concurrent_per_user,
                 )
 
-                task_manager.spawn("scheduler-engine", engine.start(), category="generic", owner=worker_id)
-                task_manager.spawn("scheduler-consumer", consumer.start(), category="consumer", owner=worker_id)
+                task_manager.spawn(
+                    "scheduler-engine", engine.start(), category="generic", owner=worker_id
+                )
+                task_manager.spawn(
+                    "scheduler-consumer", consumer.start(), category="consumer", owner=worker_id
+                )
                 logger.info("Scheduler system started (worker=%s)", worker_id)
 
                 # Sync scheduler fields into web_deps (created earlier by

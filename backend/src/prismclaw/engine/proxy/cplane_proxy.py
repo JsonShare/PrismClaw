@@ -6,13 +6,18 @@
 - 内联 DLP/PHI 扫描
 - DNS 隧道阻断（仅服务端 DNS 解析）
 """
+
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import hmac
 import ipaddress
 import logging
 import socket
+from collections.abc import Mapping
+from typing import Any
 
 import aiohttp
 from aiohttp import web
@@ -29,6 +34,12 @@ _IDENTITY_HEADER = "x-prismclaw-identity"
 _IDENTITY_PREFIX = "v"
 _IDENTITY_SEPARATOR = ":"
 _HMAC_ALGO = "sha256"
+
+
+def _sockaddr_host(sockaddr: tuple[Any, ...]) -> str:
+    """getaddrinfo 返回的 sockaddr 第二元即 IP，统一收窄成 str。"""
+    host = sockaddr[0] if sockaddr else ""
+    return host if isinstance(host, str) else str(host)
 
 
 class CPlaneProxy:
@@ -123,26 +134,34 @@ class CPlaneProxy:
         if not self._check_acl(host, server_name):
             logger.warning(
                 "CPlaneProxy: CONNECT rejected - ACL denied host=%s server=%s",
-                host, server_name,
+                host,
+                server_name,
             )
             return web.Response(status=403, text=f"Forbidden: host '{host}' not in ACL whitelist")
 
         # 4) DNS 隧道阻断：拒绝原始 IP 连接
         resolved_ip = self._resolve_dns(host)
         if resolved_ip == "":
-            logger.warning("CPlaneProxy: CONNECT rejected - DNS resolution failed for host=%s", host)
+            logger.warning(
+                "CPlaneProxy: CONNECT rejected - DNS resolution failed for host=%s", host
+            )
             return web.Response(status=502, text=f"Bad Gateway: DNS resolution failed for {host}")
 
         # 5) 建立到目标的 TCP 连接
         try:
-            reader, writer = await aiohttp.asyncio.open_connection(resolved_ip, port)
+            reader, writer = await asyncio.open_connection(resolved_ip, port)
         except OSError as e:
             logger.error("CPlaneProxy: CONNECT failed to %s:%d - %s", host, port, e)
             return web.Response(status=502, text=f"Bad Gateway: cannot connect to {host}:{port}")
 
+        # 隧道是逐个 chunk 转发的小包场景，禁用 Nagle 避免累积延迟。
+        upstream_sock = writer.get_extra_info("socket")
+        if upstream_sock is not None:
+            with contextlib.suppress(OSError):
+                upstream_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         # 6) 建立隧道
         response = web.StreamResponse(status=200, reason="Connection Established")
-        response.set_tcp_nodelay(True)
         try:
             await response.prepare(request)
         except ConnectionError:
@@ -164,7 +183,8 @@ class CPlaneProxy:
                         if not result.allowed:
                             logger.warning(
                                 "CPlaneProxy: outbound DLP block - phi_count=%d phi_ratio=%.2f",
-                                result.phi_count, result.phi_ratio,
+                                result.phi_count,
+                                result.phi_ratio,
                             )
                             break
                     writer.write(chunk)
@@ -191,19 +211,17 @@ class CPlaneProxy:
                         if not result.allowed:
                             logger.warning(
                                 "CPlaneProxy: inbound DLP block - phi_count=%d phi_ratio=%.2f",
-                                result.phi_count, result.phi_ratio,
+                                result.phi_count,
+                                result.phi_ratio,
                             )
                             break
                     await response.write(chunk)
             except (ConnectionError, asyncio.CancelledError):
                 pass
             finally:
-                try:
+                with contextlib.suppress(Exception):
                     await response.write_eof()
-                except Exception:
-                    pass
 
-        import asyncio
         await asyncio.gather(_pipe_upstream(), _pipe_downstream(), return_exceptions=True)
         return response
 
@@ -222,6 +240,7 @@ class CPlaneProxy:
             target_url = f"http://{target_url}"
 
         from urllib.parse import urlparse
+
         parsed = urlparse(target_url)
         host = parsed.hostname or ""
 
@@ -244,7 +263,10 @@ class CPlaneProxy:
             if not result.allowed:
                 return web.Response(
                     status=403,
-                    text=f"PHI_BLOCKED: outbound DLP scan detected {result.phi_count} PHI identifiers",
+                    text=(
+                        f"PHI_BLOCKED: outbound DLP scan detected "
+                        f"{result.phi_count} PHI identifiers"
+                    ),
                 )
 
         # 转发请求
@@ -252,42 +274,48 @@ class CPlaneProxy:
             if self._tcp_connector is None:
                 self._tcp_connector = aiohttp.TCPConnector(ssl=False)
 
-            async with open_client_session(connector=self._tcp_connector) as session:
-                async with session.request(
+            async with (
+                open_client_session(connector=self._tcp_connector) as session,
+                session.request(
                     method=request.method,
                     url=target_url,
                     headers={
-                        k: v for k, v in request.headers.items()
+                        k: v
+                        for k, v in request.headers.items()
                         if k.lower() not in ("host", "x-prismclaw-identity", "x-mcp-server-name")
                     },
                     data=body,
                     allow_redirects=False,
-                ) as upstream_resp:
-                    # DLP 扫描响应体
-                    resp_body = await upstream_resp.read()
-                    if self._dlp is not None and resp_body:
-                        result = self._dlp.scan_for_proxy(resp_body, "inbound")
-                        if not result.allowed:
-                            return web.Response(
-                                status=403,
-                                text=f"PHI_BLOCKED: inbound DLP scan detected {result.phi_count} PHI identifiers",
-                            )
+                ) as upstream_resp,
+            ):
+                # DLP 扫描响应体
+                resp_body = await upstream_resp.read()
+                if self._dlp is not None and resp_body:
+                    result = self._dlp.scan_for_proxy(resp_body, "inbound")
+                    if not result.allowed:
+                        return web.Response(
+                            status=403,
+                            text=(
+                                f"PHI_BLOCKED: inbound DLP scan detected "
+                                f"{result.phi_count} PHI identifiers"
+                            ),
+                        )
 
-                    # 返回响应
-                    downstream = web.StreamResponse(status=upstream_resp.status)
-                    downstream.headers.update(upstream_resp.headers)
-                    await downstream.prepare(request)
-                    if resp_body:
-                        await downstream.write(resp_body)
-                    await downstream.write_eof()
-                    return downstream
+                # 返回响应
+                downstream = web.StreamResponse(status=upstream_resp.status)
+                downstream.headers.update(upstream_resp.headers)
+                await downstream.prepare(request)
+                if resp_body:
+                    await downstream.write(resp_body)
+                await downstream.write_eof()
+                return downstream
         except Exception as e:
             logger.error("CPlaneProxy: HTTP proxy error - %s", e)
             return web.Response(status=502, text=f"Bad Gateway: {e}")
 
     # ── HMAC 身份验证 ──────────────────────────────────────────────────
 
-    def _verify_identity(self, headers: dict | web.Headers) -> tuple[bool, str]:
+    def _verify_identity(self, headers: Mapping[str, str]) -> tuple[bool, str]:
         """验证 HMAC 身份头。
 
         格式：x-prismclaw-identity: v{version}:hmac-sha256-body
@@ -414,7 +442,9 @@ class CPlaneProxy:
         # 拒绝原始 IP 连接
         try:
             ipaddress.ip_address(hostname)
-            logger.warning("CPlaneProxy: DNS tunnel block - direct IP connection rejected: %s", hostname)
+            logger.warning(
+                "CPlaneProxy: DNS tunnel block - direct IP connection rejected: %s", hostname
+            )
             return ""
         except ValueError:
             pass  # 不是 IP，继续 DNS 解析
@@ -422,14 +452,14 @@ class CPlaneProxy:
         try:
             results = socket.getaddrinfo(hostname, None, socket.AF_INET)
             if results:
-                return results[0][4][0]
+                return _sockaddr_host(results[0][4])
         except socket.gaierror:
             pass
 
         try:
             results = socket.getaddrinfo(hostname, None, socket.AF_INET6)
             if results:
-                return results[0][4][0]
+                return _sockaddr_host(results[0][4])
         except socket.gaierror:
             pass
 

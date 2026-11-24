@@ -5,10 +5,10 @@
      ``untrusted_workspaces`` 列出的路径视为不受信任，其余默认受信任。
   2. 来源策略（``is_source_allowed_by_policy``）——企业黑白名单。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from prismclaw.engine.plugins.registry.identity import (
     BUILTIN_SOURCE,
@@ -50,14 +50,12 @@ def is_source_allowed_by_policy(
     """
     if blocked and source in blocked:
         return False
-    if strict_known is not None and source not in strict_known:
-        return False
-    return True
+    return not (strict_known is not None and source not in strict_known)
 
 
 def resolve_workspace_trusted(
     workspace_path: str | Path,
-    settings: Any = None,
+    settings: object = None,
 ) -> bool:
     """解析当前工作区的信任状态。
 
@@ -111,9 +109,7 @@ def is_source_trusted_for_load(
     """
     if explicitly_trusted and plugin_id is not None and plugin_id in explicitly_trusted:
         return True
-    if trust_tier_for_source(source) == UNTRUSTED and not workspace_trusted:
-        return False
-    return True
+    return not (trust_tier_for_source(source) == UNTRUSTED and not workspace_trusted)
 
 
 def trusted_plugins_from_settings(settings: object | None) -> set[str]:

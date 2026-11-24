@@ -92,9 +92,7 @@ def _tool_messages(persistence: SubagentPersistence) -> list[MessageEntry]:
 
 def _latest_effect(persistence: SubagentPersistence, call_id: str) -> dict[str, Any]:
     matches = [
-        effect
-        for effect in persistence.get_tool_effects()
-        if effect.get("tool_call_id") == call_id
+        effect for effect in persistence.get_tool_effects() if effect.get("tool_call_id") == call_id
     ]
     assert matches
     return matches[-1]
@@ -142,8 +140,7 @@ async def test_before_dispatch_repairs_all_calls_in_one_batch(monkeypatch) -> No
     branch = persistence.tree.get_branch()
     assert persistence.tree.leaf_id == branch[-1].id
     assert all(
-        child.parent_id == parent.id
-        for parent, child in zip(branch, branch[1:], strict=False)
+        child.parent_id == parent.id for parent, child in zip(branch, branch[1:], strict=False)
     )
     assert [message["role"] for message in persistence.rebuild_model_messages()] == [
         "user",
@@ -372,6 +369,4 @@ async def test_safe_repair_is_idempotent_after_cold_load() -> None:
     assert list(cold.tree.entries) == before_ids
     assert len(_tool_messages(cold)) == 1
     assert len(cold.get_tool_effects()) == 1
-    assert _latest_effect(cold, "call:cold")["commit_state"] == (
-        CommitState.ROLLED_BACK.value
-    )
+    assert _latest_effect(cold, "call:cold")["commit_state"] == (CommitState.ROLLED_BACK.value)

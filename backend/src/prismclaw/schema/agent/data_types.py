@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from typing import Literal
+
+from pydantic import BaseModel
+from typing_extensions import TypedDict
+
 """Cache strategy and content block types shared across layers.
 
 Consolidates CacheStrategySnapshot (formerly cache_types.py) and
@@ -7,16 +12,11 @@ TextBlock/ImageBlock/FileBlock/ContentBlock (formerly content_types.py)
 into a single module to reduce file fragmentation in contracts/agent/.
 """
 
-from typing import Literal
-from typing_extensions import TypedDict, Union
-
-from pydantic import BaseModel
-
 
 # ── Cache strategy ──────────────────────────────────────────────────────
 
+
 class CacheStrategySnapshot(TypedDict, total=False):
-    request_mode: str | None
     strategy_kind: str
     provider_adapter: str
     static_digest: str
@@ -24,17 +24,12 @@ class CacheStrategySnapshot(TypedDict, total=False):
     cacheable_segment_count: int
     trailing_part_count: int
     model_supports_cache_blocks: bool
-    prior_strategy_found: bool
-    prior_static_digest: str | None
-    reused_prior_strategy: bool
     replacement_state_digest: str | None
     replacement_decision_count: int
-    prior_replacement_state_digest: str | None
-    reused_replacement_state: bool
-    section_hashes: dict[str, str]
 
 
 # ── Content blocks ──────────────────────────────────────────────────────
+
 
 class TextBlock(BaseModel):
     type: Literal["text"] = "text"
@@ -46,7 +41,7 @@ class ImageBlock(BaseModel):
     data: str
     mime_type: str
     source_path: str | None = None
-    text: str = ""          # OCR 识别结果
+    text: str = ""  # OCR 识别结果
 
 
 class FileBlock(BaseModel):
@@ -61,7 +56,7 @@ class FileBlock(BaseModel):
     is_source_document: bool = False
 
 
-ContentBlock = Union[TextBlock, ImageBlock, FileBlock]
+ContentBlock = TextBlock | ImageBlock | FileBlock
 
 
 __all__ = [

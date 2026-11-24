@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from prismclaw.app.auth.auth import get_current_user
 from prismclaw.app.web.deps import get_web_deps
-from prismclaw.schema.scheduler import ScheduledTask, ScheduledTaskRun, make_run_id
+from prismclaw.infra.settings import SchedulerSettings
+from prismclaw.schema.scheduler import (
+    ScheduledTask,
+    ScheduledTaskRun,
+    SchedulerStoreProtocol,
+    make_run_id,
+)
 from prismclaw.schema.shared.cron_convert import cron_to_spec, spec_to_cron
 
 scheduler_router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduler"])
@@ -22,7 +29,7 @@ scheduler_router = APIRouter(prefix="/api/scheduled-tasks", tags=["scheduler"])
 class CreateTaskRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     instruction: str = Field(min_length=1, max_length=5000)
-    schedule: dict  # ScheduleSpec from frontend
+    schedule: dict[str, Any]  # ScheduleSpec from frontend
     workspace_id: str | None = None  # None = 从 request query/header 取；再兜底 "default"
     missed_policy: str = "skip"
     max_age_days: int = Field(default=30, ge=0, le=365)
@@ -31,7 +38,7 @@ class CreateTaskRequest(BaseModel):
 class UpdateTaskRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     instruction: str | None = Field(default=None, min_length=1, max_length=5000)
-    schedule: dict | None = None
+    schedule: dict[str, Any] | None = None
     enabled: bool | None = None
     missed_policy: str | None = None
     max_age_days: int | None = Field(default=None, ge=0, le=365)
@@ -57,7 +64,7 @@ class TaskResponse(BaseModel):
     id: str
     name: str
     instruction: str
-    schedule: dict
+    schedule: dict[str, Any]
     cron_expr: str
     workspace_id: str
     enabled: bool
@@ -86,7 +93,7 @@ class RunResponse(BaseModel):
 # ── Helpers ────────────────────────────────────────────────────────────
 
 
-def _get_store(request: Request):
+def _get_store(request: Request) -> SchedulerStoreProtocol:
     web_deps = get_web_deps(request)
     store = web_deps.scheduler_store
     if store is None:
@@ -94,14 +101,21 @@ def _get_store(request: Request):
     return store
 
 
-def _get_settings(request: Request):
+def _require_settings(request: Request) -> SchedulerSettings:
+    settings = _get_settings(request)
+    if settings is None:
+        raise HTTPException(status_code=503, detail="Scheduler not configured")
+    return settings
+
+
+def _get_settings(request: Request) -> SchedulerSettings | None:
     web_deps = get_web_deps(request)
     if web_deps.settings_full is not None:
         return web_deps.settings_full.scheduler
     return None
 
 
-async def _invalidate_cache(app, task_id: str) -> None:
+async def _invalidate_cache(app: FastAPI, task_id: str) -> None:
     """Invalidate the scheduler next-fire cache for a task, across workers.
 
     Local: pop the entry on this process's engine. Cross-worker (cloud): publish
@@ -117,13 +131,13 @@ async def _invalidate_cache(app, task_id: str) -> None:
     if redis is not None:
         from prismclaw.schema.scheduler import INVALIDATE_CHANNEL
 
-        try:
+        # invalidation is best-effort
+        with contextlib.suppress(Exception):
             await redis.publish(INVALIDATE_CHANNEL, task_id)
-        except Exception:  # noqa: BLE001 — invalidation is best-effort
-            pass
 
 
 def _task_to_response(task: ScheduledTask, request: Request) -> dict[str, Any]:
+    limits = _require_settings(request)
     return {
         "id": task.id,
         "name": task.name,
@@ -135,7 +149,7 @@ def _task_to_response(task: ScheduledTask, request: Request) -> dict[str, Any]:
         "last_fired_at": task.last_fired_at,
         "last_status": task.last_status,
         "consecutive_failures": task.consecutive_failures,
-        "max_consecutive_failures": _get_settings(request).max_consecutive_failures,
+        "max_consecutive_failures": limits.max_consecutive_failures,
         "conversation_id": task.conversation_id,
         "created_at": task.created_at,
         "max_age_days": task.max_age_days,
@@ -178,7 +192,7 @@ async def create_task(
     user_id: str = Depends(get_current_user),
 ) -> dict[str, Any]:
     store = _get_store(request)
-    settings = _get_settings(request)
+    settings = _require_settings(request)
 
     if await store.count_user_tasks(user_id) >= settings.max_tasks_per_user:
         raise HTTPException(
@@ -189,7 +203,7 @@ async def create_task(
     try:
         cron_expr = spec_to_cron(body.schedule)
     except (ValueError, KeyError) as e:
-        raise HTTPException(status_code=422, detail=f"Invalid schedule: {e}")
+        raise HTTPException(status_code=422, detail=f"Invalid schedule: {e}") from e
 
     task = ScheduledTask(
         user_id=user_id,
@@ -229,7 +243,7 @@ async def update_task(
         try:
             task.cron_expr = spec_to_cron(body.schedule)
         except (ValueError, KeyError) as e:
-            raise HTTPException(status_code=422, detail=f"Invalid schedule: {e}")
+            raise HTTPException(status_code=422, detail=f"Invalid schedule: {e}") from e
         task.schedule_spec = body.schedule
     if body.enabled is not None:
         task.enabled = body.enabled
@@ -308,9 +322,7 @@ async def trigger_task(
     try:
         await dispatch_queue.enqueue(job)
     except Exception:
-        await store.update_run(
-            run.id, status="failed", error="dispatch_enqueue_failed"
-        )
+        await store.update_run(run.id, status="failed", error="dispatch_enqueue_failed")
         raise
 
     return {"run_id": run.id, "status": "pending"}

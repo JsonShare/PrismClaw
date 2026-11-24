@@ -8,21 +8,18 @@ from prismclaw.engine.compression.cache_block_packing import (
     MIN_CACHE_TOKENS,
     CacheBlockPacker,
 )
+from prismclaw.engine.context.projection_models import PromptProjection
+from prismclaw.engine.state.state_protocol import normalize_state_payload
+from prismclaw.schema.content.context import ContextPackLayout
 from prismclaw.schema.content.replacement_state import ReplacementDecisionState
-from prismclaw.schema.content import (
+from prismclaw.schema.content.replacement_store import (
     append_replacement_decisions,
     extract_replacement_decisions_from_blocks,
 )
-from prismclaw.engine.context.projection_models import PromptProjection
-from prismclaw.engine.state.state_protocol import normalize_state_payload
-from prismclaw.schema.agent.data_types import CacheStrategySnapshot
-from prismclaw.schema.content.context import ContextPackLayout
+from prismclaw.schema.llm.request import PackedLLMRequest
 
 _MIN_CACHE_TOKENS = MIN_CACHE_TOKENS
 _CONTEXT_PAYLOAD_SCHEMA_VERSION = "prism_context_payload.v2"
-
-
-from prismclaw.schema.llm.request import PackedLLMRequest
 
 
 class RequestPackager:
@@ -34,8 +31,6 @@ class RequestPackager:
         *,
         projection: PromptProjection,
         model: str,
-        request_mode: str | None = None,
-        previous_cache_strategy: CacheStrategySnapshot | None = None,
         previous_replacement_state: ReplacementDecisionState | None = None,
         session_id: str | None = None,
     ) -> PackedLLMRequest:
@@ -52,10 +47,6 @@ class RequestPackager:
         system = self._cache_block_packer.pack(
             plan=static_plan,
             model=model,
-            request_mode=request_mode,
-            previous_cache_strategy=previous_cache_strategy,
-            replacement_state=current_replacement_state,
-            previous_replacement_state=previous_replacement_state,
         )
 
         # T5：工具结果唯一保留在 messages 的 tool 角色，不再渲染进
@@ -73,12 +64,13 @@ class RequestPackager:
         if context_payload is not None:
             from prismclaw.engine.compression.compaction import estimate_tokens
             from prismclaw.schema.llm.request_format import render_context_payload_text
+
             rendered = render_context_payload_text(context_payload)
             # +role_text (~15 tokens) + <system-context> tags (~15 tokens)
             context_payload_tokens = estimate_tokens(rendered) + 30
 
         return PackedLLMRequest(
-            messages=projection.projected_messages,
+            messages=[dict(message) for message in projection.projected_messages],
             system=system,
             context_payload=context_payload,
             context_payload_tokens=context_payload_tokens,
@@ -86,10 +78,7 @@ class RequestPackager:
             cache_strategy=self._cache_block_packer.describe_strategy(
                 plan=static_plan,
                 model=model,
-                request_mode=request_mode,
-                previous_cache_strategy=previous_cache_strategy,
                 replacement_state=current_replacement_state,
-                previous_replacement_state=previous_replacement_state,
             ),
         )
 
@@ -125,7 +114,7 @@ def _build_context_payload(blocks: list[Any]) -> dict[str, Any]:
         if attachment_entry is not None:
             rendered_attachments.append(attachment_entry)
 
-    payload = {
+    payload: dict[str, Any] = {
         "type": "prism_context_payload",
         "schema_version": _CONTEXT_PAYLOAD_SCHEMA_VERSION,
         "blocks": rendered_blocks,
@@ -133,9 +122,7 @@ def _build_context_payload(blocks: list[Any]) -> dict[str, Any]:
     if rendered_attachments:
         payload["attachments"] = rendered_attachments
         payload["attachment_count"] = len(rendered_attachments)
-        payload["attachment_revision_digest"] = _attachment_revision_digest(
-            rendered_attachments
-        )
+        payload["attachment_revision_digest"] = _attachment_revision_digest(rendered_attachments)
         payload["attachments_present"] = True
     else:
         payload["attachments_present"] = False

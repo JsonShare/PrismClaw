@@ -1,26 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
 
 import redis.asyncio as aioredis
 
-from prismclaw.schema.session.types import SessionTree
+from prismclaw.infra.redis import resolve
+from prismclaw.persistence.lock.redis import LockAcquireError
+from prismclaw.persistence.session.base import _generate_session_id, emit_commit_metrics
 from prismclaw.schema.agent.session import SessionHeader
-from prismclaw.schema.session.types import SessionEntry
 from prismclaw.schema.session import (
     SessionEvent,
     SessionEventType,
     SessionHistorySummary,
     _event_to_message_entry,
-    _parse_entry as _parse_entry_dict,
     _repair_parent_chain,
 )
-from prismclaw.persistence.lock.redis import LockAcquireError
+from prismclaw.schema.session import (
+    _parse_entry as _parse_entry_dict,
+)
+from prismclaw.schema.session.types import SessionEntry, SessionTree
 from prismclaw.schema.storage.persistence_types import LockManager
-from prismclaw.persistence.session.base import emit_commit_metrics, _generate_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +140,7 @@ class RedisSessionStore:
 
     async def get_events(self, session_id: str, *, since_seq: int = 0) -> list[SessionEvent]:
         """Read events from the Event Log, optionally since a given seq."""
-        raw = await self._client.lrange(self._events_key(session_id), 0, -1)
+        raw = await resolve(self._client.lrange(self._events_key(session_id), 0, -1))
         if not raw:
             return []
         events: list[SessionEvent] = []
@@ -160,10 +163,10 @@ class RedisSessionStore:
     ) -> list[SessionEvent]:
         """Read events from the Event Log filtered by time range (epoch ms).
 
- Aligns with 时间对齐: events are filtered by time_ms
-        and returned in seq order (monotonically increasing with time).
+        Aligns with 时间对齐: events are filtered by time_ms
+               and returned in seq order (monotonically increasing with time).
         """
-        raw = await self._client.lrange(self._events_key(session_id), 0, -1)
+        raw = await resolve(self._client.lrange(self._events_key(session_id), 0, -1))
         if not raw:
             return []
         events: list[SessionEvent] = []
@@ -182,7 +185,7 @@ class RedisSessionStore:
 
     async def get_event_count(self, session_id: str) -> int:
         """Return the total number of events for a session."""
-        raw = await self._client.lrange(self._events_key(session_id), 0, -1)
+        raw = await resolve(self._client.lrange(self._events_key(session_id), 0, -1))
         return len(raw) if raw else 0
 
     async def rebuild_tree(self, session_id: str) -> SessionTree | None:
@@ -240,7 +243,7 @@ class RedisSessionStore:
                 if attempt == self._LOCK_RETRY_ATTEMPTS - 1:
                     break
                 # 递增退避：0.02 * 2^attempt，封顶约 1s
-                delay = min(self._LOCK_RETRY_BASE_DELAY_S * (2 ** attempt), 1.0)
+                delay = min(self._LOCK_RETRY_BASE_DELAY_S * (2**attempt), 1.0)
                 await asyncio.sleep(delay)
         raise SessionLockError(session_id)
 
@@ -352,7 +355,9 @@ class RedisSessionStore:
         for i, event in enumerate(events):
             event.seq = int(results[i])
 
-    async def _apply_projections_from_events(self, session_id: str, events: list[SessionEvent]) -> None:
+    async def _apply_projections_from_events(
+        self, session_id: str, events: list[SessionEvent]
+    ) -> None:
         """Apply projection updates derived from event data.
 
         Events that produce surface entries:
@@ -514,10 +519,7 @@ class RedisSessionStore:
         if not raw:
             return []
 
-        session_ids = [
-            sid.decode() if isinstance(sid, bytes) else sid
-            for sid in raw
-        ]
+        session_ids = [sid.decode() if isinstance(sid, bytes) else sid for sid in raw]
 
         async with self._client.pipeline(transaction=False) as pipe:
             for sid in session_ids:
@@ -562,7 +564,7 @@ class RedisSessionStore:
                 self._migrate_message_counts(session_ids, hdr_raw_list, needs_migration)
             )
 
-            def _on_mig_done(_t: asyncio.Task) -> None:
+            def _on_mig_done(_t: asyncio.Task[None]) -> None:
                 try:
                     _t.result()
                 except asyncio.CancelledError:
@@ -570,10 +572,8 @@ class RedisSessionStore:
                 except Exception:
                     _mig_logger.debug("session message_count migration failed", exc_info=True)
 
-            try:
+            with contextlib.suppress(Exception):
                 t.add_done_callback(_on_mig_done)
-            except Exception:
-                pass
 
         if dead_ids:
             # 惰性 GC：清掉历史 ZSET 中指向已丢失会话的悬空引用，
@@ -599,7 +599,7 @@ class RedisSessionStore:
                 entries_list = await pipe.execute()
 
             updates: list[tuple[int, int]] = []
-            for (i, sid), ent_raw in zip(needs_migration, entries_list):
+            for (i, _sid), ent_raw in zip(needs_migration, entries_list, strict=False):
                 msg_count = 0
                 for raw in ent_raw:
                     try:
@@ -619,10 +619,14 @@ class RedisSessionStore:
                             continue
                         header = SessionHeader.model_validate_json(hdr_raw)
                         header.message_count = new_count
-                        pipe.set(self._hdr_key(session_ids[i]), header.model_dump_json(), ex=self._ttl)
+                        pipe.set(
+                            self._hdr_key(session_ids[i]), header.model_dump_json(), ex=self._ttl
+                        )
                     await pipe.execute()
         except Exception:
-            logger.exception("Failed to migrate message_counts for %s", session_ids[0] if session_ids else "")
+            logger.exception(
+                "Failed to migrate message_counts for %s", session_ids[0] if session_ids else ""
+            )
 
     async def delete_session(self, session_id: str) -> bool:
         hdr_raw = await self._client.get(self._hdr_key(session_id))

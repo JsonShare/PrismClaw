@@ -14,17 +14,21 @@
 生产环境禁用：``PRISMCLAW_DEPLOYMENT_ENV=production`` 下构造即抛错，
 确保线上只走 HTTP 容器路径，杜绝任何静默降级。
 """
+
 from __future__ import annotations
 
 import base64
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.engine.runtime.agent.executor import RuntimeExecutor
+from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.schema.services.env_types import CommandResult, FileResult
+
+if TYPE_CHECKING:
+    from prismclaw.engine.security.sandbox.policy import SandboxPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +55,7 @@ class InProcessRuntimeClient:
         hmac_key_version: str = "1",
         workspace_id: str = "",
         timeout_seconds: float = 30.0,
-        sandbox_policy: Any | None = None,
+        sandbox_policy: SandboxPolicy | None = None,
     ) -> None:
         _assert_non_production()
         # workspace_root 为空时，按调用级 workspace_root 动态解析 executor
@@ -109,24 +113,60 @@ class InProcessRuntimeClient:
 
     # ── 文件读取 ──────────────────────────────────────────────────────
 
-    async def read_text(self, path: str, *, encoding: str = "utf-8", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def read_text(
+        self,
+        path: str,
+        *,
+        encoding: str = "utf-8",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         data = await self._executor_for(workspace_root).read_text(path, encoding=encoding)
-        return FileResult(success=data.get("success", False), content=data.get("content"), error=data.get("error"))
+        return FileResult(
+            success=data.get("success", False), content=data.get("content"), error=data.get("error")
+        )
 
-    async def read_bytes(self, path: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def read_bytes(
+        self,
+        path: str,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         data = await self._executor_for(workspace_root).read_bytes(path)
         content = None
         if data.get("success") and "content_b64" in data:
             content = base64.b64decode(data["content_b64"])
-        return FileResult(success=data.get("success", False), content=content, error=data.get("error"))
+        return FileResult(
+            success=data.get("success", False), content=content, error=data.get("error")
+        )
 
     # ── 文件写入 ──────────────────────────────────────────────────────
 
-    async def write_text(self, path: str, content: str, *, encoding: str = "utf-8", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def write_text(
+        self,
+        path: str,
+        content: str,
+        *,
+        encoding: str = "utf-8",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         data = await self._executor_for(workspace_root).write_text(path, content, encoding=encoding)
         return FileResult(success=data.get("success", False), error=data.get("error"))
 
-    async def write_bytes(self, path: str, content: bytes, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def write_bytes(
+        self,
+        path: str,
+        content: bytes,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         data = await self._executor_for(workspace_root).write_bytes(path, content)
         return FileResult(success=data.get("success", False), error=data.get("error"))
 
@@ -161,7 +201,7 @@ class InProcessRuntimeClient:
             offset = 0
             while offset < total:
                 if send_mode == "bytes":
-                    chunk = payload[offset:offset + chunk_size]
+                    chunk = payload[offset : offset + chunk_size]
                     send = base64.b64encode(chunk).decode("ascii")
                 else:
                     remaining = payload[offset:]
@@ -179,7 +219,15 @@ class InProcessRuntimeClient:
 
     # ── http_get ──────────────────────────────────────────────────────
 
-    async def http_get(self, url: str, *, tier: str = "standard", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def http_get(
+        self,
+        url: str,
+        *,
+        tier: str = "standard",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         data = await self._executor_for(workspace_root).http_get(url, tier=SandboxTier(tier))
         return FileResult(
             success=data.get("success", False),
@@ -191,17 +239,46 @@ class InProcessRuntimeClient:
 
     # ── 结构化文件系统端点（与 server.py /fs/* 共用 executor 实现） ──
 
-    async def fs_list(self, path: str = ".", *, recursive: bool = False, ignore_hidden: bool = True, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def fs_list(
+        self,
+        path: str = ".",
+        *,
+        recursive: bool = False,
+        ignore_hidden: bool = True,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return await self._executor_for(workspace_root).fs_list(
             path, recursive=recursive, ignore_hidden=ignore_hidden
         )
 
-    async def fs_glob(self, pattern: str = "*", path: str = ".", *, max_results: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def fs_glob(
+        self,
+        pattern: str = "*",
+        path: str = ".",
+        *,
+        max_results: int = 200,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return await self._executor_for(workspace_root).fs_glob(
             pattern, path, max_results=max_results
         )
 
-    async def fs_grep(self, pattern: str, path: str = ".", *, include: str = "*", case_insensitive: bool = False, max_matches: int = 200, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def fs_grep(
+        self,
+        pattern: str,
+        path: str = ".",
+        *,
+        include: str = "*",
+        case_insensitive: bool = False,
+        max_matches: int = 200,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return await self._executor_for(workspace_root).fs_grep(
             pattern,
             path,
@@ -210,12 +287,30 @@ class InProcessRuntimeClient:
             max_matches=max_matches,
         )
 
-    async def http_post(self, url: str, *, body: Any = None, headers: dict[str, str] | None = None, content_type: str = "application/json", tier: str = "standard", template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> FileResult:
+    async def http_post(
+        self,
+        url: str,
+        *,
+        body: object = None,
+        headers: dict[str, str] | None = None,
+        content_type: str = "application/json",
+        tier: str = "standard",
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> FileResult:
         allow_net = getattr(self._executor_for(self._default_root), "_allow_net", True) or True
         if not allow_net:
-            return FileResult(success=False, content=None, error="network_access_disabled", http_status_code=0, http_headers={})
+            return FileResult(
+                success=False,
+                content=None,
+                error="network_access_disabled",
+                http_status_code=0,
+                http_headers={},
+            )
         try:
             import httpx
+
             _headers = dict(headers) if headers else {}
             if content_type and "content-type" not in {k.lower() for k in _headers}:
                 _headers["content-type"] = content_type
@@ -223,7 +318,9 @@ class InProcessRuntimeClient:
                 if isinstance(body, dict):
                     resp = await client.post(url, json=body, headers=_headers)
                 else:
-                    resp = await client.post(url, content=body if isinstance(body, str) else None, headers=_headers)
+                    resp = await client.post(
+                        url, content=body if isinstance(body, str) else None, headers=_headers
+                    )
                 return FileResult(
                     success=200 <= resp.status_code < 300,
                     content=resp.text,
@@ -232,14 +329,28 @@ class InProcessRuntimeClient:
                     http_headers=dict(resp.headers),
                 )
         except Exception as exc:
-            return FileResult(success=False, content=None, error=str(exc), http_status_code=0, http_headers={})
+            return FileResult(
+                success=False, content=None, error=str(exc), http_status_code=0, http_headers={}
+            )
 
     # ── 后台任务 ──────────────────────────────────────────────────────
 
-    async def list_jobs(self, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> list[dict[str, Any]]:
+    async def list_jobs(
+        self,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> list[dict[str, Any]]:
         return self._executor_for(workspace_root).list_jobs()
 
-    async def job_status(self, pid: int, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any] | None:
+    async def job_status(
+        self,
+        pid: int,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any] | None:
         # pid 在 OS 内唯一，跨所有 executor 查找
         for exe in self._executors.values():
             st = exe.job_status(pid)
@@ -249,32 +360,85 @@ class InProcessRuntimeClient:
             return self._executor_for(self._default_root).job_status(pid)
         return None
 
-    async def job_kill(self, pid: int, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> bool:
-        for exe in self._executors.values():
-            if exe.job_kill(pid):
-                return True
-        return False
+    async def job_kill(
+        self,
+        pid: int,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> bool:
+        return any(exe.job_kill(pid) for exe in self._executors.values())
 
     # ── 归档（进程内模式不支持 Docker，均为 no-op）──────────────────
 
-    async def archive_create(self, name: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
-        return {"archive_id": f"prismclaw/archive:{name}", "size_mb": 0, "error": "archive not supported in process mode"}
+    async def archive_create(
+        self,
+        name: str,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "archive_id": f"prismclaw/archive:{name}",
+            "size_mb": 0,
+            "error": "archive not supported in process mode",
+        }
 
-    async def archive_restore(self, archive_id: str, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def archive_restore(
+        self,
+        archive_id: str,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return {"restored": False, "error": "restore not supported in process mode"}
 
-    async def archive_list(self, *, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict[str, Any]:
+    async def archive_list(
+        self,
+        *,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return {"archives": []}
 
     # ── health / mcp ─────────────────────────────────────────────────
 
-    async def health(self, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> bool:
+    async def health(
+        self,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> bool:
         return True
 
-    async def mcp_spawn(self, server_name: str, *, transport: str = "stdio", args: list[str] | None = None, env: dict[str, str] | None = None, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict:
-        return await self._executor_for(workspace_root).mcp_spawn(server_name, transport=transport, args=args, env=env)
+    async def mcp_spawn(
+        self,
+        server_name: str,
+        *,
+        transport: str = "stdio",
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._executor_for(workspace_root).mcp_spawn(
+            server_name, transport=transport, args=args, env=env
+        )
 
-    async def mcp_call(self, server_name: str, tool_name: str, arguments: dict | None = None, template_id: str = "__default__", workspace_id: str | None = None, workspace_root: str | None = None) -> dict:
+    async def mcp_call(
+        self,
+        server_name: str,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        template_id: str = "__default__",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> dict[str, Any]:
         return await self._executor_for(workspace_root).mcp_call(server_name, tool_name, arguments)
 
     async def close(self) -> None:  # pragma: no cover - 进程内无需关闭

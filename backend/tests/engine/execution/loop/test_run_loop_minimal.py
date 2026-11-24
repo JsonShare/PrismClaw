@@ -10,6 +10,7 @@ Prepare 端口 + B/S 插槽缺省）+ 最小 RunLoopState，证明骨架可以�
    谓词 `iteration < N` 产生 N+1 次 LLM 调用 → max_turns 终止判定必须放
    post 相位（且让末轮工具执行完）。
 """
+
 import asyncio
 from types import SimpleNamespace
 
@@ -58,7 +59,10 @@ async def test_run_loop_minimal_config_pure_text_loop() -> None:
         yield  # pragma: no cover — 使本函数成为 async generator
 
     async def should_continue(
-        s: RunLoopState, response=None, *, event: LoopEvent,
+        s: RunLoopState,
+        response=None,
+        *,
+        event: LoopEvent,
     ) -> Decision:
         return Decision("PROCEED" if s.iteration < 2 else "COMPLETE", "test")
 
@@ -95,19 +99,28 @@ async def test_run_loop_post_phase_terminates_after_last_turn_tools() -> None:
         nonlocal llm_calls
         llm_calls += 1
         s.llm_response = _fake_response(
-            tool_calls=[{"id": f"c{llm_calls}", "type": "function",
-                         "function": {"name": "noop", "arguments": "{}"}}]
+            tool_calls=[
+                {
+                    "id": f"c{llm_calls}",
+                    "type": "function",
+                    "function": {"name": "noop", "arguments": "{}"},
+                }
+            ]
         )
         return
         yield  # pragma: no cover
 
     async def should_continue(
-        s: RunLoopState, response=None, *, event: LoopEvent,
+        s: RunLoopState,
+        response=None,
+        *,
+        event: LoopEvent,
     ) -> Decision:
         if event.site == "post":
             # max_turns=2：calls_made = s.iteration + 1
             return Decision(
-                "PROCEED" if s.iteration + 1 < 2 else "COMPLETE", "test",
+                "PROCEED" if s.iteration + 1 < 2 else "COMPLETE",
+                "test",
             )
         return Decision("PROCEED", "test")  # preflight 放行，让工具执行
 
@@ -149,7 +162,10 @@ async def test_turn_perf_counts_pure_text_turn() -> None:
         yield  # pragma: no cover
 
     async def should_continue(
-        s: RunLoopState, response=None, *, event: LoopEvent,
+        s: RunLoopState,
+        response=None,
+        *,
+        event: LoopEvent,
     ) -> Decision:
         return Decision("COMPLETE", "test")  # 一轮即终止
 
@@ -190,18 +206,27 @@ async def test_turn_perf_counts_tool_calls_across_iterations() -> None:
         nonlocal llm_calls
         llm_calls += 1
         s.llm_response = _fake_response(
-            tool_calls=[{"id": f"c{llm_calls}", "type": "function",
-                         "function": {"name": "noop", "arguments": "{}"}}]
+            tool_calls=[
+                {
+                    "id": f"c{llm_calls}",
+                    "type": "function",
+                    "function": {"name": "noop", "arguments": "{}"},
+                }
+            ]
         )
         return
         yield  # pragma: no cover
 
     async def should_continue(
-        s: RunLoopState, response=None, *, event: LoopEvent,
+        s: RunLoopState,
+        response=None,
+        *,
+        event: LoopEvent,
     ) -> Decision:
         if event.site == "post":
             return Decision(
-                "PROCEED" if s.iteration + 1 < 2 else "COMPLETE", "test",
+                "PROCEED" if s.iteration + 1 < 2 else "COMPLETE",
+                "test",
             )
         return Decision("PROCEED", "test")
 

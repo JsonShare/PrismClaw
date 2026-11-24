@@ -30,7 +30,9 @@ class _FakeLease:
 class _AlwaysBusyLockProvider:
     """模拟会话锁被另一个执行者持有。"""
 
-    async def try_acquire(self, session_key: str, *, owner_label: str) -> DreamExecutionLease | None:
+    async def try_acquire(
+        self, session_key: str, *, owner_label: str
+    ) -> DreamExecutionLease | None:
         return None
 
 
@@ -137,12 +139,13 @@ async def test_lock_busy_is_success_not_failure():
         task_manager=_FakeTaskManager(),
     )
     assert await scheduler._run_light_worker("web:admin") is True
-    assert await scheduler._run_nightly_worker(
-        "web:admin",
-        nightly_window=type(
-            "W", (), {"start_at": datetime.now(), "end_at": datetime.now()}
-        )(),
-    ) is True
+    assert (
+        await scheduler._run_nightly_worker(
+            "web:admin",
+            nightly_window=type("W", (), {"start_at": datetime.now(), "end_at": datetime.now()})(),
+        )
+        is True
+    )
 
 
 @pytest.mark.asyncio

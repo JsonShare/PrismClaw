@@ -6,14 +6,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class WorkspaceSettings(BaseSettings):
     default: str = "~/.prismclaw/workspaces"
-    bootstrap_files: list[str] = Field(
-        default_factory=lambda: ["AGENTS.md"]
-    )
+    bootstrap_files: list[str] = Field(default_factory=lambda: ["AGENTS.md"])
     # 工作区级信任控制：列出需要被视为不受信任的工作区路径。
     # 未列出的工作区默认受信任（向后兼容）。
-    untrusted_workspaces: list[str] = Field(
-        default_factory=list
-    )
+    untrusted_workspaces: list[str] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")
 
@@ -50,8 +46,6 @@ class BuiltinToolSettings(BaseSettings):
     configuration.
     """
 
-    fetch_mcp_resource_enabled: bool = Field(
-        default=False
-    )
+    fetch_mcp_resource_enabled: bool = Field(default=False)
 
     model_config = SettingsConfigDict(populate_by_name=True, extra="ignore")

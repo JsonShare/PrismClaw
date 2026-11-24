@@ -1,39 +1,40 @@
 """gate 子域 — 核心门控基础设施。"""
-from prismclaw.engine.security.gate.types import (
-    ActorIdentity,
-    AllowedToolsPolicy,
-    RuntimeMode,
-    TaskRuntimeContext,
-    SubagentProgressSink,
-    ParallelTaskExtras,
-    ConsentStoreProtocol,
-    AggregateStoreProtocol,
-    BreakGlassStoreProtocol,
-    InMemoryAggregateStore,
-    NullBreakGlassStore,
-)
+
+from prismclaw.engine.security.gate.constraint_guard import ConstraintBreach
 from prismclaw.engine.security.gate.policies import (
+    AggregateAction,
+    AggregateDecision,
+    AggregateThreshold,
     DataResidency,
+    RedisAggregateStore,
+    SessionAggregateGuard,
     WorkspaceTag,
     WorkspaceTagValidator,
-    AggregateAction,
-    AggregateThreshold,
-    AggregateDecision,
-    SessionAggregateGuard,
-    RedisAggregateStore,
     create_aggregate_store,
 )
+from prismclaw.engine.security.gate.probes import run_preflight_probe, run_recovery_probe
 from prismclaw.engine.security.gate.routing.risk_router import (
-    SideEffectScope,
+    _TIER_ORDER,
     DataClassification,
     Reversibility,
+    SideEffectScope,
     ToolSafetyMeta,
     get_tool_safety_meta,
-    _TIER_ORDER,
 )
 from prismclaw.engine.security.gate.routing.rule_gate import RuleGate, RuleGateResult
-from prismclaw.engine.security.gate.constraint_guard import ConstraintBreach
-from prismclaw.engine.security.gate.probes import run_preflight_probe, run_recovery_probe
+from prismclaw.engine.security.gate.types import (
+    ActorIdentity,
+    AggregateStoreProtocol,
+    AllowedToolsPolicy,
+    BreakGlassStoreProtocol,
+    ConsentStoreProtocol,
+    InMemoryAggregateStore,
+    NullBreakGlassStore,
+    ParallelTaskExtras,
+    RuntimeMode,
+    SubagentProgressSink,
+    TaskRuntimeContext,
+)
 
 __all__ = [
     # types (protocols + stubs + actor_identity + runtime_context)

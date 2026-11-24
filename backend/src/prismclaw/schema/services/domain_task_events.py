@@ -7,10 +7,12 @@ adapter 直接用它当 user_id（resolve_user_workspace 默认恒等映射）�
 
 registry 自动接线时会传 kind=bundle.name，域 bundle 手写接线时也可直接用。
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from prismclaw.schema.services.domain import DomainTaskEmitter
 
@@ -32,8 +34,9 @@ def make_status_listener(
     """
 
     async def on_status_event(event: dict[str, Any]) -> None:
+        target = event.get("workspace_id") or event.get("user_id")
         await emitter.broadcast(
-            event.get("workspace_id", event.get("user_id")),
+            str(target or ""),
             DOMAIN_TASK_EVENT_TYPE,
             {
                 "task_id": event["task_id"],

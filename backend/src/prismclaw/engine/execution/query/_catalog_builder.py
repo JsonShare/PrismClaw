@@ -1,46 +1,39 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 from prismclaw.engine.execution.capabilities.catalog import (
     CapabilityCatalogService,
 )
-from prismclaw.engine.execution.request.system_prompt import (
+from prismclaw.engine.execution.request._prompt_types import (
     AvailableSubagentEntry,
     MarketplaceSummary,
+)
+from prismclaw.engine.execution.request.system_prompt import (
     _subagent_compact_description,
 )
-from prismclaw.engine.subagent.runtime.follow_up import (
-    build_session_follow_up_note,
-    session_follow_up_snapshot,
-)
-from prismclaw.schema.services.skills import SkillInvocationState
 
 logger = logging.getLogger(__name__)
-
-def _session_follow_up_notes(tree: Any, tool_summaries: list[tuple[str, str]]) -> list[str]:
-    return build_session_follow_up_note(
-        session_follow_up_snapshot(tree),
-        available_tools={name for name, _desc in tool_summaries},
-    )
 
 
 def _tool_prompt_summaries(
     *,
     capability_catalog: CapabilityCatalogService,
-    skill_invocation: SkillInvocationState | None,
-    discovered_tools: set[str] | None,
-    subagent_depth: int,
-    headless: bool = False,
+    visible_names: set[str],
+    subagent_depth: int = 0,
 ) -> list[tuple[str, str]]:
+    """``<tools>`` 段的工具摘要，数据源是本轮可见集。
+
+    ``visible_names`` 取自 ``TurnPlan.toolset``，与实发 ``tools_for_llm``
+    同源，因此提示词不可能宣传模型调不到的工具（SDD D14）。
+    """
     return [
         (entry.llm_name, entry.description)
         for entry in capability_catalog.list_visible_tool_entries(
-            skill_invocation=skill_invocation,
-            discovered_tools=discovered_tools,
+            visible_names=visible_names,
             subagent_depth=subagent_depth,
-            headless=headless,
         )
     ]
 
@@ -56,8 +49,8 @@ def _build_available_skills_catalog(
     *,
     capability_catalog: CapabilityCatalogService | None,
     workspace_path: str | None,
-    tool_summaries: list[tuple[str, str]],
-) -> "tuple[tuple[str, ...], tuple[MarketplaceSummary, ...]]":
+    tool_summaries: Sequence[tuple[str, str]],
+) -> tuple[tuple[str, ...], tuple[MarketplaceSummary, ...]]:
     """项目技能名 + 插件包索引（三层披露的第一层）。
 
     - 项目技能：逐个列名。用户主动安装、数量有界，全量保留。
@@ -113,7 +106,7 @@ def _build_available_skills_catalog(
 def _build_available_subagents_catalog(
     *,
     capability_catalog: CapabilityCatalogService | None,
-    tool_summaries: list[tuple[str, str]],
+    tool_summaries: Sequence[tuple[str, str]],
 ) -> tuple[AvailableSubagentEntry, ...]:
     """子代理目录（全量，不截断）。
 

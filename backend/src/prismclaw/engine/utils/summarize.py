@@ -9,13 +9,15 @@ SDD DT-3: do NOT hold references into the mutable pipeline objects. Every
 element we return is a freshly-constructed Python str/int/tuple. Any in-place
 mutation after return CANNOT affect the captured values.
 """
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 
 def summarize_messages(
-    messages: list[dict[str, Any]],
+    messages: Iterable[object],
     *,
     n_head: int = 2,
     n_tail: int = 2,
@@ -69,7 +71,7 @@ def summarize_tree_order(
 ) -> tuple[int, tuple[str, ...], tuple[int, ...], tuple[int, ...], tuple[str, ...]]:
     """Return for a SessionTree.order entry list:
 
-        (entry_count, entry_types, head_seqs, tail_seqs, tail_types)
+    (entry_count, entry_types, head_seqs, tail_seqs, tail_types)
     """
     total = 0
     types: list[str] = []

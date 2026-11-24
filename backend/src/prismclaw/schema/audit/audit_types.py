@@ -3,6 +3,7 @@
 Lives in contracts (L0) so that Protocol definitions can reference
 RetrievalAuditEntry without depending on engine (L2).  See SDD §5.1.3.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

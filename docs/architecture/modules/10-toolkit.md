@@ -84,8 +84,36 @@ class ReadTool:
     # 分页读取: DEFAULT_PAGE_LINES = 2000
     # MAX_LINE_LENGTH = 2000
     # read_epoch (SHA-256) 乐观并发控制
-    # 自动重定向: 图片/Office/PDF → 专用工具
+    # 同工具内分支（不再是独立工具）：图片 → read_image 视觉分支；
+    #   文档（.pdf/.docx/.xls/.md/.rst/.rtf/.odt/.ods/.odp/.epub/.ofd/.html/
+    #   .htm/.mhtml/.mht/.csv/.tsv）→ read_office 按页分支；
+    #   结构化 Office（.xlsx/.pptx）→ 保留结构锚点的行式读取 + 内嵌图片清单
+
+### 文档按页读取（document_reader）
+
+```python
+# toolkit/office/document_reader.py — 解析层唯一真源
+DOC_FORMATS                       # 扩展名 → fmt，全仓唯一表
+PAGELESS_FORMATS                  # 无页概念格式集合（恒第 1 页；
+                                  #   pdf/odp/epub/ofd 有真实页号，不在此列）
+Block(kind, page, index, text, rows, source_path, mime_type, is_ocr)
+open_doc(raw, fmt, *, workspace_path, source_rel_path)   # pdf: pdfium；docx: python-docx；
+                                                          # markdown: str；其余: DocHandle
+parse_page(doc, page)             # 只取文本层，不外发；DocHandle 直接返回预解析块
+render_page_images(doc, pages)    # 锁内把页渲染为 JPEG，供锁外 OCR（仅 PDF）
+render_page_image(doc, page)      # 单页渲染（单页 vision 读取用）
+build_ocr_page_blocks(...)        # OCR 文本 → 块（短文本附页面图）
+render_blocks(blocks, hash8, tier, start, char_budget) -> (text, Cursor | None)
+render_blocks_by_page(...)        # 批量读取：按页装填预算
+parse_locator("doc:{h}/p{n}/b{n}@{tier}[/c{n}]") -> Cursor   # 1-based 自校验
+cache_dir / ensure_cache / load_page / save_page             # 会话级单页 JSON 缓存
+search_blocks(...)                # grep 的文档分支，只扫已解析页
 ```
+
+- 定位符 `doc:{hash8}/p3/b7@text`：`hash8` 为内容哈希前 8 位，块号以 text 档为唯一权威。
+- 缓存落 `<root>/.work/cache/doc/<sha1前16>/`，单页 JSON + `meta.json`（身份字段 + 页摘要）；旧代码回滚后静默忽略，由 `workspace_gc` 回收。
+- pdfium 原生库非线程安全（并发 `get_textpage`/`render` 会 SIGABRT），全部调用经模块级锁串行化；页文件与其摘要成对落盘，共用一把缓存锁。
+- 写入侧拒绝模型改写缓存：`WorkspaceResolver.resolve_within(for_write=True)` 按物理路径拒绝任何 `.work/` 目标。
 
 ### WriteTool
 
@@ -199,10 +227,11 @@ def clear_mutation_queues()      # session 结束清理
 def ocr_cache_path()      # 基于 stat 指纹的缓存路径（.extracted/.ocr_cache/）
 def read_ocr_cache()      # 读取缓存
 def write_ocr_cache()     # 写入缓存
-def analysis_md_path()    # 分析结果 Markdown 路径
 ```
 
-缓存键基于文件的 stat 信息（mtime + size）自动失效，避免重复 OCR 处理。
+缓存键基于文件的 stat 信息（mtime + size）自动失效，避免重复 OCR 处理。文档解析缓存另有一套（见下），键是文件内容哈希，不依赖 stat。
+
+图片识别入口是 `read_image.recognize_image(path, data, question, workspace_path)`；`DEFAULT_QUESTION` 是唯一可缓存的提问（自定义提问的回答不复用）。
 
 ### 辅助常量与函数
 
@@ -212,7 +241,7 @@ BASH_DEFAULT_TIMEOUT_SECONDS = 120.0
 _READ_DEFAULT_PAGE_LINES = 2000
 _BASH_READBACK_MAX_CHARS = 200_000
 
-_blocked_binary_extension()    # 阻断 .docx/.xlsx/.pptx/.pdf 写入
+_blocked_binary_extension()    # 阻断 Office/PDF/ODF/EPUB/RTF/MHTML 等二进制格式的文本写入
 _binary_write_guidance()       # 提供替代方案提示
 build_file_change()            # difflib hunk 计算（UI artifact），大文件截断
 ```
@@ -276,11 +305,35 @@ GrepTool.execute(pattern, case_sensitive)
 ### OCR 缓存流
 
 ```
-ReadTool 检测图片/PDF → 重定向到专用工具
+ReadTool 检测到图片 → 走视觉分支（read_image）
   → ocr_cache_path(file_path)  # stat 指纹 → 缓存键
   → read_ocr_cache()           # 命中 → 直接返回
-  → 未命中 → 执行 OCR → write_ocr_cache()
+  → 未命中 → 调用视觉端点 → write_ocr_cache()
 ```
+
+文档内嵌图不自动 OCR：图片块只返回路径，由模型显式 `read` 该图片触发。
+
+### 文档读取流
+
+```
+ReadTool → 后缀命中 DOC_FORMATS
+  → read_document_branch()
+    → resolve_within() + runtime.read_bytes()
+    → cache_dir()  # 内容 sha1 前 16 位
+    → ensure_cache()  # 身份字段不符则整目录重建
+    → _page_blocks()  # 缓存优先（text 可读则用 text，否则回退 vision）
+    → render_blocks() / render_blocks_by_page()  # 超预算时给 after 游标或「下一页」
+```
+
+PDF 扫描页：`_ocr_pdf_page()` 在 `_PDFIUM_LOCK` 内渲染 JPEG，锁外经进程级 `Semaphore(8)` 调视觉模型转录，结果以文本块（`is_ocr=True`）落缓存；临时失败不落缓存。
+
+`_vision_chat()` 是唯一的视觉调用出口，持 `_OCR_SEMAPHORE`。`finish_reason=length` 视为失败并返回错误、不落缓存（截断文本当完整页用会静默丢内容）。
+
+docx 内嵌图按 `pic:spPr/a:xfrm/@rot` 的声明角度旋转后落盘：`word/media/` 存的是未旋转位图，Word 里的旋转只写在 xfrm 上。丢了这个信息，视觉模型会读到倒转 90° 的扫描件并猜造数值。EXIF 方向不做处理（vLLM 已按 EXIF 转置）。
+
+xlsx/pptx 走同一约定：`structured_office_images()` 按 `sheet→drawing→media` / `presentation→slide→media` 的关系链取内嵌图，读 `xdr:pic`、`p:pic` 下的 `a:xfrm/@rot`（同为 1/60000 度）还原后落盘，以 image 块追加在锚点文本之后（`page` 为工作表号/幻灯片号）。锚点文本（`s#S!r#Rc#C`、`slide#N/tf#M`）不变，编辑工具依赖该定位。附件预览复用同一函数。
+
+`grep` 命中同一批后缀时改走 `search_blocks()`，只扫已解析页（text 与 vision 两档每页取一个权威来源）并在响应里声明 `coverage`。
 
 ### 并发写入保护流
 
@@ -297,12 +350,12 @@ ReadTool 检测图片/PDF → 重定向到专用工具
 | 接口 | 类型 | 工具类 | 说明 |
 |------|------|--------|------|
 | `BashTool` (name=`bash`) | 工具 | write | 持久 PTY Bash 执行 |
-| `ReadTool` (name=`read`) | 工具 | read | 分页文件读取 + read_epoch |
+| `ReadTool` (name=`read`) | 工具 | read | 分页文件读取 + read_epoch；文档按页 + 块坐标 |
 | `WriteTool` (name=`write`) | 工具 | write | 文件写入 + 二进制阻断 |
 | `EditTool` (name=`edit`) | 工具 | write | 字符串替换编辑 + 并发控制 |
 | `ListDirectoryTool` (name=`ls`) | 工具 | read | 目录列表 |
 | `GlobTool` (name=`glob`) | 工具 | read | 文件模式搜索 |
-| `GrepTool` (name=`grep`) | 工具 | read | 文件内容搜索 |
+| `GrepTool` (name=`grep`) | 工具 | read | 文件内容搜索；文档后缀走块级检索 |
 | `SubagentControlTool` (name=`subagent_control`) | 工具 | write | 子代理状态查询、中断与协作（main_only） |
 | `AskUserQuestionTool` (name=`AskUserQuestion`) | 工具 | read | 用户问答交互 |
 | `FileObserver` | 基础设施 | — | SHA-256 文件版本跟踪 |

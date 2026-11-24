@@ -5,12 +5,12 @@ from typing import Any
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
 from prismclaw.engine.execution.capabilities.discovery_runtime import (
     SkillDiscoveryRuntime,
+    SubagentDiscoveryEntry,
     SubagentDiscoveryRuntime,
     ToolDiscoveryRuntime,
 )
-
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
-from prismclaw.schema.content.content_types import StateDeltaArtifact
+from prismclaw.schema.content.content_types import StateDeltaArtifact, ToolResult
 from prismclaw.schema.services.skills import SkillInvocationState
 
 
@@ -58,8 +58,7 @@ def _render_tool_fallback(query: str, all_surface: list[Any], *, skill_search_vi
     reroute = ""
     if skill_search_visible:
         reroute = (
-            " 如果你要找的是可复用工作流或领域技能，而不是具体工具，"
-            "请用 `skill_search` 检索。"
+            " 如果你要找的是可复用工作流或领域技能，而不是具体工具，请用 `skill_search` 检索。"
         )
     lines = [
         f"按关键词评分未匹配到工具“{query}”。",
@@ -84,13 +83,9 @@ def _render_tool_matches(query: str, matches: list[Any], *, skill_search_visible
         reroute = ""
         if skill_search_visible:
             reroute = (
-                " 如果你要找的是可复用工作流或领域技能，而不是具体工具，"
-                "请用 `skill_search` 检索。"
+                " 如果你要找的是可复用工作流或领域技能，而不是具体工具，请用 `skill_search` 检索。"
             )
-        return (
-            f"未找到匹配“{query}”的工具。若上下文中的现有工具已足够，请直接使用。"
-            f"{reroute}"
-        )
+        return f"未找到匹配“{query}”的工具。若上下文中的现有工具已足够，请直接使用。{reroute}"
     lines = [
         f"基于“{query}”找到 {len(matches)} 个相关工具。",
         "",
@@ -106,9 +101,7 @@ def _render_tool_matches(query: str, matches: list[Any], *, skill_search_visible
         lines.append(f"**类别**：`{match.tool_class}`")
         lines.append(f"**副作用**：`{match.effect_class}`")
         lines.append("")
-    lines.append(
-        "---\n请使用运行时已提供的工具 schema 直接调用上述工具之一。"
-    )
+    lines.append("---\n请使用运行时已提供的工具 schema 直接调用上述工具之一。")
     return "\n".join(lines)
 
 
@@ -167,7 +160,7 @@ def _render_skill_matches(query: str, matches: list[Any]) -> str:
     return "\n".join(lines)
 
 
-def _subagent_origin(match: Any) -> str:
+def _subagent_origin(match: SubagentDiscoveryEntry) -> str:
     parts = []
     if match.package:
         parts.append(f"包 {match.package}")
@@ -177,22 +170,28 @@ def _subagent_origin(match: Any) -> str:
 
 
 def _render_subagent_matches(query: str, matches: list[Any]) -> str:
+    core = [m for m in matches if getattr(m, "is_core", False)]
+    plugin = [m for m in matches if not getattr(m, "is_core", False)]
     lines = [
-        f"根据“{query}”找到 {len(matches)} 个插件子代理。",
+        f"根据“{query}”找到 {len(matches)} 个子代理。",
         "",
-        "### 可用子代理：",
         "**下一步：用下方完全一致的名称调用 `sub_agent`（agents=[{agent_name, task}]）；"
         "逐字符复制，不要缩写或改变大小写。**",
         "",
     ]
-    for match in matches:
-        lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
-        origin = _subagent_origin(match)
-        if origin:
-            lines.append(f"  {origin}")
+    for title, group in (("### 核心子代理：", core), ("### 插件子代理：", plugin)):
+        if not group:
+            continue
+        lines.append(title)
+        for match in group:
+            lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
+            origin = _subagent_origin(match)
+            if origin:
+                lines.append(f"  {origin}")
+        lines.append("")
     lines.append(
-        "\n---\n"
-        "若这些子代理都不匹配任务，请自行处理或改用核心子代理——不要猜测其他名称，"
+        "---\n"
+        "若这些子代理都不匹配任务，请自行处理——不要猜测其他名称，"
         "也不要用近似查询重复运行 subagent_search。"
     )
     return "\n".join(lines)
@@ -201,25 +200,25 @@ def _render_subagent_matches(query: str, matches: list[Any]) -> str:
 def _render_subagent_fallback(query: str, all_agents: list[Any]) -> str:
     if not all_agents:
         return (
-            f"未找到匹配“{query}”的插件子代理，该范围内没有可用条目。"
-            "核心子代理已列在 `<subagents>`；任务简单时请直接自行处理。"
+            f"未找到匹配“{query}”的子代理，该范围内没有可用条目。"
+            "核心子代理索引若未出现在系统提示中，可用 `subagent_search` 换关键词检索；"
+            "任务简单时请直接自行处理。"
         )
     lines = [
-        f"按关键词未匹配到插件子代理“{query}”。",
+        f"按关键词未匹配到子代理“{query}”。",
         "",
-        "### 全部插件子代理（请按名称/描述选择最接近的一项）：",
+        "### 全部子代理（请按名称/描述选择最接近的一项）：",
         "**调用 `sub_agent` 时必须使用下方完全一致的名称。**",
         "",
     ]
     for match in all_agents:
-        lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
+        tag = "核心" if getattr(match, "is_core", False) else "插件"
+        lines.append(f"- `{match.name}`（{tag}）：{match.description or '未提供描述。'}")
         origin = _subagent_origin(match)
         if origin:
             lines.append(f"  {origin}")
     lines.append(
-        "\n---\n"
-        "核心子代理已列在 `<subagents>`；若无合适插件子代理，请自行处理。"
-        "不要用相同或近似查询重复运行 subagent_search。"
+        "\n---\n若无合适子代理，请自行处理。不要用相同或近似查询重复运行 subagent_search。"
     )
     return "\n".join(lines)
 
@@ -245,16 +244,14 @@ class ToolSearchTool:
     side_effect = False
     effect_class = "pure_read"
 
-    def __init__(self, *, capability_catalog: CapabilityCatalogService):
+    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
         registry = capability_catalog.tool_registry
         if registry is None:
             raise RuntimeError("ToolSearchTool requires capability_catalog.tool_registry")
         self._registry = registry
-        self._runtime = ToolDiscoveryRuntime(
-            capability_catalog=capability_catalog
-        )
+        self._runtime = ToolDiscoveryRuntime(capability_catalog=capability_catalog)
 
-    async def execute(self, args: dict[str, Any], context: ToolContext):
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
         query = args.get("query", "")
         if not isinstance(query, str) or not query.strip():
@@ -286,15 +283,14 @@ class ToolSearchTool:
                     }
                 )
 
-        skill_search_visible = any(
-            entry.canonical_name == "skill_search"
-            for entry in all_surface
-        )
+        skill_search_visible = any(entry.canonical_name == "skill_search" for entry in all_surface)
         if not matches:
             # 0 结果兜底：列出全部可见工具名，避免模型盲目重试同一 query 触发 doom-loop
             return text_result(
                 call_id,
-                _render_tool_fallback(query, all_surface, skill_search_visible=skill_search_visible),
+                _render_tool_fallback(
+                    query, all_surface, skill_search_visible=skill_search_visible
+                ),
             )
         return text_result(
             call_id,
@@ -317,8 +313,7 @@ class ToolSearchTool:
 class SkillSearchTool:
     name = "skill_search"
     description = (
-        "按主题、工作流或领域检索可用技能。"
-        "仅用于发现技能；如需检索工具，请使用 `tool_search`。"
+        "按主题、工作流或领域检索可用技能。仅用于发现技能；如需检索工具，请使用 `tool_search`。"
     )
     tool_class = "read"
     parameters = {
@@ -335,12 +330,12 @@ class SkillSearchTool:
     side_effect = False
     effect_class = "pure_read"
 
-    def __init__(self, *, capability_catalog: CapabilityCatalogService):
+    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
         self._runtime = SkillDiscoveryRuntime(
             capability_catalog=capability_catalog,
         )
 
-    async def execute(self, args: dict[str, Any], context: ToolContext):
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
         query = args.get("query", "")
         if not isinstance(query, str) or not query.strip():
@@ -355,10 +350,7 @@ class SkillSearchTool:
 
 class SubagentSearchTool:
     name = "subagent_search"
-    description = (
-        "按领域、职责或任务检索插件提供的子代理。"
-        "仅用于发现；调用仍用 `sub_agent`。核心子代理见 `<subagents>`。"
-    )
+    description = "按领域、职责或任务检索子代理（核心与插件）。仅用于发现；调用仍用 `sub_agent`。"
     tool_class = "read"
     parameters = {
         "type": "object",
@@ -382,16 +374,18 @@ class SubagentSearchTool:
     side_effect = False
     effect_class = "pure_read"
 
-    def __init__(self, *, capability_catalog: CapabilityCatalogService):
+    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
         self._runtime = SubagentDiscoveryRuntime(capability_catalog=capability_catalog)
 
-    async def execute(self, args: dict[str, Any], context: ToolContext):
+    async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
         query = args.get("query", "")
         if not isinstance(query, str) or not query.strip():
             return error_result(call_id, "缺少必填参数 'query'")
         raw_package = args.get("package")
-        package = raw_package.strip() if isinstance(raw_package, str) and raw_package.strip() else None
+        package = (
+            raw_package.strip() if isinstance(raw_package, str) and raw_package.strip() else None
+        )
         raw_limit = args.get("limit", 10)
         limit = raw_limit if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) else 10
         matches = self._runtime.search(
@@ -406,7 +400,7 @@ class SubagentSearchTool:
                 call_id,
                 _render_subagent_fallback(
                     query,
-                    self._runtime.list_plugin_agents(
+                    self._runtime.list_agents(
                         limit=20, package=package, active_plugins=context.tool_scope
                     ),
                 ),

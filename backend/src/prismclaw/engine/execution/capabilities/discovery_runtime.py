@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService, ToolCatalogEntry
+from prismclaw.engine.execution.capabilities.catalog import (
+    AgentCatalogEntry,
+    CapabilityCatalogService,
+    ToolCatalogEntry,
+)
 from prismclaw.schema.services.skills import SkillInvocationState
-
 
 _QUERY_TOKEN_RE = re.compile(r"[a-z0-9_:+.-]+|[\u4e00-\u9fff]+")
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]+")
@@ -20,14 +24,15 @@ _EXCLUDED_TOOL_NAMES = frozenset(
 
 
 def _tokenize_query(value: str) -> list[str]:
-    """分词：ASCII 词原样保留；中文按 2-gram 切分（单字保留），否则纯中文 query 会得到空 token 列表。"""
+    """分词：ASCII 词原样保留；中文按 2-gram 切分（单字保留），
+    否则纯中文 query 会得到空 token 列表。"""
     tokens: list[str] = []
     for raw in _QUERY_TOKEN_RE.findall(value.lower()):
         if _CJK_RE.fullmatch(raw):
             if len(raw) == 1:
                 tokens.append(raw)
             else:
-                tokens.extend(raw[i: i + 2] for i in range(len(raw) - 1))
+                tokens.extend(raw[i : i + 2] for i in range(len(raw) - 1))
         elif raw:
             tokens.append(raw)
     return tokens
@@ -78,6 +83,8 @@ class SubagentDiscoveryEntry:
     package: str | None
     sub_plugin: str | None
     score: int
+    # 来源分组：核心子代理（工作区定义）与插件子代理，渲染不混排。
+    is_core: bool = False
 
 
 class ToolDiscoveryRuntime:
@@ -228,11 +235,12 @@ class SkillDiscoveryRuntime:
 
 
 class SubagentDiscoveryRuntime:
-    """插件子代理检索——固定 prompt 只披露包索引，具体代理按需检索。
+    """子代理检索——固定 prompt 只披露核心子代理索引，其余按需检索。
 
     数据源与派发校验同源（``CapabilityCatalogService.list_agent_entries``）。
-    工作区核心子代理（``plugin_name is None``）已在 ``<subagents>`` 列出，
-    本检索默认排除，避免重复披露。
+    候选集 = 核心子代理 + 插件子代理：核心子代理虽然已在 ``<subagents>``
+    列出，但当模型记不清名称、或固定段被预算撤除时，检索必须仍能命中，
+    否则没有替代通道（SDD D7）。``is_core`` 仅用于渲染分组，各自配额。
     """
 
     _DESC_LIMIT = 200
@@ -251,7 +259,7 @@ class SubagentDiscoveryRuntime:
         tokens = _tokenize_query(query)
         package_key = package.strip().lower() if package else None
         matches: list[SubagentDiscoveryEntry] = []
-        for agent in self._plugin_agents(active_plugins):
+        for agent, is_core in self._candidates(active_plugins):
             if package_key is not None and package_key not in {
                 (agent.marketplace_name or "").lower(),
                 (agent.plugin_name or "").lower(),
@@ -267,22 +275,22 @@ class SubagentDiscoveryRuntime:
             )
             if score <= 0:
                 continue
-            matches.append(self._entry(agent, score=score))
+            matches.append(self._entry(agent, score=score, is_core=is_core))
         matches.sort(key=lambda item: (-item.score, item.name))
         return matches[: self._clamp_limit(limit)]
 
-    def list_plugin_agents(
+    def list_agents(
         self,
         *,
         limit: int = 20,
         package: str | None = None,
         active_plugins: frozenset[str] | set[str] | None = None,
     ) -> list[SubagentDiscoveryEntry]:
-        """无关键词兜底：列出插件子代理，避免模型盲目重试同一 query。"""
+        """无关键词兜底：列出全部候选（核心 + 插件），避免模型盲目重试。"""
         package_key = package.strip().lower() if package else None
         entries = [
-            self._entry(agent, score=0)
-            for agent in self._plugin_agents(active_plugins)
+            self._entry(agent, score=0, is_core=is_core)
+            for agent, is_core in self._candidates(active_plugins)
             if package_key is None
             or package_key
             in {
@@ -290,25 +298,31 @@ class SubagentDiscoveryRuntime:
                 (agent.plugin_name or "").lower(),
             }
         ]
-        entries.sort(key=lambda item: item.name)
+        entries.sort(key=lambda item: (not item.is_core, item.name))
         return entries[: self._clamp_limit(limit)]
 
-    def _plugin_agents(
+    def _candidates(
         self, active_plugins: frozenset[str] | set[str] | None = None
-    ) -> list:
-        return [
-            entry for entry in self._catalog.list_agent_entries()
-            if entry.plugin_name is not None
-            and (active_plugins is None or entry.plugin_name in active_plugins)
-        ]
+    ) -> list[tuple[Any, bool]]:
+        """核心 + 插件候选。插件候选受激活作用域约束，核心不受。"""
+        result: list[tuple[Any, bool]] = []
+        for entry in self._catalog.list_agent_entries():
+            if entry.plugin_name is None:
+                result.append((entry, True))
+            elif active_plugins is None or entry.plugin_name in active_plugins:
+                result.append((entry, False))
+        return result
 
-    def _entry(self, agent, *, score: int) -> SubagentDiscoveryEntry:
+    def _entry(
+        self, agent: AgentCatalogEntry, *, score: int, is_core: bool
+    ) -> SubagentDiscoveryEntry:
         return SubagentDiscoveryEntry(
             name=agent.name,
             description=(agent.description or "")[: self._DESC_LIMIT],
             package=agent.marketplace_name,
             sub_plugin=agent.plugin_name,
             score=score,
+            is_core=is_core,
         )
 
     @staticmethod

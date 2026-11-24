@@ -1,21 +1,21 @@
 """Auto-extracted Mixin from postgres.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import json
 import logging
 from typing import Any
 
-from prismclaw.schema.memory.entry import (
-    MemoryEntry,
-)
+from prismclaw.persistence.memory._base_mixin import _PostgresBackendBase
 from prismclaw.persistence.memory._helpers import (
     _compute_content_hash,
     _sql_text,
 )
+from prismclaw.schema.memory.entry import (
+    MemoryEntry,
+)
 
 logger = logging.getLogger(__name__)
-
-from prismclaw.persistence.memory._base_mixin import _PostgresBackendBase
 
 
 class UpsertMixin(_PostgresBackendBase):
@@ -34,18 +34,21 @@ class UpsertMixin(_PostgresBackendBase):
             stmt = _sql_text(
                 """
                 INSERT INTO pc_memory_entries (
-                    id, session_key, layer, type, content, scope, entity_key, source_session_id, source_refs_json,
+                    id, session_key, layer, type, content, scope,
+                    entity_key, source_session_id, source_refs_json,
                     created_at, updated_at, last_used_at, use_count, status,
                     origin_stage, confidence, stability_score, cluster_id,
                     supersedes_json, last_validated_at, graph_group_id,
                     version_chain_id, publish_state, valid_from, valid_to, expires_at, winner_flag,
                     low_confidence, content_hash, embedding
                 ) VALUES (
-                    :id, :session_key, :layer, :type, :content, :scope, :entity_key, :source_session_id, CAST(:source_refs_json AS jsonb),
+                    :id, :session_key, :layer, :type, :content, :scope, :entity_key,
+                    :source_session_id, CAST(:source_refs_json AS jsonb),
                     :created_at, :updated_at, :last_used_at, :use_count, :status,
                     :origin_stage, :confidence, :stability_score, :cluster_id,
                     CAST(:supersedes_json AS jsonb), :last_validated_at, :graph_group_id,
-                    :version_chain_id, :publish_state, :valid_from, :valid_to, :expires_at, :winner_flag,
+                    :version_chain_id, :publish_state, :valid_from,
+                    :valid_to, :expires_at, :winner_flag,
                     :low_confidence, :content_hash, :embedding
                 )
                 ON CONFLICT (id) DO UPDATE SET
@@ -112,7 +115,6 @@ class UpsertMixin(_PostgresBackendBase):
             )
             await session.commit()
 
-
     async def writeback_use_counts(self, session_key: str, entry_ids: list[str]) -> int:
         """use_count += 1 / last_used_at = now for the given entries (D4 fix).
 
@@ -120,7 +122,7 @@ class UpsertMixin(_PostgresBackendBase):
         """
         if not entry_ids:
             return 0
-        from sqlalchemy import bindparam  # type: ignore[import-not-found]
+        from sqlalchemy import bindparam
 
         await self._init_db()
         assert self._async_sessionmaker is not None
@@ -156,8 +158,15 @@ class UpsertMixin(_PostgresBackendBase):
         if not updates:
             return 0
         allowed = {
-            "status", "confidence", "stability_score", "valid_to", "winner_flag",
-            "expires_at", "publish_state", "updated_at", "cluster_id",
+            "status",
+            "confidence",
+            "stability_score",
+            "valid_to",
+            "winner_flag",
+            "expires_at",
+            "publish_state",
+            "updated_at",
+            "cluster_id",
             "last_validated_at",
         }
         # E2（RE4 风险）：content 不在白名单中。content 更新走 store() 路径
@@ -197,4 +206,3 @@ class UpsertMixin(_PostgresBackendBase):
                 exc_info=True,
             )
         return applied
-

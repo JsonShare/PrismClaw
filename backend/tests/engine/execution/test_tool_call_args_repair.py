@@ -5,6 +5,7 @@
 - ``to_openai_dict`` 永不产出非法 JSON（否则下一轮 provider 400）；
 - ``_function_args`` 是执行层唯一解析点，失败只落到空 dict 一条路径。
 """
+
 from __future__ import annotations
 
 import json

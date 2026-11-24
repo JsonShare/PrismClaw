@@ -1,18 +1,23 @@
 from __future__ import annotations
 
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore, WorkspaceStore
-from prismclaw.schema.services.lock import LockManagerProtocol
-from prismclaw.schema.agent.bundles import MCPManagerProtocol, RunOwnershipStoreProtocol
 from prismclaw.engine.execution.checkpoint import RunSnapshotStore
 from prismclaw.infra.task_manager import TaskManager
+from prismclaw.schema.agent.bundles import RunOwnershipStoreProtocol
+from prismclaw.schema.services.lock import LockManagerProtocol
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore, WorkspaceStore
 
 if TYPE_CHECKING:
-    from prismclaw.engine.dream.dispatch.dispatch import RedisDreamDispatchQueue
     from collections.abc import Awaitable, Callable
+
+    from prismclaw.engine.dream.dispatch.dispatch import (
+        DreamDispatchConsumer,
+        RedisDreamDispatchQueue,
+    )
+    from prismclaw.engine.mcp.client_manager import MCPClientManager
 
 
 @dataclass
@@ -29,7 +34,7 @@ class AppInfrastructureBundle:
     workspace_store: WorkspaceStore | None = None
     workspace_base: Path | None = None
     memory_store: MemoryStore | None = None
-    mcp_manager: MCPManagerProtocol | None = None
+    mcp_manager: MCPClientManager | None = None
     mcp_death_handler: Callable[[str], Awaitable[None]] | None = None
     external_tool_registrar: Callable[..., Any] | None = None
     domain_stores: dict[str, Any] = field(default_factory=dict)
@@ -39,7 +44,7 @@ class AppInfrastructureBundle:
 class AppRuntimeBundle:
     runner_deps: Any  # AgentRunnerDeps — avoid circular import
     web_deps: Any = None  # WebDeps
-    dream_dispatch_consumer: RedisDreamDispatchQueue | None = None
+    dream_dispatch_consumer: DreamDispatchConsumer | None = None
     dream_dispatch_health_task_id: str | None = None
     domain_governance_reducers: list[Any] = field(default_factory=list)
 

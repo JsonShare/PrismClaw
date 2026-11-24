@@ -1,4 +1,5 @@
 """Unit tests for prismclaw.engine.bus.SessionBus (+ current_bus ctx-var)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -23,7 +24,9 @@ def test_noop_bus_publish_is_nop_no_alloc():
     calls: list[object] = []
     NOOP_BUS.subscribe(SessionTurnStarted, lambda ev: calls.append(ev))
     ev = SessionTurnStarted(
-        session_id="s1", turn_counter=1, started_at_ms=1700000000000,
+        session_id="s1",
+        turn_counter=1,
+        started_at_ms=1700000000000,
     )
     NOOP_BUS.publish(ev)
     assert calls == [], "NOOP_BUS subscriber handlers must never fire"
@@ -48,10 +51,15 @@ def test_sync_handler_runs_inline_and_swallowed_on_exc(caplog):
     bus.subscribe(SessionIterationStarted, lambda ev: events.append(("OTHER", ev)))
 
     ev_turn = SessionTurnStarted(
-        session_id="s1", turn_counter=2, started_at_ms=111,
+        session_id="s1",
+        turn_counter=2,
+        started_at_ms=111,
     )
     ev_iter = SessionIterationStarted(
-        session_id="s1", turn_counter=2, iteration=0, started_at_ms=112,
+        session_id="s1",
+        turn_counter=2,
+        iteration=0,
+        started_at_ms=112,
     )
     with caplog.at_level("WARNING"):
         bus.publish(ev_turn)
@@ -71,7 +79,10 @@ def test_sync_handler_runs_inline_and_swallowed_on_exc(caplog):
 def test_publish_no_subscribers_no_work():
     bus = SessionBus()
     ev = SessionIterationStarted(
-        session_id="s1", turn_counter=0, iteration=0, started_at_ms=0,
+        session_id="s1",
+        turn_counter=0,
+        iteration=0,
+        started_at_ms=0,
     )
     # Should not raise even though no handlers registered.
     bus.publish(ev)
@@ -108,7 +119,8 @@ def test_unsubscribe_all_clears_handlers_and_cancels_tasks():
     bus.subscribe(SessionTurnStarted, lambda ev: ran_sync.append(ev))
     # Just to ensure handlers exist on multiple types.
     bus.subscribe(
-        SessionIterationStarted, lambda ev: ran_sync.append(("it", ev)),
+        SessionIterationStarted,
+        lambda ev: ran_sync.append(("it", ev)),
     )
     ev = SessionTurnStarted(session_id="s1", turn_counter=1, started_at_ms=1)
     bus.unsubscribe_all()
@@ -122,6 +134,7 @@ def test_unsubscribe_all_clears_handlers_and_cancels_tasks():
 # ---------------------------------------------------------------------------
 # Async subscriber tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_async_handler_scheduled_and_swallowed():
@@ -138,9 +151,13 @@ async def test_async_handler_scheduled_and_swallowed():
     bus.subscribe(PackerFinalDone, a_ok)
     bus.subscribe(PackerFinalDone, a_bad)
     ev = PackerFinalDone(
-        session_id="s1", turn_counter=1, iteration=0, msg_count=3,
+        session_id="s1",
+        turn_counter=1,
+        iteration=0,
+        msg_count=3,
         msg_roles=("user", "system", "assistant"),
-        head=(), tail=("[a] tail",),
+        head=(),
+        tail=("[a] tail",),
     )
     bus.publish(ev)
     # Async handlers are scheduled via create_task; give loop a chance.
@@ -177,8 +194,11 @@ async def test_publish_async_runs_all_handlers_synchronously_in_gather():
     bus.subscribe(ProjectorOutputDone, a2)
 
     ev = ProjectorOutputDone(
-        session_id="s1", turn_counter=1, iteration=0,
-        msg_count=1, msg_roles=("user",),
+        session_id="s1",
+        turn_counter=1,
+        iteration=0,
+        msg_count=1,
+        msg_roles=("user",),
     )
     await bus.publish_async(ev)
     # Sync handlers run inline in registration order: s1, s2.
@@ -214,6 +234,7 @@ async def test_wait_drained_timeout_cancels_pending():
 # ---------------------------------------------------------------------------
 # ContextVar integration
 # ---------------------------------------------------------------------------
+
 
 def test_current_bus_returns_noop_when_unbound():
     assert current_bus() is NOOP_BUS

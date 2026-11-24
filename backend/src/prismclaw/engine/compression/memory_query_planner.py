@@ -14,7 +14,6 @@ def build_evidence_strategy(
     session_id: str,
     retrieval_query: str | None,
     task_profile: TaskProfile,
-    request_mode: str | None,
     merged_state_payload: dict[str, object] | None,
     anchor_blocks: list[ContextBlock],
     task_spec: TaskSpec | None,
@@ -68,11 +67,9 @@ def build_evidence_strategy(
         evidence_types.append("graph_relation")
     if strict_grounding:
         evidence_types.append("grounding_evidence")
-    if request_mode:
-        notes.append(f"request_mode:{request_mode}")
 
     return EvidenceStrategy(
-        strategy_id=f"{session_id}:ep:{_plan_digest(retrieval_query, task_profile, request_mode)}",
+        strategy_id=f"{session_id}:ep:{_plan_digest(retrieval_query, task_profile)}",
         session_id=session_id,
         query_text=retrieval_query,
         strategy=strategy,
@@ -100,7 +97,6 @@ def build_memory_query_plan(
     session_id: str,
     retrieval_query: str | None,
     task_profile: TaskProfile,
-    request_mode: str | None,
     merged_state_payload: dict[str, object] | None,
     anchor_blocks: list[ContextBlock],
     task_spec: TaskSpec | None,
@@ -112,7 +108,6 @@ def build_memory_query_plan(
         session_id=session_id,
         retrieval_query=retrieval_query,
         task_profile=task_profile,
-        request_mode=request_mode,
         merged_state_payload=merged_state_payload,
         anchor_blocks=anchor_blocks,
         task_spec=task_spec,
@@ -133,7 +128,6 @@ def _merge_unique(current: list[str], extra: list[str]) -> list[str]:
 def _plan_digest(
     retrieval_query: str | None,
     task_profile: TaskProfile,
-    request_mode: str | None,
 ) -> str:
     payload = "|".join(
         [
@@ -141,7 +135,6 @@ def _plan_digest(
             str(task_profile.risk_level),
             str(task_profile.prefers_tooling),
             str(task_profile.requires_grounding),
-            request_mode or "",
         ]
     )
     import hashlib

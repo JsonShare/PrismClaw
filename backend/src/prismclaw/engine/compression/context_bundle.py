@@ -1,18 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.config import (
-    DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
-    DEFAULT_KEEP_RECENT_TOKENS,
-    DEFAULT_THRESHOLD,
-)
-from prismclaw.schema.agent.context import (
-    ContextIngestor,
-    MemoryAftermathBoundary,
-)
-from prismclaw.schema.audit.audit import RetrievalAuditLogger
 from prismclaw.engine.compression.assemble_coordinator import AssembleCoordinator
 from prismclaw.engine.compression.bootstrap import BootstrapProvider
 from prismclaw.engine.compression.history_compactor import HistoryCompactor
@@ -24,10 +14,24 @@ from prismclaw.engine.compression.memory_retriever import (
 from prismclaw.engine.compression.state_store import SessionStateStore
 from prismclaw.engine.compression.summary_engine import SummarizerCallable, SummaryEngine
 from prismclaw.engine.compression.task_profile_inference import TaskProfileInference
+from prismclaw.schema.agent.context import (
+    ContextIngestor,
+    MemoryAftermathBoundary,
+)
+from prismclaw.schema.audit.audit import RetrievalAuditLogger
+from prismclaw.schema.config import (
+    DEFAULT_COMPACTION_SAFETY_TIMEOUT_S,
+    DEFAULT_KEEP_RECENT_TOKENS,
+    DEFAULT_THRESHOLD,
+)
 from prismclaw.schema.config.config import CompactionConfig
-from prismclaw.schema.storage.storage_types import SessionStore
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.storage.storage_types import WorkspaceStore
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.memory.memory_graph import EdgeStoreProtocol
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore, WorkspaceStore
+
+if TYPE_CHECKING:
+    from prismclaw.engine.memory.attribution import AttributionRecorder
+    from prismclaw.engine.memory.validation_signals import ValidationSignalLedger
 
 
 @dataclass(slots=True)
@@ -40,7 +44,7 @@ class ContextServiceBundle:
     summary_engine: SummaryEngine
     history_compactor: HistoryCompactor
     context_ingestor: ContextIngestor
-    edge_store: Any = None
+    edge_store: EdgeStoreProtocol | None = None
 
 
 def build_context_service_bundle(
@@ -56,13 +60,13 @@ def build_context_service_bundle(
     memory_settings: MemoryRetrievalSettings | None = None,
     compaction_config: CompactionConfig | None = None,
     session_store: SessionStore | None = None,
-    llm_client: object | None = None,
+    llm_client: LLMClient | None = None,
     evolution_settings: object | None = None,
     retrieval_audit_log: RetrievalAuditLogger | None = None,
     aftermath_boundary: MemoryAftermathBoundary | None = None,
-    attribution_recorder: object | None = None,
-    edge_store: Any = None,
-    validation_ledger: object | None = None,
+    attribution_recorder: AttributionRecorder | None = None,
+    edge_store: EdgeStoreProtocol | None = None,
+    validation_ledger: ValidationSignalLedger | None = None,
 ) -> ContextServiceBundle:
     if memory_store is not None and memory_settings is None:
         raise ValueError("memory_settings must be provided when memory_store is set")

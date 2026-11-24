@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from sqlalchemy import TextClause
+
+    from prismclaw.schema.memory.entry import MemoryEntry
 
 _RRF_K = 60.0
 
 
-def _compute_content_hash(entry: Any) -> str:
+def _compute_content_hash(entry: MemoryEntry) -> str:
     """E2: 计算内容完整性哈希。
 
     注意（S5 已知限制）：无 salt，DBA 可同时修改 content 和 content_hash
@@ -18,7 +22,7 @@ def _compute_content_hash(entry: Any) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _parse_supersedes(raw: Any) -> list[str]:
+def _parse_supersedes(raw: object) -> list[str]:
     if isinstance(raw, list):
         return [str(item) for item in raw]
     if not raw:
@@ -33,8 +37,8 @@ def _parse_supersedes(raw: Any) -> list[str]:
     return []
 
 
-def _sql_text(sql: str):
-    from sqlalchemy import text as sa_text  # type: ignore[import-not-found]
+def _sql_text(sql: str) -> TextClause:
+    from sqlalchemy import text as sa_text
 
     return sa_text(sql)
 

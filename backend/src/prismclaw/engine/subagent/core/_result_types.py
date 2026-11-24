@@ -8,18 +8,16 @@ live in a lighter module.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.services.skills import SkillInvocationState
-
 
 # ---------------------------------------------------------------------------
 # Pure helpers
 # ---------------------------------------------------------------------------
 
 
-def _coerce_skill_invocation(invoked_skill_state: Any) -> SkillInvocationState | None:
+def _coerce_skill_invocation(invoked_skill_state: object) -> SkillInvocationState | None:
     raw_state = invoked_skill_state
     if not isinstance(raw_state, dict):
         return None

@@ -29,6 +29,7 @@ handler 构造（:func:`build_hook_handlers`）：
     * callable → :class:`CallbackHookHandler`；
     * 有 matcher 的组，其 handler 以 :class:`MatcherFilteredHandler` 包装。
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,7 +51,7 @@ __all__ = [
 ]
 
 
-def normalize_hooks_config(raw: Any) -> dict[str, list[Any]]:
+def normalize_hooks_config(raw: object) -> dict[str, list[Any]]:
     """把 hooks.json 原始内容归一化为 ``{event_name: [group, ...]}``。
 
     解开顶层 ``{"hooks": {...}}`` 包装；已是扁平事件映射（键值为 list）
@@ -80,7 +81,7 @@ def normalize_hooks_config(raw: Any) -> dict[str, list[Any]]:
     return result
 
 
-def _iter_group_handlers(group: Any) -> tuple[str | None, list[Any]]:
+def _iter_group_handlers(group: object) -> tuple[str | None, list[Any]]:
     """从一个组条目提取 ``(matcher, handler_specs)``。
 
     组形如 ``{"matcher": "Bash", "hooks": [spec, ...]}``；也容忍裸 handler dict
@@ -97,7 +98,7 @@ def _iter_group_handlers(group: Any) -> tuple[str | None, list[Any]]:
 
 
 def _build_one_handler(
-    spec: Any,
+    spec: object,
     *,
     plugin_root: str | None,
     plugin_data_dir: str | None,
@@ -143,7 +144,7 @@ def _build_one_handler(
 
 
 def build_hook_handlers(
-    hooks_config: Any,
+    hooks_config: object,
     *,
     plugin_root: str | None = None,
     plugin_data_dir: str | None = None,

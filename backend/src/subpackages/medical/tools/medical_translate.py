@@ -6,28 +6,40 @@ side_effect / effect_class + async execute()。
 当前实现：返回翻译请求的结构化描述，由 LLM 在推理时完成实际翻译。
 后续可接入专业医学翻译 API（如 DeepL Medical）。
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .._protocols import ToolContext, text_result, error_result
+from .._protocols import ToolContext, error_result, text_result
 
 # 医学子域术语表（核心术语对照）
 _MEDICAL_GLOSSARY: dict[str, dict[str, str]] = {
     "oncology": {
-        "chemotherapy": "化疗", "radiotherapy": "放疗", "immunotherapy": "免疫治疗",
-        "targeted_therapy": "靶向治疗", "neoadjuvant": "新辅助", "adjuvant": "辅助",
-        "metastasis": "转移", "remission": "缓解", "recurrence": "复发",
+        "chemotherapy": "化疗",
+        "radiotherapy": "放疗",
+        "immunotherapy": "免疫治疗",
+        "targeted_therapy": "靶向治疗",
+        "neoadjuvant": "新辅助",
+        "adjuvant": "辅助",
+        "metastasis": "转移",
+        "remission": "缓解",
+        "recurrence": "复发",
     },
     "cardiology": {
-        "myocardial_infarction": "心肌梗死", "arrhythmia": "心律失常",
-        "hypertension": "高血压", "stent": "支架", "angioplasty": "血管成形术",
+        "myocardial_infarction": "心肌梗死",
+        "arrhythmia": "心律失常",
+        "hypertension": "高血压",
+        "stent": "支架",
+        "angioplasty": "血管成形术",
     },
     "pharmacology": {
-        "contraindication": "禁忌症", "adverse_reaction": "不良反应",
-        "pharmacokinetics": "药代动力学", "bioavailability": "生物利用度",
+        "contraindication": "禁忌症",
+        "adverse_reaction": "不良反应",
+        "pharmacokinetics": "药代动力学",
+        "bioavailability": "生物利用度",
         "half_life": "半衰期",
     },
 }
@@ -45,31 +57,33 @@ class MedicalTranslateTool:
 
     name: str = "medical_translate"
     description: str = "医学翻译工具 — 医学术语与文献的专业翻译"
-    parameters: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {
-            "text": {
-                "type": "string",
-                "description": "待翻译文本",
+    parameters: dict[str, Any] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "待翻译文本",
+                },
+                "source_lang": {
+                    "type": "string",
+                    "enum": ["zh", "en"],
+                    "description": "源语言",
+                },
+                "target_lang": {
+                    "type": "string",
+                    "enum": ["zh", "en"],
+                    "description": "目标语言",
+                },
+                "domain": {
+                    "type": "string",
+                    "enum": ["general", "oncology", "cardiology", "pharmacology"],
+                    "description": "医学子域，提升翻译专业度",
+                },
             },
-            "source_lang": {
-                "type": "string",
-                "enum": ["zh", "en"],
-                "description": "源语言",
-            },
-            "target_lang": {
-                "type": "string",
-                "enum": ["zh", "en"],
-                "description": "目标语言",
-            },
-            "domain": {
-                "type": "string",
-                "enum": ["general", "oncology", "cardiology", "pharmacology"],
-                "description": "医学子域，提升翻译专业度",
-            },
-        },
-        "required": ["text", "source_lang", "target_lang"],
-    })
+            "required": ["text", "source_lang", "target_lang"],
+        }
+    )
     tool_class: str = "read"
     side_effect: bool = False
     effect_class: str = "translation"

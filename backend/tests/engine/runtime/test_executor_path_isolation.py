@@ -11,6 +11,7 @@
   4. 请求级 ``workspace_root`` 必须是 executor 自身根的严格子路径，
      否则一个共享 agent 会被单个请求扩权到宿主任意目录。
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,7 +29,7 @@ def layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     assets = pc / "assets"
     alice = pc / "workspaces" / "web_alice" / "default"
     bob = pc / "workspaces" / "web_bob" / "default"
-    for d in (assets / "skills" / "demo", alice / "outputs", bob):
+    for d in (assets / "skills" / "demo", alice / "outbox", bob):
         d.mkdir(parents=True)
     (assets / "skills" / "demo" / "SKILL.md").write_text("capability", encoding="utf-8")
     (bob / "secret.txt").write_text("bob-secret", encoding="utf-8")
@@ -64,26 +65,22 @@ async def test_read_denies_cross_user_absolute(layout: dict[str, Path]):
 
 @pytest.mark.asyncio
 async def test_read_denies_cross_user_tilde(layout: dict[str, Path]):
-    out = await _executor(layout).read_text(
-        "~/.prismclaw/workspaces/web_bob/default/secret.txt"
-    )
+    out = await _executor(layout).read_text("~/.prismclaw/workspaces/web_bob/default/secret.txt")
     assert out["success"] is False
     assert "outside" in out["error"]
 
 
 @pytest.mark.asyncio
 async def test_read_allows_own_workspace(layout: dict[str, Path]):
-    (layout["alice"] / "outputs" / "a.txt").write_text("mine", encoding="utf-8")
-    out = await _executor(layout).read_text("outputs/a.txt")
+    (layout["alice"] / "outbox" / "a.txt").write_text("mine", encoding="utf-8")
+    out = await _executor(layout).read_text("outbox/a.txt")
     assert out["success"] is True
     assert out["content"] == "mine"
 
 
 @pytest.mark.asyncio
 async def test_read_allows_static_capability(layout: dict[str, Path]):
-    out = await _executor(layout).read_text(
-        "~/.prismclaw/assets/skills/demo/SKILL.md"
-    )
+    out = await _executor(layout).read_text("~/.prismclaw/assets/skills/demo/SKILL.md")
     assert out["success"] is True
     assert out["content"] == "capability"
 
@@ -93,9 +90,7 @@ async def test_read_allows_static_capability(layout: dict[str, Path]):
 
 @pytest.mark.asyncio
 async def test_write_denies_cross_user(layout: dict[str, Path]):
-    out = await _executor(layout).write_text(
-        "../../web_bob/default/pwn.txt", "pwn"
-    )
+    out = await _executor(layout).write_text("../../web_bob/default/pwn.txt", "pwn")
     assert out["success"] is False
     assert not (layout["bob"] / "pwn.txt").exists()
 
@@ -110,9 +105,7 @@ async def test_write_denies_readonly_assets(layout: dict[str, Path]):
 
 @pytest.mark.asyncio
 async def test_write_stream_denies_cross_user(layout: dict[str, Path]):
-    out = await _executor(layout).write_stream_begin(
-        "../../web_bob/default/stream.txt", "text"
-    )
+    out = await _executor(layout).write_stream_begin("../../web_bob/default/stream.txt", "text")
     assert out["success"] is False
     assert not (layout["bob"] / "stream.txt").exists()
 
@@ -155,8 +148,8 @@ async def test_request_root_narrows_read_scope(layout: dict[str, Path]):
     )
     assert denied["success"] is False
 
-    (layout["alice"] / "outputs" / "a.txt").write_text("mine", encoding="utf-8")
-    ok = await exe.read_text("outputs/a.txt", workspace_root=str(layout["alice"]))
+    (layout["alice"] / "outbox" / "a.txt").write_text("mine", encoding="utf-8")
+    ok = await exe.read_text("outbox/a.txt", workspace_root=str(layout["alice"]))
     assert ok["success"] is True
     assert ok["content"] == "mine"
 

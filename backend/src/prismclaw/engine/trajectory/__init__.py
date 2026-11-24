@@ -15,11 +15,16 @@ Feature flag still OFF/DRY/FULL three tiers (env or per-request header):
   2. ENV var PRISMCLAW_TRAJECTORY_AUDIT = OFF|DRY|FULL
   3. Default: OFF — zero cost, zero behaviour change.
 """
+
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from prismclaw.engine.trajectory.bus import SessionBus
+    from prismclaw.engine.trajectory.service import ToolRegistryPort, TrajectoryAuditService
+    from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
 
 # ========================================================================
 # Policy constants & class
@@ -36,7 +41,7 @@ class AuditLevel:
 
     __slots__ = ("level", "store_system", "store_schemas")
 
-    def __init__(self, level: str, store_system: bool, store_schemas: bool):
+    def __init__(self, level: str, store_system: bool, store_schemas: bool) -> None:
         if level not in _VALID_LEVELS:
             raise ValueError(f"invalid trajectory audit level: {level!r}")
         self.level = level
@@ -56,13 +61,23 @@ class AuditLevel:
 # ENV + Header resolution (pure, testable)
 # ========================================================================
 
+
 def _env_level() -> str:
     # Default FULL — trajectory audit is a core observability feature.
     # Set PRISMCLAW_TRAJECTORY_AUDIT=off to disable (e.g. for load testing).
     raw = os.environ.get("PRISMCLAW_TRAJECTORY_AUDIT", "full").strip().upper()
-    m = {"": FULL, "0": OFF, "OFF": OFF, "L0": OFF,
-         "1": DRY, "DRY": DRY, "L1": DRY,
-         "2": FULL, "FULL": FULL, "L2": FULL}
+    m = {
+        "": FULL,
+        "0": OFF,
+        "OFF": OFF,
+        "L0": OFF,
+        "1": DRY,
+        "DRY": DRY,
+        "L1": DRY,
+        "2": FULL,
+        "FULL": FULL,
+        "L2": FULL,
+    }
     return m.get(raw, FULL)
 
 
@@ -115,15 +130,16 @@ def resolve_policy(*, header: str | None = None, env: str | None = None) -> Audi
 #   (c) raise cleanly and let runner NOP (it still binds a bus).
 # ========================================================================
 
+
 def install_auditor_if_enabled(
     session_id: str,
-    bus: Any,
+    bus: SessionBus,
     *,
-    persistence: Any = None,
+    persistence: TrajectoryPersistence | None = None,
     header: str | None = None,
-    policy: "AuditLevel | None" = None,
-    tool_registry: Any = None,
-) -> Any:
+    policy: AuditLevel | None = None,
+    tool_registry: ToolRegistryPort | None = None,
+) -> TrajectoryAuditService | None:
     """Create + return a TrajectoryAuditService, or None if disabled.
 
     - If policy resolves to OFF → returns None (no subscribers registered,
@@ -138,17 +154,21 @@ def install_auditor_if_enabled(
     schema_detail resolution.
     """
     import logging
+
     _log = logging.getLogger(__name__)
     _log.info(
         "install_auditor_if_enabled: sid=%s header=%s persistence=%s",
-        session_id, header, "YES" if persistence is not None else "NO",
+        session_id,
+        header,
+        "YES" if persistence is not None else "NO",
     )
     from prismclaw.engine.trajectory.service import TrajectoryAuditService
 
     resolved = policy if policy is not None else resolve_policy(header=header)
     _log.info(
         "trajectory policy resolved: level=%s enabled=%s",
-        resolved.level, resolved.enabled,
+        resolved.level,
+        resolved.enabled,
     )
     if not resolved.enabled:
         _log.info("trajectory audit DISABLED for sid=%s", session_id)
@@ -165,7 +185,11 @@ def install_auditor_if_enabled(
 
 __all__ = [
     # constants
-    "OFF", "DRY", "FULL", "AuditLevel",
+    "OFF",
+    "DRY",
+    "FULL",
+    "AuditLevel",
     # factory / resolver
-    "resolve_policy", "install_auditor_if_enabled",
+    "resolve_policy",
+    "install_auditor_if_enabled",
 ]

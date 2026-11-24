@@ -4,6 +4,7 @@
 - ReportStatus: 文档生命周期状态（contract §2.3）
 - BriefStatus: 研究简报生命周期状态
 """
+
 from __future__ import annotations
 
 from enum import StrEnum
@@ -11,6 +12,7 @@ from enum import StrEnum
 
 class ReportType(StrEnum):
     """文档类型判别列（contract §2.1.1 枚举）。"""
+
     OUTPATIENT = "outpatient"
     INPATIENT = "inpatient"
     DISCHARGE = "discharge"
@@ -31,6 +33,7 @@ class ReportType(StrEnum):
 
 class ReportStatus(StrEnum):
     """文档生命周期状态（contract §2.3）。"""
+
     QUEUED = "排队中"
     OCR = "OCR识别"
     EXTRACT = "结构化提取"
@@ -41,6 +44,7 @@ class ReportStatus(StrEnum):
 
 class BriefStatus(StrEnum):
     """研究简报生命周期状态。"""
+
     ANALYZING = "分析中"
     PASSED = "已通过"
     NEEDS_FIX = "待修正"

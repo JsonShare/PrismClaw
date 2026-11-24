@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 
 from prismclaw.engine.compression.memory_selector import _heuristic_select
-from prismclaw.schema.memory.memory_types import MemoryEntry, ArchiveEntry
+from prismclaw.schema.memory.memory_types import MemoryEntry
 
 
 def _entry(entry_id: str, layer: str, score: float) -> MemoryEntry:
@@ -35,20 +35,36 @@ def test_high_relevance_l2_beats_low_relevance_l3() -> None:
     """
     now = time.time()
     high_l2 = MemoryEntry(
-        id="high-l2", layer="L2", type="fact", content="c",
-        created_at=now, updated_at=now, confidence=0.8, score=1.0 / 61.0,
+        id="high-l2",
+        layer="L2",
+        type="fact",
+        content="c",
+        created_at=now,
+        updated_at=now,
+        confidence=0.8,
+        score=1.0 / 61.0,
     )
     fillers = [
         MemoryEntry(
-            id=f"f{i}", layer="L2", type="fact", content="c",
-            created_at=now, updated_at=now, confidence=0.8,
+            id=f"f{i}",
+            layer="L2",
+            type="fact",
+            content="c",
+            created_at=now,
+            updated_at=now,
+            confidence=0.8,
             score=1.0 / (61.0 + i),
         )
         for i in range(1, 6)  # 占据 rank 2-6
     ]
     low_l3 = MemoryEntry(
-        id="low-l3", layer="L3", type="fact", content="c",
-        created_at=now, updated_at=now, confidence=1.0,  # 置信度甚至更高
+        id="low-l3",
+        layer="L3",
+        type="fact",
+        content="c",
+        created_at=now,
+        updated_at=now,
+        confidence=1.0,  # 置信度甚至更高
         score=1.0 / 121.0,  # rank 7 → band 2
     )
     memories, _archives = _heuristic_select(

@@ -22,7 +22,7 @@ import json
 import logging
 import time
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from croniter import croniter
 
@@ -33,9 +33,16 @@ from prismclaw.schema.scheduler import (
     ScheduledTask,
     ScheduledTaskRun,
     SchedulerDispatchJob,
+    SchedulerEngineProtocol,
+    SchedulerStoreProtocol,
     make_run_id,
 )
 from prismclaw.schema.shared.cron_convert import cron_to_spec, spec_to_cron
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
+    from prismclaw.engine.scheduler.dispatch import RedisSchedulerDispatchQueue
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +65,7 @@ class ScheduledTaskTool:
         "管理自动化定时任务：创建、查询、修改、删除、手动触发、启用、禁用。\n"
         "\n"
         "关键规则：\n"
-        "- instruction 无对话历史，必须完全自包含；指令模糊时（如\"整理新闻\"）先细化再创建。\n"
+        '- instruction 无对话历史，必须完全自包含；指令模糊时（如"整理新闻"）先细化再创建。\n'
         "- 用户未指定执行时间时，先询问偏好再创建。\n"
         "- 修改/删除/触发前先用 list 确认目标 task_id。\n"
         "- 结构化字段无法表达时（如工作日 9 点与 15 点）才用 cron_expr。"
@@ -88,7 +95,10 @@ class ScheduledTaskTool:
                 "description": "结构化调度定义（优先使用）",
                 "properties": {
                     "type": {"type": "string", "enum": ["minute", "hour", "day", "week", "month"]},
-                    "everyMinutes": {"type": "integer", "description": "type=minute 时的间隔分钟数(1-59)"},
+                    "everyMinutes": {
+                        "type": "integer",
+                        "description": "type=minute 时的间隔分钟数(1-59)",
+                    },
                     "minute": {"type": "integer", "description": "分钟 0-59"},
                     "hour": {"type": "integer", "description": "小时 0-23"},
                     "weekday": {"type": "string", "description": "type=week 时取值 mon-sun"},
@@ -102,7 +112,9 @@ class ScheduledTaskTool:
             },
             "enabled": {
                 "type": "boolean",
-                "description": "仅 create 时有效：创建后是否立即启用，默认 true；已有任务用 enable/disable",
+                "description": (
+                    "仅 create 时有效：创建后是否立即启用，默认 true；已有任务用 enable/disable"
+                ),
             },
         },
         "required": ["action"],
@@ -116,8 +128,8 @@ class ScheduledTaskTool:
     # ── Entry point ────────────────────────────────────────────────────
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
-        call_id = args.get("_call_id", "")
-        action = args.get("action")
+        call_id = _clean_str(args.get("_call_id"))
+        action = _clean_str(args.get("action"))
         handler = self._ACTION_HANDLERS.get(action)
         if handler is None:
             return error_result(
@@ -138,30 +150,33 @@ class ScheduledTaskTool:
 
     # ── Service resolution ─────────────────────────────────────────────
 
-    def _store(self, context: ToolContext):
-        return context.scheduler_store
+    def _store(self, context: ToolContext) -> SchedulerStoreProtocol:
+        # ToolContext 的服务字段是 Any 注入点；execute() 已拒绝服务缺失的调用。
+        return cast(SchedulerStoreProtocol, context.scheduler_store)
 
-    def _engine(self, context: ToolContext):
-        return context.scheduler_engine
+    def _engine(self, context: ToolContext) -> SchedulerEngineProtocol | None:
+        return cast(SchedulerEngineProtocol | None, context.scheduler_engine)
 
-    def _dispatch(self, context: ToolContext):
-        return context.scheduler_dispatch
+    def _dispatch(self, context: ToolContext) -> RedisSchedulerDispatchQueue | None:
+        return cast(RedisSchedulerDispatchQueue | None, context.scheduler_dispatch)
 
-    def _redis(self, context: ToolContext):
-        return context.scheduler_redis_client
+    def _redis(self, context: ToolContext) -> aioredis.Redis | None:
+        return cast(aioredis.Redis | None, context.scheduler_redis_client)
 
     def _max_tasks(self, context: ToolContext) -> int:
         value = context.scheduler_max_tasks_per_user
         return int(value) if isinstance(value, int) and value > 0 else 20
 
-    async def _broadcast(self, context: ToolContext, event_type: str, data: dict) -> None:
+    async def _broadcast(self, context: ToolContext, event_type: str, data: dict[str, Any]) -> None:
         broadcast = context.scheduler_broadcast
         if broadcast is None or context.user_id is None:
             return
         try:
             await broadcast(context.user_id, event_type, data)
         except Exception:  # noqa: BLE001 — notification is best-effort
-            logger.warning("scheduled_task.broadcast_failed", extra={"event": event_type}, exc_info=True)
+            logger.warning(
+                "scheduled_task.broadcast_failed", extra={"event": event_type}, exc_info=True
+            )
 
     async def _invalidate(self, context: ToolContext, task_id: str) -> None:
         """Local cache invalidation + cross-worker pub/sub (cloud)."""
@@ -178,7 +193,9 @@ class ScheduledTaskTool:
             except Exception:  # noqa: BLE001
                 logger.debug("scheduled_task.pubsub_failed", exc_info=True)
 
-    async def _load_owned_task(self, context: ToolContext, task_id: str) -> tuple[ScheduledTask | None, str | None]:
+    async def _load_owned_task(
+        self, context: ToolContext, task_id: str
+    ) -> tuple[ScheduledTask | None, str | None]:
         """Return (task, error). error is set when the task is missing or not owned."""
         if not task_id:
             return None, "scheduled_task：该操作需要 'task_id'"
@@ -190,7 +207,9 @@ class ScheduledTaskTool:
 
     # ── Actions ────────────────────────────────────────────────────────
 
-    async def _action_create(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_create(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         if context.user_id is None:
             return error_result(call_id, "scheduled_task：无法确定当前用户")
         store = self._store(context)
@@ -204,7 +223,9 @@ class ScheduledTaskTool:
 
         limit = self._max_tasks(context)
         if await store.count_user_tasks(context.user_id) >= limit:
-            return error_result(call_id, f"scheduled_task：已达到每用户任务上限（{limit} 个），请先删除不用的任务")
+            return error_result(
+                call_id, f"scheduled_task：已达到每用户任务上限（{limit} 个），请先删除不用的任务"
+            )
 
         cron_expr, schedule_spec, error = _resolve_schedule(args)
         if error:
@@ -228,21 +249,30 @@ class ScheduledTaskTool:
             return error_result(call_id, f"scheduled_task：任务保存失败 — {type(exc).__name__}")
 
         await self._invalidate(context, task.id)
-        await self._broadcast(context, "scheduled_task.created", {
-            "task_id": task.id,
-            "name": task.name,
-            "enabled": task.enabled,
-            "schedule": task.schedule_spec,
-        })
+        await self._broadcast(
+            context,
+            "scheduled_task.created",
+            {
+                "task_id": task.id,
+                "name": task.name,
+                "enabled": task.enabled,
+                "schedule": task.schedule_spec,
+            },
+        )
 
-        return text_result(call_id, (
-            f"已创建自动化任务「{task.name}」（id: {task.id}）。\n"
-            f"调度：{_describe_schedule(task.cron_expr, task.schedule_spec)}\n"
-            f"下次执行：{_next_fire_text(task.cron_expr)}\n"
-            f"状态：{'已启用' if task.enabled else '已停用'}"
-        ))
+        return text_result(
+            call_id,
+            (
+                f"已创建自动化任务「{task.name}」（id: {task.id}）。\n"
+                f"调度：{_describe_schedule(task.cron_expr, task.schedule_spec)}\n"
+                f"下次执行：{_next_fire_text(task.cron_expr)}\n"
+                f"状态：{'已启用' if task.enabled else '已停用'}"
+            ),
+        )
 
-    async def _action_list(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_list(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         if context.user_id is None:
             return error_result(call_id, "scheduled_task：无法确定当前用户")
         store = self._store(context)
@@ -266,11 +296,13 @@ class ScheduledTaskTool:
         ]
         return text_result(call_id, json.dumps(items, ensure_ascii=False))
 
-    async def _action_update(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_update(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         store = self._store(context)
         task, error = await self._load_owned_task(context, _clean_str(args.get("task_id")))
-        if error:
-            return error_result(call_id, error)
+        if task is None:
+            return error_result(call_id, error or "scheduled_task：任务不可用")
 
         changed = False
         name = _clean_str(args.get("name"))
@@ -289,7 +321,9 @@ class ScheduledTaskTool:
             task.schedule_spec = schedule_spec
             changed = True
         if not changed:
-            return error_result(call_id, "scheduled_task：没有可更新的字段（name/instruction/schedule）")
+            return error_result(
+                call_id, "scheduled_task：没有可更新的字段（name/instruction/schedule）"
+            )
 
         try:
             await store.put_task(task)
@@ -297,23 +331,32 @@ class ScheduledTaskTool:
             return error_result(call_id, f"scheduled_task：任务保存失败 — {type(exc).__name__}")
 
         await self._invalidate(context, task.id)
-        await self._broadcast(context, "scheduled_task.updated", {
-            "task_id": task.id,
-            "name": task.name,
-            "enabled": task.enabled,
-            "schedule": task.schedule_spec,
-        })
-        return text_result(call_id, (
-            f"已更新任务「{task.name}」。\n"
-            f"调度：{_describe_schedule(task.cron_expr, task.schedule_spec)}\n"
-            f"下次执行：{_next_fire_text(task.cron_expr)}"
-        ))
+        await self._broadcast(
+            context,
+            "scheduled_task.updated",
+            {
+                "task_id": task.id,
+                "name": task.name,
+                "enabled": task.enabled,
+                "schedule": task.schedule_spec,
+            },
+        )
+        return text_result(
+            call_id,
+            (
+                f"已更新任务「{task.name}」。\n"
+                f"调度：{_describe_schedule(task.cron_expr, task.schedule_spec)}\n"
+                f"下次执行：{_next_fire_text(task.cron_expr)}"
+            ),
+        )
 
-    async def _action_delete(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_delete(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         store = self._store(context)
         task, error = await self._load_owned_task(context, _clean_str(args.get("task_id")))
-        if error:
-            return error_result(call_id, error)
+        if task is None:
+            return error_result(call_id, error or "scheduled_task：任务不可用")
         try:
             await store.delete_task(task.id)
         except Exception as exc:  # noqa: BLE001
@@ -322,14 +365,16 @@ class ScheduledTaskTool:
         await self._broadcast(context, "scheduled_task.deleted", {"task_id": task.id})
         return text_result(call_id, f"已删除任务「{task.name}」。")
 
-    async def _action_trigger(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_trigger(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         dispatch = self._dispatch(context)
         if dispatch is None:
             return error_result(call_id, "scheduled_task：派发队列不可用")
         store = self._store(context)
         task, error = await self._load_owned_task(context, _clean_str(args.get("task_id")))
-        if error:
-            return error_result(call_id, error)
+        if task is None:
+            return error_result(call_id, error or "scheduled_task：任务不可用")
 
         fire_slot = now = time.time()
         run = ScheduledTaskRun(
@@ -358,21 +403,23 @@ class ScheduledTaskTool:
         try:
             await dispatch.enqueue(job)
         except Exception as exc:
-            await store.update_run(
-                run.id, status="failed", error="dispatch_enqueue_failed"
-            )
-            return error_result(
-                call_id, f"scheduled_task：入队失败 — {type(exc).__name__}"
-            )
-        return text_result(call_id, f"已触发任务「{task.name}」，正在后台执行（run_id: {run.id}）。")
+            await store.update_run(run.id, status="failed", error="dispatch_enqueue_failed")
+            return error_result(call_id, f"scheduled_task：入队失败 — {type(exc).__name__}")
+        return text_result(
+            call_id, f"已触发任务「{task.name}」，正在后台执行（run_id: {run.id}）。"
+        )
 
-    async def _action_set_enabled(self, args: dict, context: ToolContext, call_id: str, enabled: bool) -> ToolResult:
+    async def _action_set_enabled(
+        self, args: dict[str, Any], context: ToolContext, call_id: str, enabled: bool
+    ) -> ToolResult:
         store = self._store(context)
         task, error = await self._load_owned_task(context, _clean_str(args.get("task_id")))
-        if error:
-            return error_result(call_id, error)
+        if task is None:
+            return error_result(call_id, error or "scheduled_task：任务不可用")
         if task.enabled == enabled:
-            return text_result(call_id, f"任务「{task.name}」当前已是{'启用' if enabled else '停用'}状态。")
+            return text_result(
+                call_id, f"任务「{task.name}」当前已是{'启用' if enabled else '停用'}状态。"
+            )
         task.enabled = enabled
         if enabled:
             task.consecutive_failures = 0
@@ -382,18 +429,26 @@ class ScheduledTaskTool:
         except Exception as exc:  # noqa: BLE001
             return error_result(call_id, f"scheduled_task：保存失败 — {type(exc).__name__}")
         await self._invalidate(context, task.id)
-        await self._broadcast(context, "scheduled_task.updated", {
-            "task_id": task.id,
-            "name": task.name,
-            "enabled": task.enabled,
-            "schedule": task.schedule_spec,
-        })
+        await self._broadcast(
+            context,
+            "scheduled_task.updated",
+            {
+                "task_id": task.id,
+                "name": task.name,
+                "enabled": task.enabled,
+                "schedule": task.schedule_spec,
+            },
+        )
         return text_result(call_id, f"已{'启用' if enabled else '停用'}任务「{task.name}」。")
 
-    async def _action_enable(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_enable(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         return await self._action_set_enabled(args, context, call_id, True)
 
-    async def _action_disable(self, args: dict, context: ToolContext, call_id: str) -> ToolResult:
+    async def _action_disable(
+        self, args: dict[str, Any], context: ToolContext, call_id: str
+    ) -> ToolResult:
         return await self._action_set_enabled(args, context, call_id, False)
 
     _ACTION_HANDLERS = {
@@ -410,7 +465,7 @@ class ScheduledTaskTool:
 # ── Module helpers ─────────────────────────────────────────────────────
 
 
-def _clean_str(value: Any) -> str:
+def _clean_str(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
@@ -421,7 +476,7 @@ def _preview(text: str) -> str:
     return text[:_INSTRUCTION_PREVIEW_CHARS] + "..."
 
 
-def _resolve_schedule(args: dict) -> tuple[str, dict, str | None]:
+def _resolve_schedule(args: dict[str, Any]) -> tuple[str, dict[str, Any], str | None]:
     """Resolve (cron_expr, schedule_spec, error). Structured spec takes priority."""
     spec = args.get("schedule")
     if isinstance(spec, dict) and spec.get("type"):
@@ -439,7 +494,7 @@ def _resolve_schedule(args: dict) -> tuple[str, dict, str | None]:
     return "", {}, "either 'schedule' or 'cron_expr' is required"
 
 
-def _describe_schedule(cron_expr: str, spec: dict | None) -> str:
+def _describe_schedule(cron_expr: str, spec: dict[str, Any] | None) -> str:
     spec = spec or cron_to_spec(cron_expr)
     t = spec.get("type")
     try:
@@ -453,7 +508,10 @@ def _describe_schedule(cron_expr: str, spec: dict | None) -> str:
             day = _WEEKDAY_CN.get(str(spec.get("weekday", "")).lower(), "?")
             return f"每周{day} {int(str(spec['hour'])):02d}:{int(str(spec['minute'])):02d}"
         if t == "month":
-            return f"每月 {spec.get('day', '?')} 日 {int(str(spec['hour'])):02d}:{int(str(spec['minute'])):02d}"
+            return (
+                f"每月 {spec.get('day', '?')} 日 "
+                f"{int(str(spec['hour'])):02d}:{int(str(spec['minute'])):02d}"
+            )
     except (KeyError, ValueError, TypeError):
         pass
     return cron_expr or "自定义调度"

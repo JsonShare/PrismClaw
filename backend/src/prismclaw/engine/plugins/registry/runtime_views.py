@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from prismclaw.schema.agent.capability import RuntimeCapabilities
 from prismclaw.engine.plugins.registry.descriptors import PluginDescriptor
+from prismclaw.schema.agent.capability import RuntimeCapabilities
 
 
 @dataclass(slots=True)
@@ -13,7 +13,7 @@ class DeclarativePluginRuntimeView:
     mcp_servers: dict[str, Any]
 
     @classmethod
-    def from_descriptor(cls, descriptor: PluginDescriptor) -> "DeclarativePluginRuntimeView":
+    def from_descriptor(cls, descriptor: PluginDescriptor) -> DeclarativePluginRuntimeView:
         return cls(
             plugin_name=descriptor.plugin_name,
             mcp_servers=dict(descriptor.mcp_servers),
@@ -30,7 +30,7 @@ class DeclarativePluginCapabilityView:
     def from_descriptor(
         cls,
         descriptor: PluginDescriptor,
-    ) -> "DeclarativePluginCapabilityView | None":
+    ) -> DeclarativePluginCapabilityView | None:
         if descriptor.capability_graph is None:
             return None
         return cls(

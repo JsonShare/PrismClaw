@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from prismclaw.schema.content.context import ContextBlock
-from prismclaw.schema.content.context import ContextPackLayout
 from prismclaw.schema.agent.session import AgentMessageDict, ProjectionInputMessage
+from prismclaw.schema.content.context import ContextBlock, ContextPackLayout
 
 
 @dataclass(slots=True)
@@ -13,9 +12,7 @@ class ProjectionMessageSet:
     meta_messages: list[ProjectionInputMessage]
     appended_messages: list[ProjectionInputMessage]
 
-    def replace_messages(
-        self, new_messages: list[AgentMessageDict]
-    ) -> "ProjectionMessageSet":
+    def replace_messages(self, new_messages: list[AgentMessageDict]) -> ProjectionMessageSet:
         """Return a new instance with ``messages`` swapped in.
 
         WP-1.1 (Phase 1 immutability): the hot path used to mutate

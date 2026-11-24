@@ -5,9 +5,11 @@ persistence 和 engine 层通过 contracts 单向引用，消除循环依赖。
 
 此处仅保留 Protocol 定义 + 从 trajectory_types 的 re-export。
 """
+
 from __future__ import annotations
 
-from typing import Callable, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Protocol, runtime_checkable
 
 from prismclaw.schema.trajectory.trajectory_types import (  # noqa: F401
     STATE_VERSION,
@@ -21,9 +23,9 @@ from prismclaw.schema.trajectory.trajectory_types import (  # noqa: F401
     view,
 )
 
-
 # ── Persistence Protocol ─────────────────────────────────────────────
 # Engine 层通过此 Protocol 访问 I/O，不直接 import persistence。
+
 
 @runtime_checkable
 class TrajectoryPersistence(Protocol):

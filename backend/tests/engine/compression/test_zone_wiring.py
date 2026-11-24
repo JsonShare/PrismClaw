@@ -1,4 +1,5 @@
 """区域接线统一入口 + clamp 契约测试（absolute 模式）。"""
+
 from __future__ import annotations
 
 import inspect

@@ -7,6 +7,7 @@
   * workspace 级 ``.work/state/skills``（运行时安装，相对路径）。
 并锁定 walk-up 动态发现默认读取 ``workspace_skills_dir``。
 """
+
 from __future__ import annotations
 
 from pathlib import Path

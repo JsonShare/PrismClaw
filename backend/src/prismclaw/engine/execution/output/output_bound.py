@@ -9,6 +9,7 @@ read it back via the read tool if needed. This is the hard cap; the
 subsequent output_compressor does lossless/lossy semantic reduction
 *within* whatever output_bound left intact.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -71,6 +72,7 @@ def output_bound(
         try:
             config.spill_dir.mkdir(parents=True, exist_ok=True)
             import time
+
             stamp = int(time.monotonic_ns())
             safe_name = tool_name.replace("/", "_").replace(" ", "_") if tool_name else "tool"
             spill_path = config.spill_dir / f"{safe_name}_{stamp}_overflow.log"

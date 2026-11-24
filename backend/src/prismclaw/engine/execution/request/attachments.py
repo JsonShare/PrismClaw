@@ -14,6 +14,7 @@ from that shared state:
 State is computed once in ``project_blocks``; narration exists only in the
 channel renderers, so no channel can assert content it never received.
 """
+
 from __future__ import annotations
 
 import logging
@@ -22,19 +23,27 @@ from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.engine.toolkit.office.document_image_extract import (
-    extract_document_blocks,
+from prismclaw.engine.toolkit.office.document_reader import (
+    DOC_FORMATS,
+    IMAGE_MIME_BY_EXT,
+    STRUCTURED_OFFICE_FORMATS,
+    Block,
+    close_doc,
+    open_doc,
+    page_count,
+    parse_page,
+    structured_office_images,
     to_model_path,
 )
 from prismclaw.schema.agent.data_types import FileBlock, ImageBlock, TextBlock
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from prismclaw.engine.toolkit.office.document_reader import DocLike
+from prismclaw.schema.config.config import ContextBudgetConfig
 
-# OOXML 段落锚点前缀：document_image_extract 在每段前加 ``[w14:paraId] `` 供
-# docx 编辑工具按段落定位；这是内部编辑句柄，对聊天展示无意义，display 渲染时剥离。
-_PARA_ID_PREFIX_RE = re.compile(r"^\[[0-9A-Fa-f]{8}\]\s*")
+logger = logging.getLogger(__name__)
 
 _WORKSPACE_FILE_PATH_RE = re.compile(
     r"(?:(?:^|[\s(]))"
@@ -45,40 +54,28 @@ _WORKSPACE_FILE_PATH_RE = re.compile(
 )
 
 _THREAD_POOL_MAX_WORKERS = 4
-_SUPPORTED_DOC_FORMATS = {".docx", ".pdf", ".md", ".markdown", ".rst", ".xlsx", ".pptx"}
-
-# 无 mime_type 时按扩展名推断（仅用于 ImageBlock 的 identity，真实 mime 由
-# image_preprocess 从文件确定）。
-_EXT_MIME: dict[str, str] = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-    ".bmp": "image/bmp",
-    ".tif": "image/tiff",
-    ".tiff": "image/tiff",
-}
+# 附件预览页数：附件是「模型尚未读」的提示，只给开头几页确定内容主题，
+# 完整内容由模型按需 read。非运营旋钮。
+_ATTACHMENT_PREVIEW_PAGES = 3
+_SUPPORTED_DOC_FORMATS = set(DOC_FORMATS) | set(STRUCTURED_OFFICE_FORMATS)
 
 
-def _resolve_mime(mime_type: Any, source_path: str) -> str:
+def _resolve_mime(mime_type: object, source_path: str) -> str:
     """声明的 mime 优先；缺失时按扩展名推断（真实 mime 由文件本身确定）。"""
     if isinstance(mime_type, str) and mime_type.strip():
         return mime_type.strip()
-    return _EXT_MIME.get(Path(source_path).suffix.lower(), "image/jpeg")
+    return IMAGE_MIME_BY_EXT.get(Path(source_path).suffix.lower(), "image/jpeg")
 
 
 # 阈值各自独立，互不替代：
-# - _MAX_DISPLAY_TEXT_CHARS：前端渲染上限（防 WebSocket 传输 + 前端崩溃）
 # - _MAX_EXTRACT_FILE_SIZE：OOM 防御（read_bytes 前预检，防内存撑爆）
 # - _ATTACHMENT_CHAR_BUDGET_FALLBACK：内联预算兜底（仅配置/求解失败时用）
-# 三者均非运营旋钮，不外置。
-_MAX_DISPLAY_TEXT_CHARS = 50_000
+# 两者均非运营旋钮，不外置。
 _MAX_EXTRACT_FILE_SIZE = 100_000_000
 _ATTACHMENT_CHAR_BUDGET_FALLBACK = 30_000
 
 
-def _compute_attachment_char_budget(context_budget: Any = None) -> int:
+def _compute_attachment_char_budget(context_budget: ContextBudgetConfig | None = None) -> int:
     """根据上下文 token 预算动态计算附件内容的字符预算。
 
     absolute 模式：history_tokens×0.6（token），字符 = ×1.5。
@@ -86,14 +83,17 @@ def _compute_attachment_char_budget(context_budget: Any = None) -> int:
     if context_budget is None:
         return _ATTACHMENT_CHAR_BUDGET_FALLBACK
     try:
-        if hasattr(context_budget, 'compute_history_budget'):
+        if hasattr(context_budget, "compute_history_budget"):
             history_tokens = context_budget.compute_history_budget(model_max_output=None)
         else:
+            reserve_tokens = context_budget.output_reserve_tokens
+            if reserve_tokens is None:
+                raise ValueError("output_reserve_tokens unset")
             history_tokens = (
                 context_budget.window_tokens
                 - context_budget.system_zone_tokens
                 - context_budget.dynamic_zone_tokens
-                - context_budget.output_reserve_tokens
+                - reserve_tokens
             )
         attachment_token_budget = max(0, int(history_tokens * 0.6))
         char_budget = int(attachment_token_budget * 1.5)
@@ -207,9 +207,7 @@ def normalize_attachment_blocks(
                 mime_type = item.get("mime_type")
                 size_bytes = item.get("size_bytes")
                 resolved_mime_type = (
-                    mime_type.strip()
-                    if isinstance(mime_type, str) and mime_type.strip()
-                    else None
+                    mime_type.strip() if isinstance(mime_type, str) and mime_type.strip() else None
                 )
                 fb = FileBlock(
                     type="file",
@@ -265,16 +263,14 @@ def _extract_file_blocks(
     fb: FileBlock,
     workspace_path: Path,
 ) -> Sequence[TextBlock | ImageBlock | FileBlock]:
-    """Extract text and image blocks from a single file attachment.
+    """抽取单个文件附件的预览内容块。
 
-    On error, unsupported format, or oversized file, returns the original
-    FileBlock so the frontend still renders the attachment card. 失败原因不进
-    内容——transport 层错误不进入模型上下文，模型按引用路径 read 时才会看到
-    真实错误（单一事实来源）。
+    只解析前 ``_ATTACHMENT_PREVIEW_PAGES`` 页：附件是「用户刚上传、模型尚未读」的
+    提示，完整内容由模型按需 ``read`` 获取。失败原因不进内容——transport 层错误
+    不进入模型上下文，模型按引用路径 read 时才会看到真实错误。
 
-    Returns ``Sequence``（而非 ``list``）因为成功路径来自
-    ``extract_document_blocks`` 的 ``list[TextBlock | ImageBlock]``，失败路径是
-    ``FileBlock`` 列表——协变类型让两者共用同一签名。
+    Returns ``Sequence``（而非 ``list``）因为成功路径来自按页解析的 ``list``，
+    失败路径是 ``FileBlock`` 列表——协变类型让两者共用同一签名。
     """
     try:
         full_path = workspace_path / fb.path
@@ -283,39 +279,84 @@ def _extract_file_blocks(
 
         ext = full_path.suffix.lower()
         if ext not in _SUPPORTED_DOC_FORMATS:
-            # Unsupported format — preserve FileBlock for frontend rendering
-            # (consistent with image downgrading). LLM can use ReadTool if needed.
             return [fb]
 
-        # OOM 预检：超 100MB 不 read_bytes，直接返回 FileBlock 供前端渲染。
-        # 4 个 worker 并发时峰值约 800MB–1.2GB，故阈值与并发度需一起看。
         if full_path.stat().st_size > _MAX_EXTRACT_FILE_SIZE:
             return [fb]
 
         raw = full_path.read_bytes()
-        if ext in (".xlsx", ".pptx"):
-            # 结构化 Office 格式：走 read_office_text 保留编辑锚点
+        if ext in STRUCTURED_OFFICE_FORMATS:
             from prismclaw.engine.review.changes.office_engines import read_office_text
-            text = read_office_text(raw, ext.lstrip("."))
-            return [TextBlock(type="text", text=text)]
-        fmt_map = {
-            ".docx": "docx",
-            ".pdf": "pdf",
-            ".md": "markdown",
-            ".markdown": "markdown",
-            ".rst": "markdown",
-        }
-        fmt = fmt_map.get(ext, ext.lstrip("."))
-        blocks = extract_document_blocks(
-            raw,
-            fmt,
-            source_rel_path=fb.path,
-            workspace_path=workspace_path,
-        )
+
+            fmt = STRUCTURED_OFFICE_FORMATS[ext]
+            text = read_office_text(raw, fmt)
+            out: list[TextBlock | ImageBlock] = [TextBlock(type="text", text=text)]
+            # 纯图片的 xlsx/pptx 锚点文本为空，但仍要给出内嵌图引用：
+            # 否则模型只看到「无内容文件」，看不到里面的图片。
+            for block in structured_office_images(
+                raw, fmt, workspace_path=workspace_path, source_rel_path=fb.path
+            ):
+                out.append(_block_to_attachment_block(block))
+            return out
+
+        fmt = DOC_FORMATS[ext]
+        doc = open_doc(raw, fmt, workspace_path=workspace_path, source_rel_path=fb.path)
+        try:
+            total = page_count(doc, fmt)
+            limit = min(total, _ATTACHMENT_PREVIEW_PAGES)
+            blocks = _collect_blocks(
+                doc,
+                pages=range(1, limit + 1),
+                workspace_path=workspace_path,
+                source_rel=fb.path,
+            )
+        finally:
+            close_doc(doc, fmt)
         return blocks
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"Failed to preprocess {fb.path}: {exc}")
         return [fb]
+
+
+def _collect_blocks(
+    doc: DocLike,
+    *,
+    pages: range,
+    workspace_path: Path,
+    source_rel: str,
+) -> list[TextBlock | ImageBlock]:
+    """把预览页的文档块投影为附件通道使用的 TextBlock / ImageBlock。"""
+    out: list[TextBlock | ImageBlock] = []
+    for page in pages:
+        for block in parse_page(
+            doc, page, workspace_path=workspace_path, source_rel_path=source_rel
+        ):
+            out.append(_block_to_attachment_block(block))
+    return out
+
+
+def _block_to_attachment_block(block: Block) -> TextBlock | ImageBlock:
+    if block.kind == "text":
+        return TextBlock(type="text", text=block.text)
+    if block.kind == "table":
+        return TextBlock(
+            type="text",
+            text="\n".join("| " + " | ".join(row) + " |" for row in block.rows),
+        )
+    if block.kind == "image":
+        # 预览始终带 workspace，图片块理应已落盘；极端情况下退回文字占位，
+        # 而不是抛错让整份附件的预览失败。
+        if block.source_path is None:
+            return TextBlock(type="text", text="[图片：未能提取]")
+        return ImageBlock(
+            type="image",
+            data="",
+            mime_type=block.mime_type or "image/png",
+            source_path=block.source_path,
+        )
+    # unsupported：无文本层的页也要让模型知道「这里有内容但读不到」，
+    # 否则扫描件附件在上下文里彻底消失，比改造前更差。
+    return TextBlock(type="text", text=block.text)
 
 
 def _preprocess_file_attachments(
@@ -335,8 +376,7 @@ def _preprocess_file_attachments(
 
     with ThreadPoolExecutor(max_workers=_THREAD_POOL_MAX_WORKERS) as executor:
         future_to_block = {
-            executor.submit(_extract_file_blocks, fb, workspace_path): fb
-            for fb in file_blocks
+            executor.submit(_extract_file_blocks, fb, workspace_path): fb for fb in file_blocks
         }
         for future in as_completed(future_to_block):
             fb = future_to_block[future]
@@ -360,31 +400,27 @@ def _read_image_bytes_from_workspace(source_path: str, workspace_path: Path) -> 
 
 
 def _batch_ocr_attachments(
-    direct_images: list,
-    extracted_map: dict,
+    direct_images: list[Any],
     workspace_path: Path,
     max_concurrent: int = 5,
     timeout_per_image: int = 30,
 ) -> dict[str, str]:
-    """并发 OCR 所有图片，返回 {source_path: ocr_text}。"""
+    """并发 OCR 用户直接上传的图片，返回 {source_path: ocr_text}。
+
+    只处理顶层图片：文档内嵌图是解析副产物，其所属文档已作为附件进入上下文，
+    自动外发整份文档的图片超出用户的显式意图。需要时由模型对具体图片调用 read。
+    """
     from prismclaw.engine.toolkit.file.read_image import (
-        _DEFAULT_QUESTION,
-        _recognize_from_bytes,
+        DEFAULT_QUESTION,
+        recognize_image,
     )
 
-    # 收集所有图片（已有文本的不重复识别，避免覆盖已知内容）
     images_to_ocr: list[tuple[str, bytes]] = []
     for img in direct_images:
         if img.source_path and not img.text:
             data = _read_image_bytes_from_workspace(img.source_path, workspace_path)
             if data:
                 images_to_ocr.append((img.source_path, data))
-    for blocks in extracted_map.values():
-        for b in blocks:
-            if hasattr(b, 'source_path') and b.source_path and not getattr(b, 'text', None):
-                data = _read_image_bytes_from_workspace(b.source_path, workspace_path)
-                if data:
-                    images_to_ocr.append((b.source_path, data))
 
     if not images_to_ocr:
         return {}
@@ -395,7 +431,10 @@ def _batch_ocr_attachments(
         futures = {}
         for path, data in images_to_ocr:
             future = pool.submit(
-                _recognize_from_bytes, path, data, _DEFAULT_QUESTION,
+                recognize_image,
+                path,
+                data,
+                DEFAULT_QUESTION,
                 str(workspace_path),
             )
             futures[future] = path
@@ -423,18 +462,13 @@ def _batch_ocr_attachments(
 
 
 def _apply_ocr_to_blocks(
-    direct_images: list,
-    extracted_map: dict,
+    direct_images: list[Any],
     ocr_results: dict[str, str],
 ) -> None:
-    """将 OCR 结果回填到 ImageBlock.text。"""
+    """将 OCR 结果回填到用户上传图片的 ImageBlock.text。"""
     for img in direct_images:
         if img.source_path in ocr_results:
             img.text = ocr_results[img.source_path]
-    for blocks in extracted_map.values():
-        for b in blocks:
-            if hasattr(b, 'text') and hasattr(b, 'source_path') and b.source_path in ocr_results:
-                b.text = ocr_results[b.source_path]
 
 
 # ---------------------------------------------------------------------------
@@ -467,8 +501,8 @@ class AttachmentUnit:
     kind: AttachmentKind
     image_index: int = 0  # 顶层图片在本次上传中的 1-based 序号
     chars: int = 0
-    display_blocks: list = field(default_factory=list)
-    content_blocks: list = field(default_factory=list)
+    display_blocks: list[Any] = field(default_factory=list)
+    content_blocks: list[Any] = field(default_factory=list)
     image_refs: list[tuple[str, int, int]] = field(default_factory=list)
 
 
@@ -631,10 +665,7 @@ def _reference_lines(
                     "请用 read 工具读取该路径以查看内容。]"
                 )
             else:
-                lines.append(
-                    f"[Document {display} — 未提取到文本；"
-                    "请见下方图片引用。]"
-                )
+                lines.append(f"[Document {display} — 未提取到文本；请见下方图片引用。]")
         else:
             lines.append(
                 f"[File {to_model_path(unit.path)} — 未提取到文本；"
@@ -650,9 +681,7 @@ def _reference_lines(
 
 def _reference_manifest(projection: AttachmentProjection, *, char_budget: int) -> str:
     """超预算时的引用清单：每附件（含未内联的内嵌图片）一条 path + 工具，上限为预算一半。"""
-    header = (
-        "[本轮附件内容超出内联预算——下方仅列出引用；请用 read 工具读取你需要的内容：]"
-    )
+    header = "[本轮附件内容超出内联预算——下方仅列出引用；请用 read 工具读取你需要的内容：]"
     max_chars = int(char_budget * 0.5)
     lines = [header]
     used = len(header)
@@ -719,7 +748,9 @@ def _render_llm(
     return blocks
 
 
-def _resolve_content(blocks: list[Any]) -> Any:
+def _resolve_content(
+    blocks: list[TextBlock | ImageBlock],
+) -> str | list[TextBlock | ImageBlock]:
     """投影 block 列表 → 最终内容值（空列表 → 空字符串）。
 
     display 与 llm 各自独立调用本函数，杜绝交叉误用（display 截断文本不得
@@ -737,13 +768,14 @@ def route_attachments_for_turn(
     user_message: str,
     raw_attachments: list[Any],
     workspace_path: Path,
-    context_budget: Any = None,  # ContextBudgetConfig | None
+    context_budget: ContextBudgetConfig | None = None,
     display_user_message: str | None = None,
 ) -> AttachmentRoutingDecision:
     """Resolve the backend attachment route for a single turn.
 
     三通道契约：
-    - display：附件块（图片保留 identity、文件卡片）+ 用户消息；无消息时不附加冗余占位文字（缩略图/文件卡即为指示）
+    - display：附件块（图片保留 identity、文件卡片）+ 用户消息；无消息时不附加
+      冗余占位文字（缩略图/文件卡即为指示）
     - llm：附件内容（可内联时）或自足引用（超预算时），再拼用户消息
     - guidance：附件策略（未取先述禁令 / 意图优先级 / 图片路由是设计）
 
@@ -767,15 +799,14 @@ def route_attachments_for_turn(
     if has_file_attachments:
         extracted_map = _preprocess_file_attachments(normalized.files, workspace_path)
 
-    # 3. 批量 OCR（并发，查缓存优先）
+    # 3. 批量 OCR 用户直接上传的图片（文档内嵌图不自动外发）
     ocr_results = _batch_ocr_attachments(
         direct_images=normalized.images,
-        extracted_map=extracted_map,
         workspace_path=workspace_path,
     )
 
     # 4. 回填 OCR 结果到 ImageBlock
-    _apply_ocr_to_blocks(normalized.images, extracted_map, ocr_results)
+    _apply_ocr_to_blocks(normalized.images, ocr_results)
 
     # 5. 投影：状态只算一次（附件为单元，display/content 同时产出）
     projection = project_blocks(ordered_attachments, extracted_map)
@@ -785,9 +816,7 @@ def route_attachments_for_turn(
     inlined = projection.inline_chars <= char_budget
 
     # 7. 渲染三通道
-    display_blocks = [
-        block for unit in projection.entries for block in unit.display_blocks
-    ]
+    display_blocks = [block for unit in projection.entries for block in unit.display_blocks]
     llm_blocks = _render_llm(projection, inlined=inlined, char_budget=char_budget)
 
     display_message = display_user_message if display_user_message is not None else user_message
@@ -800,9 +829,7 @@ def route_attachments_for_turn(
         # 无文字说明：llm 通道补可验证事实；display 通道**不再**附加「已上传附件」
         # 之类的冗余占位文字——附件缩略图/文件卡本身已是「已上传」的可视指示，
         # 多余文字只会在气泡里多出一串无价值提示。
-        llm_blocks.append(
-            TextBlock(type="text", text=_turn_facts(projection, inlined=inlined))
-        )
+        llm_blocks.append(TextBlock(type="text", text=_turn_facts(projection, inlined=inlined)))
 
     return AttachmentRoutingDecision(
         display_content=_resolve_content(display_blocks),

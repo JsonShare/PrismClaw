@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from typing import Any, Iterator, Mapping
+from typing import Any
 
-from prismclaw.engine.foundation.telemetry.profiler import TurnProfiler
 from prismclaw.engine.foundation.metrics import emit
+from prismclaw.engine.foundation.telemetry.profiler import TurnProfiler
 
 
 def _normalize_labels(labels: Mapping[str, Any] | None) -> dict[str, str] | None:
@@ -35,7 +36,7 @@ class HotPathTelemetry:
         *,
         checkpoint: str | None = None,
         labels: Mapping[str, Any] | None = None,
-        **metadata: Any,
+        **metadata: object,
     ) -> float:
         normalized_labels = _normalize_labels(labels)
         clamped_elapsed_ms = max(0.0, float(elapsed_ms))
@@ -61,7 +62,7 @@ class HotPathTelemetry:
         *,
         checkpoint: str | None = None,
         labels: Mapping[str, Any] | None = None,
-        **metadata: Any,
+        **metadata: object,
     ) -> Iterator[None]:
         started_at = time.monotonic()
         try:

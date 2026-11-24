@@ -12,6 +12,7 @@
     LoopConfig                — 三端口 + 完成内核绑定 + 可选插槽
     EventSink                 — 事件输出接口
 """
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from prismclaw.engine.execution.checkpoint import RunSnapshot, RunStateMachine
     from prismclaw.engine.execution.checkpoint.models import RunState
     from prismclaw.engine.execution.control.kernel import Decision
+    from prismclaw.engine.execution.dispatch.call_handling import ParsedToolCall
     from prismclaw.engine.execution.dispatch.pipeline import (
         LLMStreamError,
         LLMStreamNoResponse,
@@ -31,13 +33,13 @@ if TYPE_CHECKING:
     from prismclaw.engine.execution.loop.ownership import _RunOwnershipLease
     from prismclaw.engine.execution.query.pre_request_pipeline import PreparedTurn
     from prismclaw.engine.foundation.telemetry.profiler import TurnProfiler
-    from prismclaw.schema.llm.types import LLMResponse
     from prismclaw.engine.state.tool_loop_state import ToolLoopState
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
     from prismclaw.schema.agent.session import ProjectionInputMessage
     from prismclaw.schema.agent.task_runtime import EvidenceRecord
     from prismclaw.schema.content.content_types import ToolResult
     from prismclaw.schema.content.streaming import Done, ErrorEvent, ToolClarifyRequest
+    from prismclaw.schema.llm.types import LLMResponse
     from prismclaw.schema.services.skills import SkillInvocationState
     from prismclaw.schema.session.types import SessionTree
 
@@ -45,6 +47,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # LoopTiming — 性能基线采集
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LoopTiming:
@@ -54,6 +57,7 @@ class LoopTiming:
     无工具调用的回合会跳过 bookkeeping（见 TurnPerf 说明）。
     所有时间单位为毫秒。
     """
+
     iteration: int = 0
     pre_request_pipeline_ms: float = 0.0
     llm_stream_ms: float = 0.0
@@ -64,6 +68,7 @@ class LoopTiming:
 # ---------------------------------------------------------------------------
 # TurnPerf — 回合级性能聚合
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TurnPerf:
@@ -105,6 +110,7 @@ class TurnPerf:
 # IterationFrame — 每迭代重建的骨架迭代单元
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class IterationFrame:
     """单次迭代的可变单元（骨架重置点归零；闭包不得跨迭代缓存本单元）。
@@ -118,10 +124,11 @@ class IterationFrame:
     不是 WebSocket 事件，不 yield；由 prepare 端口每迭代合并进
     query_loop_state 后清空。
     """
+
     pending_messages: list[ProjectionInputMessage] = field(default_factory=list)
-    llm_outcome: (
-        LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStreamNoResponse | None
-    ) = None
+    llm_outcome: LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStreamNoResponse | None = (
+        None
+    )
     llm_response: LLMResponse | None = None
     llm_start_monotonic: float = 0.0
     last_tool_results: list[ToolResult] = field(default_factory=list)
@@ -136,6 +143,7 @@ class IterationFrame:
 # ---------------------------------------------------------------------------
 # RunLedger — Run 级仅追加账本（事件流）
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class RunLedger:
@@ -156,6 +164,7 @@ class RunLedger:
 # ---------------------------------------------------------------------------
 # RunLoopState — 三周期状态之家
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class RunLoopState:
@@ -221,11 +230,15 @@ class RunLoopState:
         self.frame.pending_messages = value
 
     @property
-    def llm_outcome(self):
+    def llm_outcome(
+        self,
+    ) -> LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStreamNoResponse | None:
         return self.frame.llm_outcome
 
     @llm_outcome.setter
-    def llm_outcome(self, value) -> None:
+    def llm_outcome(
+        self, value: LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStreamNoResponse | None
+    ) -> None:
         self.frame.llm_outcome = value
 
     @property
@@ -281,10 +294,12 @@ class RunLoopState:
 # BeforeToolCallContext/Result — 工具执行前拦截
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BeforeToolCallContext:
     """工具执行前检查的上下文。"""
-    tool_call: dict[str, Any] | None = None
+
+    tool_call: ParsedToolCall | None = None
     args: dict[str, Any] | None = None
     state: RunLoopState | None = None
 
@@ -296,6 +311,7 @@ class BeforeToolCallResult:
     block=True  → 该工具不执行，返回即时错误结果
     block=False → 该工具正常执行
     """
+
     block: bool = False
     reason: str | None = None
 
@@ -304,6 +320,7 @@ class BeforeToolCallResult:
 # AfterToolCallContext/Result — 工具执行后处理
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AfterToolCallContext:
     """工具执行后处理的上下文。
@@ -311,6 +328,7 @@ class AfterToolCallContext:
     批量处理一轮的所有工具结果（POST_TOOL hooks 等）。结果与 assistant
     消息经 ``state``（``last_tool_results`` / ``llm_response``）读取。
     """
+
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     state: RunLoopState | None = None
 
@@ -322,12 +340,14 @@ class AfterToolCallResult:
     唯一消费通道：inject_messages（轮间消息注入，骨架写入
     state.pending_messages）；不注入则返回 None。
     """
+
     inject_messages: list[ProjectionInputMessage] | None = None
 
 
 # ---------------------------------------------------------------------------
 # TurnUpdate — 轮间状态更新
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class TurnUpdate:
@@ -341,6 +361,7 @@ class TurnUpdate:
     不携带任何上下文缓存/失效字段：上下文重建是每迭代从 tree 的
     纯投影（树是唯一真相源），无第二份可更新的副本。
     """
+
     restart: bool = False
     pending_messages: list[ProjectionInputMessage] | None = None
 
@@ -349,9 +370,11 @@ class TurnUpdate:
 # HITLCheckResult — B/S 架构独有
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class HITLCheckResult:
     """HITL 检测结果。AskUserQuestion 需要跨 yield 边界处理。"""
+
     needs_clarification: bool = False
     # ToolClarifyRequest 事件对象：被骨架 yield 给前端，且
     # wait_for_clarification 用其 approval_id 等待用户回答。
@@ -362,6 +385,7 @@ class HITLCheckResult:
 # 三端口 — 阶段适配器（构造期必填，缺适配器即 TypeError）
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PreparePort:
     """上下文准备端口（Iteration 级投影；Run 级缓存由投影实现内聚）。
@@ -369,6 +393,7 @@ class PreparePort:
     每迭代调用 ``prepare_next_turn`` 产出下一轮 LLM 上下文
     （pipeline 全链），或返回 TurnUpdate（压缩重启 + 注入重放）。
     """
+
     prepare_next_turn: Callable[[RunLoopState], Awaitable[TurnUpdate | None]]
 
 
@@ -379,7 +404,8 @@ class StreamPort:
     abort / 墙钟终局检查在入口完成（硬约束），随后调用 LLM 并回填
     frame.llm_outcome / frame.llm_response，用量累计进 ledger。
     """
-    stream_llm: Callable[[RunLoopState], AsyncIterator]
+
+    stream_llm: Callable[[RunLoopState], AsyncIterator[Any]]
 
 
 @dataclass
@@ -390,7 +416,8 @@ class ExecutePort:
     HITL 插槽（check_hitl / wait_for_clarification / persist_clarified_turn）
     与全拒持久化（persist_denied_turn）为 B/S 架构独有，可选。
     """
-    execute_tools: Callable[..., AsyncIterator]
+
+    execute_tools: Callable[..., AsyncIterator[Any]]
     before_tool_call: (
         Callable[[BeforeToolCallContext], Awaitable[BeforeToolCallResult | None]] | None
     ) = None
@@ -412,6 +439,7 @@ class ExecutePort:
 # LoopConfig — 三端口 + 完成内核绑定 + 可选插槽
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class LoopConfig:
     """循环行为配置。
@@ -431,6 +459,7 @@ class LoopConfig:
     run_loop 以扁平名消费端口闭包（SDD §5.1 冻结契约）——
     下方 property 是唯一的扁平访问层，其余代码一律直取端口对象。
     """
+
     prepare: PreparePort
     stream: StreamPort
     execute: ExecutePort
@@ -446,39 +475,45 @@ class LoopConfig:
     # ───────────────────────────────────────────────────────────────
 
     @property
-    def prepare_next_turn(self):
+    def prepare_next_turn(self) -> Callable[[RunLoopState], Awaitable[TurnUpdate | None]]:
         return self.prepare.prepare_next_turn
 
     @property
-    def stream_llm(self):
+    def stream_llm(self) -> Callable[[RunLoopState], AsyncIterator[Any]]:
         return self.stream.stream_llm
 
     @property
-    def before_tool_call(self):
+    def before_tool_call(
+        self,
+    ) -> Callable[[BeforeToolCallContext], Awaitable[BeforeToolCallResult | None]] | None:
         return self.execute.before_tool_call
 
     @property
-    def after_tool_call(self):
+    def after_tool_call(
+        self,
+    ) -> Callable[[AfterToolCallContext], Awaitable[AfterToolCallResult | None]] | None:
         return self.execute.after_tool_call
 
     @property
-    def execute_tools(self):
+    def execute_tools(self) -> Callable[..., AsyncIterator[Any]]:
         return self.execute.execute_tools
 
     @property
-    def persist_denied_turn(self):
+    def persist_denied_turn(
+        self,
+    ) -> Callable[[RunLoopState, Any, list[Any]], Awaitable[None]] | None:
         return self.execute.persist_denied_turn
 
     @property
-    def persist_clarified_turn(self):
+    def persist_clarified_turn(self) -> Callable[..., Awaitable[None]] | None:
         return self.execute.persist_clarified_turn
 
     @property
-    def check_hitl(self):
+    def check_hitl(self) -> Callable[[list[Any]], HITLCheckResult | None] | None:
         return self.execute.check_hitl
 
     @property
-    def wait_for_clarification(self):
+    def wait_for_clarification(self) -> Callable[[HITLCheckResult], Awaitable[str | None]] | None:
         return self.execute.wait_for_clarification
 
 

@@ -10,14 +10,20 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import websockets
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 
 from prismclaw.app.auth.auth import verify_jwt
+
+if TYPE_CHECKING:
+    from websockets.asyncio.client import ClientConnection
+
+    from prismclaw.infra.settings import SpeechSettings, WebSettings
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +34,7 @@ logger = logging.getLogger(__name__)
 speech_router = APIRouter(prefix="/speech", tags=["speech"])
 
 
-def _get_speech_settings(request: Request) -> Any:
+def _get_speech_settings(request: Request | WebSocket) -> SpeechSettings | None:
     """从 app.state 或全局 settings 获取语音配置。"""
     web_deps = getattr(request.app.state, "web_deps", None)
     settings_full = getattr(web_deps, "settings", None) if web_deps is not None else None
@@ -78,20 +84,18 @@ _WS_IDENTIFY_TIMEOUT_SECONDS = 30
 _UPSTREAM_HANDSHAKE_TIMEOUT_SECONDS = 15
 
 
-def _get_web_settings(websocket: WebSocket) -> Any:
+def _get_web_settings(websocket: WebSocket) -> WebSettings | None:
     web_deps = getattr(websocket.app.state, "web_deps", None)
     return getattr(web_deps, "web_settings", None)
 
 
 async def _safe_close(websocket: WebSocket, code: int, reason: str) -> None:
     """客户端可能已断开，close 失败不应再抛异常。"""
-    try:
+    with contextlib.suppress(RuntimeError, WebSocketDisconnect):
         await websocket.close(code, reason)
-    except (RuntimeError, WebSocketDisconnect):
-        pass
 
 
-async def _upstream_recv_json(upstream: Any) -> dict | None:
+async def _upstream_recv_json(upstream: ClientConnection) -> dict[str, Any] | None:
     """从 upstream 读一条文本消息并解析为 dict；返回 None 表示连接已关。"""
     try:
         msg = await upstream.recv()
@@ -106,13 +110,14 @@ async def _upstream_recv_json(upstream: Any) -> dict | None:
     if not msg:
         return None
     try:
-        return json.loads(msg)
+        parsed: object = json.loads(msg)
     except json.JSONDecodeError:
         logger.debug("speech upstream non-JSON text: %r", msg[:200])
         return None
+    return parsed if isinstance(parsed, dict) else None
 
 
-async def _upstream_handshake(upstream: Any, language: str) -> None:
+async def _upstream_handshake(upstream: ClientConnection, language: str) -> None:
     """
     执行 ASR 协议握手：start → audio_start → 等待 audio_start_ack。
 
@@ -151,10 +156,8 @@ async def stream_transcribe(websocket: WebSocket) -> None:
 
     # ---- 握手：首帧必须 identify（与 /api/ws 协议一致）----
     try:
-        raw = await asyncio.wait_for(
-            websocket.receive_json(), timeout=_WS_IDENTIFY_TIMEOUT_SECONDS
-        )
-    except (asyncio.TimeoutError, WebSocketDisconnect, ValueError, TypeError, RuntimeError):
+        raw = await asyncio.wait_for(websocket.receive_json(), timeout=_WS_IDENTIFY_TIMEOUT_SECONDS)
+    except (TimeoutError, WebSocketDisconnect, ValueError, TypeError, RuntimeError):
         await _safe_close(websocket, 4001, "Identify timeout")
         return
 
@@ -173,16 +176,16 @@ async def stream_transcribe(websocket: WebSocket) -> None:
     speech_cfg = _get_speech_settings(websocket)
     stream_url = (getattr(speech_cfg, "stream_url", "") or "").strip() if speech_cfg else ""
     if not stream_url:
-        try:
+        with contextlib.suppress(RuntimeError):
             await websocket.send_json(
                 {"type": "error", "code": "not_configured", "message": "流式语音识别未配置"}
             )
-        except RuntimeError:
-            pass
         await _safe_close(websocket, 4100, "Stream ASR not configured")
         return
 
-    language = (getattr(speech_cfg, "language", "Chinese") or "Chinese") if speech_cfg else "Chinese"
+    language = (
+        (getattr(speech_cfg, "language", "Chinese") or "Chinese") if speech_cfg else "Chinese"
+    )
     connect_timeout = int(getattr(speech_cfg, "stream_connect_timeout", 10) or 10)
 
     # ---- 连接 ASR 服务 ----
@@ -193,12 +196,14 @@ async def stream_transcribe(websocket: WebSocket) -> None:
         )
     except Exception as exc:
         logger.warning("speech upstream connect failed: %s", exc)
-        try:
+        with contextlib.suppress(RuntimeError):
             await websocket.send_json(
-                {"type": "error", "code": "upstream_unavailable", "message": f"流式识别服务不可达: {exc}"}
+                {
+                    "type": "error",
+                    "code": "upstream_unavailable",
+                    "message": f"流式识别服务不可达: {exc}",
+                }
             )
-        except RuntimeError:
-            pass
         await _safe_close(websocket, 4101, "Upstream unavailable")
         return
 
@@ -208,12 +213,10 @@ async def stream_transcribe(websocket: WebSocket) -> None:
             await _upstream_handshake(upstream, language)
         except (TimeoutError, RuntimeError) as exc:
             logger.warning("speech upstream handshake failed: %s", exc)
-            try:
+            with contextlib.suppress(RuntimeError):
                 await websocket.send_json(
                     {"type": "error", "code": "upstream_handshake_failed", "message": str(exc)}
                 )
-            except RuntimeError:
-                pass
             await _safe_close(websocket, 4102, "Upstream handshake failed")
             return
 
@@ -227,14 +230,12 @@ async def stream_transcribe(websocket: WebSocket) -> None:
         # ---- 双向 relay（带协议转换） ----
         await _relay_with_protocol_translate(websocket, upstream, user_id)
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await upstream.close()
-        except Exception:
-            pass
 
 
 async def _relay_with_protocol_translate(
-    websocket: WebSocket, upstream: Any, user_id: str
+    websocket: WebSocket, upstream: ClientConnection, user_id: str
 ) -> None:
     """
     在浏览器（binary PCM16LE）和 ASR 服务（JSON+base64 audio_chunk）之间做翻译。
@@ -330,10 +331,8 @@ async def _relay_with_protocol_translate(
                     text = data.get("text") if isinstance(data, dict) else None
                     if text is None:
                         text = ""
-                    try:
+                    with contextlib.suppress(RuntimeError):
                         await websocket.send_json({"type": "final", "text": str(text)})
-                    except RuntimeError:
-                        pass
                     final_received_event.set()
                     break  # final 到了就退出本方向
 
@@ -350,18 +349,15 @@ async def _relay_with_protocol_translate(
     task_b2u = asyncio.create_task(browser_to_upstream())
     task_u2b = asyncio.create_task(upstream_to_browser())
 
-    done, pending = await asyncio.wait(
-        [task_b2u, task_u2b], return_when=asyncio.FIRST_COMPLETED
-    )
+    done, pending = await asyncio.wait([task_b2u, task_u2b], return_when=asyncio.FIRST_COMPLETED)
 
     # 如果浏览器先断/先 finish，upstream 方向还在等 asr_final，
     # 给它一个短暂窗口让 final 自然回来。
-    if task_u2b in pending:
-        if finish_sent_event.is_set() and not final_received_event.is_set():
-            try:
-                await asyncio.wait_for(final_received_event.wait(), timeout=3.0)
-            except asyncio.TimeoutError:
-                logger.debug("speech asr_final not arrived within 3s after audio_end")
+    if task_u2b in pending and finish_sent_event.is_set() and not final_received_event.is_set():
+        try:
+            await asyncio.wait_for(final_received_event.wait(), timeout=3.0)
+        except TimeoutError:
+            logger.debug("speech asr_final not arrived within 3s after audio_end")
 
     # 收尾
     for t in [task_b2u, task_u2b]:

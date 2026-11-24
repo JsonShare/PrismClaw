@@ -2,6 +2,7 @@
 
 Protocol for file upload handling.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,7 +10,7 @@ from typing import Any, Protocol
 
 
 class UploadServiceProtocol(Protocol):
-    """Protocol for upload operations — duck-typing compatible with engine.services.upload_service."""
+    """上传操作协议；与 engine.services.upload_service 鸭子类型兼容。"""
 
     async def handle_upload(
         self,

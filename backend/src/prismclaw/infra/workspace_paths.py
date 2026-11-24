@@ -5,13 +5,13 @@
   {workspace_base}/web_{user_id}/
   ├── biz_domain/<domain>/                # 固定业务域（与工作区同级，跨工作区共享）
   │   ├── inbox/<record_id>/              # 业务原件输入
-  │   ├── outputs/<record_id>/            # 业务产出
+  │   ├── outbox/<record_id>/             # 业务产出
   │   └── .work/                          # 业务域私有临时区
   └── <workspace_id>/                     # 工作区（default 亦落成 default/）
       ├── <用户项目文件>                   # 用户项目区（project/ 前缀直达原件）
       ├── sessions/<session_id>/          # 对话任务（跑 agent loop）
       │   ├── inbox/                      # session 私有输入
-      │   ├── outputs/                    # session 私有产出（本 session 读写）
+      │   ├── outbox/                     # session 私有产出（本 session 读写）
       │   ├── context_blocks/             # session prompt 组装归档（本 session 只读）
       │   │   └── images/                 # 文档抽取出的图片（7 天 TTL，删会话即回收）
       │   ├── tool_results/               # session 大 tool result 归档（本 session 读写）
@@ -27,7 +27,7 @@
 两类任务的区别（见 SDD 5.2.8.1）：
   * 对话任务跑 agent loop，需要 context_blocks/tool_results/.work 等引擎机制目录；
   * 业务域是纯 Python 编排调用 LLM，不跑 agent loop，只有业务语义的
-    inbox / outputs（+ 预留的 .work）几组目录。
+    inbox / outbox（+ 预留的 .work）几组目录。
 
 业务域**不带 workspace_id**：它是用户级数据，与工作区正交 —— 同一用户的
 业务数据在任何工作区里都指向同一份原件，避免多工作区之间的文件复制。
@@ -37,6 +37,7 @@
   * ``session_id`` 是 UUID（[a-f0-9-]），直接拼进路径、天然安全。
   * 本模块只解析路径，**不创建目录**；创建由调用方按需负责。
 """
+
 from __future__ import annotations
 
 import re
@@ -97,6 +98,7 @@ def _safe_segment(raw: str, *, label: str = "segment") -> str:
 # workspace 系统区（.work 四组）
 # ---------------------------------------------------------------------------
 
+
 def work_dir(workspace_root: Path, *parts: str) -> Path:
     """工作区系统区路径：``<ws>/.work/<parts...>``（不创建）。
 
@@ -110,6 +112,7 @@ def work_dir(workspace_root: Path, *parts: str) -> Path:
 # 用户级
 # ---------------------------------------------------------------------------
 
+
 def resolve_user_root(user_id: str, *, base: Path | None = None) -> Path:
     """用户根目录：``{workspace_base}/web_<user_id>/``（不创建）。
 
@@ -121,16 +124,18 @@ def resolve_user_root(user_id: str, *, base: Path | None = None) -> Path:
     避免与 :func:`load_settings` 产生第二个来源；缺省读 settings。
     """
     workspace_base = base if base is not None else Path(load_settings().workspaces.default)
-    return Path(workspace_base).expanduser() / f"{USER_DIR_PREFIX}{_safe_segment(user_id, label='user_id')}"
+    return (
+        Path(workspace_base).expanduser()
+        / f"{USER_DIR_PREFIX}{_safe_segment(user_id, label='user_id')}"
+    )
 
 
 # ---------------------------------------------------------------------------
 # workspace 级（跨 session 共享）
 # ---------------------------------------------------------------------------
 
-def resolve_workspace_dir(
-    user_id: str, workspace_id: str = _DEFAULT_WORKSPACE_ID
-) -> Path:
+
+def resolve_workspace_dir(user_id: str, workspace_id: str = _DEFAULT_WORKSPACE_ID) -> Path:
     """返回该用户指定工作区的根目录（不创建）。"""
     if workspace_id == _DEFAULT_WORKSPACE_ID:
         return resolve_user_root(user_id) / "default"
@@ -144,7 +149,7 @@ def resolve_biz_domain_dir(user_id: str, domain: str) -> Path:
     同一用户的业务数据在任何工作区里都指向同一份原件。
 
     不含 record_id —— 由调用方按 ``inbox/<record_id>`` 或
-    ``outputs/<record_id>`` 自行拼接。业务域的路径全部由业务代码计算，
+    ``outbox/<record_id>`` 自行拼接。业务域的路径全部由业务代码计算，
     模型不参与决定落点，因此记录级隔离靠这一层拼接而非引擎边界。
     """
     return resolve_user_root(user_id) / "biz_domain" / _safe_segment(domain, label="domain")
@@ -153,6 +158,7 @@ def resolve_biz_domain_dir(user_id: str, domain: str) -> Path:
 # ---------------------------------------------------------------------------
 # session 级（会话私有）
 # ---------------------------------------------------------------------------
+
 
 def resolve_session_dir(
     user_id: str,
@@ -178,7 +184,7 @@ def session_dir_in(workspace_root: Path, session_id: str) -> Path:
 #: 会话目录的完整子目录布局（与 workspace_paths 顶部文档一致）。
 SESSION_SUBDIRS: tuple[str, ...] = (
     "inbox",
-    "outputs",
+    "outbox",
     "context_blocks",
     "context_blocks/images",
     "tool_results",
@@ -199,9 +205,6 @@ def ensure_session_layout(workspace_root: Path, session_id: str) -> Path:
     return root
 
 
-def resolve_session_inbox_dir(
-    user_id: str, workspace_id: str, session_id: str
-) -> Path:
+def resolve_session_inbox_dir(user_id: str, workspace_id: str, session_id: str) -> Path:
     """会话私有输入：{ws}/sessions/<sid>/inbox/。"""
     return resolve_session_dir(user_id, workspace_id, session_id) / "inbox"
-

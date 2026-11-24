@@ -99,13 +99,15 @@ def build_state_driven_retrieval_query(
     return query or None
 
 
-def _payload_contents(value: Any) -> list[str]:
+def _payload_contents(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [
         item["content"]
         for item in value
-        if isinstance(item, dict) and isinstance(item.get("content"), str) and item["content"].strip()
+        if isinstance(item, dict)
+        and isinstance(item.get("content"), str)
+        and item["content"].strip()
     ]
 
 

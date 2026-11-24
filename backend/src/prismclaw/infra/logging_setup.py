@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import contextlib
 import logging
 import os
 import queue as _queue
@@ -10,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from datetime import date
 from logging.handlers import QueueHandler, QueueListener, RotatingFileHandler
 from pathlib import Path
+from typing import Any
 
 _TRUTHY = {"1", "true", "yes", "y", "on", "debug"}
 
@@ -80,10 +82,11 @@ def _resolve_logger_level_overrides(
         for name, lvl_raw in _iter_logger_level_pairs(env_raw):
             out[name] = _parse_log_level(lvl_raw, default=root_level)
     if logger_levels:
-        for name, lvl_raw in logger_levels.items():
+        for raw_name, override_level in logger_levels.items():
+            name = str(raw_name)
             if not name:
                 continue
-            out[str(name)] = _parse_log_level(lvl_raw, default=root_level)
+            out[name] = _parse_log_level(override_level, default=root_level)
     return out
 
 
@@ -123,6 +126,7 @@ def _terminal_supports_color() -> bool:
     """检测 stderr 是否连接到支持 ANSI 颜色的终端。"""
     try:
         import sys
+
         if not hasattr(sys.stderr, "isatty"):
             return False
         if not sys.stderr.isatty():
@@ -131,9 +135,7 @@ def _terminal_supports_color() -> bool:
         if os.getenv("NO_COLOR") is not None:
             return False
         term = os.getenv("TERM", "")
-        if term == "dumb":
-            return False
-        return True
+        return term != "dumb"
     except Exception:
         return False
 
@@ -142,10 +144,10 @@ class _ColoredFormatter(logging.Formatter):
     """在 levelname 上叠加 ANSI 颜色的 Formatter。"""
 
     _LEVEL_COLORS: dict[int, str] = {
-        logging.DEBUG: "\033[36m",       # 青色
-        logging.INFO: "\033[32m",        # 绿色
-        logging.WARNING: "\033[33m",     # 黄色
-        logging.ERROR: "\033[31m",       # 红色
+        logging.DEBUG: "\033[36m",  # 青色
+        logging.INFO: "\033[32m",  # 绿色
+        logging.WARNING: "\033[33m",  # 黄色
+        logging.ERROR: "\033[31m",  # 红色
         logging.CRITICAL: "\033[1;31m",  # 加粗红色
     }
     _RESET = "\033[0m"
@@ -167,10 +169,17 @@ class _ColoredFormatter(logging.Formatter):
 
 
 def _build_json_formatter() -> logging.Formatter:
-    from pythonjsonlogger import jsonlogger
+    # python-json-logger v3 把 JsonFormatter 移到 pythonjsonlogger.json；
+    # jsonlogger 只是兼容 shim，没有类型信息，故从新路径导入。
+    from pythonjsonlogger.json import JsonFormatter
 
-    class _PrismClawJsonFormatter(jsonlogger.JsonFormatter):
-        def add_fields(self, log_record, record, message_dict) -> None:
+    class _PrismClawJsonFormatter(JsonFormatter):
+        def add_fields(
+            self,
+            log_record: dict[str, Any],
+            record: logging.LogRecord,
+            message_dict: dict[str, Any],
+        ) -> None:
             super().add_fields(log_record, record, message_dict)
             log_record["timestamp"] = self.formatTime(record, self.datefmt)
             log_record["level"] = record.levelname
@@ -182,7 +191,10 @@ def _build_json_formatter() -> logging.Formatter:
             log_record.pop("color_message", None)
 
     return _PrismClawJsonFormatter(
-        fmt="%(timestamp)s %(level)s %(logger)s %(process)d %(thread)d %(funcName)s %(lineno)d %(message)s",
+        fmt=(
+            "%(timestamp)s %(level)s %(logger)s %(process)d "
+            "%(thread)d %(funcName)s %(lineno)d %(message)s"
+        ),
         datefmt="%Y-%m-%dT%H:%M:%S.%03dZ",
     )
 
@@ -252,24 +264,18 @@ def _remove_stale_file_handlers() -> None:
             if h in _FILE_QUEUE_HANDLERS:
                 lg.removeHandler(h)
     for h in _FILE_QUEUE_HANDLERS:
-        try:
+        with contextlib.suppress(Exception):
             h.close()
-        except Exception:
-            pass
     _FILE_QUEUE_HANDLERS.clear()
 
     if _FILE_LISTENER is not None:
-        try:
+        with contextlib.suppress(Exception):
             _FILE_LISTENER.stop()
-        except Exception:
-            pass
         _FILE_LISTENER = None
 
     for h in _FILE_HANDLERS:
-        try:
+        with contextlib.suppress(Exception):
             h.close()
-        except Exception:
-            pass
     _FILE_HANDLERS.clear()
 
 
@@ -320,18 +326,26 @@ class _ZipRotatingFileHandler(RotatingFileHandler):
     - 超过 _LOG_ARCHIVE_KEEP 个归档时删除最旧的
     """
 
-    def __init__(self, filename: str | Path, *, max_bytes: int, keep: int, **kwargs) -> None:
-        super().__init__(filename, maxBytes=max_bytes, **kwargs)
+    def __init__(
+        self,
+        filename: str | Path,
+        *,
+        max_bytes: int,
+        keep: int,
+        encoding: str = "utf-8",
+        delay: bool = False,
+    ) -> None:
+        super().__init__(filename, maxBytes=max_bytes, encoding=encoding, delay=delay)
         self._keep = keep
         # 当前文件内容所属日期，用于归档命名；跨天时由 doRollover 重置
         self._period = date.today()
 
-    def shouldRollover(self, record: logging.LogRecord) -> bool:  # noqa: D102 — 覆盖 stdlib
+    def shouldRollover(self, record: logging.LogRecord) -> bool:  # noqa: N802, D102 - 覆盖 stdlib
         if date.today() != self._period:
             return True
         return bool(super().shouldRollover(record))
 
-    def doRollover(self) -> None:  # noqa: D102 — 覆盖 stdlib
+    def doRollover(self) -> None:  # noqa: N802, D102 - 覆盖 stdlib
         if self.stream:
             self.stream.close()
             self.stream = None
@@ -361,10 +375,8 @@ class _ZipRotatingFileHandler(RotatingFileHandler):
         )
         excess = len(archives) - self._keep
         for old in archives[:excess]:
-            try:
+            with contextlib.suppress(OSError):
                 old.unlink()
-            except OSError:
-                pass
 
 
 # 每个 MCP 客户端视角的文件 handler（按 server 名去重，重复安装先摘旧的）
@@ -434,7 +446,7 @@ def install_mcp_client_logging(server_name: str) -> logging.Logger:
     lg.propagate = False
     # 与主日志同一原则：真实写盘不在事件循环线程。MCP 工具调用同样跑在
     # 主循环上，直接挂 FileHandler 会把「工具执行」变成同步 I/O 点。
-    log_queue: _queue.SimpleQueue = _queue.SimpleQueue()
+    log_queue: _queue.SimpleQueue[logging.LogRecord] = _queue.SimpleQueue()
     listener = QueueListener(log_queue, *handlers, respect_handler_level=True)
     listener.start()
     queue_handler = _RawQueueHandler(log_queue)
@@ -498,10 +510,8 @@ def _install_file_handlers(file_formatter: logging.Formatter, root_level: int) -
     _FILE_HANDLERS.extend(file_handlers)
 
     # SimpleQueue：无界、无锁竞争开销，且 put_nowait 永不阻塞调用方线程。
-    log_queue: _queue.SimpleQueue = _queue.SimpleQueue()
-    listener = QueueListener(
-        log_queue, *file_handlers, respect_handler_level=True
-    )
+    log_queue: _queue.SimpleQueue[logging.LogRecord] = _queue.SimpleQueue()
+    listener = QueueListener(log_queue, *file_handlers, respect_handler_level=True)
     listener.start()
     _FILE_LISTENER = listener
 
@@ -531,10 +541,8 @@ def shutdown_logging() -> None:
         for h in list(lg.handlers):
             if isinstance(h, _RawQueueHandler):
                 lg.removeHandler(h)
-        try:
+        with contextlib.suppress(Exception):
             listener.stop()
-        except Exception:
-            pass
     _MCP_FILE_LISTENERS.clear()
     _MCP_FILE_HANDLERS.clear()
 
@@ -586,10 +594,13 @@ def _install_noise_filters(*, litellm_debug: bool) -> None:
             except Exception:
                 msg = ""
 
-            if name.startswith("watchfiles") and record.levelno < logging.INFO:
-                if not _is_truthy(os.getenv("PRISMCLAW_WATCHFILES_DEBUG")):
-                    if "/.idea/" in msg or "workspace.xml" in msg:
-                        return False
+            if (
+                name.startswith("watchfiles")
+                and record.levelno < logging.INFO
+                and not _is_truthy(os.getenv("PRISMCLAW_WATCHFILES_DEBUG"))
+                and ("/.idea/" in msg or "workspace.xml" in msg)
+            ):
+                return False
 
             if name == "LiteLLM" or name == "litellm" or name.startswith("litellm."):
                 if litellm_debug:

@@ -14,8 +14,13 @@ from prismclaw.schema.memory.memory_types import MemoryEntry
 
 def _l1_entry(entry_id: str, content: str, status: str = "active") -> MemoryEntry:
     return MemoryEntry(
-        id=entry_id, layer="L1", type="fact", content=content,
-        created_at=1.0, updated_at=1.0, status=status,
+        id=entry_id,
+        layer="L1",
+        type="fact",
+        content=content,
+        created_at=1.0,
+        updated_at=1.0,
+        status=status,
     )
 
 

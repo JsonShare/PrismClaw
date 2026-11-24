@@ -1,11 +1,39 @@
+"""L1 工作索引（Redis hash）。
+
+边界约定：写入侧严格校验（MemoryEntry 构造即校验，非法 type 直接 raise），
+读取侧逐条隔离——L1 是可重建的派生索引而非 source of truth，单条损坏不得
+毒死整批，也不得因无法解码而永久阻断淘汰（写入路径 index_update → _evict
+依赖同一次解码）。坏字段就地删除，读取一次即自愈。
+"""
+
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
+from prismclaw.infra.redis import resolve
 from prismclaw.schema.memory.memory_types import MemoryEntry
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+
+logger = logging.getLogger(__name__)
+
+
+def _decode_index(raw: dict[str, str]) -> tuple[list[tuple[str, MemoryEntry]], list[str]]:
+    """逐条解码 L1 索引，返回 (可用条目, 待隔离字段)。
+
+    单条解码失败只影响该条：记录完整异常便于定位，坏字段由调用方 hdel。
+    """
+    entries: list[tuple[str, MemoryEntry]] = []
+    poisoned: list[str] = []
+    for field, value in raw.items():
+        try:
+            entries.append((field, MemoryEntry.model_validate_json(value)))
+        except Exception:
+            poisoned.append(field)
+            logger.warning("L1 index entry undecodable; quarantined field=%s", field, exc_info=True)
+    return entries, poisoned
 
 
 def _eviction_rank(entry: MemoryEntry) -> tuple[float, float, float]:
@@ -39,30 +67,39 @@ class RedisL1Index:
         return f"{self._key_prefix}memory:L1:{session_key}"
 
     async def index_get(self, session_key: str) -> list[MemoryEntry]:
-        raw = await self._client.hgetall(self._hash_key(session_key))
+        key = self._hash_key(session_key)
+        raw = await resolve(self._client.hgetall(key))
         if not raw:
             return []
-        entries = [MemoryEntry.model_validate_json(v) for v in raw.values()]
-        entries.sort(key=lambda e: e.updated_at, reverse=True)
-        return entries
+        entries, poisoned = _decode_index(raw)
+        if poisoned:
+            # 自愈：坏字段就地清除，避免每次读取都重复失败。
+            await resolve(self._client.hdel(key, *poisoned))
+        result = [entry for _, entry in entries]
+        result.sort(key=lambda e: e.updated_at, reverse=True)
+        return result
 
     async def index_update(self, session_key: str, entry: MemoryEntry) -> None:
         key = self._hash_key(session_key)
-        await self._client.hset(key, entry.id, entry.model_dump_json())
+        await resolve(self._client.hset(key, entry.id, entry.model_dump_json()))
         await self._evict(key)
-        await self._client.expire(key, self._ttl_seconds)
+        await resolve(self._client.expire(key, self._ttl_seconds))
 
     async def index_remove(self, session_key: str, entry_id: str) -> None:
-        await self._client.hdel(self._hash_key(session_key), entry_id)
+        await resolve(self._client.hdel(self._hash_key(session_key), entry_id))
 
     async def close(self) -> None:
         pass
 
     async def _evict(self, key: str) -> None:
-        raw = await self._client.hgetall(key)
+        raw = await resolve(self._client.hgetall(key))
         if not raw:
             return
-        entries = [(field, MemoryEntry.model_validate_json(value)) for field, value in raw.items()]
+        entries, poisoned = _decode_index(raw)
+        if poisoned:
+            # 淘汰是写入路径的一部分：坏字段若不清除，本轮所有后续写入都会
+            # 重复失败，L1 永久停摆。
+            await resolve(self._client.hdel(key, *poisoned))
         # 淘汰序（升序 = 先删，SDD D6）：已被合并替代（supersedes 非空）最优先，
         # 低置信度次之，最后才是更新时间（recency tie-break）——不再一刀切按
         # 时间淘汰，避免把高价值的新记忆或高置信条目先清出去。
@@ -70,10 +107,10 @@ class RedisL1Index:
 
         while len(entries) > self._max_entries:
             field, _ = entries.pop(0)
-            await self._client.hdel(key, field)
+            await resolve(self._client.hdel(key, field))
 
         total = sum(len(pair[1].content) for pair in entries)
         while total > self._max_chars and entries:
             field, removed = entries.pop(0)
-            await self._client.hdel(key, field)
+            await resolve(self._client.hdel(key, field))
             total -= len(removed.content)

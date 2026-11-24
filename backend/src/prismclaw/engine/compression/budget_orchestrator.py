@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.schema.content.context import ContextBlock, TaskProfile
-from prismclaw.schema.content.context import ContextPackLayout
+from prismclaw.engine.compression.ports import ContextRuntimePorts
+from prismclaw.schema.content.context import ContextBlock, ContextPackLayout, TaskProfile
 from prismclaw.schema.shared.utils import estimate_tokens
 
 if TYPE_CHECKING:
@@ -15,25 +16,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# 冻结区超预算时的裁剪顺序（越靠前越先被持久化/丢弃）。
-# 原则：先撤可随时重建或按需读回的内容，最后才动"发现面"。
-#   - tools 是工具的唯一发现入口，catalogs 是技能/子代理/插件包的唯一
-#     发现入口。二者一旦被撤，模型既看不到可用工具，也看不到
-#     skill_search / subagent_search——必须最后撤。
-#   - l1_snapshot 已移至 per-turn 动态区（SDD D3），不再出现在冻结区。
-#   - 名单须与 system_prompt.build_frozen_prompt_sections 的 section.name 完全一致。
-#     未登记的名字不会报错，而是落进兜底名次（列表长度）——升序排序中即最大值，
-#     等于被排到"最不该撤"的末位。段名漂移因此表现为"该段被过度保护、其它段
-#     替它先撤"，而不是报错。只能靠 test_truncation_priority_matches_real_sections 拦截。
-#   - role / principles / data_safety / delegation 为 truncatable=False，
-#     不进候选集，故不登记。
-SYSTEM_TRUNCATION_PRIORITY = [
-    "bootstrap",
-    "catalogs",
-    "workspace",
-    "tools",
-]
+# 静态冻结区的裁剪顺序不再靠跨层字符串名单，而是由各段自带的
+# ``ContextBlock.metadata["evict_rank"]`` 决定（越小越先撤，见
+# ``system_prompt._section``）。这样排序依据与段构造同源，段名漂移不再
+# 表现为"某段被过度保护"。
+_EVICT_RANK_FALLBACK = 99
 
+# 动态区超预算时的裁剪顺序（越靠前越先被持久化/丢弃）。
+# 注意：动态区的 ``priority`` 同时服务预清理与归档特殊处理等多处语义，
+# 与静态段的 evict_rank 不是同一机制，故保持名单式排序不变。
 DYNAMIC_TRUNCATION_PRIORITY = [
     # l1_snapshot 随长期记忆单调增长、内容可按需重读磁盘，动态区里先撤。
     "l1_snapshot",
@@ -54,7 +45,7 @@ def truncate_context_block_for_overflow(
     *,
     overflow_tokens: int,
     working_dir: str | Path | None = None,
-    ports: Any = None,
+    ports: ContextRuntimePorts | None = None,
 ) -> ContextBlock | None:
     """逐级披露模式：persist → drop。
 
@@ -139,7 +130,7 @@ class BudgetAuditTrail:
     @classmethod
     def from_decisions(
         cls, decisions: list[BudgetDecision] | tuple[BudgetDecision, ...]
-    ) -> "BudgetAuditTrail":
+    ) -> BudgetAuditTrail:
         return cls(decisions=list(decisions))
 
     @property
@@ -165,9 +156,7 @@ class BudgetAuditTrail:
         }
 
     @classmethod
-    def from_metadata(
-        cls, data: dict[str, object] | None
-    ) -> "BudgetAuditTrail | None":
+    def from_metadata(cls, data: dict[str, object] | None) -> BudgetAuditTrail | None:
         if not isinstance(data, dict):
             return None
         raw_decisions = data.get("decisions")
@@ -181,7 +170,16 @@ class BudgetAuditTrail:
             action = item.get("action")
             reason = item.get("reason")
             zone = item.get("zone")
-            if not all(isinstance(value, str) and value for value in (stage, action, reason, zone)):
+            if (
+                not isinstance(stage, str)
+                or not stage
+                or not isinstance(action, str)
+                or not action
+                or not isinstance(reason, str)
+                or not reason
+                or not isinstance(zone, str)
+                or not zone
+            ):
                 continue
             decisions.append(
                 BudgetDecision(
@@ -189,7 +187,9 @@ class BudgetAuditTrail:
                     action=action,
                     reason=reason,
                     zone=zone,
-                    block_id=item.get("block_id") if isinstance(item.get("block_id"), str) else None,
+                    block_id=item.get("block_id")
+                    if isinstance(item.get("block_id"), str)
+                    else None,
                     source=item.get("source") if isinstance(item.get("source"), str) else None,
                     before_tokens=_coerce_non_negative_int(item.get("before_tokens")),
                     after_tokens=_coerce_non_negative_int(item.get("after_tokens")),
@@ -229,8 +229,8 @@ class BudgetOrchestrator:
         self,
         *,
         working_dir: str | Path | None = None,
-        ports: Any = None,
-    ):
+        ports: ContextRuntimePorts | None = None,
+    ) -> None:
         self._working_dir = working_dir
         self._ports = ports
 
@@ -356,7 +356,6 @@ class BudgetOrchestrator:
             budget=system_budget,
             zone="static",
             stage="system_budget",
-            truncation_priority=SYSTEM_TRUNCATION_PRIORITY,
             use_block_priority=False,
             working_dir=self._working_dir,
             ports=self._ports,
@@ -374,9 +373,7 @@ class BudgetOrchestrator:
         trimmed_plan.replace_non_static_blocks(non_static_blocks)
         return BudgetApplicationResult(
             context_layout=trimmed_plan,
-            audit_trail=BudgetAuditTrail(
-                decisions=[*static_decisions, *dynamic_decisions]
-            ),
+            audit_trail=BudgetAuditTrail(decisions=[*static_decisions, *dynamic_decisions]),
         )
 
     def apply_dynamic_budget(
@@ -422,9 +419,7 @@ class BudgetOrchestrator:
                 )
                 for decision in result_decisions
             ]
-            non_result_blocks = [
-                block for block in current_blocks if block.zone != "result"
-            ]
+            non_result_blocks = [block for block in current_blocks if block.zone != "result"]
             current_blocks = [*non_result_blocks, *enforced_result_blocks]
             decisions.extend(normalized_result_decisions)
 
@@ -540,7 +535,10 @@ def log_budget_decisions(
     )
     for decision in audit_trail.decisions:
         logger_.info(
-            "budget_audit turn=%s stage=%s action=%s zone=%s source=%s block_id=%s before=%d after=%d reason=%s",
+            (
+                "budget_audit turn=%s stage=%s action=%s zone=%s "
+                "source=%s block_id=%s before=%d after=%d reason=%s"
+            ),
             iteration if iteration is not None else "-",
             decision.stage,
             decision.action,
@@ -614,7 +612,9 @@ def _has_operational_state(block: ContextBlock) -> bool:
 
 def _context_value_category(block: ContextBlock, task_profile: TaskProfile | None) -> int:
     prefers_tooling = bool(task_profile.prefers_tooling) if task_profile is not None else False
-    requires_grounding = bool(task_profile.requires_grounding) if task_profile is not None else False
+    requires_grounding = (
+        bool(task_profile.requires_grounding) if task_profile is not None else False
+    )
     if _is_required_state_anchor(block):
         return 0
     if _has_operational_state(block):
@@ -697,7 +697,7 @@ def _trim_low_value_memory_archives(
     zone: str,
     decisions: list[BudgetDecision],
     working_dir: str | Path | None = None,
-    ports: Any = None,
+    ports: ContextRuntimePorts | None = None,
 ) -> int:
     candidates = [
         (idx, block)
@@ -727,7 +727,9 @@ def _trim_low_value_memory_archives(
             )
             continue
 
-        truncated = truncate_context_block_for_overflow(block, overflow_tokens=overflow, working_dir=working_dir, ports=ports)
+        truncated = truncate_context_block_for_overflow(
+            block, overflow_tokens=overflow, working_dir=working_dir, ports=ports
+        )
         if truncated is None:
             blocks[idx] = None
             overflow -= block.estimated_tokens
@@ -768,10 +770,10 @@ def _apply_budget_blocks(
     budget: int,
     zone: str,
     stage: str,
-    truncation_priority: list[str],
     use_block_priority: bool,
+    truncation_priority: list[str] | None = None,
     working_dir: str | Path | None = None,
-    ports: Any = None,
+    ports: ContextRuntimePorts | None = None,
 ) -> tuple[list[ContextBlock], list[BudgetDecision]]:
     total = sum(block.estimated_tokens for block in blocks)
     if total <= budget:
@@ -789,7 +791,7 @@ def _apply_budget_blocks(
     overflow = total - budget
     result: list[ContextBlock | None] = list(blocks)
     decisions: list[BudgetDecision] = []
-    named_priority_index = {name: idx for idx, name in enumerate(truncation_priority)}
+    named_priority_index = {name: idx for idx, name in enumerate(truncation_priority or ())}
     priority_rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
     candidates = [
@@ -808,9 +810,11 @@ def _apply_budget_blocks(
             )
         )
     else:
+        # 静态段：截断顺序由段自带 evict_rank 决定（0 最易撤，3 最后撤）。
+        # 未登记 evict_rank 的段落兜底位次（= 最不易撤），与旧常量行为一致。
         candidates.sort(
             key=lambda item: (
-                named_priority_index.get(item[1].source, len(named_priority_index)),
+                item[1].metadata.get("evict_rank", _EVICT_RANK_FALLBACK),
                 item[0],
             )
         )
@@ -868,9 +872,7 @@ def _apply_budget_blocks(
                 reason="still_over_budget_non_truncatable",
                 zone=zone,
                 before_tokens=total,
-                after_tokens=sum(
-                    block.estimated_tokens for block in result if block is not None
-                ),
+                after_tokens=sum(block.estimated_tokens for block in result if block is not None),
             )
         )
     return [block for block in result if block is not None and block.content], decisions

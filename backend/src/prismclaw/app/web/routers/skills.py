@@ -2,45 +2,53 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 import re
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from prismclaw.app.auth.auth import get_current_user
-from prismclaw.app.web.deps import get_web_deps
 from prismclaw.app.web._routes_helpers import (
     _clean_workspace_id,
     _resolve_workspace_root,
 )
-from prismclaw.schema.agent.domains import SkillSource
-from prismclaw.schema.services.skills import SkillManifest, normalize_skill_ref
+from prismclaw.app.web.deps import get_web_deps, get_web_deps_from_app
+from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
 from prismclaw.runtime.skills.editor import (
-    EditFailed,
-    EditForbidden,
+    EditFailedError,
+    EditForbiddenError,
     SkillEditError,
     SkillEditor,
-    SkillNotFound,
+    SkillNotFoundError,
 )
+from prismclaw.schema.agent.domains import SkillSource
+from prismclaw.schema.services.skills import SkillManifest, normalize_skill_ref
 
+if TYPE_CHECKING:
+    from prismclaw.app.web.deps import WebDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.infra.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def _get_plugin_trust_fns(web_deps: Any) -> tuple[Any, Any]:
+def _get_plugin_trust_fns(web_deps: WebDeps) -> tuple[Any, Any]:
     """R1: resolve plugin trust functions from WebDeps."""
     fns = web_deps.plugin_trust_fns
     if fns is None:
         return None, None
     return fns.get("is_source_trusted_for_load"), fns.get("resolve_workspace_trusted")
+
 
 skills_router = APIRouter(prefix="/skills", tags=["skills"])
 
@@ -97,10 +105,10 @@ class SimpleOkResponse(BaseModel):
 def _skill_source(
     manifest: SkillManifest,
     workspace_root: Path,
-    settings: Any,
-    extension_manager: Any | None = None,
+    settings: Settings,
+    extension_manager: ExtensionManager | None = None,
     *,
-    web_deps: Any = None,
+    web_deps: WebDeps,
 ) -> str:
     """展示给前端的本地化 skill 来源说明（中文字符串）。
 
@@ -131,13 +139,14 @@ def _skill_source(
 def _skill_origin(
     manifest: SkillManifest,
     workspace_root: Path,
-    settings: Any,
-    extension_manager: Any | None = None,
+    settings: Settings,
+    extension_manager: ExtensionManager | None = None,
     *,
-    web_deps: Any = None,
-) -> str | None:
+    web_deps: WebDeps,
+) -> SkillSource | None:
     fns = web_deps.skill_origin_fns
-    return fns["classify_skill_origin"](
+    classifier: Callable[..., SkillSource | None] = fns["classify_skill_origin"]
+    return classifier(
         manifest,
         workspace_root,
         settings,
@@ -145,8 +154,10 @@ def _skill_origin(
     )
 
 
-async def _get_workspace_runner_deps(app: Any, *, user_id: str, workspace_root: Path) -> Any | None:
-    web_deps = app.state.web_deps
+async def _get_workspace_runner_deps(
+    app: FastAPI, *, user_id: str, workspace_root: Path
+) -> AgentRunnerDeps | None:
+    web_deps = get_web_deps_from_app(app)
     fn = web_deps.workspace_runner_deps_fn
     if fn is not None:
         return await fn(app, user_id=user_id, workspace_root=workspace_root, wait_for_ready=True)
@@ -158,8 +169,8 @@ async def _list_runtime_skills(
     *,
     user_id: str,
     workspace_root: Path,
-    settings_full: Any,
-) -> tuple[list[Any], Any | None]:
+    settings_full: Settings,
+) -> tuple[list[Any], ExtensionManager | None]:
     _ = settings_full
     runner_deps = await _get_workspace_runner_deps(
         request.app,
@@ -167,10 +178,11 @@ async def _list_runtime_skills(
         workspace_root=workspace_root,
     )
     if runner_deps is None:
-        raise RuntimeError(
-            "workspace runner deps are required for skill listing"
-        )
-    extension_manager = getattr(runner_deps, "extension_manager", None) if runner_deps is not None else None
+        raise RuntimeError("workspace runner deps are required for skill listing")
+    raw_extension_manager = runner_deps.plugin.extension_manager
+    extension_manager = (
+        raw_extension_manager if isinstance(raw_extension_manager, ExtensionManager) else None
+    )
     capability_catalog = (
         getattr(runner_deps, "capability_catalog", None) if runner_deps is not None else None
     )
@@ -181,7 +193,7 @@ async def _list_runtime_skills(
     return capability_catalog.list_skill_entries(workspace_root), extension_manager
 
 
-def _invalidate_plugin_runtime_state(app: Any, settings: Any) -> None:
+def _invalidate_plugin_runtime_state(app: FastAPI, settings: Settings) -> None:
     web_deps = app.state.web_deps
     web_deps.apply_settings_fn(app, settings, invalidate_plugin_runtime=True)
 
@@ -267,14 +279,21 @@ async def list_skills(
 
     # Resolve workspace trust state for filtering and display
     workspace_path = getattr(settings_full, "workspaces", None)
-    workspace_default = getattr(workspace_path, "default", "~/.prismclaw/workspaces") if workspace_path else "~/.prismclaw/workspaces"
+    workspace_default = (
+        getattr(workspace_path, "default", "~/.prismclaw/workspaces")
+        if workspace_path
+        else "~/.prismclaw/workspaces"
+    )
     _is_source_trusted_for_load, _resolve_workspace_trusted = _get_plugin_trust_fns(web_deps)
-    workspace_trusted = _resolve_workspace_trusted(workspace_default, settings_full) if _resolve_workspace_trusted else True
+    workspace_trusted = (
+        _resolve_workspace_trusted(workspace_default, settings_full)
+        if _resolve_workspace_trusted
+        else True
+    )
 
-    # Origin to plugin source mapping for trust checking.
-    # SkillSource.* (Enum 是 str 子类) 也可直接作为 key。
-    # "bundled" -> builtin, "personal" -> local, "managed" -> local, "project" -> local, "plugin" -> marketplace
-    _ORIGIN_TO_PLUGIN_SOURCE: dict[str, str] = {
+    # 技能来源 → 插件信任域映射：builtin / local / marketplace。
+    # SkillSource.* 是 str 子类，可直接作为 key。
+    _ORIGIN_TO_PLUGIN_SOURCE: dict[str, str] = {  # noqa: N806 - 常量映射表
         SkillSource.BUNDLED: "builtin",
         SkillSource.WORKSPACE: "builtin",
         SkillSource.BUILTIN: "builtin",
@@ -298,8 +317,14 @@ async def list_skills(
         )
 
         # Check if this skill's origin requires trust
-        plugin_source = _ORIGIN_TO_PLUGIN_SOURCE.get(origin, "local")
-        is_trusted_for_load = _is_source_trusted_for_load(plugin_source, workspace_trusted=workspace_trusted) if _is_source_trusted_for_load else True
+        plugin_source = (
+            _ORIGIN_TO_PLUGIN_SOURCE.get(origin, "local") if origin is not None else "local"
+        )
+        is_trusted_for_load = (
+            _is_source_trusted_for_load(plugin_source, workspace_trusted=workspace_trusted)
+            if _is_source_trusted_for_load
+            else True
+        )
 
         # Filter out skills from untrusted sources in untrusted workspaces
         if not is_trusted_for_load:
@@ -339,7 +364,9 @@ async def list_skills(
                 marketplace_name=entry.marketplace_name,
                 marketplace_description=entry.marketplace_description,
                 plugin_description=entry.plugin_description,
-                invocation_policy=str(m.invocation_policy.value) if m.invocation_policy is not None else "auto",
+                invocation_policy=str(m.invocation_policy.value)
+                if m.invocation_policy is not None
+                else "auto",
                 editable=bool(m.editable),
             )
         )
@@ -360,7 +387,8 @@ async def get_marketplace_icon(
         raise HTTPException(status_code=404, detail="icon not found")
 
     settings_full = get_web_deps(request).settings_full
-    base = Path(settings_full.plugins.asset_plugins_dir).expanduser().resolve()
+    # expanduser/resolve 只做路径规范化，不读盘。
+    base = Path(settings_full.plugins.asset_plugins_dir).expanduser().resolve()  # noqa: ASYNC240
     root = (base / plugin_name).resolve()
     if root.parent != base:
         raise HTTPException(status_code=404, detail="icon not found")
@@ -381,7 +409,7 @@ async def get_skill(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     wid = _clean_workspace_id(workspace_id)
     skill_name = normalize_skill_ref(skill_name)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
@@ -412,6 +440,7 @@ async def get_skill(
     if target.body is None and target.file_path:
         try:
             from prismclaw.runtime.skills.parser import parse_skill_file
+
             full_manifest = parse_skill_file(target.file_path, fallback_name=target.name)
             body = full_manifest.body or ""
         except Exception:
@@ -441,7 +470,7 @@ async def install_skill_from_url(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
     web_deps = get_web_deps(request)
@@ -471,7 +500,7 @@ async def install_skill_from_url(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid URL")
+        raise HTTPException(status_code=400, detail="Invalid URL") from None
 
     if "@" in slug and not version:
         maybe_slug, maybe_ver = slug.split("@", 1)
@@ -492,10 +521,8 @@ async def install_skill_from_url(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Install failed: {exc}") from exc
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await client.close()
-        except Exception:
-            pass
 
     # Invalidate the cached runner deps so the next request rebuilds the
     # capability catalog with the newly installed skill visible.
@@ -507,10 +534,10 @@ async def install_skill_from_url(
 @skills_router.post("/upload")
 async def upload_skill(
     request: Request,
-    file: UploadFile = File(...),
-    user_id: str = Depends(get_current_user),
+    file: Annotated[UploadFile, File(...)],
+    user_id: Annotated[str, Depends(get_current_user)],
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
     web_deps = get_web_deps(request)
@@ -546,7 +573,7 @@ async def upload_skill(
                 with zipfile.ZipFile(io.BytesIO(data)) as zf:
                     _safe_extract_zip(zf, tmp_dir)
             except Exception:
-                raise HTTPException(status_code=400, detail="Invalid zip file")
+                raise HTTPException(status_code=400, detail="Invalid zip file") from None
 
             root = _resolve_extracted_skill_root(tmp_dir)
             base_name = root.name or Path(raw_name).stem or "skill"
@@ -595,26 +622,28 @@ async def delete_skill(
         extension_manager=extension_manager,
         web_deps=web_deps,
     )
-    if origin is SkillSource.BUNDLED or origin is SkillSource.WORKSPACE or origin is SkillSource.BUILTIN:
+    if (
+        origin is SkillSource.BUNDLED
+        or origin is SkillSource.WORKSPACE
+        or origin is SkillSource.BUILTIN
+    ):
         raise HTTPException(status_code=403, detail="Cannot delete bundled skills")
     if origin is SkillSource.PLUGIN:
         raise HTTPException(status_code=403, detail="Cannot delete plugin-provided skills")
     try:
-        mp = Path(target.file_path).expanduser().resolve()
+        mp = Path(target.file_path).expanduser().resolve()  # noqa: ASYNC240 - 纯路径规范化
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid skill path")
+        raise HTTPException(status_code=400, detail="Invalid skill path") from None
     skill_dir = mp.parent
     allowed_roots: list[Path] = []
-    try:
+    with contextlib.suppress(Exception):
         allowed_roots.append(workspace_root.expanduser().resolve())
-    except Exception:
-        pass
     if not any(r in skill_dir.parents for r in allowed_roots if r):
         raise HTTPException(status_code=403, detail="Delete not allowed for this skill")
     try:
         shutil.rmtree(skill_dir)
     except Exception:
-        raise HTTPException(status_code=500, detail="Failed to delete skill")
+        raise HTTPException(status_code=500, detail="Failed to delete skill") from None
     _invalidate_plugin_runtime_state(request.app, settings_full)
     return SimpleOkResponse()
 
@@ -622,8 +651,8 @@ async def delete_skill(
 def _build_skill_editor(
     request: Request,
     workspace_root: Path,
-    settings_full: Any,
-    extension_manager: Any,
+    settings_full: Settings,
+    extension_manager: ExtensionManager | None,
 ) -> SkillEditor:
     web_deps = get_web_deps(request)
     origin_fns = web_deps.skill_origin_fns or {}
@@ -656,9 +685,9 @@ async def _resolve_target_manifest(
     *,
     user_id: str,
     workspace_root: Path,
-    settings_full: Any,
+    settings_full: Settings,
     skill_name: str,
-) -> tuple[Any, Any]:
+) -> tuple[SkillManifest | None, ExtensionManager | None]:
     skill_name = normalize_skill_ref(skill_name)
     entries, extension_manager = await _list_runtime_skills(
         request,
@@ -677,7 +706,7 @@ async def edit_skill(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
     web_deps = get_web_deps(request)
@@ -699,14 +728,14 @@ async def edit_skill(
             body=payload.body,
             fields=payload.fields,
         )
-    except EditForbidden as exc:
-        raise HTTPException(status_code=403, detail=exc.message)
-    except SkillNotFound as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
-    except EditFailed as exc:
-        raise HTTPException(status_code=500, detail=exc.message)
+    except EditForbiddenError as exc:
+        raise HTTPException(status_code=403, detail=exc.message) from exc
+    except SkillNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message) from exc
+    except EditFailedError as exc:
+        raise HTTPException(status_code=500, detail=exc.message) from exc
     except SkillEditError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return {
         "ok": True,
         "name": result.name,
@@ -721,7 +750,7 @@ async def list_skill_backups(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
     web_deps = get_web_deps(request)
@@ -738,10 +767,10 @@ async def list_skill_backups(
     editor = _build_skill_editor(request, workspace_root, settings_full, extension_manager)
     try:
         entries = editor.backups(target)
-    except SkillNotFound as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
+    except SkillNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message) from exc
     except SkillEditError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return {
         "ok": True,
         "name": skill_name,
@@ -756,7 +785,7 @@ async def restore_skill(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-) -> dict:
+) -> dict[str, Any]:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
     web_deps = get_web_deps(request)
@@ -773,14 +802,14 @@ async def restore_skill(
     editor = _build_skill_editor(request, workspace_root, settings_full, extension_manager)
     try:
         result = editor.restore(target, payload.backup_id)
-    except EditForbidden as exc:
-        raise HTTPException(status_code=403, detail=exc.message)
-    except SkillNotFound as exc:
-        raise HTTPException(status_code=404, detail=exc.message)
-    except EditFailed as exc:
-        raise HTTPException(status_code=500, detail=exc.message)
+    except EditForbiddenError as exc:
+        raise HTTPException(status_code=403, detail=exc.message) from exc
+    except SkillNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message) from exc
+    except EditFailedError as exc:
+        raise HTTPException(status_code=500, detail=exc.message) from exc
     except SkillEditError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.message)
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return {
         "ok": True,
         "name": result.name,

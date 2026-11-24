@@ -11,8 +11,10 @@
 存储目标：
   - 本地存储（默认 LocalRecordingStorage）：分片 + 索引落盘
 """
+
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -29,20 +31,22 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class RecordingChunk:
     """单个录屏分片。"""
-    chunk_id: str               # 分片 ID
-    session_id: str             # 录制会话 ID
-    breakglass_token: str       # 关联的 BreakGlass token
-    sequence: int               # 分片序号（从 0 开始）
-    timestamp: float            # 分片开始时间
-    size_bytes: int             # 分片大小
-    content_hash: str           # 分片内容 SHA256
-    prev_chunk_hash: str        # 前一分片 hash（哈希链）
-    storage_path: str = ""      # 本地路径
+
+    chunk_id: str  # 分片 ID
+    session_id: str  # 录制会话 ID
+    breakglass_token: str  # 关联的 BreakGlass token
+    sequence: int  # 分片序号（从 0 开始）
+    timestamp: float  # 分片开始时间
+    size_bytes: int  # 分片大小
+    content_hash: str  # 分片内容 SHA256
+    prev_chunk_hash: str  # 前一分片 hash（哈希链）
+    storage_path: str = ""  # 本地路径
 
 
 @dataclass
 class RecordingIndex:
     """录屏分片索引。"""
+
     session_id: str
     breakglass_token: str
     started_at: float
@@ -50,7 +54,7 @@ class RecordingIndex:
     total_chunks: int = 0
     total_bytes: int = 0
     chunks: list[RecordingChunk] = field(default_factory=list)
-    index_hash: str = ""        # 整个索引的哈希（完整性校验用）
+    index_hash: str = ""  # 整个索引的哈希（完整性校验用）
     _pending_uploads: list[Any] = field(default_factory=list, repr=False, compare=False)
 
 
@@ -85,46 +89,60 @@ class LocalRecordingStorage:
 
     async def upload_chunk(self, chunk: RecordingChunk, data: bytes) -> str:
         import os
+
         path = os.path.join(self._base_dir, chunk.session_id, f"chunk_{chunk.sequence:04d}.bin")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "wb") as f:
-            f.write(data)
+
+        def _write() -> None:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data)
+
+        await asyncio.to_thread(_write)
         return path
 
     async def download_chunk(self, storage_path: str) -> bytes | None:
-        try:
+        def _read() -> bytes:
             with open(storage_path, "rb") as f:
                 return f.read()
+
+        try:
+            return await asyncio.to_thread(_read)
         except FileNotFoundError:
             return None
 
     async def upload_index(self, index: RecordingIndex) -> str:
         import os
+
         path = os.path.join(self._base_dir, index.session_id, "index.json")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            json.dump({
-                "session_id": index.session_id,
-                "breakglass_token": index.breakglass_token,
-                "started_at": index.started_at,
-                "finished_at": index.finished_at,
-                "total_chunks": index.total_chunks,
-                "total_bytes": index.total_bytes,
-                "chunks": [
-                    {
-                        "chunk_id": c.chunk_id,
-                        "session_id": c.session_id,
-                        "sequence": c.sequence,
-                        "timestamp": c.timestamp,
-                        "size_bytes": c.size_bytes,
-                        "content_hash": c.content_hash,
-                        "prev_chunk_hash": c.prev_chunk_hash,
-                        "storage_path": c.storage_path,
-                    }
-                    for c in index.chunks
-                ],
-                "index_hash": index.index_hash,
-            }, f, ensure_ascii=False, indent=2)
+        payload = {
+            "session_id": index.session_id,
+            "breakglass_token": index.breakglass_token,
+            "started_at": index.started_at,
+            "finished_at": index.finished_at,
+            "total_chunks": index.total_chunks,
+            "total_bytes": index.total_bytes,
+            "chunks": [
+                {
+                    "chunk_id": c.chunk_id,
+                    "session_id": c.session_id,
+                    "sequence": c.sequence,
+                    "timestamp": c.timestamp,
+                    "size_bytes": c.size_bytes,
+                    "content_hash": c.content_hash,
+                    "prev_chunk_hash": c.prev_chunk_hash,
+                    "storage_path": c.storage_path,
+                }
+                for c in index.chunks
+            ],
+            "index_hash": index.index_hash,
+        }
+
+        def _write() -> None:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+
+        await asyncio.to_thread(_write)
         return path
 
 
@@ -236,7 +254,9 @@ class BreakGlassRecorder:
                 storage_path = asyncio.run(self._storage.upload_chunk(chunk, data))
         except Exception as e:
             logger.error(
-                "BreakGlassRecorder: upload chunk %s failed: %s", chunk.chunk_id, e,
+                "BreakGlassRecorder: upload chunk %s failed: %s",
+                chunk.chunk_id,
+                e,
             )
             # 失败时仍写入索引 — storage_path 留空，后续可根据 chunk 元数据重试
 
@@ -289,7 +309,8 @@ class BreakGlassRecorder:
             except Exception as e:
                 logger.error(
                     "BreakGlassRecorder: await chunk upload %s failed: %s",
-                    chunk.chunk_id, e,
+                    chunk.chunk_id,
+                    e,
                 )
                 # 兜底：重新同步上传一次
                 try:
@@ -297,7 +318,8 @@ class BreakGlassRecorder:
                 except Exception as e2:
                     logger.error(
                         "BreakGlassRecorder: retry upload %s also failed: %s",
-                        chunk.chunk_id, e2,
+                        chunk.chunk_id,
+                        e2,
                     )
                     storage_path = ""
             if storage_path and 0 <= chunk.sequence < len(index.chunks):
@@ -317,12 +339,15 @@ class BreakGlassRecorder:
         index.finished_at = time.time()
 
         # 计算索引哈希
-        index_data = json.dumps({
-            "session_id": index.session_id,
-            "total_chunks": index.total_chunks,
-            "total_bytes": index.total_bytes,
-            "finished_at": index.finished_at,
-        }, sort_keys=True)
+        index_data = json.dumps(
+            {
+                "session_id": index.session_id,
+                "total_chunks": index.total_chunks,
+                "total_bytes": index.total_bytes,
+                "finished_at": index.finished_at,
+            },
+            sort_keys=True,
+        )
         index.index_hash = hashlib.sha256(index_data.encode()).hexdigest()
 
         # 上传索引
@@ -330,7 +355,9 @@ class BreakGlassRecorder:
 
         logger.info(
             "BreakGlassRecorder: stopped recording for token %s (%d chunks, %d bytes)",
-            breakglass_token, index.total_chunks, index.total_bytes,
+            breakglass_token,
+            index.total_chunks,
+            index.total_bytes,
         )
         return index
 
@@ -348,7 +375,8 @@ class BreakGlassRecorder:
                 if chunk.prev_chunk_hash != "":
                     logger.error(
                         "BreakGlassRecorder: first chunk %s has non-empty prev_hash: %s",
-                        chunk.chunk_id, chunk.prev_chunk_hash,
+                        chunk.chunk_id,
+                        chunk.prev_chunk_hash,
                     )
                     return False
             else:
@@ -357,7 +385,9 @@ class BreakGlassRecorder:
                     logger.error(
                         "BreakGlassRecorder: hash chain broken at chunk %s: "
                         "prev_hash=%s != expected=%s",
-                        chunk.chunk_id, chunk.prev_chunk_hash, prev.content_hash,
+                        chunk.chunk_id,
+                        chunk.prev_chunk_hash,
+                        prev.content_hash,
                     )
                     return False
 

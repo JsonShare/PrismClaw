@@ -10,20 +10,22 @@
   - 所有 Break-Glass 使用由 BreakGlassRecorder 录屏并留存哈希链索引
   - IAM 独立角色（breakglass_approver）才能批准
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import secrets
 import time
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from typing import Any
 
-from prismclaw.engine.security.gate.types import BreakGlassStoreProtocol
-from prismclaw.schema.content.workspace import SandboxTier
 # 避免与 breakglass_recorder 循环 import — 内部模块名显式指向同包
 from prismclaw.engine.security.breakglass.breakglass_recorder import BreakGlassRecorder
+from prismclaw.engine.security.gate.types import BreakGlassStoreProtocol
+from prismclaw.schema.content.workspace import SandboxTier
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class BreakGlassToken:
     """Break-Glass token。"""
+
     token: str
     session_id: str
     requester_id: str
@@ -108,6 +111,7 @@ class InMemoryBreakGlassStore(BreakGlassStoreProtocol):
 @dataclass
 class BreakGlassRequest:
     """Break-Glass 请求。"""
+
     session_id: str
     requester_id: str
     reason: str
@@ -118,6 +122,7 @@ class BreakGlassRequest:
 @dataclass
 class BreakGlassResult:
     """Break-Glass 操作结果。"""
+
     allowed: bool
     reason: str = ""
     token: str = ""
@@ -148,7 +153,7 @@ class BreakGlassManager:
         # P4-SEC-01：BreakGlassRecorder（可选，默认创建本地存储实例）
         self._recorder = recorder if recorder is not None else BreakGlassRecorder()
         # token → (session_id, auto_stop_task)：过期自动 stop_recording 回收
-        self._recording_tasks: dict[str, asyncio.Task] = {}
+        self._recording_tasks: dict[str, asyncio.Task[Any]] = {}
 
     @property
     def recorder(self) -> BreakGlassRecorder:
@@ -246,7 +251,9 @@ class BreakGlassManager:
         if token_workspace_ids and workspace_id and workspace_id not in token_workspace_ids:
             return BreakGlassResult(
                 allowed=False,
-                reason=f"breakglass_workspace_mismatch: {workspace_id} not in {token_workspace_ids}",
+                reason=(
+                    f"breakglass_workspace_mismatch: {workspace_id} not in {token_workspace_ids}"
+                ),
             )
 
         # Scoping: tool_pattern
@@ -260,12 +267,19 @@ class BreakGlassManager:
         # Scoping: sandbox_tier_cap
         token_tier_cap = info.get("sandbox_tier_cap")
         from prismclaw.engine.security.gate.routing.risk_router import _TIER_ORDER
-        if token_tier_cap is not None and required_tier is not None:
-            if _TIER_ORDER.get(required_tier, 0) > _TIER_ORDER.get(token_tier_cap, 0):
-                return BreakGlassResult(
-                    allowed=False,
-                    reason=f"breakglass_tier_exceeded: required {required_tier} exceeds cap {token_tier_cap}",
-                )
+
+        if (
+            token_tier_cap is not None
+            and required_tier is not None
+            and _TIER_ORDER.get(required_tier, 0) > _TIER_ORDER.get(token_tier_cap, 0)
+        ):
+            return BreakGlassResult(
+                allowed=False,
+                reason=(
+                    f"breakglass_tier_exceeded: required "
+                    f"{required_tier} exceeds cap {token_tier_cap}"
+                ),
+            )
 
         return BreakGlassResult(
             allowed=True,
@@ -296,7 +310,7 @@ class BreakGlassManager:
 
     # ── P4-SEC-01 录屏辅助 ──────────────────────────────────────────
 
-    def _run_async(self, coro: Any) -> None:
+    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> None:
         """在当前事件循环中安全运行协程（兼容 sync/async 调用上下文）。
 
         替代 asyncio.get_event_loop()（Python 3.10+ 已弃用）：
@@ -321,7 +335,8 @@ class BreakGlassManager:
 
     def _schedule_auto_stop(self, token: str, duration_seconds: int) -> None:
         """按 token 生命周期调度自动停止录屏。"""
-        async def _auto_stop():
+
+        async def _auto_stop() -> None:
             try:
                 await asyncio.sleep(max(0, duration_seconds))
             except asyncio.CancelledError:

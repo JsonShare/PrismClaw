@@ -13,7 +13,6 @@ reference).
 
 from __future__ import annotations
 
-
 from prismclaw.engine.services._sop_parse import (
     _TOOL_RESULT_PREVIEW_CHARS,
     _tool_result_preview,
@@ -45,7 +44,8 @@ class TestToolResultPreview:
             "tool_use_id: abc\n"
             "size: 1617 chars\n"
             "preview: FACT-AT-CHAR-800-...\n"
-            f"[Full output persisted to: {full_file}] Use the Read tool to view the full contents.\n"
+            f"[Full output persisted to: {full_file}] "
+            "Use the Read tool to view the full contents.\n"
         )
         out = _tool_result_preview(ref)
         # The full file content (not just the 24-char inline preview) is read:
@@ -55,10 +55,7 @@ class TestToolResultPreview:
     def test_persisted_file_larger_than_preview_clipped(self, tmp_path):
         full_file = tmp_path / "tr_big.txt"
         full_file.write_text("H" * 9000, encoding="utf-8")
-        ref = (
-            "<persisted-output>\n"
-            f"[Full output persisted to: {full_file}]\n"
-        )
+        ref = f"<persisted-output>\n[Full output persisted to: {full_file}]\n"
         out = _tool_result_preview(ref)
         assert out.startswith("H" * 2000)
         assert "9000 chars total" in out

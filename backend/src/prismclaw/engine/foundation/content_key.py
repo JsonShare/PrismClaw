@@ -3,6 +3,7 @@
 对基础类型载荷做稳定 sha256：字典排序、紧凑分隔符、default=str
 兜底不可序列化对象。同一逻辑载荷任何顺序都得到同一键。
 """
+
 from __future__ import annotations
 
 import hashlib

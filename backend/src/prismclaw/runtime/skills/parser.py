@@ -14,12 +14,12 @@ from prismclaw.schema.agent.domains import (
     _exe_mode_normalize,
     exe_mode_valid_values,
 )
-from prismclaw.schema.shared import _extract_frontmatter
 from prismclaw.schema.services.skills import (
     SkillAgentConfig,
     SkillManifest,
     SkillRequirements,
 )
+from prismclaw.schema.shared import _extract_frontmatter
 from prismclaw.schema.shared.exceptions import SkillParseError
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ def _parse_requirements(skill_meta: dict[str, Any]) -> SkillRequirements:
     )
 
 
-def _coerce_string_list(raw: Any) -> list[str] | None:
+def _coerce_string_list(raw: object) -> list[str] | None:
     if raw is None:
         return None
     if not isinstance(raw, list):
@@ -55,11 +55,11 @@ def _coerce_string_list(raw: Any) -> list[str] | None:
     return values or None
 
 
-def _coerce_optional_int(raw: Any) -> int | None:
+def _coerce_optional_int(raw: object) -> int | None:
     return raw if isinstance(raw, int) and not isinstance(raw, bool) else None
 
 
-def _coerce_optional_float(raw: Any) -> float | None:
+def _coerce_optional_float(raw: object) -> float | None:
     if isinstance(raw, (int, float)) and not isinstance(raw, bool):
         return float(raw)
     return None
@@ -86,14 +86,14 @@ def _parse_execution_mode(
         # _exe_mode_normalize 对任何输入都有返回,若既不是规范值也不在 synonym 中 → INLINE(兜底)
         # 这里要判断兜底是不是非法值:既不是规范值也不是 synonym 也不是空
         if mode is SkillExecutionMode.INLINE and norm != "inline":
-            is_synonym = norm in {k.replace("-", "_") for k in ("agent", "workflow",
-                                                               "sub-agent", "sub_agent",
-                                                               "forked")}
+            is_synonym = norm in {
+                k.replace("-", "_")
+                for k in ("agent", "workflow", "sub-agent", "sub_agent", "forked")
+            }
             if not is_synonym:
                 valid = ", ".join(exe_mode_valid_values())
                 raise SkillParseError(
-                    f"execution_mode must be one of: {valid} "
-                    f"(got {raw!r})",
+                    f"execution_mode must be one of: {valid} (got {raw!r})",
                     file_path=file_path_str,
                 )
     return mode
@@ -214,8 +214,8 @@ def _build_manifest_from_frontmatter(
     *,
     fallback_name: str | None = None,
     parent_dir_name: str | None = None,
-body: str | None = None,
-        declared_invoke_sequence: list[str] | None = None,
+    body: str | None = None,
+    declared_invoke_sequence: list[str] | None = None,
 ) -> SkillManifest:
     """从已解析的 frontmatter dict 构建 SkillManifest。
 
@@ -252,7 +252,7 @@ body: str | None = None,
     customizes: str | None = frontmatter.get(FM.CUSTOMIZES) or None
 
     if declared_invoke_sequence is None:
-        declared_invoke_sequence = _extract_declared_invoke_sequence(body)
+        declared_invoke_sequence = _extract_declared_invoke_sequence(body or "")
 
     # ========================================================================
     # 语义分工(严格对应方案 §0.1 决策 #2 + Phase4 遵从度埋点):
@@ -270,18 +270,39 @@ body: str | None = None,
     # 未知字段告警：检测 frontmatter 中不被识别的顶级键
     # name_zh / description_zh 是显示用元数据：写入 SkillManifest.name_zh
     # 供 UI 与提示词展示，不参与目录键、斜杠手势或 hook matcher 的查找。
-    _KNOWN_FM_KEYS: set[str] = {
-        "name", "description", "body", "category", "paths",
-        "execution_mode", "invocation_policy", "allowed_tools", "allowed-tools",
-        "agent", "subagent", "metadata", "priority", "customizes", "editable",
-        "argument_hint", "references", "tags", "author", "version",
-        "name_zh", "description_zh", "homepage", "keywords", "license",
+    _known_fm_keys: set[str] = {
+        "name",
+        "description",
+        "body",
+        "category",
+        "paths",
+        "execution_mode",
+        "invocation_policy",
+        "allowed_tools",
+        "allowed-tools",
+        "agent",
+        "subagent",
+        "metadata",
+        "priority",
+        "customizes",
+        "editable",
+        "argument_hint",
+        "references",
+        "tags",
+        "author",
+        "version",
+        "name_zh",
+        "description_zh",
+        "homepage",
+        "keywords",
+        "license",
     }
-    _unknown = set(frontmatter.keys()) - _KNOWN_FM_KEYS
+    _unknown = set(frontmatter.keys()) - _known_fm_keys
     if _unknown:
         logger.warning(
             "SKILL %s: unknown frontmatter keys %s will be ignored",
-            name, sorted(_unknown),
+            name,
+            sorted(_unknown),
         )
 
     return SkillManifest(
@@ -398,22 +419,37 @@ def _parse_manifest(
 
 _INVOKE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # 0) 中文自然语言:调用技能 / 使用技能 : "contract-review"
-    re.compile(r'''(?:调用技能|使用技能)\s*[:：]\s*["']?([A-Za-z0-9_./-]+)'''),
+    re.compile(r"""(?:调用技能|使用技能)\s*[:：]\s*["']?([A-Za-z0-9_./-]+)"""),
     # 1) Markdown 伪代码箭头:→ contract-review / -> contract-review
-    re.compile(r'''(?:→|->|➡️)\s*([A-Za-z][A-Za-z0-9_./-]*)'''),
+    re.compile(r"""(?:→|->|➡️)\s*([A-Za-z][A-Za-z0-9_./-]*)"""),
     # 2) "Step N: <skill-name>" 类枚举式分步(仅匹配以字母开头、且含至少一个 -_/ 的 skill-like 命名)
-    re.compile(
-        r'''Step\s*\d+\s*[:：]\s*([A-Za-z][A-Za-z0-9]*(?:[-_./][A-Za-z0-9]+)+)'''
-    ),
+    re.compile(r"""Step\s*\d+\s*[:：]\s*([A-Za-z][A-Za-z0-9]*(?:[-_./][A-Za-z0-9]+)+)"""),
 )
 
 
 # 过滤普通英文词,避免 "Step 3: Review" 等伪声明被误抓
-_SKIP_COMMON_ENGLISH: frozenset[str] = frozenset({
-    "review", "draft", "check", "update", "submit", "verify",
-    "create", "build", "analyze", "close", "open", "write",
-    "read", "sign", "file", "send", "reply", "report",
-})
+_SKIP_COMMON_ENGLISH: frozenset[str] = frozenset(
+    {
+        "review",
+        "draft",
+        "check",
+        "update",
+        "submit",
+        "verify",
+        "create",
+        "build",
+        "analyze",
+        "close",
+        "open",
+        "write",
+        "read",
+        "sign",
+        "file",
+        "send",
+        "reply",
+        "report",
+    }
+)
 
 
 def _extract_declared_invoke_sequence(body: str) -> list[str]:

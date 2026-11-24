@@ -19,7 +19,7 @@ _NON_CONVERSATIONAL_ROLES = {"system"}
 _HEARTBEAT_MARKERS = ("heartbeat", "ping", "pong", "[heartbeat]", "[system]")
 
 
-def _extract_text(content: Any) -> str:
+def _extract_text(content: object) -> str:
     from prismclaw.schema.shared import extract_text_from_content
 
     return extract_text_from_content(content)
@@ -250,7 +250,7 @@ def extract_sections(text: str) -> dict[int, str]:
     if not positions:
         return {}
     sections: dict[int, str] = {}
-    for i, (start, num, header) in enumerate(positions):
+    for i, (start, num, _header) in enumerate(positions):
         end = positions[i + 1][0] if i + 1 < len(positions) else len(text)
         content = text[start:end].rstrip()
         sections[num] = content
@@ -280,9 +280,7 @@ def _section_is_substantive(text: str) -> bool:
         return False
     # Prefix patterns: "no pending tasks", "no current items", etc.
     empty_prefixes = ("no pending", "no current", "no active", "no outstanding")
-    if stripped.startswith(empty_prefixes):
-        return False
-    return True
+    return not stripped.startswith(empty_prefixes)
 
 
 def carry_forward_missing_sections(
@@ -319,22 +317,17 @@ def carry_forward_missing_sections(
     for num, content in prior_sections.items():
         if not _section_is_substantive(content):
             continue
-        # Mandatory carry-forward sections
-        if num in _CARRY_FORWARD_SECTION_NUMBERS:
-            if num not in new_sections or not _section_is_substantive(new_sections[num]):
-                missing.append((num, content))
-                continue
-        # W12: voided markers in any section
-        if _is_voided_section(content):
-            if num not in new_sections or not _section_is_substantive(new_sections[num]):
-                missing.append((num, content))
+        # 新摘要里缺失或变得不实质，才需要结转
+        if num in new_sections and _section_is_substantive(new_sections[num]):
+            continue
+        # 强制结转的编号，或被作废（voided）的章节
+        if num in _CARRY_FORWARD_SECTION_NUMBERS or _is_voided_section(content):
+            missing.append((num, content))
 
     if not missing:
         return new_summary
 
     # Append missing sections deterministically
     anchor = "\n\n[从既有摘要结转——以下各节必须保留]\n"
-    appended_parts: list[str] = []
-    for num, content in sorted(missing):
-        appended_parts.append(content)
+    appended_parts: list[str] = [content for _num, content in sorted(missing)]
     return new_summary.rstrip() + anchor + "\n\n".join(appended_parts) + "\n"

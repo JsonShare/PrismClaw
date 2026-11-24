@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from prismclaw.engine.execution.request.system_prompt import (
+from prismclaw.engine.execution.request._prompt_types import (
     AvailableSubagentEntry,
     MarketplaceSummary,
     PromptInputs,
+)
+from prismclaw.engine.execution.request.system_prompt import (
     build_frozen_prompt_sections,
 )
 
@@ -211,15 +213,14 @@ def test_register_subagent_tools_clears_when_disabled(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _build_shell_snapshot 回归：PromptInputs 构造不得传入已删除字段
+# _build_shell_snapshot：按本轮可见集构建壳，技能/子代理按披露层级分区
 # ---------------------------------------------------------------------------
-def test_build_shell_snapshot_does_not_pass_removed_fields_to_prompt_inputs():
-    """回归测试：_build_shell_snapshot 构造 PromptInputs 时不得传入已删除字段。
+def test_build_shell_snapshot_partitions_skill_and_subagent_disclosure():
+    """壳构建必须能真实走通，且只把项目技能名放进固定前缀。
 
-    此前重构删除了 PromptInputs.request_mode，但 _build_shell_snapshot 的
-    frozen_prompt_inputs 构造仍传 request_mode=request_mode，导致每次 cache
-    miss 都抛 TypeError。本测试用 mock deps 走通整条 _build_shell_snapshot，
-    锁定该回归不再发生。
+    ``<skills>`` / ``<subagents>`` 的存在取决于可见集：项目技能逐个列名，
+    插件技能与插件子代理只保留在目录中供 ``skill_search`` /
+    ``subagent_search`` 检索，不写入冻结 prompt。
     """
     import asyncio
     from types import SimpleNamespace
@@ -327,11 +328,13 @@ def test_build_shell_snapshot_does_not_pass_removed_fields_to_prompt_inputs():
             capability_catalog=_FakeCatalog(),
             tool_workspace_path="/tmp/ws",
             effective_model="test-model",
-            request_mode="standard",
-            is_fast_path=False,
-            skill_invocation=None,
-            discovered_tools=None,
             subagent_depth=0,
+            visible_tool_names={
+                "read",
+                "skill_search",
+                "sub_agent",
+                "subagent_search",
+            },
         )
     )
 
@@ -346,8 +349,6 @@ def test_build_shell_snapshot_does_not_pass_removed_fields_to_prompt_inputs():
     assert "plugin-agent" in agent_names
     # frozen_result 非空
     assert snapshot.frozen_result.text
-    # 冻结 prompt 不含 request_mode 字面量
-    assert "request_mode" not in snapshot.frozen_result.text
 
 
 def test_behavior_boundaries_are_present() -> None:

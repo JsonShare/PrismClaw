@@ -231,7 +231,7 @@ Ready to proceed to Subskill 2? (Y/N): ___
 
 **Output:**
 - `waypoints/decision.json` (final decision)
-- `outputs/notification_letter.txt` (provider notification)
+- `outbox/notification_letter.txt` (provider notification)
 
 **Duration:** 1-2 minutes
 

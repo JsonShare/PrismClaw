@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from prismclaw.schema.agent.types import AgentDeps
+
+from prismclaw.app.web.connection import ConnectionState, send_event
 from prismclaw.app.web.protocol.messages import (
     SERVER_QUESTIONS,
     SERVER_REFERENCE,
 )
-from prismclaw.app.web.connection import ConnectionState, send_event
 from prismclaw.schema.services.chat_assistant import (
     extract_reference_sources,
     generate_followup_questions,
@@ -18,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _generate_followup_questions_for_request(
-    deps: Any,
+    deps: AgentDeps,
     *,
     session_id: str,
     user_message: str,
@@ -57,7 +60,7 @@ async def _await_questions_and_push(
     if refined_questions_task is not None:
         try:
             questions = await asyncio.wait_for(refined_questions_task, timeout=refined_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         except Exception:
             logger.debug("refined_questions failed", exc_info=True)
@@ -67,7 +70,7 @@ async def _await_questions_and_push(
         if remaining > 0:
             try:
                 questions = await asyncio.wait_for(base_questions_task, timeout=remaining)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             except Exception:
                 logger.debug("base_questions failed", exc_info=True)
@@ -86,7 +89,7 @@ async def _await_questions_and_push(
 
 
 async def _generate_reference_sources(
-    deps: Any,
+    deps: AgentDeps,
     *,
     session_id: str,
     max_turns: int = 5,
@@ -101,7 +104,7 @@ async def _generate_reference_sources(
 async def _push_reference_event(
     state: ConnectionState,
     *,
-    deps: Any,
+    deps: AgentDeps,
     conversation_id: str,
     session_id: str,
     assistant_message_id: str | None,

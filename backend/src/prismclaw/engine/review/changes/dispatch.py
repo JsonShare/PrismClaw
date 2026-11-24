@@ -7,12 +7,13 @@ review semantics for ``fmt``. The call site never branches on ``kind`` again.
 from __future__ import annotations
 
 from prismclaw.engine.review.changes.docx_change import DocxChange
+from prismclaw.engine.review.changes.protocol import ReviewableChange
 from prismclaw.engine.review.changes.spreadsheet_change import SpreadsheetChange
 from prismclaw.engine.review.changes.text_change import TextChange
 from prismclaw.engine.review.registry import ReviewRegistry
 
 
-def dispatch(fmt: str | None, *, registry: ReviewRegistry | None = None):
+def dispatch(fmt: str | None, *, registry: ReviewRegistry | None = None) -> ReviewableChange:
     """Return the ``ReviewableChange`` strategy for ``fmt``.
 
     ``registry`` is required only for the text/code strategy (it owns the

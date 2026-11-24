@@ -134,13 +134,11 @@ CHINESE_STOP_WORDS: set[str] = {
     "于是乎",
     "难道",
     "究竟",
-    "罢了",
     "而言",
     "基于",
     "鉴于",
     "由于",
     "对于",
-    "关于",
     "至于",
     "不仅",
     "而且",
@@ -182,7 +180,6 @@ CHINESE_STOP_WORDS: set[str] = {
     "居然",
     "反而",
     "反倒",
-    "却",
     "只得",
     "只好",
     "只好是",
@@ -409,7 +406,6 @@ QA_STOP_WORDS: set[str] = {
     "能否",
     "是否有",
     "算不算",
-    "像不像",
     "像不像",
     "多不多",
     "大不大",
@@ -650,7 +646,6 @@ CODE_STOP_WORDS: set[str] = {
     "怎么写",
     "怎么做",
     "怎么用",
-    "怎么用",
     "如何实现",
     "如何使用",
     "怎么实现",
@@ -668,8 +663,4 @@ CODE_STOP_WORDS: set[str] = {
     "怎么解决",
 }
 
-STOP_WORDS: set[str] = (
-    CHINESE_STOP_WORDS
-    | ENGLISH_STOP_WORDS
-    | QA_STOP_WORDS
-)
+STOP_WORDS: set[str] = CHINESE_STOP_WORDS | ENGLISH_STOP_WORDS | QA_STOP_WORDS

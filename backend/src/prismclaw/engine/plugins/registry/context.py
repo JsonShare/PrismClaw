@@ -2,17 +2,19 @@
 
 插件通过 transform 方法修改运行时注册表，而非直接操作 ExtensionManager 内部状态。
 """
+
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 
 class AgentDraft(Protocol):
     """Agent 注册表 draft。"""
 
     def list(self) -> list[Any]: ...
-    def get(self, agent_id: str) -> Any | None: ...
-    def update(self, agent_id: str, update: Any) -> None: ...
+    def get(self, agent_id: str) -> object | None: ...
+    def update(self, agent_id: str, update: object) -> None: ...
     def remove(self, agent_id: str) -> None: ...
 
 
@@ -20,8 +22,8 @@ class SkillDraft(Protocol):
     """Skill 注册表 draft。"""
 
     def list(self) -> list[Any]: ...
-    def get(self, skill_id: str) -> Any | None: ...
-    def update(self, skill_id: str, update: Any) -> None: ...
+    def get(self, skill_id: str) -> object | None: ...
+    def update(self, skill_id: str, update: object) -> None: ...
     def remove(self, skill_id: str) -> None: ...
 
 
@@ -29,8 +31,8 @@ class CommandDraft(Protocol):
     """Command 注册表 draft。"""
 
     def list(self) -> list[Any]: ...
-    def get(self, command_name: str) -> Any | None: ...
-    def update(self, command_name: str, update: Any) -> None: ...
+    def get(self, command_name: str) -> object | None: ...
+    def update(self, command_name: str, update: object) -> None: ...
     def remove(self, command_name: str) -> None: ...
 
 
@@ -44,11 +46,11 @@ class PluginContext:
     def __init__(
         self,
         *,
-        agent_registry: Any | None = None,
-        skill_registry: Any | None = None,
-        command_registry: Any | None = None,
-        hook_dispatcher: Any | None = None,
-        mcp_manager: Any | None = None,
+        agent_registry: object | None = None,
+        skill_registry: object | None = None,
+        command_registry: object | None = None,
+        hook_dispatcher: object | None = None,
+        mcp_manager: object | None = None,
     ) -> None:
         self._agent_registry = agent_registry
         self._skill_registry = skill_registry
@@ -77,7 +79,7 @@ class PluginContext:
         draft = _RegistryDraft(self._command_registry)
         callback(draft)
 
-    def hook_register(self, event: str, handler: Any) -> None:
+    def hook_register(self, event: str, handler: object) -> None:
         """注册 hook。"""
         if self._hook_dispatcher is None:
             return
@@ -85,7 +87,7 @@ class PluginContext:
         if callable(register_named):
             register_named(event, handler)
 
-    def hook_unregister(self, event: str, handler: Any) -> None:
+    def hook_unregister(self, event: str, handler: object) -> None:
         """注销 hook。"""
         if self._hook_dispatcher is None:
             return
@@ -97,7 +99,7 @@ class PluginContext:
 class _RegistryDraft:
     """通用注册表 draft 适配器。"""
 
-    def __init__(self, registry: Any) -> None:
+    def __init__(self, registry: object) -> None:
         self._registry = registry
 
     def list(self) -> list[Any]:
@@ -109,17 +111,17 @@ class _RegistryDraft:
             return list(result)
         return []
 
-    def get(self, item_id: str) -> Any | None:
+    def get(self, item_id: str) -> object | None:
         getters = ["get_plugin", "get_skill", "get_command", "get_agent", "get"]
         for attr in getters:
             getter = getattr(self._registry, attr, None)
             if callable(getter):
-                result = getter(item_id)
+                result: object | None = getter(item_id)
                 if result is not None:
                     return result
         return None
 
-    def update(self, item_id: str, update: Any) -> None:
+    def update(self, item_id: str, update: object) -> None:
         register = getattr(self._registry, "register", None)
         if callable(register):
             register(item_id, update)

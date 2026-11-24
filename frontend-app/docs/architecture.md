@@ -163,7 +163,7 @@
 | POST | `/api/scheduled-tasks/{id}/trigger` | 立即触发 |
 | GET | `/api/scheduled-tasks/{id}/runs` | 运行记录 |
 | GET | `/api/workspaces` | 工作区列表 |
-| GET | `/api/workspaces/outputs?workspace_id=` | 产出物列表 |
+| GET | `/api/workspaces/outbox?workspace_id=` | 产出物列表 |
 | POST | `/api/files/upload` | 附件上传（multipart） |
 | GET | `/api/files/download`、`/raw` | 下载 / 原文件 |
 | GET | `/api/files/list`、`/text`、`/search` | 文件浏览 |
@@ -236,7 +236,7 @@ App/小程序               后端
 | `chat.queued` | position | 显示排队位次 |
 | `task.runtime` / `task.timeline` | 运行态 / 时间线 | 工具调用卡片 |
 | `tool.clarify_request` | clarify_id, tool_call_id, questions | 提问并等待用户回复 |
-| `event:outputs` | message_id, files | 追加产出物卡片 |
+| `event:outbox` | message_id, files | 追加产出物卡片 |
 | `error` | message, code | 错误提示 + 可重试 |
 
 ### 6.2 单连接多路复用

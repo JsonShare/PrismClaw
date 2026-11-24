@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Awaitable
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +75,7 @@ def _same_attempt(left: SubagentLease, right: SubagentLease) -> bool:
     )
 
 
-def _parse_lease(raw: Any) -> SubagentLease | None:
+def _parse_lease(raw: object) -> SubagentLease | None:
     if isinstance(raw, bytes):
         raw = raw.decode()
     if not isinstance(raw, str):
@@ -105,7 +109,7 @@ def _lease_payload(lease: SubagentLease, owner_session_id: str) -> str:
     )
 
 
-def _owner_session_id(raw: Any) -> str | None:
+def _owner_session_id(raw: object) -> str | None:
     if isinstance(raw, bytes):
         raw = raw.decode()
     if not isinstance(raw, str):
@@ -233,8 +237,7 @@ class LocalSubagentLeaseStore:
             current = self._leases.get(agent_id)
             now_ms = _now_epoch_ms()
             if current is not None and (
-                not _same_attempt(current, expired_lease)
-                or not self._expired(current, now_ms)
+                not _same_attempt(current, expired_lease) or not self._expired(current, now_ms)
             ):
                 return None
             lease = SubagentLease(
@@ -432,7 +435,7 @@ return 1
 class RedisSubagentLeaseStore:
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: aioredis.Redis,
         *,
         key_prefix: str = "prismclaw:",
         ttl_seconds: float = 30.0,
@@ -452,6 +455,17 @@ class RedisSubagentLeaseStore:
 
     def _active_index_key(self) -> str:
         return f"{self._prefix}subagent-active:index"
+
+    async def _eval(
+        self,
+        script: str,
+        numkeys: int,
+        *args: bytes | str | memoryview | bytearray | int | float,
+    ) -> str:
+        # redis 的 eval 签名兼容同步/异步客户端（Union[Awaitable[str], str]）；
+        # 此处只持有 asyncio 客户端，收窄为 awaitable 后取结果。
+        pending = cast(Awaitable[str], self._redis.eval(script, numkeys, *args))
+        return await pending
 
     def _keys(self, agent_id: str) -> tuple[str, str, str, str]:
         return (
@@ -480,7 +494,7 @@ class RedisSubagentLeaseStore:
             heartbeat=now_ms,
         )
         session_id = owner_session_id or ""
-        fence = await self._redis.eval(
+        fence = await self._eval(
             _CLAIM_SCRIPT,
             4,
             *self._keys(agent_id),
@@ -502,7 +516,7 @@ class RedisSubagentLeaseStore:
         return current is not None and _same_attempt(current, lease)
 
     async def heartbeat(self, lease: SubagentLease) -> bool:
-        result = await self._redis.eval(
+        result = await self._eval(
             _HEARTBEAT_SCRIPT,
             4,
             *self._keys(lease.agent_id),
@@ -527,7 +541,7 @@ class RedisSubagentLeaseStore:
     ) -> SubagentLease | None:
         now_ms = _now_epoch_ms()
         owner_worker_id = new_owner_worker_id or expired_lease.owner_worker_id
-        fence = await self._redis.eval(
+        fence = await self._eval(
             _TAKEOVER_SCRIPT,
             4,
             *self._keys(expired_lease.agent_id),
@@ -562,7 +576,7 @@ class RedisSubagentLeaseStore:
         return _parse_lease(await self._redis.get(self._lease_key(agent_id)))
 
     async def release(self, lease: SubagentLease) -> bool:
-        result = await self._redis.eval(
+        result = await self._eval(
             _RELEASE_SCRIPT,
             4,
             *self._keys(lease.agent_id),

@@ -8,6 +8,7 @@ ID 生成规则（保证幂等重跑）：
 - 患者：P{seq:04d}  → P0001, P0002, …
 - 报告：RPT-P{seq:04d}-{idx:02d}  → RPT-P0001-01, RPT-P0001-02, …
 """
+
 from __future__ import annotations
 
 import logging
@@ -47,9 +48,30 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["高血压5年", "吸烟史30年"],
         "medications_json": ["培美曲塞 500mg/m\u00b2", "顺铂 75mg/m\u00b2", "帕博利珠单抗 200mg"],
         "labs_json": [
-            {"item": "白细胞", "valueText": "3.2\u00d710\u2079/L", "valueNum": 3.2, "unit": "\u00d710\u2079/L", "refText": "4.0-10.0", "flag": "L"},
-            {"item": "CEA", "valueText": "45.2 ng/mL", "valueNum": 45.2, "unit": "ng/mL", "refText": "<5.0", "flag": "H"},
-            {"item": "肝肾功能", "valueText": "正常", "valueNum": None, "unit": "", "refText": "", "flag": "normal"},
+            {
+                "item": "白细胞",
+                "valueText": "3.2\u00d710\u2079/L",
+                "valueNum": 3.2,
+                "unit": "\u00d710\u2079/L",
+                "refText": "4.0-10.0",
+                "flag": "L",
+            },
+            {
+                "item": "CEA",
+                "valueText": "45.2 ng/mL",
+                "valueNum": 45.2,
+                "unit": "ng/mL",
+                "refText": "<5.0",
+                "flag": "H",
+            },
+            {
+                "item": "肝肾功能",
+                "valueText": "正常",
+                "valueNum": None,
+                "unit": "",
+                "refText": "",
+                "flag": "normal",
+            },
         ],
         "tags_json": ["肺腺癌", "IIIB期", "化疗"],
     },
@@ -73,8 +95,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["否认家族肿瘤史"],
         "medications_json": ["来曲唑 2.5mg qd", "唑来膦酸 4mg q3m"],
         "labs_json": [
-            {"item": "CA153", "valueText": "正常", "valueNum": None, "unit": "", "refText": "<25 U/mL", "flag": "normal"},
-            {"item": "骨密度", "valueText": "T值 -1.8", "valueNum": -1.8, "unit": "T值", "refText": ">-1.0", "flag": "L"},
+            {
+                "item": "CA153",
+                "valueText": "正常",
+                "valueNum": None,
+                "unit": "",
+                "refText": "<25 U/mL",
+                "flag": "normal",
+            },
+            {
+                "item": "骨密度",
+                "valueText": "T值 -1.8",
+                "valueNum": -1.8,
+                "unit": "T值",
+                "refText": ">-1.0",
+                "flag": "L",
+            },
         ],
         "tags_json": ["乳腺癌", "IIA期", "术后"],
     },
@@ -98,8 +134,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["Barrett食管5年", "高血压10年"],
         "medications_json": ["紫杉醇 175mg/m\u00b2", "信迪利单抗 200mg"],
         "labs_json": [
-            {"item": "白蛋白", "valueText": "32 g/L", "valueNum": 32, "unit": "g/L", "refText": "40-55", "flag": "L"},
-            {"item": "SCC", "valueText": "8.5 ng/mL", "valueNum": 8.5, "unit": "ng/mL", "refText": "<1.5", "flag": "H"},
+            {
+                "item": "白蛋白",
+                "valueText": "32 g/L",
+                "valueNum": 32,
+                "unit": "g/L",
+                "refText": "40-55",
+                "flag": "L",
+            },
+            {
+                "item": "SCC",
+                "valueText": "8.5 ng/mL",
+                "valueNum": 8.5,
+                "unit": "ng/mL",
+                "refText": "<1.5",
+                "flag": "H",
+            },
         ],
         "tags_json": ["食管癌", "IV期", "免疫治疗"],
     },
@@ -123,7 +173,14 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["慢阻肺病史"],
         "medications_json": ["术前准备中"],
         "labs_json": [
-            {"item": "肺功能", "valueText": "FEV1 68%", "valueNum": 68, "unit": "%", "refText": ">80%", "flag": "L"},
+            {
+                "item": "肺功能",
+                "valueText": "FEV1 68%",
+                "valueNum": 68,
+                "unit": "%",
+                "refText": ">80%",
+                "flag": "L",
+            },
         ],
         "tags_json": ["肺鳞癌", "IA期", "术前"],
     },
@@ -147,8 +204,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["高血压8年", "吸烟史20年"],
         "medications_json": ["吉西他滨 1000mg/m\u00b2", "卡铂 AUC5"],
         "labs_json": [
-            {"item": "血红蛋白", "valueText": "98 g/L", "valueNum": 98, "unit": "g/L", "refText": "130-175", "flag": "L"},
-            {"item": "肌酐", "valueText": "正常", "valueNum": None, "unit": "", "refText": "44-133 μmol/L", "flag": "normal"},
+            {
+                "item": "血红蛋白",
+                "valueText": "98 g/L",
+                "valueNum": 98,
+                "unit": "g/L",
+                "refText": "130-175",
+                "flag": "L",
+            },
+            {
+                "item": "肌酐",
+                "valueText": "正常",
+                "valueNum": None,
+                "unit": "",
+                "refText": "44-133 μmol/L",
+                "flag": "normal",
+            },
         ],
         "tags_json": ["膀胱癌", "III期", "化疗"],
     },
@@ -172,8 +243,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["冠心病10年", "高血压15年"],
         "medications_json": ["依托泊苷 100mg/m\u00b2", "顺铂 75mg/m\u00b2", "阿替利珠单抗 1200mg"],
         "labs_json": [
-            {"item": "NSE", "valueText": "48.6 ng/mL", "valueNum": 48.6, "unit": "ng/mL", "refText": "<16.3", "flag": "H"},
-            {"item": "血小板", "valueText": "92\u00d710\u2079/L", "valueNum": 92, "unit": "\u00d710\u2079/L", "refText": "125-350", "flag": "L"},
+            {
+                "item": "NSE",
+                "valueText": "48.6 ng/mL",
+                "valueNum": 48.6,
+                "unit": "ng/mL",
+                "refText": "<16.3",
+                "flag": "H",
+            },
+            {
+                "item": "血小板",
+                "valueText": "92\u00d710\u2079/L",
+                "valueNum": 92,
+                "unit": "\u00d710\u2079/L",
+                "refText": "125-350",
+                "flag": "L",
+            },
         ],
         "tags_json": ["小细胞肺癌", "广泛期", "化疗"],
     },
@@ -197,8 +282,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["乙肝肝硬化12年"],
         "medications_json": ["阿替利珠单抗 1200mg", "贝伐珠单抗 7.5mg/kg", "恩替卡韦 0.5mg qd"],
         "labs_json": [
-            {"item": "AFP", "valueText": "186 ng/mL", "valueNum": 186, "unit": "ng/mL", "refText": "<7.0", "flag": "H"},
-            {"item": "Child-Pugh", "valueText": "A级 6分", "valueNum": 6, "unit": "分", "refText": "A:5-6 B:7-9", "flag": "normal"},
+            {
+                "item": "AFP",
+                "valueText": "186 ng/mL",
+                "valueNum": 186,
+                "unit": "ng/mL",
+                "refText": "<7.0",
+                "flag": "H",
+            },
+            {
+                "item": "Child-Pugh",
+                "valueText": "A级 6分",
+                "valueNum": 6,
+                "unit": "分",
+                "refText": "A:5-6 B:7-9",
+                "flag": "normal",
+            },
         ],
         "tags_json": ["肝癌", "IIIB期", "靶向"],
     },
@@ -222,8 +321,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["否认慢性病史"],
         "medications_json": ["紫杉醇 175mg/m\u00b2", "卡铂 AUC5"],
         "labs_json": [
-            {"item": "CA125", "valueText": "892 U/mL", "valueNum": 892, "unit": "U/mL", "refText": "<35", "flag": "H"},
-            {"item": "白蛋白", "valueText": "35 g/L", "valueNum": 35, "unit": "g/L", "refText": "40-55", "flag": "L"},
+            {
+                "item": "CA125",
+                "valueText": "892 U/mL",
+                "valueNum": 892,
+                "unit": "U/mL",
+                "refText": "<35",
+                "flag": "H",
+            },
+            {
+                "item": "白蛋白",
+                "valueText": "35 g/L",
+                "valueNum": 35,
+                "unit": "g/L",
+                "refText": "40-55",
+                "flag": "L",
+            },
         ],
         "tags_json": ["卵巢癌", "IIIC期", "化疗"],
     },
@@ -247,8 +360,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["2型糖尿病8年"],
         "medications_json": ["FOLFOX方案", "贝伐珠单抗 5mg/kg", "二甲双胍 0.5g bid"],
         "labs_json": [
-            {"item": "CEA", "valueText": "28.6 ng/mL", "valueNum": 28.6, "unit": "ng/mL", "refText": "<5.0", "flag": "H"},
-            {"item": "血糖", "valueText": "6.8 mmol/L", "valueNum": 6.8, "unit": "mmol/L", "refText": "3.9-6.1", "flag": "H"},
+            {
+                "item": "CEA",
+                "valueText": "28.6 ng/mL",
+                "valueNum": 28.6,
+                "unit": "ng/mL",
+                "refText": "<5.0",
+                "flag": "H",
+            },
+            {
+                "item": "血糖",
+                "valueText": "6.8 mmol/L",
+                "valueNum": 6.8,
+                "unit": "mmol/L",
+                "refText": "3.9-6.1",
+                "flag": "H",
+            },
         ],
         "tags_json": ["结直肠癌", "IV期", "靶向"],
     },
@@ -272,8 +399,22 @@ _PATIENT_SEEDS: list[dict[str, Any]] = [
         "history_json": ["否认家族肿瘤史"],
         "medications_json": ["多柔比星脂质体 40mg/m\u00b2", "环磷酰胺 600mg/m\u00b2"],
         "labs_json": [
-            {"item": "白细胞", "valueText": "4.1\u00d710\u2079/L", "valueNum": 4.1, "unit": "\u00d710\u2079/L", "refText": "4.0-10.0", "flag": "normal"},
-            {"item": "心脏射血分数", "valueText": "61%", "valueNum": 61, "unit": "%", "refText": ">55%", "flag": "normal"},
+            {
+                "item": "白细胞",
+                "valueText": "4.1\u00d710\u2079/L",
+                "valueNum": 4.1,
+                "unit": "\u00d710\u2079/L",
+                "refText": "4.0-10.0",
+                "flag": "normal",
+            },
+            {
+                "item": "心脏射血分数",
+                "valueText": "61%",
+                "valueNum": 61,
+                "unit": "%",
+                "refText": ">55%",
+                "flag": "normal",
+            },
         ],
         "tags_json": ["乳腺癌", "IIB期", "化疗"],
     },
@@ -297,12 +438,21 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "肺腺癌 IIIB期 (T3N2M0)",
         "narrative_json": [
             {"heading": "主诉", "body": "咳嗽伴痰中带血2月余，加重1周"},
-            {"heading": "现病史", "body": "患者2月前无明显诱因出现咳嗽，痰中带血丝。1周前症状加重，外院CT示右肺上叶占位，约4.2cm。支气管镜活检病理示腺癌。"},
+            {
+                "heading": "现病史",
+                "body": (
+                    "患者2月前无明显诱因出现咳嗽，痰中带血丝。1周前症状加重，"
+                    "外院CT示右肺上叶占位，约4.2cm。支气管镜活检病理示腺癌。"
+                ),
+            },
         ],
         "labs_json": [],
         "medications_json": ["培美曲塞 500mg/m\u00b2", "顺铂 75mg/m\u00b2", "帕博利珠单抗 200mg"],
         "tags_json": ["肺腺癌", "IIIB期", "化疗"],
-        "summary": "患者王建国，58岁男性，因咳嗽伴痰中带血2月余入院。支气管镜活检确诊肺腺癌IIIB期(T3N2M0)，制定培美曲塞+顺铂+帕博利珠单抗方案。",
+        "summary": (
+            "患者王建国，58岁男性，因咳嗽伴痰中带血2月余入院。支气管镜活检确诊肺腺癌IIIB期("
+            "T3N2M0)，制定培美曲塞+顺铂+帕博利珠单抗方案。"
+        ),
     },
     {
         "id": "RPT-P0002-01",
@@ -323,7 +473,10 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "labs_json": [],
         "medications_json": ["来曲唑 2.5mg qd", "唑来膦酸 4mg q3m"],
         "tags_json": ["乳腺癌", "IIA期", "术后"],
-        "summary": "患者李秀芳，45岁女性，发现左乳肿块1月。穿刺活检示浸润性导管癌IIA期(T1N1M0)，行保乳手术+前哨淋巴结活检。",
+        "summary": (
+            "患者李秀芳，45岁女性，发现左乳肿块1月。穿刺活检示浸润性导管癌IIA期("
+            "T1N1M0)，行保乳手术+前哨淋巴结活检。"
+        ),
     },
     {
         "id": "RPT-P0003-01",
@@ -339,12 +492,20 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "食管鳞癌 IV期 (T4N2M1)",
         "narrative_json": [
             {"heading": "主诉", "body": "吞咽困难3月，消瘦10kg"},
-            {"heading": "现病史", "body": "患者3月前出现进行性吞咽困难，CT示肝转移、纵隔淋巴结转移，确诊食管鳞癌IV期。"},
+            {
+                "heading": "现病史",
+                "body": (
+                    "患者3月前出现进行性吞咽困难，CT示肝转移、纵隔淋巴结转移，确诊食管鳞癌IV期。"
+                ),
+            },
         ],
         "labs_json": [],
         "medications_json": ["紫杉醇 175mg/m\u00b2", "信迪利单抗 200mg"],
         "tags_json": ["食管癌", "IV期", "免疫治疗"],
-        "summary": "患者赵德明，67岁男性，吞咽困难3月伴消瘦10kg。CT示肝转移及纵隔淋巴结转移，食管鳞癌IV期(T4N2M1)，行免疫联合化疗。",
+        "summary": (
+            "患者赵德明，67岁男性，吞咽困难3月伴消瘦10kg。CT示肝转移及纵隔淋巴结转移，"
+            "食管鳞癌IV期(T4N2M1)，行免疫联合化疗。"
+        ),
     },
     {
         "id": "RPT-P0005-01",
@@ -360,12 +521,18 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "膀胱尿路上皮癌 III期 (T2N0M0)",
         "narrative_json": [
             {"heading": "主诉", "body": "无痛性肉眼血尿1月"},
-            {"heading": "现病史", "body": "患者1月前出现无痛性肉眼血尿，膀胱镜示三角区菜花样肿物，活检示尿路上皮癌。"},
+            {
+                "heading": "现病史",
+                "body": "患者1月前出现无痛性肉眼血尿，膀胱镜示三角区菜花样肿物，活检示尿路上皮癌。",
+            },
         ],
         "labs_json": [],
         "medications_json": ["吉西他滨 1000mg/m\u00b2", "卡铂 AUC5"],
         "tags_json": ["膀胱癌", "III期", "化疗"],
-        "summary": "患者刘志强，61岁男性，无痛性肉眼血尿1月。膀胱镜活检确诊膀胱尿路上皮癌III期(T2N0M0)，行GC方案新辅助化疗。",
+        "summary": (
+            "患者刘志强，61岁男性，无痛性肉眼血尿1月。膀胱镜活检确诊膀胱尿路上皮癌III期("
+            "T2N0M0)，行GC方案新辅助化疗。"
+        ),
     },
     {
         "id": "RPT-P0006-01",
@@ -381,12 +548,21 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "小细胞肺癌 广泛期 (T4N3M1)",
         "narrative_json": [
             {"heading": "主诉", "body": "声嘶伴颈部淋巴结肿大20天"},
-            {"heading": "现病史", "body": "患者20天前声音嘶哑，发现右颈部包块。EBUS-TBNA确诊小细胞肺癌，骨扫描示多发骨转移。"},
+            {
+                "heading": "现病史",
+                "body": (
+                    "患者20天前声音嘶哑，发现右颈部包块。EBUS-TBNA确诊小细胞肺癌，"
+                    "骨扫描示多发骨转移。"
+                ),
+            },
         ],
         "labs_json": [],
         "medications_json": ["依托泊苷 100mg/m\u00b2", "顺铂 75mg/m\u00b2", "阿替利珠单抗 1200mg"],
         "tags_json": ["小细胞肺癌", "广泛期", "化疗"],
-        "summary": "患者孙桂英，73岁女性，声嘶伴颈部淋巴结肿大20天。EBUS-TBNA确诊小细胞肺癌广泛期(T4N3M1)，行EP方案+免疫治疗。",
+        "summary": (
+            "患者孙桂英，73岁女性，声嘶伴颈部淋巴结肿大20天。EBUS-TBNA确诊小细胞肺癌广泛期("
+            "T4N3M1)，行EP方案+免疫治疗。"
+        ),
     },
     {
         "id": "RPT-P0007-01",
@@ -402,12 +578,18 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "肝细胞癌 IIIB期 (T4N0M0)",
         "narrative_json": [
             {"heading": "主诉", "body": "乙肝肝硬化随访发现肝占位"},
-            {"heading": "现病史", "body": "常规随访增强MRI示右肝S7段活性病灶，TACE术+靶免联合治疗启动。"},
+            {
+                "heading": "现病史",
+                "body": "常规随访增强MRI示右肝S7段活性病灶，TACE术+靶免联合治疗启动。",
+            },
         ],
         "labs_json": [],
         "medications_json": ["阿替利珠单抗 1200mg", "贝伐珠单抗 7.5mg/kg", "恩替卡韦 0.5mg qd"],
         "tags_json": ["肝癌", "IIIB期", "靶向"],
-        "summary": "患者周涛，49岁男性，乙肝肝硬化12年，随访发现肝占位。确诊肝细胞癌IIIB期(T4N0M0)，TACE+靶免联合治疗。",
+        "summary": (
+            "患者周涛，49岁男性，乙肝肝硬化12年，随访发现肝占位。"
+            "确诊肝细胞癌IIIB期(T4N0M0)，TACE+靶免联合治疗。"
+        ),
     },
     {
         "id": "RPT-P0008-01",
@@ -423,12 +605,21 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "卵巢高级别浆液性癌 IIIC期",
         "narrative_json": [
             {"heading": "主诉", "body": "腹胀伴腹腔积液2周"},
-            {"heading": "现病史", "body": "患者2周前腹胀进行性加重，超声示大量腹水。腹腔镜活检示高级别浆液性癌，BRCA1突变。"},
+            {
+                "heading": "现病史",
+                "body": (
+                    "患者2周前腹胀进行性加重，超声示大量腹水。腹腔镜活检示高级别浆液性癌，"
+                    "BRCA1突变。"
+                ),
+            },
         ],
         "labs_json": [],
         "medications_json": ["紫杉醇 175mg/m\u00b2", "卡铂 AUC5"],
         "tags_json": ["卵巢癌", "IIIC期", "化疗"],
-        "summary": "患者吴丽娟，38岁女性，腹胀伴腹腔积液2周。腹腔镜活检确诊卵巢高级别浆液性癌IIIC期，BRCA1胚系突变，行TC方案新辅助化疗。",
+        "summary": (
+            "患者吴丽娟，38岁女性，腹胀伴腹腔积液2周。腹腔镜活检确诊卵巢高级别浆液性癌IIIC期，"
+            "BRCA1胚系突变，行TC方案新辅助化疗。"
+        ),
     },
     {
         "id": "RPT-P0009-01",
@@ -444,12 +635,18 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "结直肠腺癌 IV期 (T4N2M1)",
         "narrative_json": [
             {"heading": "主诉", "body": "便血伴排便习惯改变3月"},
-            {"heading": "现病史", "body": "患者3月前便血，大便变细。肠镜示乙状结肠环周狭窄，肝内多发转移。"},
+            {
+                "heading": "现病史",
+                "body": "患者3月前便血，大便变细。肠镜示乙状结肠环周狭窄，肝内多发转移。",
+            },
         ],
         "labs_json": [],
         "medications_json": ["FOLFOX方案", "贝伐珠单抗 5mg/kg", "二甲双胍 0.5g bid"],
         "tags_json": ["结直肠癌", "IV期", "靶向"],
-        "summary": "患者郑国栋，70岁男性，便血伴排便习惯改变3月。肠镜确诊结直肠腺癌IV期(T4N2M1)，行FOLFOX+贝伐珠单抗方案。",
+        "summary": (
+            "患者郑国栋，70岁男性，便血伴排便习惯改变3月。肠镜确诊结直肠腺癌IV期("
+            "T4N2M1)，行FOLFOX+贝伐珠单抗方案。"
+        ),
     },
     {
         "id": "RPT-P0010-01",
@@ -465,12 +662,19 @@ _REPORT_SEEDS: list[dict[str, Any]] = [
         "diagnosis": "三阴性乳腺癌 IIB期 (T2N1M0)",
         "narrative_json": [
             {"heading": "主诉", "body": "右乳肿块术后1月返院"},
-            {"heading": "现病史", "body": "患者1月前右乳根治术，病理三阴性，腋窝淋巴结2/17转移。术后辅助化疗第1周期完成。"},
+            {
+                "heading": "现病史",
+                "body": (
+                    "患者1月前右乳根治术，病理三阴性，腋窝淋巴结2/17转移。术后辅助化疗第1周期完成。"
+                ),
+            },
         ],
         "labs_json": [],
         "medications_json": ["多柔比星脂质体 40mg/m\u00b2", "环磷酰胺 600mg/m\u00b2"],
         "tags_json": ["乳腺癌", "IIB期", "化疗"],
-        "summary": "患者冯晓梅，56岁女性，右乳根治术后1月返院。病理三阴性乳腺癌IIB期(T2N1M0)，行辅助化疗。",
+        "summary": (
+            "患者冯晓梅，56岁女性，右乳根治术后1月返院。病理三阴性乳腺癌IIB期(T2N1M0)，行辅助化疗。"
+        ),
     },
     # ── 额外几条处于不同状态的报告（模拟处理队列）──
     {

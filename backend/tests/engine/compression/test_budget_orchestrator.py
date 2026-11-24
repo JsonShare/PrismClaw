@@ -7,6 +7,7 @@
 4. BudgetDecision.to_metadata_dict：序列化格式稳定
 5. truncate_context_block_for_overflow：working_dir 可用时持久化，不可用时 drop
 """
+
 from __future__ import annotations
 
 from prismclaw.engine.compression.budget_orchestrator import (
@@ -28,6 +29,7 @@ def _make_block(
     priority: str = "medium",
     replaceable: bool = True,
     zone: str = "dynamic",
+    metadata: dict | None = None,
 ) -> ContextBlock:
     """构造测试用 ContextBlock。priority 仅接受 critical/high/medium/low。"""
     return ContextBlock(
@@ -38,6 +40,7 @@ def _make_block(
         priority=priority,
         replaceable=replaceable,
         zone=zone,
+        metadata=metadata or {},
     )
 
 
@@ -58,8 +61,14 @@ def test_budget_decision_to_metadata_dict_keys():
     )
     metadata = decision.to_metadata_dict()
     assert set(metadata.keys()) == {
-        "stage", "action", "reason", "zone",
-        "block_id", "source", "before_tokens", "after_tokens",
+        "stage",
+        "action",
+        "reason",
+        "zone",
+        "block_id",
+        "source",
+        "before_tokens",
+        "after_tokens",
     }
     assert metadata["stage"] == "select"
     assert metadata["action"] == "drop"
@@ -71,14 +80,24 @@ def test_budget_audit_trail_round_trip():
     """BudgetAuditTrail.from_decisions → to_metadata_dict → from_metadata 往返。"""
     decisions = [
         BudgetDecision(
-            stage="select", action="drop", reason="remove_for_budget",
-            zone="dynamic", block_id="b1", source="s1",
-            before_tokens=100, after_tokens=0,
+            stage="select",
+            action="drop",
+            reason="remove_for_budget",
+            zone="dynamic",
+            block_id="b1",
+            source="s1",
+            before_tokens=100,
+            after_tokens=0,
         ),
         BudgetDecision(
-            stage="truncate", action="truncate", reason="truncate_for_budget",
-            zone="system", block_id="b2", source="s2",
-            before_tokens=200, after_tokens=50,
+            stage="truncate",
+            action="truncate",
+            reason="truncate_for_budget",
+            zone="system",
+            block_id="b2",
+            source="s2",
+            before_tokens=200,
+            after_tokens=50,
         ),
     ]
     trail = BudgetAuditTrail.from_decisions(decisions)
@@ -103,7 +122,9 @@ def test_select_non_static_blocks_within_budget():
     ]
     orchestrator = BudgetOrchestrator()
     selected, decisions = orchestrator.select_non_static_blocks(
-        blocks, budget=1000, task_profile=None,
+        blocks,
+        budget=1000,
+        task_profile=None,
     )
     assert len(selected) == 2
     # 预算内不应有 drop
@@ -112,15 +133,26 @@ def test_select_non_static_blocks_within_budget():
 
 
 def test_select_non_static_blocks_over_budget_skips_lowest_priority():
-    """超预算 → 通过 skip 决策舍弃低优先级 block（action='skip', reason='skip_lower_value_block'）。"""
+    """超预算 → 通过 skip 决策舍弃低优先级 block。
+
+    期望 action='skip'、reason='skip_lower_value_block'。
+    """
     blocks = [
-        _make_block("b1", "memory_archives", "c1", estimated_tokens=500, priority="high", replaceable=False),
-        _make_block("b2", "memory_procedures", "c2", estimated_tokens=500, priority="low", replaceable=True),
-        _make_block("b3", "runtime_context", "c3", estimated_tokens=500, priority="medium", replaceable=True),
+        _make_block(
+            "b1", "memory_archives", "c1", estimated_tokens=500, priority="high", replaceable=False
+        ),
+        _make_block(
+            "b2", "memory_procedures", "c2", estimated_tokens=500, priority="low", replaceable=True
+        ),
+        _make_block(
+            "b3", "runtime_context", "c3", estimated_tokens=500, priority="medium", replaceable=True
+        ),
     ]
     orchestrator = BudgetOrchestrator()
     selected, decisions = orchestrator.select_non_static_blocks(
-        blocks, budget=600, task_profile=None,
+        blocks,
+        budget=600,
+        task_profile=None,
     )
     # 至少 skip 一个（action="skip"，非 "drop"）
     skip_actions = [d for d in decisions if d.action == "skip"]
@@ -158,8 +190,12 @@ def test_history_compaction_assessment_audit_trail_property():
     """HistoryCompactionAssessment.audit_trail 从 decisions 构造。"""
     decisions = (
         BudgetDecision(
-            stage="assess", action="keep", reason="within-budget",
-            zone="history", before_tokens=5000, after_tokens=5000,
+            stage="assess",
+            action="keep",
+            reason="within-budget",
+            zone="history",
+            before_tokens=5000,
+            after_tokens=5000,
         ),
     )
     assessment = HistoryCompactionAssessment(
@@ -200,13 +236,46 @@ class _FakePorts:
 
 
 def _frozen_zone_blocks() -> list[ContextBlock]:
-    """复刻真实冻结区：l1_snapshot 已移出，catalogs 为技能/子代理的唯一索引块。"""
+    """复刻真实冻结区：l1_snapshot 已移出，catalogs 为技能/子代理的唯一索引块。
+
+    evict_rank 与 ``system_prompt._section`` 保持同源，测试不另立口径。
+    """
     return [
-        _make_block("role", "role", "你是 PrismClaw。" * 5, estimated_tokens=35, priority="critical"),
-        _make_block("bootstrap", "bootstrap", "b" * 4000, estimated_tokens=1000, priority="high"),
-        _make_block("tools", "tools", "t" * 3180, estimated_tokens=796, priority="high"),
-        _make_block("catalogs", "catalogs", "c" * 10240, estimated_tokens=2561, priority="high"),
-        _make_block("workspace", "workspace", "w" * 214, estimated_tokens=54, priority="high"),
+        _make_block(
+            "role", "role", "你是 PrismClaw。" * 5, estimated_tokens=35, priority="critical"
+        ),
+        _make_block(
+            "bootstrap",
+            "bootstrap",
+            "b" * 4000,
+            estimated_tokens=1000,
+            priority="high",
+            metadata={"evict_rank": 0},
+        ),
+        _make_block(
+            "tools",
+            "tools",
+            "t" * 3180,
+            estimated_tokens=796,
+            priority="high",
+            metadata={"evict_rank": 3},
+        ),
+        _make_block(
+            "catalogs",
+            "catalogs",
+            "c" * 10240,
+            estimated_tokens=2561,
+            priority="high",
+            metadata={"evict_rank": 2},
+        ),
+        _make_block(
+            "workspace",
+            "workspace",
+            "w" * 214,
+            estimated_tokens=54,
+            priority="high",
+            metadata={"evict_rank": 1},
+        ),
     ]
 
 
@@ -233,22 +302,19 @@ def test_system_zone_over_budget_keeps_discovery_surface():
     assert persisted.get("bootstrap") is True
 
 
-def test_truncation_priority_matches_real_sections():
-    """裁剪顺序表必须与真实冻结段名双向一致。
+def test_evict_rank_covers_all_truncatable_static_sections():
+    """静态段自带 evict_rank，且可裁剪段全部登记。
 
-    回归背景：段合并把 subagents/packages/skills 合成 catalogs 后，旧名字全部
-    失效而新名字未登记。未登记的名字不报错，会落进兜底名次（列表长度）——
-    升序排序中即最大值，被排到"最不该撤"的末位。实测后果是 catalogs 被过度保护，
-    workspace（路径契约）与 tools（工具面）反先被撤。本测试同时拦截
-    "表内有多余名"与"可裁剪段有遗漏"。
+    回归背景：旧实现靠跨层字符串名单 + 兜底名次，段名漂移会让某段被过度保护。
+    现在顺序由段启身的 metadata 决定，因此判据变成：可裁剪段必须有 evict_rank，
+    且 tools 最后撤（rank 最大）、bootstrap 最先撤（rank 最小）。
     """
-    from prismclaw.engine.compression.budget_orchestrator import (
-        SYSTEM_TRUNCATION_PRIORITY,
-    )
-    from prismclaw.engine.execution.request.system_prompt import (
+    from prismclaw.engine.execution.request._prompt_types import (
         AvailableSubagentEntry,
         MarketplaceSummary,
         PromptInputs,
+    )
+    from prismclaw.engine.execution.request.system_prompt import (
         build_frozen_prompt_sections,
     )
 
@@ -270,11 +336,36 @@ def test_truncation_priority_matches_real_sections():
     )
     sections = build_frozen_prompt_sections(inputs, bootstrap="<bootstrap>x</bootstrap>")
 
-    unknown = set(SYSTEM_TRUNCATION_PRIORITY) - {s.name for s in sections}
-    assert not unknown, f"裁剪顺序表含不存在的段名: {unknown}"
+    ranks = {s.name: s.metadata.get("evict_rank") for s in sections if s.truncatable}
+    assert all(rank is not None for rank in ranks.values()), f"可裁剪段缺 evict_rank: {ranks}"
+    assert ranks["bootstrap"] == 0
+    assert ranks["workspace"] == 1
+    assert ranks["catalogs"] == 2
+    assert ranks["tools"] == 3
+    assert ranks["tools"] == max(ranks.values())
 
-    missing = {s.name for s in sections if s.truncatable} - set(SYSTEM_TRUNCATION_PRIORITY)
-    assert not missing, f"可裁剪段未登记裁剪顺序: {missing}"
+
+def test_static_truncation_follows_evict_rank():
+    """静态池超预算：evict_rank 小的先撤（bootstrap 先于 tools 被持久化）。
+
+    与旧常量名单的关键差异：排序依据来自块自身 metadata，改动段构造即生效，
+    不需要同步维护第二个名单。
+    """
+    blocks = [
+        _make_block("t", "tools", "t" * 4000, estimated_tokens=1000, metadata={"evict_rank": 3}),
+        _make_block(
+            "b", "bootstrap", "b" * 4000, estimated_tokens=1000, metadata={"evict_rank": 0}
+        ),
+    ]
+    orchestrator = BudgetOrchestrator(working_dir="/tmp/unused", ports=_FakePorts())
+    result = orchestrator.apply_context_layout_budgets(
+        ContextPackLayout(static_blocks=blocks),
+        system_budget=1000,
+        dynamic_budget=0,
+        result_budget=0,
+    )
+    truncated_order = [d.source for d in result.audit_trail.decisions if d.action == "truncate"]
+    assert truncated_order == ["bootstrap", "tools"]
 
 
 def test_dynamic_zone_drops_l1_snapshot_first():

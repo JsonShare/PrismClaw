@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TokenSnapshot:
     """Token usage snapshot from a single API call."""
+
     input_tokens: int = 0
     output_tokens: int = 0
     cache_creation_tokens: int = 0
@@ -55,6 +56,7 @@ class TokenSnapshot:
 @dataclass
 class CumulativeTokenMetrics:
     """Cumulative token metrics across multiple API calls."""
+
     total_input: int = 0
     total_output: int = 0
     total_cache_creation: int = 0
@@ -80,7 +82,9 @@ class CumulativeTokenMetrics:
     @property
     def total_tokens(self) -> int:
         """Total tokens consumed."""
-        return self.total_input + self.total_output + self.total_cache_creation + self.total_cache_read
+        return (
+            self.total_input + self.total_output + self.total_cache_creation + self.total_cache_read
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -94,7 +98,7 @@ class CumulativeTokenMetrics:
         }
 
 
-def extract_token_snapshot(usage: Any) -> TokenSnapshot:
+def extract_token_snapshot(usage: object) -> TokenSnapshot:
     """Extract a TokenSnapshot from an API response usage object.
 
     Supports:
@@ -143,7 +147,7 @@ def _extract_from_dict(usage: dict[str, Any]) -> TokenSnapshot:
     )
 
 
-def _extract_from_object(usage: Any) -> TokenSnapshot:
+def _extract_from_object(usage: object) -> TokenSnapshot:
     """Extract from a dataclass or object with attributes."""
     return TokenSnapshot(
         input_tokens=_coerce_int(getattr(usage, "input_tokens", 0)),
@@ -165,8 +169,10 @@ def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
     return max(1, count_messages(messages))
 
 
-def _coerce_int(value: Any) -> int:
+def _coerce_int(value: object) -> int:
     """Safely coerce to non-negative int."""
+    if not isinstance(value, int | float | str):
+        return 0
     try:
         return max(0, int(value))
     except (TypeError, ValueError):

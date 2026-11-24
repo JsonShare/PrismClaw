@@ -18,11 +18,11 @@ def _block_from_text(
 ) -> ContextBlock:
     return ContextBlock(
         id=block_id or name,
-        zone=zone,  # type: ignore[arg-type]
+        zone=zone,
         source=name,
         content=text,
-        stability=(stability or ("stable" if zone == "static" else "volatile")),  # type: ignore[arg-type]
-        priority=priority,  # type: ignore[arg-type]
+        stability=(stability or ("stable" if zone == "static" else "volatile")),
+        priority=priority,
         cacheable=cacheable,
         truncatable=truncatable,
         replaceable=replaceable,

@@ -21,9 +21,9 @@ from pathlib import Path
 
 from PIL import Image
 
-_MAX_LONG_EDGE = 2048              # Qwen3-VL 有效分辨率上限（默认 max_pixels）
+_MAX_LONG_EDGE = 2048  # Qwen3-VL 有效分辨率上限（默认 max_pixels）
 _HARD_MAX_FILE_SIZE = 100_000_000  # 100MB，纯防 OOM
-_COMPRESS_THRESHOLD = 5_000_000    # 5MB 以下不压缩（OCR 质量优先）
+_COMPRESS_THRESHOLD = 5_000_000  # 5MB 以下不压缩（OCR 质量优先）
 
 # 从 read_image.py 迁移：小图保留原格式需要 mime 映射
 _MIME_MAP: dict[str, str] = {
@@ -66,17 +66,18 @@ def compress_for_vision(path: Path) -> tuple[bytes, str]:
     if size < _COMPRESS_THRESHOLD:
         return path.read_bytes(), _mime_for(ext)
     img = Image.open(path)
-    if max(img.size) > _MAX_LONG_EDGE:
-        ratio = _MAX_LONG_EDGE / max(img.size)
-        img = img.resize(
-            (int(img.width * ratio), int(img.height * ratio)),
+    working: Image.Image = img
+    if max(working.size) > _MAX_LONG_EDGE:
+        ratio = _MAX_LONG_EDGE / max(working.size)
+        working = working.resize(
+            (int(working.width * ratio), int(working.height * ratio)),
             Image.Resampling.LANCZOS,
         )
     # RGBA/P/LA 等带透明通道或调色板模式无法直接存 JPEG，需转 RGB。
-    if img.mode in ("RGBA", "P", "LA"):
-        img = img.convert("RGB")
+    if working.mode in ("RGBA", "P", "LA"):
+        working = working.convert("RGB")
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85, optimize=True)
+    working.save(buf, format="JPEG", quality=85, optimize=True)
     return buf.getvalue(), "image/jpeg"
 
 
@@ -92,14 +93,15 @@ def compress_for_vision_bytes(img_data: bytes, ext: str = "") -> tuple[bytes, st
     if size < _COMPRESS_THRESHOLD:
         return img_data, _mime_for(ext)
     img = Image.open(io.BytesIO(img_data))
-    if max(img.size) > _MAX_LONG_EDGE:
-        ratio = _MAX_LONG_EDGE / max(img.size)
-        img = img.resize(
-            (int(img.width * ratio), int(img.height * ratio)),
+    working: Image.Image = img
+    if max(working.size) > _MAX_LONG_EDGE:
+        ratio = _MAX_LONG_EDGE / max(working.size)
+        working = working.resize(
+            (int(working.width * ratio), int(working.height * ratio)),
             Image.Resampling.LANCZOS,
         )
-    if img.mode in ("RGBA", "P", "LA"):
-        img = img.convert("RGB")
+    if working.mode in ("RGBA", "P", "LA"):
+        working = working.convert("RGB")
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=85, optimize=True)
+    working.save(buf, format="JPEG", quality=85, optimize=True)
     return buf.getvalue(), "image/jpeg"

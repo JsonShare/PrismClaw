@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from prismclaw.engine.state.state_protocol import render_state_payload_block
-from prismclaw.schema.content.context import ContextBlock
 from prismclaw.schema.content.compaction import CompactionArtifact, parse_compaction_artifact
+from prismclaw.schema.content.context import ContextBlock
 from prismclaw.schema.shared.utils import estimate_tokens
 
 _HISTORY_COMPACTION_PLACEHOLDER_PREFIX = "[projection:history_compaction:"

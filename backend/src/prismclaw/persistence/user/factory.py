@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.schema.storage.storage_types import UserStore
+
+if TYPE_CHECKING:
+    from prismclaw.persistence.user.store import DatabaseUserProfileStore
 
 
 def create_user_store(
@@ -15,6 +18,7 @@ def create_user_store(
     scheme: str = "scrypt",
 ) -> UserStore:
     from prismclaw.persistence.user.postgres import PostgresUserRepository
+
     return PostgresUserRepository(
         session_factory,
         lockout_threshold=lockout_threshold,
@@ -23,7 +27,8 @@ def create_user_store(
     )
 
 
-def create_user_profile_store(user_store: UserStore | Any) -> Any:
+def create_user_profile_store(user_store: UserStore) -> DatabaseUserProfileStore:
     """Create a ``DatabaseUserProfileStore`` wrapping a ``UserStore``."""
     from prismclaw.persistence.user.store import DatabaseUserProfileStore
+
     return DatabaseUserProfileStore(user_store)

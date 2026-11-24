@@ -25,8 +25,9 @@ from __future__ import annotations
 
 import threading
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 MetricLabels = Mapping[str, str]
 
@@ -237,8 +238,7 @@ class _MetricsRegistry:
             self.histogram(name).observe(value, labels)
         else:
             raise ValueError(
-                f"unknown metric kind {kind!r} for {name!r}; "
-                f"expected counter/gauge/histogram"
+                f"unknown metric kind {kind!r} for {name!r}; expected counter/gauge/histogram"
             )
 
     # --- snapshot -----------------------------------------------------

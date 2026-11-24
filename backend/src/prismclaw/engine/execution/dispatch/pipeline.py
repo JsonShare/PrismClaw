@@ -17,29 +17,30 @@ The caller (``run_agent_stream``) retains responsibility for:
 * Budget enforcement
 * Post-response governance (no-tool-turn logic, completion intake)
 """
+
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator
+from typing import Any
 
-from prismclaw.schema.llm.errors import LLMError
-from prismclaw.schema.llm.types import LLMResponse, LLMUsage
+from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
+from prismclaw.engine.execution.loop.housekeeping import _heartbeat_decision, _log_exec_phase
+from prismclaw.engine.execution.loop.runtime import LoopRuntime
+from prismclaw.engine.foundation.metrics import emit
 from prismclaw.engine.foundation.runtime_util import (
-    AgentAbortedError,
-    AgentTimeoutError,
     is_abort_set,
     iterate_with_deadline,
 )
-from prismclaw.schema.llm.tool_call_types import ToolCallBuffer
-from prismclaw.engine.execution.loop.housekeeping import _heartbeat_decision, _log_exec_phase
-from prismclaw.engine.execution.loop.runtime import LoopRuntime
 from prismclaw.engine.trajectory.bus_context import LLMMetricsSnapshot, trajectory_runtime
-from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.content.streaming import ErrorEvent, HeartbeatEvent, ReasoningChunk, TextChunk
-from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
+from prismclaw.schema.llm.errors import LLMError
+from prismclaw.schema.llm.tool_call_types import ToolCallBuffer
+from prismclaw.schema.llm.types import LLMResponse, LLMUsage
 from prismclaw.schema.session.types import generate_entry_id, now_iso
+from prismclaw.schema.shared.exceptions import AgentAbortedError, AgentTimeoutError
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Streaming result dataclass
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LLMStreamResult:
@@ -94,6 +96,7 @@ LLMStreamOutcome = LLMStreamResult | LLMStreamError | LLMStreamRetry | LLMStream
 # Pipeline config (params the caller passes in)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PipelineParams:
     """Parameters needed by ``call_llm_stream`` that are derived from the
@@ -118,9 +121,12 @@ class PipelineParams:
 # final result into, since Python async generators cannot return a value.
 # ---------------------------------------------------------------------------
 
+
 class _OutcomeHolder:
     """Mutable slot for the generator to write its outcome into."""
+
     __slots__ = ("outcome",)
+
     def __init__(self) -> None:
         self.outcome: LLMStreamOutcome | None = None
 
@@ -128,6 +134,7 @@ class _OutcomeHolder:
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 async def call_llm_stream_with_outcome(
     rt: LoopRuntime,
@@ -200,8 +207,7 @@ async def call_llm_stream_with_outcome(
             )
             # 单请求墙钟硬上限 cap_s（预算派生）；cap_s 未设时回退到剩余 run 时间。
             _request_deadline = (
-                params.cap_s if params.cap_s and params.cap_s > 0
-                else (params.remaining_run or 0.0)
+                params.cap_s if params.cap_s and params.cap_s > 0 else (params.remaining_run or 0.0)
             )
             guarded_iter = iterate_with_deadline(
                 stream_iter,
@@ -214,7 +220,9 @@ async def call_llm_stream_with_outcome(
                     _outcome.outcome = LLMStreamError(
                         error_event=ErrorEvent(
                             error_code="timeout",
-                            message=f"run exceeded {params.run_deadline_s}s hard deadline during stream",
+                            message=(
+                                f"run exceeded {params.run_deadline_s}s hard deadline during stream"
+                            ),
                         ),
                     )
                     return
@@ -409,11 +417,16 @@ async def call_llm_stream_with_outcome(
                 # 硬上限，达到即继续下一轮。
                 continue
 
-            from prismclaw.schema.session.types import CustomEntry, TRANSIENT_RETRY_NOTICE_CUSTOM_TYPE
             from prismclaw.engine.execution.loop.tree_writer import _append
+            from prismclaw.schema.session.types import (
+                TRANSIENT_RETRY_NOTICE_CUSTOM_TYPE,
+                CustomEntry,
+            )
 
             if exc.code in ("timeout", "rate_limit", "server_error", "connection_error"):
-                logger.warning("LLM API transient error (%s): %s. Attempting to retry.", exc.code, str(exc))
+                logger.warning(
+                    "LLM API transient error (%s): %s. Attempting to retry.", exc.code, str(exc)
+                )
                 if len(tree.order) > 3:
                     retry_note = CustomEntry(
                         id=generate_entry_id(set(tree.entries.keys())),
@@ -471,6 +484,7 @@ async def call_llm_stream_with_outcome(
 #     on the success path.
 # ---------------------------------------------------------------------------
 
+
 async def _publish_llm_response(
     *,
     session_id: str,
@@ -497,7 +511,7 @@ async def _publish_llm_response(
         _bus_resp = current_bus()
         if _bus_resp is None or _bus_resp._is_noop:
             return
- # derive content previews at the publish boundary so
+        # derive content previews at the publish boundary so
         # downstream subscribers (projection → persistence → API → UI)
         # receive ready-to-store strings, not raw response objects.
         _assistant_preview: str | None = None
@@ -508,11 +522,14 @@ async def _publish_llm_response(
         _tool_calls_summary: tuple[str, ...] = ()
         if tool_calls:
             import json as _tc_json
+
             _summaries: list[str] = []
             for _tc in tool_calls:
                 try:
                     _tc_name = str(_tc.get("name") or _tc.get("function", {}).get("name") or "?")
-                    _tc_args = _tc.get("arguments") or _tc.get("function", {}).get("arguments") or {}
+                    _tc_args = (
+                        _tc.get("arguments") or _tc.get("function", {}).get("arguments") or {}
+                    )
                     if isinstance(_tc_args, str):
                         _tc_args_str = _tc_args
                     else:
@@ -521,23 +538,25 @@ async def _publish_llm_response(
                 except Exception:
                     _summaries.append("?")
             _tool_calls_summary = tuple(_summaries)
-        _bus_resp.publish(LLMResponseReceived(
-            session_id=session_id,
-            turn_counter=turn_counter,
-            iteration=iteration,
-            model=metrics.model or "",
-            finish_reason=metrics.finish_reason,
-            usage_input_tokens=metrics.usage_input_tokens,
-            usage_output_tokens=metrics.usage_output_tokens,
-            usage_cache_read_tokens=metrics.usage_cache_read_tokens,
-            usage_cache_write_tokens=metrics.usage_cache_write_tokens,
-            usage_reasoning_tokens=metrics.usage_reasoning_tokens,
-            ttft_ms=metrics.ttft_ms,
-            total_ms=metrics.total_ms,
-            completed_at_ms=metrics.completed_at_ms,
-            assistant_text_preview=_assistant_preview,
-            tool_calls_summary=_tool_calls_summary,
-        ))
+        _bus_resp.publish(
+            LLMResponseReceived(
+                session_id=session_id,
+                turn_counter=turn_counter,
+                iteration=iteration,
+                model=metrics.model or "",
+                finish_reason=metrics.finish_reason,
+                usage_input_tokens=metrics.usage_input_tokens,
+                usage_output_tokens=metrics.usage_output_tokens,
+                usage_cache_read_tokens=metrics.usage_cache_read_tokens,
+                usage_cache_write_tokens=metrics.usage_cache_write_tokens,
+                usage_reasoning_tokens=metrics.usage_reasoning_tokens,
+                ttft_ms=metrics.ttft_ms,
+                total_ms=metrics.total_ms,
+                completed_at_ms=metrics.completed_at_ms,
+                assistant_text_preview=_assistant_preview,
+                tool_calls_summary=_tool_calls_summary,
+            )
+        )
     except Exception:
         logger.debug("audit publish failed", exc_info=True)
 
@@ -567,10 +586,12 @@ async def _publish_llm_failure(
     """
     try:
         import time as _traj_t5
+
         # 结构化 logger.warning, 统一 3 个失败分支的日志格式
         _ttft_str = (
             f"{((first_token_at - llm_start) * 1000.0):.0f}"
-            if first_token_at is not None else "none"
+            if first_token_at is not None
+            else "none"
         )
         logger.warning(
             "llm_request_failed session_id=%s iteration=%d "
@@ -584,23 +605,23 @@ async def _publish_llm_failure(
         )
         from prismclaw.engine.trajectory.bus import current_bus
         from prismclaw.engine.trajectory.bus_events import LLMRequestFailed
+
         _bus_fail = current_bus()
         if _bus_fail is None or _bus_fail._is_noop:
             return
-        _ttft_val = (
-            (first_token_at - llm_start) * 1000.0
-            if first_token_at is not None else None
+        _ttft_val = (first_token_at - llm_start) * 1000.0 if first_token_at is not None else None
+        _bus_fail.publish(
+            LLMRequestFailed(
+                session_id=session_id,
+                turn_counter=turn_counter,
+                iteration=iteration,
+                model=model,
+                error_code=error_code,
+                error_message=error_message,
+                ttft_ms=_ttft_val,
+                total_ms=(time.monotonic() - llm_start) * 1000.0,
+                failed_at_ms=int(_traj_t5.time() * 1000),
+            )
         )
-        _bus_fail.publish(LLMRequestFailed(
-            session_id=session_id,
-            turn_counter=turn_counter,
-            iteration=iteration,
-            model=model,
-            error_code=error_code,
-            error_message=error_message,
-            ttft_ms=_ttft_val,
-            total_ms=(time.monotonic() - llm_start) * 1000.0,
-            failed_at_ms=int(_traj_t5.time() * 1000),
-        ))
     except Exception:
         logger.debug("audit publish failed", exc_info=True)

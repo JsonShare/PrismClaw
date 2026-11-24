@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from litellm import aembedding
+
+if TYPE_CHECKING:
+    from litellm.types.utils import EmbeddingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +52,7 @@ class EmbeddingClient:
         self._embed_cache: dict[str, list[float]] = {}
         self._embed_cache_cap = max(0, int(cache_size))
 
-    async def _request(self, texts: list[str]):
+    async def _request(self, texts: list[str]) -> EmbeddingResponse:
         """带硬超时的 embedding 请求：外层 asyncio.wait_for 是权威上界，
         即使 litellm 内部重试也不会超过 timeout_s。"""
         return await asyncio.wait_for(

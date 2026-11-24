@@ -1,16 +1,20 @@
 """todo_write tool — manage task checklist in session memory."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
-from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.agent.session import TodoItem
+from prismclaw.schema.content.content_types import ToolResult
 
 
 class TodoWriteTool:
     name = "todo_write"
-    description = "更新任务清单，每次调用都会整体替换列表。条目包含 id、content 和 status（pending/in_progress/completed）。"
+    description = (
+        "更新任务清单，每次调用都会整体替换列表。条目包含 "
+        "id、content 和 status（pending/in_progress/completed）。"
+    )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -22,7 +26,11 @@ class TodoWriteTool:
                     "properties": {
                         "id": {"type": "string", "description": "唯一标识"},
                         "content": {"type": "string", "description": "任务描述"},
-                        "status": {"type": "string", "description": "pending、in_progress 或 completed", "enum": ["pending", "in_progress", "completed"]},
+                        "status": {
+                            "type": "string",
+                            "description": "pending、in_progress 或 completed",
+                            "enum": ["pending", "in_progress", "completed"],
+                        },
                     },
                     "required": ["id", "content", "status"],
                     "additionalProperties": False,
@@ -71,7 +79,10 @@ class TodoWriteTool:
         pending_count = sum(1 for t in todo_items if t.status == "pending")
         in_progress_count = len(in_progress_items)
 
-        text = f"todo_write：已更新 {len(todo_items)} 项（{pending_count} 项待处理，{in_progress_count} 项进行中）"
+        text = (
+            f"todo_write：已更新 {len(todo_items)} 项（{pending_count} "
+            f"项待处理，{in_progress_count} 项进行中）"
+        )
         if in_progress_items:
             current = in_progress_items[0]
             text += f"；当前步骤：{current.id} {current.content}"

@@ -52,7 +52,7 @@ def persist_context_block(
     source: str,
     content: str,
     reason: str,
-    working_dir: str | Path,
+    working_dir: str | Path | None,
 ) -> str | None:
     """Persist a context block to disk and return the inline reference text.
 

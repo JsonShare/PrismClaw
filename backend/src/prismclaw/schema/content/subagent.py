@@ -13,11 +13,11 @@ class EvidenceRef(BaseModel):
     各域模块通过 EvidenceInferencer 注册表填充，核心不包含域逻辑。
     """
 
-    source_type: str = ""          # "file" | "web" | "tool_output" | "reasoning"
-    source_path: str = ""          # 文件路径 / URL / 工具调用 ID
-    source_location: str = ""      # 行号 / 段落 / 锚点
-    quoted_text: str = ""          # 原始证据的精确引用（防止改写失真）
-    confidence: str = "high"       # "high" | "medium" | "low" | "unverified"
+    source_type: str = ""  # "file" | "web" | "tool_output" | "reasoning"
+    source_path: str = ""  # 文件路径 / URL / 工具调用 ID
+    source_location: str = ""  # 行号 / 段落 / 锚点
+    quoted_text: str = ""  # 原始证据的精确引用（防止改写失真）
+    confidence: str = "high"  # "high" | "medium" | "low" | "unverified"
 
     # 领域扩展——由各域 EvidenceInferencer 自动填充
     # key 格式: "{domain}.{field}"，值均为字符串

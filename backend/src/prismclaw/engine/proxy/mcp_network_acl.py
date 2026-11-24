@@ -5,6 +5,7 @@
   - 用户 server.yaml 改了也不生效，必须 Registry 管理员改
   - 支持 per-server 域名白名单 + 全局默认策略
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -78,7 +79,9 @@ class McpNetworkAcl:
             domains = self._server_domains.get(server_name)
             if domains is None:
                 # 未注册 server → Fail-Closed
-                logger.warning("McpNetworkAcl: unregistered server=%s host=%s → DENIED", server_name, host)
+                logger.warning(
+                    "McpNetworkAcl: unregistered server=%s host=%s → DENIED", server_name, host
+                )
                 return False
             for pattern in domains:
                 if fnmatch.fnmatch(host.lower(), pattern.lower()):

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 # ── hooks ──────────────────────────────────────────────────────────────────
 from .hooks import (
+    DEFAULT_HOOK_TIMEOUT,
     CallbackHookHandler,
     CircuitBreakerConfig,
     CircuitState,
-    DEFAULT_HOOK_TIMEOUT,
     HookCircuitBreaker,
     HookCircuitBreakerManager,
     HookContext,
@@ -132,8 +132,8 @@ from .registry import (
 
 # ── trust ──────────────────────────────────────────────────────────────────
 from .trust import (
-    TRUSTED,
     TRUST_HIERARCHY,
+    TRUSTED,
     UNTRUSTED,
     VERIFIED,
     PluginSandbox,

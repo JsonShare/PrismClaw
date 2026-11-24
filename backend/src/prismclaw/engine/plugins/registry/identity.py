@@ -2,6 +2,7 @@
 
 PluginID = "{name}@{source}"，source ∈ builtin | marketplace | session | local
 """
+
 from __future__ import annotations
 
 import re
@@ -59,7 +60,7 @@ class PluginID:
             raise ValueError(f"Invalid plugin source: {self.source!r}")
 
     @classmethod
-    def parse(cls, plugin_id: str) -> "PluginID":
+    def parse(cls, plugin_id: str) -> PluginID:
         name, source = parse_plugin_identifier(plugin_id)
         return cls(name=name, source=source)
 
@@ -79,7 +80,7 @@ class PluginID:
         """
         return _SOURCE_PRIORITY.get(self.source, 0)
 
-    def __lt__(self, other: "PluginID") -> bool:
+    def __lt__(self, other: PluginID) -> bool:
         if not isinstance(other, PluginID):
             return NotImplemented
         return (self.priority_rank, self.name, self.source) < (

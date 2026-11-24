@@ -151,15 +151,32 @@ class PluginSandbox:
         }
 
 
-def create_plugin_sandbox(plugin_root: str, **kwargs: Any) -> PluginSandbox:
+def create_plugin_sandbox(
+    plugin_root: str,
+    *,
+    allowed_paths: list[str] | None = None,
+    blocked_paths: list[str] | None = None,
+    blocked_commands: list[str] | None = None,
+    network_access: bool = False,
+    max_memory_mb: int = 256,
+    timeout_seconds: float = 30.0,
+) -> PluginSandbox:
     """创建 Plugin 沙箱实例。
 
     Args:
         plugin_root: Plugin 根目录路径
-        **kwargs: 可选的 SandboxPolicy 覆盖参数
+        其余关键字参数为 SandboxPolicy 覆盖项，未显式传入时取策略默认值。
 
     Returns:
         PluginSandbox 实例
     """
-    policy = PluginSandboxPolicy(plugin_root=plugin_root, **kwargs)
+    policy = PluginSandboxPolicy(
+        plugin_root=plugin_root,
+        allowed_paths=allowed_paths or [],
+        blocked_paths=blocked_paths or [],
+        blocked_commands=blocked_commands or [],
+        network_access=network_access,
+        max_memory_mb=max_memory_mb,
+        timeout_seconds=timeout_seconds,
+    )
     return PluginSandbox(policy)

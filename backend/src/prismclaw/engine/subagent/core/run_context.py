@@ -7,7 +7,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from prismclaw.engine.execution.checkpoint.models import CommitState, ToolEffectRecord
 from prismclaw.engine.execution.output.tool_result_rendering import (
@@ -25,6 +25,9 @@ from prismclaw.schema.session.types import (
     SessionTree,
     generate_entry_id,
 )
+
+if TYPE_CHECKING:
+    from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 
 
 class SubagentRunInterruptedError(RuntimeError):
@@ -72,9 +75,7 @@ class SubagentRunContext:
         message_ids = [self._message_id(entry) for entry in pending]
         self._injected_message_ids.update(message_ids)
         self._pending_ack_ids.extend(
-            message_id
-            for message_id in message_ids
-            if message_id not in self._pending_ack_ids
+            message_id for message_id in message_ids if message_id not in self._pending_ack_ids
         )
         return [dict(message) for message in self.persistence.rebuild_model_messages()]
 
@@ -136,15 +137,13 @@ class SubagentRunContext:
         )
         acknowledged = set(ack_ids)
         self._pending_ack_ids = [
-            message_id
-            for message_id in self._pending_ack_ids
-            if message_id not in acknowledged
+            message_id for message_id in self._pending_ack_ids if message_id not in acknowledged
         ]
 
     async def before_tool_dispatch(
         self,
         tool_calls: list[dict[str, Any]],
-        tool_registry: Any,
+        tool_registry: ToolRegistry,
     ) -> None:
         for call in tool_calls:
             await self.ensure_active()
@@ -153,9 +152,7 @@ class SubagentRunContext:
             tool_name = str(function.get("name") or "unknown")
             tool = tool_registry.get(tool_name) if tool_name else None
             effect_class = (
-                resolve_tool_effect_class(tool)
-                if tool is not None
-                else EffectClass.UNKNOWN_EFFECT
+                resolve_tool_effect_class(tool) if tool is not None else EffectClass.UNKNOWN_EFFECT
             )
             record = ToolEffectRecord(
                 tool_call_id=call_id,
@@ -253,11 +250,7 @@ class SubagentRunContext:
             raise SubagentCommitUnknownError(self.recovery_blocked_reason) from exc
 
     def start_heartbeat(self) -> None:
-        if (
-            self.lease is None
-            or self.lease_store is None
-            or self._heartbeat_task is not None
-        ):
+        if self.lease is None or self.lease_store is None or self._heartbeat_task is not None:
             return
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
@@ -322,7 +315,7 @@ def _now_epoch_ms() -> int:
     return int(time.time() * 1000)
 
 
-def _arguments_summary(raw_arguments: Any) -> str:
+def _arguments_summary(raw_arguments: object) -> str:
     if isinstance(raw_arguments, str):
         text = raw_arguments
     else:

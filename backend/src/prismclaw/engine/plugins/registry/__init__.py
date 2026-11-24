@@ -1,5 +1,20 @@
 """插件注册表子包。"""
 
+from prismclaw.engine.plugins.registry.context import (
+    AgentDraft,
+    CommandDraft,
+    PluginContext,
+    SkillDraft,
+)
+from prismclaw.engine.plugins.registry.descriptors import (
+    AgentDescriptor,
+    BaseDescriptor,
+    CommandDescriptor,
+    DescriptorKind,
+    HookDescriptor,
+    PluginDescriptor,
+    SkillDescriptor,
+)
 from prismclaw.engine.plugins.registry.identity import (
     BUILTIN_SOURCE,
     LOCAL_SOURCE,
@@ -13,27 +28,12 @@ from prismclaw.engine.plugins.registry.identity import (
     make_plugin_id,
     parse_plugin_identifier,
 )
-from prismclaw.engine.plugins.registry.descriptors import (
-    AgentDescriptor,
-    BaseDescriptor,
-    CommandDescriptor,
-    DescriptorKind,
-    HookDescriptor,
-    PluginDescriptor,
-    SkillDescriptor,
-)
 from prismclaw.engine.plugins.registry.registry import DescriptorRegistry
 from prismclaw.engine.plugins.registry.runtime_views import (
     DeclarativePluginCapabilityView,
     DeclarativePluginRuntimeView,
     HookBindingView,
     HookExtensionView,
-)
-from prismclaw.engine.plugins.registry.context import (
-    AgentDraft,
-    CommandDraft,
-    PluginContext,
-    SkillDraft,
 )
 
 __all__ = [

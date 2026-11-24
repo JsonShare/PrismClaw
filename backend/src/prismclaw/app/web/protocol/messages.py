@@ -96,7 +96,7 @@ SERVER_CHAT_QUEUED = "chat.queued"
 SERVER_CHAT_STEERING_ACK = "chat.steering_ack"
 SERVER_REFERENCE = "event:reference"
 SERVER_QUESTIONS = "event:questions"
-SERVER_OUTPUTS = "event:outputs"
+SERVER_OUTBOX = "event:outbox"
 SERVER_FILE_CHANGES = "event:file_changes"
 SERVER_TASK_RUNTIME = "task.runtime"
 SERVER_TASK_TIMELINE = "task.timeline"
@@ -115,6 +115,7 @@ _CLIENT_MESSAGE_MAP: dict[str, type[ClientMessage]] = {
     "pong": PongMessage,
     "tool.clarify": ToolClarifyMessage,
 }
+
 
 def parse_client_message(data: dict[str, Any]) -> ClientMessage | None:
     """Route a raw JSON dict to the appropriate client message dataclass.

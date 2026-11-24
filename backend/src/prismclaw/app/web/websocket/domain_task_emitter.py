@@ -1,9 +1,13 @@
 """DomainTaskEmitter 端口的 web 层实现 — 复用 broadcast_to_user 的用户级广播。"""
+
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.app.web.websocket.websocket import broadcast_to_user
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 
 class WsDomainTaskEmitter:
@@ -14,7 +18,7 @@ class WsDomainTaskEmitter:
     因此 web_deps 重建（插件热重载）不影响已接线的 emitter 实例。
     """
 
-    def __init__(self, app: Any) -> None:
+    def __init__(self, app: FastAPI) -> None:
         self._app = app
 
     async def broadcast(self, user_id: str, event_type: str, data: dict[str, Any]) -> None:

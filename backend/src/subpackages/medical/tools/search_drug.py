@@ -6,13 +6,14 @@ side_effect / effect_class + async execute()。
 数据源：`pc_medical_kb_drugs`（西药 / 中成药三级分类目录 + 说明书要点），
 由 bundle 在注册时注入 KbStore 实例。
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .._protocols import ToolContext, text_result, error_result
+from .._protocols import ToolContext, error_result, text_result
 
 
 @dataclass
@@ -27,27 +28,31 @@ class SearchDrugTool:
 
     name: str = "search_drug"
     description: str = "药品检索工具 — 检索知识库中药品说明书的适应症、用法用量、禁忌与不良反应"
-    parameters: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "药品名 / 通用名",
+    parameters: dict[str, Any] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "药品名 / 通用名",
+                },
+                "action": {
+                    "type": "string",
+                    "enum": ["info", "indication", "interaction"],
+                    "description": (
+                        "查询类型：info=基本信息, indication=适应症与禁忌, interaction=相互作用"
+                    ),
+                    "default": "info",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "返回结果数量上限",
+                    "default": 10,
+                },
             },
-            "action": {
-                "type": "string",
-                "enum": ["info", "indication", "interaction"],
-                "description": "查询类型：info=基本信息, indication=适应症与禁忌, interaction=相互作用",
-                "default": "info",
-            },
-            "limit": {
-                "type": "integer",
-                "description": "返回结果数量上限",
-                "default": 10,
-            },
-        },
-        "required": ["query"],
-    })
+            "required": ["query"],
+        }
+    )
     tool_class: str = "read"
     side_effect: bool = False
     effect_class: str = "search"
@@ -80,17 +85,21 @@ class SearchDrugTool:
                 "drug_class": d.get("atc_l2", "") or d.get("atc_group", ""),
             }
             if action == "info":
-                base.update({
-                    "dosage": d.get("dosage", ""),
-                    "mechanism": d.get("mechanism", ""),
-                    "pregnancy_grade": d.get("pregnancy_grade", ""),
-                })
+                base.update(
+                    {
+                        "dosage": d.get("dosage", ""),
+                        "mechanism": d.get("mechanism", ""),
+                        "pregnancy_grade": d.get("pregnancy_grade", ""),
+                    }
+                )
             elif action == "indication":
-                base.update({
-                    "indications": d.get("indications_json") or [],
-                    "contraindications": d.get("contraindications_json") or [],
-                    "side_effects": d.get("side_effects_json") or [],
-                })
+                base.update(
+                    {
+                        "indications": d.get("indications_json") or [],
+                        "contraindications": d.get("contraindications_json") or [],
+                        "side_effects": d.get("side_effects_json") or [],
+                    }
+                )
             else:
                 base["interactions"] = d.get("interactions_json") or []
             results.append(base)
@@ -98,8 +107,10 @@ class SearchDrugTool:
                 break
 
         payload: dict[str, Any] = {
-            "query": query, "action": action,
-            "results": results, "count": len(results),
+            "query": query,
+            "action": action,
+            "results": results,
+            "count": len(results),
             "total_matched": page["total"],
         }
         if not results:

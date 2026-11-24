@@ -17,7 +17,7 @@ import json
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 ReviewDecision = Literal["proposed", "accepted", "rejected"]
 
@@ -34,8 +34,8 @@ class ReviewEvent:
         return _dumps(asdict(self))
 
     @classmethod
-    def from_line(cls, line: str) -> "ReviewEvent":
-        d = _loads(line)
+    def from_line(cls, line: str) -> ReviewEvent:
+        d = cast("dict[str, Any]", _loads(line))
         return cls(
             review_set_id=d["review_set_id"],
             kind=d["kind"],
@@ -45,9 +45,9 @@ class ReviewEvent:
         )
 
 
-def _dumps(obj: Any) -> str:
+def _dumps(obj: object) -> str:
     return json.dumps(obj, ensure_ascii=False, sort_keys=True)
 
 
-def _loads(line: str) -> Any:
+def _loads(line: str) -> object:
     return json.loads(line)

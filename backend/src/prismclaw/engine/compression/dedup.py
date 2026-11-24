@@ -19,13 +19,13 @@ def normalize_for_dedup(text: str) -> str:
     return collapsed.lower()
 
 
-def _extract_text(content: Any) -> str:
+def _extract_text(content: object) -> str:
     from prismclaw.schema.shared import extract_text_from_content
 
     return extract_text_from_content(content)
 
 
-def _parse_timestamp(value: Any) -> float | None:
+def _parse_timestamp(value: object) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
@@ -68,10 +68,9 @@ def dedupe_duplicate_user_messages(
         ts = _parse_timestamp(msg.get("timestamp"))
 
         previous_ts = last_seen.get(normalized)
-        is_duplicate = False
-        if previous_ts is not None:
-            if ts is None or window_seconds <= 0 or (ts - previous_ts) <= window_seconds:
-                is_duplicate = True
+        is_duplicate = previous_ts is not None and (
+            ts is None or window_seconds <= 0 or (ts - previous_ts) <= window_seconds
+        )
 
         if is_duplicate:
             continue

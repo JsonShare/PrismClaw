@@ -35,6 +35,8 @@ interface RawMessage {
   output_files?: string[]
   timeline?: unknown[]
   metadata?: Message['metadata'] | null
+  /** 后端标记：这一轮仍在产出，正文由 live 叠加层渲染，不得落进权威层 */
+  in_progress?: boolean
 }
 
 function normalizeContent(raw: unknown): string | ContentBlock[] {
@@ -118,6 +120,7 @@ function normalizeMessage(raw: RawMessage): Message {
     timestamp: raw.timestamp ? new Date(raw.timestamp).getTime() : Date.now(),
     metadata,
     timeline: timeline.length ? timeline : undefined,
+    inProgress: raw.in_progress === true,
   }
 }
 

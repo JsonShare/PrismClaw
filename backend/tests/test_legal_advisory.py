@@ -3,6 +3,7 @@
 分级匹配的取舍是"宁可漏判，不可误注入"：漏判只损失一段提示，
 误注入会让每个技术对话都带上无关的法律要求。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -70,9 +71,7 @@ def test_hook_injects_for_legal_task() -> None:
 def test_hook_handles_missing_user_message() -> None:
     """USER_PROMPT_SUBMIT 之外的上下文没有 user_message，必须安全跳过。"""
     hook = LegalAdvisoryHook()
-    result = asyncio.run(
-        hook.execute(HookContext(event="session_start", session_id="s1"))
-    )
+    result = asyncio.run(hook.execute(HookContext(event="session_start", session_id="s1")))
     assert result.additional_context is None
 
 

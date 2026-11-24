@@ -14,14 +14,16 @@
 注意：本对象只表达 **project 级**能力。workspace 级（previews/edits/spills 等）
 与 user 级（~/.prismclaw/assets）路径不经过这里。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 
-class RootSource(str, Enum):
+class RootSource(StrEnum):
     """项目根的定位来源，可信度依次递减。"""
 
     ENV = "env"
@@ -47,7 +49,7 @@ class ResolvedRoot:
         return self.source is not RootSource.CWD_FALLBACK
 
 
-class CapabilityKind(str, Enum):
+class CapabilityKind(StrEnum):
     """三类项目级能力。value 同时用于诊断与日志标识。"""
 
     SKILLS = "skills"
@@ -55,7 +57,7 @@ class CapabilityKind(str, Enum):
     AGENTS = "agents"
 
 
-class DiagnosticLevel(str, Enum):
+class DiagnosticLevel(StrEnum):
     INFO = "info"
     WARN = "warn"
     ERROR = "error"
@@ -85,9 +87,7 @@ class ProjectCapabilityLayout:
     """一次完整的项目级能力布局展开结果。"""
 
     roots: tuple[ResolvedRoot, ...]
-    locations: dict[CapabilityKind, tuple[CapabilityLocation, ...]] = field(
-        default_factory=dict
-    )
+    locations: dict[CapabilityKind, tuple[CapabilityLocation, ...]] = field(default_factory=dict)
     diagnostics: tuple[LayoutDiagnostic, ...] = ()
 
     def locations_of(self, kind: CapabilityKind) -> tuple[CapabilityLocation, ...]:
@@ -118,12 +118,13 @@ class ProjectCapabilityLayout:
     def has_error(self) -> bool:
         return any(d.level is DiagnosticLevel.ERROR for d in self.diagnostics)
 
-    def summary_dict(self) -> dict:
+    def summary_dict(self) -> dict[str, Any]:
         """JSON 安全的布局快照：根来源、三类已存在/缺失目录、诊断列表。
 
         供启动聚合日志与 ``/api/health`` 共用，避免在展示层重复遍历 location。
         """
-        def kind_block(kind: CapabilityKind) -> dict:
+
+        def kind_block(kind: CapabilityKind) -> dict[str, Any]:
             locs = self.locations.get(kind, ())
             return {
                 "existing": [str(loc.path) for loc in locs if loc.exists],

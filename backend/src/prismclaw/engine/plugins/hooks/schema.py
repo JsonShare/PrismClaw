@@ -2,14 +2,15 @@
 
 ``HookContext`` 描述一次 hook 事件的输入，``HookResult`` 承载 hook 的执行结果。
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class HookOutcome(str, Enum):
+class HookOutcome(StrEnum):
     """Hook 执行结果。"""
 
     SUCCESS = "success"
@@ -18,7 +19,7 @@ class HookOutcome(str, Enum):
     CANCELLED = "cancelled"
 
 
-class PermissionDecision(str, Enum):
+class PermissionDecision(StrEnum):
     """PreToolUse 权限决策。"""
 
     ALLOW = "allow"
@@ -26,7 +27,7 @@ class PermissionDecision(str, Enum):
     ASK = "ask"
 
 
-class HookDecision(str, Enum):
+class HookDecision(StrEnum):
     """通用决策。"""
 
     APPROVE = "approve"
@@ -115,11 +116,11 @@ class HookResult:
     suppress_output: bool = False
 
     @classmethod
-    def success(cls) -> "HookResult":
+    def success(cls) -> HookResult:
         return cls()
 
     @classmethod
-    def blocking(cls, *, reason: str | None = None) -> "HookResult":
+    def blocking(cls, *, reason: str | None = None) -> HookResult:
         return cls(
             outcome=HookOutcome.BLOCKING,
             continue_execution=False,
@@ -128,7 +129,7 @@ class HookResult:
         )
 
     @classmethod
-    def from_dict(cls, raw: dict[str, Any]) -> "HookResult":
+    def from_dict(cls, raw: dict[str, Any]) -> HookResult:
         """从 JSON 字典解析 HookResult。"""
         outcome_raw = raw.get("outcome", "success")
         try:
@@ -165,9 +166,7 @@ class HookResult:
                 specific.get("permissionDecisionReason") or raw.get("permissionDecisionReason")
             ),
             updated_input=specific.get("updatedInput") or raw.get("updatedInput"),
-            additional_context=(
-                specific.get("additionalContext") or raw.get("additionalContext")
-            ),
+            additional_context=(specific.get("additionalContext") or raw.get("additionalContext")),
             updated_mcp_tool_output=(
                 specific.get("updatedMCPToolOutput") or raw.get("updatedMCPToolOutput")
             ),

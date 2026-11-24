@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, cast
+from typing import Any, Self, cast
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,7 +36,7 @@ def _default_mcp_settings() -> McpSettings:
 _ENV_PLACEHOLDER_RE = re.compile(r"^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$")
 
 
-def _resolve_env_placeholders(value: Any) -> Any:
+def _resolve_env_placeholders(value: object) -> object:
     if isinstance(value, dict):
         return {k: _resolve_env_placeholders(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -45,6 +45,7 @@ def _resolve_env_placeholders(value: Any) -> Any:
         match = _ENV_PLACEHOLDER_RE.match(value.strip())
         if match:
             import os
+
             return os.getenv(match.group(1), "")
     return value
 
@@ -60,9 +61,7 @@ class Settings(BaseSettings):
     speech: SpeechSettings = Field(default_factory=lambda: SpeechSettings())
     agent: AgentSettings = Field(default_factory=lambda: AgentSettings())
     models: ModelsSettings = Field(default_factory=lambda: ModelsSettings())
-    token_counting: TokenCountingSettings = Field(
-        default_factory=lambda: TokenCountingSettings()
-    )
+    token_counting: TokenCountingSettings = Field(default_factory=lambda: TokenCountingSettings())
     channels: ChannelsSettings = Field(default_factory=lambda: ChannelsSettings())
     workspaces: WorkspaceSettings = Field(default_factory=lambda: WorkspaceSettings())
     skills: SkillSettings = Field(default_factory=lambda: SkillSettings())
@@ -74,9 +73,7 @@ class Settings(BaseSettings):
     scheduler: SchedulerSettings = Field(default_factory=lambda: SchedulerSettings())
     plugins: PluginSettings = Field(default_factory=lambda: PluginSettings())
     mcp: McpSettings = Field(default_factory=_default_mcp_settings)
-    builtin_tools: BuiltinToolSettings = Field(
-        default_factory=lambda: BuiltinToolSettings()
-    )
+    builtin_tools: BuiltinToolSettings = Field(default_factory=lambda: BuiltinToolSettings())
     domains: DomainSettings = Field(default_factory=lambda: DomainSettings())
     # Graceful shutdown timeout in seconds.  Matches the default K8s
     # SIGTERM→SIGKILL window (30 s) so that TaskManager drain completes
@@ -87,14 +84,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="before")
     @classmethod
-    def _normalize_input(cls, data):
+    def _normalize_input(cls, data: object) -> object:
         if isinstance(data, dict):
             data = {k: v for k, v in data.items() if not k.startswith("_comment")}
             data = cast(dict[str, Any], _resolve_env_placeholders(data))
         return data
 
     @model_validator(mode="after")
-    def _apply_env_overrides(self):
+    def _apply_env_overrides(self) -> Self:
         """环境变量优先于配置文件，供容器部署注入密钥。
 
         只处理**需要注入密钥**的字段。其余配置一律走 yaml（含 {env:VAR}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -48,7 +48,7 @@ class HeartbeatDetail(BaseModel):
     """心跳携带的进度细节；两者皆 None 时表示纯 time-based 兜底（无增量信息）。"""
 
     partial_tool_name: str | None = None  # delta 可见时："Write"
-    chars_so_far: int | None = None       # delta 可见时：累计参数字符数
+    chars_so_far: int | None = None  # delta 可见时：累计参数字符数
 
 
 class HeartbeatEvent(BaseModel):
@@ -150,15 +150,15 @@ class SubagentProgressBatch(BaseModel):
     items: list[SubagentProgressItem] = Field(default_factory=list)
 
 
-AgentEvent = Union[
-    TextChunk,
-    ReasoningChunk,
-    ToolCallStart,
-    ToolCallEnd,
-    IterationBoundary,
-    HeartbeatEvent,
-    Done,
-    ErrorEvent,
-    ToolClarifyRequest,
-    SubagentProgressBatch,
-]
+AgentEvent = (
+    TextChunk
+    | ReasoningChunk
+    | ToolCallStart
+    | ToolCallEnd
+    | IterationBoundary
+    | HeartbeatEvent
+    | Done
+    | ErrorEvent
+    | ToolClarifyRequest
+    | SubagentProgressBatch
+)

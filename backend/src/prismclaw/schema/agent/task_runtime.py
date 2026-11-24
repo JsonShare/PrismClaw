@@ -15,7 +15,7 @@ class TurnAssessment(BaseModel):
     """单轮任务评估结果（纯规则，不引入 LLM 调用）。
 
     合并了此前 TurnSemantics / TaskContextContract / ComplexityAssessment 三个
-    对象中唯一被消费的信号，用于驱动管道步骤跳过与 fast_path 选路。
+    对象中唯一被消费的信号，用于 ``TurnPlanner`` 决定是否跳过重管道。
     """
 
     level: TaskComplexity

@@ -119,18 +119,59 @@ def _file_criteria(target: str, *, with_content: bool) -> tuple[Criterion, ...]:
 
 
 # 看起来是纯问答/解释的 goal 关键词（中英混合）
-_DIALOGUE_KEYWORDS = frozenset({
-    "?", "？", "怎么", "什么", "为什么", "如何", "哪些", "区别", "对比",
-    "解释", "说明", "介绍", "讲讲", "help", "explain", "what", "why", "how",
-    "请问", "能否", "可以吗", "是什么",
-})
+_DIALOGUE_KEYWORDS = frozenset(
+    {
+        "?",
+        "？",
+        "怎么",
+        "什么",
+        "为什么",
+        "如何",
+        "哪些",
+        "区别",
+        "对比",
+        "解释",
+        "说明",
+        "介绍",
+        "讲讲",
+        "help",
+        "explain",
+        "what",
+        "why",
+        "how",
+        "请问",
+        "能否",
+        "可以吗",
+        "是什么",
+    }
+)
 
 # 看起来要产出文件/改代码的 goal 关键词
-_PRODUCTION_KEYWORDS = frozenset({
-    "写", "创建", "生成", "做个", "新建", "改", "修改", "更新", "编辑",
-    "产出", "出一个", "实现", "fix", "edit", "update", "change",
-    "create", "generate", "add", "build", "implement",
-})
+_PRODUCTION_KEYWORDS = frozenset(
+    {
+        "写",
+        "创建",
+        "生成",
+        "做个",
+        "新建",
+        "改",
+        "修改",
+        "更新",
+        "编辑",
+        "产出",
+        "出一个",
+        "实现",
+        "fix",
+        "edit",
+        "update",
+        "change",
+        "create",
+        "generate",
+        "add",
+        "build",
+        "implement",
+    }
+)
 
 
 def _goal_suggests_dialogue(goal: str) -> bool:
@@ -203,8 +244,7 @@ class CompletionReviewer:
             dict.fromkeys(record.evidence_id for record in records if record.wrote_paths)
         )
         outcomes = tuple(
-            self._evaluate(criterion, wrote_paths, evidence_ids)
-            for criterion in contract.criteria
+            self._evaluate(criterion, wrote_paths, evidence_ids) for criterion in contract.criteria
         )
         for outcome in outcomes:
             emit(
@@ -234,11 +274,15 @@ class CompletionReviewer:
 
         if criterion.kind == "file_exists":
             met = any(self._scanner.inspect(path).exists for path in candidates)
-            return CriterionOutcome(criterion, "met" if met else "unmet", evidence_ids if met else ())
+            return CriterionOutcome(
+                criterion, "met" if met else "unmet", evidence_ids if met else ()
+            )
 
         if criterion.kind == "file_nonempty":
             met = any(self._scanner.inspect(path).size > 0 for path in candidates)
-            return CriterionOutcome(criterion, "met" if met else "unmet", evidence_ids if met else ())
+            return CriterionOutcome(
+                criterion, "met" if met else "unmet", evidence_ids if met else ()
+            )
 
         verdicts = [self._parsable(path) for path in candidates]
         if any(verdict is True for verdict in verdicts):

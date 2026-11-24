@@ -14,6 +14,7 @@ MCP 注册表签名校验从 stub 替换为真实 Ed25519 签名 + HSM PKCS#11 �
   - key_version 递增：v1 → v2 → v3...
   - 轮换后所有已签名 MCP Meta 仍可通过前任钥验证
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,11 +22,17 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
-from prismclaw.schema.agent.security import SignerProtocol
+from prismclaw.schema.agent.security import SignerProtocol as SignerProtocol
 
 logger = logging.getLogger(__name__)
+
+
+class _LocalPrivateKey(Protocol):
+    """cryptography 的 Ed25519 私钥最小接口（避免引入具体实现类型）。"""
+
+    def sign(self, data: bytes) -> bytes: ...
 
 
 # ── SignerProtocol (re-exported from contracts) ───────────────────────
@@ -37,9 +44,10 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class KeyVersion:
     """密钥版本信息。"""
-    version: str              # "v1", "v2", ...
-    public_key_hex: str       # Ed25519 公钥 hex
-    created_at: float         # 创建时间
+
+    version: str  # "v1", "v2", ...
+    public_key_hex: str  # Ed25519 公钥 hex
+    created_at: float  # 创建时间
     rotated_at: float | None  # 轮换时间（None=当前主密钥）
     expires_at: float | None  # 过期时间（前任钥兼容窗口结束后）
 
@@ -67,15 +75,15 @@ class LocalEd25519Signer:
         self._keys: dict[str, KeyVersion] = {}
         self._primary_version: str = ""
         # 多版本密钥存储 — 轮换时追加而非覆盖，保证 7 天兼容窗口
-        self._private_keys: dict[str, Any] = {}
+        self._private_keys: dict[str, _LocalPrivateKey] = {}
         self._hmac_secrets: dict[str, str] = {}
         self._public_keys_hex: dict[str, str] = {}
         # 每个版本使用的签名算法种类："ed25519" 或 "hmac"
         # verify 必须基于版本对应的算法，不能用当前主密钥类型判断，
         # 否则兼容窗口内跨算法家族的旧签名永远验不过。
         self._key_kind: dict[str, str] = {}
-        self._private_key: Any = None       # 当前 Ed25519 主私钥
-        self._hmac_secret: str = ""         # 当前 HMAC 主密钥
+        self._private_key: _LocalPrivateKey | None = None  # 当前 Ed25519 主私钥
+        self._hmac_secret: str = ""  # 当前 HMAC 主密钥
 
         # 生成初始密钥
         self._generate_key()
@@ -129,6 +137,7 @@ class LocalEd25519Signer:
     def _generate_hmac_fallback(self) -> str:
         """无 cryptography 库时的 HMAC-SHA256 回退签名。"""
         import secrets
+
         version = f"v{len(self._keys) + 1}"
         if self._primary_version:
             old = self._keys.get(self._primary_version)
@@ -167,12 +176,13 @@ class LocalEd25519Signer:
         if self._private_key is not None:
             # 真实 Ed25519 签名
             sig = self._private_key.sign(payload)
-            return sig.hex()
+            return str(sig.hex())
         else:
             # HMAC-SHA256 回退
             import hmac as _hmac
-            sig = _hmac.new(self._hmac_secret.encode(), payload, hashlib.sha256).hexdigest()
-            return sig
+
+            digest = _hmac.new(self._hmac_secret.encode(), payload, hashlib.sha256).hexdigest()
+            return digest
 
     def verify(self, payload: bytes, signature: str, key_version: str | None = None) -> bool:
         """验证签名。支持前任钥在兼容窗口内验证。"""
@@ -182,16 +192,16 @@ class LocalEd25519Signer:
             return False
 
         # 检查前任钥是否在兼容窗口内
-        if kv.rotated_at is not None and kv.expires_at is not None:
-            if time.time() > kv.expires_at:
-                logger.warning("Key %s expired beyond compatibility window", ver)
-                return False
+        if kv.rotated_at is not None and kv.expires_at is not None and time.time() > kv.expires_at:
+            logger.warning("Key %s expired beyond compatibility window", ver)
+            return False
 
         kind = self._key_kind.get(ver)
         try:
             if kind == "ed25519":
                 # Ed25519 验证 — 使用存储的公钥而非从私钥派生
                 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
                 pub_hex = self._public_keys_hex.get(ver)
                 if pub_hex is None:
                     return False
@@ -201,6 +211,7 @@ class LocalEd25519Signer:
             elif kind == "hmac":
                 # HMAC 回退验证
                 import hmac as _hmac
+
                 secret = self._hmac_secrets.get(ver)
                 if secret is None:
                     return False
@@ -257,7 +268,9 @@ class HsmPkcs11Signer:
       - C_GenerateKeyPair — 密钥生成
     """
 
-    def __init__(self, *, slot_id: int = 0, pin: str = "", key_label: str = "prismclaw-ed25519") -> None:
+    def __init__(
+        self, *, slot_id: int = 0, pin: str = "", key_label: str = "prismclaw-ed25519"
+    ) -> None:
         self._slot_id = slot_id
         self._pin = pin
         self._key_label = key_label
@@ -273,8 +286,7 @@ class HsmPkcs11Signer:
             self._init_pkcs11_session(lib_path)
         else:
             logger.info(
-                "HsmPkcs11Signer: PRISMCLAW_PKCS11_LIB not set; "
-                "using LocalEd25519Signer fallback"
+                "HsmPkcs11Signer: PRISMCLAW_PKCS11_LIB not set; using LocalEd25519Signer fallback"
             )
 
     def _init_pkcs11_session(self, lib_path: str) -> None:
@@ -293,7 +305,8 @@ class HsmPkcs11Signer:
             return
 
         try:
-            from pkcs11 import lib as pkcs11_lib, Mechanism, KeyType
+            from pkcs11 import KeyType
+            from pkcs11 import lib as pkcs11_lib
 
             self._pkcs11_lib = pkcs11_lib(lib_path)
             token = self._pkcs11_lib.get_token(token_slot=self._slot_id)
@@ -312,15 +325,17 @@ class HsmPkcs11Signer:
             if key is not None:
                 self._pkcs11_available = True
                 logger.info(
-                    "HsmPkcs11Signer: PKCS#11 session initialized "
-                    "(lib=%s, slot=%d, key_label=%s)",
-                    lib_path, self._slot_id, self._key_label,
+                    "HsmPkcs11Signer: PKCS#11 session initialized (lib=%s, slot=%d, key_label=%s)",
+                    lib_path,
+                    self._slot_id,
+                    self._key_label,
                 )
             else:
                 logger.warning(
                     "HsmPkcs11Signer: key label '%s' not found in slot %d; "
                     "falling back to local signer",
-                    self._key_label, self._slot_id,
+                    self._key_label,
+                    self._slot_id,
                 )
         except ImportError:
             logger.warning(
@@ -329,9 +344,9 @@ class HsmPkcs11Signer:
             )
         except Exception as e:
             logger.warning(
-                "HsmPkcs11Signer: PKCS#11 init failed (lib=%s): %s; "
-                "falling back to local signer",
-                lib_path, e,
+                "HsmPkcs11Signer: PKCS#11 init failed (lib=%s): %s; falling back to local signer",
+                lib_path,
+                e,
             )
             self._pkcs11_session = None
             self._pkcs11_key = None
@@ -342,13 +357,15 @@ class HsmPkcs11Signer:
         if self._pkcs11_available and self._pkcs11_key is not None:
             try:
                 from pkcs11 import Mechanism
+
                 # Ed25519 使用 EdDSA 机制；RSA 使用 SHA256_RSA_PKCS
                 mechanism = Mechanism.EDDSA
                 signature = self._pkcs11_key.sign(payload, mechanism=mechanism)
                 return bytes(signature).hex()
             except Exception as e:
                 logger.warning(
-                    "HsmPkcs11Signer: C_Sign failed: %s; falling back to local", e,
+                    "HsmPkcs11Signer: C_Sign failed: %s; falling back to local",
+                    e,
                 )
 
         return self._fallback.sign(payload)
@@ -358,13 +375,19 @@ class HsmPkcs11Signer:
         if self._pkcs11_available and self._pkcs11_key is not None:
             try:
                 from pkcs11 import Mechanism
+
                 mechanism = Mechanism.EDDSA
-                return self._pkcs11_key.verify(
-                    payload, bytes.fromhex(signature), mechanism=mechanism,
+                return bool(
+                    self._pkcs11_key.verify(
+                        payload,
+                        bytes.fromhex(signature),
+                        mechanism=mechanism,
+                    )
                 )
             except Exception as e:
                 logger.warning(
-                    "HsmPkcs11Signer: C_Verify failed: %s; falling back to local", e,
+                    "HsmPkcs11Signer: C_Verify failed: %s; falling back to local",
+                    e,
                 )
 
         return self._fallback.verify(payload, signature, key_version)
@@ -443,7 +466,10 @@ class KeyRotationJob:
             new_version = self._signer.rotate_key()
             logger.info(
                 "KeyRotationJob: rotated key from %s to %s (age=%.0f days, threshold=%d days)",
-                kv.version, new_version, age / 86400, self._rotation_interval // 86400,
+                kv.version,
+                new_version,
+                age / 86400,
+                self._rotation_interval // 86400,
             )
             return new_version
 

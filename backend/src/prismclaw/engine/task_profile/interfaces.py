@@ -1,43 +1,23 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-if TYPE_CHECKING:
-    from prismclaw.schema.session import SessionTree
-
-from prismclaw.schema.llm.request_mode import RequestMode
 from prismclaw.engine.task_profile.service import (
     TaskCompactionPolicy,
     TaskResponsePolicy,
 )
 from prismclaw.schema.content.context import TaskProfile
 
+if TYPE_CHECKING:
+    from prismclaw.schema.config.config import AgentRunConfig
+
 
 @runtime_checkable
 class TaskRequestPolicyProvider(Protocol):
-    def resolve_request_mode(
-        self,
-        *,
-        tree: "SessionTree",
-        run_seconds: int = 300,
-    ) -> RequestMode | None: ...
-
     def runtime_strategy_notes(
         self,
         task_profile: TaskProfile,
-        *,
-        request_mode: RequestMode | None,
     ) -> list[str]: ...
-
-    def retrieval_limits(
-        self,
-        task_profile: TaskProfile,
-        *,
-        l2_quota: int,
-        l3_quota: int,
-        archive_limit: int,
-        request_mode: RequestMode | None,
-    ) -> tuple[int, int, int]: ...
 
 
 @runtime_checkable
@@ -46,7 +26,7 @@ class TaskRuntimePolicyProvider(Protocol):
         self,
         task_profile: TaskProfile,
         *,
-        config: Any,
+        config: AgentRunConfig,
     ) -> TaskResponsePolicy: ...
 
     def compaction_policy(

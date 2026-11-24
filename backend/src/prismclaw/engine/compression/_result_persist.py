@@ -2,30 +2,28 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.foundation.tool_output import truncate_tool_result
 from prismclaw.engine.compression._helpers import _result_text, _result_text_len
+from prismclaw.engine.foundation.tool_output import truncate_tool_result
 from prismclaw.schema.agent.data_types import TextBlock
 from prismclaw.schema.content.content_types import ToolResult
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.toolkit.registry.tool_runtime import Tool
 
 _PERSISTED_PATH_RE = re.compile(r"\[Full output persisted to: (.+?)\]")
 
 
-def _tool_obj_for_call(call: dict[str, Any] | None, deps: Any) -> Any:
+def _tool_obj_for_call(call: dict[str, Any] | None, deps: AgentRunnerDeps) -> Tool | None:
     if not call:
         return None
     tool_name = ((call or {}).get("function") or {}).get("name") or ""
-    tools = getattr(deps, "tools", None)
-    if tools is None:
-        return None
-    getter = getattr(tools, "get", None)
-    if callable(getter):
-        return getter(tool_name)
-    return None
+    return deps.tools.get(tool_name)
 
 
-def _tool_allows_persist(tool_obj: Any) -> bool:
+def _tool_allows_persist(tool_obj: Tool | None) -> bool:
     """Whether a tool's results may be persisted to disk.
 
     Mirrors the reference implementation's anti-loop rule: tools that read files back
@@ -43,16 +41,14 @@ def _tool_allows_persist(tool_obj: Any) -> bool:
     if getattr(tool_obj, "tool_class", None) == "read":
         return False
     moc = getattr(tool_obj, "max_output_chars", None)
-    if moc is not None and (moc == float("inf") or moc <= 0):
-        return False
-    return True
+    return not (moc is not None and (moc == float("inf") or moc <= 0))
 
 
 def _persist_reference(
     *,
     result: ToolResult,
     call: dict[str, Any] | None,
-    deps: Any,
+    deps: AgentRunnerDeps,
     working_dir: str | Path | None,
     reason: str,
 ) -> ToolResult | None:
@@ -91,7 +87,7 @@ def _persist_precompression_original(
     *,
     result: ToolResult,
     working_dir: str | Path | None,
-    deps: Any,
+    deps: AgentRunnerDeps,
 ) -> str | None:
     """SDD T-4: persist the pre-lossy-compression original of an
     un-persisted result; return a one-line recovery pointer.
@@ -122,7 +118,7 @@ def _materialize_single_result(
     result: ToolResult,
     inline_limit: int,
     working_dir: str | Path | None,
-    deps: Any,
+    deps: AgentRunnerDeps,
     call: dict[str, Any] | None = None,
 ) -> tuple[ToolResult, list[str]]:
     """Single source of truth for how a tool result is materialized.
@@ -145,9 +141,7 @@ def _materialize_single_result(
         return result, []
 
     # Path 1: Persist to working_dir (preferred — survives session restart)
-    if working_dir is not None and _tool_allows_persist(
-        _tool_obj_for_call(call, deps)
-    ):
+    if working_dir is not None and _tool_allows_persist(_tool_obj_for_call(call, deps)):
         persisted = _persist_reference(
             result=result,
             call=call,
@@ -161,6 +155,7 @@ def _materialize_single_result(
     # Path 2: Fallback to temp directory (better than truncation)
     if _tool_allows_persist(_tool_obj_for_call(call, deps)):
         import tempfile
+
         tmp_dir = Path(tempfile.gettempdir()) / "prismclaw_tool_results"
         persisted = _persist_reference(
             result=result,

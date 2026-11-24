@@ -3,8 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+import redis.asyncio as aioredis
+from redis.typing import FieldT
+
+if TYPE_CHECKING:
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +34,7 @@ class DreamDispatchJob:
 class RedisDreamDispatchQueue:
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: aioredis.Redis,
         *,
         key_prefix: str = "prismclaw:dream:dispatch:",
         group_name: str = "dream-dispatch",
@@ -85,7 +92,9 @@ class RedisDreamDispatchQueue:
                     "session_key": job.session_key,
                     "job_kind": job.job_kind,
                     "enqueued_at": str(job.enqueued_at),
-                    "nightly_window_start_at": _serialize_optional_float(job.nightly_window_start_at),
+                    "nightly_window_start_at": _serialize_optional_float(
+                        job.nightly_window_start_at
+                    ),
                     "nightly_window_end_at": _serialize_optional_float(job.nightly_window_end_at),
                     "attempt_count": str(int(job.attempt_count)),
                     "last_error": job.last_error or "",
@@ -139,8 +148,12 @@ class RedisDreamDispatchQueue:
                     "session_key": replay_job.session_key,
                     "job_kind": replay_job.job_kind,
                     "enqueued_at": str(replay_job.enqueued_at),
-                    "nightly_window_start_at": _serialize_optional_float(replay_job.nightly_window_start_at),
-                    "nightly_window_end_at": _serialize_optional_float(replay_job.nightly_window_end_at),
+                    "nightly_window_start_at": _serialize_optional_float(
+                        replay_job.nightly_window_start_at
+                    ),
+                    "nightly_window_end_at": _serialize_optional_float(
+                        replay_job.nightly_window_end_at
+                    ),
                     "attempt_count": str(int(replay_job.attempt_count)),
                     "last_error": replay_job.last_error or "",
                     "retry_at": "",
@@ -205,13 +218,14 @@ class RedisDreamDispatchQueue:
         block_ms: int,
     ) -> list[Any] | None:
         try:
-            return await self._redis.xreadgroup(
+            raw: object = await self._redis.xreadgroup(
                 self._group_name,
                 consumer_name,
                 {self._stream_key: ">"},
                 count=count,
                 block=block_ms,
             )
+            return raw if isinstance(raw, list) else None
         except Exception as exc:
             if _is_nogroup_error(exc):
                 return None
@@ -305,26 +319,22 @@ class RedisDreamDispatchQueue:
                         )
                         self._supports_xautoclaim = True
                     except Exception:
-                        logger.warning(
-                            "dream dispatch stale reclaim retry failed", exc_info=True
-                        )
+                        logger.warning("dream dispatch stale reclaim retry failed", exc_info=True)
                         return []
                 else:
                     return []
             elif _is_unknown_command_error(exc, "XAUTOCLAIM"):
                 self._supports_xautoclaim = False
                 logger.warning(
-                    "dream dispatch stale reclaim disabled because Redis server does not support XAUTOCLAIM"
+                    "dream dispatch stale reclaim disabled because "
+                    "Redis server does not support XAUTOCLAIM"
                 )
                 return []
             else:
                 logger.warning("dream dispatch stale reclaim failed", exc_info=True)
                 return []
         messages: list[Any]
-        if isinstance(raw, (list, tuple)) and len(raw) >= 2:
-            messages = raw[1]
-        else:
-            messages = []
+        messages = raw[1] if isinstance(raw, (list, tuple)) and len(raw) >= 2 else []
         return _parse_claimed_jobs(messages)
 
     async def ack(self, job: DreamDispatchJob) -> None:
@@ -354,7 +364,9 @@ class RedisDreamDispatchQueue:
                 return {"status": "group_missing_redeliverable"}
             raise
 
-    async def _fail_inner(self, job: DreamDispatchJob, *, reason: str | None = None) -> dict[str, Any]:
+    async def _fail_inner(
+        self, job: DreamDispatchJob, *, reason: str | None = None
+    ) -> dict[str, Any]:
         next_attempt = int(job.attempt_count) + 1
         normalized_reason = _normalize_error_message(reason)
         if next_attempt <= self._max_retries:
@@ -377,8 +389,12 @@ class RedisDreamDispatchQueue:
                     "session_key": retry_job.session_key,
                     "job_kind": retry_job.job_kind,
                     "enqueued_at": str(retry_job.enqueued_at),
-                    "nightly_window_start_at": _serialize_optional_float(retry_job.nightly_window_start_at),
-                    "nightly_window_end_at": _serialize_optional_float(retry_job.nightly_window_end_at),
+                    "nightly_window_start_at": _serialize_optional_float(
+                        retry_job.nightly_window_start_at
+                    ),
+                    "nightly_window_end_at": _serialize_optional_float(
+                        retry_job.nightly_window_end_at
+                    ),
                     "attempt_count": str(int(retry_job.attempt_count)),
                     "last_error": retry_job.last_error or "",
                     "retry_at": _serialize_optional_float(retry_job.retry_at),
@@ -430,7 +446,9 @@ class RedisDreamDispatchQueue:
             stream_length = int(await self._redis.xlen(self._stream_key) or 0)
             dead_letter_length = int(await self._redis.xlen(self._dead_letter_key) or 0)
             audit_length = int(await self._redis.xlen(self._audit_key) or 0)
-            oldest_dead_letter_at = await self._stream_edge_time(self._dead_letter_key, newest=False)
+            oldest_dead_letter_at = await self._stream_edge_time(
+                self._dead_letter_key, newest=False
+            )
             newest_dead_letter_at = await self._stream_edge_time(self._dead_letter_key, newest=True)
             pending_summary = await self._redis.xpending(self._stream_key, self._group_name)
             consumers_raw = []
@@ -519,9 +537,13 @@ class RedisDreamDispatchQueue:
         dead_letters = await self.list_dead_letters(limit=bounded_limit)
         replay_candidates = await self._build_replay_candidates(dead_letters)
         audit_events = await self.list_audit_events(limit=bounded_limit)
-        replayable_count = len([item for item in replay_candidates if item.get("replayable") is True])
+        replayable_count = len(
+            [item for item in replay_candidates if item.get("replayable") is True]
+        )
         blocked_count = len(replay_candidates) - replayable_count
-        queue_backlog = int(stats.get("stream_length", 0) or 0) + int(stats.get("pending_count", 0) or 0)
+        queue_backlog = int(stats.get("stream_length", 0) or 0) + int(
+            stats.get("pending_count", 0) or 0
+        )
         return {
             **stats,
             "summary": {
@@ -655,8 +677,12 @@ class RedisDreamDispatchQueue:
                     "enqueued_at": _parse_float(fields.get("enqueued_at"), default=0.0),
                     "attempt_count": _parse_int(fields.get("attempt_count"), default=0),
                     "last_error": _parse_optional_text(fields.get("last_error")),
-                    "nightly_window_start_at": _parse_optional_float(fields.get("nightly_window_start_at")),
-                    "nightly_window_end_at": _parse_optional_float(fields.get("nightly_window_end_at")),
+                    "nightly_window_start_at": _parse_optional_float(
+                        fields.get("nightly_window_start_at")
+                    ),
+                    "nightly_window_end_at": _parse_optional_float(
+                        fields.get("nightly_window_end_at")
+                    ),
                     "retry_at": _parse_optional_float(fields.get("retry_at")),
                 }
             )
@@ -696,7 +722,9 @@ class RedisDreamDispatchQueue:
                     "attempt_count": _parse_int(fields.get("attempt_count"), default=0),
                     "last_error": _parse_optional_text(fields.get("last_error")),
                     "retry_at": _parse_optional_float(fields.get("retry_at")),
-                    "dead_letter_stream_id": _parse_optional_text(fields.get("dead_letter_stream_id")),
+                    "dead_letter_stream_id": _parse_optional_text(
+                        fields.get("dead_letter_stream_id")
+                    ),
                 }
             )
             if len(items) >= limit:
@@ -719,7 +747,7 @@ class RedisDreamDispatchQueue:
         extra_fields: dict[str, Any] | None = None,
     ) -> None:
         try:
-            payload = {
+            payload: dict[FieldT, FieldT] = {
                 "event": event,
                 "session_key": job.session_key,
                 "job_kind": job.job_kind,
@@ -811,7 +839,7 @@ class DreamDispatchConsumer:
         self,
         *,
         queue: RedisDreamDispatchQueue,
-        task_manager: Any,
+        task_manager: TaskManagerProtocol,
         consumer_name: str,
         process_job: Callable[[DreamDispatchJob], Awaitable[bool]],
         reclaim_idle_ms: int = 120_000,
@@ -885,7 +913,9 @@ class DreamDispatchConsumer:
             await self._sleep_fn(delay)
 
 
-def build_light_dispatch_job(session_key: str, *, enqueued_at: float | None = None) -> DreamDispatchJob:
+def build_light_dispatch_job(
+    session_key: str, *, enqueued_at: float | None = None
+) -> DreamDispatchJob:
     return DreamDispatchJob(
         stream_id="",
         session_key=session_key,
@@ -943,7 +973,9 @@ def _parse_claimed_jobs(messages: list[Any]) -> list[DreamDispatchJob]:
                 session_key=session_key,
                 job_kind=job_kind,  # type: ignore[arg-type]
                 enqueued_at=_parse_float(fields.get("enqueued_at"), default=0.0),
-                nightly_window_start_at=_parse_optional_float(fields.get("nightly_window_start_at")),
+                nightly_window_start_at=_parse_optional_float(
+                    fields.get("nightly_window_start_at")
+                ),
                 nightly_window_end_at=_parse_optional_float(fields.get("nightly_window_end_at")),
                 attempt_count=_parse_int(fields.get("attempt_count"), default=0),
                 last_error=_parse_optional_text(fields.get("last_error")),
@@ -962,14 +994,16 @@ def _is_nogroup_error(exc: Exception) -> bool:
     return "nogroup" in str(exc).lower()
 
 
-def _parse_float(raw: Any, *, default: float) -> float:
-    try:
-        return float(raw)
-    except Exception:
-        return default
+def _parse_float(raw: object, *, default: float) -> float:
+    if isinstance(raw, (int, float, str)):
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return default
+    return default
 
 
-def _parse_optional_float(raw: Any) -> float | None:
+def _parse_optional_float(raw: object) -> float | None:
     text = str(raw or "").strip()
     if not text:
         return None
@@ -979,19 +1013,21 @@ def _parse_optional_float(raw: Any) -> float | None:
         return None
 
 
-def _parse_int(raw: Any, *, default: int) -> int:
-    try:
-        return int(raw)
-    except Exception:
-        return default
+def _parse_int(raw: object, *, default: int) -> int:
+    if isinstance(raw, (int, float, str)):
+        try:
+            return int(raw)
+        except (TypeError, ValueError, OverflowError):
+            return default
+    return default
 
 
-def _parse_optional_text(raw: Any) -> str | None:
+def _parse_optional_text(raw: object) -> str | None:
     text = str(raw or "").strip()
     return text or None
 
 
-def _parse_pending_count(raw: Any) -> int:
+def _parse_pending_count(raw: object) -> int:
     if isinstance(raw, dict):
         return int(raw.get("pending", 0) or 0)
     if isinstance(raw, (list, tuple)) and raw:
@@ -1002,7 +1038,7 @@ def _parse_pending_count(raw: Any) -> int:
     return 0
 
 
-def _parse_pending_id(raw: Any, *, index: int) -> str | None:
+def _parse_pending_id(raw: object, *, index: int) -> str | None:
     if isinstance(raw, dict):
         key = "min" if index == 1 else "max"
         value = raw.get(key)
@@ -1013,7 +1049,7 @@ def _parse_pending_id(raw: Any, *, index: int) -> str | None:
     return None
 
 
-def _normalize_consumer_info(raw: Any) -> dict[str, Any]:
+def _normalize_consumer_info(raw: object) -> dict[str, Any]:
     if isinstance(raw, dict):
         name = raw.get("name")
         pending = raw.get("pending")
@@ -1038,7 +1074,7 @@ def _normalize_error_message(reason: str | None) -> str | None:
     return text[:500]
 
 
-def _first_present(items: list[dict[str, Any]], key: str) -> Any:
+def _first_present(items: list[dict[str, Any]], key: str) -> object:
     for item in items:
         value = item.get(key)
         if value not in (None, ""):
@@ -1065,7 +1101,7 @@ def _count_values(
     return counts
 
 
-def _age_seconds(raw: Any, *, now: float) -> float | None:
+def _age_seconds(raw: object, *, now: float) -> float | None:
     timestamp = _parse_optional_float(raw)
     if timestamp is None:
         return None

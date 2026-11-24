@@ -16,6 +16,7 @@ self._llm / self._tools / self._tool_timeout_s 三个属性。
 
 本文件在重构前后必须逐字不变地全绿（parity 契约）。
 """
+
 import asyncio
 import json
 import time
@@ -38,8 +39,13 @@ MANIFEST = SimpleNamespace(name="charter")
 
 
 class MockResponse:
-    def __init__(self, text: str = "", tool_calls: list | None = None,
-                 input_tokens: int = 10, output_tokens: int = 5):
+    def __init__(
+        self,
+        text: str = "",
+        tool_calls: list | None = None,
+        input_tokens: int = 10,
+        output_tokens: int = 5,
+    ):
         self.text = text
         self.tool_calls = tool_calls or []
         self.usage = SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens)
@@ -54,12 +60,14 @@ class MockLLM:
         self._delay_s = delay_s
 
     async def complete(self, *, request, model, tools, abort_event, **kw):
-        self.calls.append({
-            "messages": [dict(m) for m in request.messages],
-            "system": request.system,
-            "model": model,
-            "n_tools": len(tools or []),
-        })
+        self.calls.append(
+            {
+                "messages": [dict(m) for m in request.messages],
+                "system": request.system,
+                "model": model,
+                "n_tools": len(tools or []),
+            }
+        )
         if self._delay_s:
             await asyncio.sleep(self._delay_s)
         if self._idx >= len(self._responses):
@@ -107,8 +115,14 @@ class MockToolRegistry:
 
     def list_for_llm(self, allowed_names=None) -> list[dict]:
         return [
-            {"type": "function", "function": {"name": t.name,
-             "description": t.description, "parameters": t.parameters}}
+            {
+                "type": "function",
+                "function": {
+                    "name": t.name,
+                    "description": t.description,
+                    "parameters": t.parameters,
+                },
+            }
             for t in self._tools.values()
             if allowed_names is None or t.name in allowed_names
         ]
@@ -161,11 +175,16 @@ def _tc(call_id: str, name: str = "noop", args: dict | None = None) -> dict:
     }
 
 
-async def _run(harness: LoopHarness, *, messages: list | None = None,
-               max_turns: int = 8, timeout_s: float = 30.0,
-               sub_ctx: ToolContext | None = None,
-               llm: MockLLM | None = None,
-               tools: MockToolRegistry | None = None):
+async def _run(
+    harness: LoopHarness,
+    *,
+    messages: list | None = None,
+    max_turns: int = 8,
+    timeout_s: float = 30.0,
+    sub_ctx: ToolContext | None = None,
+    llm: MockLLM | None = None,
+    tools: MockToolRegistry | None = None,
+):
     llm = llm or harness._llm
     tools = tools or harness._tools
     messages = messages if messages is not None else [{"role": "user", "content": "go"}]
@@ -190,10 +209,12 @@ async def _run(harness: LoopHarness, *, messages: list | None = None,
 @pytest.mark.asyncio
 @pytest.mark.parametrize("max_turns", [8, 0])  # 0 = 无迭代上限（fork 语义）
 async def test_natural_completion(max_turns: int) -> None:
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="all done", input_tokens=20, output_tokens=7),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="all done", input_tokens=20, output_tokens=7),
+        ]
+    )
     harness = LoopHarness(llm, MockToolRegistry([MockTool("noop")]))
     messages = [{"role": "user", "content": "go"}]
 
@@ -236,7 +257,11 @@ async def test_max_turns_exceeded() -> None:
     assert last_call_tools[0]["tool_call_id"] == "tc0"
     # 末轮 dispatch 后工具结果完整回填（assistant tool_calls 不留孤儿）
     assert [m["role"] for m in messages] == [
-        "user", "assistant", "tool", "assistant", "tool",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+        "tool",
     ]
     assert messages[4]["tool_call_id"] == "tc1"
     # 终端进度映射：max_turns_exceeded → failed
@@ -282,15 +307,19 @@ async def test_deadline_timeout() -> None:
 @pytest.mark.asyncio
 async def test_loop_top_deadline_exhausted_second_iteration() -> None:
     """轮顶墙钟检查（LLM 调用前）：第 1 轮工具执行耗尽预算，第 2 轮轮顶终止。"""
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="never"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="never"),
+        ]
+    )
     harness = LoopHarness(
         llm,
-        MockToolRegistry([
-            MockTool("noop", execute_fn=lambda args: _sleep_then_text(0.25)),
-        ]),
+        MockToolRegistry(
+            [
+                MockTool("noop", execute_fn=lambda args: _sleep_then_text(0.25)),
+            ]
+        ),
     )
 
     outcome, turns, usage = await _run(harness, timeout_s=0.15)
@@ -310,13 +339,13 @@ def _sleep_then_text(_args: dict) -> str:
 
 @pytest.mark.asyncio
 async def test_tool_exception_becomes_error_result() -> None:
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="recovered"),
-    ])
-    harness = LoopHarness(
-        llm, MockToolRegistry([MockTool("noop", raise_exc=RuntimeError("boom"))])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="recovered"),
+        ]
     )
+    harness = LoopHarness(llm, MockToolRegistry([MockTool("noop", raise_exc=RuntimeError("boom"))]))
     messages = [{"role": "user", "content": "go"}]
 
     outcome, turns, usage = await _run(harness, messages=messages, llm=llm)
@@ -334,10 +363,12 @@ async def test_tool_exception_becomes_error_result() -> None:
 
 @pytest.mark.asyncio
 async def test_unregistered_tool_becomes_error_result() -> None:
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1", name="ghost")]),
-        MockResponse(text="ok then"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1", name="ghost")]),
+            MockResponse(text="ok then"),
+        ]
+    )
     harness = LoopHarness(llm, MockToolRegistry([MockTool("noop")]))
     messages = [{"role": "user", "content": "go"}]
 
@@ -355,10 +386,12 @@ async def test_unregistered_tool_becomes_error_result() -> None:
 
 @pytest.mark.asyncio
 async def test_should_break_after_results() -> None:
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="never reached"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="never reached"),
+        ]
+    )
     harness = LoopHarness(llm, MockToolRegistry([MockTool("noop")]))
     sub_ctx = _sub_ctx(should_break_after_results=True)
 
@@ -375,10 +408,12 @@ async def test_should_break_after_results() -> None:
 @pytest.mark.asyncio
 async def test_progress_event_sequence() -> None:
     recorder = ProgressRecorder()
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1", name="med__read")]),
-        MockResponse(text="done"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1", name="med__read")]),
+            MockResponse(text="done"),
+        ]
+    )
     tools = MockToolRegistry([MockTool("med__read")])
     harness = LoopHarness(llm, tools)
     sub_ctx = _sub_ctx(subagent_progress_emitter=recorder)
@@ -387,11 +422,11 @@ async def test_progress_event_sequence() -> None:
 
     statuses = [item.partial_status for item in recorder.items]
     assert statuses == [
-        "tool_calling",   # turn 1：LLM 返回工具调用
-        "tool_running",   # turn 1：工具执行中（首个工具名，__→: 归一化）
-        "tool_calling",   # turn 1：工具执行完毕
-        "thinking",       # turn 2：无工具调用
-        "completed",      # 终态
+        "tool_calling",  # turn 1：LLM 返回工具调用
+        "tool_running",  # turn 1：工具执行中（首个工具名，__→: 归一化）
+        "tool_calling",  # turn 1：工具执行完毕
+        "thinking",  # turn 2：无工具调用
+        "completed",  # 终态
     ]
     tool_running = recorder.items[1]
     assert tool_running.current_tool == "med:read"
@@ -407,10 +442,12 @@ async def test_progress_event_sequence() -> None:
 @pytest.mark.asyncio
 async def test_abort_mid_loop_after_completed_turn() -> None:
     """abort 在工具执行期触发：第 2 轮 LLM 调用前终止，已完成的轮次保留。"""
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")]),
-        MockResponse(text="never"),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")]),
+            MockResponse(text="never"),
+        ]
+    )
     sub_ctx = _sub_ctx()
 
     def _set_abort(_args: dict) -> str:
@@ -431,10 +468,12 @@ async def test_abort_mid_loop_after_completed_turn() -> None:
 @pytest.mark.asyncio
 async def test_no_usage_accumulates_zero() -> None:
     """response.usage 为 None 时 usage_acc 保持 0。"""
-    llm = MockLLM([
-        MockResponse(tool_calls=[_tc("tc1")], input_tokens=10, output_tokens=5),
-        MockResponse(text="done", input_tokens=0, output_tokens=0),
-    ])
+    llm = MockLLM(
+        [
+            MockResponse(tool_calls=[_tc("tc1")], input_tokens=10, output_tokens=5),
+            MockResponse(text="done", input_tokens=0, output_tokens=0),
+        ]
+    )
     llm._responses[1].usage = None
     harness = LoopHarness(llm, MockToolRegistry([MockTool("noop")]))
 

@@ -27,10 +27,21 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
-from prismclaw.schema.storage.storage_types import MemoryStore
 from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.storage.storage_types import MemoryStore
+
+if TYPE_CHECKING:
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.memory.memory_graph import MemoryEdge
+
+    class EdgeStorePort(Protocol):
+        async def store_edge(self, session_key: str, edge: MemoryEdge) -> None: ...
+        async def edge_degree(self, session_key: str, entry_id: str) -> int: ...
+        async def deactivate_edges_for_entry(self, session_key: str, entry_id: str) -> int: ...
+        async def cleanup_dead_edges(self, session_key: str) -> int: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +59,8 @@ async def _scan_active(memory: MemoryStore, session_key: str, limit: int) -> lis
         logger.warning("tier scan failed for %s", session_key, exc_info=True)
         return []
     return [
-        e for e in entries
+        e
+        for e in entries
         if str(getattr(e, "publish_state", "") or "").strip().lower() not in {"draft", "rejected"}
     ]
 
@@ -132,7 +144,10 @@ async def run_light_tier(
     if groups:
         logger.info(
             "[SDD-B3/light] %s: groups=%d deduped=%d suggestions=%d",
-            session_key, groups, deduped, suggestions,
+            session_key,
+            groups,
+            deduped,
+            suggestions,
         )
     return {"deduped": deduped, "groups": groups, "suggestions": suggestions}
 
@@ -143,8 +158,8 @@ async def run_light_tier(
 
 _CONFIDENCE_FLOOR = 0.05
 _CONFIDENCE_CEIL = 0.95
-_STRONG_NEG_PENALTY = 0.8       # one strong negative × current confidence
-_WEAK_POS_BONUS = 0.02          # per weak positive
+_STRONG_NEG_PENALTY = 0.8  # one strong negative × current confidence
+_WEAK_POS_BONUS = 0.02  # per weak positive
 _STABILITY_POS_BONUS = 0.05
 _STABILITY_NEG_PENALTY = 0.1
 
@@ -159,7 +174,7 @@ async def run_mid_tier(
     contest_exit_days: int = 30,
     scan_limit: int = _MERGE_PAIR_SCAN_LIMIT,
     budget_entries: int = 0,
-    edge_store: Any = None,
+    edge_store: EdgeStorePort | None = None,
 ) -> dict[str, int]:
     """Daily bookkeeping: validation writeback + decay + CONTEST exits.
 
@@ -200,7 +215,7 @@ async def run_mid_tier(
             continue
         confidence = float(entry.confidence if entry.confidence is not None else 0.5)
         if strong_neg:
-            confidence *= _STRONG_NEG_PENALTY ** strong_neg
+            confidence *= _STRONG_NEG_PENALTY**strong_neg
         confidence += _WEAK_POS_BONUS * weak_pos
         confidence -= 0.01 * weak_neg
         confidence = max(_CONFIDENCE_FLOOR, min(_CONFIDENCE_CEIL, confidence))
@@ -211,20 +226,24 @@ async def run_mid_tier(
         if strong_neg or weak_neg:
             stability = max(0.0, stability - _STABILITY_NEG_PENALTY * (strong_neg + weak_neg))
 
-        updates.append((entry.id, {
-            "confidence": confidence,
-            "stability_score": stability,
-            # Consume the events: the watermark advances past every event
-            # counted above, so the next run sees only what arrived since.
-            "last_validated_at": now,
-        }))
+        updates.append(
+            (
+                entry.id,
+                {
+                    "confidence": confidence,
+                    "stability_score": stability,
+                    # Consume the events: the watermark advances past every event
+                    # counted above, so the next run sees only what arrived since.
+                    "last_validated_at": now,
+                },
+            )
+        )
         writebacks += 1
 
     # 2. Expired entries (expires_at / valid_to in the past) → decayed.
     for entry in active:
-        expired = (
-            (entry.expires_at is not None and float(entry.expires_at) < now)
-            or (entry.valid_to is not None and float(entry.valid_to) < now)
+        expired = (entry.expires_at is not None and float(entry.expires_at) < now) or (
+            entry.valid_to is not None and float(entry.valid_to) < now
         )
         if expired:
             updates.append((entry.id, {"status": "decayed"}))
@@ -257,7 +276,10 @@ async def run_mid_tier(
     if writebacks or decayed or contest_exited:
         logger.info(
             "[SDD-B3/mid] %s: writebacks=%d decayed=%d contest_exits=%d",
-            session_key, writebacks, decayed, contest_exited,
+            session_key,
+            writebacks,
+            decayed,
+            contest_exited,
         )
 
     # E3: 价值驱动的降级迁移。
@@ -273,7 +295,9 @@ async def run_mid_tier(
 
         _protected_publish = {"published", "canary", "reviewed"}
         active_for_demote = [
-            e for e in active if e.status == "active"
+            e
+            for e in active
+            if e.status == "active"
             and e.id not in decayed_ids
             # 不降级刚写入的条目（<1天）和发布态条目
             and (now - float(e.updated_at or e.created_at)) > 86400.0
@@ -291,7 +315,10 @@ async def run_mid_tier(
                 except Exception:
                     logger.warning("edge degree query failed for %s", session_key, exc_info=True)
 
-            scored = [(e, memory_value(e, now=now, edge_degree=edge_degrees.get(e.id, 0))) for e in active_for_demote]
+            scored = [
+                (e, memory_value(e, now=now, edge_degree=edge_degrees.get(e.id, 0)))
+                for e in active_for_demote
+            ]
             scored.sort(key=lambda x: x[1])  # 升序，最低价值在前
             # 渐进式降级：每次最多降级超出部分的 demote_fraction，最少 1 条
             excess = len(active_for_demote) - budget_entries
@@ -324,7 +351,9 @@ async def run_mid_tier(
                                 try:
                                     await edge_store.deactivate_edges_for_entry(session_key, eid)
                                 except Exception:
-                                    logger.warning("edge deactivate failed for %s", eid, exc_info=True)
+                                    logger.warning(
+                                        "edge deactivate failed for %s", eid, exc_info=True
+                                    )
 
             # L2 刷盘成功后执行 L3 归档
             l3_demoted = 0
@@ -338,7 +367,9 @@ async def run_mid_tier(
                             try:
                                 await edge_store.deactivate_edges_for_entry(session_key, entry_id)
                             except Exception:
-                                logger.warning("edge deactivate failed for %s", entry_id, exc_info=True)
+                                logger.warning(
+                                    "edge deactivate failed for %s", entry_id, exc_info=True
+                                )
                 except Exception:
                     logger.warning("mid tier demote archive failed for %s", entry_id, exc_info=True)
             # 修正 demoted 计数：仅计入 L3 实际成功归档数
@@ -349,7 +380,11 @@ async def run_mid_tier(
             if demoted:
                 logger.info(
                     "[SDD-B3/mid] %s: demoted=%d (budget=%d, active=%d, excess=%d)",
-                    session_key, demoted, budget_entries, len(active_for_demote), excess,
+                    session_key,
+                    demoted,
+                    budget_entries,
+                    len(active_for_demote),
+                    excess,
                 )
 
             # updates 已提前刷盘，清空避免重复刷盘
@@ -379,13 +414,13 @@ async def run_mid_tier(
 
 async def run_deep_tier(
     memory: MemoryStore,
-    llm_client: Any,
+    llm_client: LLMClient,
     session_key: str,
     *,
     min_positive: int = 1,
     scan_limit: int = _MERGE_PAIR_SCAN_LIMIT,
     correction_learning_enabled: bool = False,
-    edge_store: Any = None,
+    edge_store: EdgeStorePort | None = None,
 ) -> dict[str, int]:
     """Weekly semantic merge. Admission: BOTH sides carry positive validation
     history (≥ min_positive each). Loser gets valid_to (reversible), survivor
@@ -434,7 +469,8 @@ async def run_deep_tier(
             examined += 1
             survivor, loser = (
                 (entry, neighbor)
-                if (entry.updated_at, entry.created_at) >= (neighbor.updated_at, neighbor.created_at)
+                if (entry.updated_at, entry.created_at)
+                >= (neighbor.updated_at, neighbor.created_at)
                 else (neighbor, entry)
             )
             merged_content = await _llm_merge(llm_client, survivor.content, loser.content)
@@ -443,34 +479,47 @@ async def run_deep_tier(
             now = time.time()
             chain_id = survivor.version_chain_id or survivor.id
             try:
-                await memory.store(session_key, survivor.model_copy(update={
-                    "content": merged_content,
-                    "version_chain_id": chain_id,
-                    "supersedes": sorted({*survivor.supersedes, loser.id}),
-                    "confidence": min(0.95, max(
-                        float(survivor.confidence or 0.5), float(loser.confidence or 0.5)
-                    ) + 0.05),
-                    "stability_score": min(1.0, float(survivor.stability_score or 0.5) + 0.05),
-                    "updated_at": now,
-                }))
-                await memory.store(session_key, loser.model_copy(update={
-                    "valid_to": now,          # reversible soft-invalidation
-                    "winner_flag": False,
-                    "version_chain_id": chain_id,
-                    "updated_at": now,
-                }))
+                await memory.store(
+                    session_key,
+                    survivor.model_copy(
+                        update={
+                            "content": merged_content,
+                            "version_chain_id": chain_id,
+                            "supersedes": sorted({*survivor.supersedes, loser.id}),
+                            "confidence": min(
+                                0.95,
+                                max(
+                                    float(survivor.confidence or 0.5),
+                                    float(loser.confidence or 0.5),
+                                )
+                                + 0.05,
+                            ),
+                            "stability_score": min(
+                                1.0, float(survivor.stability_score or 0.5) + 0.05
+                            ),
+                            "updated_at": now,
+                        }
+                    ),
+                )
+                await memory.store(
+                    session_key,
+                    loser.model_copy(
+                        update={
+                            "valid_to": now,  # reversible soft-invalidation
+                            "winner_flag": False,
+                            "version_chain_id": chain_id,
+                            "updated_at": now,
+                        }
+                    ),
+                )
                 used_ids.update({survivor.id, loser.id})
                 merged += 1
             except Exception:
-                logger.warning(
-                    "deep tier merge store failed for %s", session_key, exc_info=True
-                )
+                logger.warning("deep tier merge store failed for %s", session_key, exc_info=True)
             break  # one merge per survivor per run
 
     if examined:
-        logger.info(
-            "[SDD-B3/deep] %s: pairs_examined=%d merged=%d", session_key, examined, merged
-        )
+        logger.info("[SDD-B3/deep] %s: pairs_examined=%d merged=%d", session_key, examined, merged)
 
     # E4: 纠正自学习。
     # 当 active 条目有 ≥2 strong_negative 信号且同 entity_key 有较新条目时，
@@ -478,7 +527,10 @@ async def run_deep_tier(
     correction_result = {"learned": 0, "skipped_low_signal": 0, "skipped_no_newer": 0}
     if correction_learning_enabled:
         correction_result = await _learn_from_corrections(
-            memory, session_key, min_negatives=2, scan_limit=scan_limit,
+            memory,
+            session_key,
+            min_negatives=2,
+            scan_limit=scan_limit,
         )
 
     # E5: 死边清理。删除 source/target 条目已不存在的 inactive 边。
@@ -494,23 +546,30 @@ async def run_deep_tier(
     if edge_store is not None and llm_client is not None:
         try:
             from prismclaw.engine.memory.relation_extractor import RelationExtractor
+
             extractor = RelationExtractor()
             batch_text = "\n".join(
                 f"[{e.entity_key}] {e.content[:500]}…"
-                for e in pool if e.status == "active" and e.entity_key
+                for e in pool
+                if e.status == "active" and e.entity_key
             )
             # 防御性截断：避免 batch_text 超出 LLM 上下文窗口
-            _MAX_BATCH_CHARS = 32_000
-            if len(batch_text) > _MAX_BATCH_CHARS:
-                batch_text = batch_text[:_MAX_BATCH_CHARS]
+            _max_batch_chars = 32_000
+            if len(batch_text) > _max_batch_chars:
+                batch_text = batch_text[:_max_batch_chars]
             if batch_text.strip():
                 relations = await extractor.extract(batch_text, llm_client=llm_client)
                 if relations:
                     relations_extracted = await extractor.resolve_and_store(
-                        session_key, relations, memory=memory, edge_store=edge_store,
+                        session_key,
+                        relations,
+                        memory=memory,
+                        edge_store=edge_store,
                     )
         except Exception:
-            logger.warning("[E6] deep tier relation extraction failed for %s", session_key, exc_info=True)
+            logger.warning(
+                "[E6] deep tier relation extraction failed for %s", session_key, exc_info=True
+            )
 
     return {
         "pairs_examined": examined,
@@ -578,7 +637,8 @@ async def _learn_from_corrections(
             continue
 
         newer = [
-            e for e in active
+            e
+            for e in active
             if getattr(e, "entity_key", None) == entity_key
             and e.id != entry.id
             and (e.created_at or 0) > (entry.created_at or 0)
@@ -615,9 +675,7 @@ async def _learn_from_corrections(
             retirement_updates.append((entry.id, {"status": "decayed"}))
             learned += 1
         except Exception:
-            logger.warning(
-                "correction learning store failed for %s", session_key, exc_info=True
-            )
+            logger.warning("correction learning store failed for %s", session_key, exc_info=True)
 
     # 批量退役被纠正的原条目
     if retirement_updates:
@@ -631,7 +689,10 @@ async def _learn_from_corrections(
     if learned:
         logger.info(
             "[SDD-B3/deep/E4] %s: learned=%d skipped_signal=%d skipped_no_newer=%d",
-            session_key, learned, skipped_low_signal, skipped_no_newer,
+            session_key,
+            learned,
+            skipped_low_signal,
+            skipped_no_newer,
         )
 
     return {
@@ -641,7 +702,8 @@ async def _learn_from_corrections(
     }
 
 
-_MERGE_PROMPT = """合并以下两条关于同一主题的记忆为一条完整表述。保留双方的全部信息增量，不要丢失任何细节；若两者冲突以较新表述为准。
+_MERGE_PROMPT = """合并以下两条关于同一主题的记忆为一条完整表述。
+保留双方的全部信息增量，不要丢失任何细节；若两者冲突以较新表述为准。
 
 记忆A：{a}
 
@@ -650,7 +712,7 @@ _MERGE_PROMPT = """合并以下两条关于同一主题的记忆为一条完整�
 直接输出合并后的单条记忆内容，不要任何解释。"""
 
 
-async def _llm_merge(llm_client: Any, a: str, b: str) -> str | None:
+async def _llm_merge(llm_client: LLMClient, a: str, b: str) -> str | None:
     try:
         from prismclaw.schema.llm.request import PackedLLMRequest
 

@@ -4,19 +4,28 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass
-from typing import Any, cast, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
-from prismclaw.engine.subagent.definition.manifest import AgentManifest
-from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.engine.compression.preservation import project_active_skill_invocation
 from prismclaw.engine.execution.checkpoint import (
     InvokedSkillRecord,
     RunSnapshot,
 )
+from prismclaw.engine.subagent.definition.manifest import AgentManifest
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
-from prismclaw.schema.content.content_types import RuntimeControlArtifact, ToolContextModifier, ToolResult, ToolSkillExecutionStrategy
-from prismclaw.schema.agent.session import AgentMessageDict, ProjectionInputMessage, SystemReminderProjection
+from prismclaw.schema.agent.session import (
+    AgentMessageDict,
+    ProjectionInputMessage,
+    SystemReminderProjection,
+)
+from prismclaw.schema.content.content_types import (
+    RuntimeControlArtifact,
+    ToolContextModifier,
+    ToolResult,
+    ToolSkillExecutionStrategy,
+)
 from prismclaw.schema.services.skills import SkillInvocationState
 
 if TYPE_CHECKING:
@@ -26,7 +35,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _coerce_appended_messages(raw: Any) -> list[ProjectionInputMessage]:
+def _coerce_appended_messages(raw: object) -> list[ProjectionInputMessage]:
     if not isinstance(raw, list):
         return []
     out: list[ProjectionInputMessage] = []
@@ -100,7 +109,8 @@ def _normalize_allowed_tool_names(
                 normalized.append(canonical)
             logger.info(
                 "allowed_tools: case-insensitive match %r → %r",
-                item, canonical,
+                item,
+                canonical,
             )
             continue
 
@@ -151,7 +161,8 @@ def _record_invoked_skill_from_runtime_control(
         skill_name = modifier.active_skill_name
     else:
         return
-    catalog_entry = deps.capability_catalog.get_skill_entry(skill_name)
+    catalog = deps.capability_catalog
+    catalog_entry = catalog.get_skill_entry(skill_name) if catalog is not None else None
     instructions = catalog_entry.instructions if catalog_entry is not None else ""
     snapshot.invoked_skill_state.skills[skill_name] = InvokedSkillRecord(
         skill_name=skill_name,
@@ -224,9 +235,7 @@ async def _dispatch_skill_execution_strategy_result(
     if not isinstance(plan.subagent_manifest, dict):
         return _skill_dispatch_error_result(
             call_id=result.tool_call_id,
-            message=(
-                f"技能执行模式 '{plan.execution_mode}' 未提供子代理清单数据。"
-            ),
+            message=(f"技能执行模式 '{plan.execution_mode}' 未提供子代理清单数据。"),
             runtime_control=runtime_control,
         )
     try:
@@ -326,13 +335,8 @@ def _apply_context_modifiers_from_results(
         modifier = runtime_control.context_modifier if runtime_control is not None else None
         if modifier is None:
             continue
-        old_skill_name = (
-            resolved_state.skill_name if resolved_state is not None else None
-        )
-        if (
-            old_skill_name is not None
-            and modifier.active_skill_name != old_skill_name
-        ):
+        old_skill_name = resolved_state.skill_name if resolved_state is not None else None
+        if old_skill_name is not None and modifier.active_skill_name != old_skill_name:
             logger.warning(
                 "skill_override old=%s new=%s",
                 old_skill_name,
@@ -345,15 +349,15 @@ def _apply_context_modifiers_from_results(
                     "此前技能的约束不再生效。]"
                 ),
             }
-            updated_messages = _append_control_message_override(
-                updated_messages, switch_msg
-            )
+            updated_messages = _append_control_message_override(updated_messages, switch_msg)
         catalog_entry = (
             deps.capability_catalog.get_skill_entry(modifier.active_skill_name)
             if deps.capability_catalog is not None
             else None
         )
-        plugin_name = getattr(catalog_entry, "plugin_name", None) if catalog_entry is not None else None
+        plugin_name = (
+            getattr(catalog_entry, "plugin_name", None) if catalog_entry is not None else None
+        )
         resolved_state = SkillInvocationState(
             skill_name=modifier.active_skill_name,
             allowed_tools_override=_normalize_allowed_tool_names(
@@ -374,13 +378,13 @@ def _apply_context_modifiers_from_results(
         # 重复断言不产生新上下文，避免每工具结果刷一条 context cell
         if old_skill_name != modifier.active_skill_name:
             content = "\n\n".join(injected_texts)
-            injections.append(ContextInjection(
-                skill_name=modifier.active_skill_name,
-                content=content,
-                entry_id=(
-                    f"skill_{modifier.active_skill_name}_{int(time.time() * 1000)}"
-                ),
-            ))
+            injections.append(
+                ContextInjection(
+                    skill_name=modifier.active_skill_name,
+                    content=content,
+                    entry_id=(f"skill_{modifier.active_skill_name}_{int(time.time() * 1000)}"),
+                )
+            )
     project_active_skill_invocation(
         request=request,
         snapshot=snapshot,

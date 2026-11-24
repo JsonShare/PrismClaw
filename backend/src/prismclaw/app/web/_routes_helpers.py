@@ -9,7 +9,7 @@ from __future__ import annotations
 import mimetypes
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from fastapi import HTTPException, Request
@@ -22,26 +22,40 @@ from prismclaw.app.web.workspace_ids import (
 )
 from prismclaw.schema.storage.storage_types import SessionStore
 
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from prismclaw.app.web.chat.chat_protocol import SessionQueue
+    from prismclaw.engine.hooks.memory_nudge_hook import MemoryNudgeHook
+    from prismclaw.infra.settings import Settings
+    from prismclaw.infra.settings._dream import EvolutionSettings
+    from prismclaw.infra.task_manager import TaskManager
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.storage.storage_types import MemoryStore
+
 # ---------------------------------------------------------------------------
 # Module-level globals — set once via set_web_deps() at lifespan startup.
 # ---------------------------------------------------------------------------
 _store: SessionStore | None = None
 _session_router: SessionRouter | None = None
-_memory_store: Any = None
-_task_manager: Any = None
-_redis_client: Any = None
-_session_factory: Any = None
-_llm_client: Any = None
-_evolution_settings: Any = None
-_nudge_hook: Any = None
+_memory_store: MemoryStore | None = None
+_task_manager: TaskManager | None = None
+_redis_client: Redis | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
+_llm_client: LLMClient | None = None
+_evolution_settings: EvolutionSettings | None = None
+_nudge_hook: MemoryNudgeHook | None = None
+
 
 # ---------------------------------------------------------------------------
 # Lazy import for the module-level session queue defined in chat.py.
 # We avoid a top-level import to prevent circular-import issues; the chat
 # module sets _session_queue at import time, so a deferred import is safe.
 # ---------------------------------------------------------------------------
-def _get_chat_session_queue():
+def _get_chat_session_queue() -> SessionQueue:
     from prismclaw.app.web.chat.chat_protocol import _session_queue
+
     return _session_queue
 
 
@@ -49,13 +63,13 @@ def set_web_deps(
     store: SessionStore,
     session_router: SessionRouter,
     *,
-    memory_store: Any = None,
-    task_manager: Any = None,
-    redis_client: Any = None,
-    session_factory: Any = None,
-    llm_client: Any = None,
-    evolution_settings: Any = None,
-    nudge_hook: Any = None,
+    memory_store: MemoryStore | None = None,
+    task_manager: TaskManager | None = None,
+    redis_client: Redis | None = None,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    llm_client: LLMClient | None = None,
+    evolution_settings: EvolutionSettings | None = None,
+    nudge_hook: MemoryNudgeHook | None = None,
 ) -> None:
     global _store, _session_router, _memory_store, _task_manager
     global _redis_client, _session_factory, _llm_client, _evolution_settings, _nudge_hook
@@ -98,7 +112,7 @@ def _resolve_workspace_root(
     """Resolve a cloud workspace's server-managed directory.
 
     Every workspace ("default" or a custom id) is a direct sub-directory of the
-    user's container (``user_root``); the concrete folders (outputs/inbox/
+    user's container (``user_root``); the concrete folders (outbox/inbox/
     tmp/...) live *inside* that sub-directory — never flattened at user_root.
     There is no local-filesystem binding: cloud workspaces always resolve to a
     server-side directory under ``workspace_base``.
@@ -121,7 +135,7 @@ def _resolve_within_root(root: Path, relative: str) -> Path:
     return resolved
 
 
-def _get_web_settings(request: Request) -> Any:
+def _get_web_settings(request: Request) -> object | None:
     web_deps = get_web_deps(request)
     settings_full = web_deps.settings_full
     if settings_full is None:
@@ -132,7 +146,7 @@ def _get_web_settings(request: Request) -> Any:
     return getattr(channels, "web", None)
 
 
-def _get_settings_full(request: Request) -> Any:
+def _get_settings_full(request: Request) -> Settings:
     web_deps = get_web_deps(request)
     return web_deps.settings_full
 
@@ -235,10 +249,13 @@ def _csp_for_mime(media_type: str | None) -> str | None:
         return _CSP_SANDBOX
     if base == "text/html":
         return _CSP_SANDBOX
-    if (
-        base.startswith(("image/", "video/", "audio/", "text/"))
-        or base in ("application/pdf", "application/json", "application/xml",
-                    "application/zip", "application/gzip", "application/x-tar")
+    if base.startswith(("image/", "video/", "audio/", "text/")) or base in (
+        "application/pdf",
+        "application/json",
+        "application/xml",
+        "application/zip",
+        "application/gzip",
+        "application/x-tar",
     ):
         return None
     return _CSP_SANDBOX
@@ -254,7 +271,7 @@ def _content_disposition_inline(filename: str) -> str:
         ascii_fallback = "file" + suffix
     ascii_fallback = ascii_fallback.replace('"', "_")
     encoded = quote(name, safe="!#$&+-.^_`|~")
-    return f'inline; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+    return f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def _content_disposition_attachment(filename: str) -> str:
@@ -267,7 +284,7 @@ def _content_disposition_attachment(filename: str) -> str:
         ascii_fallback = "file" + suffix
     ascii_fallback = ascii_fallback.replace('"', "_")
     encoded = quote(name, safe="!#$&+-.^_`|~")
-    return f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded}'
+    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{encoded}"
 
 
 def _candidate_file_targets(
@@ -293,7 +310,11 @@ def _candidate_file_targets(
         except Exception:
             abs_resolved = Path(s).expanduser()
         try:
-            return [_resolve_within_root(workspace_root_abs, str(abs_resolved.relative_to(workspace_root_abs)))]
+            return [
+                _resolve_within_root(
+                    workspace_root_abs, str(abs_resolved.relative_to(workspace_root_abs))
+                )
+            ]
         except ValueError:
             return []
 

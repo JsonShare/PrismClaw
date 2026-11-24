@@ -33,7 +33,7 @@ class TurnProfiler:
         self._started_at = time.monotonic()
         self._events: list[ProfilerEvent] = []
 
-    def mark(self, checkpoint: str, /, **metadata: Any) -> ProfilerEvent | None:
+    def mark(self, checkpoint: str, /, **metadata: object) -> ProfilerEvent | None:
         if not self._enabled:
             return None
         event = ProfilerEvent(
@@ -60,7 +60,10 @@ class TurnProfiler:
             return
         checkpoints = [event.checkpoint for event in self._events]
         self._logger.info(
-            "turn_profiler_summary session_id=%s request_id=%s status=%s checkpoints=%r total_elapsed_ms=%.1f",
+            (
+                "turn_profiler_summary session_id=%s request_id=%s "
+                "status=%s checkpoints=%r total_elapsed_ms=%.1f"
+            ),
             self.session_id,
             self.request_id or "-",
             status or "",

@@ -3,15 +3,28 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from prismclaw.engine.dream.candidates import DreamCandidateCollector, DreamCandidateStore
+from prismclaw.engine.memory.archive import archive_session_background
+from prismclaw.schema.agent.context import MemoryAftermathBoundary
+from prismclaw.schema.agent.memory import MemoryGatewayProtocol
+from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.dream.dream import DreamEnqueueBoundary
 from prismclaw.schema.dream.dream_types import DreamEnqueueResult
-from prismclaw.engine.dream.candidates import DreamCandidateCollector, DreamCandidateStore
-from prismclaw.schema.agent.context import MemoryAftermathBoundary
-from prismclaw.schema.agent.session import MessageEntry
+from prismclaw.schema.memory.memory_graph import EdgeStoreProtocol
 from prismclaw.schema.session.ids import derive_memory_session_key
-from prismclaw.engine.memory.archive import archive_session_background
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
+    from prismclaw.engine.hooks.memory_nudge_hook import MemoryNudgeHook
+    from prismclaw.engine.memory.attribution import AttributionRecorder
+    from prismclaw.engine.memory.validation_signals import ValidationSignalLedger
+    from prismclaw.infra.settings._dream import EvolutionSettings
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +41,7 @@ class NullMemoryAftermathBoundary:
         _ = session_id
         return False
 
-    def set_session_store(self, session_store: Any) -> None:
+    def set_session_store(self, session_store: SessionStore | None) -> None:
         _ = session_store
 
 
@@ -36,19 +49,19 @@ class DefaultMemoryAftermathBoundary:
     def __init__(
         self,
         *,
-        memory_store: Any = None,
-        session_store: Any = None,
-        task_manager: Any = None,
-        redis_client: Any = None,
-        llm_client: Any = None,
-        evolution_settings: Any = None,
-        nudge_hook: Any = None,
+        memory_store: MemoryStore | None = None,
+        session_store: SessionStore | None = None,
+        task_manager: TaskManagerProtocol | None = None,
+        redis_client: aioredis.Redis | None = None,
+        llm_client: LLMClient | None = None,
+        evolution_settings: EvolutionSettings | None = None,
+        nudge_hook: MemoryNudgeHook | None = None,
         dream_boundary: DreamEnqueueBoundary | None = None,
         dream_candidate_store: DreamCandidateStore | None = None,
-        attribution_recorder: Any = None,
-        memory_gateway: Any = None,
-        edge_store: Any = None,
-        validation_ledger: Any = None,
+        attribution_recorder: AttributionRecorder | None = None,
+        memory_gateway: MemoryGatewayProtocol | None = None,
+        edge_store: EdgeStoreProtocol | None = None,
+        validation_ledger: ValidationSignalLedger | None = None,
     ) -> None:
         self._memory_store = memory_store
         self._session_store = session_store
@@ -74,7 +87,7 @@ class DefaultMemoryAftermathBoundary:
         self._dream_candidate_collector: DreamCandidateCollector | None = None
         self._refresh_dream_candidate_collector()
 
-    def set_session_store(self, session_store: Any) -> None:
+    def set_session_store(self, session_store: SessionStore | None) -> None:
         self._session_store = session_store
         self._refresh_dream_candidate_collector()
 
@@ -134,12 +147,12 @@ class DefaultMemoryAftermathBoundary:
         try:
             await self._dream_candidate_collector.capture_session(session_id, session_key)
         except Exception:
-            logger.warning("dream session candidate capture failed for %s", session_id, exc_info=True)
+            logger.warning(
+                "dream session candidate capture failed for %s", session_id, exc_info=True
+            )
 
     def _capture_fullturn_enabled(self) -> bool:
-        return bool(
-            getattr(self._evolution_settings, "capture_fullturn_enabled", False)
-        )
+        return bool(getattr(self._evolution_settings, "capture_fullturn_enabled", False))
 
     async def _buffer_chat_turn(self, session_id: str) -> None:
         """SDD A4: buffer the latest turn's transcript when it had no tool calls.
@@ -164,17 +177,19 @@ class DefaultMemoryAftermathBoundary:
                 return
             branch = tree.get_branch()
             last_user_idx: int | None = None
+            last_user_entry: MessageEntry | None = None
             for idx in range(len(branch) - 1, -1, -1):
                 entry = branch[idx]
                 if isinstance(entry, MessageEntry) and entry.role == "user":
                     last_user_idx = idx
+                    last_user_entry = entry
                     break
-            if last_user_idx is None:
+            if last_user_idx is None or last_user_entry is None:
                 return
 
             has_tool_use = False
             last_assistant: MessageEntry | None = None
-            for entry in branch[last_user_idx + 1:]:
+            for entry in branch[last_user_idx + 1 :]:
                 if not isinstance(entry, MessageEntry):
                     continue
                 if entry.role == "tool":
@@ -188,7 +203,7 @@ class DefaultMemoryAftermathBoundary:
 
             from prismclaw.schema.shared import extract_text_from_content
 
-            user_text = extract_text_from_content(branch[last_user_idx].content)
+            user_text = extract_text_from_content(last_user_entry.content)
             assistant_text = extract_text_from_content(last_assistant.content)
             if not user_text.strip() and not assistant_text.strip():
                 return
@@ -199,9 +214,7 @@ class DefaultMemoryAftermathBoundary:
             if len(buffer) > _CHAT_TURN_BUFFER_CAP:
                 del buffer[: len(buffer) - _CHAT_TURN_BUFFER_CAP]
         except Exception:
-            logger.warning(
-                "chat turn buffering failed for %s", session_id, exc_info=True
-            )
+            logger.warning("chat turn buffering failed for %s", session_id, exc_info=True)
 
     async def _flush_chat_facts(self, session_id: str) -> None:
         """Session-end batched extraction + independent validator over buffered turns.
@@ -223,8 +236,8 @@ class DefaultMemoryAftermathBoundary:
             from prismclaw.engine.memory.capture import (
                 MIN_CHAT_TURNS_FOR_EXTRACTION,
                 extract_chat_facts,
-                validate_facts,
                 store_validated_chat_facts,
+                validate_facts,
             )
 
             if len(turns) < MIN_CHAT_TURNS_FOR_EXTRACTION:
@@ -236,14 +249,13 @@ class DefaultMemoryAftermathBoundary:
             if not facts:
                 logger.info(
                     "[SDD-A4] chat fact extraction: session=%s turns=%d → 0 facts",
-                    session_id, len(turns),
+                    session_id,
+                    len(turns),
                 )
                 return
 
             # ── Call 2: Validator（独立 LLM，fresh perspective）────────
-            validation_results = await validate_facts(
-                self._llm_client, turns, facts
-            )
+            validation_results = await validate_facts(self._llm_client, turns, facts)
 
             # ── Store（validator 结果覆盖 confidence + rejected 丢弃）─
             stored = await store_validated_chat_facts(
@@ -263,8 +275,13 @@ class DefaultMemoryAftermathBoundary:
             logger.info(
                 "[SDD-A8] chat fact pipeline: session=%s turns=%d "
                 "extracted=%d pass=%d flagged=%d rejected=%d stored=%d",
-                session_id, len(turns), len(facts),
-                pass_count, flag_count, reject_count, stored,
+                session_id,
+                len(turns),
+                len(facts),
+                pass_count,
+                flag_count,
+                reject_count,
+                stored,
             )
 
             # 关系抽取（在 chat_facts 之后触发，数据源是 turns 而非 facts）
@@ -272,32 +289,34 @@ class DefaultMemoryAftermathBoundary:
                 try:
                     if self._relation_extractor is None:
                         from prismclaw.engine.memory.relation_extractor import RelationExtractor
+
                         self._relation_extractor = RelationExtractor()
                     combined_text = "\n".join(
-                        f"用户: {t.get('user', '')}\n助手: {t.get('assistant', '')}"
-                        for t in turns
+                        f"用户: {t.get('user', '')}\n助手: {t.get('assistant', '')}" for t in turns
                     )
                     relations = await self._relation_extractor.extract(
-                        combined_text, llm_client=self._llm_client,
+                        combined_text,
+                        llm_client=self._llm_client,
                     )
                     if relations:
                         stored_edges = await self._relation_extractor.resolve_and_store(
-                            session_key, relations,
-                            memory=self._memory_store, edge_store=self._edge_store,
+                            session_key,
+                            relations,
+                            memory=self._memory_store,
+                            edge_store=self._edge_store,
                         )
                         if stored_edges:
                             logger.info(
                                 "[E6] relation extraction: session=%s edges=%d",
-                                session_id, stored_edges,
+                                session_id,
+                                stored_edges,
                             )
                 except Exception:
                     logger.warning(
                         "[E6] relation extraction failed for %s", session_id, exc_info=True
                     )
         except Exception:
-            logger.warning(
-                "chat fact extraction failed for %s", session_id, exc_info=True
-            )
+            logger.warning("chat fact extraction failed for %s", session_id, exc_info=True)
 
     async def _record_attribution_signals(self, session_id: str) -> None:
         """SDD B1: seal the turn's attribution + collect validation signals.
@@ -330,13 +349,15 @@ class DefaultMemoryAftermathBoundary:
 
             # Locate the last user entry → turn boundary + turn_seq.
             last_user_idx: int | None = None
+            last_user_entry: MessageEntry | None = None
             turn_seq = 0
             for idx in range(len(branch) - 1, -1, -1):
                 entry = branch[idx]
                 if isinstance(entry, MessageEntry) and entry.role == "user":
                     last_user_idx = idx
+                    last_user_entry = entry
                     break
-            if last_user_idx is None:
+            if last_user_idx is None or last_user_entry is None:
                 if recorder is not None:
                     recorder.mark_turn_complete(session_id, turn_seq)
                 return
@@ -345,7 +366,7 @@ class DefaultMemoryAftermathBoundary:
                 for e in branch[: last_user_idx + 1]
                 if isinstance(e, MessageEntry) and e.role == "user"
             )
-            user_text = extract_text_from_content(branch[last_user_idx].content)
+            user_text = extract_text_from_content(last_user_entry.content)
             session_key = derive_memory_session_key(session_id)
 
             # ── 影子 ledger 路径（无归因环境的最小闭环） ──────────────
@@ -355,7 +376,7 @@ class DefaultMemoryAftermathBoundary:
                 outcome = self._scan_task_outcome(branch, last_user_idx, pending_ids)
                 if outcome is not None and pending_ids:
                     occurred = time.time()
-                    events = [
+                    shadow_events: list[dict[str, Any]] = [
                         {
                             "id": f"vs_{uuid.uuid4().hex[:12]}",
                             "entry_id": entry_id,
@@ -368,7 +389,7 @@ class DefaultMemoryAftermathBoundary:
                         }
                         for entry_id in pending_ids
                     ]
-                    await ledger.record_events(session_key, events)
+                    await ledger.record_events(session_key, shadow_events)
                     await ledger.bump_use_counts(session_key, pending_ids)
                 return
 
@@ -413,9 +434,7 @@ class DefaultMemoryAftermathBoundary:
             # 3. Seal the turn (flush reference log + use_count; keep for next).
             recorder.mark_turn_complete(session_id, turn_seq)
         except Exception:
-            logger.warning(
-                "attribution signal collection failed for %s", session_id, exc_info=True
-            )
+            logger.warning("attribution signal collection failed for %s", session_id, exc_info=True)
 
     @staticmethod
     def _scan_task_outcome(
@@ -430,7 +449,7 @@ class DefaultMemoryAftermathBoundary:
         """
         if not candidate_ids:
             return None
-        turn_slice = branch[last_user_idx + 1:]
+        turn_slice = branch[last_user_idx + 1 :]
         has_tool_error = False
         has_tool = False
         has_reply = False
@@ -451,10 +470,16 @@ class DefaultMemoryAftermathBoundary:
         return None
 
     async def _maybe_extract_memories(self, session_id: str) -> bool:
-        # Only memory_store and session_store are genuine runtime-optionals.
-        # redis_client, task_manager, llm_client, evolution_settings are guaranteed
-        # by the assembly layer (see runner_assembly._validate_memory_runtime_prerequisites).
-        if self._memory_store is None or self._session_store is None:
+        # 这六项由 assembly 层统一校验（_validate_memory_runtime_prerequisites），
+        # 任何一项缺失都说明装配不完整，直接跳过而不是降级运行。
+        if (
+            self._memory_store is None
+            or self._session_store is None
+            or self._task_manager is None
+            or self._redis_client is None
+            or self._llm_client is None
+            or self._evolution_settings is None
+        ):
             return False
         try:
             from prismclaw.engine.services.sop_extraction import maybe_spawn_extraction
@@ -471,7 +496,8 @@ class DefaultMemoryAftermathBoundary:
             )
             logger.info(
                 "[PROBE R1] memory extraction completed: session=%s result=%r",
-                session_id, result,
+                session_id,
+                result,
             )
             return result
         except Exception:
@@ -485,19 +511,19 @@ class DefaultMemoryAftermathBoundary:
 
 def build_memory_aftermath_boundary(
     *,
-    memory_store: Any = None,
-    session_store: Any = None,
-    task_manager: Any = None,
-    redis_client: Any = None,
-    llm_client: Any = None,
-    evolution_settings: Any = None,
-    nudge_hook: Any = None,
+    memory_store: MemoryStore | None = None,
+    session_store: SessionStore | None = None,
+    task_manager: TaskManagerProtocol | None = None,
+    redis_client: aioredis.Redis | None = None,
+    llm_client: LLMClient | None = None,
+    evolution_settings: EvolutionSettings | None = None,
+    nudge_hook: MemoryNudgeHook | None = None,
     dream_boundary: DreamEnqueueBoundary | None = None,
     dream_candidate_store: DreamCandidateStore | None = None,
-    attribution_recorder: Any = None,
-    memory_gateway: Any = None,
-    edge_store: Any = None,
-    validation_ledger: Any = None,
+    attribution_recorder: AttributionRecorder | None = None,
+    memory_gateway: MemoryGatewayProtocol | None = None,
+    edge_store: EdgeStoreProtocol | None = None,
+    validation_ledger: ValidationSignalLedger | None = None,
 ) -> MemoryAftermathBoundary:
     if (
         memory_store is None

@@ -1,25 +1,28 @@
 """Auto-extracted Mixin from client_manager.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
 from dataclasses import replace
-from datetime import datetime, timezone
-from typing import Any, Literal
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Literal
 
+from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
 from prismclaw.engine.mcp._types import (
     MCPRuntimeTelemetry,
     ServerStatus,
 )
 from prismclaw.engine.mcp.settings import McpServerConfig
 
-from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
+if TYPE_CHECKING:
+    from prismclaw.engine.security.sandbox.policy import SandboxPolicy
 
 logger = logging.getLogger(__name__)
 
 
 class ConfigMixin(_MCPBackendBase):
-    def set_sandbox_policy(self, sandbox_policy: Any) -> None:
+    def set_sandbox_policy(self, sandbox_policy: SandboxPolicy) -> None:
         """Inject the resolved ``SandboxPolicy`` from app lifespan."""
         if sandbox_policy is None:
             raise RuntimeError(
@@ -27,7 +30,7 @@ class ConfigMixin(_MCPBackendBase):
             )
         self._sandbox_policy = sandbox_policy
 
-    def _require_sandbox_policy(self) -> Any:
+    def _require_sandbox_policy(self) -> SandboxPolicy:
         if self._sandbox_policy is None:
             raise RuntimeError(
                 "MCPClientManager requires set_sandbox_policy() before startup when MCP is enabled"
@@ -39,7 +42,7 @@ class ConfigMixin(_MCPBackendBase):
         return getattr(self._sandbox_policy, "backend", "none")
 
     @property
-    def sandbox_policy(self) -> Any:
+    def sandbox_policy(self) -> SandboxPolicy | None:
         return self._sandbox_policy
 
     def _emit_sandbox_startup_advisories(self) -> None:
@@ -54,7 +57,10 @@ class ConfigMixin(_MCPBackendBase):
                 continue
             if config.transport != "stdio":
                 logger.info(
-                    "MCP server %r: transport=%s (HTTP-based transports currently bypass local sandbox wrapping)",
+                    (
+                        "MCP server %r: transport=%s (HTTP-based "
+                        "transports currently bypass local sandbox wrapping)"
+                    ),
                     name,
                     config.transport,
                 )
@@ -108,7 +114,7 @@ class ConfigMixin(_MCPBackendBase):
         reason: str | None = None,
     ) -> None:
         telemetry = self._telemetry_for(server_name)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         telemetry.last_tool_name = tool_name
         telemetry.last_tool_decision_at = now
         telemetry.last_tool_decision = decision
@@ -125,7 +131,7 @@ class ConfigMixin(_MCPBackendBase):
         detail: str | None = None,
     ) -> None:
         telemetry = self._telemetry_for(server_name)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         telemetry.last_tool_name = tool_name
         telemetry.last_tool_call_at = now
         telemetry.total_tool_calls += 1
@@ -140,11 +146,7 @@ class ConfigMixin(_MCPBackendBase):
             telemetry.total_timed_out_calls += 1
 
     def _enabled_servers(self) -> list[tuple[str, McpServerConfig]]:
-        return [
-            (name, config)
-            for name, config in self._settings.servers.items()
-            if config.enabled
-        ]
+        return [(name, config) for name, config in self._settings.servers.items() if config.enabled]
 
     def _get_lock(self, name: str) -> asyncio.Lock:
         if name not in self._locks:

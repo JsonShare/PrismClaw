@@ -7,8 +7,10 @@
 4. 静态守卫：compression 层无 runtime 反向 import 到
    execution/hooks/security/task_profile/plugins（行首 `from` 锚定）
 """
+
 from __future__ import annotations
 
+import dataclasses
 import re
 from pathlib import Path
 
@@ -19,8 +21,7 @@ from prismclaw.engine.compression.ports import (
     HookInvocationResult,
 )
 
-
-# ──────────────────────────── 1. Protocol runtime_checkable ────────────────────────────
+# ───────────────────────────────── 1. Protocol runtime_checkable ──────────────────────────────────
 
 
 def test_context_runtime_ports_is_runtime_checkable():
@@ -52,7 +53,7 @@ def test_context_runtime_ports_has_all_required_methods():
     assert not missing, f"ContextRuntimePorts 缺失方法: {missing}"
 
 
-# ──────────────────────────── 2. ExecutionRuntimePorts isinstance ────────────────────────────
+# ────────────────────────────── 2. ExecutionRuntimePorts isinstance ───────────────────────────────
 
 
 def test_execution_runtime_ports_satisfies_protocol():
@@ -94,7 +95,7 @@ def test_execution_runtime_ports_method_signatures():
     assert not missing, f"ExecutionRuntimePorts 缺失: {missing}"
 
 
-# ──────────────────────────── 3. HookInvocationResult 契约 ────────────────────────────
+# ────────────────────────────────── 3. HookInvocationResult 契约 ──────────────────────────────────
 
 
 def test_hook_invocation_result_fields():
@@ -117,11 +118,11 @@ def test_hook_invocation_result_string_comparison():
 def test_hook_invocation_result_is_frozen():
     """frozen=True dataclass 不可变。"""
     result = HookInvocationResult(outcome="SUCCESS")
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         result.outcome = "BLOCKING"  # type: ignore[misc]
 
 
-# ──────────────────────────── 4. 静态守卫：compression 层无 runtime 反向 import ────────────────────────────
+# ─────────────────────── 4. 静态守卫：compression 层无 runtime 反向 import ────────────────────────
 
 
 def _compression_root() -> Path:
@@ -164,9 +165,6 @@ def test_no_runtime_reverse_imports_in_compression():
     hits = _scan_runtime_reverse_imports(_compression_root())
     if hits:
         details = "\n".join(
-            f"{p.relative_to(_compression_root())}:{lineno}: {line}"
-            for p, lineno, line in hits
+            f"{p.relative_to(_compression_root())}:{lineno}: {line}" for p, lineno, line in hits
         )
-        pytest.fail(
-            "compression 层存在 runtime 反向 import（违反 Phase 2 依赖反转）:\n" + details
-        )
+        pytest.fail("compression 层存在 runtime 反向 import（违反 Phase 2 依赖反转）:\n" + details)

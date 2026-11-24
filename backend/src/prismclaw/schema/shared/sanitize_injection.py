@@ -6,6 +6,7 @@
 
 统一入口：sanitize_before_context_injection(text) -> (sanitized_text, phi_masked)
 """
+
 from __future__ import annotations
 
 import logging
@@ -41,6 +42,10 @@ def sanitize_before_context_injection(
         logger.info(
             "phi masked before context injection: layer=%s source=%s session_id=%s "
             "orig_len=%d sanitized_len=%d",
-            layer, source, session_id, len(text), len(sanitized),
+            layer,
+            source,
+            session_id,
+            len(text),
+            len(sanitized),
         )
     return sanitized, masked

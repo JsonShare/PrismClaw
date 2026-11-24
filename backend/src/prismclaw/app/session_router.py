@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
-from prismclaw.schema.session.types import SessionTree
-from prismclaw.schema.session.types import now_iso
+from prismclaw.schema.session.types import SessionTree, now_iso
 from prismclaw.schema.storage.storage_types import SessionStore
 
 

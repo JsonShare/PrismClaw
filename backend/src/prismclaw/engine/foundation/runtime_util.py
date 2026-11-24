@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TypeVar
 
+from prismclaw.schema.shared.exceptions import (
+    AgentAbortedError as AgentAbortedError,
+)
+from prismclaw.schema.shared.exceptions import (
+    AgentTimeoutError as AgentTimeoutError,
+)
+
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
-from prismclaw.schema.shared.exceptions import AgentAbortedError, AgentTimeoutError  # noqa: E402
-
-
-async def run_with_timeout(
+async def run_with_timeout[T](
     coro: Awaitable[T],
     *,
     timeout_s: float,
@@ -50,10 +55,8 @@ async def run_with_timeout(
         return main_task.result()
 
     main_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError, BaseException):
         await main_task
-    except (asyncio.CancelledError, BaseException):
-        pass
 
     if abort_task is not None and abort_task in done:
         raise AgentAbortedError(kind=kind)
@@ -61,7 +64,7 @@ async def run_with_timeout(
     raise AgentTimeoutError(kind=kind, limit_seconds=timeout_s)
 
 
-async def iterate_with_deadline(
+async def iterate_with_deadline[T](
     source: AsyncIterator[T],
     *,
     deadline_s: float,
@@ -113,10 +116,8 @@ async def iterate_with_deadline(
             continue
 
         next_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError, BaseException):
             await next_task
-        except (asyncio.CancelledError, BaseException):
-            pass
 
         if abort_task is not None and abort_task in done:
             raise AgentAbortedError(kind=kind)
@@ -125,7 +126,9 @@ async def iterate_with_deadline(
         raise AgentTimeoutError(kind=kind, limit_seconds=elapsed)
 
 
-async def race_abort(coro: Awaitable[T], abort_event: asyncio.Event, *, kind: str = "aborted") -> T:
+async def race_abort[T](
+    coro: Awaitable[T], abort_event: asyncio.Event, *, kind: str = "aborted"
+) -> T:
     return await run_with_timeout(coro, timeout_s=0.0, abort_event=abort_event, kind=kind)
 
 
@@ -140,7 +143,7 @@ def remaining_run_seconds(run_deadline_s: float, run_started: float) -> float | 
     return remaining
 
 
-async def with_safety_timeout(
+async def with_safety_timeout[T](
     fn: Callable[[], Awaitable[T]],
     *,
     timeout_s: float,
@@ -152,8 +155,6 @@ async def with_safety_timeout(
         return await run_with_timeout(fn(), timeout_s=timeout_s, abort_event=abort_event, kind=kind)
     except (AgentTimeoutError, AgentAbortedError):
         if on_cancel is not None:
-            try:
+            with contextlib.suppress(Exception):
                 on_cancel()
-            except Exception:
-                pass
         raise

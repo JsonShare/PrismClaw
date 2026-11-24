@@ -7,6 +7,7 @@
 归一化函数承担「模型说什么都不能信」的职责：枚举收敛、日期归一、
 列表长度裁剪、类型矫正。落库的字段一律先过这里。
 """
+
 from __future__ import annotations
 
 import json
@@ -342,13 +343,15 @@ def normalize_structure(raw: dict[str, Any]) -> dict[str, Any]:
         value = _str(item.get("value"), 64)
         if not name or not value:
             continue
-        labs.append({
-            "name": name,
-            "value": value,
-            "unit": _str(item.get("unit"), 32),
-            "reference": _str(item.get("reference"), 64),
-            "abnormal": bool(item.get("abnormal")),
-        })
+        labs.append(
+            {
+                "name": name,
+                "value": value,
+                "unit": _str(item.get("unit"), 32),
+                "reference": _str(item.get("reference"), 64),
+                "abnormal": bool(item.get("abnormal")),
+            }
+        )
 
     meds: list[dict[str, str]] = []
     for item in (raw.get("medications") or [])[:MAX_MEDS]:
@@ -357,16 +360,16 @@ def normalize_structure(raw: dict[str, Any]) -> dict[str, Any]:
         name = _str(item.get("name"), 128)
         if not name:
             continue
-        meds.append({
-            "name": name,
-            "dose": _str(item.get("dose"), 64),
-            "frequency": _str(item.get("frequency"), 64),
-            "route": _str(item.get("route"), 32),
-        })
+        meds.append(
+            {
+                "name": name,
+                "dose": _str(item.get("dose"), 64),
+                "frequency": _str(item.get("frequency"), 64),
+                "route": _str(item.get("route"), 32),
+            }
+        )
 
-    tags = [
-        t for t in (_str(x, 32) for x in (raw.get("tags") or [])[:MAX_TAGS]) if t
-    ]
+    tags = [t for t in (_str(x, 32) for x in (raw.get("tags") or [])[:MAX_TAGS]) if t]
 
     return {
         "narrative": {"sections": sections},

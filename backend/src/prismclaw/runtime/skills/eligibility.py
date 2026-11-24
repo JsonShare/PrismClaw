@@ -44,10 +44,7 @@ def is_eligible(skill: SkillManifest) -> bool:
     if reqs.any_bins and not check_any_bins(reqs.any_bins):
         return False
 
-    if reqs.env and not check_env(reqs.env):
-        return False
-
-    return True
+    return not (reqs.env and not check_env(reqs.env))
 
 
 def filter_eligible(skills: list[SkillManifest]) -> list[SkillManifest]:

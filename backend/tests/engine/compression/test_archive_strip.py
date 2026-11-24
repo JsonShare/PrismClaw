@@ -23,9 +23,13 @@ def test_resolve_strip_analysis_safe_default():
 
 
 def test_resolve_strip_analysis_config_wins():
-    cfg_off = SimpleNamespace(history=SimpleNamespace(prompt=SimpleNamespace(strip_analysis_block=False)))
+    cfg_off = SimpleNamespace(
+        history=SimpleNamespace(prompt=SimpleNamespace(strip_analysis_block=False))
+    )
     assert resolve_strip_analysis(cfg_off) is False
-    cfg_on = SimpleNamespace(history=SimpleNamespace(prompt=SimpleNamespace(strip_analysis_block=True)))
+    cfg_on = SimpleNamespace(
+        history=SimpleNamespace(prompt=SimpleNamespace(strip_analysis_block=True))
+    )
     assert resolve_strip_analysis(cfg_on) is True
     # history 缺失 / prompt 缺失 → 安全默认
     assert resolve_strip_analysis(SimpleNamespace(history=None)) is True
@@ -38,8 +42,10 @@ def test_strip_closed_block():
 
 
 def test_strip_unclosed_block_truncates_to_end():
-    text = "前置正文\n<analysis>\nThe user wants a continuation summary..." \
-           "（此处为被截断的 reasoning，无闭合标签）"
+    text = (
+        "前置正文\n<analysis>\nThe user wants a continuation summary..."
+        "（此处为被截断的 reasoning，无闭合标签）"
+    )
     assert strip_analysis_block(text) == "前置正文"
 
 
@@ -58,7 +64,7 @@ def test_summary_engine_without_config_strips():
     from prismclaw.engine.compression.summary_engine import SummaryEngine
 
     async def fake_summarize(payload, *, model=None):
-        assert False, "should not be called for empty message list guard?"
+        raise AssertionError("should not be called for empty message list guard?")
 
     # 直接驱动 summarize_messages 会走 LLM; 改为验证内部决策即可:
     engine = SummaryEngine(

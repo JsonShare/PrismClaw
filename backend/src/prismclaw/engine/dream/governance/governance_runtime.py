@@ -5,13 +5,11 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from prismclaw.schema.dream.dream import DreamGovernanceStore
-from prismclaw.schema.dream.dream_types import DreamGovernanceRecord, DreamPublishChannel, build_governance_record_id
 from prismclaw.engine.dream.models import (
     DreamArtifactPublishResult,
-    DreamPublishResult,
     DreamPublishableArtifact,
     DreamPublishableMemory,
+    DreamPublishResult,
 )
 from prismclaw.engine.dream.publishing import (
     build_l4_artifact_entry_from_publishable,
@@ -21,6 +19,15 @@ from prismclaw.engine.dream.publishing import (
     serialize_publishable_artifact,
     serialize_publishable_memory,
 )
+from prismclaw.schema.dream.dream import DreamGovernanceStore
+from prismclaw.schema.dream.dream_types import (
+    DreamGovernanceRecord,
+    DreamPublishChannel,
+    DreamPublishState,
+    DreamReviewStatus,
+    DreamRolloutStage,
+    build_governance_record_id,
+)
 from prismclaw.schema.storage.storage_types import MemoryStore
 
 logger = logging.getLogger(__name__)
@@ -29,10 +36,10 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class _PublicationPlan:
     store_entry: bool
-    stored_publish_state: str
-    governance_publish_state: str
-    review_status: str
-    rollout_stage: str
+    stored_publish_state: DreamPublishState
+    governance_publish_state: DreamPublishState
+    review_status: DreamReviewStatus
+    rollout_stage: DreamRolloutStage
 
 
 class DreamGovernanceRuntime:
@@ -143,17 +150,21 @@ class DreamGovernanceRuntime:
         if record is None or record.review_status != "pending_review":
             return False
         if record.target_type == "memory":
-            payload = deserialize_publishable_memory(record.metadata.get("publishable_payload"))
-            if payload is None:
+            memory_payload = deserialize_publishable_memory(
+                record.metadata.get("publishable_payload")
+            )
+            if memory_payload is None:
                 return False
-            entry = build_memory_entry_from_publishable(payload)
+            entry = build_memory_entry_from_publishable(memory_payload)
             entry.publish_state = "published"
             await self._memory.store(record.session_key, entry)
         elif record.target_type == "artifact":
-            payload = deserialize_publishable_artifact(record.metadata.get("publishable_payload"))
-            if payload is None:
+            artifact_payload = deserialize_publishable_artifact(
+                record.metadata.get("publishable_payload")
+            )
+            if artifact_payload is None:
                 return False
-            artifact_entry = build_l4_artifact_entry_from_publishable(payload)
+            artifact_entry = build_l4_artifact_entry_from_publishable(artifact_payload)
             artifact_entry.publish_state = "published"
             await self._memory.store_l4_artifact(
                 record.session_key,
@@ -205,12 +216,20 @@ class DreamGovernanceRuntime:
                 try:
                     await self._memory.delete(record.session_key, record.target_id)
                 except Exception:
-                    logger.warning("canary memory rejection cleanup failed for %s", record.target_id, exc_info=True)
+                    logger.warning(
+                        "canary memory rejection cleanup failed for %s",
+                        record.target_id,
+                        exc_info=True,
+                    )
             elif record.target_type == "artifact":
                 try:
                     await self._memory.delete_l4_artifact(record.session_key, record.target_id)
                 except Exception:
-                    logger.warning("canary artifact rejection cleanup failed for %s", record.target_id, exc_info=True)
+                    logger.warning(
+                        "canary artifact rejection cleanup failed for %s",
+                        record.target_id,
+                        exc_info=True,
+                    )
         updated = await self._governance_store.update_status(
             record_id,
             publish_state="rejected",
@@ -247,7 +266,10 @@ class DreamGovernanceRuntime:
             return False
         if record.review_status == "rolled_back":
             return False
-        if record.review_status not in {"published", "rollback_requested"} and record.publish_state != "published":
+        if (
+            record.review_status not in {"published", "rollback_requested"}
+            and record.publish_state != "published"
+        ):
             return False
         try:
             deleted = await self._memory.delete_l4_artifact(record.session_key, record.target_id)
@@ -288,7 +310,9 @@ class DreamGovernanceRuntime:
             await self._governance_store.record(updated)
         return updated is not None
 
-    async def list_pending_reviews(self, session_key: str | None = None) -> list[DreamGovernanceRecord]:
+    async def list_pending_reviews(
+        self, session_key: str | None = None
+    ) -> list[DreamGovernanceRecord]:
         if self._governance_store is None:
             return []
         return await self._governance_store.list_records(
@@ -354,6 +378,7 @@ class DreamGovernanceRuntime:
                 continue
             updated.rollout_stage = "rolled_back"
             await self._governance_store.record(updated)
+
 
 def _resolve_publication_plan(channel: DreamPublishChannel) -> _PublicationPlan:
     if channel == "shadow":

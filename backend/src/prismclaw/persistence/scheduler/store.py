@@ -19,6 +19,7 @@ from sqlalchemy import (
     Double,
     Integer,
     MetaData,
+    RowMapping,
     String,
     Table,
     Text,
@@ -130,21 +131,15 @@ class PostgresSchedulerStore:
             index_elements=[scheduled_tasks.c.id],
             set_={c: getattr(stmt.excluded, c) for c in _TASK_UPSERT_COLUMNS},
         )
-        async with self._sf() as s:
-            async with s.begin():
-                await s.execute(stmt)
+        async with self._sf() as s, s.begin():
+            await s.execute(stmt)
 
     async def delete_task(self, task_id: str) -> None:
-        async with self._sf() as s:
-            async with s.begin():
-                await s.execute(
-                    scheduled_task_runs.delete().where(
-                        scheduled_task_runs.c.task_id == task_id
-                    )
-                )
-                await s.execute(
-                    scheduled_tasks.delete().where(scheduled_tasks.c.id == task_id)
-                )
+        async with self._sf() as s, s.begin():
+            await s.execute(
+                scheduled_task_runs.delete().where(scheduled_task_runs.c.task_id == task_id)
+            )
+            await s.execute(scheduled_tasks.delete().where(scheduled_tasks.c.id == task_id))
 
     async def update_status(
         self, task_id: str, status: str, consecutive_failures: int | None = None
@@ -152,22 +147,18 @@ class PostgresSchedulerStore:
         values: dict[str, Any] = {"last_status": status}
         if consecutive_failures is not None:
             values["consecutive_failures"] = consecutive_failures
-        async with self._sf() as s:
-            async with s.begin():
-                await s.execute(
-                    scheduled_tasks.update()
-                    .where(scheduled_tasks.c.id == task_id)
-                    .values(**values)
-                )
+        async with self._sf() as s, s.begin():
+            await s.execute(
+                scheduled_tasks.update().where(scheduled_tasks.c.id == task_id).values(**values)
+            )
 
     async def set_conversation(self, task_id: str, conversation_id: str) -> None:
-        async with self._sf() as s:
-            async with s.begin():
-                await s.execute(
-                    scheduled_tasks.update()
-                    .where(scheduled_tasks.c.id == task_id)
-                    .values(conversation_id=conversation_id)
-                )
+        async with self._sf() as s, s.begin():
+            await s.execute(
+                scheduled_tasks.update()
+                .where(scheduled_tasks.c.id == task_id)
+                .values(conversation_id=conversation_id)
+            )
 
     async def count_user_tasks(self, user_id: str) -> int:
         stmt = (
@@ -180,9 +171,7 @@ class PostgresSchedulerStore:
 
     # ── Runs ───────────────────────────────────────────────────────────
 
-    async def add_run(
-        self, run: ScheduledTaskRun, *, fired_task_id: str, fired_at: float
-    ) -> bool:
+    async def add_run(self, run: ScheduledTaskRun, *, fired_task_id: str, fired_at: float) -> bool:
         """Atomically insert a run and update the task's ``last_fired_at``.
 
         Only ``last_fired_at`` is touched on the task — ``last_status`` is owned
@@ -190,7 +179,7 @@ class PostgresSchedulerStore:
         status on completion). Setting ``running`` here would leave the task
         stuck if ``dispatch_enqueue`` later fails.
         """
-        stmt = pg_insert(scheduled_task_runs).values(
+        insert_stmt = pg_insert(scheduled_task_runs).values(
             id=run.id,
             task_id=run.task_id,
             fired_at=run.fired_at,
@@ -201,31 +190,29 @@ class PostgresSchedulerStore:
             error=run.error,
             duration_s=run.duration_s,
         )
-        stmt = stmt.on_conflict_do_nothing(index_elements=["id"]).returning(
+        stmt = insert_stmt.on_conflict_do_nothing(index_elements=["id"]).returning(
             scheduled_task_runs.c.id
         )
-        async with self._sf() as s:
-            async with s.begin():
-                inserted = (await s.execute(stmt)).first()
-                if inserted is None:
-                    return False
-                await s.execute(
-                    scheduled_tasks.update()
-                    .where(scheduled_tasks.c.id == fired_task_id)
-                    .values(last_fired_at=fired_at)
-                )
+        async with self._sf() as s, s.begin():
+            inserted = (await s.execute(stmt)).first()
+            if inserted is None:
+                return False
+            await s.execute(
+                scheduled_tasks.update()
+                .where(scheduled_tasks.c.id == fired_task_id)
+                .values(last_fired_at=fired_at)
+            )
         return True
 
     async def update_run(self, run_id: str, **fields: object) -> None:
         if not fields:
             return
-        async with self._sf() as s:
-            async with s.begin():
-                await s.execute(
-                    scheduled_task_runs.update()
-                    .where(scheduled_task_runs.c.id == run_id)
-                    .values(**fields)
-                )
+        async with self._sf() as s, s.begin():
+            await s.execute(
+                scheduled_task_runs.update()
+                .where(scheduled_task_runs.c.id == run_id)
+                .values(**fields)
+            )
 
     async def list_runs(
         self, task_id: str, limit: int = 20, offset: int = 0
@@ -299,7 +286,7 @@ class PostgresSchedulerStore:
         }
 
     @staticmethod
-    def _row_to_task(row: Any) -> ScheduledTask:
+    def _row_to_task(row: RowMapping) -> ScheduledTask:
         return ScheduledTask(
             id=row["id"],
             user_id=row["user_id"],
@@ -319,7 +306,7 @@ class PostgresSchedulerStore:
         )
 
     @staticmethod
-    def _row_to_run(row: Any) -> ScheduledTaskRun:
+    def _row_to_run(row: RowMapping) -> ScheduledTaskRun:
         return ScheduledTaskRun(
             id=row["id"],
             task_id=row["task_id"],

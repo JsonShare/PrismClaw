@@ -15,10 +15,12 @@
 后台任务：``bash(background=True)`` 返回 job_id（=OS pid），由调用方注册；
 ``job_status`` / ``job_kill`` / ``list_jobs`` 提供与 ``jobs`` 工具一致的接口。
 """
+
 from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import itertools
 import json
 import logging
@@ -31,8 +33,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from prismclaw.schema.content.workspace import SandboxTier
-from prismclaw.engine.security.gate.routing.rule_gate import RuleGate
 from prismclaw.engine.security.gate.routing.risk_router import (
     DataClassification,
     Reversibility,
@@ -40,8 +40,10 @@ from prismclaw.engine.security.gate.routing.risk_router import (
     ToolSafetyMeta,
     get_tool_safety_meta,
 )
-from prismclaw.engine.security.sandbox.bwrap import BwrapPolicy
+from prismclaw.engine.security.gate.routing.rule_gate import RuleGate
+from prismclaw.engine.security.sandbox.policy import SandboxPolicy
 from prismclaw.engine.security.sandbox.roots import runtime_readonly_roots
+from prismclaw.schema.content.workspace import SandboxTier
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ class _JobEntry:
     stderr_path: Path
     started_at: float = field(default_factory=time.time)
     # 流式写入任务（把 proc 的输出落盘）
-    pump_tasks: list[asyncio.Task] = field(default_factory=list)
+    pump_tasks: list[asyncio.Task[None]] = field(default_factory=list)
 
 
 class RuntimeExecutor:
@@ -105,7 +107,7 @@ class RuntimeExecutor:
         *,
         allow_net: bool = True,
         workspace_id: str = "unknown",
-        sandbox_policy: BwrapPolicy | None = None,
+        sandbox_policy: SandboxPolicy | None = None,
     ) -> None:
         self._workspace_root = str(workspace_root)
         self._allow_net = allow_net
@@ -137,9 +139,7 @@ class RuntimeExecutor:
         try:
             candidate.relative_to(base)
         except ValueError as exc:
-            raise ValueError(
-                f"workspace_root {candidate} is not within {base}"
-            ) from exc
+            raise ValueError(f"workspace_root {candidate} is not within {base}") from exc
         return candidate
 
     def _bound_root(self, workspace_root: str | None) -> tuple[Path | None, str | None]:
@@ -267,18 +267,19 @@ class RuntimeExecutor:
         try:
             if self._sandbox_policy is not None:
                 # BwrapPolicy: 内核级隔离
-                executable, args = self._sandbox_policy.wrap_bash_command(
-                    command, sandbox_ctx
-                )
+                executable, args = self._sandbox_policy.wrap_bash_command(command, sandbox_ctx)
                 proc = await asyncio.create_subprocess_exec(
-                    executable, *args,
+                    executable,
+                    *args,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
             else:
                 # 无沙箱策略（PassthroughPolicy）: 直接执行
                 proc = await asyncio.create_subprocess_exec(
-                    "/bin/sh", "-c", command,
+                    "/bin/sh",
+                    "-c",
+                    command,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=effective_workspace,
@@ -301,11 +302,11 @@ class RuntimeExecutor:
                 "timed_out": False,
                 "tier_used": tier.value,
             }
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # 软超时：detach 为后台任务（不杀进程），注册硬超时杀手
             from prismclaw.infra.workspace_paths import work_dir
 
-            job_dir = work_dir(effective_workspace, "run", "jobs") / str(proc.pid)
+            job_dir = work_dir(root, "run", "jobs") / str(proc.pid)
             job_dir.mkdir(parents=True, exist_ok=True)
             stdout_path = job_dir / "stdout"
             stderr_path = job_dir / "stderr"
@@ -376,10 +377,16 @@ class RuntimeExecutor:
         if done:
             extra["exit_code"] = entry.proc.returncode
         try:
-            extra["stdout_tail"] = entry.stdout_path.read_text(errors="replace")[-2000:] \
-                if entry.stdout_path.exists() else ""
-            extra["stderr_tail"] = entry.stderr_path.read_text(errors="replace")[-2000:] \
-                if entry.stderr_path.exists() else ""
+            extra["stdout_tail"] = (
+                entry.stdout_path.read_text(errors="replace")[-2000:]
+                if entry.stdout_path.exists()
+                else ""
+            )
+            extra["stderr_tail"] = (
+                entry.stderr_path.read_text(errors="replace")[-2000:]
+                if entry.stderr_path.exists()
+                else ""
+            )
             extra["stdout_file"] = str(entry.stdout_path)
             extra["stderr_file"] = str(entry.stderr_path)
         except Exception:
@@ -419,11 +426,11 @@ class RuntimeExecutor:
         self, path: str, *, encoding: str = "utf-8", workspace_root: str | None = None
     ) -> dict[str, Any]:
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"success": False, "error": err}
+        if root is None:
+            return {"success": False, "error": err or "invalid workspace_root"}
         resolved, err = self._authorize(path, root=root, write=False)
-        if err:
-            return {"success": False, "error": err}
+        if resolved is None:
+            return {"success": False, "error": err or "path not authorized"}
         try:
             p = resolved
             if not p.exists():
@@ -435,15 +442,13 @@ class RuntimeExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def read_bytes(
-        self, path: str, *, workspace_root: str | None = None
-    ) -> dict[str, Any]:
+    async def read_bytes(self, path: str, *, workspace_root: str | None = None) -> dict[str, Any]:
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"success": False, "error": err}
+        if root is None:
+            return {"success": False, "error": err or "invalid workspace_root"}
         resolved, err = self._authorize(path, root=root, write=False)
-        if err:
-            return {"success": False, "error": err}
+        if resolved is None:
+            return {"success": False, "error": err or "path not authorized"}
         try:
             p = resolved
             if not p.exists():
@@ -466,11 +471,11 @@ class RuntimeExecutor:
         workspace_root: str | None = None,
     ) -> dict[str, Any]:
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"success": False, "error": err}
+        if root is None:
+            return {"success": False, "error": err or "invalid workspace_root"}
         p, err = self._authorize(path, root=root, write=True)
-        if err:
-            return {"success": False, "error": err}
+        if p is None:
+            return {"success": False, "error": err or "path not authorized"}
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(content, encoding=encoding)
@@ -482,11 +487,11 @@ class RuntimeExecutor:
         self, path: str, content: bytes, *, workspace_root: str | None = None
     ) -> dict[str, Any]:
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"success": False, "error": err}
+        if root is None:
+            return {"success": False, "error": err or "invalid workspace_root"}
         p, err = self._authorize(path, root=root, write=True)
-        if err:
-            return {"success": False, "error": err}
+        if p is None:
+            return {"success": False, "error": err or "path not authorized"}
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_bytes(content)
@@ -508,18 +513,24 @@ class RuntimeExecutor:
         if mode not in ("text", "bytes"):
             return {"success": False, "error": f"invalid mode: {mode}"}
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"success": False, "error": err}
+        if root is None:
+            return {"success": False, "error": err or "invalid workspace_root"}
         p, err = self._authorize(path, root=root, write=True)
-        if err:
-            return {"success": False, "error": err}
+        if p is None:
+            return {"success": False, "error": err or "path not authorized"}
         session_id = f"ws-{secrets.token_urlsafe(8)}"
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
         except (OSError, PermissionError) as e:
             return {"success": False, "error": f"mkdir failed: {e}"}
         try:
-            f = open(p, "wb") if mode == "bytes" else open(p, "w", encoding=encoding)
+            # 句柄保存到 _write_sessions，跨多次 write/close 调用存活，不能用 with。
+            # 同步 open 仅建立句柄；实际写盘走 write_stream_chunk 的线程池。
+            f: Any = (
+                open(p, "wb")  # noqa: SIM115, ASYNC230 - 句柄按会话长期持有
+                if mode == "bytes"
+                else open(p, "w", encoding=encoding)  # noqa: SIM115, ASYNC230 - 句柄长期持有
+            )
         except Exception as e:
             return {"success": False, "error": f"open failed: {e.__class__.__name__}: {e}"}
         self._write_sessions[session_id] = {
@@ -546,10 +557,8 @@ class RuntimeExecutor:
             return {"success": True, "bytes_written": sess["total_bytes"]}
         except Exception as e:
             self._write_sessions.pop(session_id, None)
-            try:
+            with contextlib.suppress(Exception):
                 sess["file"].close()
-            except Exception:
-                pass
             return {"success": False, "error": str(e)}
 
     async def write_stream_finish(self, session_id: str) -> dict[str, Any]:
@@ -564,7 +573,9 @@ class RuntimeExecutor:
 
     # ── http_get ──────────────────────────────────────────────────────
 
-    async def http_get(self, url: str, *, tier: SandboxTier = SandboxTier.STANDARD) -> dict[str, Any]:
+    async def http_get(
+        self, url: str, *, tier: SandboxTier = SandboxTier.STANDARD
+    ) -> dict[str, Any]:
         if not self._allow_net:
             return {"success": False, "error": "strict_deny_network"}
         if self._sandbox_policy is not None:
@@ -599,7 +610,12 @@ class RuntimeExecutor:
     # ── mcp ───────────────────────────────────────────────────────────
 
     async def mcp_spawn(
-        self, server_name: str, *, transport: str = "stdio", args: list[str] | None = None, env: dict[str, str] | None = None
+        self,
+        server_name: str,
+        *,
+        transport: str = "stdio",
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         if not server_name:
             return {"success": False, "error": "server_name required"}
@@ -617,7 +633,9 @@ class RuntimeExecutor:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def mcp_call(self, server_name: str, tool_name: str, arguments: dict | None = None) -> dict[str, Any]:
+    async def mcp_call(
+        self, server_name: str, tool_name: str, arguments: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         if not server_name or not tool_name:
             return {"success": False, "error": "server_name and tool_name required"}
         proc = self._mcp_processes.get(server_name)
@@ -631,12 +649,16 @@ class RuntimeExecutor:
                 "method": "tools/call",
                 "params": {"name": tool_name, "arguments": arguments or {}},
             }
-            proc.stdin.write((json.dumps(rpc_request) + "\n").encode())
-            await proc.stdin.drain()
-            response_line = await asyncio.wait_for(proc.stdout.readline(), timeout=30.0)
+            stdin = proc.stdin
+            stdout = proc.stdout
+            if stdin is None or stdout is None:
+                return {"success": False, "error": f"MCP server {server_name} has no pipes"}
+            stdin.write((json.dumps(rpc_request) + "\n").encode())
+            await stdin.drain()
+            response_line = await asyncio.wait_for(stdout.readline(), timeout=30.0)
             rpc_response = json.loads(response_line)
             return {"success": True, "result": rpc_response.get("result", {})}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return {"success": False, "error": "MCP call timed out (30s)"}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -652,11 +674,11 @@ class RuntimeExecutor:
         workspace_root: str | None = None,
     ) -> dict[str, Any]:
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"entries": [], "error": err}
+        if root is None:
+            return {"entries": [], "error": err or "invalid workspace_root"}
         base, err = self._authorize(path, root=root, write=False)
-        if err:
-            return {"entries": [], "error": err}
+        if base is None:
+            return {"entries": [], "error": err or "path not authorized"}
         if not base.is_dir():
             return {"entries": [], "error": f"directory not found: {path}"}
         entries: list[dict[str, Any]] = []
@@ -667,25 +689,29 @@ class RuntimeExecutor:
                     if ignore_hidden and any(part.startswith(".") for part in rel.parts):
                         continue
                     st = p.stat()
-                    entries.append({
-                        "name": p.name,
-                        "path": str(rel),
-                        "is_dir": p.is_dir(),
-                        "size": 0 if p.is_dir() else st.st_size,
-                        "modified_epoch": st.st_mtime,
-                    })
+                    entries.append(
+                        {
+                            "name": p.name,
+                            "path": str(rel),
+                            "is_dir": p.is_dir(),
+                            "size": 0 if p.is_dir() else st.st_size,
+                            "modified_epoch": st.st_mtime,
+                        }
+                    )
             else:
                 for p in base.iterdir():
                     if ignore_hidden and p.name.startswith("."):
                         continue
                     st = p.stat()
-                    entries.append({
-                        "name": p.name,
-                        "path": p.name,
-                        "is_dir": p.is_dir(),
-                        "size": 0 if p.is_dir() else st.st_size,
-                        "modified_epoch": st.st_mtime,
-                    })
+                    entries.append(
+                        {
+                            "name": p.name,
+                            "path": p.name,
+                            "is_dir": p.is_dir(),
+                            "size": 0 if p.is_dir() else st.st_size,
+                            "modified_epoch": st.st_mtime,
+                        }
+                    )
         except OSError as e:
             return {"entries": entries, "error": str(e)}
         return {"entries": entries}
@@ -699,11 +725,11 @@ class RuntimeExecutor:
         workspace_root: str | None = None,
     ) -> dict[str, Any]:
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"entries": [], "error": err}
+        if root is None:
+            return {"entries": [], "error": err or "invalid workspace_root"}
         base, err = self._authorize(path, root=root, write=False)
-        if err:
-            return {"entries": [], "error": err}
+        if base is None:
+            return {"entries": [], "error": err or "path not authorized"}
         entries: list[dict[str, Any]] = []
         for p in sorted(
             base.glob(pattern),
@@ -713,11 +739,13 @@ class RuntimeExecutor:
             if not p.exists():
                 continue
             st = p.stat()
-            entries.append({
-                "path": str(p.relative_to(base)),
-                "size": st.st_size,
-                "modified_epoch": st.st_mtime,
-            })
+            entries.append(
+                {
+                    "path": str(p.relative_to(base)),
+                    "size": st.st_size,
+                    "modified_epoch": st.st_mtime,
+                }
+            )
             if len(entries) >= max_results:
                 break
         return {"entries": entries, "truncated": len(entries) >= max_results}
@@ -735,11 +763,11 @@ class RuntimeExecutor:
         import re as _re
 
         root, err = self._bound_root(workspace_root)
-        if err:
-            return {"matches": [], "error": err}
+        if root is None:
+            return {"matches": [], "error": err or "invalid workspace_root"}
         base, err = self._authorize(path, root=root, write=False)
-        if err:
-            return {"matches": [], "error": err}
+        if base is None:
+            return {"matches": [], "error": err or "path not authorized"}
         flags = _re.IGNORECASE if case_insensitive else 0
         matches: list[dict[str, Any]] = []
         for p in base.rglob(include):
@@ -748,14 +776,16 @@ class RuntimeExecutor:
             try:
                 if b"\x00" in p.read_bytes()[:8192]:
                     continue
-                with open(p, "r", errors="replace") as f:
+                with open(p, errors="replace") as f:  # noqa: ASYNC230 - 本地小文件逐行扫描
                     for line_no, line in enumerate(f, 1):
                         if _re.search(pattern, line, flags):
-                            matches.append({
-                                "path": str(p.relative_to(base)),
-                                "line_number": line_no,
-                                "line": line.rstrip("\n"),
-                            })
+                            matches.append(
+                                {
+                                    "path": str(p.relative_to(base)),
+                                    "line_number": line_no,
+                                    "line": line.rstrip("\n"),
+                                }
+                            )
                             if len(matches) >= max_matches:
                                 break
             except OSError:

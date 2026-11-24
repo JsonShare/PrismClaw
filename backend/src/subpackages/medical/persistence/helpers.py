@@ -5,6 +5,7 @@
 
 通过 AppState 泛型取 store，路由函数签名即文档。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -27,6 +28,7 @@ def get_medical_store(request: Request):
     2. FastAPI Depends：store = Depends(get_medical_store) — 自动注入
     """
     from .medical_store import MedicalStore
+
     state = get_app_state(request)
     return state.get_domain_store("medical", MedicalStore)
 
@@ -34,6 +36,7 @@ def get_medical_store(request: Request):
 def get_kb_store(request: Request):
     """从 Request 获取 KbStore（类型安全）。"""
     from .kb_store import KbStore
+
     state = get_app_state(request)
     return state.get_domain_store("medical_kb", KbStore)
 
@@ -41,5 +44,6 @@ def get_kb_store(request: Request):
 def get_brief_store(request: Request):
     """从 Request 获取 BriefStore（类型安全）。"""
     from .brief_store import BriefStore
+
     state = get_app_state(request)
     return state.get_domain_store("medical_briefs", BriefStore)

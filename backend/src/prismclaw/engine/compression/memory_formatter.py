@@ -61,13 +61,18 @@ class MemoryFormatter:
                 )
                 summary = getattr(entry, "summary", "")
                 graph_group_id = getattr(entry, "graph_group_id", None)
-                payload = getattr(entry, "payload", {}) if isinstance(getattr(entry, "payload", {}), dict) else {}
+                payload = (
+                    getattr(entry, "payload", {})
+                    if isinstance(getattr(entry, "payload", {}), dict)
+                    else {}
+                )
                 payload_hint = _artifact_payload_hint(payload)
                 if archive_kind:
                     extra = f"|group={str(graph_group_id)[:10]}" if graph_group_id else ""
                     hint = f" {payload_hint}" if payload_hint else ""
                     lines.append(
-                        f"- [kind={archive_kind}|session={sid_short}|sim={sim_str}|score={score_str}{extra}] {summary}{hint}"
+                        f"- [kind={archive_kind}|session={sid_short}|sim={sim_str}"
+                        f"|score={score_str}{extra}] {summary}{hint}"
                     )
                 else:
                     lines.append(f"- [session={sid_short}|sim={sim_str}] {summary}")
@@ -89,9 +94,7 @@ class MemoryFormatter:
             for packet in packets
             if packet.kind == "memory" and str(packet.layer or "").upper() == "L3"
         ]
-        archive_entries = [
-            packet for packet in packets if packet.kind in {"archive", "artifact"}
-        ]
+        archive_entries = [packet for packet in packets if packet.kind in {"archive", "artifact"}]
         if not l2_entries and not l3_entries and not archive_entries:
             return []
         sections: list[tuple[str, str]] = []
@@ -138,10 +141,13 @@ class MemoryFormatter:
                 if archive_kind:
                     extra = f"|group={str(graph_group_id)[:10]}" if graph_group_id else ""
                     payload = packet.metadata.get("payload", {})
-                    payload_hint = _artifact_payload_hint(payload) if isinstance(payload, dict) else ""
+                    payload_hint = (
+                        _artifact_payload_hint(payload) if isinstance(payload, dict) else ""
+                    )
                     hint = f" {payload_hint}" if payload_hint else ""
                     lines.append(
-                        f"- [kind={archive_kind}|session={sid_short}|sim={sim_str}|score={score_str}{extra}] {packet.content}{hint}"
+                        f"- [kind={archive_kind}|session={sid_short}|sim={sim_str}"
+                        f"|score={score_str}{extra}] {packet.content}{hint}"
                     )
                 else:
                     lines.append(f"- [session={sid_short}|sim={sim_str}] {packet.content}")
@@ -170,7 +176,7 @@ class MemoryFormatter:
                     source=name,
                     content=text,
                     stability="volatile",
-                    priority=priority,  # type: ignore[arg-type]
+                    priority=priority,
                     cacheable=False,
                     truncatable=True,
                     metadata={"wrapper": "memory_context"},
@@ -205,8 +211,16 @@ class MemoryFormatter:
             packet_ids = [
                 packet.packet_id
                 for packet in packets
-                if (name == "memory_facts" and packet.kind == "memory" and str(packet.layer or "").upper() == "L2")
-                or (name == "memory_procedures" and packet.kind == "memory" and str(packet.layer or "").upper() == "L3")
+                if (
+                    name == "memory_facts"
+                    and packet.kind == "memory"
+                    and str(packet.layer or "").upper() == "L2"
+                )
+                or (
+                    name == "memory_procedures"
+                    and packet.kind == "memory"
+                    and str(packet.layer or "").upper() == "L3"
+                )
                 or (name == "memory_archives" and packet.kind in {"archive", "artifact"})
             ]
             blocks.append(
@@ -216,7 +230,7 @@ class MemoryFormatter:
                     source=name,
                     content=text,
                     stability="volatile",
-                    priority=priority,  # type: ignore[arg-type]
+                    priority=priority,
                     cacheable=False,
                     truncatable=True,
                     metadata={
@@ -250,7 +264,7 @@ class MemoryFormatter:
         return cls.build_memory_context_from_sections(sections)
 
 
-def _archive_kind_label(entry: Any) -> str | None:
+def _archive_kind_label(entry: object) -> str | None:
     artifact_kind = str(getattr(entry, "artifact_kind", "") or "").strip().lower()
     if artifact_kind:
         return _normalize_archive_kind_label(artifact_kind)
@@ -264,7 +278,7 @@ def _archive_kind_label(entry: Any) -> str | None:
     return normalized_kind or "rem"
 
 
-def _normalize_archive_kind_label(value: Any) -> str | None:
+def _normalize_archive_kind_label(value: object) -> str | None:
     artifact_kind = str(value or "").strip().lower()
     if not artifact_kind:
         return None

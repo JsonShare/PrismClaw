@@ -4,11 +4,12 @@
 workspace/preferences 三处重复），模型避开禁令后仍按预训练默认过度验证、
 串行试探。现为四步工作循环（停止条件挂在可观察事件上）加绝对禁止。
 """
+
 from __future__ import annotations
 
 from prismclaw.engine.execution.request.system_prompt import (
-    PromptInputs,
     _PRINCIPLES_BODY,
+    PromptInputs,
     tooling_section,
 )
 
@@ -83,7 +84,7 @@ def test_constraints_live_in_one_place_only() -> None:
     principles 不再重复它们。"""
     assert "并行" not in _PRINCIPLES_BODY
     assert "检索" not in _PRINCIPLES_BODY
-    assert "outputs/" not in _PRINCIPLES_BODY
+    assert "outbox/" not in _PRINCIPLES_BODY
     assert "先结论" not in _PRINCIPLES_BODY
 
 

@@ -1,4 +1,5 @@
 """Auth sub-contracts: UserProfile data class and UserProfileStore protocol."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -17,12 +18,8 @@ class UserProfile:
 class UserProfileStore(Protocol):
     async def get(self, channel: str, user_id: str) -> UserProfile: ...
 
-    async def set(
-        self, profile: UserProfile, *, ttl_seconds: int | None = None
-    ) -> bool: ...
+    async def set(self, profile: UserProfile, *, ttl_seconds: int | None = None) -> bool: ...
 
-    async def list_users(
-        self, channel: str
-    ) -> list[UserProfile]: ...
+    async def list_users(self, channel: str) -> list[UserProfile]: ...
 
     async def discard(self, channel: str, user_id: str) -> bool: ...

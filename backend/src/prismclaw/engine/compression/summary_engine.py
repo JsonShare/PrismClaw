@@ -1,16 +1,17 @@
 """Summary engine — fact sheet, reason codes, and summarization."""
+
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
+from prismclaw.engine.compression.compaction import (
+    build_summarizer_payload,
+)
 from prismclaw.engine.compression.hardening import (
     HARDENED_SUMMARIZER_SYSTEM_PROMPT,
     split_into_chunks,
     summarize_in_stages,
-)
-from prismclaw.engine.compression.compaction import (
-    build_summarizer_payload,
 )
 from prismclaw.engine.compression.history_compaction import (
     _resolve_no_tools_preamble_enabled,
@@ -20,6 +21,9 @@ from prismclaw.engine.compression.history_compaction import (
     strip_analysis_block,
 )
 from prismclaw.schema.content.compaction import CompactionReasonCode
+
+if TYPE_CHECKING:
+    from prismclaw.schema.config.config import CompactionConfig
 
 
 class SummarizerCallable(Protocol):
@@ -31,11 +35,11 @@ class SummarizerCallable(Protocol):
     ) -> str: ...
 
 
-class CompactionTimeout(Exception):
+class CompactionTimeoutError(Exception):
     pass
 
 
-class CompactionAborted(Exception):
+class CompactionAbortedError(Exception):
     pass
 
 
@@ -46,7 +50,7 @@ class SummaryEngine:
         summarize: SummarizerCallable | None = None,
         compaction_timeout_s: float,
         chunk_token_budget: int,
-        compaction_config: Any | None = None,
+        compaction_config: CompactionConfig | None = None,
     ) -> None:
         self._summarize = summarize
         self._compaction_timeout_s = compaction_timeout_s
@@ -105,7 +109,9 @@ class SummaryEngine:
                 from prismclaw.engine.foundation.metrics import emit
 
                 try:
-                    from prismclaw.engine.foundation.telemetry.token_metrics import estimate_message_tokens
+                    from prismclaw.engine.foundation.telemetry.token_metrics import (
+                        estimate_message_tokens,
+                    )
 
                     prompt_tokens_est = max(
                         1,
@@ -132,7 +138,7 @@ class SummaryEngine:
                     pass
                 return result
             except TypeError:
-                return await summarize_fn(effective_payload)  # type: ignore[call-arg]
+                return await summarize_fn(effective_payload)
 
         chunks = split_into_chunks(messages, chunk_token_budget=self._chunk_token_budget)
 
@@ -153,9 +159,9 @@ class SummaryEngine:
                 kind="compaction",
             )
         except AgentTimeoutError as te:
-            raise CompactionTimeout() from te
+            raise CompactionTimeoutError() from te
         except AgentAbortedError as ae:
-            raise CompactionAborted() from ae
+            raise CompactionAbortedError() from ae
         if resolve_strip_analysis(self._compaction_config):
             return strip_analysis_block(summary)
         return summary

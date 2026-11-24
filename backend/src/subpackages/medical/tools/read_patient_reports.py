@@ -3,13 +3,14 @@
 仅在咨询会话中可用：查 consultations 域表得 patient_id。
 患者不从参数来，从域表查——读错患者、模型传错 id，从结构上不存在。
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from .._protocols import ToolContext, text_result, error_result
+from .._protocols import ToolContext, error_result, text_result
 
 
 @dataclass
@@ -28,20 +29,22 @@ class ReadPatientReportsTool:
         "返回抽取字段的概览，每条带 report_id 供 read_raw_report 引用。"
         "未解析完的报告标注'尚未完成解析'。下临床结论前须再调 read_raw_report 回查原文。"
     )
-    parameters: dict[str, Any] = field(default_factory=lambda: {
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "搜索关键词（命中诊断/文件名/摘要）",
+    parameters: dict[str, Any] = field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "搜索关键词（命中诊断/文件名/摘要）",
+                },
+                "report_type": {
+                    "type": "string",
+                    "description": "报告类型过滤（如 outpatient/inspection/exam）",
+                },
             },
-            "report_type": {
-                "type": "string",
-                "description": "报告类型过滤（如 outpatient/inspection/exam）",
-            },
-        },
-        "required": ["query"],
-    })
+            "required": ["query"],
+        }
+    )
     tool_class: str = "read"
     side_effect: bool = False
     effect_class: str = ""
@@ -76,7 +79,8 @@ class ReadPatientReportsTool:
         if query:
             q = query.lower()
             reports = [
-                r for r in reports
+                r
+                for r in reports
                 if q in (r.get("diagnosis", "") or "").lower()
                 or q in (r.get("file_name", "") or "").lower()
                 or q in (r.get("summary", "") or "").lower()
@@ -101,5 +105,9 @@ class ReadPatientReportsTool:
 
         return text_result(
             call_id,
-            json.dumps({"patient_id": patient_id, "reports": overview, "total": len(overview)}, ensure_ascii=False, default=str),
+            json.dumps(
+                {"patient_id": patient_id, "reports": overview, "total": len(overview)},
+                ensure_ascii=False,
+                default=str,
+            ),
         )

@@ -22,6 +22,7 @@ Phase 0' 解耦铁律规定依赖箭头只能 trajectory → core，反向禁止
 生命周期：runner 每迭代开始 set 新对象；turn teardown reset。
 ContextVar 持有同一可变对象，迭代内由 runner 陆续填充。
 """
+
 from __future__ import annotations
 
 import time
@@ -83,11 +84,7 @@ class LLMMetricsSnapshot:
         now_ms = int(time.time() * 1000)
         # monotonic 差值理论非负；夹紧防止时钟源异常把 started 推到 completed 之后。
         total_ms = max(0.0, (llm_end - llm_start) * 1000.0)
-        ttft_ms = (
-            (first_token_at - llm_start) * 1000.0
-            if first_token_at is not None
-            else None
-        )
+        ttft_ms = (first_token_at - llm_start) * 1000.0 if first_token_at is not None else None
         return cls(
             model=model,
             finish_reason=finish_reason,

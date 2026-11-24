@@ -2,15 +2,15 @@
 
 沙箱隔离永远存在，不允许"无沙箱"概念。
 """
+
 from __future__ import annotations
 
-from enum import Enum
-
+from enum import StrEnum
 
 # ── 沙箱档位（隔离永远存在，不允许"无沙箱"概念）───────────────────
 
 
-class SandboxTier(str, Enum):
+class SandboxTier(StrEnum):
     """容器隔离档位。
 
     每个工具调用都运行在容器内，档位决定文件系统/网络/进程命名空间的隔离强度。

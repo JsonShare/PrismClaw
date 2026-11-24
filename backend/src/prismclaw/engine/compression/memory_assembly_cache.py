@@ -5,6 +5,7 @@
 结构，不含任何 execution 层依赖（dependency direction: compression →
 foundation/schema only）。
 """
+
 from __future__ import annotations
 
 import time
@@ -37,7 +38,6 @@ def memory_core_cache_key(
     session_id: str,
     task_id: str | None,
     prompt: str | None,
-    request_mode: str | None,
     history_artifact_id: str | None,
 ) -> str:
     """记忆组合缓存键：只含 Run 级稳定输入。
@@ -53,7 +53,6 @@ def memory_core_cache_key(
         payload={
             "task_id": task_id,
             "prompt": prompt,
-            "request_mode": request_mode,
             "history_artifact_id": history_artifact_id,
         },
     )
@@ -107,12 +106,12 @@ class MemoryCoreCache:
 
     # ── Run 级树状态三元组缓存（Step 3）──
 
-    def get_tree_state(self, session_id: str) -> tuple | None:
+    def get_tree_state(self, session_id: str) -> tuple[Any, ...] | None:
         """返回 (persisted_artifacts, history_artifact, persisted_memory_state)
         的 Run 级缓存；未缓存时 None。"""
         return self._tree_state.get(session_id)
 
-    def put_tree_state(self, session_id: str, state: tuple) -> None:
+    def put_tree_state(self, session_id: str, state: tuple[Any, ...]) -> None:
         self._tree_state[session_id] = state
 
     def invalidate_tree_state(self, session_id: str | None = None) -> None:

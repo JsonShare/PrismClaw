@@ -15,7 +15,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from prismclaw.engine.plugins.loading._declarative_load import _load_declarative_plugin
+from prismclaw.engine.plugins.loading._declarative_load import (
+    SkillScanner,
+    _load_declarative_plugin,
+)
 from prismclaw.engine.plugins.loading.agent_loader import PluginAgentLoader
 from prismclaw.engine.plugins.loading.load_result import LoadedPlugin, PluginError
 from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
@@ -64,7 +67,7 @@ class DeclarativePluginLoadStrategy(PluginLoadStrategy):
         *,
         agent_loader: PluginAgentLoader,
         data_base_dir: Path | None = None,
-        skill_scanner: Any | None = None,
+        skill_scanner: SkillScanner | None = None,
     ) -> None:
         self._agent_loader = agent_loader
         self._data_base_dir = data_base_dir
@@ -181,7 +184,7 @@ def default_strategies(
     *,
     agent_loader: PluginAgentLoader,
     data_base_dir: Path | None = None,
-    skill_scanner: Any | None = None,
+    skill_scanner: SkillScanner | None = None,
 ) -> list[PluginLoadStrategy]:
     return [
         NativePythonPluginLoadStrategy(),

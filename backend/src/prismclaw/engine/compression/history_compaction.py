@@ -2,80 +2,111 @@ from __future__ import annotations
 
 import asyncio
 import logging
-
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from prismclaw.schema.session import SessionTree
+    from prismclaw.engine.compression.ports import ContextRuntimePorts
+    from prismclaw.engine.execution.checkpoint import CompressionRuntimeState
+
     # 类型注解所需，runtime 通过 deps.ports 访问。
     from prismclaw.engine.execution.query.state import QueryLoopState
-    from prismclaw.engine.execution.checkpoint import CompressionRuntimeState
     from prismclaw.engine.task_profile.service import TaskCompactionPolicy
+    from prismclaw.schema.agent.types import RunRequest
+    from prismclaw.schema.config.config import AgentRunConfig
+    from prismclaw.schema.session import SessionTree
+    from prismclaw.schema.session.event_logger import SessionEntry
+    from prismclaw.schema.storage.storage_types import SessionStore
 
+# ── Re-export from sub-modules (external import compatibility) ──
+import contextlib
+
+from prismclaw.engine.compression._autocompact_breaker import (  # noqa: F401
+    _MAX_PTL_RETRIES,
+    _METRIC_AUTOCOMPACT_FAILURE,
+    _METRIC_AUTOCOMPACT_GAUGE,
+    _METRIC_AUTOCOMPACT_OPEN,
+    _METRIC_AUTOCOMPACT_SUCCESS,
+    _METRIC_AUTOCOMPACT_TRIGGER,
+    _PROMPT_TOO_LONG_REASON,
+    AutocompactBreaker,
+    _emit_breaker_metric,
+    _persist_breaker_state,
+    _persist_summary_text,
+    _resolve_breaker,
+)
+from prismclaw.engine.compression._compact_prompt import (  # noqa: F401
+    _ANALYSIS_BLOCK_RE,
+    _METRIC_COMPACT_ANALYSIS_STRIPPED,
+    _METRIC_COMPACT_PREAMBLE_INJECTED,
+    _METRIC_COMPACT_TOOL_CALL_REJECTED,
+    NO_TOOLS_PREAMBLE,
+    _resolve_prompt_template,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    _METRIC_COMPACT_OUTPUT_TOKENS as _METRIC_COMPACT_OUTPUT_TOKENS,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    _METRIC_COMPACT_PROMPT_TOKENS as _METRIC_COMPACT_PROMPT_TOKENS,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    _resolve_no_tools_preamble_enabled as _resolve_no_tools_preamble_enabled,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    inject_no_tools_preamble as inject_no_tools_preamble,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    resolve_compact_prompt as resolve_compact_prompt,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    resolve_strip_analysis as resolve_strip_analysis,
+)
+from prismclaw.engine.compression._compact_prompt import (
+    strip_analysis_block as strip_analysis_block,
+)
+from prismclaw.engine.compression._ptl_retry import (  # noqa: F401
+    _compact_with_ptl_retry,
+    _parse_ptl_token_gap,
+    group_messages_by_api_round,
+    truncate_head_for_ptl_retry,
+)
+from prismclaw.engine.compression._soft_budget import (  # noqa: F401
+    _METRIC_SOFT_BUDGET_RATIO,
+    _METRIC_SOFT_BUDGET_TERMINATE,
+    _METRIC_SOFT_BUDGET_WARN,
+    SoftBudgetExhaustedError,
+    SoftBudgetVerdict,
+    evaluate_soft_budget,
+    inject_budget_warning,
+    maybe_raise_soft_budget_exhausted,
+    render_budget_warning,
+)
 from prismclaw.engine.compression.budget_orchestrator import HistoryCompactionAssessment
 from prismclaw.engine.compression.compaction import (
     estimate_messages_tokens,
 )
-from prismclaw.engine.compression.state_store import take_checkpoint
 from prismclaw.engine.compression.hardening import carry_forward_missing_sections
+from prismclaw.engine.compression.state_store import take_checkpoint
 from prismclaw.engine.foundation.metrics import emit
-from prismclaw.schema.agent.context import ContextCompactor
 from prismclaw.engine.state.state_protocol import normalize_state_payload
-from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.agent.context import ContextCompactor
 from prismclaw.schema.agent.session import SessionContextState, SessionStateUpdate
-from prismclaw.schema.content.compaction import CompactionBoundary, CompactionPreservedSegment, CompactResult
+from prismclaw.schema.content.compaction import (
+    CompactionArtifact,
+    CompactionBoundary,
+    CompactionPreservedSegment,
+    CompactResult,
+    parse_compaction_artifact,
+)
+from prismclaw.schema.session.event_logger import SessionEventLogger
 from prismclaw.schema.session.projection import SessionProjectionEngine
-from prismclaw.schema.session.types import CompactionEntry, CustomEntry, SESSION_MEMORY_CUSTOM_TYPE
-from prismclaw.schema.session.types import generate_entry_id, now_iso
-from prismclaw.schema.content.compaction import parse_compaction_artifact
-
-# ── Re-export from sub-modules (external import compatibility) ──
-from prismclaw.engine.compression._autocompact_breaker import (  # noqa: F401
-    AutocompactBreaker,
-    _resolve_breaker,
-    _persist_breaker_state,
-    _persist_summary_text,
-    _emit_breaker_metric,
-    _METRIC_AUTOCOMPACT_TRIGGER,
-    _METRIC_AUTOCOMPACT_SUCCESS,
-    _METRIC_AUTOCOMPACT_FAILURE,
-    _METRIC_AUTOCOMPACT_GAUGE,
-    _METRIC_AUTOCOMPACT_OPEN,
-    _MAX_PTL_RETRIES,
-    _PROMPT_TOO_LONG_REASON,
-)
-from prismclaw.engine.compression._compact_prompt import (  # noqa: F401
-    NO_TOOLS_PREAMBLE,
-    inject_no_tools_preamble,
-    _resolve_no_tools_preamble_enabled,
-    _ANALYSIS_BLOCK_RE,
-    strip_analysis_block,
-    _resolve_prompt_template,
-    resolve_compact_prompt,
-    resolve_strip_analysis,
-    _METRIC_COMPACT_PREAMBLE_INJECTED,
-    _METRIC_COMPACT_TOOL_CALL_REJECTED,
-    _METRIC_COMPACT_ANALYSIS_STRIPPED,
-    _METRIC_COMPACT_PROMPT_TOKENS,
-    _METRIC_COMPACT_OUTPUT_TOKENS,
-)
-from prismclaw.engine.compression._soft_budget import (  # noqa: F401
-    SoftBudgetExhausted,
-    SoftBudgetVerdict,
-    evaluate_soft_budget,
-    render_budget_warning,
-    maybe_raise_soft_budget_exhausted,
-    inject_budget_warning,
-    _METRIC_SOFT_BUDGET_WARN,
-    _METRIC_SOFT_BUDGET_TERMINATE,
-    _METRIC_SOFT_BUDGET_RATIO,
-)
-from prismclaw.engine.compression._ptl_retry import (  # noqa: F401
-    group_messages_by_api_round,
-    truncate_head_for_ptl_retry,
-    _parse_ptl_token_gap,
-    _compact_with_ptl_retry,
+from prismclaw.schema.session.types import (
+    SESSION_MEMORY_CUSTOM_TYPE,
+    CompactionEntry,
+    CustomEntry,
+    generate_entry_id,
+    now_iso,
 )
 
 logger = logging.getLogger(__name__)
@@ -94,25 +125,25 @@ class CompactionOutcome:
 
 class _CompactionDeps(Protocol):
     context_compactor: ContextCompactor
-    session_store: Any
-    config: Any
+    session_store: SessionStore
+    config: AgentRunConfig
     # Optional per-session autocompact breaker.  When absent, the
     # coordinator creates a fresh in-memory breaker that lives for
     # the duration of the run.
-    autocompact_breaker: "AutocompactBreaker | None"
+    autocompact_breaker: AutocompactBreaker | None
     # Callback to publish a compaction trajectory node (avoids a runtime
     # import of the loop layer from compression).
     on_compaction_node: Callable[..., None] | None
     # 依赖反转 ports——compression 通过此协议访问
     # execution/hooks/security 能力，避免反向 import。
-    ports: Any
+    ports: ContextRuntimePorts
 
 
 async def try_compaction(
     *,
     deps: _CompactionDeps,
-    tree: Any,
-    request: Any,
+    tree: SessionTree,
+    request: RunRequest,
     query_loop_state: QueryLoopState,
     compression_runtime: CompressionRuntimeState,
     history_budget: int,
@@ -229,7 +260,7 @@ async def try_compaction(
 
     # Active soft-degrade check after compaction has had a chance to
     # shrink the prompt.  If the post-compaction token usage still
-    # crosses the terminate ratio, raise SoftBudgetExhausted so the
+    # crosses the terminate ratio, raise SoftBudgetExhaustedError so the
     # runner stops dispatching new turns.  Overflow-rescue callers
     # pass force=True and skip this guard because they are already
     # dealing with an overflow.
@@ -255,12 +286,16 @@ async def try_compaction(
                     soft_budget=soft_budget_cfg,
                 )
                 maybe_raise_soft_budget_exhausted(verdict, enabled=soft_budget_on)
-            except SoftBudgetExhausted:
+            except SoftBudgetExhaustedError:
                 raise
             except Exception as exc:
                 logger.debug("soft_budget.post_check_skipped err=%s", exc)
 
-    if compact_result.compacted and compact_result.validation is not None and not compact_result.validation.ok:
+    if (
+        compact_result.compacted
+        and compact_result.validation is not None
+        and not compact_result.validation.ok
+    ):
         # The reference implementation's compaction has no hard semantic fidelity
         # gate. Downgrade to a non-blocking warning: the compaction is still
         # accepted and committed, but the loss is recorded for audit instead
@@ -282,7 +317,8 @@ async def try_compaction(
         prior_summary = _find_prior_compaction_summary(tree)
         if prior_summary:
             anchored = carry_forward_missing_sections(
-                compact_result.summary, prior_summary,
+                compact_result.summary,
+                prior_summary,
             )
             if anchored != compact_result.summary:
                 logger.info(
@@ -314,7 +350,9 @@ async def try_compaction(
             on_compaction_node = _callbacks.on_compaction_node if _callbacks is not None else None
             if callable(on_compaction_node):
                 on_compaction_node(
-                    tree, entry_id=comp_entry_id, summary=compact_result.summary,
+                    tree,
+                    entry_id=comp_entry_id,
+                    summary=compact_result.summary,
                 )
         except Exception:
             pass
@@ -341,7 +379,7 @@ async def try_compaction(
 
 
 def _compaction_entry_details(
-    compact_result: "CompactResult",
+    compact_result: CompactResult,
     *,
     compaction_entry_id: str,
     session_id: str,
@@ -366,13 +404,13 @@ def _compaction_entry_details(
 
 
 def _finalize_history_artifact_boundary(
-    artifact: Any,
+    artifact: CompactionArtifact,
     *,
     compaction_entry_id: str,
     session_id: str,
     first_kept_entry_id: str | None,
     query_loop_state: QueryLoopState,
-):
+) -> CompactionArtifact:
     if getattr(artifact, "artifact_type", None) != "history_compaction_summary":
         return artifact
     boundary = artifact.boundary or CompactionBoundary()
@@ -404,7 +442,7 @@ def _finalize_history_artifact_boundary(
     return artifact.model_copy(update={"boundary": next_boundary})
 
 
-def _message_entry_id(message: Any) -> str | None:
+def _message_entry_id(message: object) -> str | None:
     if not isinstance(message, dict):
         return None
     entry_id = message.get("__entry_id__")
@@ -414,7 +452,7 @@ def _message_entry_id(message: Any) -> str | None:
 async def _persist_session_memory_snapshot_for_compaction(
     *,
     deps: _CompactionDeps,
-    tree: Any,
+    tree: SessionTree,
     session_id: str,
     compact_result: CompactResult,
 ) -> None:
@@ -444,7 +482,9 @@ async def _persist_session_memory_snapshot_for_compaction(
     await _commit_tree_entry(deps=deps, tree=tree, entry=entry)
 
 
-async def _commit_tree_entry(*, deps: _CompactionDeps, tree: Any, entry: Any) -> None:
+async def _commit_tree_entry(
+    *, deps: _CompactionDeps, tree: SessionTree, entry: SessionEntry
+) -> None:
     """Commit a non-message entry (CompactionEntry / session-memory snapshot)
     via entry_updated AND sync the in-memory tree.
 
@@ -466,8 +506,8 @@ async def _commit_tree_entry(*, deps: _CompactionDeps, tree: Any, entry: Any) ->
 async def maybe_pretrim_history(
     *,
     deps: _CompactionDeps,
-    tree: Any,
-    request: Any,
+    tree: SessionTree,
+    request: RunRequest,
     query_loop_state: QueryLoopState,
     compression_runtime: CompressionRuntimeState,
     history_budget: int,
@@ -506,11 +546,19 @@ async def maybe_pretrim_history(
         entry_seq = len(getattr(tree, "entries", {}) or {})
         elapsed = entry_seq - compression_runtime.last_compaction_entry_seq
         if 0 <= elapsed < min_interval_entries:
+            # 预算事实按两档分别陈述：history_budget 是硬预算，触发阈值可能
+            # 低于它（compaction_policy.pretrim_trigger_tokens）。此前的文案
+            # 一律写 "over budget"，在 history_tokens 未超硬预算时是假命题，
+            # 会把排障引向错误的预算计算。
             logger.warning(
                 "history compaction suppressed by cooldown: %d entries since last "
-                "compaction (< %d). history_tokens=%d over budget=%d stays visible "
-                "this turn; soft-budget guards remain active.",
-                elapsed, min_interval_entries, history_tokens, history_budget,
+                "compaction (< %d). history_tokens=%d history_budget=%d over_hard_budget=%s "
+                "stays visible this turn; soft-budget guards remain active.",
+                elapsed,
+                min_interval_entries,
+                history_tokens,
+                history_budget,
+                history_tokens > history_budget,
             )
             return None
     outcome = await try_compaction(
@@ -526,13 +574,11 @@ async def maybe_pretrim_history(
         keep_recent_tokens_override=keep_recent_tokens_override,
     )
     if outcome is not None and outcome.ok and getattr(outcome, "compacted", False):
-        compression_runtime.last_compaction_entry_seq = len(
-            getattr(tree, "entries", {}) or {}
-        )
+        compression_runtime.last_compaction_entry_seq = len(getattr(tree, "entries", {}) or {})
     return outcome
 
 
-def _resolve_min_interval_entries(deps: Any) -> int:
+def _resolve_min_interval_entries(deps: _CompactionDeps) -> int:
     """Cooldown window from config; 0 (disabled) on any access failure."""
     try:
         history_cfg = deps.config.context.compaction.history
@@ -544,8 +590,8 @@ def _resolve_min_interval_entries(deps: Any) -> int:
 async def recover_from_context_overflow(
     *,
     deps: _CompactionDeps,
-    tree: Any,
-    request: Any,
+    tree: SessionTree,
+    request: RunRequest,
     query_loop_state: QueryLoopState,
     compression_runtime: CompressionRuntimeState,
     history_budget: int,
@@ -568,7 +614,7 @@ async def recover_from_context_overflow(
     )
 
 
-def _find_prior_compaction_summary(tree: Any) -> str | None:
+def _find_prior_compaction_summary(tree: SessionTree) -> str | None:
     """Return the summary text of the latest CompactionEntry in the tree.
 
     Used by the carry-forward anchor to detect sections that the LLM
@@ -630,19 +676,23 @@ def _query_messages_for_compaction(
                 load_fact_sheet,
                 render_fact_sheet_text,
             )
+
             facts = load_fact_sheet(tree)
             if facts:
                 fact_text = render_fact_sheet_text(facts)
-                fact_preamble.append({
-                    "role": "user",
-                    "content": fact_text,
-                })
+                fact_preamble.append(
+                    {
+                        "role": "user",
+                        "content": fact_text,
+                    }
+                )
         except Exception:
             pass  # Fact Sheet is best-effort; never block compaction
 
     if not meta_messages and not fact_preamble:
         return messages
     from prismclaw.engine.context.projection_engine import render_system_reminder_content
+
     # 从 .session 子模块导入：包 __init__ 的惰性表中没有该符号，走包级导入会
     # 直接 ImportError（曾使 prepare_next_turn 的压缩路径整轮崩溃，会话执行中丢失）。
     from prismclaw.schema.agent.session import SystemReminderProjection
@@ -661,8 +711,7 @@ def _query_messages_for_compaction(
                 "content": (
                     "[既有压缩摘要——下方每一节都必须出现在"
                     "你的新摘要中。不要省略或替换任何一节，"
-                    "请逐字结转每一节。]\n\n"
-                    + render_system_reminder_content(reminder)
+                    "请逐字结转每一节。]\n\n" + render_system_reminder_content(reminder)
                 ),
             }
         )
@@ -721,10 +770,8 @@ def predict_compaction_trigger(
     if history_budget > 0:
         emergency_threshold = int(history_budget * emergency_ratio)
         if current_tokens >= emergency_threshold:
-            try:
+            with contextlib.suppress(Exception):
                 emit(_METRIC_PREDICTIVE_TRIGGER, 1.0, kind="counter")
-            except Exception:
-                pass
             return True
 
     # ── Predictive path (with cooldown) ──
@@ -735,15 +782,13 @@ def predict_compaction_trigger(
     if current_tokens >= trigger_budget:
         return False  # Already over — let the passive path handle it.
 
-    deltas = [b - a for a, b in zip(snapshots, snapshots[1:]) if b > a]
+    deltas = [b - a for a, b in zip(snapshots, snapshots[1:], strict=False) if b > a]
     if len(deltas) < 3:
         return False
     p75 = sorted(deltas)[int(len(deltas) * 0.75)]
     projected = current_tokens + p75 * horizon
     if projected >= trigger_budget:
-        try:
+        with contextlib.suppress(Exception):
             emit(_METRIC_PREDICTIVE_TRIGGER, 1.0, kind="counter")
-        except Exception:
-            pass
         return True
     return False

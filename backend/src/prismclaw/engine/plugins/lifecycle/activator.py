@@ -4,19 +4,20 @@ PrismClaw 特有设计（Python 需要 load/activate 分离）。
 
 管理插件生命周期状态机：load → activate → deactivate → unload。
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
 
-from prismclaw.engine.plugins.registry.identity import PluginID
-from prismclaw.engine.plugins.loading.load_result import LoadedPlugin
 from prismclaw.engine.plugins.lifecycle.state import (
     IllegalStateTransitionError,
     PluginLifecycleState,
     assert_transition,
     can_transition,
 )
+from prismclaw.engine.plugins.loading.load_result import LoadedPlugin
+from prismclaw.engine.plugins.registry.identity import PluginID
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,7 @@ class PluginActivator:
         self,
         plugin_id: PluginID,
         *,
-        register_fn: "Callable[[LoadedPlugin], list[str]] | None" = None,
+        register_fn: Callable[[LoadedPlugin], list[str]] | None = None,
     ) -> list[str]:
         """激活插件（状态 loaded/inactive → active）。
 
@@ -85,7 +86,7 @@ class PluginActivator:
         self,
         plugin_id: PluginID,
         *,
-        unregister_fn: "Callable[[LoadedPlugin, list[str]], None] | None" = None,
+        unregister_fn: Callable[[LoadedPlugin, list[str]], None] | None = None,
     ) -> None:
         """停用插件（状态 active → inactive）。"""
         record = self._get_record(plugin_id)
@@ -137,4 +138,4 @@ class PluginActivator:
 
 
 # 用于类型注解的前向引用
-from typing import Callable  # noqa: E402
+from collections.abc import Callable  # noqa: E402

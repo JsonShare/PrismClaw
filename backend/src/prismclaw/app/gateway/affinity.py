@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+from prismclaw.infra.redis import resolve
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +22,7 @@ end
 class AffinityRegistry:
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: Redis,
         worker_id: str,
         *,
         key_prefix: str = "prismclaw:",
@@ -48,26 +53,32 @@ class AffinityRegistry:
         return str(raw)
 
     async def claim(self, session_key: str) -> bool:
-        result = await self._redis.set(
-            self._key(session_key),
-            self._worker_id,
-            nx=True,
-            ex=self._ttl,
+        result = await resolve(
+            self._redis.set(
+                self._key(session_key),
+                self._worker_id,
+                nx=True,
+                ex=self._ttl,
+            )
         )
         return bool(result)
 
     async def renew(self, session_key: str) -> None:
-        await self._redis.expire(self._key(session_key), self._ttl)
+        await resolve(self._redis.expire(self._key(session_key), self._ttl))
 
     async def release(self, session_key: str) -> bool:
-        result = await self._redis.eval(_RELEASE_SCRIPT, 1, self._key(session_key), self._worker_id)
+        result = await resolve(
+            self._redis.eval(_RELEASE_SCRIPT, 1, self._key(session_key), self._worker_id)
+        )
         return bool(result)
 
     async def force_claim(self, session_key: str) -> None:
-        await self._redis.set(
-            self._key(session_key),
-            self._worker_id,
-            ex=self._ttl,
+        await resolve(
+            self._redis.set(
+                self._key(session_key),
+                self._worker_id,
+                ex=self._ttl,
+            )
         )
 
     def is_mine(self, owner_id: str | None) -> bool:

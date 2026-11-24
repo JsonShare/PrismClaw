@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from .candidates import (
     DreamCandidateCollector,
-    DreamCandidateStore,
-    DreamMemoryCandidate,
+)
+from .candidates import (
+    DreamCandidateStore as DreamCandidateStore,
+)
+from .candidates import (
+    DreamMemoryCandidate as DreamMemoryCandidate,
 )
 from .dispatch import (
     DistributedDreamLease,
@@ -30,8 +34,9 @@ from .governance import (
     DreamStatusOps,
     InProcessDreamAdminOps,
 )
-# DreamReviewService cannot be re-exported at package level due to circular import
-# with engine.py. Import directly: from prismclaw.engine.dream.governance.review_service import DreamReviewService
+
+# DreamReviewService 与 engine.py 循环依赖，不在此层导出；
+# 需直接 from prismclaw.engine.dream.governance.review_service import DreamReviewService
 from .state import (
     DreamAuditEntry,
     DreamAuditLogger,

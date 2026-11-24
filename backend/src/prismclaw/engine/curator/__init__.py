@@ -10,16 +10,31 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Literal
-
-from prismclaw.schema.agent.curator import CuratorSopRepository
-from prismclaw.schema.agent.curator_types import CuratorReport, CycleReport, ReviewOutcome
+from typing import TYPE_CHECKING, Literal
 
 from prismclaw.engine.curator.state import (
     CuratorStateStore,
 )
+from prismclaw.schema.agent.curator import CuratorL1Index, CuratorSopRepository
+from prismclaw.schema.agent.curator_types import (
+    CuratorReport as CuratorReport,
+)
+from prismclaw.schema.agent.curator_types import (
+    CycleReport as CycleReport,
+)
+from prismclaw.schema.agent.curator_types import (
+    ReviewOutcome as ReviewOutcome,
+)
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
+    from prismclaw.infra.settings._memory import CuratorSettings
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.services.lock import LockManagerProtocol
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -40,17 +55,18 @@ SCAN_CONCURRENCY = 10
 async def run_curator_cycle(
     *,
     sop_repo: CuratorSopRepository,
-    settings: Any,
-    redis_client: Any,
-    lock_manager: Any,
-    task_manager: Any,
-    l1_index: Any,
+    settings: CuratorSettings,
+    redis_client: aioredis.Redis,
+    lock_manager: LockManagerProtocol,
+    task_manager: TaskManagerProtocol,
+    l1_index: CuratorL1Index,
     workspace_base_dir: Path | None = None,
-    llm_client: Any = None,
+    llm_client: LLMClient | None = None,
     mode: Literal["scan_and_review", "review_only"] = "scan_and_review",
     force_review: bool = False,
     owner_label: str = "timed",
-    count_validation_signals: Callable | None = None,
+    count_validation_signals: Callable[[str, list[str]], Awaitable[dict[str, dict[str, int]]]]
+    | None = None,
 ) -> CycleReport:
     """Execute one curator cycle using the package-level curator API."""
     from prismclaw.engine.curator.cycle import CuratorCycle
@@ -78,16 +94,17 @@ async def run_curator_cycle(
 
 
 async def create_curator_loop(
-    settings: Any,
+    settings: CuratorSettings,
     sop_repo: CuratorSopRepository,
-    redis_client: Any,
-    l1_index: Any,
+    redis_client: aioredis.Redis,
+    l1_index: CuratorL1Index,
     *,
-    lock_manager: Any,
-    task_manager: Any,
+    lock_manager: LockManagerProtocol,
+    task_manager: TaskManagerProtocol,
     workspace_base_dir: Path | None = None,
-    llm_client: Any = None,
-    count_validation_signals: Callable | None = None,
+    llm_client: LLMClient | None = None,
+    count_validation_signals: Callable[[str, list[str]], Awaitable[dict[str, dict[str, int]]]]
+    | None = None,
 ) -> None:
     logger.info(
         "curator cycle using RedisLockManager (key: prismclaw:curator:cycle)",
@@ -114,9 +131,8 @@ async def create_curator_loop(
             await asyncio.sleep(settings.check_interval_seconds)
 
             last_run_at = await state_store.get_last_scan_at()
-            if last_run_at is not None:
-                if time.time() - last_run_at < settings.interval_seconds:
-                    continue
+            if last_run_at is not None and time.time() - last_run_at < settings.interval_seconds:
+                continue
 
             report = await run_curator_cycle(
                 sop_repo=sop_repo,
@@ -149,12 +165,13 @@ async def _list_active_sop_sessions(sop_repo: CuratorSopRepository) -> list[str]
 async def run_curator_scan(
     sop_repo: CuratorSopRepository,
     archive_days: int,
-    l1_index: Any,
+    l1_index: CuratorL1Index,
     workspace_base_dir: Path | None = None,
-    settings: Any = None,
+    settings: CuratorSettings | None = None,
     *,
     check_alive: Callable[[], None] = lambda: None,
-    count_validation_signals: Callable | None = None,
+    count_validation_signals: Callable[[str, list[str]], Awaitable[dict[str, dict[str, int]]]]
+    | None = None,
 ) -> CuratorReport:
 
     check_alive()
@@ -195,10 +212,11 @@ async def _scan_session(
     sop_repo: CuratorSopRepository,
     session_key: str,
     archive_days: int,
-    l1_index: Any,
+    l1_index: CuratorL1Index,
     workspace_base_dir: Path | None = None,
-    settings: Any = None,
-    count_validation_signals: Callable | None = None,
+    settings: CuratorSettings | None = None,
+    count_validation_signals: Callable[[str, list[str]], Awaitable[dict[str, dict[str, int]]]]
+    | None = None,
 ) -> tuple[int, int]:
     """Archive stale SOPs and graduate high-use ones for one session_key."""
     return await sop_repo.scan_session(
@@ -216,25 +234,23 @@ async def _scan_session(
 # ---------------------------------------------------------------------------
 
 
-async def should_run_llm_review(settings: Any, state_store: CuratorStateStore) -> bool:
+async def should_run_llm_review(settings: CuratorSettings, state_store: CuratorStateStore) -> bool:
     if not settings.llm_review_enabled:
         return False
 
     last_run = await state_store.get_last_review_at()
-    if last_run is not None:
-        if time.time() - last_run < settings.llm_review_interval_seconds:
-            return False
-
-    return True
+    return not (
+        last_run is not None and time.time() - last_run < settings.llm_review_interval_seconds
+    )
 
 
 async def _review_session(
     sop_repo: CuratorSopRepository,
     session_key: str,
-    settings: Any,
-    l1_index: Any,
+    settings: CuratorSettings,
+    l1_index: CuratorL1Index,
     workspace_base_dir: Path,
-    llm_client: Any,
+    llm_client: LLMClient,
     *,
     check_alive: Callable[[], None] = lambda: None,
     abort_event: asyncio.Event | None = None,
@@ -264,9 +280,9 @@ async def _review_session(
 async def run_llm_review(
     sop_repo: CuratorSopRepository,
     session_key: str,
-    settings: Any,
-    llm_client: Any,
-    l1_index: Any,
+    settings: CuratorSettings,
+    llm_client: LLMClient,
+    l1_index: CuratorL1Index,
     workspace_base_dir: Path,
     *,
     check_alive: Callable[[], None] = lambda: None,

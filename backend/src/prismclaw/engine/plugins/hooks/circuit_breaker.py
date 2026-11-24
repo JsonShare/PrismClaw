@@ -14,30 +14,31 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Callable
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-class CircuitState(str, Enum):
+class CircuitState(StrEnum):
     """熔断状态。"""
 
-    CLOSED = "closed"          # 正常通行
-    OPEN = "open"              # 熔断，拒绝所有请求
-    HALF_OPEN = "half_open"    # 尝试恢复，允许少量请求
+    CLOSED = "closed"  # 正常通行
+    OPEN = "open"  # 熔断，拒绝所有请求
+    HALF_OPEN = "half_open"  # 尝试恢复，允许少量请求
 
 
 @dataclass
 class CircuitBreakerConfig:
     """熔断器配置。"""
 
-    failure_threshold: int = 5           # 连续失败次数阈值
-    recovery_timeout: float = 30.0       # 熔断恢复时间（秒）
-    half_open_max_requests: int = 3      # HALF_OPEN 状态允许的最大请求数
-    request_timeout: float = 30.0        # 单个请求超时时间（秒）
-    success_threshold: int = 3           # HALF_OPEN 状态连续成功次数恢复
+    failure_threshold: int = 5  # 连续失败次数阈值
+    recovery_timeout: float = 30.0  # 熔断恢复时间（秒）
+    half_open_max_requests: int = 3  # HALF_OPEN 状态允许的最大请求数
+    request_timeout: float = 30.0  # 单个请求超时时间（秒）
+    success_threshold: int = 3  # HALF_OPEN 状态连续成功次数恢复
 
 
 class HookCircuitBreaker:
@@ -63,16 +64,13 @@ class HookCircuitBreaker:
 
     def _check_state_transition(self) -> None:
         """检查并执行状态转换。"""
-        if self._state == CircuitState.OPEN:
-            if self._last_failure_time is not None:
-                elapsed = time.time() - self._last_failure_time
-                if elapsed >= self._config.recovery_timeout:
-                    self._state = CircuitState.HALF_OPEN
-                    self._half_open_requests = 0
-                    self._success_count = 0
-                    logger.info(
-                        "Circuit breaker transitioning to HALF_OPEN state"
-                    )
+        if self._state == CircuitState.OPEN and self._last_failure_time is not None:
+            elapsed = time.time() - self._last_failure_time
+            if elapsed >= self._config.recovery_timeout:
+                self._state = CircuitState.HALF_OPEN
+                self._half_open_requests = 0
+                self._success_count = 0
+                logger.info("Circuit breaker transitioning to HALF_OPEN state")
 
     def can_execute(self) -> bool:
         """检查是否允许执行新请求。"""
@@ -111,9 +109,7 @@ class HookCircuitBreaker:
 
         if self._state == CircuitState.HALF_OPEN:
             self._state = CircuitState.OPEN
-            logger.warning(
-                "Circuit breaker OPEN: failure during HALF_OPEN state"
-            )
+            logger.warning("Circuit breaker OPEN: failure during HALF_OPEN state")
         elif self._state == CircuitState.CLOSED:
             if self._failure_count >= self._config.failure_threshold:
                 self._state = CircuitState.OPEN
@@ -133,9 +129,9 @@ class HookCircuitBreaker:
 
     async def execute_with_protection(
         self,
-        coro: Callable[..., Any],
-        *args: Any,
-        **kwargs: Any,
+        coro: Callable[..., Awaitable[Any]],
+        *args: object,
+        **kwargs: object,
     ) -> tuple[Any, bool]:
         """带熔断保护执行协程。
 
@@ -156,7 +152,7 @@ class HookCircuitBreaker:
             )
             self.record_success()
             return result, True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Request timed out after %.1fs", self._config.request_timeout)
             self.record_failure()
             raise
@@ -210,10 +206,7 @@ class HookCircuitBreakerManager:
 
     def get_all_status(self) -> dict[str, dict[str, Any]]:
         """获取所有熔断器状态。"""
-        return {
-            key: cb.get_status()
-            for key, cb in self._breakers.items()
-        }
+        return {key: cb.get_status() for key, cb in self._breakers.items()}
 
     def reset_all(self) -> None:
         """重置所有熔断器。"""

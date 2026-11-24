@@ -5,6 +5,7 @@
 
 纯函数：只吃候选列表和身份字段，不碰数据库。
 """
+
 from __future__ import annotations
 
 import re
@@ -68,19 +69,19 @@ def match_patient(
     if _DESENSITIZED_PAT.match(target):
         return {"patient_id": "", "reason": "desensitized", "candidates": []}
 
-    same_name = [
-        c for c in candidates if normalize_name(str(c.get("name") or "")) == target
-    ]
+    same_name = [c for c in candidates if normalize_name(str(c.get("name") or "")) == target]
     if not same_name:
         return {"patient_id": "", "reason": "no_match", "candidates": []}
     if len(same_name) == 1:
-        return {"patient_id": str(same_name[0].get("id") or ""), "reason": "exact", "candidates": []}
+        return {
+            "patient_id": str(same_name[0].get("id") or ""),
+            "reason": "exact",
+            "candidates": [],
+        }
 
     # 重名：先用性别收敛
     if gender and gender[0] in ("男", "女"):
-        by_gender = [
-            c for c in same_name if str(c.get("gender") or "").startswith(gender[0])
-        ]
+        by_gender = [c for c in same_name if str(c.get("gender") or "").startswith(gender[0])]
         if len(by_gender) == 1:
             return {
                 "patient_id": str(by_gender[0].get("id") or ""),

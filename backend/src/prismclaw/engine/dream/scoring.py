@@ -3,6 +3,7 @@
 多因子评分，用于 Mid tier 的价值驱动降级循环。
 所有权重因子通过常量暴露，可在 env 中配置。
 """
+
 from __future__ import annotations
 
 import math
@@ -22,9 +23,9 @@ _CONNECTIVITY_WEIGHT = 0.5
 _CONNECTIVITY_CAP = 2.0
 
 # ── 衰减 lambda（每日） ──
-_DECAY_SHORT_TERM = 0.05   # expires_at 存在时
-_DECAY_DECISION = 0.0      # type=decision 时永不衰减
-_DECAY_DEFAULT = 0.005     # 其他
+_DECAY_SHORT_TERM = 0.05  # expires_at 存在时
+_DECAY_DECISION = 0.0  # type=decision 时永不衰减
+_DECAY_DEFAULT = 0.005  # 其他
 
 
 def memory_value(
@@ -71,7 +72,9 @@ def memory_value(
     # 发布态权重
     publish = str(getattr(entry, "publish_state", "") or "").strip().lower()
     publish_weight = {
-        "published": 1.0, "reviewed": 0.9, "canary": 0.7,
+        "published": 1.0,
+        "reviewed": 0.9,
+        "canary": 0.7,
     }.get(publish, 0.5)
 
     return (

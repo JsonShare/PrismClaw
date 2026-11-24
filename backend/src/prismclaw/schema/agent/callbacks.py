@@ -1,8 +1,10 @@
 """Loop behavioral callbacks."""
+
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 
 @dataclass(slots=True)
@@ -16,4 +18,3 @@ class AgentCallbacks:
     # 仅在 dispatch_mode='background' 且进程内有投递通道时触发；
     # 无回调（CLI / headless）时结果留在会话树，由下一轮 note 呈现。
     on_subagent_terminal: Callable[[Any], Awaitable[None]] | None = None
-

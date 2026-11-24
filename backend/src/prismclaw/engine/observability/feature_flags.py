@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import Mapping
+from collections.abc import Mapping
 
 _TRUE_TOKENS = frozenset({"1", "true", "yes", "on", "enabled"})
 _FALSE_TOKENS = frozenset({"0", "false", "no", "off", "disabled"})
@@ -68,8 +68,7 @@ def _parse_env_value(raw: str | None) -> bool | None:
         return False
     # Reject ambiguous values — never silently default
     raise ValueError(
-        f"unrecognized truth value {raw!r}; "
-        f"expected one of {sorted(_TRUE_TOKENS | _FALSE_TOKENS)}"
+        f"unrecognized truth value {raw!r}; expected one of {sorted(_TRUE_TOKENS | _FALSE_TOKENS)}"
     )
 
 

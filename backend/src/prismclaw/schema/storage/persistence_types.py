@@ -4,8 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from prismclaw.schema.services.lock import LockManagerProtocol
+from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
+
 if TYPE_CHECKING:
-    from prismclaw.schema.agent.bundles import RunOwnershipStoreProtocol, TrajectoryPersistenceProtocol
+    from prismclaw.schema.agent.bundles import (
+        RunOwnershipStoreProtocol,
+    )
 
 
 class PersistenceContextProtocol(Protocol):
@@ -22,23 +27,35 @@ class PersistenceContextProtocol(Protocol):
     def run_ownership_store(self) -> RunOwnershipStoreProtocol | None: ...
 
     @property
-    def trajectory_persistence(self) -> TrajectoryPersistenceProtocol | None: ...
+    def trajectory_persistence(self) -> TrajectoryPersistence | None: ...
 
 
-@runtime_checkable
-class LockManager(Protocol):
-    """Distributed lock manager Protocol — abstracts RedisLockManager.
-
-    Engine code should depend on this Protocol instead of importing
-    the concrete RedisLockManager from persistence.
-    """
-
-    async def acquire(self, key: str, ttl_ms: int = 30_000) -> str: ...
-    async def release(self, key: str, token: str) -> bool: ...
-    async def renew(self, key: str, token: str, ttl_ms: int = 30_000) -> bool: ...
+#: Distributed lock manager — single source of truth is ``schema.services.lock``.
+LockManager = LockManagerProtocol
 
 
 # ── RunSnapshotStore Protocol ────────────────────────────────────
+
+
+class RunSnapshotLike(Protocol):
+    """快照的结构化最小视图：可序列化 + 暴露运行标识。"""
+
+    @property
+    def run_state(self) -> RunStateLike: ...
+
+    @property
+    def created_at_epoch_ms(self) -> float: ...
+
+    def model_dump(self, *, mode: str = ...) -> dict[str, Any]: ...
+
+
+class RunStateLike(Protocol):
+    @property
+    def run_id(self) -> str | None: ...
+
+    @property
+    def session_id(self) -> str: ...
+
 
 @runtime_checkable
 class RunSnapshotStore(Protocol):
@@ -48,9 +65,9 @@ class RunSnapshotStore(Protocol):
     engine 层类型 RunSnapshot 以 Any 代替，避免 contracts 依赖 engine。
     """
 
-    async def save(self, snapshot: Any) -> None: ...
-    async def load_latest(self, run_id: str) -> Any | None: ...
-    async def list_for_session(self, session_id: str) -> tuple[Any, ...]: ...
+    async def save(self, snapshot: RunSnapshotLike) -> None: ...
+    async def load_latest(self, run_id: str) -> RunSnapshotLike | None: ...
+    async def list_for_session(self, session_id: str) -> tuple[RunSnapshotLike, ...]: ...
 
 
 __all__ = ["PersistenceContextProtocol", "LockManager", "RunSnapshotStore"]

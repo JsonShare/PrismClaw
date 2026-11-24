@@ -25,19 +25,26 @@ LLM-facing rewrite ``{server}__{tool}``.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+    from prismclaw.engine.toolkit.registry.specs import ToolSpec
+    from prismclaw.engine.toolkit.registry.tool_runtime import Tool
+    from prismclaw.schema.config.config import RunLoopTuningConfig
+
 
 def _canonical(name: str) -> str:
     """Normalize an LLM-facing ``{server}__{tool}`` name to ``{server}:{tool}``."""
     return name.replace("__", ":", 1) if "__" in name else name
 
 
-def _configured_names(config: Any) -> list[str] | None:
+def _configured_names(config: RunLoopTuningConfig | None) -> list[str] | None:
     names = getattr(config, "search_intent_tools", None) if config is not None else None
     return list(names) if names else None
 
 
-def is_search_intent_tool(tool_name: str, *, config: Any = None) -> bool:
+def is_search_intent_tool(tool_name: str, *, config: RunLoopTuningConfig | None = None) -> bool:
     """True when *tool_name* is configured as a search/fetch intent tool.
 
     Without an explicit *config* the schema default is used, which mirrors the
@@ -52,7 +59,7 @@ def is_search_intent_tool(tool_name: str, *, config: Any = None) -> bool:
     return any(_canonical(name) == canonical for name in names)
 
 
-def is_network_read_tool(tool_name: str, *, config: Any = None) -> bool:
+def is_network_read_tool(tool_name: str, *, config: RunLoopTuningConfig | None = None) -> bool:
     """True for public-network read-only tools (search intent)."""
     return is_search_intent_tool(tool_name, config=config)
 
@@ -73,7 +80,7 @@ asks — may this call produce a task deliverable?"""
 _READ_CLASSES = frozenset({"read", "memory-write-safe"})
 
 
-def _declared_tool_class(spec: Any) -> str | None:
+def _declared_tool_class(spec: Tool | ToolSpec | None) -> str | None:
     """Read the tool-declared class from either spec shape.
 
     - ``Tool`` protocol: direct ``tool_class`` attribute
@@ -93,9 +100,9 @@ def _declared_tool_class(spec: Any) -> str | None:
 
 def resolve_tool_class(
     tool_name: str,
-    tool_registry: Any = None,
+    tool_registry: ToolRegistry | None = None,
     *,
-    config: Any = None,
+    config: RunLoopTuningConfig | None = None,
 ) -> ResolvedToolClass:
     """Resolve the governance class of *tool_name*: ``read`` or ``write``.
 

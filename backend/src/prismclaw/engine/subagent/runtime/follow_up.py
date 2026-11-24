@@ -13,6 +13,7 @@ from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.session.types import (
     HANDOFF_REQUEST_CUSTOM_TYPE,
     CustomEntry,
+    SessionTree,
 )
 
 
@@ -32,7 +33,7 @@ class SessionFollowUpSnapshot:
         )
 
 
-def session_follow_up_snapshot(session_tree: Any) -> SessionFollowUpSnapshot:
+def session_follow_up_snapshot(session_tree: SessionTree) -> SessionFollowUpSnapshot:
     summary = _build_parallel_task_summary(session_tree)
     attention = _build_parallel_task_attention(session_tree)
     latest_handoff_request = _read_tree_dict(session_tree, "get_latest_handoff_request")
@@ -89,10 +90,7 @@ def format_parallel_task_attention(attention: dict[str, Any]) -> str:
             if isinstance(recommended_reason, str) and recommended_reason
             else "follow_up"
         )
-        prefix = (
-            f"并行任务待关注：请先检查 `{recommended_task_id}`"
-            f"（原因：{reason_text}）"
-        )
+        prefix = f"并行任务待关注：请先检查 `{recommended_task_id}`（原因：{reason_text}）"
         if isinstance(attention_count, int) and attention_count > 1:
             return prefix + f"；共有 {attention_count} 个任务需要关注。"
         return prefix + "。"
@@ -195,12 +193,8 @@ def build_session_follow_up_note(
             handoff_details.append(f"source_subagent={source_subagent}")
         if attention.get("source_is_fork") is True:
             handoff_details.append("source_is_fork=true")
-        details_text = (
-            f" ({', '.join(handoff_details)})" if handoff_details else ""
-        )
-        suffix = (
-            "在再次委派或重复工作前，请先查看最近一次移交请求。"
-        )
+        details_text = f" ({', '.join(handoff_details)})" if handoff_details else ""
+        suffix = "在再次委派或重复工作前，请先查看最近一次移交请求。"
         return [f"会话后续动作可用{details_text}。{suffix}"]
 
     summary = snapshot.parallel_task_summary
@@ -247,7 +241,7 @@ def build_session_follow_up_note(
     return [f"{headline}{details_text}。{suffix}"]
 
 
-def _runtime_parallel_records(session_tree: Any) -> list[ParallelTaskRuntimeRecord]:
+def _runtime_parallel_records(session_tree: SessionTree) -> list[ParallelTaskRuntimeRecord]:
     return parallel_task_records_for_tree(
         session_tree,
         include_terminal=True,
@@ -255,7 +249,7 @@ def _runtime_parallel_records(session_tree: Any) -> list[ParallelTaskRuntimeReco
     )
 
 
-def _build_parallel_task_summary(session_tree: Any) -> dict[str, Any] | None:
+def _build_parallel_task_summary(session_tree: SessionTree) -> dict[str, Any] | None:
     records = _runtime_parallel_records(session_tree)
     if not records:
         return None
@@ -265,9 +259,7 @@ def _build_parallel_task_summary(session_tree: Any) -> dict[str, Any] | None:
         "completed_count": sum(1 for record in records if record.status == "completed"),
         "error_count": sum(1 for record in records if record.status == "failed"),
         "cancelled_count": sum(1 for record in records if record.status == "cancelled"),
-        "running_count": sum(
-            1 for record in records if record.status in {"scheduled", "running"}
-        ),
+        "running_count": sum(1 for record in records if record.status in {"scheduled", "running"}),
         "latest_task_id": latest.task_id,
         "latest_status": latest.status,
     }
@@ -276,22 +268,18 @@ def _build_parallel_task_summary(session_tree: Any) -> dict[str, Any] | None:
     return summary
 
 
-def _build_parallel_task_attention(session_tree: Any) -> dict[str, Any] | None:
+def _build_parallel_task_attention(session_tree: SessionTree) -> dict[str, Any] | None:
     records = _runtime_parallel_records(session_tree)
     if not records:
         return None
     # 只提示「有新变化」的任务：活跃任务始终提示；已完成/失败/取消的任务
     # 仅当记录出现在最后一条 assistant 消息之后才提示。否则每一轮都会
     # 重复要求模型检查同一个旧任务，形成永久噪音。
-    has_active = any(
-        record.status in {"scheduled", "running"} for record in records
-    )
+    has_active = any(record.status in {"scheduled", "running"} for record in records)
     if not has_active and not _has_record_after_last_assistant(session_tree):
         return None
     kind = _parallel_kind(records)
-    attention_records = [
-        record for record in records if record.status in {"failed", "cancelled"}
-    ]
+    attention_records = [record for record in records if record.status in {"failed", "cancelled"}]
     if attention_records:
         ordered_task_ids = [record.task_id for record in reversed(attention_records)]
         latest = attention_records[-1]
@@ -320,7 +308,7 @@ def _parallel_kind(records: list[ParallelTaskRuntimeRecord]) -> str:
 
 
 def _latest_custom_entry_index(
-    session_tree: Any,
+    session_tree: SessionTree,
     *,
     custom_type: str,
 ) -> int | None:
@@ -331,7 +319,7 @@ def _latest_custom_entry_index(
     return latest_index
 
 
-def _has_record_after_last_assistant(session_tree: Any) -> bool:
+def _has_record_after_last_assistant(session_tree: SessionTree) -> bool:
     """记录是否出现在最后一条 assistant 消息之后（含尚无 assistant 的情况）。"""
     for entry in reversed(_branch_entries(session_tree)):
         if (
@@ -345,7 +333,7 @@ def _has_record_after_last_assistant(session_tree: Any) -> bool:
 
 
 def _build_follow_up_attention(
-    session_tree: Any,
+    session_tree: SessionTree,
     *,
     latest_handoff_request: dict[str, Any] | None,
     parallel_task_attention: dict[str, Any] | None,
@@ -385,7 +373,7 @@ def _build_follow_up_attention(
     return dict(parallel_task_attention)
 
 
-def _read_tree_dict(tree: Any, method_name: str) -> dict[str, Any] | None:
+def _read_tree_dict(tree: SessionTree, method_name: str) -> dict[str, Any] | None:
     if tree is None:
         return None
     getter = getattr(tree, method_name, None)

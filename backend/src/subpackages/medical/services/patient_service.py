@@ -2,8 +2,10 @@
 
 从 routes/patients.py 提取的业务逻辑。
 """
+
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 from typing import Any
 
@@ -22,12 +24,13 @@ async def list_patients(
     total = await store.count_patients(search=keyword, create_by=create_by)
     start = (page - 1) * page_size
     items = await store.list_patients(
-        search=keyword, limit=page_size, offset=start, create_by=create_by,
+        search=keyword,
+        limit=page_size,
+        offset=start,
+        create_by=create_by,
     )
     # 列表卡片需显示该患者的报告份数，一次批量查询避免 N+1
-    counts = await store.count_reports_by_patients(
-        [p["id"] for p in items if p.get("id")]
-    )
+    counts = await store.count_reports_by_patients([p["id"] for p in items if p.get("id")])
     # 列表项不含 timeline，补空数组以匹配前端 PatientProfile 类型
     for item in items:
         item["timeline"] = []
@@ -48,7 +51,10 @@ async def create_patient(
     仅做行级归属（create_by = 当前用户）与脱敏入库；姓名非空校验在路由层完成。
     """
     return await store.create_patient(
-        name=name, id_type=id_type, id_number=id_number, user_id=user_id,
+        name=name,
+        id_type=id_type,
+        id_number=id_number,
+        user_id=user_id,
     )
 
 
@@ -70,7 +76,9 @@ async def get_patient_detail(
     timeline_raw = await store.get_timeline(patient_id)
     timeline = [
         {
-            "date": t.get("event_date", "")[:10] if len(t.get("event_date", "")) >= 10 else t.get("event_date", ""),
+            "date": t.get("event_date", "")[:10]
+            if len(t.get("event_date", "")) >= 10
+            else t.get("event_date", ""),
             "event": t.get("title", "") or t.get("detail", ""),
             "detail": t.get("detail", ""),
             "eventType": t.get("event_type", ""),
@@ -78,14 +86,16 @@ async def get_patient_detail(
         for t in timeline_raw
     ]
     patient["timeline"] = timeline
-    patient["report_count"] = (
-        await store.count_reports_by_patients([patient_id])
-    ).get(patient_id, 0)
+    patient["report_count"] = (await store.count_reports_by_patients([patient_id])).get(
+        patient_id, 0
+    )
     return patient
 
 
 async def get_patient_stats(
-    store: MedicalStore, *, create_by: str | None = None,
+    store: MedicalStore,
+    *,
+    create_by: str | None = None,
 ) -> dict[str, Any]:
     """统计条四项指标。create_by: 行级过滤。"""
     return await store.get_stats(create_by=create_by)
@@ -109,7 +119,9 @@ async def list_patient_reports(
     total = (await store.count_reports_by_patients([patient_id])).get(patient_id, 0)
     start = (page - 1) * page_size
     reports = await store.list_patient_reports(
-        patient_id, limit=page_size, offset=start,
+        patient_id,
+        limit=page_size,
+        offset=start,
     )
     return {
         "items": reports,
@@ -150,19 +162,11 @@ async def correct_report(
     patient = await store.get_patient(patient_id)
     if patient is None or patient.get("create_by") != user_id:
         return None
-    data = {
-        column: patch[key]
-        for key, column in CORRECTABLE_KEYS.items()
-        if key in patch
-    }
+    data = {column: patch[key] for key, column in CORRECTABLE_KEYS.items() if key in patch}
     # visit_date 是 Date 列：非法日期直接丢弃，不让脏值进库
     if "visitDate" in patch:
-        try:
-            data["visit_date"] = datetime.strptime(
-                str(patch["visitDate"]), "%Y-%m-%d"
-            ).date()
-        except (ValueError, TypeError):
-            pass
+        with contextlib.suppress(ValueError, TypeError):
+            data["visit_date"] = datetime.strptime(str(patch["visitDate"]), "%Y-%m-%d").date()
     if not data:
         return report
     await store.update_report(report_id, data, user_id=user_id)

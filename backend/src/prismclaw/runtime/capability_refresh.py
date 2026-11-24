@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
 from prismclaw.engine.execution.capabilities.runtime_bundle import RuntimeCapabilityBundle
@@ -11,17 +12,24 @@ from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.skills.runtime import SkillRuntime
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.infra.settings import Settings
-from prismclaw.schema.shared import CapabilityKind, ProjectCapabilityLayout
 from prismclaw.runtime.skills.mcp_skills import mcp_prompt_resolver, mcp_skill_manifests_builder
+from prismclaw.schema.shared import CapabilityKind, ProjectCapabilityLayout
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+    from prismclaw.engine.hooks import SkillProvider
+    from prismclaw.engine.subagent import SubAgentRegistry
+    from prismclaw.engine.subagent.runtime.collaboration import SubagentCollaborationService
     from prismclaw.schema.config.config import SubAgentConfig
+    from prismclaw.schema.llm.types import LLMClient
+    from prismclaw.schema.services.skills import SkillManifest
+    from prismclaw.schema.storage.storage_types import MemoryStore
 
 logger = logging.getLogger(__name__)
 
 # Strong references to in-flight refresh tasks (create_task results are weakly
 # held by the loop; without this the one-shot refresh could be GC'd mid-await).
-_PENDING_REFRESH_TASKS: set[asyncio.Task] = set()
+_PENDING_REFRESH_TASKS: set[asyncio.Task[Any]] = set()
 
 
 def build_subagent_registry(
@@ -31,8 +39,9 @@ def build_subagent_registry(
     project_root: Path | None = None,
     additional_project_roots: list[Path | str] | None = None,
     capability_layout: ProjectCapabilityLayout | None = None,
-) -> Any:
+) -> SubAgentRegistry:
     from prismclaw.engine.subagent import SubAgentRegistry
+    from prismclaw.schema.config.config import SubAgentConfig
 
     # 优先复用 deps 边界已构造的唯一布局；否则由 registry 以 workspace 为根现场展开。
     agent_locations = (
@@ -41,7 +50,7 @@ def build_subagent_registry(
         else None
     )
     return SubAgentRegistry(
-        settings.subagent,
+        SubAgentConfig.model_validate(settings.subagent.model_dump()),
         workspace_path=workspace_path,
         project_root=project_root,
         additional_project_roots=additional_project_roots,
@@ -53,10 +62,10 @@ def build_capability_catalog(
     *,
     workspace_path: Path,
     tool_registry: ToolRegistry,
-    skill_provider: Any,
-    extension_manager: Any,
-    subagent_registry: Any = None,
-    mcp_skill_manifests_builder: Callable[[], list[Any]] | None = None,
+    skill_provider: SkillProvider,
+    extension_manager: ExtensionManager,
+    subagent_registry: SubAgentRegistry | None = None,
+    mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None = None,
 ) -> CapabilityCatalogService:
     from prismclaw.engine.execution.capabilities.assembly import assemble_capability_catalog
 
@@ -70,7 +79,7 @@ def build_capability_catalog(
     )
 
 
-def _extract_memory_store_from_deps(deps: AgentRunnerDeps) -> Any:
+def _extract_memory_store_from_deps(deps: AgentRunnerDeps) -> MemoryStore | None:
     service_bundle = getattr(getattr(deps, "context_engine", None), "service_bundle", None)
     memory_retriever = getattr(service_bundle, "memory_retriever", None)
     return getattr(memory_retriever, "_memory_store", None)
@@ -80,14 +89,14 @@ def register_subagent_tools(
     registry: ToolRegistry,
     *,
     settings: Settings,
-    capability_catalog: Any,
-    subagent_registry: Any,
-    llm_client: Any,
-    memory_store: Any,
-    skill_runtime: Any,
+    capability_catalog: CapabilityCatalogService,
+    subagent_registry: SubAgentRegistry,
+    llm_client: LLMClient,
+    memory_store: MemoryStore | None,
+    skill_runtime: SkillRuntime,
     channel: str | None = None,
-    collaboration: Any = None,
-) -> "SubAgentConfig":
+    collaboration: SubagentCollaborationService | None = None,
+) -> SubAgentConfig:
     """Register the sub-agent tools (sub_agent / reduce / handoff / search / task 查询).
 
     单点装配，供启动装配（runner_assembly）与运行时能力刷新
@@ -173,11 +182,11 @@ def schedule_mcp_capability_refresh(
     *,
     settings: Settings,
     workspace_path: Path,
-    extension_manager: Any,
-    skill_provider: Any,
+    extension_manager: ExtensionManager,
+    skill_provider: SkillProvider,
     project_root: Path | None = None,
     capability_layout: ProjectCapabilityLayout | None = None,
-) -> asyncio.Task | None:
+) -> asyncio.Task[Any] | None:
     """One-shot, event-driven catalog rebuild once MCP reaches ready state.
 
     The initial capability catalog is assembled synchronously during startup,
@@ -206,9 +215,7 @@ def schedule_mcp_capability_refresh(
             )
             catalog = deps.capability_catalog
             n_skills = len(catalog.list_skill_entries()) if catalog is not None else 0
-            logger.info(
-                "capability catalog refreshed after MCP ready (skills=%d)", n_skills
-            )
+            logger.info("capability catalog refreshed after MCP ready (skills=%d)", n_skills)
         except Exception:
             logger.exception("capability refresh after MCP ready failed")
 
@@ -223,16 +230,16 @@ def refresh_runner_capabilities(
     *,
     settings: Settings,
     workspace_path: Path,
-    extension_manager: Any,
-    skill_provider: Any,
+    extension_manager: ExtensionManager,
+    skill_provider: SkillProvider,
     project_root: Path | None = None,
-    subagent_registry_override: Any = None,
+    subagent_registry_override: SubAgentRegistry | None = None,
     refresh_mcp_tools: bool = False,
     capability_layout: ProjectCapabilityLayout | None = None,
 ) -> RuntimeCapabilityBundle:
-    from prismclaw.engine.toolkit.registry.discovery import SkillSearchTool, ToolSearchTool
     from prismclaw.engine.toolkit.builtin.skill_activate import ActivateSkillTool
     from prismclaw.engine.toolkit.mcp.fetch_mcp_resource import FetchMcpResourceTool
+    from prismclaw.engine.toolkit.registry.discovery import SkillSearchTool, ToolSearchTool
 
     if not isinstance(deps, AgentRunnerDeps):
         raise TypeError("refresh_runner_capabilities requires AgentRunnerDeps")
@@ -245,7 +252,7 @@ def refresh_runner_capabilities(
 
     subagent_registry = subagent_registry_override
     if subagent_registry is None and settings.subagent.enabled:
-        extra_project_roots = (
+        extra_project_roots: list[Path | str] | None = (
             [workspace_path]
             if project_root is not None and workspace_path.resolve() != project_root.resolve()
             else None
@@ -271,6 +278,7 @@ def refresh_runner_capabilities(
     )
     # Inject skill_parser callback (P4: engine→skills decoupling)
     from prismclaw.runtime.skills.parser import parse_skill_file
+
     skill_runtime = SkillRuntime(
         capability_catalog=capability_catalog,
         mcp_prompt_resolver=mcp_prompt_resolver(runtime_mcp_manager),
@@ -323,17 +331,18 @@ def refresh_runner_capabilities(
         if runtime_mcp_manager is not None:
             runtime_mcp_manager.attach_and_register(registry)
 
-    register_subagent_tools(
-        registry,
-        settings=settings,
-        capability_catalog=capability_catalog,
-        subagent_registry=subagent_registry,
-        llm_client=deps.llm,
-        memory_store=_extract_memory_store_from_deps(deps),
-        skill_runtime=skill_runtime,
-        channel=deps.channel,
-        collaboration=deps.subagent_collaboration,
-    )
+    if subagent_registry is not None:
+        register_subagent_tools(
+            registry,
+            settings=settings,
+            capability_catalog=capability_catalog,
+            subagent_registry=subagent_registry,
+            llm_client=deps.llm,
+            memory_store=_extract_memory_store_from_deps(deps),
+            skill_runtime=skill_runtime,
+            channel=deps.channel,
+            collaboration=deps.subagent_collaboration,
+        )
 
     return RuntimeCapabilityBundle(
         workspace_path=workspace_path,

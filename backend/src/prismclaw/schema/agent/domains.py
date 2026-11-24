@@ -14,14 +14,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Any
+from enum import StrEnum
 
 
 # ==========================================================================
 # 1. Skill 来源（SkillManifest.source 与 classify_skill_origin() 共用
 # ==========================================================================
-class SkillSource(str, Enum):
+class SkillSource(StrEnum):
     """SkillManifest.source 与 origin 字段共用词汇。
 
     历史命名混乱说明：
@@ -42,7 +41,7 @@ class SkillSource(str, Enum):
     BUILTIN = "builtin"
 
     @classmethod
-    def _missing_(cls, value: Any) -> "SkillSource | None":
+    def _missing_(cls, value: object) -> SkillSource | None:
         if isinstance(value, str):
             norm = value.strip().lower().replace("-", "_")
             for member in cls:
@@ -51,7 +50,7 @@ class SkillSource(str, Enum):
         return None
 
     @classmethod
-    def coerce(cls, raw: Any, default: "SkillSource | None" = None) -> "SkillSource | None":
+    def coerce(cls, raw: object, default: SkillSource | None = None) -> SkillSource | None:
         """origin 入口：字符串/枚举都归一化,失败返回 default。"""
         if isinstance(raw, cls):
             return raw
@@ -68,14 +67,14 @@ class SkillSource(str, Enum):
 # ==========================================================================
 # 2. Invocation Policy：技能准入策略
 # ==========================================================================
-class InvocationPolicy(str, Enum):
+class InvocationPolicy(StrEnum):
     AUTO = "auto"
     USER_ONLY = "user_only"
     MODEL_ONLY = "model_only"
     DISABLED = "disabled"
 
     @classmethod
-    def _missing_(cls, value: Any) -> "InvocationPolicy | None":
+    def _missing_(cls, value: object) -> InvocationPolicy | None:
         # None / 非字符串 → AUTO
         if value is None:
             return cls.AUTO
@@ -90,7 +89,7 @@ class InvocationPolicy(str, Enum):
         return None
 
     @classmethod
-    def coerce(cls, raw: Any) -> "InvocationPolicy":
+    def coerce(cls, raw: object) -> InvocationPolicy:
         """parser 入口：任何异常或 None → AUTO。"""
         if isinstance(raw, cls):
             return raw
@@ -101,13 +100,13 @@ class InvocationPolicy(str, Enum):
 # ==========================================================================
 # 3. Skill execution mode：inline / fork / subagent（含同义词映射）
 # ==========================================================================
-class SkillExecutionMode(str, Enum):
+class SkillExecutionMode(StrEnum):
     INLINE = "inline"
     FORK = "fork"
     SUBAGENT = "subagent"
 
     @classmethod
-    def _missing_(cls, value: Any) -> "SkillExecutionMode | None":
+    def _missing_(cls, value: object) -> SkillExecutionMode | None:
         """用 EXECUTION_MODE_SYNONYMS 支持 agent/sub-agent/workflow 等同义词。
 
         注:EXECUTION_MODE_SYNONYMS 定义在类体之后(因为需要引用 cls 成员),
@@ -144,7 +143,7 @@ EXECUTION_MODE_SYNONYMS: dict[str, SkillExecutionMode] = {
 }
 
 
-def _exe_mode_normalize(raw: Any) -> SkillExecutionMode:
+def _exe_mode_normalize(raw: object) -> SkillExecutionMode:
     if isinstance(raw, SkillExecutionMode):
         return raw
     if not isinstance(raw, str):
@@ -169,7 +168,7 @@ def exe_mode_valid_values() -> tuple[str, ...]:
 # ==========================================================================
 # 4. Plugin error type：兼容 v3 常量与 v4 多子类规范值
 # ==========================================================================
-class PluginErrorType(str, Enum):
+class PluginErrorType(StrEnum):
     """PluginError.type 全量规范值。
 
     消费端分支时用语义化 helper（is_manifest / is_dependency）即可。
@@ -196,24 +195,29 @@ class PluginErrorType(str, Enum):
     GENERIC_ERROR = "generic_error"
 
     @classmethod
-    def is_manifest(cls, err_type: Any) -> bool:
+    def is_manifest(cls, err_type: object) -> bool:
         return err_type in {cls.MANIFEST_PARSE, cls.MANIFEST_VALIDATE, cls.MANIFEST_PARSE_ERROR}
 
     @classmethod
-    def is_dependency(cls, err_type: Any) -> bool:
-        return err_type in {cls.DEPENDENCY, cls.DEPENDENCY_MISSING,
-                          cls.CIRCULAR_DEPENDENCY, cls.CROSS_MARKETPLACE_DEPENDENCY}
+    def is_dependency(cls, err_type: object) -> bool:
+        return err_type in {
+            cls.DEPENDENCY,
+            cls.DEPENDENCY_MISSING,
+            cls.CIRCULAR_DEPENDENCY,
+            cls.CROSS_MARKETPLACE_DEPENDENCY,
+        }
 
 
 # ==========================================================================
 # 5. SKILL.md frontmatter 字段名常量（parser 中禁止再写裸字符串）
 # ==========================================================================
-class FM(str, Enum):
+class FM(StrEnum):
     """SKILL.md frontmatter 字段名（含 nested metadata.prismclaw.*）。
 
     命名规范：A__* 是 agent 子键，META__* 是 metadata.prismclaw.* 子键，
     R__* 是 metadata.prismclaw.requires.* 子键。
     """
+
     NAME = "name"
     DESCRIPTION = "description"
     BODY = "body"
@@ -254,22 +258,23 @@ class FM(str, Enum):
 # ==========================================================================
 # 6. namespace / run_id / session_id 前缀
 # ==========================================================================
-class NP(str, Enum):
+class NP(StrEnum):
     """各类 id/命名空间前缀。
 
     用例：NP.SESSION.matches(x) 代替 x.startswith("session:")
     """
+
     SESSION = "session:"
     MANAGED = "managed:"
     PLUGIN = "plugin:"
     WEB = "web:"
     TAKEOVER = "takeover:"
 
-    def matches(self, s: Any) -> bool:
+    def matches(self, s: object) -> bool:
         return bool(s and isinstance(s, str) and s.startswith(self.value))
 
     @classmethod
-    def classify(cls, s: Any) -> "NP | None":
+    def classify(cls, s: object) -> NP | None:
         """返回前缀匹配的第一个 NP 成员;若都不匹配返回 None."""
         if not isinstance(s, str) or not s:
             return None
@@ -282,8 +287,9 @@ class NP(str, Enum):
 # ==========================================================================
 # 7. CapabilityNode.metadata 字典键
 # ==========================================================================
-class MK(str, Enum):
+class MK(StrEnum):
     """CapabilityNode.metadata 语义化键。"""
+
     PLUGIN_NAME = "plugin_name"
     PLUGIN_ID = "plugin_id"
     PLUGIN_SOURCE = "plugin_source"
@@ -301,8 +307,9 @@ class MK(str, Enum):
 # ==========================================================================
 # 8. Plugin discovery 源
 # ==========================================================================
-class PDS(str, Enum):
+class PDS(StrEnum):
     """Plugin discovery source（discovery_engine 入口分类。"""
+
     BUILTIN = "builtin"
     MARKETPLACE = "marketplace"
     SESSION = "session"
@@ -310,7 +317,7 @@ class PDS(str, Enum):
     PERSONAL = "personal"
 
 
-def normalize_key(raw: Any) -> str:
+def normalize_key(raw: object) -> str:
     """Enum ``_missing_`` 共用 helper：小写 + kebab→snake + strip"""
     if not isinstance(raw, str):
         return ""

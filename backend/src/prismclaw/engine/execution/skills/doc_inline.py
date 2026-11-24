@@ -4,6 +4,7 @@ Moved from contracts.services.skills to break the contracts→engine
 dependency cycle. This is an I/O function (reads the filesystem) and
 belongs in the engine layer.
 """
+
 from __future__ import annotations
 
 import logging as _logging
@@ -21,6 +22,7 @@ def _inline_caps() -> tuple[int, int]:
     """惰性读取内联预算；加载失败回退旧默认 2500/7500。"""
     try:
         from prismclaw.infra.settings import load_settings
+
         caps = load_settings().agent.context.budget.subcaps
         return caps.doc_inline_min_chars, caps.doc_inline_max_chars
     except Exception:
@@ -47,8 +49,7 @@ def _inline_referenced_docs(body: str | None, skill_file_path: str | _Path) -> s
         "---",
         "# 已加载的参考文档",
         "",
-        "以下参考文档已自动加载到你的上下文中。"
-        "不要用 `read` 工具读取它们——内容已在下方提供。",
+        "以下参考文档已自动加载到你的上下文中。不要用 `read` 工具读取它们——内容已在下方提供。",
         "",
     ]
     total_tokens = 0

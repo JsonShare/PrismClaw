@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from prismclaw.engine.toolkit.file.workspace import WorkspaceBoundaryError, WorkspaceResolver
 from prismclaw.engine.toolkit.registry.tool_runtime import (
     ToolContext,
     error_result,
     text_result,
 )
-from prismclaw.engine.toolkit.file.workspace import WorkspaceResolver, WorkspaceBoundaryError
 from prismclaw.infra.workspace_paths import session_dir_in
 from prismclaw.schema.content.content_types import ToolResult
 
@@ -17,7 +17,7 @@ class PresentFilesTool:
     name = "present_files"
     description = (
         "声明最终交付文件——已完成的作品（报告、图表、文档）。"
-        "只接受会话交付目录（sessions/<sid>/outputs/，见 workspace 段的「会话交付目录」）"
+        "只接受会话交付目录（sessions/<sid>/outbox/，见 workspace 段的「会话交付目录」）"
         "下的路径；目录之外的路径会被拒绝。本工具只做声明，不创建文件："
         "文件可以稍后写入，写入后会自动出现在交付物面板；尚未生成时返回「已登记」。"
         "只列出最终交付物，不要列出中间产物或工具输出。"
@@ -31,7 +31,7 @@ class PresentFilesTool:
                 "items": {"type": "string"},
                 "description": (
                     "会话交付目录下的交付物文件路径（相对工作区根或绝对路径）。"
-                    "示例：[\"outputs/report.pdf\"]——确切目录见 workspace 段。"
+                    '示例：["outbox/report.pdf"]——确切目录见 workspace 段。'
                 ),
             },
         },
@@ -62,9 +62,8 @@ class PresentFilesTool:
                 "present_files：缺少会话上下文，无法确定会话交付目录，未展示任何文件。",
             )
 
-
         session_root = session_dir_in(Path(context.workspace_path), context.session_id)
-        outputs_dir = session_root / "outputs"
+        outbox_dir = session_root / "outbox"
 
         accepted: list[str] = []
         outside: list[str] = []
@@ -74,14 +73,12 @@ class PresentFilesTool:
                 continue
             normalized = raw.strip().replace("\\", "/")
             # 只接受显式交付目录路径。裸相对路径会被 resolve_within 静默改写到
-            # session outputs 下（如 `other/outputs/x` → `outputs/other/outputs/x`），
+            # session outbox 下（如 `other/outbox/x` → `outbox/other/outbox/x`），
             # 与声明意图不符，直接按“不在交付目录”拒绝。
             is_abs = normalized.startswith("/") or normalized.startswith("~/")
-            in_outputs_prefix = normalized.startswith("outputs/") or normalized == "outputs"
-            in_session_prefix = normalized.startswith(
-                f"sessions/{session_root.name}/outputs"
-            )
-            if not is_abs and not (in_outputs_prefix or in_session_prefix):
+            in_outbox_prefix = normalized.startswith("outbox/") or normalized == "outbox"
+            in_session_prefix = normalized.startswith(f"sessions/{session_root.name}/outbox")
+            if not is_abs and not (in_outbox_prefix or in_session_prefix):
                 outside.append(normalized)
                 continue
             try:
@@ -100,7 +97,7 @@ class PresentFilesTool:
                 outside.append(normalized)
                 continue
             try:
-                full.relative_to(outputs_dir.resolve())
+                full.relative_to(outbox_dir.resolve())
             except ValueError:
                 outside.append(normalized)
                 continue
@@ -116,9 +113,9 @@ class PresentFilesTool:
             return error_result(
                 call_id,
                 "present_files：未登记任何交付文件。"
-                "本工具只接受会话交付目录 `outputs/` 下的路径。"
+                "本工具只接受会话交付目录 `outbox/` 下的路径。"
                 f"（{'；'.join(details)}）"
-                "请改用 `outputs/<rel>` 形式的路径后重新声明。",
+                "请改用 `outbox/<rel>` 形式的路径后重新声明。",
             )
 
         existing = [p for p in accepted if p not in pending]
@@ -132,13 +129,13 @@ class PresentFilesTool:
             suffix = f" 等，另有 {len(pending) - 10} 个" if len(pending) > 10 else ""
             parts.append(
                 f"已登记 {len(pending)} 个待生成交付文件：{listed}{suffix}；"
-                "写入 `outputs/` 后会自动出现在交付物面板。"
+                "写入 `outbox/` 后会自动出现在交付物面板。"
             )
         result = "".join(parts)
         if outside:
             result += (
                 f"另有 {len(outside)} 个路径被忽略"
-                f"（须在会话交付目录 `outputs/` 下）："
+                f"（须在会话交付目录 `outbox/` 下）："
                 + ", ".join(f"`{p}`" for p in outside[:5])
                 + "。"
             )

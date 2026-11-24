@@ -13,6 +13,7 @@
   → generic_text（无 reducer，无损截断）；
 - 散文文档（.md/.docx/.pdf/…）→ document_extraction（文档摘要）。
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -64,12 +65,10 @@ def _deps(per_result_char_cap: int = 4000) -> SimpleNamespace:
 
 
 _PY_SOURCE = "\n".join(
-    f"def handler_{i}(x):" if i % 20 == 0 else f"    value_{i} = x * {i}"
-    for i in range(400)
+    f"def handler_{i}(x):" if i % 20 == 0 else f"    value_{i} = x * {i}" for i in range(400)
 )
 _PROSE = "\n".join(
-    f"第 {i} 章：这是一段足够长的散文内容，用于模拟文档抽取结果的普通行。"
-    for i in range(120)
+    f"第 {i} 章：这是一段足够长的散文内容，用于模拟文档抽取结果的普通行。" for i in range(120)
 )
 # read 对 .xlsx 的输出形态：短锚点行（不以 ':' 结尾且 <40 字符）。
 _XLSX_ANCHORS = "\n".join(
@@ -79,6 +78,7 @@ _XLSX_ANCHORS = "\n".join(
 
 
 # ── material type 分流：read ─────────────────────────────────────
+
 
 def test_read_source_code_by_extension_is_generic_text():
     mt = _detect_material_type(
@@ -95,9 +95,7 @@ def test_read_json_by_extension_is_generic_text():
 
 
 def test_read_prose_md_is_document_extraction():
-    mt = _detect_material_type(
-        "read", _result(_PROSE), _call("read", {"file_path": "report.md"})
-    )
+    mt = _detect_material_type("read", _result(_PROSE), _call("read", {"file_path": "report.md"}))
     assert mt == "document_extraction"
 
 
@@ -111,9 +109,7 @@ def test_read_extensionless_source_sniffed_as_generic_text():
 
 
 def test_read_extensionless_prose_sniffed_as_document_extraction():
-    mt = _detect_material_type(
-        "read", _result(_PROSE), _call("read", {"file_path": "NOTICE"})
-    )
+    mt = _detect_material_type("read", _result(_PROSE), _call("read", {"file_path": "NOTICE"}))
     assert mt == "document_extraction"
 
 
@@ -128,16 +124,12 @@ def test_read_unknown_extension_source_sniffed_as_generic_text():
 
 
 def test_read_unknown_extension_prose_is_document_extraction():
-    mt = _detect_material_type(
-        "read", _result(_PROSE), _call("read", {"file_path": "notes.dat"})
-    )
+    mt = _detect_material_type("read", _result(_PROSE), _call("read", {"file_path": "notes.dat"}))
     assert mt == "document_extraction"
 
 
 def test_read_txt_prose_is_document_extraction():
-    mt = _detect_material_type(
-        "read", _result(_PROSE), _call("read", {"file_path": "notes.txt"})
-    )
+    mt = _detect_material_type("read", _result(_PROSE), _call("read", {"file_path": "notes.txt"}))
     assert mt == "document_extraction"
 
 
@@ -164,17 +156,14 @@ def test_read_without_call_source_sniffed_as_generic_text():
 
 # ── material type 分流：read 的 office 文档（B1 迁移验证）─────────
 
+
 def test_read_docx_is_document_extraction():
-    mt = _detect_material_type(
-        "read", _result(_PROSE), _call("read", {"file_path": "合同.docx"})
-    )
+    mt = _detect_material_type("read", _result(_PROSE), _call("read", {"file_path": "合同.docx"}))
     assert mt == "document_extraction"
 
 
 def test_read_pdf_is_document_extraction():
-    mt = _detect_material_type(
-        "read", _result(_PROSE), _call("read", {"file_path": "报告.pdf"})
-    )
+    mt = _detect_material_type("read", _result(_PROSE), _call("read", {"file_path": "报告.pdf"}))
     assert mt == "document_extraction"
 
 
@@ -207,26 +196,24 @@ def test_legacy_dead_tool_names_fall_through():
 
 # ── policy 装配 ──────────────────────────────────────────────────
 
+
 def test_policy_for_read_py_is_generic_text():
     policy = _policy_for(_call("read", {"file_path": "x.py"}), _result(_PY_SOURCE), _deps())
     assert policy.material_type == "generic_text"
 
 
 def test_policy_for_read_docx_is_document_extraction():
-    policy = _policy_for(
-        _call("read", {"file_path": "x.docx"}), _result(_PROSE), _deps()
-    )
+    policy = _policy_for(_call("read", {"file_path": "x.docx"}), _result(_PROSE), _deps())
     assert policy.material_type == "document_extraction"
 
 
 def test_policy_for_read_xlsx_is_generic_text():
-    policy = _policy_for(
-        _call("read", {"file_path": "big.xlsx"}), _result(_XLSX_ANCHORS), _deps()
-    )
+    policy = _policy_for(_call("read", {"file_path": "big.xlsx"}), _result(_XLSX_ANCHORS), _deps())
     assert policy.material_type == "generic_text"
 
 
 # ── reducer 直测 ─────────────────────────────────────────────────
+
 
 def test_semantic_compact_skips_generic_text():
     # generic_text 无 reducer：原样返回，无 strategies。
@@ -249,6 +236,7 @@ def test_semantic_compact_degrades_source_via_document_extraction():
 
 
 # ── 端到端：_compact_single_result 整链（policy → 截断 → reducer 分派）──
+
 
 def _end_to_end(tool_name: str, file_path: str, text: str) -> tuple[str, list[str]]:
     artifact = _compact_single_result(

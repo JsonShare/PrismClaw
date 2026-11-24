@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from prismclaw.schema.dream.dream_types import DreamPublishState, DreamMemoryKind, DreamArtifactKind
+from prismclaw.schema.dream.dream_types import DreamArtifactKind, DreamMemoryKind, DreamPublishState
+
 
 @dataclass(slots=True)
 class DreamPublishableMemory:

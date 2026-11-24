@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
+from prismclaw.infra.redis import resolve
 from prismclaw.schema.content.content_types import ToolResult
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +40,7 @@ class UpdateWorkingMemoryTool:
 
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: aioredis.Redis,
         *,
         key_prefix: str = "prismclaw:wm:",
         max_chars: int = 1024,
@@ -59,39 +63,37 @@ class UpdateWorkingMemoryTool:
             key = args.get("key", "")
             value = args.get("value", "")
             if not key or not isinstance(key, str):
-                return error_result(
-                    call_id, "update_working_memory：'key' 必须是非空字符串"
-                )
+                return error_result(call_id, "update_working_memory：'key' 必须是非空字符串")
             if not isinstance(value, str):
                 return error_result(call_id, "update_working_memory：'value' 必须是字符串")
 
             hash_key = self._hash_key(context.session_id)
             order_key = self._order_key(context.session_id)
 
-            existing = await self._redis.hget(hash_key, key)
-            await self._redis.hset(hash_key, key, value)
+            existing = await resolve(self._redis.hget(hash_key, key))
+            await resolve(self._redis.hset(hash_key, key, value))
 
             if existing is None:
-                await self._redis.rpush(order_key, key)
+                await resolve(self._redis.rpush(order_key, key))
 
             await self._evict_if_needed(hash_key, order_key)
 
-            await self._redis.expire(hash_key, self._ttl_seconds)
-            await self._redis.expire(order_key, self._ttl_seconds)
+            await resolve(self._redis.expire(hash_key, self._ttl_seconds))
+            await resolve(self._redis.expire(order_key, self._ttl_seconds))
 
             return text_result(call_id, f"已将 '{key}' 写入工作记忆")
         except Exception as exc:
             return error_result(call_id, f"update_working_memory：{exc}")
 
     async def _evict_if_needed(self, hash_key: str, order_key: str) -> None:
-        all_fields = await self._redis.hgetall(hash_key)
+        all_fields = await resolve(self._redis.hgetall(hash_key))
         total_chars = sum(len(k) + len(v) for k, v in all_fields.items())
 
         while total_chars > self._max_chars:
-            oldest = await self._redis.lpop(order_key)
-            if oldest is None:
+            oldest = await resolve(self._redis.lpop(order_key))
+            if not isinstance(oldest, str):
                 break
             if oldest in all_fields:
                 total_chars -= len(oldest) + len(all_fields[oldest])
                 del all_fields[oldest]
-                await self._redis.hdel(hash_key, oldest)
+                await resolve(self._redis.hdel(hash_key, oldest))

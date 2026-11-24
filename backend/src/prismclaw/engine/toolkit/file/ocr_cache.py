@@ -28,13 +28,11 @@ def _resolve_abs_path(workspace_path: str, source_path: str) -> Path:
 def _session_root_of(workspace_path: str, abs_path: Path) -> Path | None:
     """源文件位于 ``sessions/<sid>/...`` 时返回会话根目录。
 
-    OCR 缓存与 analysis.md 是会话私有上传的派生物，跟着会话走：
+    OCR 缓存是会话私有上传的派生物，跟着会话走：
     跨会话不可读，删会话即回收。
     """
     try:
-        rel = abs_path.resolve(strict=False).relative_to(
-            Path(workspace_path).resolve(strict=False)
-        )
+        rel = abs_path.resolve(strict=False).relative_to(Path(workspace_path).resolve(strict=False))
     except (OSError, ValueError):
         return None
     parts = rel.parts
@@ -51,9 +49,7 @@ def _cache_dir(workspace_path: str, abs_path: Path) -> Path:
     会话内文件 → ``sessions/<sid>/.work/cache/ocr/``；工作区根文件 →
     ``<ws>/.work/cache/ocr/``。
     """
-    source_key = hashlib.sha1(
-        str(abs_path.resolve(strict=False)).encode("utf-8")
-    ).hexdigest()[:16]
+    source_key = hashlib.sha1(str(abs_path.resolve(strict=False)).encode("utf-8")).hexdigest()[:16]
     root = _session_root_of(workspace_path, abs_path) or Path(workspace_path)
     return root / ".work" / "cache" / "ocr" / source_key
 
@@ -83,7 +79,8 @@ def read_ocr_cache(workspace_path: str, source_path: str) -> str:
         return ""
     try:
         data = json.loads(cache_file.read_text(encoding="utf-8"))
-        return data.get("text", "")
+        text = data.get("text", "") if isinstance(data, dict) else ""
+        return text if isinstance(text, str) else ""
     except Exception:
         pass
     return ""
@@ -113,19 +110,3 @@ def write_ocr_cache(workspace_path: str, source_path: str, text: str, model: str
         cache_file.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
-
-
-def analysis_md_path(workspace_path: str, source_path: str) -> Path:
-    """根据源文件 stat 属性计算 analysis.md 路径（绝对路径）。
-
-    与 OCR 缓存同属引擎副产物，落在 ``<session|ws>/.work/cache/ocr/<source-key>/``。
-    """
-    abs_path = _resolve_abs_path(workspace_path, source_path)
-    try:
-        st = abs_path.stat()
-    except OSError:
-        return Path("/nonexistent/_cache_miss.analysis.md")
-
-    fingerprint = f"{st.st_size}_{st.st_ctime_ns}_{st.st_ino}"
-    md_filename = f"{fingerprint}.analysis.md"
-    return _cache_dir(workspace_path, abs_path) / md_filename

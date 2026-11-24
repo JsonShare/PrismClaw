@@ -39,16 +39,12 @@ def test_host_mode_is_noop(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     )
 
 
-def test_valid_layout_passes(
-    assets: Path, runtime: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_valid_layout_passes(assets: Path, runtime: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(deployment_checks, "is_container", lambda: True)
     validate_container_layout(assets_root=assets, runtime_root=runtime)
 
 
-def test_empty_assets_fails(
-    assets: Path, runtime: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_empty_assets_fails(assets: Path, runtime: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """skills 与 plugins 同时为空 = 镜像漏拷或同步失败，必须中止启动。"""
     monkeypatch.setattr(deployment_checks, "is_container", lambda: True)
     for child in (assets / "skills").iterdir():
@@ -71,9 +67,7 @@ def test_missing_runtime_volume_fails(
 ) -> None:
     monkeypatch.setattr(deployment_checks, "is_container", lambda: True)
     with pytest.raises(ContainerCheckError, match="runtime 卷未挂载"):
-        validate_container_layout(
-            assets_root=assets, runtime_root=tmp_path / "not-mounted"
-        )
+        validate_container_layout(assets_root=assets, runtime_root=tmp_path / "not-mounted")
 
 
 def test_unwritable_runtime_fails(

@@ -22,8 +22,8 @@ class ReviewSet:
     id: str
     conversation_id: str
     baseline: dict[str, str | None] = field(default_factory=dict)  # path -> content_ref | None(new)
-    head: dict[str, str] = field(default_factory=dict)            # path -> content_ref
-    head_sha: dict[str, str] = field(default_factory=dict)        # path -> sha256 of head content
+    head: dict[str, str] = field(default_factory=dict)  # path -> content_ref
+    head_sha: dict[str, str] = field(default_factory=dict)  # path -> sha256 of head content
     decision: dict[str, ReviewDecision] = field(default_factory=dict)  # path -> decision
     status: str = "open"  # "open" | "sealed"
 
@@ -50,7 +50,9 @@ class ReviewSet:
 
     # -- event sourcing --------------------------------------------------
     @classmethod
-    def rebuild(cls, review_set_id: str, conversation_id: str, events: list[ReviewEvent]) -> "ReviewSet":
+    def rebuild(
+        cls, review_set_id: str, conversation_id: str, events: list[ReviewEvent]
+    ) -> ReviewSet:
         rs = cls(id=review_set_id, conversation_id=conversation_id)
         for ev in events:
             p = ev.payload

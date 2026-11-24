@@ -15,10 +15,10 @@ from prismclaw.engine.subagent.runtime.collaboration import (
 from prismclaw.engine.subagent.runtime.records import AgentSessionRecord
 from prismclaw.engine.toolkit.registry.tool_runtime import (
     ToolContext,
-    ToolResult,
     error_result,
     text_result,
 )
+from prismclaw.schema.content.content_types import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -119,15 +119,12 @@ class SubagentControlTool:
                     status=args.get("status"),
                 )
                 if filter_agent_id:
-                    agents = [
-                        agent for agent in agents
-                        if agent.agent_id == filter_agent_id
-                    ]
-                payload = [agent.model_dump(mode="json") for agent in agents]
+                    agents = [agent for agent in agents if agent.agent_id == filter_agent_id]
+                listed = [agent.model_dump(mode="json") for agent in agents]
                 return text_result(
                     call_id,
                     f"当前会话共有 {len(agents)} 个符合条件的子代理。",
-                    metadata={"agents": payload},
+                    metadata={"agents": listed},
                 )
             agent_id, _ = await self._resolve_composite(args, context)
             if action == "status":
@@ -225,9 +222,7 @@ class SubagentControlTool:
 
         store = context.task_runtime.parallel_task_store
         if store is None:
-            raise SubagentCollaborationError(
-                "当前会话缺少并行任务存储，无法按组合键定位子代理任务"
-            )
+            raise SubagentCollaborationError("当前会话缺少并行任务存储，无法按组合键定位子代理任务")
         record = await store.get(
             session_id=context.session_id,
             agent_id=agent_id,
@@ -244,8 +239,7 @@ class SubagentControlTool:
                 f"与提供的 agent_id {agent_id!r} 不匹配"
             )
         raise SubagentCollaborationError(
-            f"当前会话中未找到 (agent_id={agent_id!r}, task_id={task_id!r}) "
-            "对应的子代理任务"
+            f"当前会话中未找到 (agent_id={agent_id!r}, task_id={task_id!r}) 对应的子代理任务"
         )
 
     async def _owned_agent(self, session_id: str, agent_id: str) -> AgentSessionRecord:

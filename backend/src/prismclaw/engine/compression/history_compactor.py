@@ -4,13 +4,13 @@ import asyncio
 import hashlib
 from typing import Any
 
-from prismclaw.engine.compression.dedup import (
-    dedupe_duplicate_user_messages,
+from prismclaw.engine.compression.compaction import (
+    build_compaction,
+    estimate_messages_tokens,
 )
 from prismclaw.engine.compression.context_zones import clamp_keep_recent
-from prismclaw.engine.compression.compaction import (
-    estimate_messages_tokens,
-    build_compaction,
+from prismclaw.engine.compression.dedup import (
+    dedupe_duplicate_user_messages,
 )
 from prismclaw.engine.compression.hardening import (
     filter_oversized_messages,
@@ -24,13 +24,18 @@ from prismclaw.engine.compression.semantic_fidelity import (
     fidelity_metadata,
     validate_semantic_capsule,
 )
-from prismclaw.engine.state.state_protocol import derive_state_payload
 from prismclaw.engine.compression.summary_engine import (
-    CompactionAborted,
-    CompactionTimeout,
+    CompactionAbortedError,
+    CompactionTimeoutError,
     SummaryEngine,
 )
-from prismclaw.schema.content.compaction import CompactResult, CompactionArtifact, CompactionBoundary, CompactionPreservedSegment
+from prismclaw.engine.state.state_protocol import derive_state_payload
+from prismclaw.schema.content.compaction import (
+    CompactionArtifact,
+    CompactionBoundary,
+    CompactionPreservedSegment,
+    CompactResult,
+)
 
 
 class HistoryCompactor:
@@ -121,7 +126,7 @@ class HistoryCompactor:
                 abort_event=abort_event,
                 model=model,
             )
-        except CompactionTimeout:
+        except CompactionTimeoutError:
             return CompactResult(
                 ok=False,
                 compacted=False,
@@ -129,7 +134,7 @@ class HistoryCompactor:
                 reason_code="timeout",
                 tokens_before=plan.estimated_tokens,
             )
-        except CompactionAborted:
+        except CompactionAbortedError:
             return CompactResult(
                 ok=False,
                 compacted=False,
@@ -260,9 +265,7 @@ def _build_history_compaction_artifact(
     fidelity: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     digest = hashlib.sha1(
-        f"{session_id}:{token_budget}:{source_message_count}:{compacted_message_count}:{summary_text[:200]}".encode(
-            "utf-8"
-        )
+        f"{session_id}:{token_budget}:{source_message_count}:{compacted_message_count}:{summary_text[:200]}".encode()
     ).hexdigest()
     preserved_segment = None
     if first_kept_entry_id or preserved_tail_entry_id:
@@ -292,7 +295,7 @@ def _build_history_compaction_artifact(
     return artifact
 
 
-def _entry_id(message: Any) -> str | None:
+def _entry_id(message: object) -> str | None:
     if not isinstance(message, dict):
         return None
     entry_id = message.get("__entry_id__")

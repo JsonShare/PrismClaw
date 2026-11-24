@@ -26,7 +26,6 @@ Design discipline:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 
 @dataclass(frozen=True)
@@ -37,7 +36,7 @@ class ConstraintBreach:
     detail: str
 
 
-def _safe_constraint_texts(task_spec: Any | None) -> set[str]:
+def _safe_constraint_texts(task_spec: object | None) -> set[str]:
     raw = getattr(task_spec, "constraints", None)
     if not raw:
         return set()
@@ -46,8 +45,8 @@ def _safe_constraint_texts(task_spec: Any | None) -> set[str]:
 
 def detect_constraint_breaches(
     *,
-    task_spec: Any | None = None,
-    review_decision: Any | None = None,
+    task_spec: object | None = None,
+    review_decision: object | None = None,
 ) -> list[ConstraintBreach]:
     """Return constraint breaches observed for the current turn.
 

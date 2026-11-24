@@ -20,9 +20,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.schema.content.streaming import SubagentProgressBatch, SubagentProgressItem
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.handoff.supervisor import CapExceededInfo
 
 logger = logging.getLogger(__name__)
 
@@ -61,18 +64,14 @@ class SubagentProgressEmitter:
         # 只在「工具身份变化」时追一条：同工具同轮次的重复 update 是高频噪声，
         # 同工具跨轮次（prev.turn 不同）才是新动作。
         if item.current_tool and (
-            prev is None
-            or prev.current_tool != item.current_tool
-            or prev.turn != item.turn
+            prev is None or prev.current_tool != item.current_tool or prev.turn != item.turn
         ):
             label = f"{item.current_tool} {item.current_tool_summary or ''}".strip()
             if not activity or activity[-1] != label:
                 activity.append(label)
         if len(activity) > _MAX_RECENT_ACTIVITY:
             activity = activity[-_MAX_RECENT_ACTIVITY:]
-        self._states[item.sub_session_id] = item.model_copy(
-            update={"recent_activity": activity}
-        )
+        self._states[item.sub_session_id] = item.model_copy(update={"recent_activity": activity})
         self._dirty = True
 
     async def _flush_loop(self) -> None:
@@ -114,8 +113,8 @@ __all__ = ["SubagentProgressEmitter", "SubagentProgressSink"]
 
 async def _emit_cap_exceeded_synthetic_progress(
     *,
-    sink: Any,
-    cap_info_by_call: dict[str, Any],
+    sink: SubagentProgressSink | None,
+    cap_info_by_call: dict[str, CapExceededInfo],
 ) -> None:
     import uuid as _uuid
 
@@ -129,9 +128,7 @@ async def _emit_cap_exceeded_synthetic_progress(
 
     items: list[SubagentProgressItem] = []
     for call_id, cap_info in cap_info_by_call.items():
-        synthetic_name = (
-            f"$synthetic:chain_cap_exceeded:{cap_info.requested_target}"
-        )
+        synthetic_name = f"$synthetic:chain_cap_exceeded:{cap_info.requested_target}"
         items.append(
             SubagentProgressItem(
                 sub_session_id=f"$synthetic#{call_id}",

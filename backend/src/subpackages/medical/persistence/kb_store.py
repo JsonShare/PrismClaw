@@ -7,6 +7,7 @@
 
 与 MedicalStore 独立，通过 bundle 注册为 'medical_kb' Store。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -51,17 +52,26 @@ class KbStore:
             if year is not None:
                 stmt = stmt.where(kb_literatures.c.year == year)
 
-            total = (await conn.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
-            rows = (await conn.execute(
-                stmt.order_by(
-                    kb_literatures.c.published_at.desc().nullslast(),
-                    kb_literatures.c.year.desc(),
-                ).offset((page - 1) * page_size).limit(page_size)
-            )).fetchall()
+            total = (
+                await conn.execute(select(func.count()).select_from(stmt.subquery()))
+            ).scalar() or 0
+            rows = (
+                await conn.execute(
+                    stmt.order_by(
+                        kb_literatures.c.published_at.desc().nullslast(),
+                        kb_literatures.c.year.desc(),
+                    )
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            ).fetchall()
             items = [row_to_dict(r) for r in rows]
 
         return {
-            "items": items, "total": total, "page": page, "pageSize": page_size,
+            "items": items,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
         }
 
     # ── 指南 ────────────────────────────────────────────────────
@@ -88,19 +98,26 @@ class KbStore:
             if category and category != "全部":
                 stmt = stmt.where(kb_guidelines.c.category == category)
 
-            total = (await conn.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
+            total = (
+                await conn.execute(select(func.count()).select_from(stmt.subquery()))
+            ).scalar() or 0
             order_col = (
                 (kb_guidelines.c.published_at.desc().nullslast(), kb_guidelines.c.year.desc())
                 if sort == "year"
                 else (kb_guidelines.c.title,)
             )
-            rows = (await conn.execute(
-                stmt.order_by(*order_col).offset((page - 1) * page_size).limit(page_size)
-            )).fetchall()
+            rows = (
+                await conn.execute(
+                    stmt.order_by(*order_col).offset((page - 1) * page_size).limit(page_size)
+                )
+            ).fetchall()
             items = [row_to_dict(r) for r in rows]
 
         return {
-            "items": items, "total": total, "page": page, "pageSize": page_size,
+            "items": items,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
         }
 
     # ── 药品 ────────────────────────────────────────────────────
@@ -120,22 +137,27 @@ class KbStore:
             if keyword:
                 # 商品名与通用名都要能命中（如「泰瑞沙」→ 奥希替尼 / Osimertinib）
                 like = f"%{keyword}%"
-                stmt = stmt.where(
-                    kb_drugs.c.name.ilike(like) | kb_drugs.c.generic_name.ilike(like)
-                )
+                stmt = stmt.where(kb_drugs.c.name.ilike(like) | kb_drugs.c.generic_name.ilike(like))
             if category and category != "全部":
                 stmt = stmt.where(kb_drugs.c.category == category)
             if essential_only:
                 stmt = stmt.where(kb_drugs.c.is_essential == True)  # noqa: E712
 
-            total = (await conn.execute(select(func.count()).select_from(stmt.subquery()))).scalar() or 0
-            rows = (await conn.execute(
-                stmt.order_by(kb_drugs.c.name).offset((page - 1) * page_size).limit(page_size)
-            )).fetchall()
+            total = (
+                await conn.execute(select(func.count()).select_from(stmt.subquery()))
+            ).scalar() or 0
+            rows = (
+                await conn.execute(
+                    stmt.order_by(kb_drugs.c.name).offset((page - 1) * page_size).limit(page_size)
+                )
+            ).fetchall()
             items = [row_to_dict(r) for r in rows]
 
         return {
-            "items": items, "total": total, "page": page, "pageSize": page_size,
+            "items": items,
+            "total": total,
+            "page": page,
+            "pageSize": page_size,
         }
 
     # ── 种子数据 upsert ─────────────────────────────────────────
@@ -148,18 +170,20 @@ class KbStore:
             )
             if existing.fetchone():
                 values = {k: data[k] for k in data if k != "id"}
-                await conn.execute(update(kb_literatures).where(kb_literatures.c.id == data["id"]).values(**values))
+                await conn.execute(
+                    update(kb_literatures).where(kb_literatures.c.id == data["id"]).values(**values)
+                )
             else:
                 await conn.execute(insert(kb_literatures).values(**data))
 
     async def upsert_drug(self, data: dict[str, Any]) -> None:
         """幂等插入/更新药品。"""
         async with self._engine.begin() as conn:
-            existing = await conn.execute(
-                select(kb_drugs.c.id).where(kb_drugs.c.id == data["id"])
-            )
+            existing = await conn.execute(select(kb_drugs.c.id).where(kb_drugs.c.id == data["id"]))
             if existing.fetchone():
                 values = {k: data[k] for k in data if k != "id"}
-                await conn.execute(update(kb_drugs).where(kb_drugs.c.id == data["id"]).values(**values))
+                await conn.execute(
+                    update(kb_drugs).where(kb_drugs.c.id == data["id"]).values(**values)
+                )
             else:
                 await conn.execute(insert(kb_drugs).values(**data))

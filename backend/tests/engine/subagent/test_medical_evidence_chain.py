@@ -41,18 +41,16 @@ from __future__ import annotations
 import json
 from typing import Any
 
-
-from prismclaw.schema.content.subagent import (
-    EvidenceRef,
-    SubagentContextSnapshot,
-    SubagentResultEnvelope,
-)
 from prismclaw.schema.agent.session import (
     SessionContextItem,
     SessionContextState,
     SessionStateUpdate,
 )
-
+from prismclaw.schema.content.subagent import (
+    EvidenceRef,
+    SubagentContextSnapshot,
+    SubagentResultEnvelope,
+)
 
 # ═══════════════════════════════════════════════════════════════
 # 医疗场景大文本数据
@@ -229,7 +227,10 @@ DRUG_INTERACTION_DB = """
 # 辅助函数
 # ═══════════════════════════════════════════════════════════════
 
-def _make_read_messages(file_path: str, content: str, offset: int | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+
+def _make_read_messages(
+    file_path: str, content: str, offset: int | None = None, limit: int | None = None
+) -> list[dict[str, Any]]:
     tc_id = f"tc_read_{hash(file_path + str(offset)) % 10000:04d}"
     args: dict[str, Any] = {"file_path": file_path}
     if offset:
@@ -241,7 +242,11 @@ def _make_read_messages(file_path: str, content: str, offset: int | None = None,
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": tc_id, "type": "function", "function": {"name": "read", "arguments": json.dumps(args)}}
+                {
+                    "id": tc_id,
+                    "type": "function",
+                    "function": {"name": "read", "arguments": json.dumps(args)},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": tc_id, "content": content},
@@ -255,7 +260,11 @@ def _make_grep_messages(pattern: str, content: str) -> list[dict[str, Any]]:
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": tc_id, "type": "function", "function": {"name": "grep", "arguments": json.dumps({"pattern": pattern})}}
+                {
+                    "id": tc_id,
+                    "type": "function",
+                    "function": {"name": "grep", "arguments": json.dumps({"pattern": pattern})},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": tc_id, "content": content},
@@ -269,7 +278,11 @@ def _make_web_fetch_messages(url: str, content: str) -> list[dict[str, Any]]:
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": tc_id, "type": "function", "function": {"name": "web_fetch", "arguments": json.dumps({"url": url})}}
+                {
+                    "id": tc_id,
+                    "type": "function",
+                    "function": {"name": "web_fetch", "arguments": json.dumps({"url": url})},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": tc_id, "content": content},
@@ -283,7 +296,11 @@ def _make_bash_messages(command: str, output: str) -> list[dict[str, Any]]:
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {"id": tc_id, "type": "function", "function": {"name": "bash", "arguments": json.dumps({"command": command})}}
+                {
+                    "id": tc_id,
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": json.dumps({"command": command})},
+                }
             ],
         },
         {"role": "tool", "tool_call_id": tc_id, "content": output},
@@ -301,7 +318,9 @@ def _make_session_state(
         state.primary_goal = primary_goal
     if facts:
         for f in facts:
-            state.facts.append(SessionContextItem(id=f"fac_{hash(f) % 10000:04d}", kind="fact", content=f))
+            state.facts.append(
+                SessionContextItem(id=f"fac_{hash(f) % 10000:04d}", kind="fact", content=f)
+            )
     if evidence:
         state.evidence = evidence
     return state
@@ -310,6 +329,7 @@ def _make_session_state(
 # ═══════════════════════════════════════════════════════════════
 # M01: 单 researcher 检索药品说明书（大文本 read）
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_m01_researcher_read_drug_label():
     """研究员检索药品说明书，产生大文本 evidence，验证 quoted_text 截断和关键字保留。"""
@@ -341,12 +361,15 @@ def test_m01_researcher_read_drug_label():
 # M02: 并行 3 个 researcher 分别检索不同文献（evidence 独立保留）
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m02_parallel_researchers_different_literatures():
     """3 个 researcher 的来源独立保留，聚合器不自动合并。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
     # Researcher 1: 药品说明书
-    msg1 = _make_read_messages("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100)
+    msg1 = _make_read_messages(
+        "/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100
+    )
     ev1 = _collect_evidence_from_messages(msg1)
 
     # Researcher 2: 临床指南
@@ -354,7 +377,9 @@ def test_m02_parallel_researchers_different_literatures():
     ev2 = _collect_evidence_from_messages(msg2)
 
     # Researcher 3: 文献检索（web）
-    msg3 = _make_web_fetch_messages("https://pubmed.cn/sglt2i-metformin-meta-analysis", LITERATURE_SGLT2I)
+    msg3 = _make_web_fetch_messages(
+        "https://pubmed.cn/sglt2i-metformin-meta-analysis", LITERATURE_SGLT2I
+    )
     ev3 = _collect_evidence_from_messages(msg3)
 
     all_evidence = ev1 + ev2 + ev3
@@ -375,6 +400,7 @@ def test_m02_parallel_researchers_different_literatures():
 # ═══════════════════════════════════════════════════════════════
 # M03: researcher 检索临床指南（web_fetch 大文本）+ 超时退出
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_m03_researcher_timeout_with_evidence():
     """researcher 超时退出，但已执行的 web_fetch 仍应产生 evidence。
@@ -418,7 +444,11 @@ def test_m03_researcher_timeout_with_evidence():
     assert len(envelope.evidence[0].quoted_text) <= 2000
 
     # 验证 envelope 能被正常序列化 + 反序列化（模拟持久化链路）
-    from prismclaw.engine.state.state_protocol import _extract_structured_tool_result_sections, _merge_subagent_result_update
+    from prismclaw.engine.state.state_protocol import (
+        _extract_structured_tool_result_sections,
+        _merge_subagent_result_update,
+    )
+
     envelope_json = envelope.model_dump_json()
     sections = _extract_structured_tool_result_sections(envelope_json)
     assert sections is not None
@@ -434,18 +464,32 @@ def test_m03_researcher_timeout_with_evidence():
 # M04: 推理型子代理基于前轮 evidence 推理药物交互
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m04_reasoning_evidence_preserved():
     """推理型子代理的结果保留自己的 evidence 与 confidence。"""
     from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
 
     # 模拟推理型子代理的 envelope——包含推理型 findings
     evidence = [
-        EvidenceRef(source_type="file", source_path="/data/drug_labels/metformin.txt",
-                   source_location="L1-L101", quoted_text=DRUG_LABEL_METFORMIN[:500], confidence="high"),
-        EvidenceRef(source_type="file", source_path="/data/guidelines/t2dm_2024.txt",
-                   quoted_text=GUIDELINE_T2DM[:300], confidence="high"),
-        EvidenceRef(source_type="web", source_path="https://pubmed.cn/sglt2i-metformin-meta-analysis",
-                   quoted_text=LITERATURE_SGLT2I[:300], confidence="medium"),
+        EvidenceRef(
+            source_type="file",
+            source_path="/data/drug_labels/metformin.txt",
+            source_location="L1-L101",
+            quoted_text=DRUG_LABEL_METFORMIN[:500],
+            confidence="high",
+        ),
+        EvidenceRef(
+            source_type="file",
+            source_path="/data/guidelines/t2dm_2024.txt",
+            quoted_text=GUIDELINE_T2DM[:300],
+            confidence="high",
+        ),
+        EvidenceRef(
+            source_type="web",
+            source_path="https://pubmed.cn/sglt2i-metformin-meta-analysis",
+            quoted_text=LITERATURE_SGLT2I[:300],
+            confidence="medium",
+        ),
     ]
 
     envelope = SubagentResultEnvelope(
@@ -477,20 +521,36 @@ def test_m04_reasoning_evidence_preserved():
 # M05: 第二轮追问——prior_evidence 传递验证
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m05_prior_evidence_carried_to_next_round():
     """验证前轮 evidence 通过 session state 传递到下一轮 subagent。"""
-    from prismclaw.engine.subagent.core.contract import _collect_prior_evidence, render_context_snapshot
+    from prismclaw.engine.subagent.core.contract import (
+        _collect_prior_evidence,
+        render_context_snapshot,
+    )
 
     ev_dicts = [
-        {"source_type": "file", "source_path": "/data/drug_labels/metformin.txt",
-         "source_location": "L1-L101", "quoted_text": DRUG_LABEL_METFORMIN[:500], "confidence": "high"},
-        {"source_type": "web", "source_path": "https://guidelines.diabetes.cn/t2dm-2024",
-         "quoted_text": GUIDELINE_T2DM[:300], "confidence": "high"},
+        {
+            "source_type": "file",
+            "source_path": "/data/drug_labels/metformin.txt",
+            "source_location": "L1-L101",
+            "quoted_text": DRUG_LABEL_METFORMIN[:500],
+            "confidence": "high",
+        },
+        {
+            "source_type": "web",
+            "source_path": "https://guidelines.diabetes.cn/t2dm-2024",
+            "quoted_text": GUIDELINE_T2DM[:300],
+            "confidence": "high",
+        },
     ]
-    state = _make_session_state(evidence=ev_dicts, facts=[
-        "[HIGH] 二甲双胍与碘化造影剂存在严重交互",
-        "[MEDIUM] eGFR 30-45 需减量",
-    ])
+    state = _make_session_state(
+        evidence=ev_dicts,
+        facts=[
+            "[HIGH] 二甲双胍与碘化造影剂存在严重交互",
+            "[MEDIUM] eGFR 30-45 需减量",
+        ],
+    )
 
     prior = _collect_prior_evidence(state)
     assert len(prior) == 2
@@ -517,6 +577,7 @@ def test_m05_prior_evidence_carried_to_next_round():
 # M06: 大量 evidence（20+条）的 prior_evidence 截断
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m06_large_evidence_prior_evidence_truncation():
     """_collect_prior_evidence 对输入最多保留 20 条。"""
     from prismclaw.engine.subagent.core.contract import _collect_prior_evidence
@@ -524,20 +585,24 @@ def test_m06_large_evidence_prior_evidence_truncation():
     # 生成 25 条 evidence，其中 5 条重复
     base_evs = []
     for i in range(25):
-        base_evs.append(EvidenceRef(
-            source_type="file",
-            source_path=f"/data/patient_{i}.txt",
-            quoted_text=f"Patient {i} data: " + "x" * 400,
-            confidence="high" if i < 15 else "medium",
-        ))
+        base_evs.append(
+            EvidenceRef(
+                source_type="file",
+                source_path=f"/data/patient_{i}.txt",
+                quoted_text=f"Patient {i} data: " + "x" * 400,
+                confidence="high" if i < 15 else "medium",
+            )
+        )
     # 添加 5 条重复
     for i in range(5):
-        base_evs.append(EvidenceRef(
-            source_type="file",
-            source_path=f"/data/patient_{i}.txt",
-            quoted_text=f"Patient {i} data: " + "x" * 400,
-            confidence="high",
-        ))
+        base_evs.append(
+            EvidenceRef(
+                source_type="file",
+                source_path=f"/data/patient_{i}.txt",
+                quoted_text=f"Patient {i} data: " + "x" * 400,
+                confidence="high",
+            )
+        )
 
     assert len(base_evs) == 30
 
@@ -551,6 +616,7 @@ def test_m06_large_evidence_prior_evidence_truncation():
 # ═══════════════════════════════════════════════════════════════
 # M07: 混合置信度——[HIGH]药品说明书 + [MEDIUM]文献 + [LOW]推理
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_m07_mixed_confidence_medical_scenario():
     """医疗场景下各 Agent 的置信度分别保留。"""
@@ -580,6 +646,7 @@ def test_m07_mixed_confidence_medical_scenario():
 # M08: auditor 验证——检查 evidence 中 quoted_text 与原文一致性
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m08_auditor_evidence_consistency():
     """auditor 验证 evidence 的 quoted_text 确实来自原始文档。
 
@@ -589,7 +656,9 @@ def test_m08_auditor_evidence_consistency():
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
     # 自动提取 evidence
-    messages = _make_read_messages("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100)
+    messages = _make_read_messages(
+        "/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100
+    )
     evidence = _collect_evidence_from_messages(messages)
     assert len(evidence) == 1
 
@@ -615,26 +684,39 @@ def test_m08_auditor_evidence_consistency():
 # M09: 第三轮追问——累积 evidence 超过 20 条的截断处理
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m09_cumulative_evidence_truncation():
     """3 轮累积 evidence，_collect_prior_evidence 截断到 20 条。"""
     from prismclaw.engine.subagent.core.contract import _collect_prior_evidence
 
     # 第 1 轮：5 条
     round1_evidence = [
-        {"source_type": "file", "source_path": f"/data/round1/doc_{i}.txt",
-         "quoted_text": f"Round1 evidence {i}", "confidence": "high"}
+        {
+            "source_type": "file",
+            "source_path": f"/data/round1/doc_{i}.txt",
+            "quoted_text": f"Round1 evidence {i}",
+            "confidence": "high",
+        }
         for i in range(5)
     ]
     # 第 2 轮：8 条
     round2_evidence = [
-        {"source_type": "web", "source_path": f"https://round2/source_{i}",
-         "quoted_text": f"Round2 evidence {i}", "confidence": "medium"}
+        {
+            "source_type": "web",
+            "source_path": f"https://round2/source_{i}",
+            "quoted_text": f"Round2 evidence {i}",
+            "confidence": "medium",
+        }
         for i in range(8)
     ]
     # 第 3 轮：10 条
     round3_evidence = [
-        {"source_type": "file", "source_path": f"/data/round3/doc_{i}.txt",
-         "quoted_text": f"Round3 evidence {i}", "confidence": "high"}
+        {
+            "source_type": "file",
+            "source_path": f"/data/round3/doc_{i}.txt",
+            "quoted_text": f"Round3 evidence {i}",
+            "confidence": "high",
+        }
         for i in range(10)
     ]
 
@@ -655,6 +737,7 @@ def test_m09_cumulative_evidence_truncation():
 # M10: builder 执行药物剂量计算（bash evidence）
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m10_builder_bash_dose_calculation():
     """builder 执行剂量计算脚本，bash 工具产生 evidence。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
@@ -674,33 +757,56 @@ def test_m10_builder_bash_dose_calculation():
 # M11: 多轮 session state apply_update 累积 evidence
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m11_multi_round_apply_update_evidence():
     """3 轮 apply_update 累积 evidence，验证去重。"""
     state = _make_session_state(primary_goal="评估二甲双胍安全性")
 
     # 第 1 轮
-    update1 = SessionStateUpdate(evidence=[
-        {"source_type": "file", "source_path": "/data/drug_labels/metformin.txt",
-         "quoted_text": "盐酸二甲双胍片说明书", "confidence": "high"},
-    ])
+    update1 = SessionStateUpdate(
+        evidence=[
+            {
+                "source_type": "file",
+                "source_path": "/data/drug_labels/metformin.txt",
+                "quoted_text": "盐酸二甲双胍片说明书",
+                "confidence": "high",
+            },
+        ]
+    )
     state.apply_update(update1)
     assert len(state.evidence) == 1
 
     # 第 2 轮——有重复
-    update2 = SessionStateUpdate(evidence=[
-        {"source_type": "file", "source_path": "/data/drug_labels/metformin.txt",
-         "quoted_text": "盐酸二甲双胍片说明书", "confidence": "high"},  # 重复
-        {"source_type": "web", "source_path": "https://guidelines.diabetes.cn",
-         "quoted_text": "中国2型糖尿病防治指南", "confidence": "high"},
-    ])
+    update2 = SessionStateUpdate(
+        evidence=[
+            {
+                "source_type": "file",
+                "source_path": "/data/drug_labels/metformin.txt",
+                "quoted_text": "盐酸二甲双胍片说明书",
+                "confidence": "high",
+            },  # 重复
+            {
+                "source_type": "web",
+                "source_path": "https://guidelines.diabetes.cn",
+                "quoted_text": "中国2型糖尿病防治指南",
+                "confidence": "high",
+            },
+        ]
+    )
     state.apply_update(update2)
     assert len(state.evidence) == 2  # 去重后只有 2 条
 
     # 第 3 轮
-    update3 = SessionStateUpdate(evidence=[
-        {"source_type": "web", "source_path": "https://pubmed.cn/meta-analysis",
-         "quoted_text": "SGLT2i联合二甲双胍Meta分析", "confidence": "medium"},
-    ])
+    update3 = SessionStateUpdate(
+        evidence=[
+            {
+                "source_type": "web",
+                "source_path": "https://pubmed.cn/meta-analysis",
+                "quoted_text": "SGLT2i联合二甲双胍Meta分析",
+                "confidence": "medium",
+            },
+        ]
+    )
     state.apply_update(update3)
     assert len(state.evidence) == 3
 
@@ -709,14 +815,19 @@ def test_m11_multi_round_apply_update_evidence():
 # M12: normalize + merge 大量 evidence payload
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m12_normalize_merge_large_evidence():
     """大量 evidence payload 的 normalize 和 merge。"""
-    from prismclaw.engine.state.state_protocol import normalize_state_payload, merge_state_payloads
+    from prismclaw.engine.state.state_protocol import merge_state_payloads, normalize_state_payload
 
     # 构造包含大量 evidence 的 session state
     evidence = [
-        {"source_type": "file", "source_path": f"/data/doc_{i}.txt",
-         "quoted_text": f"Evidence content {i}", "confidence": "high" if i < 10 else "medium"}
+        {
+            "source_type": "file",
+            "source_path": f"/data/doc_{i}.txt",
+            "quoted_text": f"Evidence content {i}",
+            "confidence": "high" if i < 10 else "medium",
+        }
         for i in range(15)
     ]
     state = _make_session_state(
@@ -741,18 +852,35 @@ def test_m12_normalize_merge_large_evidence():
 # M13: render handover 包含完整 evidence 列表（大文本场景）
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m13_render_handover_medical_evidence():
     """大文本场景下 handover 渲染包含完整 evidence 列表。"""
+    from prismclaw.engine.execution.output.tool_result_rendering import (
+        _render_subagent_result_handover,
+    )
     from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
-    from prismclaw.engine.execution.output.tool_result_rendering import _render_subagent_result_handover
 
     evidence = [
-        EvidenceRef(source_type="file", source_path="/data/drug_labels/metformin.txt",
-                   source_location="L1-L101", quoted_text=DRUG_LABEL_METFORMIN[:500], confidence="high"),
-        EvidenceRef(source_type="file", source_path="/data/guidelines/t2dm_2024.txt",
-                   source_location="L1-L81", quoted_text=GUIDELINE_T2DM[:400], confidence="high"),
-        EvidenceRef(source_type="web", source_path="https://pubmed.cn/sglt2i-meta",
-                   quoted_text=LITERATURE_SGLT2I[:300], confidence="medium"),
+        EvidenceRef(
+            source_type="file",
+            source_path="/data/drug_labels/metformin.txt",
+            source_location="L1-L101",
+            quoted_text=DRUG_LABEL_METFORMIN[:500],
+            confidence="high",
+        ),
+        EvidenceRef(
+            source_type="file",
+            source_path="/data/guidelines/t2dm_2024.txt",
+            source_location="L1-L81",
+            quoted_text=GUIDELINE_T2DM[:400],
+            confidence="high",
+        ),
+        EvidenceRef(
+            source_type="web",
+            source_path="https://pubmed.cn/sglt2i-meta",
+            quoted_text=LITERATURE_SGLT2I[:300],
+            confidence="medium",
+        ),
     ]
 
     envelope = SubagentResultEnvelope(
@@ -780,14 +908,13 @@ def test_m13_render_handover_medical_evidence():
 # M14: 动态上限——大量 facts 时 findings limit 提升
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m14_dynamic_findings_limit_medical():
     """医疗场景下大量 facts（>6）时 findings limit 从 6 提升到 12。"""
     from prismclaw.engine.subagent.core.contract import build_context_snapshot
 
     # 模拟 10 个医疗 facts
-    facts = [
-        f"[HIGH] 医疗事实_{i}" for i in range(10)
-    ]
+    facts = [f"[HIGH] 医疗事实_{i}" for i in range(10)]
     state = _make_session_state(facts=facts, primary_goal="药物安全性评估")
 
     class MockTaskSpec:
@@ -818,6 +945,7 @@ def test_m14_dynamic_findings_limit_medical():
 # M15: 空证据查询——evidence 为空但 findings 有内容
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m15_empty_evidence_with_findings():
     """subagent 返回 findings 但无 evidence（LLM 未执行工具调用）。"""
     envelope = SubagentResultEnvelope(
@@ -832,6 +960,7 @@ def test_m15_empty_evidence_with_findings():
 
     # 渲染时不应包含 evidence 段
     from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
+
     rendered = render_result_envelope_handover(envelope)
     assert "evidence:" not in rendered
     assert "[UNVERIFIED]" in rendered
@@ -844,6 +973,7 @@ def test_m15_empty_evidence_with_findings():
 # ═══════════════════════════════════════════════════════════════
 # M16: 重复文献被不同 subagent 检索——独立保留
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_m16_duplicate_literature_across_agents():
     """两个 researcher 检索同一篇文献，各自保留自己的 evidence。"""
@@ -883,12 +1013,17 @@ def test_m16_duplicate_literature_across_agents():
 # M17: 同一文献不同章节（不同 offset）——保留多条
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m17_same_file_different_sections():
     """同一药品说明书的不同章节保留各自的 source_location。"""
     from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
-    msg1 = _make_read_messages("/data/drug_labels/metformin.txt", "【适应症】部分内容", offset=1, limit=50)
-    msg2 = _make_read_messages("/data/drug_labels/metformin.txt", "【禁忌】部分内容", offset=51, limit=50)
+    msg1 = _make_read_messages(
+        "/data/drug_labels/metformin.txt", "【适应症】部分内容", offset=1, limit=50
+    )
+    msg2 = _make_read_messages(
+        "/data/drug_labels/metformin.txt", "【禁忌】部分内容", offset=51, limit=50
+    )
 
     ev1 = _collect_evidence_from_messages(msg1)
     ev2 = _collect_evidence_from_messages(msg2)
@@ -903,24 +1038,29 @@ def test_m17_same_file_different_sections():
 # M18: 端到端：3 轮追问 × 多 subagent × 大文本 × 完整链路
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m18_full_medical_e2e():
     """医疗循证咨询完整端到端：3 轮追问，每轮多 subagent，大文本。"""
-    from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
-    from prismclaw.engine.subagent.core.contract import (
-        build_context_snapshot,
-        render_context_snapshot,
-        render_task_envelope,
-        render_result_envelope_handover,
-    )
     from prismclaw.engine.state.state_protocol import (
         _extract_structured_tool_result_sections,
         _merge_subagent_result_update,
     )
+    from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
+    from prismclaw.engine.subagent.core.contract import (
+        build_context_snapshot,
+        render_context_snapshot,
+        render_result_envelope_handover,
+        render_task_envelope,
+    )
 
-    state = _make_session_state(primary_goal="患者62岁男性，2型糖尿病，eGFR=35，需评估二甲双胍使用安全性")
+    state = _make_session_state(
+        primary_goal="患者62岁男性，2型糖尿病，eGFR=35，需评估二甲双胍使用安全性"
+    )
 
     # ---- Round 1: 并行检索 ----
-    msg_r1_a = _make_read_messages("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100)
+    msg_r1_a = _make_read_messages(
+        "/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100
+    )
     msg_r1_b = _make_web_fetch_messages("https://guidelines.diabetes.cn/t2dm-2024", GUIDELINE_T2DM)
     msg_r1_c = _make_grep_messages("乳酸酸中毒", DRUG_INTERACTION_DB)
 
@@ -1014,7 +1154,12 @@ def test_m18_full_medical_e2e():
     assert "confidence_assessment" in task_text
 
     # Round 2 subagent 执行
-    msg_r2 = _make_read_messages("/data/guidelines/ckd_dosing.txt", "eGFR 30-45: 减量至500mg bid，密切监测", offset=1, limit=30)
+    msg_r2 = _make_read_messages(
+        "/data/guidelines/ckd_dosing.txt",
+        "eGFR 30-45: 减量至500mg bid，密切监测",
+        offset=1,
+        limit=30,
+    )
     ev_r2 = _collect_evidence_from_messages(msg_r2)
 
     env_r2 = SubagentResultEnvelope(
@@ -1033,8 +1178,7 @@ def test_m18_full_medical_e2e():
 
     # ---- Round 3: 最终建议 handover ----
     all_evidence_list = [
-        EvidenceRef.model_validate(e) if isinstance(e, dict) else e
-        for e in state.evidence
+        EvidenceRef.model_validate(e) if isinstance(e, dict) else e for e in state.evidence
     ]
     final_envelope = SubagentResultEnvelope(
         summary="最终建议：eGFR=35患者可使用二甲双胍，需减量至500mg bid，每3个月监测肾功能",
@@ -1059,17 +1203,20 @@ def test_m18_full_medical_e2e():
 # M19: prompt advisory 包含医疗场景证据规则
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m19_medical_advisory_evidence_rules():
     """证据规则归属固定段 <delegation>（唯一 owner）。"""
     from prismclaw.engine.execution.request._prompt_types import PromptInputs
     from prismclaw.engine.execution.request.system_prompt import delegation_section
 
-    text = delegation_section(PromptInputs(
-        session_id="s",
-        workspace_id="w",
-        agent_id="a",
-        tools=[("sub_agent", "delegate")],
-    ))
+    text = delegation_section(
+        PromptInputs(
+            session_id="s",
+            workspace_id="w",
+            agent_id="a",
+            tools=[("sub_agent", "delegate")],
+        )
+    )
     assert text is not None
     assert "主 Agent 直接比较各 Agent 的结果" in text
     assert "不机械采用全体最低置信度" in text
@@ -1081,13 +1228,14 @@ def test_m19_medical_advisory_evidence_rules():
 # M20: 极端压力测试——8 并行 subagent × 大文本 × 超时 × 错误混合
 # ═══════════════════════════════════════════════════════════════
 
+
 def test_m20_extreme_pressure_8_agents():
     """8 个并行 subagent：5 成功 + 2 超时 + 1 错误，大文本，验证 evidence 完整性。"""
-    from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
     from prismclaw.engine.state.state_protocol import (
         _extract_structured_tool_result_sections,
         _merge_subagent_result_update,
     )
+    from prismclaw.engine.subagent.core._lifecycle_mixin import _collect_evidence_from_messages
 
     # 5 成功的 subagent
     envelopes = []
@@ -1102,35 +1250,41 @@ def test_m20_extreme_pressure_8_agents():
         )
         ev = _collect_evidence_from_messages(messages)
         all_evidence.extend(ev)
-        envelopes.append(SubagentResultEnvelope(
-            summary=f"文献{i}检索完成",
-            findings=[f"[HIGH] 文献{i}: 样本量{i*100}，有效性确认"],
-            evidence=ev,
-            confidence_assessment="high" if i < 3 else "medium",
-        ))
+        envelopes.append(
+            SubagentResultEnvelope(
+                summary=f"文献{i}检索完成",
+                findings=[f"[HIGH] 文献{i}: 样本量{i * 100}，有效性确认"],
+                evidence=ev,
+                confidence_assessment="high" if i < 3 else "medium",
+            )
+        )
 
     # 2 超时的 subagent——已有部分 evidence
     for i in range(5, 7):
         messages = _make_web_fetch_messages(
             f"https://db.med.cn/source_{i}",
-            f"超时前检索到的部分数据：样本量{i*50}",
+            f"超时前检索到的部分数据：样本量{i * 50}",
         )
         ev = _collect_evidence_from_messages(messages)
         all_evidence.extend(ev)
-        envelopes.append(SubagentResultEnvelope(
-            summary=f"[timeout] 文献{i}检索超时",
-            findings=[f"[MEDIUM] 文献{i}: 部分数据已获取"],
-            evidence=ev,
-            confidence_assessment="low",
-        ))
+        envelopes.append(
+            SubagentResultEnvelope(
+                summary=f"[timeout] 文献{i}检索超时",
+                findings=[f"[MEDIUM] 文献{i}: 部分数据已获取"],
+                evidence=ev,
+                confidence_assessment="low",
+            )
+        )
 
     # 1 错误的 subagent——无 evidence（无工具调用）
-    envelopes.append(SubagentResultEnvelope(
-        summary="[error] 文献7检索失败：网络错误",
-        findings=["[LOW] 无法获取文献7数据"],
-        evidence=[],
-        confidence_assessment="low",
-    ))
+    envelopes.append(
+        SubagentResultEnvelope(
+            summary="[error] 文献7检索失败：网络错误",
+            findings=["[LOW] 无法获取文献7数据"],
+            evidence=[],
+            confidence_assessment="low",
+        )
+    )
 
     # 各 Agent 的 evidence 和 confidence 独立保留，不被其他结果改写。
     assert len(all_evidence) == 7  # 5 read + 2 web
@@ -1168,6 +1322,7 @@ def test_m20_extreme_pressure_8_agents():
 
     # 验证 handover
     from prismclaw.engine.subagent.core.contract import render_result_envelope_handover
+
     handover = render_result_envelope_handover(merged)
     assert "evidence:" in handover
     assert "confidence: low" in handover
@@ -1181,6 +1336,7 @@ def test_m20_extreme_pressure_8_agents():
 # ═══════════════════════════════════════════════════════════════
 # 边界条件补充：医疗大文本特有场景
 # ═══════════════════════════════════════════════════════════════
+
 
 def test_drug_interaction_db_evidence():
     """药物交互数据库通过 grep 检索产生 evidence。"""
@@ -1247,7 +1403,7 @@ def test_render_prior_evidence_with_long_quotes():
     rendered = render_context_snapshot(snapshot)
     assert "<prior_evidence>" in rendered
     # 渲染时截断到 200 字符
-    quote_lines = [l for l in rendered.splitlines() if l.strip().startswith("quote:")]
+    quote_lines = [line for line in rendered.splitlines() if line.strip().startswith("quote:")]
     assert len(quote_lines) == 1
     assert "..." in quote_lines[0]  # 被截断了
 
@@ -1255,6 +1411,7 @@ def test_render_prior_evidence_with_long_quotes():
 # ═══════════════════════════════════════════════════════════════
 # 集成级测试：通过 _aggregate_results 验证真实 subagent 调用链路
 # ═══════════════════════════════════════════════════════════════
+
 
 def _make_subagent_tool_result(
     *,
@@ -1311,7 +1468,9 @@ def test_integrate_aggregate_results_medical():
     from prismclaw.engine.subagent.tool import SubAgentTool
 
     # Researcher 1: 成功检索药品说明书
-    msg1 = _make_read_messages("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100)
+    msg1 = _make_read_messages(
+        "/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100
+    )
     ev1 = _collect_evidence_from_messages(msg1)
     r1 = _make_subagent_tool_result(
         agent_name="researcher-1",
@@ -1339,7 +1498,9 @@ def test_integrate_aggregate_results_medical():
     )
 
     # Researcher 3: 超时退出——但 _lifecycle_mixin 仍创建了带 evidence 的 envelope
-    msg3 = _make_read_messages("/data/guidelines/ckd_dosing.txt", "eGFR 30-45: 减量至500mg bid", offset=1, limit=30)
+    msg3 = _make_read_messages(
+        "/data/guidelines/ckd_dosing.txt", "eGFR 30-45: 减量至500mg bid", offset=1, limit=30
+    )
     ev3 = _collect_evidence_from_messages(msg3)
 
     # 注意：outcome="timeout"——_lifecycle_mixin 中 outcome != "success"
@@ -1352,6 +1513,7 @@ def test_integrate_aggregate_results_medical():
             TextBlock,
             ToolResult,
         )
+
         timeout_envelope = SubagentResultEnvelope(
             summary="[timeout] 部分检索完成",
             findings=["[MEDIUM] eGFR 30-45建议减量"],
@@ -1399,11 +1561,7 @@ def test_integrate_aggregate_results_medical():
     ]
     assert [len(item.envelope.findings) for item in items] == [2, 2, 1]
 
-    paths = {
-        evidence.source_path
-        for item in items
-        for evidence in item.envelope.evidence
-    }
+    paths = {evidence.source_path for item in items for evidence in item.envelope.evidence}
     assert paths == {
         "/data/drug_labels/metformin.txt",
         "https://guidelines.diabetes.cn/t2dm-2024",
@@ -1420,6 +1578,7 @@ def test_integrate_aggregate_results_medical():
         _extract_structured_tool_result_sections,
         _merge_subagent_result_update,
     )
+
     synthesized = SubagentResultEnvelope(
         summary="主 Agent 综合检索结果",
         findings=[finding for item in items for finding in item.envelope.findings],
@@ -1449,7 +1608,9 @@ def test_integrate_aggregate_results_with_errors():
     from prismclaw.engine.subagent.tool import SubAgentTool
 
     # 成功的 researcher
-    msg1 = _make_read_messages("/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100)
+    msg1 = _make_read_messages(
+        "/data/drug_labels/metformin.txt", DRUG_LABEL_METFORMIN, offset=1, limit=100
+    )
     ev1 = _collect_evidence_from_messages(msg1)
     r1 = _make_subagent_tool_result(
         agent_name="researcher-1",
@@ -1479,6 +1640,7 @@ def test_integrate_aggregate_results_with_errors():
         TextBlock,
         ToolResult,
     )
+
     timeout_env3 = SubagentResultEnvelope(
         summary="[timeout] 部分完成",
         findings=["[MEDIUM] 部分数据获取"],

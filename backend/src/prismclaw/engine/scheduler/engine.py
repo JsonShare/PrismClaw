@@ -22,10 +22,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from croniter import croniter
 
+from prismclaw.infra.redis import resolve
 from prismclaw.schema.scheduler import (
     INVALIDATE_CHANNEL,
     ScheduledTask,
@@ -35,6 +38,14 @@ from prismclaw.schema.scheduler import (
 from prismclaw.schema.scheduler import (
     SchedulerStoreProtocol as SchedulerStore,
 )
+from prismclaw.schema.scheduler.scheduler import SchedulerDispatchJob
+from prismclaw.schema.storage.persistence_types import LockManager
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+    from redis.asyncio.client import PubSub
+
+    from prismclaw.infra.settings import SchedulerSettings
 
 logger = logging.getLogger(__name__)
 
@@ -46,10 +57,10 @@ class SchedulerEngine:
         self,
         *,
         store: SchedulerStore,
-        dispatch_enqueue,  # async callable(SchedulerDispatchJob) -> None
-        settings,  # SchedulerSettings
-        lock_manager=None,  # LockManager | None
-        redis=None,  # aioredis.Redis | None — enables cross-worker invalidation
+        dispatch_enqueue: Callable[[SchedulerDispatchJob], Awaitable[None]],
+        settings: SchedulerSettings,
+        lock_manager: LockManager | None = None,
+        redis: aioredis.Redis | None = None,
         worker_id: str = "",  # this process's identity (embedded in the lock)
     ) -> None:
         self._store = store
@@ -66,10 +77,10 @@ class SchedulerEngine:
         self._recovered = False
         self._running = False
         self._stopping = False
-        self._pubsub = None
-        self._watch_task: asyncio.Task | None = None
-        self._heartbeat_task: asyncio.Task | None = None
-        self._redis_heartbeat_task: asyncio.Task | None = None
+        self._pubsub: PubSub | None = None
+        self._watch_task: asyncio.Task[Any] | None = None
+        self._heartbeat_task: asyncio.Task[Any] | None = None
+        self._redis_heartbeat_task: asyncio.Task[Any] | None = None
 
     # ── Public API ─────────────────────────────────────────────────────
 
@@ -257,9 +268,7 @@ class SchedulerEngine:
         try:
             await self._dispatch_enqueue(job)
         except Exception:
-            await self._store.update_run(
-                run.id, status="failed", error="dispatch_enqueue_failed"
-            )
+            await self._store.update_run(run.id, status="failed", error="dispatch_enqueue_failed")
             logger.exception(
                 "scheduler.task.dispatch_failed",
                 extra={"task_id": task.id, "run_id": run.id},
@@ -371,14 +380,18 @@ class SchedulerEngine:
         max_backoff_s = 30.0
         while not self._stopping:
             try:
-                self._pubsub = self._redis.pubsub()
-                await self._pubsub.subscribe(INVALIDATE_CHANNEL)
+                redis = self._redis
+                if redis is None:
+                    return
+                pubsub = redis.pubsub()
+                self._pubsub = pubsub
+                await pubsub.subscribe(INVALIDATE_CHANNEL)
                 logger.info(
                     "scheduler.invalidation.subscribed",
                     extra={"channel": INVALIDATE_CHANNEL},
                 )
                 backoff_s = 1.0
-                async for message in self._pubsub.listen():
+                async for message in pubsub.listen():
                     if self._stopping:
                         break
                     if message.get("type") != "message":
@@ -463,8 +476,11 @@ class SchedulerEngine:
         lock (so a subsequent loss re-reports even for the same holder).
         """
         holder: str | None
+        lock = self._lock
+        if lock is None:
+            return
         try:
-            holder = await self._lock.owner_of(self._settings.leader_lock_key)
+            holder = await lock.owner_of(self._settings.leader_lock_key)
         except Exception:
             logger.debug("scheduler.lock.holder_lookup_failed", exc_info=True)
             holder = "unknown"
@@ -568,7 +584,7 @@ class SchedulerEngine:
                 if self._redis is None or self._stopping:
                     continue
                 try:
-                    await self._redis.ping()
+                    await resolve(self._redis.ping())
                 except asyncio.CancelledError:
                     raise
                 except Exception:

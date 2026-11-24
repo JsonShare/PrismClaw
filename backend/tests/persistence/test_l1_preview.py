@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import time
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -124,9 +122,7 @@ class _FakeRedis:
 async def test_evict_prefers_superseded_over_recent() -> None:
     superseded = _entry("sup", content="x", updated_at=999.0, supersedes=["z"])
     normal = _entry("nrm", content="y", updated_at=1.0)
-    fields = {
-        e.id: e.model_dump_json() for e in (superseded, normal)
-    }
+    fields = {e.id: e.model_dump_json() for e in (superseded, normal)}
     redis = _FakeRedis(fields)
     index = RedisL1Index(redis)  # type: ignore[arg-type]
     index._max_entries = 1
@@ -134,3 +130,44 @@ async def test_evict_prefers_superseded_over_recent() -> None:
     # 被淘汰的必须是 superseded 条目（尽管它更新时间最新）
     assert "sup" in redis.deleted
     assert "nrm" not in redis.deleted
+
+
+# ── 读边界隔离：单条损坏不得毒死整批（写边界仍严格） ─────────────────────
+
+
+def _poisoned(field: str) -> str:
+    """构造一条旧词表残留记录（type='procedures' 已非法）。"""
+    return MemoryEntry.model_construct(
+        id=field, layer="L1", type="procedures", content="x", created_at=1.0, updated_at=1.0
+    ).model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_index_get_isolates_and_purges_poisoned_field() -> None:
+    good = _entry("good", content="ok")
+    redis = _FakeRedis({"good": good.model_dump_json(), "bad": _poisoned("bad")})
+    index = RedisL1Index(redis)  # type: ignore[arg-type]
+
+    entries = await index.index_get("k")
+
+    assert [e.id for e in entries] == ["good"]  # 好条目照常返回
+    assert "bad" in redis.deleted  # 坏字段就地清除，读取即自愈
+
+    # 自愈后再次读取不再失败，且只返回剩余条目
+    redis.deleted.clear()
+    again = await index.index_get("k")
+    assert [e.id for e in again] == ["good"]
+    assert redis.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_evict_purges_poisoned_field_so_writes_continue() -> None:
+    """写入路径 index_update → _evict 不因坏字段停摆（否则 L1 永久锁死）。"""
+    good = _entry("good", content="ok")
+    redis = _FakeRedis({"good": good.model_dump_json(), "bad": _poisoned("bad")})
+    index = RedisL1Index(redis)  # type: ignore[arg-type]
+
+    await index.index_update("k", _entry("new", content="fresh"))
+
+    assert "bad" in redis.deleted
+    assert "new" in redis._fields  # 新条目成功写入

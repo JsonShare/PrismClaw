@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import os
+
 """Scheme-tagged password hashing for the DB-backed web user store.
 
 Storage format: ``<scheme>:<payload>``
@@ -14,10 +19,6 @@ The scheme tag makes the format forward-compatible: operators can switch to
 and re-hashing on next password change.
 """
 
-import base64
-import hashlib
-import hmac
-import os
 
 _SCRYPT_N = 16384  # 2^14 — memory-hard cost factor
 _SCRYPT_R = 8

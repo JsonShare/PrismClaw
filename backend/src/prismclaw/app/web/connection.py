@@ -10,13 +10,15 @@ import logging
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from fastapi import WebSocket
 
 from prismclaw.app.gateway.event_codec import (
     encode_forward_event,
     web_session_key,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +49,12 @@ class ConnectionState:
 
 class ConnectionRegistry:
     def __init__(self) -> None:
-        self._connections: dict[str, set[Any]] = {}
+        self._connections: dict[str, set[WebSocket]] = {}
 
-    def connect(self, user_id: str, ws: Any) -> None:
+    def connect(self, user_id: str, ws: WebSocket) -> None:
         self._connections.setdefault(user_id, set()).add(ws)
 
-    def disconnect(self, user_id: str, ws: Any) -> None:
+    def disconnect(self, user_id: str, ws: WebSocket) -> None:
         conns = self._connections.get(user_id)
         if conns is not None:
             conns.discard(ws)
@@ -84,7 +86,14 @@ def _resolve_connection_registry(state: ConnectionState) -> ConnectionRegistry |
     return registry if isinstance(registry, ConnectionRegistry) else None
 
 
-def _resolve_gateway_router(state: ConnectionState) -> Any | None:
+@runtime_checkable
+class GatewayRouterLike(Protocol):
+    """跨节点转发路由器的最小视图（仅需 ``route``）。"""
+
+    async def route(self, session_key: str, payload: dict[str, Any]) -> str: ...
+
+
+def _resolve_gateway_router(state: ConnectionState) -> GatewayRouterLike | None:
     """Best-effort lookup of this node's gateway router.
 
     ``web_deps`` is rebuilt on plugin reload, so the router is read at send
@@ -94,7 +103,8 @@ def _resolve_gateway_router(state: ConnectionState) -> Any | None:
         web_deps = state.ws.app.state.web_deps
     except Exception:  # noqa: BLE001 - 非 app 上下文（测试替身）无此结构
         return None
-    return getattr(web_deps, "gateway_router", None)
+    router = getattr(web_deps, "gateway_router", None)
+    return router if isinstance(router, GatewayRouterLike) else None
 
 
 async def _fanout_to_peer_connections(

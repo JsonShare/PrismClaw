@@ -22,6 +22,7 @@ plugins/agents/IDENTITY.md/PREFERENCES.md/.gitignore（项目未上线，全部�
 
 幂等：多次启动 sync 结果相同。旧位置清理只跑一次（清理 marker 存在则跳过）。
 """
+
 from __future__ import annotations
 
 import filecmp
@@ -250,9 +251,10 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
             unmanaged = _unmanaged_files(src_entry, dst_entry)
             if unmanaged:
                 logger.warning(
-                    "sync: %s 下有 %d 个非 repo 管控文件（用户/插件数据），"
-                    "将保留不删：%s",
-                    name, len(unmanaged), unmanaged[:5],
+                    "sync: %s 下有 %d 个非 repo 管控文件（用户/插件数据），将保留不删：%s",
+                    name,
+                    len(unmanaged),
+                    unmanaged[:5],
                 )
             try:
                 current |= _prune_managed(src_entry, dst_entry, previous, name)
@@ -283,9 +285,12 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
         _write_manifest(target, current)
 
     logger.info(
-        "sync_prismclaw_home: source=%s → target=%s, entries_synced=%d, "
-        "failed=%d, drifted=%d",
-        source, target, result.synced, len(result.failed), len(result.drifted),
+        "sync_prismclaw_home: source=%s → target=%s, entries_synced=%d, failed=%d, drifted=%d",
+        source,
+        target,
+        result.synced,
+        len(result.failed),
+        len(result.drifted),
     )
     if result.failed:
         logger.error(
@@ -305,8 +310,5 @@ if __name__ == "__main__":  # pragma: no cover - 手动同步入口
 
     _root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
     _res = sync_prismclaw_home(_root)
-    print(
-        f"target={_res.target}\n"
-        f"synced={_res.synced} failed={_res.failed} drifted={_res.drifted}"
-    )
+    print(f"target={_res.target}\nsynced={_res.synced} failed={_res.failed} drifted={_res.drifted}")
     raise SystemExit(0 if _res.ok else 1)

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import text
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.persistence.sql_runner import apply_core_schema
@@ -79,7 +82,10 @@ class PostgresDreamStateStore:
         await self._init_schema()
         async with self._sf() as session:
             result = await session.execute(
-                text(f"SELECT {_SELECT_COLUMNS} FROM pc_dream_states WHERE session_key = :session_key"),
+                text(
+                    f"SELECT {_SELECT_COLUMNS} FROM pc_dream_states "
+                    "WHERE session_key = :session_key"
+                ),
                 {"session_key": session_key},
             )
             row = result.mappings().first()
@@ -96,13 +102,11 @@ class PostgresDreamStateStore:
     async def list_states(self) -> list[DreamSessionState]:
         await self._init_schema()
         async with self._sf() as session:
-            result = await session.execute(
-                text(f"SELECT {_SELECT_COLUMNS} FROM pc_dream_states")
-            )
+            result = await session.execute(text(f"SELECT {_SELECT_COLUMNS} FROM pc_dream_states"))
             return [_row_to_state(row) for row in result.mappings()]
 
 
-def _row_to_state(row) -> DreamSessionState:
+def _row_to_state(row: RowMapping) -> DreamSessionState:
     return DreamSessionState(
         session_key=row["session_key"],
         dream_pending=bool(row["dream_pending"]),
@@ -133,7 +137,7 @@ def _row_to_state(row) -> DreamSessionState:
     )
 
 
-def _state_to_params(state: DreamSessionState) -> dict:
+def _state_to_params(state: DreamSessionState) -> dict[str, Any]:
     return {
         "session_key": state.session_key,
         "dream_pending": state.dream_pending,
@@ -164,13 +168,15 @@ def _state_to_params(state: DreamSessionState) -> dict:
     }
 
 
-def _maybe_float(value) -> float | None:
+def _maybe_float(value: object) -> float | None:
     if value is None:
         return None
-    return float(value)
+    if isinstance(value, str | int | float):
+        return float(value)
+    raise TypeError(f"pc_dream_states 浮点列取值非法: {type(value).__name__}")
 
 
-def _maybe_str(value) -> str | None:
+def _maybe_str(value: object) -> str | None:
     if value is None:
         return None
     text = str(value)

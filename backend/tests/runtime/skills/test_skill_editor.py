@@ -6,6 +6,7 @@ Uses the real parser (parse_skill_file) and real origin classifier
 ``editable`` normalization and the discovery skip of ``.backups`` are exercised
 end-to-end rather than mocked.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,17 +17,16 @@ import pytest
 from prismclaw.runtime.skills import editor as editor_mod
 from prismclaw.runtime.skills.discovery import discover_skills
 from prismclaw.runtime.skills.editor import (
-    EditFailed,
-    EditForbidden,
+    EditFailedError,
+    EditForbiddenError,
     SkillEditError,
     SkillEditor,
-    SkillNotFound,
+    SkillNotFoundError,
 )
-from prismclaw.runtime.skills.parser import parse_skill_file
 from prismclaw.runtime.skills.origin import classify_skill_origin
+from prismclaw.runtime.skills.parser import parse_skill_file
 from prismclaw.schema.agent.domains import SkillSource
 from prismclaw.schema.shared.exceptions import SkillParseError
-
 
 # ---------------------------------------------------------------------------
 # fixtures / helpers
@@ -52,10 +52,7 @@ def _write_skill(root: Path, name: str, *, editable: bool | None, extra_fm: str 
         "name: " + name + "\n"
         "description: original description\n"
         "name_zh: 演示\n"
-        "custom_unknown_key: keep-me\n"
-        + editable_line
-        + extra_fm
-        + "---\n"
+        "custom_unknown_key: keep-me\n" + editable_line + extra_fm + "---\n"
         "\n"
         "# Demo skill\n"
         "\n"
@@ -100,7 +97,7 @@ def test_default_is_not_editable(tmp_path):
     manifest = parse_skill_file(md)
     assert manifest.editable is False
     ed, _ = _make_editor(tmp_path)
-    with pytest.raises(EditForbidden) as ei:
+    with pytest.raises(EditForbiddenError) as ei:
         ed.edit(manifest, description="new")
     assert ei.value.status_code == 403
     # file untouched
@@ -112,7 +109,7 @@ def test_editable_false_is_not_editable(tmp_path):
     manifest = parse_skill_file(md)
     assert manifest.editable is False
     ed, _ = _make_editor(tmp_path)
-    with pytest.raises(EditForbidden):
+    with pytest.raises(EditForbiddenError):
         ed.edit(manifest, description="new")
 
 
@@ -181,7 +178,7 @@ def test_readonly_origin_rejected(tmp_path):
     md = _write_skill(tmp_path, "demo", editable=True)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(tmp_path, classify=lambda *a, **k: SkillSource.BUNDLED)
-    with pytest.raises(EditForbidden) as ei:
+    with pytest.raises(EditForbiddenError) as ei:
         ed.edit(manifest, description="x")
     assert ei.value.status_code == 403
 
@@ -192,7 +189,7 @@ def test_outside_workspace_rejected(tmp_path):
     manifest = parse_skill_file(md)
     # editor rooted at a *different* dir → containment guard trips
     ed, _ = _make_editor(tmp_path / "elsewhere")
-    with pytest.raises(EditForbidden):
+    with pytest.raises(EditForbiddenError):
         ed.edit(manifest, description="x")
 
 
@@ -201,7 +198,7 @@ def test_missing_file_raises_not_found(tmp_path):
     manifest = parse_skill_file(md)
     md.unlink()
     ed, _ = _make_editor(tmp_path)
-    with pytest.raises(SkillNotFound):
+    with pytest.raises(SkillNotFoundError):
         ed.edit(manifest, description="x")
 
 
@@ -219,7 +216,7 @@ def test_rollback_on_parse_failure(tmp_path):
         raise SkillParseError("synthetic parse failure")
 
     ed, _ = _make_editor(tmp_path, parse_fn=_boom)
-    with pytest.raises(EditFailed) as ei:
+    with pytest.raises(EditFailedError) as ei:
         ed.edit(manifest, description="should be rolled back")
     assert ei.value.status_code == 500
     # content restored to the pre-edit snapshot
@@ -227,7 +224,7 @@ def test_rollback_on_parse_failure(tmp_path):
 
 
 def test_backup_failure_aborts_edit_before_write(tmp_path, monkeypatch):
-    # snapshot fails (read-only dir / disk full) → clean EditFailed(500),
+    # snapshot fails (read-only dir / disk full) → clean EditFailedError(500),
     # the SKILL.md is never touched, no invalidation fires
     md = _write_skill(tmp_path, "demo", editable=True)
     manifest = parse_skill_file(md)
@@ -238,7 +235,7 @@ def test_backup_failure_aborts_edit_before_write(tmp_path, monkeypatch):
 
     monkeypatch.setattr(editor_mod.shutil, "copytree", _boom)
     ed, calls = _make_editor(tmp_path)
-    with pytest.raises(EditFailed) as ei:
+    with pytest.raises(EditFailedError) as ei:
         ed.edit(manifest, description="x")
     assert ei.value.status_code == 500
     assert md.read_text(encoding="utf-8") == original
@@ -260,12 +257,10 @@ def test_snapshot_cleans_partial_dest_on_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(editor_mod.shutil, "copytree", _partial)
     ed, _ = _make_editor(tmp_path)
-    with pytest.raises(EditFailed):
+    with pytest.raises(EditFailedError):
         ed.edit(manifest, description="x")
     backups_dir = md.parent / ".backups"
-    leftovers = (
-        [p for p in backups_dir.iterdir() if p.is_dir()] if backups_dir.exists() else []
-    )
+    leftovers = [p for p in backups_dir.iterdir() if p.is_dir()] if backups_dir.exists() else []
     assert leftovers == []
 
 
@@ -293,8 +288,8 @@ def test_restore_reverts(tmp_path):
     md = _write_skill(tmp_path, "demo", editable=True)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(tmp_path)
-    ed.edit(manifest, description="v2")            # this backup captures "original"
-    second = ed.edit(manifest, description="v3")   # this backup captures "v2"
+    ed.edit(manifest, description="v2")  # this backup captures "original"
+    second = ed.edit(manifest, description="v3")  # this backup captures "v2"
     assert "v3" in md.read_text(encoding="utf-8")
     # each edit's backup is the PRE-edit state → restore the 2nd backup to reach v2
     res = ed.restore(manifest, second.backup_id)
@@ -310,7 +305,7 @@ def test_restore_unknown_backup_raises(tmp_path):
     md = _write_skill(tmp_path, "demo", editable=True)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(tmp_path)
-    with pytest.raises(SkillNotFound):
+    with pytest.raises(SkillNotFoundError):
         ed.restore(manifest, "does-not-exist")
 
 
@@ -363,9 +358,7 @@ def _write_skill_at(skill_dir: Path, name: str, *, editable: bool | None) -> Pat
     content = (
         "---\n"
         "name: " + name + "\n"
-        "description: original description\n"
-        + editable_line
-        + "---\n"
+        "description: original description\n" + editable_line + "---\n"
         "\n"
         "# Demo skill\n"
         "\n"
@@ -413,7 +406,7 @@ def test_plugin_skill_without_opt_in_still_locked(tmp_path):
     md = _write_skill_at(skill_dir, "pdemo", editable=None)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(ws, settings=_full_settings(), project_root=tmp_path)
-    with pytest.raises(EditForbidden) as ei:
+    with pytest.raises(EditForbiddenError) as ei:
         ed.edit(manifest, description="x")
     assert ei.value.status_code == 403
     assert "original description" in md.read_text(encoding="utf-8")
@@ -429,7 +422,7 @@ def test_system_origin_blocked_even_when_opted_in(tmp_path):
         project_root=tmp_path,
         classify=lambda *a, **k: SkillSource.BUNDLED,
     )
-    with pytest.raises(EditForbidden) as ei:
+    with pytest.raises(EditForbiddenError) as ei:
         ed.edit(manifest, description="x")
     assert ei.value.status_code == 403
 
@@ -443,7 +436,7 @@ def test_outside_all_roots_rejected(tmp_path):
     md = _write_skill_at(skill_dir, "demo", editable=True)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(ws, settings=_full_settings(), project_root=proj)
-    with pytest.raises(EditForbidden) as ei:
+    with pytest.raises(EditForbiddenError) as ei:
         ed.edit(manifest, description="x")
     assert ei.value.status_code == 403
     assert "outside the managed skill roots" in str(ei.value)

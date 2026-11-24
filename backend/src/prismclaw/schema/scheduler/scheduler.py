@@ -4,13 +4,14 @@ Protocol for task scheduling — store, engine, and dispatch interfaces.
 Canonical definitions of scheduler data types live here so that the
 contracts layer (L0) does not depend on the engine layer (L1).
 """
+
 from __future__ import annotations
 
 import hashlib
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 # ── Constants ────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ class ScheduledTask:
     name: str = ""
     instruction: str = ""
     cron_expr: str = ""
-    schedule_spec: dict = field(default_factory=dict)
+    schedule_spec: dict[str, Any] = field(default_factory=dict)
     enabled: bool = True
     conversation_id: str | None = None
     last_fired_at: float | None = None
@@ -93,7 +94,10 @@ class SchedulerDispatchJob:
 
 
 class SchedulerStoreProtocol(Protocol):
-    """Protocol for scheduler persistence — duck-typing compatible with scheduler/store.SchedulerStore."""
+    """
+    Protocol for scheduler persistence — duck-typing compatible with
+    scheduler/store.SchedulerStore.
+    """
 
     async def list_tasks(
         self,
@@ -162,7 +166,10 @@ class SchedulerStoreProtocol(Protocol):
 
 
 class SchedulerEngineProtocol(Protocol):
-    """Protocol for the scheduler engine — duck-typing compatible with scheduler/engine.SchedulerEngine."""
+    """
+    Protocol for the scheduler engine — duck-typing compatible with
+    scheduler/engine.SchedulerEngine.
+    """
 
     async def start(self) -> None:
         """Start the scheduler."""

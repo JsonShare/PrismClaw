@@ -305,7 +305,7 @@ export function useFilePreviewController({
         setSelectedFile(rawPath)
         setSelectedFileError(
           looksLikeAbs
-            ? '云端部署无法访问本地路径，请将文件生成到工作区（使用相对路径，如 outputs/report.docx）'
+            ? '云端部署无法访问本地路径，请将文件生成到工作区（使用相对路径，如 outbox/report.docx）'
             : '无法预览该文件路径',
         )
         revokePreviewBlobUrl()

@@ -5,6 +5,7 @@
 - GET /             查询当前医生的咨询列表
 - GET /{session_id} 按 session_id 查询单条咨询（工具入口校验用）
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,8 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from prismclaw.app.auth.auth import get_current_user
 
 from ..models.schemas import CreateConsultationRequest
-from ..persistence.helpers import get_medical_store
 from ..models.view_models import consultation_to_vm
+from ..persistence.helpers import get_medical_store
 
 router = APIRouter(tags=["medical-consultations"])
 
@@ -45,6 +46,7 @@ async def create_consultation(
 
     # 插入登记行
     import uuid
+
     consultation_id = str(uuid.uuid4())
     await store.insert_consultation(
         consultation_id=consultation_id,

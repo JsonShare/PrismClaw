@@ -12,22 +12,14 @@ import json
 import logging
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
-from prismclaw.engine.services.llm.client import LiteLLMClient
-from prismclaw.schema.config.config import EvolutionConfig
-from prismclaw.schema.llm.request import PackedLLMRequest
-from prismclaw.schema.memory.classify import SOP_MEMORY_TYPE
-from prismclaw.schema.memory.memory_types import MemoryEntry
-from prismclaw.schema.session.ids import derive_memory_session_key
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.storage.storage_types import SessionStore
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
 
-# Re-export from sub-modules for backward compatibility
-from prismclaw.engine.services._sop_types import (  # noqa: F401 - re-exported for runtime facade
-    ExtractionResult,
-    format_extraction_result_zh,
-)
+    from prismclaw.engine.hooks.memory_nudge_hook import MemoryNudgeHook
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
+
 from prismclaw.engine.services._sop_parse import (
     _build_segments,
     _format_sop_content,
@@ -36,6 +28,21 @@ from prismclaw.engine.services._sop_parse import (
     _parse_sop_tool_calls,
     _validate_sop,
 )
+
+# Re-export from sub-modules for backward compatibility
+from prismclaw.engine.services._sop_types import (  # noqa: F401 - re-exported for runtime facade
+    ExtractionResult as ExtractionResult,
+)
+from prismclaw.engine.services._sop_types import (
+    format_extraction_result_zh as format_extraction_result_zh,
+)
+from prismclaw.infra.redis import resolve
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.llm.types import LLMClient
+from prismclaw.schema.memory.classify import SOP_MEMORY_TYPE
+from prismclaw.schema.memory.memory_types import MemoryEntry
+from prismclaw.schema.session.ids import derive_memory_session_key
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +69,19 @@ _SOP_SYSTEM = """你是一个 AI 代理运行时中的精准 SOP 提取器。
   ]
 }
 """
+
+
+class SopExtractionSettings(Protocol):
+    """SOP 提取只读取这几个开关与阈值，不绑定具体配置类。"""
+
+    enabled: bool
+    extraction_model: str | None
+    max_sops_per_extraction: int
+    description_max_chars: int
+    procedure_max_chars: int
+    dedup_overlap_threshold: float
+    min_tool_calls_for_extraction: int
+
 
 _SOP_TOOL: dict[str, Any] = {
     "type": "function",
@@ -121,7 +141,9 @@ EXTRACTION_PROMPT_TEMPLATE = """\
 - 绝不要包含凭据、API key、具体 URL、用户名或 PII
 
 有效输出示例：
-{{"sops": [{{"name": "monthly-report-delivery", "description": "月度报告定稿后的分发流程", "procedure": "1. 核对数据口径\\n2. 生成定稿\\n3. 交叉复核\\n4. 分发给相关方"}}]}}
+{{"sops": [{{"name": "monthly-report-delivery",
+  "description": "月度报告定稿后的分发流程",
+  "procedure": "1. 核对数据口径\\n2. 生成定稿\\n3. 交叉复核\\n4. 分发给相关方"}}]}}
 
 输出格式：只调用 `sop_extractor`。若没有合格内容，则以 `{{"sops": []}}` 调用它。
 
@@ -131,7 +153,7 @@ EXTRACTION_PROMPT_TEMPLATE = """\
 """
 
 
-async def _check_user_ratelimit(redis_client: Any, session_key: str) -> bool:  # noqa: ANN401
+async def _check_user_ratelimit(redis_client: aioredis.Redis, session_key: str) -> bool:
     """Check rate limit for user-initiated extraction triggers.
 
     Uses SETNX with 60-second TTL. Returns True if allowed, False if in cooldown.
@@ -195,10 +217,10 @@ async def _is_duplicate(
 async def extract_sop_background(
     memory_store: MemoryStore,
     session_store: SessionStore,
-    redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMClient,
+    redis_client: aioredis.Redis,
+    llm_client: LLMClient,
     session_id: str,
-    settings: EvolutionConfig,
+    settings: SopExtractionSettings,
 ) -> ExtractionResult:
     """Background SOP extraction triggered at session boundaries.
 
@@ -219,7 +241,7 @@ async def extract_sop_background(
 
     try:
         try:
-            raw = await redis_client.hgetall(candidates_key)
+            raw = await resolve(redis_client.hgetall(candidates_key))
         except Exception:
             logger.warning("failed to read candidates for %s", session_id, exc_info=True)
             result.error = "redis_read_failed"
@@ -337,7 +359,7 @@ async def extract_sop_background(
         return result
 
 
-async def _cleanup(redis_client: Any, candidates_key: str) -> None:  # noqa: ANN401
+async def _cleanup(redis_client: aioredis.Redis, candidates_key: str) -> None:
     """Delete candidates hash to mark this session's batch as processed."""
     try:
         await redis_client.delete(candidates_key)
@@ -347,15 +369,15 @@ async def _cleanup(redis_client: Any, candidates_key: str) -> None:  # noqa: ANN
 
 async def maybe_spawn_extraction(
     *,
-    task_manager: Any,  # noqa: ANN401
+    task_manager: TaskManagerProtocol,
     memory_store: MemoryStore,
     session_store: SessionStore,
-    redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMClient,
+    redis_client: aioredis.Redis,
+    llm_client: LLMClient,
     session_id: str,
-    settings: Any,  # noqa: ANN401
+    settings: SopExtractionSettings,
     min_tool_calls: int | None = None,
-    nudge_hook: Any = None,  # noqa: ANN401
+    nudge_hook: MemoryNudgeHook | None = None,
 ) -> bool:
     """Conditionally spawn extract_sop_background with SETNX distributed lock.
 
@@ -377,7 +399,7 @@ async def maybe_spawn_extraction(
         else getattr(settings, "min_tool_calls_for_extraction", 2)
     )
     try:
-        all_entries = await redis_client.hgetall(candidates_key)
+        all_entries = await resolve(redis_client.hgetall(candidates_key))
     except Exception:
         logger.warning("redis hgetall failed for %s", session_id, exc_info=True)
         return False
@@ -444,12 +466,12 @@ async def extract_sops_sync(
     *,
     memory_store: MemoryStore,
     session_store: SessionStore,
-    redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMClient,
+    redis_client: aioredis.Redis,
+    llm_client: LLMClient,
     session_id: str,
-    settings: Any,  # noqa: ANN401
+    settings: SopExtractionSettings,
     min_tool_calls: int | None = None,
-    nudge_hook: Any = None,  # noqa: ANN401
+    nudge_hook: MemoryNudgeHook | None = None,
 ) -> ExtractionResult:
     """Run SOP extraction synchronously and return its outcome.
 
@@ -478,7 +500,7 @@ async def extract_sops_sync(
         else getattr(settings, "min_tool_calls_for_extraction", 2)
     )
     try:
-        all_entries = await redis_client.hgetall(candidates_key)
+        all_entries = await resolve(redis_client.hgetall(candidates_key))
     except Exception:
         logger.warning("redis hgetall failed for %s", session_id, exc_info=True)
         return ExtractionResult(spawned=False, skip_reason="redis_error", error="hgetall_failed")
@@ -545,11 +567,11 @@ async def extract_sops_sync(
 async def _extract_then_reset(
     memory_store: MemoryStore,
     session_store: SessionStore,
-    redis_client: Any,  # noqa: ANN401
-    llm_client: LiteLLMClient,
+    redis_client: aioredis.Redis,
+    llm_client: LLMClient,
     session_id: str,
-    settings: Any,  # noqa: ANN401
-    nudge_hook: Any,  # noqa: ANN401
+    settings: SopExtractionSettings,
+    nudge_hook: MemoryNudgeHook | None,
     lock_key: str,
 ) -> None:
     """Run extraction, reset nudge counter, release distributed lock."""
@@ -578,7 +600,7 @@ async def _extract_then_reset(
 
 
 async def _call_llm_with_retry(
-    llm_client: LiteLLMClient,
+    llm_client: LLMClient,
     prompt_text: str,
     model: str | None,
 ) -> list[dict[str, Any]]:

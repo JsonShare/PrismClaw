@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.schema.audit.audit_types import RetrievalAuditEntry
@@ -122,10 +123,18 @@ class PostgresRetrievalAuditLog:
             total_duration_s=sum(entry.duration_s for entry in entries),
             total_memory_candidates=sum(entry.memory_candidate_count for entry in entries),
             total_archive_candidates=sum(entry.archive_candidate_count for entry in entries),
-            total_memory_text_candidates=sum(entry.memory_text_candidate_count for entry in entries),
-            total_memory_vector_candidates=sum(entry.memory_vector_candidate_count for entry in entries),
-            total_archive_text_candidates=sum(entry.archive_text_candidate_count for entry in entries),
-            total_archive_vector_candidates=sum(entry.archive_vector_candidate_count for entry in entries),
+            total_memory_text_candidates=sum(
+                entry.memory_text_candidate_count for entry in entries
+            ),
+            total_memory_vector_candidates=sum(
+                entry.memory_vector_candidate_count for entry in entries
+            ),
+            total_archive_text_candidates=sum(
+                entry.archive_text_candidate_count for entry in entries
+            ),
+            total_archive_vector_candidates=sum(
+                entry.archive_vector_candidate_count for entry in entries
+            ),
             total_selected_memories=sum(entry.selected_memory_count for entry in entries),
             total_selected_archives=sum(entry.selected_archive_count for entry in entries),
             memory_source_mix=_sum_distributions(entry.memory_source_mix for entry in entries),
@@ -135,8 +144,12 @@ class PostgresRetrievalAuditLog:
                 1 for entry in entries if entry.planner_graph_expansion_enabled
             ),
             archive_cache_hit_count=sum(1 for entry in entries if entry.archive_cache_hit),
-            memory_vector_fallback_count=sum(1 for entry in entries if entry.memory_vector_fallback),
-            archive_vector_fallback_count=sum(1 for entry in entries if entry.archive_vector_fallback),
+            memory_vector_fallback_count=sum(
+                1 for entry in entries if entry.memory_vector_fallback
+            ),
+            archive_vector_fallback_count=sum(
+                1 for entry in entries if entry.archive_vector_fallback
+            ),
             l2l3_error_count=sum(1 for entry in entries if entry.l2l3_error),
             archive_error_count=sum(1 for entry in entries if entry.archive_error),
         )
@@ -180,7 +193,7 @@ def _entry_to_params(entry: RetrievalAuditEntry) -> dict[str, Any]:
     }
 
 
-def _entry_from_row(row: Any) -> RetrievalAuditEntry:
+def _entry_from_row(row: RowMapping) -> RetrievalAuditEntry:
     return RetrievalAuditEntry(
         session_key=str(row["session_key"]),
         retrieval_query=str(row["retrieval_query"]),
@@ -263,7 +276,7 @@ def _parse_sequence(raw: object) -> list[str]:
     return []
 
 
-def _sum_distributions(distributions: object) -> dict[str, int]:
+def _sum_distributions(distributions: Iterable[object]) -> dict[str, int]:
     merged: dict[str, int] = {}
     for distribution in distributions:
         if not isinstance(distribution, dict):

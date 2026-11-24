@@ -1,4 +1,5 @@
 """Environment helpers for the application package."""
+
 from __future__ import annotations
 
 import os

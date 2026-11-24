@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
-from prismclaw.infra.settings import Settings
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+
+from prismclaw.app.state.web_state import sync_web_runtime_state
 from prismclaw.assembly.workspace.cache import (
     clear_workspace_runner_deps_cache,
 )
-from prismclaw.assembly.wiring.runtime_state import (  # noqa: F401
-    resolve_dream_boundary,
-    resolve_dream_scheduler,
-)
-from prismclaw.app.state.web_state import sync_web_runtime_state
+from prismclaw.infra.settings import Settings
 
 
 def apply_app_runtime_state(
-    app: Any,
-    runner_deps: Any,
+    app: FastAPI,
+    runner_deps: AgentRunnerDeps,
     *,
     settings: Settings | None = None,
     clear_workspace_cache: bool = True,
@@ -33,16 +33,11 @@ def apply_app_runtime_state(
         if llm_client is not None:
             llm_client.default_model = settings.models.default_model
 
-    runtime_mcp_manager = getattr(runner_deps, "runtime_mcp_manager", None)
+    runtime_mcp_manager = runner_deps.plugin.runtime_mcp_manager
     if runtime_mcp_manager is not None or not hasattr(state, "mcp_manager"):
         state.mcp_manager = runtime_mcp_manager
 
-    state.dream_review_service = getattr(runner_deps.dream, "review_service", None)
-    state.dream_boundary = getattr(runner_deps.dream, "boundary", None)
-    state.dream_ops = getattr(runner_deps.dream, "ops", None) or getattr(
-        runner_deps.dream, "review_service", None
-    )
-    state.dream_scheduler = resolve_dream_boundary(runner_deps)
+    state.dream_ops = runner_deps.dream.ops or runner_deps.dream.review_service
 
     sync_web_runtime_state(app, runner_deps, settings=settings)
 

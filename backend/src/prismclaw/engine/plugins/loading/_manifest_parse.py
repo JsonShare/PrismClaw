@@ -21,7 +21,7 @@ from prismclaw.engine.plugins.paths import MANIFEST_REL_PATH
 logger = logging.getLogger(__name__)
 
 
-def _coerce_string_list(raw: Any) -> list[str] | None:
+def _coerce_string_list(raw: object) -> list[str] | None:
     """通用列表归一:非 list/None 返回 None;仅保留非空字符串 strip 后的元素。
 
     与 skills/parser._coerce_string_list 行为完全对齐,放在此处避免跨模块引
@@ -35,7 +35,7 @@ def _coerce_string_list(raw: Any) -> list[str] | None:
     return values or None
 
 
-def _load_json_file(path: Path) -> Any:
+def _load_json_file(path: Path) -> object:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -90,7 +90,7 @@ def _resolve_user_config(
     return resolved
 
 
-def _resolve_relative_paths(base: Path, raw: Any) -> list[Path]:
+def _resolve_relative_paths(base: Path, raw: object) -> list[Path]:
     """解析 manifest 中相对路径字段。"""
     if raw is None:
         return []
@@ -189,9 +189,10 @@ def _validate_hook_command_paths(hooks_config: dict[str, Any], install_path: Pat
                     full_path = Path(script_path)
                     if not full_path.is_file():
                         logger.warning(
-                            "Hook references missing script: %s "
-                            "(resolved from %s, event=%s)",
-                            full_path, command, event_name,
+                            "Hook references missing script: %s (resolved from %s, event=%s)",
+                            full_path,
+                            command,
+                            event_name,
                         )
 
 
@@ -205,6 +206,7 @@ def _extract_script_path_from_command(command: str) -> str | None:
     - /path/to/script.sh
     """
     import re
+
     patterns = [
         r"(?:python(?:3)?|bash|sh|zsh)\s+(\S+\.(?:py|sh|bash|zsh))",
         r"^(\S+\.(?:py|sh|bash|zsh))",

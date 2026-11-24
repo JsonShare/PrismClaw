@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from prismclaw.schema.storage.storage_types import UserStore
+from typing import Any
+
 from prismclaw.infra.settings import WebSettings
+from prismclaw.schema.storage.storage_types import UserStore
 
 
 async def seed_from_config(
@@ -10,7 +12,7 @@ async def seed_from_config(
     *,
     bootstrap_admin_id: str = "",
     bootstrap_admin_password: str = "",
-) -> dict:
+) -> dict[str, Any]:
     """One-time migration: populate the ``users`` table from config.
 
     Runs only when the table is empty. Plaintext config passwords are

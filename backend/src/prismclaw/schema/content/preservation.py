@@ -4,7 +4,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-PreservationItemKind = Literal["constraint", "decision", "question", "fact", "identifier", "artifact_ref"]
+PreservationItemKind = Literal[
+    "constraint", "decision", "question", "fact", "identifier", "artifact_ref"
+]
 LossClassification = Literal["lossless", "bounded_loss", "aggressive"]
 
 

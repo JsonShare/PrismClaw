@@ -11,8 +11,6 @@ from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.schema.llm.errors import LLMError, LLMErrorCode
-from prismclaw.schema.llm.types import LLMResponse, LLMStreamChunk, LLMUsage
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.engine.services.llm.provider_resolver import (
     _connection_error_types,
@@ -23,6 +21,9 @@ from prismclaw.engine.services.llm.provider_resolver import (
     model_supports_input,
     resolve_credentials,
 )
+from prismclaw.schema.llm.errors import LLMError, LLMErrorCode
+from prismclaw.schema.llm.request import PackedLLMRequest
+from prismclaw.schema.llm.types import LLMResponse, LLMStreamChunk, LLMUsage
 
 if TYPE_CHECKING:
     from prismclaw.schema.llm.provider_types import ModelEntry, ProviderConfig
@@ -37,6 +38,7 @@ _CONTEXT_PAYLOAD_ROLE_TEXT = (
 # ---------------------------------------------------------------------------
 # Request adapter helpers
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ProviderPreparedRequest:
@@ -81,7 +83,7 @@ def _should_disable_thinking(
 def _estimate_input_tokens(messages: list[Any], tools: list[Any]) -> int:
     from prismclaw.token_counting import count_bytes
 
-    def _size(obj: Any) -> int:
+    def _size(obj: object) -> int:
         try:
             payload = json.dumps(obj, ensure_ascii=False, default=str)
         except Exception:
@@ -96,9 +98,9 @@ class ProviderRequestAdapter:
     def adapt(
         self,
         *,
-        request: Any,
+        request: PackedLLMRequest,
         llm_provider: str | None,
-        prompt_cache_runtime: Any | None,
+        prompt_cache_runtime: object | None,
     ) -> ProviderPreparedRequest:
         if not request.context_payload:
             return ProviderPreparedRequest(
@@ -119,9 +121,9 @@ class ProviderRequestAdapter:
     def _adapt_with_context_bridge(
         self,
         *,
-        request: Any,
+        request: PackedLLMRequest,
         llm_provider: str | None,
-        prompt_cache_runtime: Any | None,
+        prompt_cache_runtime: object | None,
     ) -> list[dict[str, Any]]:
         from prismclaw.schema.llm.cache_types import EPHEMERAL_CACHE_CONTROL
         from prismclaw.schema.llm.request_format import (
@@ -203,7 +205,7 @@ def _provider_prefers_block_system_messages(provider_name: str | None) -> bool:
     return normalized == "openai"
 
 
-def _should_apply_cache_breakpoints(prompt_cache_runtime: Any | None) -> bool:
+def _should_apply_cache_breakpoints(prompt_cache_runtime: object | None) -> bool:
     if prompt_cache_runtime is None:
         return False
     return bool(
@@ -214,7 +216,7 @@ def _should_apply_cache_breakpoints(prompt_cache_runtime: Any | None) -> bool:
     )
 
 
-def _sanitize_tool_call_arguments_json(tool_calls: Any) -> Any:
+def _sanitize_tool_call_arguments_json(tool_calls: object) -> object:
     if not isinstance(tool_calls, list):
         return tool_calls
     out: list[dict[str, Any]] = []
@@ -254,54 +256,78 @@ def _sanitize_tool_call_arguments_json(tool_calls: Any) -> Any:
 # Chunk / usage conversion helpers
 # ---------------------------------------------------------------------------
 
-def _get(obj: Any, key: str) -> Any:
+
+def _get(obj: object, key: str) -> object:
     if obj is None:
         return None
-    if isinstance(obj, dict):
+    if isinstance(obj, Mapping):
         return obj.get(key)
     return getattr(obj, key, None)
 
 
-def _extract_usage(raw: Any) -> LLMUsage | None:
+def _as_int(value: object, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _as_str(value: object) -> str:
+    return value if isinstance(value, str) else ""
+
+
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _extract_usage(raw: object) -> LLMUsage | None:
     usage = _get(raw, "usage")
     if usage is None:
         return None
-    prompt = _get(usage, "prompt_tokens") or _get(usage, "input_tokens") or 0
-    completion = _get(usage, "completion_tokens") or _get(usage, "output_tokens") or 0
-    total = _get(usage, "total_tokens") or (prompt + completion)
+    prompt = _as_int(_get(usage, "prompt_tokens")) or _as_int(_get(usage, "input_tokens"))
+    completion = _as_int(_get(usage, "completion_tokens")) or _as_int(_get(usage, "output_tokens"))
+    total = _as_int(_get(usage, "total_tokens")) or (prompt + completion)
 
     cache_creation = 0
     cache_read = 0
     details = _get(usage, "prompt_tokens_details")
     if details is not None:
-        cache_read = int(_get(details, "cached_tokens") or 0)
-        cache_creation = int(_get(details, "cache_creation_tokens") or 0)
+        cache_read = _as_int(_get(details, "cached_tokens"))
+        cache_creation = _as_int(_get(details, "cache_creation_tokens"))
     if not cache_read:
-        cache_read = int(_get(usage, "cache_read_input_tokens") or 0)
+        cache_read = _as_int(_get(usage, "cache_read_input_tokens"))
     if not cache_creation:
-        cache_creation = int(_get(usage, "cache_creation_input_tokens") or 0)
+        cache_creation = _as_int(_get(usage, "cache_creation_input_tokens"))
 
     reasoning = 0
     completion_details = _get(usage, "completion_tokens_details")
     if completion_details is not None:
-        reasoning = int(_get(completion_details, "reasoning_tokens") or 0)
+        reasoning = _as_int(_get(completion_details, "reasoning_tokens"))
     if not reasoning:
-        reasoning = int(_get(usage, "reasoning_tokens") or 0)
+        reasoning = _as_int(_get(usage, "reasoning_tokens"))
 
     return LLMUsage(
-        input_tokens=int(prompt),
-        output_tokens=int(completion),
-        total_tokens=int(total),
+        input_tokens=prompt,
+        output_tokens=completion,
+        total_tokens=total,
         cache_creation_input_tokens=cache_creation,
         cache_read_input_tokens=cache_read,
         reasoning_tokens=reasoning,
     )
 
 
-def _normalize_tool_call(tc: Any, *, index: int | None = None) -> dict[str, Any]:
+def _normalize_tool_call(tc: object, *, index: int | None = None) -> dict[str, Any]:
     function = _get(tc, "function")
     return {
-        "index": index if index is not None else (_get(tc, "index") or 0),
+        "index": index if index is not None else _as_int(_get(tc, "index")),
         "id": _get(tc, "id"),
         "type": _get(tc, "type") or "function",
         "function": {
@@ -311,17 +337,16 @@ def _normalize_tool_call(tc: Any, *, index: int | None = None) -> dict[str, Any]
     }
 
 
-def _reasoning_text(payload: Any) -> str:
+def _reasoning_text(payload: object) -> str:
     return (
-        _get(payload, "reasoning_content")
-        or _get(payload, "reasoning")
-        or _get(payload, "thinking")
-        or ""
+        _as_str(_get(payload, "reasoning_content"))
+        or _as_str(_get(payload, "reasoning"))
+        or _as_str(_get(payload, "thinking"))
     )
 
 
 def _usage_only_chunk(
-    raw: Any,
+    raw: object,
     *,
     finish_reason: str | None = None,
 ) -> LLMStreamChunk | None:
@@ -331,51 +356,52 @@ def _usage_only_chunk(
     return LLMStreamChunk(usage=usage, finish_reason=finish_reason)
 
 
-def _convert_chunk(raw: Any) -> LLMStreamChunk | None:
-    try:
-        choices = getattr(raw, "choices", None) or raw.get("choices")
-    except Exception:
-        return None
+def _chunk_choices(raw: object) -> list[object]:
+    for candidate in (getattr(raw, "choices", None), _get(raw, "choices")):
+        if isinstance(candidate, list):
+            return candidate
+    return []
+
+
+def _convert_chunk(raw: object) -> LLMStreamChunk | None:
+    choices = _chunk_choices(raw)
     if not choices:
         return _usage_only_chunk(raw)
 
     choice = choices[0]
     delta = _get(choice, "delta") or {}
+    tool_calls = [_normalize_tool_call(tc) for tc in _as_list(_get(delta, "tool_calls"))]
+    finish_reason = _get(choice, "finish_reason")
     return LLMStreamChunk(
-        text_delta=_get(delta, "content") or "",
+        text_delta=_as_str(_get(delta, "content")),
         reasoning_delta=_reasoning_text(delta),
-        tool_call_deltas=[
-            _normalize_tool_call(tc) for tc in (_get(delta, "tool_calls") or [])
-        ],
-        finish_reason=_get(choice, "finish_reason"),
+        tool_call_deltas=tool_calls,
+        finish_reason=finish_reason if isinstance(finish_reason, str) else None,
         usage=_extract_usage(raw),
     )
 
 
-def _convert_nonstream_response(raw: Any) -> LLMStreamChunk | None:
-    try:
-        choices = getattr(raw, "choices", None) or raw.get("choices")
-    except Exception:
-        return None
+def _convert_nonstream_response(raw: object) -> LLMStreamChunk | None:
+    choices = _chunk_choices(raw)
     if not choices:
         return _usage_only_chunk(raw, finish_reason="stop")
 
     choice = choices[0]
     msg = _get(choice, "message") or {}
-    tool_calls = _get(msg, "tool_calls") or []
+    tool_calls = _as_list(_get(msg, "tool_calls"))
 
     normalized_calls: list[dict[str, Any]] = []
-    if isinstance(tool_calls, list):
-        for i, tc in enumerate(tool_calls):
-            if not isinstance(tc, Mapping):
-                continue
-            normalized_calls.append(_normalize_tool_call(tc, index=i))
+    for i, tc in enumerate(tool_calls):
+        if not isinstance(tc, Mapping):
+            continue
+        normalized_calls.append(_normalize_tool_call(tc, index=i))
 
+    finish_reason = _get(choice, "finish_reason") or _get(raw, "finish_reason") or "stop"
     return LLMStreamChunk(
-        text_delta=_get(msg, "content") or "",
+        text_delta=_as_str(_get(msg, "content")),
         reasoning_delta=_reasoning_text(msg),
         tool_call_deltas=normalized_calls,
-        finish_reason=_get(choice, "finish_reason") or _get(raw, "finish_reason") or "stop",
+        finish_reason=finish_reason if isinstance(finish_reason, str) else None,
         usage=_extract_usage(raw),
     )
 
@@ -383,6 +409,7 @@ def _convert_nonstream_response(raw: Any) -> LLMStreamChunk | None:
 # ---------------------------------------------------------------------------
 # LiteLLMClient
 # ---------------------------------------------------------------------------
+
 
 def compute_max_tokens_clamp(
     *,
@@ -421,9 +448,7 @@ def _report_context_window_pressure(
     打 warning 并计数。纯函数，便于单测断言日志字段。
     """
     over_budget = bool(
-        input_budget is not None
-        and int(input_budget) > 0
-        and est_input > int(input_budget)
+        input_budget is not None and int(input_budget) > 0 and est_input > int(input_budget)
     )
     over_window = bool(
         context_window is not None
@@ -483,18 +508,21 @@ class LiteLLMClient:
     async def stream(
         self,
         *,
-        request: Any,
+        request: PackedLLMRequest,
         model: str | None = None,
         tools: list[dict[str, Any]] | None = None,
-        prompt_cache_runtime: Any | None = None,
+        prompt_cache_runtime: object | None = None,
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,
     ) -> AsyncIterator[LLMStreamChunk]:
         from litellm import acompletion
 
-        from prismclaw.schema.shared import AgentAbortedError, AgentTimeoutError
-        from prismclaw.schema.shared import iterate_with_idle_timeout
+        from prismclaw.schema.shared import (
+            AgentAbortedError,
+            AgentTimeoutError,
+            iterate_with_idle_timeout,
+        )
 
         effective_model = model or self.default_model
         api_key, api_base, _provider_name, llm_provider = resolve_credentials(
@@ -518,21 +546,24 @@ class LiteLLMClient:
             if isinstance(m, dict) and m.get("tool_calls") is not None:
                 m["tool_calls"] = _sanitize_tool_call_arguments_json(m.get("tool_calls"))
 
-        if self._providers and messages_have_user_image_content(payload_messages):
-            if not model_supports_input(
+        if (
+            self._providers
+            and messages_have_user_image_content(payload_messages)
+            and not model_supports_input(
                 effective_model,
                 self._providers,
                 "image",
                 default_provider=self._default_provider,
                 unknown_prefix_policy=self._unknown_prefix_policy,
-            ):
-                vision_models_str = format_vision_capable_models(self._providers)
-                raise LLMError(
-                    LLMErrorCode.VISION_NOT_SUPPORTED,
-                    f"模型 '{effective_model}' 不具备图片输入能力。"
-                    f"支持视觉输入的模型：{vision_models_str}。"
-                    f"可使用 /model <model_id> 切换模型。",
-                )
+            )
+        ):
+            vision_models_str = format_vision_capable_models(self._providers)
+            raise LLMError(
+                LLMErrorCode.VISION_NOT_SUPPORTED,
+                f"模型 '{effective_model}' 不具备图片输入能力。"
+                f"支持视觉输入的模型：{vision_models_str}。"
+                f"可使用 /model <model_id> 切换模型。",
+            )
 
         extra: dict[str, Any] = {}
         if api_key:
@@ -575,16 +606,22 @@ class LiteLLMClient:
         if _model_max_tokens:
             _input_budget = getattr(request, "input_budget", None)
             # 输入 token 估算只做一次，钳制与压力埋点共用。
-            _clamped, _est_in = compute_max_tokens_clamp(
+            _clamped, _clamped_est_in = compute_max_tokens_clamp(
                 model_max_tokens=_model_max_tokens,
                 context_window=_context_window,
                 estimated_input_tokens=_est_in,
             )
+            if _clamped_est_in is not None:
+                _est_in = _clamped_est_in
             if _clamped != _model_max_tokens:
                 logger.info(
                     "max_tokens clamp: model_max=%d est_input=%s input_budget=%s window=%s "
                     "→ capped=%d",
-                    _model_max_tokens, _est_in, _input_budget, _context_window, _clamped,
+                    _model_max_tokens,
+                    _est_in,
+                    _input_budget,
+                    _context_window,
+                    _clamped,
                 )
             # G4：超窗计数/预警（估算输入超 input_budget 或 +max_output 超窗口）。
             # 用钳制后的 max_output 判定：实际请求已保证 input+output 不越窗，
@@ -617,8 +654,11 @@ class LiteLLMClient:
 
         _tools_digest = _hashlib.sha256(
             _json.dumps(
-                tools or [], sort_keys=True, ensure_ascii=False,
-                separators=(",", ":"), default=str,
+                tools or [],
+                sort_keys=True,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
             ).encode()
         ).hexdigest()[:16]
         _system_payload = request.system
@@ -626,7 +666,10 @@ class LiteLLMClient:
             _system_payload
             if isinstance(_system_payload, str)
             else _json.dumps(
-                _system_payload, sort_keys=True, ensure_ascii=False, default=str,
+                _system_payload,
+                sort_keys=True,
+                ensure_ascii=False,
+                default=str,
             )
         )
         _system_digest = _hashlib.sha256(_system_text.encode()).hexdigest()[:16]
@@ -658,7 +701,11 @@ class LiteLLMClient:
                     last_role = roles[-1] if roles else "none"
                     any_user = any(r == "user" for r in roles)
                     last_user = next(
-                        (m for m in reversed(payload_messages) if isinstance(m, dict) and m.get("role") == "user"),
+                        (
+                            m
+                            for m in reversed(payload_messages)
+                            if isinstance(m, dict) and m.get("role") == "user"
+                        ),
                         None,
                     )
                     last_user_content = (
@@ -674,7 +721,10 @@ class LiteLLMClient:
                         last_user_kind = "none"
                         last_user_chars = 0
                     logger.info(
-                        "llm_request_start request_id=%s model=%s provider=%s messages=%d tool_count=%d est_in_tok=%d request_timeout_s=%.1f roles=%s last_role=%s any_user=%s last_user_kind=%s last_user_size=%d prefix_digest=%s/%s session=%s",
+                        "llm_request_start request_id=%s model=%s provider=%s messages=%d "
+                        "tool_count=%d est_in_tok=%d request_timeout_s=%.1f roles=%s "
+                        "last_role=%s any_user=%s last_user_kind=%s last_user_size=%d "
+                        "prefix_digest=%s/%s session=%s",
                         request_id,
                         effective_model,
                         llm_provider or "",
@@ -709,7 +759,7 @@ class LiteLLMClient:
                 )
                 last_exc = None
                 break
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 last_exc = exc
                 break
             except Exception as exc:
@@ -764,7 +814,10 @@ class LiteLLMClient:
                     pass
             raise LLMError(
                 classify_error(last_exc or Exception("unknown")),
-                f"{str(last_exc or '')} (model='{effective_model}', base_url='{api_base or ''}', provider='{llm_provider or ''}')",
+                (
+                    f"{str(last_exc or '')} (model='{effective_model}', "
+                    f"base_url='{api_base or ''}', provider='{llm_provider or ''}')"
+                ),
                 original=last_exc,
             ) from last_exc
 
@@ -832,7 +885,9 @@ class LiteLLMClient:
                 max(0.0, now - last_chunk_at) if last_chunk_at is not None else None
             )
             logger.warning(
-                "llm_stream_idle_timeout request_id=%s idle_seconds=%.1f since_start_s=%.1f since_last_chunk_s=%s model=%s provider=%s got_first_text=%s chunks=%d text_chars=%d finish_reason=%s",
+                "llm_stream_idle_timeout request_id=%s idle_seconds=%.1f "
+                "since_start_s=%.1f since_last_chunk_s=%s model=%s provider=%s "
+                "got_first_text=%s chunks=%d text_chars=%d finish_reason=%s",
                 request_id,
                 te.limit_seconds,
                 since_start_s,
@@ -849,7 +904,10 @@ class LiteLLMClient:
         except AgentAbortedError as ae:
             logged_end = True
             logger.info(
-                "llm_request_end request_id=%s model=%s provider=%s status=aborted chunks=%d text_chars=%d finish_reason=%s",
+                (
+                    "llm_request_end request_id=%s model=%s provider=%s "
+                    "status=aborted chunks=%d text_chars=%d finish_reason=%s"
+                ),
                 request_id,
                 effective_model,
                 llm_provider or "",
@@ -865,7 +923,10 @@ class LiteLLMClient:
             # external 连接错误，包装成 LLMError(CONNECTION_ERROR) 交给 pipeline
             # 的 connection_error 重试回路接管，而非裸抛成 Internal error。
             logger.warning(
-                "llm_stream_connection_error request_id=%s model=%s provider=%s chunks=%d text_chars=%d: %s",
+                (
+                    "llm_stream_connection_error request_id=%s "
+                    "model=%s provider=%s chunks=%d text_chars=%d: %s"
+                ),
                 request_id,
                 effective_model,
                 llm_provider or "",
@@ -877,7 +938,7 @@ class LiteLLMClient:
                 LLMErrorCode.CONNECTION_ERROR,
                 f"流式传输连接错误：{str(ce)[:300]} "
                 f"（model='{effective_model}'，provider='{llm_provider or ''}'）",
-                original=ce,
+                original=ce if isinstance(ce, Exception) else None,
             ) from ce
         except asyncio.CancelledError:
             cancelled = True
@@ -886,9 +947,7 @@ class LiteLLMClient:
             if not logged_end:
                 ended_at = time.monotonic()
                 duration_s = max(0.0, ended_at - started)
-                ttfb_ms = (
-                    max(0.0, (first_text_at - started) * 1000.0) if first_text_at else None
-                )
+                ttfb_ms = max(0.0, (first_text_at - started) * 1000.0) if first_text_at else None
                 logger.info(
                     "llm_request_end request_id=%s model=%s provider=%s status=%s duration_s=%.1f "
                     "first_chunk_ms=%s ttfb_ms=%s reasoning_chars=%d chunks=%d text_chars=%d "
@@ -898,7 +957,9 @@ class LiteLLMClient:
                     llm_provider or "",
                     "cancelled" if cancelled else "ok",
                     duration_s,
-                    f"{max(0.0, (first_any_at - started) * 1000.0):.0f}" if first_any_at else "none",
+                    f"{max(0.0, (first_any_at - started) * 1000.0):.0f}"
+                    if first_any_at
+                    else "none",
                     f"{ttfb_ms:.0f}" if ttfb_ms is not None else "none",
                     reasoning_chars,
                     chunk_count,
@@ -912,10 +973,10 @@ class LiteLLMClient:
     async def complete(
         self,
         *,
-        request: Any,
+        request: PackedLLMRequest,
         model: str | None = None,
         tools: list[dict[str, Any]] | None = None,
-        prompt_cache_runtime: Any | None = None,
+        prompt_cache_runtime: object | None = None,
         idle_seconds: float = 0.0,
         abort_event: asyncio.Event | None = None,
         temperature: float | None = None,

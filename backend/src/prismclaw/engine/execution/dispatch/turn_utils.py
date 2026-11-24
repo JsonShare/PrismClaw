@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.schema.content.content_types import ToolResult
+from prismclaw.engine.foundation.tool_output import (  # noqa: F401
+    _head_tail_budget,
+    _text_length,
+    resolve_max_output_chars,
+    truncate_tool_result,
+)
 from prismclaw.schema.agent.capability import EffectClass
+from prismclaw.schema.content.content_types import ToolResult
 from prismclaw.schema.shared.tool_markup import has_tool_markup, strip_tool_markup
 
 if TYPE_CHECKING:
@@ -41,7 +47,7 @@ def extract_thinking(text: str) -> str:
 def classify_turn(
     *,
     text: str,
-    tool_calls: list[dict] | None,
+    tool_calls: list[dict[str, Any]] | None,
     reasoning: str | None = None,
 ) -> TurnClassification:
     if tool_calls:
@@ -75,16 +81,11 @@ def classify_turn(
 # result_truncation — re-exported from foundation/tool_output.py
 # ---------------------------------------------------------------------------
 
-from prismclaw.engine.foundation.tool_output import (  # noqa: F401
-    _head_tail_budget,
-    _text_length,
-    resolve_max_output_chars,
-    truncate_tool_result,
-)
 
 # ---------------------------------------------------------------------------
 # batch_runtime
 # ---------------------------------------------------------------------------
+
 
 def _resolve_tool_batch_entries(
     tools: ToolRegistry,
@@ -163,7 +164,7 @@ def _terminal_batch_status(
     *,
     tool_call_count: int,
     results: list[ToolResult],
-) -> str:
+) -> Literal["completed", "partial", "failed"]:
     error_count = sum(1 for result in results if result.is_error)
     member_count = max(tool_call_count, len(results))
     if error_count <= 0:

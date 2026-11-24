@@ -16,7 +16,9 @@ depend on the persistence layer for this orchestration primitive.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+from types import TracebackType
 from typing import TYPE_CHECKING
 
 import redis.exceptions
@@ -24,8 +26,8 @@ import redis.exceptions
 from prismclaw.schema.shared.exceptions import LockLostError
 
 if TYPE_CHECKING:
-    from prismclaw.schema.storage import LockManager
     from prismclaw.schema.services.task_protocol import TaskManagerProtocol
+    from prismclaw.schema.storage import LockManager
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +125,12 @@ class DistributedMutex:
         await asyncio.sleep(0)
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self._heartbeat_task_id is not None:
             try:
                 await self._task_manager.cancel(self._heartbeat_task_id)
@@ -159,10 +166,8 @@ class DistributedMutex:
         task = handle.asyncio_task
         if not task.done() or task.cancelled():
             return
-        try:
+        with contextlib.suppress(Exception):
             task.exception()
-        except Exception:
-            pass
 
     async def _heartbeat(self) -> None:
         """Background task: periodically renew the lock until cancelled.

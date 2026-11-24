@@ -3,12 +3,22 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from prismclaw.engine.state.tool_loop_state import ToolLoopState
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.streaming import ToolCallStart
+
+if TYPE_CHECKING:
+    import asyncio
+
+    from prismclaw.engine.execution.dispatch.prepared_types import (
+        ImmediateResult,
+        PreparedCall,
+    )
+    from prismclaw.schema.config.config import RunLoopTuningConfig
+    from prismclaw.schema.content.content_types import ToolResult
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +43,8 @@ class ParsedToolCall:
     @property
     def call_id(self) -> str:
         """Tool call ID from the raw call dict (e.g. OpenAI ``id`` field)."""
-        return self.call.get("id", "")
+        raw_id = self.call.get("id", "")
+        return raw_id if isinstance(raw_id, str) else ""
 
     @property
     def tool_name(self) -> str:
@@ -52,7 +63,7 @@ class ToolLoopOutcome:
     frozen_signature: str | None = None
 
 
-def doom_loop_thresholds(config: Any) -> tuple[int, int]:
+def doom_loop_thresholds(config: RunLoopTuningConfig | None) -> tuple[int, int]:
     """从 stuck.signature_warn 推导 doom-loop 阶梯的两级阈值。
 
     Returns:
@@ -163,7 +174,7 @@ def record_tool_call_observation(
 def evaluate_tool_loop_policies(
     *,
     state: ToolLoopState,
-    config: Any = None,
+    config: RunLoopTuningConfig | None = None,
 ) -> ToolLoopOutcome:
     """评估工具循环策略并返回动作决策。
 
@@ -208,7 +219,10 @@ def evaluate_tool_loop_policies(
             logger.warning(
                 "loop_policy check_2: doom-loop FREEZE. "
                 "signature=%s streak=%d escalate_above=%d absolute_max=%d",
-                latest_token, streak, escalate_above, absolute_max,
+                latest_token,
+                streak,
+                escalate_above,
+                absolute_max,
             )
             return ToolLoopOutcome(
                 action="freeze",
@@ -233,7 +247,10 @@ def evaluate_tool_loop_policies(
             logger.warning(
                 "loop_policy check_2: doom-loop CORRECTION injected. "
                 "signature=%s streak=%d escalate_above=%d absolute_max=%d",
-                latest_token, streak, escalate_above, absolute_max,
+                latest_token,
+                streak,
+                escalate_above,
+                absolute_max,
             )
             return ToolLoopOutcome(
                 action="warn",
@@ -266,7 +283,7 @@ def check_frozen_call(
     *,
     state: ToolLoopState,
     tool_signature: str,
-    config: Any = None,
+    config: RunLoopTuningConfig | None = None,
     counted_this_turn: set[str] | None = None,
 ) -> ToolLoopOutcome:
     """before_tool_call 冻结检查：命中冻结表即 block，反复尝试则升级 terminate。
@@ -310,7 +327,9 @@ def check_frozen_call(
         logger.warning(
             "loop_policy frozen_call: ESCALATE to SUSPICION. "
             "signature=%s frozen_attempts=%d escalate_above=%d",
-            tool_signature, attempts, escalate_above,
+            tool_signature,
+            attempts,
+            escalate_above,
         )
         # 不再直接杀任务，只置嫌疑标志；终态由 CompletionKernel 裁决。
         state.frozen_call_defied = True
@@ -331,7 +350,9 @@ def check_frozen_call(
     logger.warning(
         "loop_policy frozen_call: BLOCKED frozen signature. "
         "signature=%s frozen_attempts=%d escalate_above=%d",
-        tool_signature, attempts, escalate_above,
+        tool_signature,
+        attempts,
+        escalate_above,
     )
     return ToolLoopOutcome(
         action="freeze",
@@ -359,11 +380,12 @@ def _resolve_approval_runtime_ids(tool_ctx: ToolContext) -> tuple[str, str]:
 
 # ── P2 prepare/execute two-phase separation (aligned with Pi) ──
 
+
 async def prepare_call(
     tool_call: dict[str, Any],
     context: ToolContext,
     registry: ToolRegistry | None = None,
-) -> Any:
+) -> PreparedCall | ImmediateResult:
     """Prepare phase — validate and resolve tool.
 
     Aligned with Pi's prepareToolCall: the prepare phase determines
@@ -403,10 +425,10 @@ async def prepare_call(
 
 
 async def execute_prepared(
-    prepared: Any,
+    prepared: PreparedCall,
     *,
-    signal: Any | None = None,
-) -> Any:
+    signal: asyncio.Event | None = None,
+) -> ToolResult:
     """Execute phase — run the prepared call, no interception possible.
 
     Aligned with Pi's executePreparedToolCall: once prepared, the

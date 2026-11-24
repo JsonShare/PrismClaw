@@ -2,15 +2,25 @@
 
 Protocols for consent management, and policy / runtime-mode / signer data models.
 """
+
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from prismclaw.engine.security.consent.consent_gate import (
+        ConsentCheckResult,
+        ConsentRecord,
+    )
+
 
 class ConsentProtocol(Protocol):
-    """Protocol for consent management — duck-typing compatible with security/consent_gate.ConsentGate."""
+    """
+    Protocol for consent management — duck-typing compatible with
+    security/consent_gate.ConsentGate.
+    """
 
     def check(
         self,
@@ -20,7 +30,7 @@ class ConsentProtocol(Protocol):
         tool_name: str,
         declared_purposes: list[str],
         workspace_id: str = "",
-    ) -> Any:
+    ) -> ConsentCheckResult:
         """Check whether consent exists for the given tool/purpose combination."""
         ...
 
@@ -34,7 +44,7 @@ class ConsentProtocol(Protocol):
         scope: str = "",
         workspace_id: str = "",
         ttl_seconds: int | None = None,
-    ) -> Any:
+    ) -> ConsentRecord:
         """Grant consent for a purpose/tool combination."""
         ...
 
@@ -42,7 +52,7 @@ class ConsentProtocol(Protocol):
         """Revoke a previously granted consent."""
         ...
 
-    def list_active_consents(self, session_id: str, user_id: str) -> list[Any]:
+    def list_active_consents(self, session_id: str, user_id: str) -> list[ConsentRecord]:
         """List all active consents for a session/user."""
         ...
 

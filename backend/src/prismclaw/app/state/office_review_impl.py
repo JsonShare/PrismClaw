@@ -3,6 +3,7 @@
 This class only exists in the wiring layer (composition root).
 delivery and engine both remain unaware of it.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,6 +15,7 @@ class _OfficeReviewImpl:
 
     def fmt_from_path(self, path: str) -> str | None:
         from prismclaw.runtime.facade.review import structured_office_fmt_from_path
+
         return structured_office_fmt_from_path(path)
 
     def apply_office_edit(
@@ -25,8 +27,8 @@ class _OfficeReviewImpl:
         current_bytes: bytes,
         rejected: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        from prismclaw.runtime.facade.review import ReviewIntent
-        from prismclaw.runtime.facade.review import dispatch
+        from prismclaw.runtime.facade.review import ReviewIntent, dispatch
+
         change = dispatch(fmt)
         intent = ReviewIntent(
             workspace_path=Path(workspace_path),
@@ -47,6 +49,7 @@ class _OfficeReviewImpl:
         author: str | None = None,
     ) -> dict[str, Any]:
         from prismclaw.runtime.facade.review import DocxChange
+
         change = DocxChange()
         return change.build_artifact(
             workspace_path=Path(workspace_path),
@@ -68,6 +71,7 @@ class _OfficeReviewImpl:
         content_base64: str,
     ) -> dict[str, Any]:
         from prismclaw.runtime.facade.review import DocxChange
+
         change = DocxChange()
         return change.save_reviewed(
             workspace_path=Path(workspace_path),
@@ -87,6 +91,7 @@ class _OfficeReviewImpl:
         force: bool = False,
     ) -> dict[str, Any]:
         from prismclaw.runtime.facade.review import get_review_registry
+
         registry = get_review_registry(Path(workspace_root))
         return registry.reject_path(session_id, path, force=force)
 
@@ -101,8 +106,14 @@ class _OfficeReviewImpl:
         is_binary: bool = False,
     ) -> None:
         from prismclaw.runtime.facade.review import get_review_registry
+
         registry = get_review_registry(Path(workspace_root))
         registry.register_edit(
-            session_id, path, before_content, after_content,
-            session_id, tool_call_id, is_binary=is_binary,
+            session_id,
+            path,
+            before_content,
+            after_content,
+            session_id,
+            tool_call_id,
+            is_binary=is_binary,
         )

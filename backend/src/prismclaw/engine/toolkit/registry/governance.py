@@ -1,67 +1,78 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
-from prismclaw.engine.toolkit.registry.tool_runtime import Tool
-from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.engine.security.gate.types import (
     ActorIdentity,
     AllowedToolsPolicy,
     RuntimeMode,
 )
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.engine.toolkit.registry.specs import (
     ToolExecutionTraits,
     ToolPermissionTraits,
     ToolSpec,
     VisibilityScope,
 )
+from prismclaw.engine.toolkit.registry.tool_runtime import Tool
 from prismclaw.schema.services.skills import SkillInvocationState
 
 logger = logging.getLogger(__name__)
 
 
 # 通用工具面：不受任何 skill 的 allowed_tools 白名单限制，始终对模型可见可调用。
-#   - present_files：交付物的可选声明通道（表现层还会扫描 outputs/ 兜底），
+#   - present_files：交付物的可选声明通道（表现层还会扫描 outbox/ 兜底），
 #     任何产出文件的 skill 都应能调用它，但不能调用不该导致任务无法完成。
 #   - ask_user_question：人机澄清，skill 经常需要向用户确认。
 #   - tool_search / skill_search / subagent_search / activate_skill：能力发现
 #     与激活，是插件生态的入口，被白名单屏蔽会导致无法切换/发现能力。
 #   - todo_write：多步任务的可选清单通道；系统提示不再强制建清单
 #     （强制清单曾把轮次放大到 2N+1），但白名单不能隐藏它。
-_UNIVERSAL_TOOLS = frozenset({
-    "present_files",
-    "ask_user_question",
-    "tool_search",
-    "skill_search",
-    "subagent_search",
-    "activate_skill",
-    "todo_write",
-})
+_UNIVERSAL_TOOLS = frozenset(
+    {
+        "present_files",
+        "ask_user_question",
+        "tool_search",
+        "skill_search",
+        "subagent_search",
+        "activate_skill",
+        "todo_write",
+        # 委派是平台级能力：任何技能都可能需要拆解并行任务，
+        # 被 skill 的 allowed_tools 白名单屏蔽会让任务无法完成。
+        "sub_agent",
+    }
+)
 
 # 核心可见工具集：flag ``tools.core_visible_only`` 开启时，
 # 只有这些工具默认对模型可见；其余工具被 DeferredToolReducer 视同
 # requires_discovery——不可见不可直调，但仍可被 tool_search 检索，发现后下一轮解锁。
 # 成员须同时覆盖 _UNIVERSAL_TOOLS（发现/交付/澄清通道不应有摩擦）。
-_CORE_VISIBLE_TOOLS = frozenset({
-    "read",
-    "write",
-    "edit",
-    "bash",
-    "ls",
-    "grep",
-    "glob",
-    "todo_write",
-    "ask_user_question",
-    "tool_search",
-    "skill_search",
-    "subagent_search",
-    "activate_skill",
-    "present_files",
-})
+_CORE_VISIBLE_TOOLS = frozenset(
+    {
+        "read",
+        "write",
+        "edit",
+        "bash",
+        "ls",
+        "grep",
+        "glob",
+        "todo_write",
+        "ask_user_question",
+        "tool_search",
+        "skill_search",
+        "subagent_search",
+        "activate_skill",
+        "present_files",
+        # 委派同属核心能力：core_visible_only 时若被视作 deferred，
+        # 模型首屏看不到委派入口（D6 的第二条触发路径）。
+        "sub_agent",
+    }
+)
 
 
 class DecisionTraceEntry(BaseModel):
@@ -105,10 +116,10 @@ class ResolvedToolSetDraft:
     tools: dict[str, ResolvedToolRecord]
     decision_trace: tuple[DecisionTraceEntry, ...] = ()
 
-    def append_trace(self, entry: DecisionTraceEntry) -> "ResolvedToolSetDraft":
+    def append_trace(self, entry: DecisionTraceEntry) -> ResolvedToolSetDraft:
         return replace(self, decision_trace=(*self.decision_trace, entry))
 
-    def with_tool(self, tool_name: str, record: ResolvedToolRecord) -> "ResolvedToolSetDraft":
+    def with_tool(self, tool_name: str, record: ResolvedToolRecord) -> ResolvedToolSetDraft:
         updated = dict(self.tools)
         updated[tool_name] = record
         return replace(self, tools=updated)
@@ -140,7 +151,9 @@ class AllowedToolsPolicyReducer:
                 continue
             if input_data.allowed_tools_policy.allows(tool_name):
                 continue
-            updated = record.model_copy(update={"visible_to_llm": False, "callable": False, "searchable": False})
+            updated = record.model_copy(
+                update={"visible_to_llm": False, "callable": False, "searchable": False}
+            )
             next_draft = next_draft.with_tool(tool_name, updated).append_trace(
                 DecisionTraceEntry(
                     tool_name=tool_name,
@@ -164,12 +177,12 @@ class ActorIdentityReducer:
         for tool_name, record in draft.tools.items():
             traits = record.spec.permission_traits
             hidden_reason: str | None = None
-            if input_data.actor_identity == "subagent":
-                if traits.visibility_scope == "main_only" or traits.parent_only:
-                    hidden_reason = "tool_hidden_for_subagent"
-            elif input_data.actor_identity == "main":
-                if traits.visibility_scope == "subagent_only":
-                    hidden_reason = "tool_hidden_for_main_agent"
+            if input_data.actor_identity == "subagent" and (
+                traits.visibility_scope == "main_only" or traits.parent_only
+            ):
+                hidden_reason = "tool_hidden_for_subagent"
+            elif input_data.actor_identity == "main" and traits.visibility_scope == "subagent_only":
+                hidden_reason = "tool_hidden_for_main_agent"
             if hidden_reason is None:
                 continue
             updated = record.model_copy(
@@ -294,9 +307,7 @@ class DeferredToolReducer:
                 continue
             if explicit_policy and tool_name in explicit_allowed:
                 continue
-            updated = record.model_copy(
-                update={"visible_to_llm": False, "callable": False}
-            )
+            updated = record.model_copy(update={"visible_to_llm": False, "callable": False})
             next_draft = next_draft.with_tool(tool_name, updated).append_trace(
                 DecisionTraceEntry(
                     tool_name=tool_name,
@@ -416,25 +427,14 @@ class ToolGovernance:
             duplicates = ", ".join(sorted(duplicate_names))
             raise ValueError(f"duplicate tool names in governance catalog: {duplicates}")
         draft = ResolvedToolSetDraft(
-            tools={
-                spec.name: ResolvedToolRecord(spec=spec)
-                for spec in input_data.catalog
-            }
+            tools={spec.name: ResolvedToolRecord(spec=spec) for spec in input_data.catalog}
         )
         for reducer in self._reducers:
             draft = reducer.apply(input_data, draft)
-        visible = tuple(
-            name for name, record in draft.tools.items() if record.visible_to_llm
-        )
-        callable_tools = tuple(
-            name for name, record in draft.tools.items() if record.callable
-        )
-        searchable = tuple(
-            name for name, record in draft.tools.items() if record.searchable
-        )
-        denied = tuple(
-            name for name, record in draft.tools.items() if not record.callable
-        )
+        visible = tuple(name for name, record in draft.tools.items() if record.visible_to_llm)
+        callable_tools = tuple(name for name, record in draft.tools.items() if record.callable)
+        searchable = tuple(name for name, record in draft.tools.items() if record.searchable)
+        denied = tuple(name for name, record in draft.tools.items() if not record.callable)
         return ResolvedToolSet(
             all_resolved_tools=draft.tools,
             visible_tools_for_llm=visible,
@@ -494,6 +494,8 @@ def resolve_registry_tool_governance(
             skill_allowed_tools=frozenset(normalized_skill_tools or ()),
         )
     )
+
+
 def registry_tool_specs(registry: ToolRegistry) -> list[ToolSpec]:
     specs: list[ToolSpec] = []
     for name in registry.names():
@@ -512,9 +514,7 @@ def tool_to_spec(tool: Tool) -> ToolSpec:
         visibility_scope = raw_visibility_scope
     elif bool(getattr(tool, "parent_only", False)):
         visibility_scope = "main_only"
-    executor_kind = (
-        "mcp_remote" if hasattr(tool, "server_config") or ":" in tool.name else "local"
-    )
+    executor_kind = "mcp_remote" if hasattr(tool, "server_config") or ":" in tool.name else "local"
     return ToolSpec(
         name=tool.name,
         description=getattr(tool, "description", "") or "",
@@ -528,14 +528,10 @@ def tool_to_spec(tool: Tool) -> ToolSpec:
             tool_class=tool_class,
             visibility_scope=visibility_scope,
             approval_eligible=bool(getattr(tool, "approval_eligible", True)),
-            read_only_allowed=bool(
-                getattr(tool, "read_only_allowed", tool_class != "write")
-            ),
+            read_only_allowed=bool(getattr(tool, "read_only_allowed", tool_class != "write")),
             parent_only=bool(getattr(tool, "parent_only", False)),
             requires_approval=bool(getattr(tool, "requires_approval", False)),
-            requires_interactive_user=bool(
-                getattr(tool, "requires_interactive_user", False)
-            ),
+            requires_interactive_user=bool(getattr(tool, "requires_interactive_user", False)),
             server_read_only=(
                 getattr(cfg, "server_read_only", False)
                 if (cfg := getattr(tool, "server_config", None)) is not None
@@ -560,7 +556,7 @@ def normalize_registry_tool_names(
     dropped: list[str] = []
     out_of_scope: list[str] = []
 
-    def _in_scope(tool: Any) -> bool:
+    def _in_scope(tool: Tool) -> bool:
         if tool_scope is None:
             return True
         owner = getattr(tool, "plugin_name", None)
@@ -585,7 +581,8 @@ def normalize_registry_tool_names(
             normalized.add(canonical)
             logger.info(
                 "normalize_registry_tool_names: case-insensitive match %r → %r",
-                raw_name, canonical,
+                raw_name,
+                canonical,
             )
             continue
         dropped.append(raw_name)

@@ -9,6 +9,7 @@
     python backend/tools/seed_kb.py
     python backend/tools/seed_kb.py --only literatures
 """
+
 from __future__ import annotations
 
 import argparse
@@ -56,7 +57,9 @@ async def run(dsn: str, only: set[str]) -> None:
         if "literatures" in only:
             for row in _LITERATURE_SEEDS:
                 await store.upsert_literature(row)
-            await _prune_stale_seed_rows(engine, kb_literatures, [r["id"] for r in _LITERATURE_SEEDS])
+            await _prune_stale_seed_rows(
+                engine, kb_literatures, [r["id"] for r in _LITERATURE_SEEDS]
+            )
             print(f"文献：{len(_LITERATURE_SEEDS)} 条")
         if "drugs" in only:
             for row in _DRUG_SEEDS:

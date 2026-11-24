@@ -1,4 +1,5 @@
 """Redis / DB / Memory 等存储的内存 mock。"""
+
 from __future__ import annotations
 
 from typing import Any

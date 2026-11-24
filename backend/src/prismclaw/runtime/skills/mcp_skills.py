@@ -18,7 +18,7 @@ type is imported here.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
 
 from prismclaw.schema.services.skills import (
     McpPromptResolver,
@@ -27,13 +27,12 @@ from prismclaw.schema.services.skills import (
 )
 
 
-def _render_mcp_skill_body(server_name: str, prompt: Any) -> str:
+def _render_mcp_skill_body(server_name: str, prompt: object) -> str:
     """Build a human/LLM-readable instruction body for an MCP prompt skill."""
     name = getattr(prompt, "name", None) or "<unknown>"
     description = getattr(prompt, "description", None) or ""
     header = (
-        f"Invoke the MCP prompt '{name}' exposed by server '{server_name}'.\n\n"
-        f"{description}"
+        f"Invoke the MCP prompt '{name}' exposed by server '{server_name}'.\n\n{description}"
     ).strip()
 
     arguments = getattr(prompt, "arguments", None) or []
@@ -53,7 +52,7 @@ def _render_mcp_skill_body(server_name: str, prompt: Any) -> str:
     return header.strip()
 
 
-def mcp_skill_manifests_from_manager(manager: Any) -> list[SkillManifest]:
+def mcp_skill_manifests_from_manager(manager: object) -> list[SkillManifest]:
     """Build ``SkillManifest`` objects for every MCP prompt command.
 
     Args:
@@ -78,6 +77,7 @@ def mcp_skill_manifests_from_manager(manager: Any) -> list[SkillManifest]:
             continue
         description = getattr(prompt, "description", None) or ""
         from prismclaw.schema.agent.domains import SkillSource
+
         manifests.append(
             SkillManifest(
                 name=mcp_skill_name(server_name, name),
@@ -91,7 +91,7 @@ def mcp_skill_manifests_from_manager(manager: Any) -> list[SkillManifest]:
 
 
 def mcp_skill_manifests_builder(
-    manager: Any,
+    manager: object,
 ) -> Callable[[], list[SkillManifest]] | None:
     """Return a zero-arg callable for the capability assembly layer.
 
@@ -112,7 +112,7 @@ def mcp_skill_manifests_builder(
 MCP_PROMPT_FETCH_TIMEOUT_S = 8.0
 
 
-def mcp_prompt_resolver(manager: Any) -> McpPromptResolver | None:
+def mcp_prompt_resolver(manager: object) -> McpPromptResolver | None:
     """Build the invoke-time resolver that fetches *real* MCP prompt content.
 
     The catalog manifest body of an MCP skill is discovery metadata only;

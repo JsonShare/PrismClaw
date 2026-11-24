@@ -3,16 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
-
-from prismclaw.engine.foundation.tool_output import truncate_tool_result
-from prismclaw.schema.agent.data_types import TextBlock
-from prismclaw.schema.content.compaction import CompactionArtifact
-from prismclaw.schema.content.content_types import ToolResult
-from prismclaw.schema.content.context import ContextBlock
-from prismclaw.schema.content.replacement_state import ReplacementDecisionState
-from prismclaw.schema.content.replacement_store import replacement_decision_from_artifact
-from prismclaw.schema.content.compaction import parse_compaction_artifact
+from typing import TYPE_CHECKING, Any
 
 # ── Re-exported from sub-modules ──────────────────────────────────────────────
 from prismclaw.engine.compression._helpers import (  # noqa: F401
@@ -32,32 +23,7 @@ from prismclaw.engine.compression._material_policy import (  # noqa: F401
     _looks_like_structured_json,
     _looks_like_table,
     _policy_for,
-)
-from prismclaw.engine.compression._semantic_compress import (  # noqa: F401
-    _compact_document_extraction_text,
-    _compact_retrieval_list_text,
-    _compact_structured_dataset_text,
-    _compact_web_page_text,
-    _semantic_compact_text,
-)
-from prismclaw.engine.compression._result_persist import (  # noqa: F401
-    _PERSISTED_PATH_RE,
-    _materialize_single_result,
-    _persist_precompression_original,
-    _persist_reference,
-    _tool_allows_persist,
-    _tool_obj_for_call,
-)
-from prismclaw.engine.compression._result_metadata import (  # noqa: F401
-    _attach_compaction_metadata,
-    _attach_context_block_compaction_metadata,
-    _extract_block_state_updates,
-    _extract_result_state_updates,
-    _loss_budget_for_strategies,
-    _loss_classification_for_strategies,
-    _replace_context_block_with_reference_preview,
-    _replace_with_reference_preview,
-    _result_replacement_state,
+    coerce_result_material_type,
 )
 from prismclaw.engine.compression._result_budget import (  # noqa: F401
     _coerce_positive_int,
@@ -73,6 +39,43 @@ from prismclaw.engine.compression._result_llm_summary import (  # noqa: F401
     _resolve_per_result_summary,
     run_per_result_fork_agent,
 )
+from prismclaw.engine.compression._result_metadata import (  # noqa: F401
+    _attach_compaction_metadata,
+    _attach_context_block_compaction_metadata,
+    _extract_block_state_updates,
+    _extract_result_state_updates,
+    _loss_budget_for_strategies,
+    _loss_classification_for_strategies,
+    _replace_context_block_with_reference_preview,
+    _replace_with_reference_preview,
+    _result_replacement_state,
+)
+from prismclaw.engine.compression._result_persist import (  # noqa: F401
+    _PERSISTED_PATH_RE,
+    _materialize_single_result,
+    _persist_precompression_original,
+    _persist_reference,
+    _tool_allows_persist,
+    _tool_obj_for_call,
+)
+from prismclaw.engine.compression._semantic_compress import (  # noqa: F401
+    _compact_document_extraction_text,
+    _compact_retrieval_list_text,
+    _compact_structured_dataset_text,
+    _compact_web_page_text,
+    _semantic_compact_text,
+)
+from prismclaw.engine.foundation.tool_output import truncate_tool_result
+from prismclaw.schema.agent.data_types import TextBlock
+from prismclaw.schema.content.compaction import CompactionArtifact, parse_compaction_artifact
+from prismclaw.schema.content.content_types import ToolResult
+from prismclaw.schema.content.context import ContextBlock
+from prismclaw.schema.content.replacement_state import ReplacementDecisionState
+from prismclaw.schema.content.replacement_store import replacement_decision_from_artifact
+
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.schema.config.config import CompactionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +123,7 @@ def compact_tool_results_for_turn(
     *,
     tool_calls: list[dict[str, Any]],
     results: list[ToolResult],
-    deps: Any,
+    deps: AgentRunnerDeps,
     frozen_replacement_state: dict[str, str] | None = None,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionTurn:
@@ -128,9 +131,10 @@ def compact_tool_results_for_turn(
     AND ``deps.summarize_fn`` is wired, prefer the async
     ``compact_tool_results_for_turn_async`` to honor the LLM pass.
     This sync path always falls back to character truncation."""
-    if _resolve_per_result_summary(deps) is not None and getattr(
-        deps, "summarize_fn", None
-    ) is not None:
+    if (
+        _resolve_per_result_summary(deps) is not None
+        and getattr(deps, "summarize_fn", None) is not None
+    ):
         logger.warning(
             "compact_tool_results_for_turn called on the sync path with "
             "per_result_summary enabled; falling back to character "
@@ -150,7 +154,7 @@ async def compact_tool_results_for_turn_async(
     *,
     tool_calls: list[dict[str, Any]],
     results: list[ToolResult],
-    deps: Any,
+    deps: AgentRunnerDeps,
     frozen_replacement_state: dict[str, str] | None = None,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionTurn:
@@ -181,7 +185,7 @@ def _compact_tool_results_for_turn_sync(
     *,
     tool_calls: list[dict[str, Any]],
     results: list[ToolResult],
-    deps: Any,
+    deps: AgentRunnerDeps,
     frozen_replacement_state: dict[str, str] | None = None,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionTurn:
@@ -202,10 +206,13 @@ def _compact_tool_results_for_turn_sync(
         if frozen_replacement_state and cid in frozen_replacement_state:
             # Replay the frozen replacement directly
             from prismclaw.schema.agent.data_types import TextBlock
+
             frozen_text = frozen_replacement_state[cid]
             result.content = [TextBlock(text=frozen_text)]
 
-            original_chars = len(frozen_text) # We don't have the real original, treat frozen as original
+            original_chars = len(
+                frozen_text
+            )  # We don't have the real original, treat frozen as original
             artifact = ResultCompactionArtifact(
                 tool_call=call,
                 result=result,
@@ -214,7 +221,7 @@ def _compact_tool_results_for_turn_sync(
                 original_chars=original_chars,
                 compacted_chars=len(frozen_text),
                 strategies=["replay_frozen"],
-                state_source_text=frozen_text
+                state_source_text=frozen_text,
             )
         else:
             artifact = _compact_single_result(
@@ -226,14 +233,19 @@ def _compact_tool_results_for_turn_sync(
             )
 
             # Record the replacement decision if it was compacted
-            if artifact.compacted_chars < artifact.original_chars or "truncate" in artifact.strategies or "preview" in artifact.strategies:
+            if (
+                artifact.compacted_chars < artifact.original_chars
+                or "truncate" in artifact.strategies
+                or "preview" in artifact.strategies
+            ):
                 # Persisted results must replay the <persisted-output>
                 # reference (not the original full text) so the frozen
                 # turn keeps pointing at the recoverable file, not at a
                 # re-inflated copy that would blow the context window.
                 text_content = _result_text(artifact.result)
 
-                from prismclaw.schema.content import ReplacementDecision
+                from prismclaw.schema.content.replacement_state import ReplacementDecision
+
                 # NOTE: ``artifact_type`` must be one of the
                 # ``CompactionArtifactType`` literals defined in
                 # ``prismclaw.kernel.agent`` because
@@ -293,7 +305,7 @@ def _compact_tool_results_for_turn_sync(
             original_chars=artifact.original_chars,
             compacted_chars=artifact.compacted_chars,
             strategies=artifact.strategies,
-                state_source_text=artifact.state_source_text,
+            state_source_text=artifact.state_source_text,
         )
 
     # Ensure replacement_state includes our recorded decisions
@@ -301,7 +313,9 @@ def _compact_tool_results_for_turn_sync(
 
     for dec in replacement_state.decisions:
         # Check if already present to avoid duplicates
-        existing = next((d for d in final_replacement_state.decisions if d.decision_id == dec.decision_id), None)
+        existing = next(
+            (d for d in final_replacement_state.decisions if d.decision_id == dec.decision_id), None
+        )
         if not existing:
             # Copy the freshly attached compaction artifact into the replacement ledger.
             for artifact in artifacts:
@@ -335,7 +349,7 @@ async def _compact_tool_results_for_turn_async_impl(
     *,
     tool_calls: list[dict[str, Any]],
     results: list[ToolResult],
-    deps: Any,
+    deps: AgentRunnerDeps,
     frozen_replacement_state: dict[str, str] | None = None,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionTurn:
@@ -358,6 +372,7 @@ async def _compact_tool_results_for_turn_async_impl(
         cid = call.get("id", "")
         if frozen_replacement_state and cid in frozen_replacement_state:
             from prismclaw.schema.agent.data_types import TextBlock
+
             frozen_text = frozen_replacement_state[cid]
             result.content = [TextBlock(text=frozen_text)]
             original_chars = len(frozen_text)
@@ -382,9 +397,8 @@ async def _compact_tool_results_for_turn_async_impl(
         # Always feed the per-result strategies back to the replacement
         # state so the frozen-replay story stays consistent with the
         # sync path.
-        from prismclaw.schema.content import (
-            ReplacementDecision,
-        )
+        from prismclaw.schema.content.replacement_state import ReplacementDecision
+
         try:
             meta = replacement_decision_from_artifact(
                 parse_compaction_artifact(_tool_result_compaction_payload(artifact.result))
@@ -441,7 +455,7 @@ def compact_context_blocks_for_turn(
     *,
     blocks: list[ContextBlock],
     token_budget: int | None,
-    compaction_config: Any | None = None,
+    compaction_config: CompactionConfig | None = None,
     persisted_artifacts: dict[str, CompactionArtifact] | None = None,
 ) -> list[ContextBlock]:
     if not blocks:
@@ -489,7 +503,7 @@ def _compact_single_result(
     *,
     call: dict[str, Any],
     result: ToolResult,
-    deps: Any,
+    deps: AgentRunnerDeps,
     compression_enabled: bool,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionArtifact:
@@ -537,10 +551,7 @@ def _compact_single_result(
                 )
                 if recovery is not None:
                     merged = _result_text(compressed)
-                    if merged:
-                        merged = f"{merged}\n{recovery}"
-                    else:
-                        merged = recovery
+                    merged = f"{merged}\n{recovery}" if merged else recovery
                     compressed = ToolResult(
                         tool_call_id=compressed.tool_call_id,
                         content=[TextBlock(text=merged)],
@@ -585,7 +596,7 @@ async def _compact_single_result_async(
     *,
     call: dict[str, Any],
     result: ToolResult,
-    deps: Any,
+    deps: AgentRunnerDeps,
     compression_enabled: bool,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionArtifact:
@@ -716,7 +727,7 @@ def _aggressively_compact(
     policy: ResultCompactionPolicy,
     original_chars: int,
     state_source_text: str,
-    deps: Any = None,
+    deps: AgentRunnerDeps | None = None,
     working_dir: str | Path | None = None,
 ) -> ResultCompactionArtifact:
     # Already a persisted <persisted-output> reference: tiny inline
@@ -743,7 +754,7 @@ def _aggressively_compact(
     if len(_result_text(result)) > policy.aggressive_chars:
         # Try working_dir persistence first
         persisted = None
-        if working_dir is not None:
+        if working_dir is not None and deps is not None:
             persisted = _persist_reference(
                 result=result,
                 call=tool_call,
@@ -752,8 +763,13 @@ def _aggressively_compact(
                 reason="aggregate_persist",
             )
         # Fallback to temp directory
-        if persisted is None and _tool_allows_persist(_tool_obj_for_call(tool_call, deps)):
+        if (
+            persisted is None
+            and deps is not None
+            and _tool_allows_persist(_tool_obj_for_call(tool_call, deps))
+        ):
             import tempfile
+
             tmp_dir = Path(tempfile.gettempdir()) / "prismclaw_tool_results"
             persisted = _persist_reference(
                 result=result,
@@ -838,17 +854,20 @@ def _hydrate_context_block_from_artifact(
     artifact: CompactionArtifact,
 ) -> ContextBlock:
     from prismclaw.engine.state.projection_rendering import build_result_compaction_placeholder
+
     strategies = list(artifact.strategies)
     if "frozen_reference_reuse" not in strategies:
         strategies.insert(0, "frozen_reference_reuse")
     compacted_text = artifact.replacement_text or block.content
     preview_text = artifact.preview
     if "reference_preview" in artifact.strategies:
-        compacted_text = build_result_compaction_placeholder(artifact.reference_id or artifact.artifact_id)
+        compacted_text = build_result_compaction_placeholder(
+            artifact.reference_id or artifact.artifact_id
+        )
         preview_text = artifact.preview
     return _attach_context_block_compaction_metadata(
         block,
-        material_type=(artifact.material_type or "generic_text"),
+        material_type=coerce_result_material_type(artifact.material_type),
         original_chars=max(artifact.original_chars or 0, len(block.content)),
         compacted_text=compacted_text,
         strategies=strategies,

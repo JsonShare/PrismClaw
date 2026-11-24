@@ -49,8 +49,7 @@ def _build_tool_listing_delta_block(
         return None
 
     discovered_by_name = {
-        record.canonical_name: record
-        for record in discovered_tool_ledger.records
+        record.canonical_name: record for record in discovered_tool_ledger.records
     }
     unlocked_entries = [
         entry
@@ -88,9 +87,7 @@ def _build_tool_listing_delta_block(
         content_lines.append("  <tool>")
         content_lines.append(f"    <name>{xml_escape(entry.llm_name)}</name>")
         if entry.description:
-            content_lines.append(
-                f"    <description>{xml_escape(entry.description)}</description>"
-            )
+            content_lines.append(f"    <description>{xml_escape(entry.description)}</description>")
         discovery = discovered_by_name[entry.canonical_name]
         if discovery.query:
             content_lines.append(f"    <query>{xml_escape(discovery.query)}</query>")
@@ -98,9 +95,7 @@ def _build_tool_listing_delta_block(
             f"    <discovered_via>{xml_escape(discovery.discovered_via)}</discovered_via>"
         )
         content_lines.append(f"    <tool_class>{xml_escape(entry.tool_class)}</tool_class>")
-        content_lines.append(
-            f"    <effect_class>{xml_escape(entry.effect_class)}</effect_class>"
-        )
+        content_lines.append(f"    <effect_class>{xml_escape(entry.effect_class)}</effect_class>")
         content_lines.append("  </tool>")
     content_lines.append("</tool_listing_delta>")
 

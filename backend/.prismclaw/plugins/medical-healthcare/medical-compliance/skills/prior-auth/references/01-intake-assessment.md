@@ -321,7 +321,7 @@ Display assessment summary showing:
 
 **Purpose:** Create a detailed, human-readable audit justification document for regulatory compliance and review.
 
-**File:** `outputs/audit_justification.md`
+**File:** `outbox/audit_justification.md`
 
 Inform user: "Generating audit justification document..."
 
@@ -382,9 +382,9 @@ All decisions require human clinical review before finalization.
 
 **Document footer:** Timestamp, system version
 
-**Write file to:** `outputs/audit_justification.md`
+**Write file to:** `outbox/audit_justification.md`
 
-Display: "Audit justification document created - outputs/audit_justification.md"
+Display: "Audit justification document created - outbox/audit_justification.md"
 
 ---
 
@@ -487,7 +487,7 @@ Display concise completion summary with:
 - Recommendation (APPROVE/DENY/PEND) with brief rationale
 - Files created:
   - waypoints/assessment.json
-  - outputs/audit_justification.md
+  - outbox/audit_justification.md
 
 Ask if ready to proceed to Subskill 2 (Y/N):
 - If Y: Return to orchestrator to execute Subskill 2
@@ -499,7 +499,7 @@ Ask if ready to proceed to Subskill 2 (Y/N):
 
 **Created:**
 - `waypoints/assessment.json` - Consolidated assessment
-- `outputs/audit_justification.md` - Detailed medical necessity justification for audit
+- `outbox/audit_justification.md` - Detailed medical necessity justification for audit
 
 ---
 

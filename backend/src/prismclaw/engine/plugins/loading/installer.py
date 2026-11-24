@@ -16,14 +16,15 @@
   - zip 解压复用 ``prismclaw.skills.installer._extract_zip``（含 zip-slip 防护）。
   - 未信任工作区拒绝安装 UNTRUSTED 来源（local/session）插件。
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import httpx
 
@@ -80,12 +81,12 @@ def parse_source_spec(spec: str, *, ref: str | None = None) -> PluginSourceSpec:
     if not raw:
         raise ValueError("Empty plugin source spec")
     if raw.startswith("github:"):
-        return _github_spec(raw[len("github:"):].strip(), ref)
+        return _github_spec(raw[len("github:") :].strip(), ref)
     if raw.startswith("git+") or raw.startswith("git:"):
         rest = raw.split(":", 1)[1].strip()
         return PluginSourceSpec("git", rest, _repo_name(rest), ref)
     if raw.startswith("url:"):
-        rest = raw[len("url:"):].strip()
+        rest = raw[len("url:") :].strip()
         return PluginSourceSpec("url", rest, _repo_name(rest), ref)
     if raw.startswith("http://") or raw.startswith("https://"):
         if "github.com" in raw:
@@ -113,8 +114,13 @@ async def _git_clone(url: str, target: Path, *, ref: str | None) -> str:
     if proc.returncode != 0:
         raise RuntimeError(f"git clone failed: {stderr.decode(errors='replace')[:400]}")
     sha_proc = await asyncio.create_subprocess_exec(
-        "git", "-C", str(target), "rev-parse", "HEAD",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        "git",
+        "-C",
+        str(target),
+        "rev-parse",
+        "HEAD",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
     out, _ = await sha_proc.communicate()
     if sha_proc.returncode != 0:
@@ -126,11 +132,12 @@ async def _download_zip(
     url: str,
     target: Path,
     *,
-    zip_extract_fn: Any,
-    zip_verify_fn: Any,
+    zip_extract_fn: Callable[[bytes, Path], None],
+    zip_verify_fn: Callable[[bytes, str | None], None],
 ) -> None:
     async with httpx.AsyncClient(
-        timeout=httpx.Timeout(60.0), follow_redirects=True,
+        timeout=httpx.Timeout(60.0),
+        follow_redirects=True,
         headers={"User-Agent": "PrismClaw-PluginInstaller/1.0"},
     ) as client:
         resp = await client.get(url)
@@ -157,19 +164,16 @@ def _validate_manifest(target: Path) -> None:
             if isinstance(exc, _PydanticValidationError):
                 validation_err = ManifestValidationError(
                     file_path=str(manifest_path),
-                    invalid_fields=list(exc.errors()),
+                    invalid_fields=[dict(err) for err in exc.errors()],
                     message=(
-                        f"插件 {target.name} 的清单无效："
-                        f"共 {exc.error_count()} 处 schema 违规"
+                        f"插件 {target.name} 的清单无效：共 {exc.error_count()} 处 schema 违规"
                     ),
                 )
         except Exception:  # noqa: BLE001 - fallback if pydantic not importable
             validation_err = None
         if validation_err is not None:
-            raise PluginInstallError(validation_err.format_message()) from validation_err
-        raise PluginInstallError(
-            f"Invalid plugin manifest for {target.name}: {exc}"
-        ) from exc
+            raise PluginInstallError(validation_err.format_message()) from exc
+        raise PluginInstallError(f"Invalid plugin manifest for {target.name}: {exc}") from exc
 
 
 async def install_plugin(
@@ -182,8 +186,8 @@ async def install_plugin(
     workspace_trusted: bool = True,
     strict_known_sources: set[str] | None = None,
     blocked_sources: set[str] | None = None,
-    zip_extract_fn: Any | None = None,
-    zip_verify_fn: Any | None = None,
+    zip_extract_fn: Callable[[bytes, Path], None] | None = None,
+    zip_verify_fn: Callable[[bytes, str | None], None] | None = None,
 ) -> PluginID:
     """从远程来源安装一个插件到本地，并登记到 ``InstalledPluginsStore``。
 
@@ -199,9 +203,7 @@ async def install_plugin(
         raise PluginInstallError(f"Source '{LOCAL_SOURCE}' blocked by policy")
     # 安全门控 2：文件夹信任（未信任工作区拒绝安装 UNTRUSTED 来源）。
     if not is_source_trusted_for_load(LOCAL_SOURCE, workspace_trusted=workspace_trusted):
-        raise PluginInstallError(
-            "Workspace is not trusted; refusing to install remote plugin"
-        )
+        raise PluginInstallError("Workspace is not trusted; refusing to install remote plugin")
 
     version_key = version or src.ref or "latest"
     target = _versioned_target(install_root, src.name, version_key)
@@ -217,10 +219,12 @@ async def install_plugin(
         else:  # url -> zip archive
             if zip_extract_fn is None or zip_verify_fn is None:
                 raise PluginInstallError(
-                    "zip_extract_fn and zip_verify_fn are required for URL-based plugin installation"
+                    "zip_extract_fn and zip_verify_fn are "
+                    "required for URL-based plugin installation"
                 )
             await _download_zip(
-                src.url, target,
+                src.url,
+                target,
                 zip_extract_fn=zip_extract_fn,
                 zip_verify_fn=zip_verify_fn,
             )

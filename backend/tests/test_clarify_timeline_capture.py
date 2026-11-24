@@ -6,6 +6,7 @@ ToolCallEnd 经 chat_runner 落入 projector.on_tool_call_end，把答案写入 
 「人机交互」步骤的 question+answer。本项目测试只验证后端半边（投影器确实把
 答案写入 ask_user 操作的 output），前端半边由现有 stepRows/timelineParse 单测覆盖。
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -35,8 +36,9 @@ def test_ask_user_operation_captures_answer_as_output():
     p = TaskExecutionProjector(workspace_root=None)
     p.set_message_id("a1")
     p.on_tool_call_start(
-        _tool_start("c1", "ask_user_question",
-                   {"questions": [{"question": "如何处理？", "header": "处理"}]}),
+        _tool_start(
+            "c1", "ask_user_question", {"questions": [{"question": "如何处理？", "header": "处理"}]}
+        ),
     )
     # HITL 用户作答后合成 ToolCallEnd 落 output（与 agent_loop._create_clarify_tool_end 同形态）
     p.on_tool_call_end(_tool_end("c1", "排期文档处理：评估排期合理性"))

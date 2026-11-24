@@ -4,7 +4,10 @@ import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +15,7 @@ ForwardHandler = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class ForwardPublisher:
-    def __init__(self, redis_client: Any, *, prefix: str = "prismclaw:forward:") -> None:
+    def __init__(self, redis_client: Redis, *, prefix: str = "prismclaw:forward:") -> None:
         self._redis = redis_client
         self._prefix = prefix
 
@@ -29,7 +32,7 @@ class ForwardPublisher:
 class ForwardConsumer:
     def __init__(
         self,
-        redis_client: Any,
+        redis_client: Redis,
         worker_id: str,
         handler_fn: ForwardHandler,
         *,

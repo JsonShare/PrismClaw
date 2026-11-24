@@ -386,7 +386,7 @@ Licensed under Apache License 2.0
 
 ## 输出位置
 
-如果事项工作区已启用且事项处于活跃状态，写入 `${PRISMCLAW_PLUGIN_DATA}/matters/<matter-slug>/outputs/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md`。否则写入 `${PRISMCLAW_PLUGIN_DATA}/outputs/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
+如果事项工作区已启用且事项处于活跃状态，写入 `${PRISMCLAW_PLUGIN_DATA}/matters/<matter-slug>/outbox/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md`。否则写入 `${PRISMCLAW_PLUGIN_DATA}/outbox/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
 
 如果事项处于活跃状态，向事项的 `history.md` 追加一行。
 

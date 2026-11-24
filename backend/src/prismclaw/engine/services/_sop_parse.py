@@ -112,7 +112,8 @@ def _tool_result_preview(text: str) -> str:
             except OSError:
                 logger.debug(
                     "sop extraction: persisted output unreadable: %s",
-                    match.group(1), exc_info=True,
+                    match.group(1),
+                    exc_info=True,
                 )
         return _clip(text, source="persisted-output reference")
     return _clip(text, source="tool result")

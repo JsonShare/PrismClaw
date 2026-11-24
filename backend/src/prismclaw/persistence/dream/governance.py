@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.persistence.sql_runner import apply_core_schema
@@ -28,7 +28,8 @@ INSERT INTO pc_dream_governance_records (
     publish_channel, rollout_stage, shadow, created_at, updated_at, metadata_json
 ) VALUES (
     :record_id, :session_key, :target_type, :target_id, :publish_state, :review_status,
-    :publish_channel, :rollout_stage, :shadow, :created_at, :updated_at, CAST(:metadata_json AS jsonb)
+    :publish_channel, :rollout_stage, :shadow, :created_at, :updated_at,
+    CAST(:metadata_json AS jsonb)
 )
 ON CONFLICT (record_id) DO UPDATE SET
     session_key = EXCLUDED.session_key,
@@ -175,16 +176,53 @@ class PostgresDreamGovernanceStore:
         )
 
 
-def _record_from_row(row: Any) -> DreamGovernanceRecord:
+_TARGET_TYPES: tuple[DreamTargetType, ...] = ("memory", "artifact", "compression")
+_PUBLISH_STATES: tuple[DreamPublishState, ...] = (
+    "draft",
+    "reviewed",
+    "canary",
+    "published",
+    "rejected",
+)
+_REVIEW_STATUSES: tuple[DreamReviewStatus, ...] = (
+    "pending_review",
+    "published",
+    "rolled_back",
+    "rollback_requested",
+    "rejected",
+)
+_PUBLISH_CHANNELS: tuple[DreamPublishChannel, ...] = ("direct", "shadow", "canary")
+_ROLLOUT_STAGES: tuple[DreamRolloutStage, ...] = (
+    "shadow",
+    "canary",
+    "live",
+    "rolled_back",
+    "rollback_requested",
+    "rejected",
+)
+
+
+def _coerce_literal[L](value: object, allowed: tuple[L, ...], column: str) -> L:
+    """把数据库读出的原始值收敛到 Literal 枚举，非法值直接报错。"""
+    candidate = str(value)
+    for option in allowed:
+        if option == candidate:
+            return option
+    raise ValueError(f"pc_dream_governance_records.{column} 取值非法: {candidate!r}")
+
+
+def _record_from_row(row: RowMapping) -> DreamGovernanceRecord:
     return DreamGovernanceRecord(
         record_id=str(row["record_id"]),
         session_key=str(row["session_key"]),
-        target_type=str(row["target_type"]),
+        target_type=_coerce_literal(row["target_type"], _TARGET_TYPES, "target_type"),
         target_id=str(row["target_id"]),
-        publish_state=str(row["publish_state"]),
-        review_status=str(row["review_status"]),
-        publish_channel=str(row["publish_channel"]),
-        rollout_stage=str(row["rollout_stage"]),
+        publish_state=_coerce_literal(row["publish_state"], _PUBLISH_STATES, "publish_state"),
+        review_status=_coerce_literal(row["review_status"], _REVIEW_STATUSES, "review_status"),
+        publish_channel=_coerce_literal(
+            row["publish_channel"], _PUBLISH_CHANNELS, "publish_channel"
+        ),
+        rollout_stage=_coerce_literal(row["rollout_stage"], _ROLLOUT_STAGES, "rollout_stage"),
         shadow=bool(row["shadow"]),
         created_at=float(row["created_at"]),
         updated_at=float(row["updated_at"]),
@@ -192,7 +230,7 @@ def _record_from_row(row: Any) -> DreamGovernanceRecord:
     )
 
 
-def _record_to_params(record: DreamGovernanceRecord, now: float) -> dict:
+def _record_to_params(record: DreamGovernanceRecord, now: float) -> dict[str, object]:
     return {
         "record_id": record.record_id,
         "session_key": record.session_key,
@@ -209,7 +247,7 @@ def _record_to_params(record: DreamGovernanceRecord, now: float) -> dict:
     }
 
 
-def _load_metadata(raw: Any) -> dict[str, Any]:
+def _load_metadata(raw: object) -> dict[str, Any]:
     if raw is None:
         return {}
     if isinstance(raw, dict):

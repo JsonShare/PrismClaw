@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.schema.dream import (
-    DreamAuditLogger,
+    DreamAuditStore,
     DreamCandidateStore,
     DreamDecisionAuditStore,
     DreamGovernanceStore,
@@ -17,7 +17,7 @@ from prismclaw.schema.dream import (
 class DreamStores:
     candidate_store: DreamCandidateStore
     state_store: DreamStateStore
-    audit_logger: DreamAuditLogger
+    audit_logger: DreamAuditStore
     governance_store: DreamGovernanceStore
     decision_audit_store: DreamDecisionAuditStore
 

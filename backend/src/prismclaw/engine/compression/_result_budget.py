@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from prismclaw.engine.compression.context_zones import (
     clamp_summary_cap,
 )
 
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.schema.config.config import CompactionConfig
 
-def _coerce_positive_int(value: Any) -> int | None:
+
+def _coerce_positive_int(value: object) -> int | None:
+    if not isinstance(value, (int, float, str)):
+        return None
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -15,7 +21,9 @@ def _coerce_positive_int(value: Any) -> int | None:
     return parsed if parsed > 0 else None
 
 
-def _coerce_ratio(value: Any, *, default: float) -> float:
+def _coerce_ratio(value: object, *, default: float) -> float:
+    if not isinstance(value, (int, float, str)):
+        return default
     try:
         parsed = float(value)
     except (TypeError, ValueError):
@@ -27,13 +35,13 @@ def _coerce_ratio(value: Any, *, default: float) -> float:
     return parsed
 
 
-def _resolve_default_max_chars(deps: Any) -> int:
+def _resolve_default_max_chars(deps: AgentRunnerDeps) -> int:
     # per_result_char_cap 是结果裁剪的唯一配置来源（schema 保证非空正整数）；
     # 工具自身的 max_output_chars 属性覆盖仍由 resolve_max_output_chars 处理。
     return deps.config.context.compaction.tool_results.per_result_char_cap
 
 
-def _resolve_model_for_budget(deps: Any) -> str | None:
+def _resolve_model_for_budget(deps: AgentRunnerDeps) -> str | None:
     """Resolve the active LLM model id for budget calculations.
 
     Resolution order:
@@ -51,7 +59,7 @@ def _resolve_model_for_budget(deps: Any) -> str | None:
     return None
 
 
-def _resolve_aggregate_budget_chars(deps: Any, result_count: int) -> int:
+def _resolve_aggregate_budget_chars(deps: AgentRunnerDeps, result_count: int) -> int:
     compaction_cfg = deps.config.context.compaction
 
     explicit = _coerce_positive_int(compaction_cfg.tool_results.aggregate_char_budget)
@@ -91,7 +99,9 @@ def _resolve_aggregate_budget_chars(deps: Any, result_count: int) -> int:
         return max(2000, dynamic_tokens * 4)
 
     system_tokens = _coerce_positive_int(prompt_budget.system_zone_tokens) or 4096
-    reserve_tokens = _coerce_positive_int(prompt_budget.output_reserve_tokens) or int(max_context * 0.1)
+    reserve_tokens = _coerce_positive_int(prompt_budget.output_reserve_tokens) or int(
+        max_context * 0.1
+    )
     remaining_tokens = max(0, max_context - system_tokens - reserve_tokens)
 
     # Allocate 30% of remaining tokens to tool results
@@ -102,7 +112,7 @@ def _resolve_aggregate_budget_chars(deps: Any, result_count: int) -> int:
 def _resolve_context_block_aggregate_budget_chars(
     *,
     token_budget: int | None,
-    compaction_config: Any | None,
+    compaction_config: CompactionConfig | None,
 ) -> int:
     if compaction_config is None:
         # 无配置时仅基于 token_budget 推导（ratio 默认 0.6）

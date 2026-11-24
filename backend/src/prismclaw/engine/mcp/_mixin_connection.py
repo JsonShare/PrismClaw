@@ -1,34 +1,36 @@
 """Auto-extracted Mixin from client_manager.py — DO NOT edit method signatures."""
+
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import tempfile
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TextIO
 
 import anyio
 from mcp.client.session_group import SseServerParameters, StreamableHttpParameters
 from mcp.client.stdio import StdioServerParameters
 from mcp.shared.exceptions import MCPError
 
+from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
+from prismclaw.engine.mcp._patch import (
+    _STDIO_ERRLOG_FILE,
+)
 from prismclaw.engine.mcp._types import (
+    _STDERR_BUFFER_LINES,
     RestartResult,
     ServerStatus,
-    _STDERR_BUFFER_LINES,
 )
 from prismclaw.engine.mcp._utils import (
     _is_unfilled_placeholder,
-)
-from prismclaw.engine.mcp._patch import (
-    _STDIO_ERRLOG_FILE,
 )
 from prismclaw.engine.mcp.settings import (
     McpServerConfig,
     _substitute_env_placeholder,
 )
-
-from prismclaw.engine.mcp._mcp_base import _MCPBackendBase
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,7 @@ class ConnectionMixin(_MCPBackendBase):
 
         return install_mcp_client_logging(name)
 
-    def _warn_failed(self, name: str, msg: str, *args) -> None:
+    def _warn_failed(self, name: str, msg: str, *args: object) -> None:
         """连接失败事件：主日志 + 该 server 的 error.log 同步记录。"""
         logger.warning(msg, *args)
         try:
@@ -64,7 +66,7 @@ class ConnectionMixin(_MCPBackendBase):
         except Exception:
             logger.debug("mcp server logger emit error", exc_info=True)
 
-    def _open_stderr_capture(self, name: str):
+    def _open_stderr_capture(self, name: str) -> TextIO:
         self._stop_stderr_pump(name)
         existing = self._stderr_files.pop(name, None)
         if existing is not None:
@@ -75,10 +77,11 @@ class ConnectionMixin(_MCPBackendBase):
         from prismclaw.infra.logging_setup import sanitize_mcp_log_name
 
         safe = sanitize_mcp_log_name(name)
-        # 命名临时文件：子进程 OS 级写 fd；另有 pump 任务轮询该文件逐行进 logging
-        capture = tempfile.NamedTemporaryFile(
-            mode="w+t", encoding="utf-8", delete=False, prefix=f"mcp_{safe}_stderr_"
-        )
+        # 命名临时文件：子进程 OS 级写 fd；另有 pump 任务轮询该文件逐行进 logging。
+        # 句柄要跨调用存活到 pump 结束，故不能用 with 管理生命周期。
+        fd, raw_path = tempfile.mkstemp(prefix=f"mcp_{safe}_stderr_", suffix=".log")
+        os.close(fd)
+        capture = open(raw_path, "w+", encoding="utf-8")  # noqa: SIM115 - 句柄需长期持有
         self._stderr_files[name] = capture
         return capture
 
@@ -87,7 +90,7 @@ class ConnectionMixin(_MCPBackendBase):
         if task is not None and not task.done():
             task.cancel()
 
-    def _start_stderr_pump(self, name: str, capture) -> None:
+    def _start_stderr_pump(self, name: str, capture: TextIO) -> None:
         """启动 stderr 轮询：把子进程写入捕获文件的新增内容逐行 emit 到
         该 server 的独立 logger（INFO 级别 → logs/mcp_<name>/log.log）。"""
         self._stop_stderr_pump(name)
@@ -96,6 +99,12 @@ class ConnectionMixin(_MCPBackendBase):
         if not path or isinstance(path, int):
             return
 
+        def _read_from(offset: int) -> tuple[bytes, int]:
+            with open(path, "rb") as f:  # noqa: SIM115 - 每次轮询独立短生命周期
+                f.seek(offset)
+                data = f.read()
+                return data, f.tell()
+
         async def _pump() -> None:
             pos = 0
             pending = ""
@@ -103,10 +112,8 @@ class ConnectionMixin(_MCPBackendBase):
                 while True:
                     await asyncio.sleep(1.0)
                     try:
-                        with open(path, "rb") as f:
-                            f.seek(pos)
-                            data = f.read()
-                            pos = f.tell()
+                        # 1s 轮询一次 stderr 文件；放线程池避免阻塞事件循环。
+                        data, pos = await asyncio.to_thread(_read_from, pos)
                     except FileNotFoundError:
                         continue
                     except OSError:
@@ -178,18 +185,21 @@ class ConnectionMixin(_MCPBackendBase):
                     self._servers[name] = ServerStatus(
                         name=name,
                         status="disabled",
-                        reason=f"环境变量 {key!r} 仍是未填写的占位符——请在插件配置中填写后再启用该服务",
+                        reason=(
+                            f"环境变量 {key!r} 仍是未填写的占位符——请在插件配置中填写后再启用该服务"
+                        ),
                     )
                     logger.info(
                         "MCP server %r disabled: env %r is an unfilled placeholder",
-                        name, key,
+                        name,
+                        key,
                     )
                     return
 
             resolved_env: dict[str, str] = {}
             for key, raw_value in config.env.items():
-                resolved, status = _substitute_env_placeholder(raw_value)
-                if status == "missing-env-var":
+                resolved, _status = _substitute_env_placeholder(raw_value)
+                if resolved is None:
                     self._servers[name] = ServerStatus(
                         name=name,
                         status="failed",
@@ -206,8 +216,8 @@ class ConnectionMixin(_MCPBackendBase):
 
             resolved_headers: dict[str, str] = {}
             for key, raw_value in config.headers.items():
-                resolved, status = _substitute_env_placeholder(raw_value)
-                if status == "missing-env-var":
+                resolved, _status = _substitute_env_placeholder(raw_value)
+                if resolved is None:
                     self._servers[name] = ServerStatus(
                         name=name,
                         status="failed",
@@ -224,8 +234,8 @@ class ConnectionMixin(_MCPBackendBase):
 
             resolved_args: list[str] = []
             for idx, raw_value in enumerate(config.args):
-                resolved, status = _substitute_env_placeholder(raw_value)
-                if status == "missing-env-var":
+                resolved, _status = _substitute_env_placeholder(raw_value)
+                if resolved is None:
                     self._servers[name] = ServerStatus(
                         name=name,
                         status="failed",
@@ -238,7 +248,7 @@ class ConnectionMixin(_MCPBackendBase):
                         idx,
                     )
                     return
-                resolved_args.append(resolved or "")
+                resolved_args.append(resolved)
 
             if config.transport == "stdio":
                 # 为自建 server 注入日志目录与 logkit 路径（第三方 server 会忽略这些变量）。
@@ -257,7 +267,8 @@ class ConnectionMixin(_MCPBackendBase):
                     )
                     resolved_env.setdefault(
                         "PRISMCLAW_INFRA_PATH",
-                        str(_Path(__file__).resolve().parents[2] / "infra"),
+                        # resolve() 只做路径规范化，不触盘：无需进线程池。
+                        str(_Path(__file__).resolve().parents[2] / "infra"),  # noqa: ASYNC240
                     )
                 # runtime 卷：MCP SDK 的 stdio 子进程只继承
                 # HOME/LOGNAME/PATH/SHELL/TERM/USER 六个白名单变量，技能安装的
@@ -287,14 +298,23 @@ class ConnectionMixin(_MCPBackendBase):
                 # 该根下），防止 agent 传 /etc/passwd、~/.ssh/id_rsa 等任意物理路径。
                 try:
                     from prismclaw.infra.settings import load_settings
+
                     resolved_env.setdefault(
                         "PRISMCLAW_WORKSPACES_BASE",
-                        str(_Path(load_settings().workspaces.default).expanduser()),
+                        # expanduser() 只是字符串替换 ~，不做 IO。
+                        str(_Path(load_settings().workspaces.default).expanduser()),  # noqa: ASYNC240
                     )
                 except Exception as e:
                     # MCP server 路径沙箱依赖此变量；缺失会导致所有文件操作被拒——
                     # 打出 warning 便于回溯，server 侧的 fail-fast 守卫会给出更明确的拒绝消息。
-                    logging.warning("Failed to inject PRISMCLAW_WORKSPACES_BASE into MCP server %r: %s — path sandbox will reject all file operations", name, e)
+                    logging.warning(
+                        (
+                            "Failed to inject PRISMCLAW_WORKSPACES_BASE into MCP server "
+                            "%r: %s — path sandbox will reject all file operations"
+                        ),
+                        name,
+                        e,
+                    )
 
             server_params = self._build_server_params(
                 name=name,
@@ -314,7 +334,11 @@ class ConnectionMixin(_MCPBackendBase):
                     sorted(resolved_env.keys()) if resolved_env else "(default)",
                 )
 
-            if config.transport == "stdio" and config.sandbox.enabled:
+            if (
+                config.transport == "stdio"
+                and config.sandbox.enabled
+                and isinstance(server_params, StdioServerParameters)
+            ):
                 if self._sandbox_policy is None:
                     self._servers[name] = ServerStatus(
                         name=name,
@@ -326,7 +350,10 @@ class ConnectionMixin(_MCPBackendBase):
                         ),
                     )
                     logger.error(
-                        "MCP server %r marked failed: sandbox.enabled=true but no sandbox policy available",
+                        (
+                            "MCP server %r marked failed: sandbox.enabled=true "
+                            "but no sandbox policy available"
+                        ),
                         name,
                     )
                     return
@@ -362,7 +389,7 @@ class ConnectionMixin(_MCPBackendBase):
                         session = await self._group.connect_to_server(server_params)
                     finally:
                         _STDIO_ERRLOG_FILE.reset(token_file)
-            except (asyncio.TimeoutError, TimeoutError):
+            except TimeoutError:
                 self._servers[name] = ServerStatus(
                     name=name,
                     status="failed",
@@ -381,9 +408,7 @@ class ConnectionMixin(_MCPBackendBase):
                     self._servers[name] = ServerStatus(
                         name=name,
                         status="failed",
-                        reason=(
-                            "工具名冲突：另一个已连接的服务已提供至少一个同名远程工具"
-                        ),
+                        reason=("工具名冲突：另一个已连接的服务已提供至少一个同名远程工具"),
                     )
                 else:
                     stderr_tail = self._read_stderr_tail(name)
@@ -449,7 +474,7 @@ class ConnectionMixin(_MCPBackendBase):
                 name=name,
                 status="connected",
                 tool_count=tool_count,
-                last_connect_at=datetime.now(timezone.utc),
+                last_connect_at=datetime.now(UTC),
             )
             level = logging.WARNING if tool_count == 0 else logging.INFO
             logger.log(
@@ -468,7 +493,7 @@ class ConnectionMixin(_MCPBackendBase):
         resolved_env: dict[str, str],
         resolved_headers: dict[str, str],
         resolved_args: list[str],
-    ):
+    ) -> StdioServerParameters | SseServerParameters | StreamableHttpParameters | None:
         if config.transport == "stdio":
             return StdioServerParameters(
                 command=config.command or "",

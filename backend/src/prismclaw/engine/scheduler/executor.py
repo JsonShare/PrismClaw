@@ -19,16 +19,23 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.schema.scheduler.scheduler import SchedulerDispatchJob
 from prismclaw.schema.scheduler.scheduler import SchedulerStoreProtocol as SchedulerStore
 from prismclaw.schema.session.ids import build_web_session_key
 
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prismclaw.infra.settings import SchedulerSettings
+
 logger = logging.getLogger(__name__)
 
 # app 层注入：async (*, user_id, conversation_id, content, workspace_id) -> None
 RunChatFn = Callable[..., Awaitable[None]]
+# 跨 worker 广播：async (user_id, event_type, data) -> None
+BroadcastFn = Callable[[str, str, dict[str, Any]], Awaitable[None]]
 
 
 class ScheduledRunExecutor:
@@ -41,10 +48,10 @@ class ScheduledRunExecutor:
     def __init__(
         self,
         *,
-        app: Any,  # FastAPI application instance
+        app: FastAPI,
         store: SchedulerStore,
-        settings: Any,  # SchedulerSettings
-        broadcast: Any = None,  # async (user_id, event_type, data) -> None
+        settings: SchedulerSettings,
+        broadcast: BroadcastFn | None = None,
         run_chat: RunChatFn | None = None,
     ) -> None:
         self._app = app
@@ -67,10 +74,14 @@ class ScheduledRunExecutor:
         started_at = time.time()
         await self._store.update_run(job.run_id, status="running", started_at=started_at)
         await self._store.update_status(job.task_id, "running")
-        await self._notify(job.user_id, "scheduled_task.started", {
-            "task_id": job.task_id,
-            "run_id": job.run_id,
-        })
+        await self._notify(
+            job.user_id,
+            "scheduled_task.started",
+            {
+                "task_id": job.task_id,
+                "run_id": job.run_id,
+            },
+        )
 
         session_id: str | None = None
         error: str | None = None
@@ -118,34 +129,46 @@ class ScheduledRunExecutor:
                 failures = task.consecutive_failures + 1
                 if failures >= self._settings.max_consecutive_failures:
                     await self._store.update_status(
-                        job.task_id, "disabled", consecutive_failures=failures,
+                        job.task_id,
+                        "disabled",
+                        consecutive_failures=failures,
                     )
                     # Also disable in the persisted task
                     task.enabled = False
                     await self._store.put_task(task)
-                    await self._notify(job.user_id, "scheduled_task.disabled", {
-                        "task_id": job.task_id,
-                        "reason": f"{failures} consecutive failures",
-                    })
+                    await self._notify(
+                        job.user_id,
+                        "scheduled_task.disabled",
+                        {
+                            "task_id": job.task_id,
+                            "reason": f"{failures} consecutive failures",
+                        },
+                    )
                     logger.warning(
                         "scheduler.task.circuit_break",
                         extra={"task_id": job.task_id, "failures": failures},
                     )
                 else:
                     await self._store.update_status(
-                        job.task_id, status, consecutive_failures=failures,
+                        job.task_id,
+                        status,
+                        consecutive_failures=failures,
                     )
         else:
             await self._store.update_status(job.task_id, "success", consecutive_failures=0)
 
-        await self._notify(job.user_id, "scheduled_task.completed", {
-            "task_id": job.task_id,
-            "run_id": job.run_id,
-            "status": status,
-            "session_id": session_id,
-            "duration_s": round(duration, 2),
-            "error": error,
-        })
+        await self._notify(
+            job.user_id,
+            "scheduled_task.completed",
+            {
+                "task_id": job.task_id,
+                "run_id": job.run_id,
+                "status": status,
+                "session_id": session_id,
+                "duration_s": round(duration, 2),
+                "error": error,
+            },
+        )
 
     # ── Internal ───────────────────────────────────────────────────────
 
@@ -156,15 +179,15 @@ class ScheduledRunExecutor:
             raise RuntimeError("session_store not available; cannot create execution session")
         wid = job.workspace_id or "default"
         session_key = build_web_session_key(job.user_id, wid)
-        tree = await session_store.create_new_session(
+        created = await session_store.create_new_session(
             session_key=session_key,
             workspace_id=wid,
             agent_id="default",
             title=job.task_name,
         )
-        return tree.header.id
+        return str(created.header.id)
 
-    async def _notify(self, user_id: str, event_type: str, data: dict) -> None:
+    async def _notify(self, user_id: str, event_type: str, data: dict[str, Any]) -> None:
         if self._broadcast:
             try:
                 await self._broadcast(user_id, event_type, data)

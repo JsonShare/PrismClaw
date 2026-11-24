@@ -8,7 +8,13 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from prismclaw.schema.session.event_logger import SessionEventLogger
-from prismclaw.schema.session.types import CustomEntry, generate_entry_id, now_iso
+from prismclaw.schema.session.types import (
+    CustomEntry,
+    SessionEntry,
+    SessionTree,
+    generate_entry_id,
+    now_iso,
+)
 from prismclaw.schema.storage.storage_types import SessionStore
 
 _event_logger = SessionEventLogger()
@@ -75,7 +81,7 @@ def new_parallel_task_id() -> str:
     return f"pt:{uuid.uuid4().hex[:12]}"
 
 
-def parse_parallel_task_record(data: Any) -> ParallelTaskRuntimeRecord | None:
+def parse_parallel_task_record(data: object) -> ParallelTaskRuntimeRecord | None:
     if isinstance(data, ParallelTaskRuntimeRecord):
         return data
     if not isinstance(data, dict):
@@ -87,14 +93,14 @@ def parse_parallel_task_record(data: Any) -> ParallelTaskRuntimeRecord | None:
         return None
 
 
-def _branch_entries(tree: Any) -> list[Any]:
+def _branch_entries(tree: SessionTree) -> list[SessionEntry]:
     if tree is None:
         return []
     return list(tree.get_branch())
 
 
 def parallel_task_records_for_tree(
-    tree: Any | None,
+    tree: SessionTree | None,
     *,
     include_terminal: bool = True,
     kinds: set[ParallelTaskKind] | None = None,
@@ -122,7 +128,7 @@ def parallel_task_records_for_tree(
 
 
 def latest_parallel_task_for_tree(
-    tree: Any | None,
+    tree: SessionTree | None,
     *,
     agent_id: str,
     task_id: str,
@@ -135,17 +141,13 @@ def latest_parallel_task_for_tree(
         if entry.custom_type != PARALLEL_TASK_RUNTIME_CUSTOM_TYPE:
             continue
         record = parse_parallel_task_record(entry.data)
-        if (
-            record is not None
-            and record.agent_id == agent_id
-            and record.task_id == task_id
-        ):
+        if record is not None and record.agent_id == agent_id and record.task_id == task_id:
             return record
     return None
 
 
 def task_owner_agent_id(
-    tree: Any | None,
+    tree: SessionTree | None,
     *,
     task_id: str,
 ) -> str | None:
@@ -182,9 +184,7 @@ class SessionParallelTaskStore:
         session_id = record.owner_session_id
         tree = await self._session_store.load(session_id)
         if tree is None:
-            raise ValueError(
-                f"parallel task session {session_id!r} was not found"
-            )
+            raise ValueError(f"parallel task session {session_id!r} was not found")
         owner_agent_id = task_owner_agent_id(tree, task_id=record.task_id)
         if owner_agent_id is not None and owner_agent_id != record.agent_id:
             raise ValueError(

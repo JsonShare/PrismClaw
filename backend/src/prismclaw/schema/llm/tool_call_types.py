@@ -337,7 +337,7 @@ def _salvage_json_object(raw: str) -> dict[str, Any] | None:
         # 2. Missing closing quote only: '"'
         # 3. Missing BOTH quote and brace: '"}'
         # 4. Missing quote + 2 braces (nested obj): '"}}'
-        repair_suffixes = ['}', '"', '"}', '"}}', '}}']
+        repair_suffixes = ["}", '"', '"}', '"}}', "}}"]
         for suffix in repair_suffixes:
             candidate_str = base + suffix
             try:

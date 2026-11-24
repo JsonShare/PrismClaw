@@ -3,14 +3,14 @@
 在工具执行前拦截参数，对受保护健康信息（PHI）进行脱敏处理，
 防止患者身份信息泄露到非授权工具或外部服务。
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from typing import Any
 
-from ..._protocols import HookHandler, HookContext, HookResult, HookOutcome
-
+from ..._protocols import HookContext, HookHandler, HookOutcome, HookResult
 from ...config.settings import MEDICAL_TOOL_PREFIXES
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,10 @@ _PHI_PATTERNS: list[tuple[str, Any]] = [
     # 中文姓名（2-4 字，前后有上下文标识）
     (r"(?:姓名|患者|病人)[：:]\s*[\u4e00-\u9fff]{2,4}", "姓名：[NAME_REDACTED]"),
     # 病历号
-    (r"(?:病历号|住院号|门诊号)[：:]\s*\S+", lambda m: m.group(0).rsplit("：", 1)[0] + "：[MRN_REDACTED]"),
+    (
+        r"(?:病历号|住院号|门诊号)[：:]\s*\S+",
+        lambda m: m.group(0).rsplit("：", 1)[0] + "：[MRN_REDACTED]",
+    ),
 ]
 
 

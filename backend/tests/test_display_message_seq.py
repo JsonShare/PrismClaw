@@ -4,6 +4,7 @@
 多轮迭代 + 其工具结果），所以展示 seq 必须是组内最大值——取错会让
 "后到的工具结果/更新"被客户端 last_seq 永久跳过。
 """
+
 from __future__ import annotations
 
 from prismclaw.app.web.routers._message_helpers import _build_display_messages

@@ -31,16 +31,16 @@ class _FakeClock:
 
 
 class _FakePipeline:
-    def __init__(self, parent: "_FakeRedis") -> None:
+    def __init__(self, parent: _FakeRedis) -> None:
         self._parent = parent
 
-    def xack(self, *args: Any) -> "_FakePipeline":
+    def xack(self, *args: Any) -> _FakePipeline:
         return self
 
-    def xdel(self, *args: Any) -> "_FakePipeline":
+    def xdel(self, *args: Any) -> _FakePipeline:
         return self
 
-    def delete(self, *args: Any) -> "_FakePipeline":
+    def delete(self, *args: Any) -> _FakePipeline:
         return self
 
     async def execute(self) -> None:
@@ -59,31 +59,33 @@ class _FakeRedis:
     def pipeline(self) -> _FakePipeline:
         return _FakePipeline(self)
 
-    async def xgroup_create(self, key: str, group: str, id: Any = None, mkstream: bool = False) -> bool:
+    async def xgroup_create(
+        self, key: str, group: str, id: Any = None, mkstream: bool = False
+    ) -> bool:
         if self.group_exists:
             raise _RedisError("BUSYGROUP Consumer Group name already exists")
         self.group_exists = True
         self.xgroup_create_calls += 1
         return True
 
-    async def xreadgroup(self, group: str, consumer: str, streams: Any, count: int = 10, block: int = 0) -> list[Any]:
+    async def xreadgroup(
+        self, group: str, consumer: str, streams: Any, count: int = 10, block: int = 0
+    ) -> list[Any]:
         if not self.group_exists:
-            raise _RedisError(
-                "NOGROUP No such key 'stream' or consumer group 'dream-dispatch'"
-            )
+            raise _RedisError("NOGROUP No such key 'stream' or consumer group 'dream-dispatch'")
         return []
 
     async def xautoclaim(self, *args: Any, **kwargs: Any) -> list[Any]:
         if not self.group_exists:
-            raise _RedisError(
-                "NOGROUP No such key 'stream' or consumer group 'dream-dispatch'"
-            )
+            raise _RedisError("NOGROUP No such key 'stream' or consumer group 'dream-dispatch'")
         return [[], []]
 
     async def xlen(self, key: str) -> int:
         return self.stream_len
 
-    async def xadd(self, key: str, fields: dict[str, Any], maxlen: int = 0, approximate: bool = False) -> str:
+    async def xadd(
+        self, key: str, fields: dict[str, Any], maxlen: int = 0, approximate: bool = False
+    ) -> str:
         if key.endswith("audit"):
             self.audit_events.append(dict(fields))
         return "1-0"
@@ -143,9 +145,7 @@ async def test_ack_tolerates_group_loss() -> None:
     redis = _FakeRedis(clock)
     queue = _queue(redis, clock)
 
-    job = DreamDispatchJob(
-        stream_id="1-0", session_key="s1", job_kind="light", enqueued_at=0.0
-    )
+    job = DreamDispatchJob(stream_id="1-0", session_key="s1", job_kind="light", enqueued_at=0.0)
     redis.group_exists = False  # claim 之后组被销毁
     await queue.ack(job)  # 必须不抛
     events = [e.get("event") for e in redis.audit_events]

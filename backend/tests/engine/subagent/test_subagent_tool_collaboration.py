@@ -64,9 +64,7 @@ async def test_sync_result_and_persistent_replay_share_identity() -> None:
     assert replay.subagent_envelope is not None
     assert live.subagent_envelope.agent_id == replay.subagent_envelope.agent_id
     assert live.subagent_envelope.run_id == replay.subagent_envelope.run_id
-    assert live.subagent_envelope.child_session_id == (
-        replay.subagent_envelope.child_session_id
-    )
+    assert live.subagent_envelope.child_session_id == (replay.subagent_envelope.child_session_id)
     assert replay.metadata["results"][0]["status"] == "success"
     assert "done" in replay.content[0].text
 

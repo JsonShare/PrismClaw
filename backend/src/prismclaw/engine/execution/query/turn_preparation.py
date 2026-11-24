@@ -8,46 +8,46 @@ entry-points.
 from __future__ import annotations
 
 import logging
-from pathlib import Path as _Path
 from dataclasses import replace
+from pathlib import Path as _Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.engine.execution.query._static_context_types import StaticContextResult
+    from prismclaw.schema.agent.types import RunRequest
 
 from prismclaw.engine.compression.budget_orchestrator import (
     load_budget_audit_trail,
     merge_budget_audit_trails,
 )
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
-from prismclaw.engine.execution.capabilities.delta_projection import build_capability_delta_blocks
-from prismclaw.engine.execution.request.packing import RequestPackager
-from prismclaw.engine.security.gate.governance import runtime_notes_for
-from prismclaw.engine.execution.request._prompt_types import build_system_prompt_section_state
 from prismclaw.engine.compression.context_zones import resolve_runtime_zones
-from prismclaw.engine.execution.request.system_prompt import (
-    PromptInputs,
-    SystemPromptResult,
-    build_per_turn_suffix,
-)
 from prismclaw.engine.context.projection_engine import ContextProjectionEngine
 from prismclaw.engine.context.projection_models import ProjectionMessageSet
-from prismclaw.schema.content.replacement_state import ReplacementDecisionState
-from prismclaw.engine.state.turn_state import TurnState
-from prismclaw.schema.content.content_types import RuntimeControlArtifact
-from prismclaw.schema.content.context import ContextBlock
-
+from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.delta_projection import build_capability_delta_blocks
 from prismclaw.engine.execution.query._turn_helpers import (
     DynamicContextResult,
     TurnPreflightResult,
     _build_runtime_status_blocks,
     _require_capability_catalog,
     _try_auto_activate_skill,
-    apply_request_mode_skeleton,
     build_turn_context_layout,
     ensure_user_message,
     orchestrate_context_layout_budgets,
 )
+from prismclaw.engine.execution.request._prompt_types import build_system_prompt_section_state
+from prismclaw.engine.execution.request.packing import RequestPackager
+from prismclaw.engine.execution.request.system_prompt import (
+    PromptInputs,
+    SystemPromptResult,
+    build_per_turn_suffix,
+)
+from prismclaw.engine.security.gate.governance import runtime_notes_for
+from prismclaw.engine.state.turn_state import TurnState
+from prismclaw.schema.content.content_types import RuntimeControlArtifact
+from prismclaw.schema.content.context import ContextBlock
+from prismclaw.schema.content.replacement_state import ReplacementDecisionState
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +56,15 @@ logger = logging.getLogger(__name__)
 # Async entry-points
 # ---------------------------------------------------------------------------
 
+
 async def _prepare_query_turn_from_prompt_inputs(
     *,
-    request: Any,
-    deps: Any,
+    request: RunRequest,
+    deps: AgentRunnerDeps,
     prompt_inputs: PromptInputs,
     frozen_result: SystemPromptResult,
     history_budget: int,
-    request_mode: str | None,
+    include_l1_memory: bool,
     prior_replacement_state: ReplacementDecisionState | None = None,
     attachment_guidance: str | None,
     message_set: ProjectionMessageSet,
@@ -77,7 +78,7 @@ async def _prepare_query_turn_from_prompt_inputs(
         prompt_inputs=prompt_inputs,
         frozen_result=frozen_result,
         history_budget=history_budget,
-        request_mode=request_mode,
+        include_l1_memory=include_l1_memory,
         prior_replacement_state=prior_replacement_state,
         attachment_guidance=attachment_guidance,
         message_set=message_set,
@@ -89,9 +90,10 @@ async def _prepare_query_turn_from_prompt_inputs(
 
 async def prepare_query_turn_from_static_context(
     *,
-    request: Any,
-    deps: Any,
-    static_result: "StaticContextResult",
+    request: RunRequest,
+    deps: AgentRunnerDeps,
+    static_result: StaticContextResult,
+    include_l1_memory: bool,
     attachment_guidance: str | None,
     message_set: ProjectionMessageSet,
     model: str,
@@ -103,7 +105,7 @@ async def prepare_query_turn_from_static_context(
         prompt_inputs=static_result.prompt_inputs,
         frozen_result=static_result.frozen_result,
         history_budget=static_result.history_budget,
-        request_mode=static_result.request_mode,
+        include_l1_memory=include_l1_memory,
         prior_replacement_state=static_result.prior_replacement_state,
         attachment_guidance=attachment_guidance,
         message_set=message_set,
@@ -116,6 +118,7 @@ async def prepare_query_turn_from_static_context(
 # Main orchestrator
 # ---------------------------------------------------------------------------
 
+
 class QueryTurnPreparator:
     def __init__(self, *, projection_engine: ContextProjectionEngine | None = None) -> None:
         self._projection_engine = projection_engine or ContextProjectionEngine()
@@ -123,12 +126,13 @@ class QueryTurnPreparator:
     async def build(
         self,
         *,
-        request: Any,
-        deps: Any,
+        request: RunRequest,
+        deps: AgentRunnerDeps,
         prompt_inputs: PromptInputs,
         frozen_result: SystemPromptResult,
         history_budget: int,
-        request_mode: str | None,
+        include_l1_memory: bool,
+        prior_replacement_state: ReplacementDecisionState | None = None,
         attachment_guidance: str | None,
         message_set: ProjectionMessageSet,
         turn_state: TurnState | None = None,
@@ -139,7 +143,6 @@ class QueryTurnPreparator:
             messages=message_set.messages,
             token_budget=history_budget,
             prompt=request.user_message,
-            request_mode=request_mode,
             task_spec=getattr(request, "task_spec", None),
         )
         assembled.messages = ensure_user_message(
@@ -155,9 +158,9 @@ class QueryTurnPreparator:
         # import, no trajectory-specific try/except per exception.
         try:
             from prismclaw.engine.trajectory.bus import current_bus
+            from prismclaw.engine.trajectory.bus_context import current_runtime
             from prismclaw.engine.trajectory.bus_events import AssembleEntryDone
             from prismclaw.engine.utils.summarize import summarize_messages
-            from prismclaw.engine.trajectory.bus_context import current_runtime
 
             bus = current_bus()
             _rt = current_runtime()
@@ -174,14 +177,18 @@ class QueryTurnPreparator:
                 msg_count, roles, head, tail = summarize_messages(
                     assembled.messages or [],
                 )
-                bus.publish(AssembleEntryDone(
-                    session_id=sid, turn_counter=turn_counter, iteration=iteration,
-                    msg_count=msg_count,
-                    msg_roles=roles,
-                    head=head,
-                    tail=tail,
-                    entry_meta_keys=_meta_keys,
-                ))
+                bus.publish(
+                    AssembleEntryDone(
+                        session_id=sid,
+                        turn_counter=turn_counter,
+                        iteration=iteration,
+                        msg_count=msg_count,
+                        msg_roles=roles,
+                        head=head,
+                        tail=tail,
+                        entry_meta_keys=_meta_keys,
+                    )
+                )
         except Exception:
             pass  # never break baseline
         assembled_plan = assembled.context_layout
@@ -197,10 +204,7 @@ class QueryTurnPreparator:
                         *prompt_inputs.runtime_strategy_notes,
                         *runtime_notes_for(getattr(request, "task_spec", None)),
                         *(
-                            deps.task_request_policy.runtime_strategy_notes(
-                                task_profile,
-                                request_mode=request_mode,
-                            )
+                            deps.task_request_policy.runtime_strategy_notes(task_profile)
                             if task_profile is not None
                             else []
                         ),
@@ -209,17 +213,15 @@ class QueryTurnPreparator:
             ),
         )
         # L1 记忆索引（SDD D3 方案 A）：per-turn 加载，走动态区——静态 shell
-        # cache 命中时也反映最新记忆；fast_path 维持零 IO 不加载。
+        # cache 命中时也反映最新记忆。是否加载由 plan.include_l1_memory 决定。
         l1_snapshot_text: str | None = None
-        if request_mode != "fast_path":
+        if include_l1_memory:
             try:
                 from prismclaw.engine.execution.query._static_context_types import (
                     format_l1_snapshot,
                 )
 
-                l1_entries = await deps.context_memory_provider.get_l1_snapshot(
-                    request.session_id
-                )
+                l1_entries = await deps.context_memory_provider.get_l1_snapshot(request.session_id)
                 l1_snapshot_text = format_l1_snapshot(l1_entries) if l1_entries else None
             except Exception:
                 logger.warning("per-turn l1 snapshot load failed", exc_info=True)
@@ -247,6 +249,7 @@ class QueryTurnPreparator:
                     load_fact_sheet,
                     render_fact_sheet_text,
                 )
+
                 fs = load_fact_sheet(tree)
                 if fs:
                     fact_sheet_text = render_fact_sheet_text(fs)
@@ -263,7 +266,9 @@ class QueryTurnPreparator:
             capability_catalog = getattr(deps, "capability_catalog", None)
             auto_activation = _try_auto_activate_skill(
                 user_message=request.user_message,
-                capability_catalog=capability_catalog if isinstance(capability_catalog, CapabilityCatalogService) else None,
+                capability_catalog=capability_catalog
+                if isinstance(capability_catalog, CapabilityCatalogService)
+                else None,
                 workspace_path=prompt_inputs.workspace_path,
             )
         except Exception:
@@ -276,7 +281,7 @@ class QueryTurnPreparator:
         # LLM 迭代都执行，无论走激活提醒还是推荐提示，hints 只消费一次。
         skill_route_hints = getattr(request, "skill_route_hints", ())
         request.skill_route_hints = ()
-        appended_messages_override: list | None = None
+        appended_messages_override: list[Any] | None = None
         if auto_activation is not None and auto_activation.skill_invocation is not None:
             inv = auto_activation.skill_invocation
             reminder_text = f"[已自动激活技能“{inv.skill_name}”，该技能现已对当前任务生效。]"
@@ -312,16 +317,16 @@ class QueryTurnPreparator:
 
         turn_context_layout = build_turn_context_layout(
             frozen_blocks=frozen_result.blocks,
-            per_turn_blocks=[*per_turn_result.blocks, *capability_delta_blocks, *runtime_status_blocks],
+            per_turn_blocks=[
+                *per_turn_result.blocks,
+                *capability_delta_blocks,
+                *runtime_status_blocks,
+            ],
             assembled_plan=assembled_plan,
             attachment_guidance=attachment_guidance,
             extra_system=request.extra_system,
             task_profile=task_profile,
             fact_sheet_text=fact_sheet_text,
-        )
-        turn_context_layout = apply_request_mode_skeleton(
-            turn_context_layout,
-            request_mode=request_mode,
         )
         _tools_wire = 0
         _tools_registry = getattr(deps, "tools", None)
@@ -342,9 +347,11 @@ class QueryTurnPreparator:
             # working_dir 必须是 session 根，不是 workspace 根 —— 否则 context_blocks
             # / tool_results 会被 mkdir 到 workspace 根，与重构后 session 级隔离冲突。
             working_dir=(
-                str(_Path(prompt_inputs.workspace_path)
+                str(
+                    _Path(prompt_inputs.workspace_path)
                     / "sessions"
-                    / prompt_inputs.session_id.replace("#", "-").replace(":", "-"))
+                    / prompt_inputs.session_id.replace("#", "-").replace(":", "-")
+                )
                 if prompt_inputs.workspace_path and prompt_inputs.session_id
                 else prompt_inputs.workspace_path
             ),
@@ -353,22 +360,22 @@ class QueryTurnPreparator:
         turn_context_layout = budgeted.context_layout
         # G4：每轮区域压力计量（每块 actual/cap），结构化日志。
         try:
-            _sys_actual = sum(
-                b.estimated_tokens for b in turn_context_layout.zone_blocks("static")
-            )
+            _sys_actual = sum(b.estimated_tokens for b in turn_context_layout.zone_blocks("static"))
             _dyn_actual = sum(
                 b.estimated_tokens for b in turn_context_layout.zone_blocks("dynamic")
             )
-            _res_actual = sum(
-                b.estimated_tokens for b in turn_context_layout.zone_blocks("result")
-            )
+            _res_actual = sum(b.estimated_tokens for b in turn_context_layout.zone_blocks("result"))
             logger.info(
                 "zone_pressure system_actual=%d system_cap=%d dynamic_actual=%d "
                 "dynamic_cap=%d result_actual=%d result_cap=%d tools_actual=%d tools_cap=%d",
-                _sys_actual, _zones.system,
-                _dyn_actual, _zones.dynamic,
-                _res_actual, _zones.result,
-                _tools_wire, _zones.tools,
+                _sys_actual,
+                _zones.system,
+                _dyn_actual,
+                _zones.dynamic,
+                _res_actual,
+                _zones.result,
+                _tools_wire,
+                _zones.tools,
             )
         except Exception:
             pass
@@ -395,20 +402,18 @@ class QueryTurnPreparator:
                 assembled_budget_audit,
                 budgeted.audit_trail,
             ),
-            system_prompt_sections=build_system_prompt_section_state(
-                turn_context_layout
-            ),
+            system_prompt_sections=build_system_prompt_section_state(turn_context_layout),
         )
 
     async def prepare_turn(
         self,
         *,
-        request: Any,
-        deps: Any,
+        request: RunRequest,
+        deps: AgentRunnerDeps,
         prompt_inputs: PromptInputs,
         frozen_result: SystemPromptResult,
         history_budget: int,
-        request_mode: str | None,
+        include_l1_memory: bool,
         prior_replacement_state: ReplacementDecisionState | None = None,
         attachment_guidance: str | None,
         message_set: ProjectionMessageSet,
@@ -422,7 +427,7 @@ class QueryTurnPreparator:
             prompt_inputs=prompt_inputs,
             frozen_result=frozen_result,
             history_budget=history_budget,
-            request_mode=request_mode,
+            include_l1_memory=include_l1_memory,
             attachment_guidance=attachment_guidance,
             message_set=message_set,
             turn_state=turn_state,
@@ -432,9 +437,9 @@ class QueryTurnPreparator:
         # Core imports ONLY core.bus / core.bus_events / summarise helper.
         try:
             from prismclaw.engine.trajectory.bus import current_bus
+            from prismclaw.engine.trajectory.bus_context import current_runtime
             from prismclaw.engine.trajectory.bus_events import PipelineOutDone
             from prismclaw.engine.utils.summarize import summarize_messages
-            from prismclaw.engine.trajectory.bus_context import current_runtime
 
             bus = current_bus()
             _rt = current_runtime()
@@ -450,11 +455,7 @@ class QueryTurnPreparator:
                 try:
                     _ba = getattr(dynamic_result, "budget_audit", None)
                     if _ba is not None:
-                        _md = (
-                            _ba.to_metadata_dict()
-                            if hasattr(_ba, "to_metadata_dict")
-                            else {}
-                        )
+                        _md = _ba.to_metadata_dict() if hasattr(_ba, "to_metadata_dict") else {}
                         if isinstance(_md, dict):
                             _dc = _md.get("decision_count")
                             if isinstance(_dc, int):
@@ -496,7 +497,7 @@ class QueryTurnPreparator:
                 except Exception:
                     _compressors_used = ()
                 msg_count, roles, head, tail = summarize_messages(list(_projected))
- # derive compaction_summary — a human-readable
+                # derive compaction_summary — a human-readable
                 # preview of what was compacted. We sample the assemble_entry
                 # (pre-compaction) vs pipeline_out (post-compaction) head/tail
                 # difference into a short string so the panel can show
@@ -523,23 +524,26 @@ class QueryTurnPreparator:
                         _compaction_summary = " | ".join(_lines)[:500]
                 except Exception:
                     _compaction_summary = None
-                bus.publish(PipelineOutDone(
-                    session_id=sid, turn_counter=turn_counter, iteration=iteration,
-                    msg_count=msg_count,
-                    msg_roles=roles,
-                    head=head,
-                    tail=tail,
-                    budget_summary=_budget_summary,
-                    compressors_used=_compressors_used,
-                    compaction_summary=_compaction_summary,
-                ))
+                bus.publish(
+                    PipelineOutDone(
+                        session_id=sid,
+                        turn_counter=turn_counter,
+                        iteration=iteration,
+                        msg_count=msg_count,
+                        msg_roles=roles,
+                        head=head,
+                        tail=tail,
+                        budget_summary=_budget_summary,
+                        compressors_used=_compressors_used,
+                        compaction_summary=_compaction_summary,
+                    )
+                )
         except Exception:
             pass  # never break baseline
 
         packed_request = request_packager.pack_projection(
             projection=dynamic_result.projection,
             model=model,
-            request_mode=request_mode,
             previous_replacement_state=prior_replacement_state,
             # D2/F5：主链路透传 session_id 作 prompt_cache_key 来源。
             session_id=getattr(request, "session_id", None),
@@ -547,11 +551,11 @@ class QueryTurnPreparator:
 
         # ⚓ [Phase 0' Decoupled Trajectory] Layer ④ final messages to LLM.
         try:
+            from prismclaw.engine.compression.compaction import estimate_messages_tokens
             from prismclaw.engine.trajectory.bus import current_bus
+            from prismclaw.engine.trajectory.bus_context import current_runtime
             from prismclaw.engine.trajectory.bus_events import PackerFinalDone
             from prismclaw.engine.utils.summarize import summarize_messages
-            from prismclaw.engine.trajectory.bus_context import current_runtime
-            from prismclaw.engine.compression.compaction import estimate_messages_tokens
 
             bus = current_bus()
             _rt = current_runtime()
@@ -590,7 +594,7 @@ class QueryTurnPreparator:
                     _sys_chars = None
                 _schema_chars: int | None = None
                 _resp_chars: int | None = None
- # actual system prompt + tool schema TEXT (up to 1000 chars).
+                # actual system prompt + tool schema TEXT (up to 1000 chars).
                 # The existing *_chars fields only carry counts — useless for
                 # "what did the system prompt actually say". These give the
                 # panel real content to display.
@@ -606,7 +610,13 @@ class QueryTurnPreparator:
                         _parts: list[str] = []
                         for _b in _sys_field:
                             try:
-                                _t = _b if isinstance(_b, str) else getattr(_b, "content", None) or getattr(_b, "text", None) or ""
+                                _t = (
+                                    _b
+                                    if isinstance(_b, str)
+                                    else getattr(_b, "content", None)
+                                    or getattr(_b, "text", None)
+                                    or ""
+                                )
                                 if isinstance(_t, str):
                                     _parts.append(_t)
                             except Exception:
@@ -618,6 +628,7 @@ class QueryTurnPreparator:
                         if len(_system_prompt_full) > 1000:
                             _system_prompt_text = _system_prompt_text + "…"
                         import hashlib as _hashlib
+
                         _system_prompt_sha = _hashlib.sha1(
                             _system_prompt_full.encode("utf-8", "replace"),
                         ).hexdigest()[:16]
@@ -629,11 +640,14 @@ class QueryTurnPreparator:
                     _ctx_payload = getattr(packed_request, "context_payload", None)
                     if _ctx_payload:
                         import json as _json
+
                         _schema_str = _json.dumps(
-                            _ctx_payload, ensure_ascii=False, default=str,
+                            _ctx_payload,
+                            ensure_ascii=False,
+                            default=str,
                         )
                         _schema_chars = len(_schema_str)
- # also keep the actual schema text (up to 1000 chars)
+                        # also keep the actual schema text (up to 1000 chars)
                         if _schema_str:
                             _tool_schema_text = _schema_str[:1000]
                             if len(_schema_str) > 1000:
@@ -642,21 +656,25 @@ class QueryTurnPreparator:
                     _schema_chars = None
                     _tool_schema_text = None
                 msg_count, roles, head, tail = summarize_messages(_final_msgs)
-                bus.publish(PackerFinalDone(
-                    session_id=sid, turn_counter=turn_counter, iteration=iteration,
-                    msg_count=msg_count,
-                    msg_roles=roles,
-                    head=head,
-                    tail=tail,
-                    estimated_tokens=_final_tokens,
-                    system_text_chars=_sys_chars,
-                    tool_schema_chars=_schema_chars,
-                    response_format_chars=_resp_chars,
-                    system_prompt_text=_system_prompt_text,
-                    tool_schema_text=_tool_schema_text,
-                    system_prompt_full_text=_system_prompt_full,
-                    system_prompt_sha1_16=_system_prompt_sha,
-                ))
+                bus.publish(
+                    PackerFinalDone(
+                        session_id=sid,
+                        turn_counter=turn_counter,
+                        iteration=iteration,
+                        msg_count=msg_count,
+                        msg_roles=roles,
+                        head=head,
+                        tail=tail,
+                        estimated_tokens=_final_tokens,
+                        system_text_chars=_sys_chars,
+                        tool_schema_chars=_schema_chars,
+                        response_format_chars=_resp_chars,
+                        system_prompt_text=_system_prompt_text,
+                        tool_schema_text=_tool_schema_text,
+                        system_prompt_full_text=_system_prompt_full,
+                        system_prompt_sha1_16=_system_prompt_sha,
+                    )
+                )
         except Exception:
             pass  # never break baseline
         history_tokens = estimate_messages_tokens(dynamic_result.projection.projected_messages)
@@ -671,7 +689,6 @@ class QueryTurnPreparator:
             packed_request=packed_request,
             request_snapshot=None,
             history_tokens=history_tokens,
-            request_mode=request_mode,
             budget_audit=dynamic_result.budget_audit,
             system_prompt_sections=dynamic_result.system_prompt_sections,
         )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 import mcp
 
@@ -15,7 +15,7 @@ class DeclarativeMCPManager:
     def __init__(self, statuses: list[ServerStatus]) -> None:
         self._statuses = list(statuses)
 
-    def attach_and_register(self, _registry: Any) -> None:
+    def attach_and_register(self, _registry: object) -> None:
         return None
 
     def list_servers(self) -> list[ServerStatus]:
@@ -59,7 +59,7 @@ class DeclarativeMCPManager:
     def get_logs(self, _name: str) -> str:
         return ""
 
-    def get_session(self, _name: str) -> "mcp.ClientSession | None":
+    def get_session(self, _name: str) -> mcp.ClientSession | None:
         return None
 
     def note_tool_decision(

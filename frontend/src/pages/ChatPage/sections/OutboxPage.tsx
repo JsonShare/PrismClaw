@@ -15,7 +15,7 @@ import {
 } from '../../../lib/file/outputFiles'
 import { apiUrl } from '../../../lib/system-adapter'
 
-interface OutputsPageProps {
+interface OutboxPageProps {
   token?: string | null
   onSelectSession?: (sessionId: string) => void
 }
@@ -35,7 +35,7 @@ function SortIcon({ type }: { type: 'time' | 'size' | 'session' | 'workspace' })
   return <FolderKanban className={cls} />
 }
 
-export default function OutputsPage({ token, onSelectSession: _onSelectSession }: OutputsPageProps) {
+export default function OutboxPage({ token, onSelectSession: _onSelectSession }: OutboxPageProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [files, setFiles] = useState<OutputFile[]>([])

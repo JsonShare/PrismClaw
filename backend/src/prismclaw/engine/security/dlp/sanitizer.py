@@ -1,4 +1,5 @@
 """DLP sanitizer — sanitize + encoding_preprocessor + phi_llm_scanner 合并。"""
+
 from __future__ import annotations
 
 import base64
@@ -9,9 +10,8 @@ import re
 import unicodedata
 import urllib.parse
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
-
 
 # ── sanitize ────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ def sanitize_tool_args(args: dict[str, Any]) -> tuple[str, str, str]:
 # ── dlp_encoding_preprocessor ───────────────────────────────────────────────
 
 # Base64 检测模式（至少 16 字符，标准 Base64 字符集）
-_BASE64_PATTERN = re.compile(r'(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{4,}={0,2}(?![A-Za-z0-9+/=])')
+_BASE64_PATTERN = re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{4,}={0,2}(?![A-Za-z0-9+/=])")
 
 
 def normalize_nfkc(text: str) -> str:
@@ -94,7 +94,11 @@ def base64_decode_phi(text: str) -> str:
         try:
             decoded = base64.b64decode(candidate, validate=True).decode("utf-8", errors="strict")
             printable = sum(1 for c in decoded if c.isprintable()) / max(1, len(decoded))
-            has_phi_patterns = bool(re.search(r'[\u4e00-\u9fff]|[A-Za-z]{3,}|\d{3}-\d{2}-\d{4}|\d{9,11}|1[3-9]\d{9}', decoded))
+            has_phi_patterns = bool(
+                re.search(
+                    r"[\u4e00-\u9fff]|[A-Za-z]{3,}|\d{3}-\d{2}-\d{4}|\d{9,11}|1[3-9]\d{9}", decoded
+                )
+            )
             if printable >= 0.95 and (has_phi_patterns or len(decoded) >= 8):
                 return decoded
         except Exception:
@@ -111,6 +115,7 @@ def quoted_printable_decode(text: str) -> str:
     示例：=E5=BC=A0=E4=B8=89 → 张三
     """
     import quopri
+
     try:
         decoded = quopri.decodestring(text.encode("utf-8", errors="replace")).decode(
             "utf-8", errors="replace"
@@ -146,18 +151,19 @@ def dlp_preprocess(text: str) -> str:
 logger = logging.getLogger(__name__)
 
 
-class LlmScanResult(str, Enum):
-    CLEAN = "clean"           # 无残留 PHI
-    RISK_DETECTED = "risk"    # 检测到残留 PHI
-    FALLBACK = "fallback"    # GPU 不可用，降级仅 L3
+class LlmScanResult(StrEnum):
+    CLEAN = "clean"  # 无残留 PHI
+    RISK_DETECTED = "risk"  # 检测到残留 PHI
+    FALLBACK = "fallback"  # GPU 不可用，降级仅 L3
 
 
 @dataclass(frozen=True)
 class LlmPhiScanReport:
     """LLM PHI 扫描报告。"""
+
     result: LlmScanResult
     detected_phi: list[str] = field(default_factory=list)
-    risk_score: float = 0.0         # 0.0-1.0
+    risk_score: float = 0.0  # 0.0-1.0
     gpu_available: bool = False
     fallback_active: bool = False
     reason: str = ""
@@ -196,17 +202,17 @@ class PhiLlmScanner:
         self._model_name = model_name
         self._vllm_endpoint = vllm_endpoint
         self._gpu_available = self._detect_gpu()
+        self._fallback: PhiLlmFallbackScanner | None = None
         if not self._gpu_available:
             logger.warning("PhiLlmScanner: GPU not available, falling back to L3 regex")
             self._fallback = PhiLlmFallbackScanner()
-        else:
-            self._fallback = None
 
     @staticmethod
     def _detect_gpu() -> bool:
         """检测 GPU 是否可用（NVIDIA T4+）。"""
         try:
             import subprocess
+
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
                 capture_output=True,
@@ -226,8 +232,11 @@ class PhiLlmScanner:
 
     async def scan(self, text: str, *, session_id: str = "") -> LlmPhiScanReport:
         """执行 L2 LLM PHI 扫描。GPU 不可用自动 fallback。"""
-        if not self._gpu_available or self._fallback is not None:
-            return self._fallback.scan(text, session_id=session_id)
+        if not self._gpu_available:
+            fallback = self._fallback
+            if fallback is None:
+                raise RuntimeError("PhiLlmScanner 缺少 fallback 扫描器")
+            return fallback.scan(text, session_id=session_id)
 
         # NOTE: 占位实现——GPU 存在时仍返回 CLEAN（未接入真实推理）
         # 待接入真实 vLLM HTTP 调用（continuous batching）后生效

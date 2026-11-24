@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.schema.agent.task_runtime import EvidenceRecord
@@ -9,7 +8,7 @@ from prismclaw.schema.agent.task_runtime import EvidenceRecord
 _PATH_ARG_NAMES = ("file_path", "path", "file", "filepath")
 
 
-def declared_paths(call: Any) -> tuple[str, ...]:
+def declared_paths(call: object) -> tuple[str, ...]:
     """从工具入参解析调用方声明的文件路径；解析失败即为空集。"""
     arguments = getattr(call, "arguments", None)
     if not isinstance(arguments, dict):
@@ -25,8 +24,8 @@ def declared_paths(call: Any) -> tuple[str, ...]:
 def record_tool_evidence(
     *,
     task_id: str,
-    call: Any,
-    result: Any,
+    call: object,
+    result: object,
     before: dict[str, tuple[int, int] | None],
     after: dict[str, tuple[int, int] | None],
 ) -> EvidenceRecord:

@@ -4,6 +4,7 @@
 使其后全部内容失去前缀可缓存性；改动后恒 append 到尾部，跨轮共享
 前缀最大化（仅 reminder 本身逐轮更新）。
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -39,20 +40,24 @@ def _is_reminder(msg: dict) -> bool:
 
 
 def test_reminder_appended_after_current_user_message() -> None:
-    out = _adapt([
-        {"role": "user", "content": "u1"},
-        {"role": "assistant", "content": "a1"},
-        {"role": "user", "content": "u2"},
-    ])
+    out = _adapt(
+        [
+            {"role": "user", "content": "u1"},
+            {"role": "assistant", "content": "a1"},
+            {"role": "user", "content": "u2"},
+        ]
+    )
     assert _is_reminder(out[-1])
     assert out[2]["content"] == "u2"
 
 
 def test_reminder_appended_after_assistant_message() -> None:
-    out = _adapt([
-        {"role": "user", "content": "u1"},
-        {"role": "assistant", "content": "a1"},
-    ])
+    out = _adapt(
+        [
+            {"role": "user", "content": "u1"},
+            {"role": "assistant", "content": "a1"},
+        ]
+    )
     assert _is_reminder(out[-1])
 
 
@@ -69,11 +74,13 @@ def test_cross_turn_shared_prefix_is_maximal() -> None:
         {"role": "user", "content": "u2"},
     ]
     turn_n = _adapt(history)
-    turn_n1 = _adapt([
-        *history,
-        {"role": "assistant", "content": "a2"},
-        {"role": "user", "content": "u3"},
-    ])
+    turn_n1 = _adapt(
+        [
+            *history,
+            {"role": "assistant", "content": "a2"},
+            {"role": "user", "content": "u3"},
+        ]
+    )
     # turn N 的最后一条是 reminder；其前的全部内容必须逐字节等于
     # turn N+1 的同位前缀——即历史部分零漂移。
     assert turn_n[:-1] == turn_n1[: len(turn_n) - 1]

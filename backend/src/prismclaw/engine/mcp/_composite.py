@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import mcp
 
@@ -11,19 +12,57 @@ from prismclaw.engine.mcp._types import (
 )
 from prismclaw.schema.shared.exceptions import MCPServerDeadError
 
+if TYPE_CHECKING:
+    from prismclaw.engine.mcp._utils import _ToolRegistryProto
+
+
+class _MCPManagerProto(Protocol):
+    """CompositeMCPManager 聚合所需的子管理器契约。
+
+    ``MCPClientManager`` 与 ``DeclarativeMCPManager`` 都满足；后者只是状态占位，
+    不真正连接，因此这里是结构化协议而非某个具体实现类型。
+    """
+
+    def attach_and_register(self, registry: _ToolRegistryProto) -> None: ...
+    def list_servers(self) -> list[ServerStatus]: ...
+    def get_status(self, name: str) -> ServerStatus | None: ...
+    def connection_summary(self) -> ConnectionSummary: ...
+    def is_ready(self) -> bool: ...
+    async def wait_ready(self) -> None: ...
+    async def restart_server(self, name: str) -> RestartResult: ...
+    def get_logs(self, name: str) -> str: ...
+    def get_session(self, name: str) -> mcp.ClientSession | None: ...
+    def note_tool_decision(
+        self,
+        server_name: str,
+        *,
+        tool_name: str,
+        decision: Literal["approved", "denied"],
+        reason: str | None = None,
+    ) -> None: ...
+    def note_tool_result(
+        self,
+        server_name: str,
+        *,
+        tool_name: str,
+        outcome: Literal["success", "error", "timeout", "server_dead"],
+        detail: str | None = None,
+    ) -> None: ...
+    async def shutdown(self) -> None: ...
+
 
 class CompositeMCPManager:
-    def __init__(self, managers: list[Any]) -> None:
-        self._managers = [m for m in managers if m is not None]
+    def __init__(self, managers: Sequence[_MCPManagerProto]) -> None:
+        self._managers: list[_MCPManagerProto] = list(managers)
 
-    def _find_manager(self, server_name: str) -> Any | None:
+    def _find_manager(self, server_name: str) -> _MCPManagerProto | None:
         for manager in self._managers:
             for status in manager.list_servers():
                 if status.name == server_name:
                     return manager
         return None
 
-    def attach_and_register(self, registry: Any) -> None:
+    def attach_and_register(self, registry: _ToolRegistryProto) -> None:
         for manager in self._managers:
             manager.attach_and_register(registry)
 
@@ -72,7 +111,7 @@ class CompositeMCPManager:
             return ""
         return manager.get_logs(name)
 
-    def get_session(self, name: str) -> "mcp.ClientSession | None":
+    def get_session(self, name: str) -> mcp.ClientSession | None:
         manager = self._find_manager(name)
         if manager is None:
             return None
@@ -99,8 +138,8 @@ class CompositeMCPManager:
         fetch = getattr(manager, "get_prompt_text_threadsafe", None)
         if not callable(fetch):
             raise MCPServerDeadError(
-                f"MCP server {server_name!r} not available; "
-                f"cannot fetch prompt {prompt_name!r}"
+                server_name,
+                f"cannot fetch prompt {prompt_name!r}: manager does not support prompts",
             )
         return str(fetch(server_name, prompt_name, arguments, timeout_s=timeout_s))
 

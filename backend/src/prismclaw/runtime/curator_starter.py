@@ -1,23 +1,35 @@
 """Curator 后台启动服务 — 从 wiring/bundles/lifecycle.py 迁出"""
+
 from __future__ import annotations
 
 import logging
 from functools import partial
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+    from fastapi import FastAPI
+
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.infra.settings import Settings
+    from prismclaw.schema.services.lock import LockManagerProtocol
+    from prismclaw.schema.services.task_protocol import TaskManagerProtocol
+    from prismclaw.schema.storage.storage_types import MemoryStore
 
 logger = logging.getLogger(__name__)
 
 
 async def start_curator_if_enabled(
     *,
-    app: Any,
-    settings: Any,
-    redis_client: Any,
-    task_manager: Any,
-    runner_deps: Any,
-    lock_manager: Any,
-    workspace_base: Any,
-    memory_store: Any,
+    app: FastAPI,
+    settings: Settings,
+    redis_client: aioredis.Redis,
+    task_manager: TaskManagerProtocol,
+    runner_deps: AgentRunnerDeps,
+    lock_manager: LockManagerProtocol,
+    workspace_base: Path,
+    memory_store: MemoryStore | None,
 ) -> None:
     """启动 curator 后台循环（如果配置启用且前置条件满足）"""
     if not settings.evolution.enabled or not settings.evolution.curator.enabled:

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from prismclaw.engine.subagent.definition.manifest import AgentManifest
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 
 from prismclaw.engine.subagent.shared_types import PreloadedSkillContext
@@ -13,14 +14,14 @@ from prismclaw.schema.services.skills import SkillManifest
 logger = logging.getLogger(__name__)
 
 
-def coerce_allowed_tool_names(raw: Any) -> set[str] | None:
+def coerce_allowed_tool_names(raw: object) -> set[str] | None:
     if not isinstance(raw, list):
         return None
     names = {item.strip() for item in raw if isinstance(item, str) and item.strip()}
     return names or set()
 
 
-def expand_allowed_tool_names(raw: Any, available: set[str]) -> set[str] | None:
+def expand_allowed_tool_names(raw: object, available: set[str]) -> set[str] | None:
     """把 ``<prefix>:*`` 展开成注册表中匹配的具体工具名。
 
     MCP 工具注册名为 ``{server_name}:{tool_name}``，插件清单无法预先枚举远端工具，
@@ -39,15 +40,13 @@ def expand_allowed_tool_names(raw: Any, available: set[str]) -> set[str] | None:
     return expanded
 
 
-def coerce_preloaded_skill_manifest(raw: Any, *, skill_name: str) -> SkillManifest:
+def coerce_preloaded_skill_manifest(raw: object, *, skill_name: str) -> SkillManifest:
     if isinstance(raw, SkillManifest):
         return raw
     try:
         return SkillManifest.model_validate(raw)
     except Exception as exc:
-        raise ValueError(
-            f"预加载技能 {skill_name!r} 生成了无效的清单数据"
-        ) from exc
+        raise ValueError(f"预加载技能 {skill_name!r} 生成了无效的清单数据") from exc
 
 
 def render_preloaded_skill_catalog(skills: list[SkillManifest]) -> str:
@@ -131,8 +130,8 @@ def compose_subagent_system_prompt(
 def resolve_preloaded_skill_context(
     *,
     parent_ctx: ToolContext,
-    manifest: Any,
-    skill_runtime: Any,
+    manifest: AgentManifest,
+    skill_runtime: object,
 ) -> PreloadedSkillContext:
     # AgentManifest 的运行时预加载字段是 preload_skills；
     # declared_invoke_sequence 仅用于 SkillManifest 的工作流遵从度审计。
@@ -162,7 +161,7 @@ def resolve_preloaded_skill_context(
         if resolved is None:
             raise LookupError(f"Skill '{skill_name}' not found.")
         skill = coerce_preloaded_skill_manifest(resolved, skill_name=skill_name)
-        # v5 渐进式披露：如果 body 未加载（None），通过 skill_runtime 按需加载（含延迟 content pipeline）
+        # body 未加载（frontmatter-only）时按需从文件读取
         if skill.body is None and skill.file_path:
             ensure_loaded = getattr(skill_runtime, "_ensure_body_loaded", None)
             if callable(ensure_loaded):

@@ -4,6 +4,7 @@
 1. subcaps 各字段默认/配置文件值符合计划数值。
 2. microcompact 分档表从配置注入后 keep_recent_for 输出一致。
 """
+
 from __future__ import annotations
 
 from prismclaw.engine.context import microcompact as mc
@@ -29,7 +30,7 @@ def test_subcaps_defaults():
     assert compaction.reinject_max_files == 5
 
     assert settings.memory.intent_bias["prefers_tooling_l3"] == 3
-    assert settings.memory.intent_bias["follow_up_l2"] == -2
+    assert settings.memory.intent_bias["requires_grounding_l2"] == 3
 
 
 def test_microcompact_tiers_from_config(monkeypatch):

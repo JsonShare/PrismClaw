@@ -8,14 +8,14 @@ _FILE_MUTATION_TOOLS / _WEB_TOOLS 分类。每个工具声明自己的安全属�
   - Fail-closed：未注册工具走最严分类（EXTERNAL_IRREVERSIBLE + SENSITIVE + IRREVERSIBLE）
   - 无 yolo：安全分级由 SandboxTier 承担，不存在"跳过所有检查"的路径
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
-from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.engine.toolkit.registry.tool_classification import is_network_read_tool
-
+from prismclaw.schema.content.workspace import SandboxTier
 
 # ── 安全枚举 ─────────────────────────────────────────────────────────────
 
@@ -26,25 +26,28 @@ _TIER_ORDER: dict[SandboxTier, int] = {
 }
 
 
-class SideEffectScope(str, Enum):
+class SideEffectScope(StrEnum):
     """工具副作用的辐射范围。"""
-    LOCAL_READ = "local_read"             # 纯读：read/glob/ls
-    LOCAL_WORKSPACE = "local_workspace"   # 读写：write/edit/bash
-    INTERNAL_READ = "internal_read"       # 公网只读：联网检索/抓取
-    INTERNAL_WRITE = "internal_write"     # 内部写
-    EXTERNAL_WRITE = "external_write"     # 外部写
+
+    LOCAL_READ = "local_read"  # 纯读：read/glob/ls
+    LOCAL_WORKSPACE = "local_workspace"  # 读写：write/edit/bash
+    INTERNAL_READ = "internal_read"  # 公网只读：联网检索/抓取
+    INTERNAL_WRITE = "internal_write"  # 内部写
+    EXTERNAL_WRITE = "external_write"  # 外部写
     EXTERNAL_IRREVERSIBLE = "external_irreversible"
 
 
-class DataClassification(str, Enum):
+class DataClassification(StrEnum):
     """数据敏感度分级。"""
+
     PUBLIC = "public"
     INTERNAL = "internal"
     SENSITIVE = "sensitive"
 
 
-class Reversibility(str, Enum):
+class Reversibility(StrEnum):
     """操作可逆性。"""
+
     REVERSIBLE = "reversible"
     CONDITIONAL = "conditional"
     IRREVERSIBLE = "irreversible"
@@ -61,6 +64,7 @@ class ToolSafetyMeta:
     基于这三个维度做风险分级：
       side_effect_scope × data_classification × reversibility → SandboxTier
     """
+
     side_effect_scope: SideEffectScope
     data_classification: DataClassification
     reversibility: Reversibility
@@ -82,24 +86,50 @@ _FAIL_CLOSED_META = ToolSafetyMeta(
 
 _BUILTIN_SAFETY_META: dict[str, ToolSafetyMeta] = {
     # 文件操作 — 纯读
-    "read":        ToolSafetyMeta(SideEffectScope.LOCAL_READ, DataClassification.INTERNAL, Reversibility.REVERSIBLE,
-                                  declared_purposes=("workspace_data_access",)),
-    "glob":        ToolSafetyMeta(SideEffectScope.LOCAL_READ, DataClassification.INTERNAL, Reversibility.REVERSIBLE,
-                                  declared_purposes=("workspace_data_access",)),
-    "ls":          ToolSafetyMeta(SideEffectScope.LOCAL_READ, DataClassification.INTERNAL, Reversibility.REVERSIBLE,
-                                  declared_purposes=("workspace_data_access",)),
-
+    "read": ToolSafetyMeta(
+        SideEffectScope.LOCAL_READ,
+        DataClassification.INTERNAL,
+        Reversibility.REVERSIBLE,
+        declared_purposes=("workspace_data_access",),
+    ),
+    "glob": ToolSafetyMeta(
+        SideEffectScope.LOCAL_READ,
+        DataClassification.INTERNAL,
+        Reversibility.REVERSIBLE,
+        declared_purposes=("workspace_data_access",),
+    ),
+    "ls": ToolSafetyMeta(
+        SideEffectScope.LOCAL_READ,
+        DataClassification.INTERNAL,
+        Reversibility.REVERSIBLE,
+        declared_purposes=("workspace_data_access",),
+    ),
     # 文件操作 — 读写
-    "write":       ToolSafetyMeta(SideEffectScope.LOCAL_WORKSPACE, DataClassification.INTERNAL, Reversibility.REVERSIBLE,
-                                  declared_purposes=("workspace_data_access",)),
-    "edit":        ToolSafetyMeta(SideEffectScope.LOCAL_WORKSPACE, DataClassification.INTERNAL, Reversibility.REVERSIBLE,
-                                  declared_purposes=("workspace_data_access",)),
+    "write": ToolSafetyMeta(
+        SideEffectScope.LOCAL_WORKSPACE,
+        DataClassification.INTERNAL,
+        Reversibility.REVERSIBLE,
+        declared_purposes=("workspace_data_access",),
+    ),
+    "edit": ToolSafetyMeta(
+        SideEffectScope.LOCAL_WORKSPACE,
+        DataClassification.INTERNAL,
+        Reversibility.REVERSIBLE,
+        declared_purposes=("workspace_data_access",),
+    ),
     # Shell 执行
-    "bash":        ToolSafetyMeta(SideEffectScope.LOCAL_WORKSPACE, DataClassification.INTERNAL, Reversibility.CONDITIONAL,
-                                  declared_purposes=("workspace_data_access",)),
-    "python":      ToolSafetyMeta(SideEffectScope.LOCAL_WORKSPACE, DataClassification.INTERNAL, Reversibility.CONDITIONAL,
-                                  declared_purposes=("workspace_data_access",)),
-
+    "bash": ToolSafetyMeta(
+        SideEffectScope.LOCAL_WORKSPACE,
+        DataClassification.INTERNAL,
+        Reversibility.CONDITIONAL,
+        declared_purposes=("workspace_data_access",),
+    ),
+    "python": ToolSafetyMeta(
+        SideEffectScope.LOCAL_WORKSPACE,
+        DataClassification.INTERNAL,
+        Reversibility.CONDITIONAL,
+        declared_purposes=("workspace_data_access",),
+    ),
 }
 
 

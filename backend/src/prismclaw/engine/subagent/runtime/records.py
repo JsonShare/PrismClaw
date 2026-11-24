@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Literal
+from collections.abc import Callable
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,8 +17,8 @@ from prismclaw.schema.session.types import (
 )
 from prismclaw.schema.storage.storage_types import SessionStore
 
-CURRENT_AGENT_SESSION_SCHEMA_VERSION = "subagent_session.v1"
-CURRENT_AGENT_RUN_SCHEMA_VERSION = "subagent_run.v1"
+CURRENT_AGENT_SESSION_SCHEMA_VERSION: Final[Literal["subagent_session.v1"]] = "subagent_session.v1"
+CURRENT_AGENT_RUN_SCHEMA_VERSION: Final[Literal["subagent_run.v1"]] = "subagent_run.v1"
 
 AgentLifecycle = Literal["one_shot", "persistent"]
 AgentSessionStatus = Literal[
@@ -87,13 +88,27 @@ class AgentRunRecord(BaseModel):
     finished_at: str | None = None
 
 
-def _fold_records[RecordT: AgentSessionRecord | AgentRunRecord](
+def _parse_session_record(data: dict[str, Any]) -> AgentSessionRecord | None:
+    try:
+        return AgentSessionRecord.model_validate(data)
+    except Exception:
+        return None
+
+
+def _parse_run_record(data: dict[str, Any]) -> AgentRunRecord | None:
+    try:
+        return AgentRunRecord.model_validate(data)
+    except Exception:
+        return None
+
+
+def _fold_entries[RecordT](
     tree: SessionTree | None,
     *,
     custom_type: str,
-    model_cls: type[RecordT],
-    identity_field: str,
-    fence_field: str,
+    parse: Callable[[dict[str, Any]], RecordT | None],
+    identity_of: Callable[[RecordT], str],
+    fence_of: Callable[[RecordT], int],
 ) -> list[RecordT]:
     if tree is None:
         return []
@@ -103,40 +118,36 @@ def _fold_records[RecordT: AgentSessionRecord | AgentRunRecord](
             continue
         if not isinstance(entry.data, dict):
             continue
-        try:
-            record = model_cls.model_validate(entry.data)
-        except Exception:
+        record = parse(entry.data)
+        if record is None:
             continue
-        identity = getattr(record, identity_field)
-        rank = (getattr(record, fence_field), entry.seq)
+        identity = identity_of(record)
+        rank = (fence_of(record), entry.seq)
         current = latest.get(identity)
         if current is None or rank >= current[0]:
             latest[identity] = (rank, record)
-    return [
-        record
-        for _rank, record in sorted(latest.values(), key=lambda item: item[0])
-    ]
+    return [record for _rank, record in sorted(latest.values(), key=lambda item: item[0])]
 
 
 def agent_session_records_for_tree(
     tree: SessionTree | None,
 ) -> list[AgentSessionRecord]:
-    return _fold_records(
+    return _fold_entries(
         tree,
         custom_type=SUBAGENT_SESSION_CUSTOM_TYPE,
-        model_cls=AgentSessionRecord,
-        identity_field="agent_id",
-        fence_field="current_fence",
+        parse=_parse_session_record,
+        identity_of=lambda record: record.agent_id,
+        fence_of=lambda record: record.current_fence,
     )
 
 
 def agent_run_records_for_tree(tree: SessionTree | None) -> list[AgentRunRecord]:
-    return _fold_records(
+    return _fold_entries(
         tree,
         custom_type=SUBAGENT_RUN_CUSTOM_TYPE,
-        model_cls=AgentRunRecord,
-        identity_field="run_id",
-        fence_field="fence",
+        parse=_parse_run_record,
+        identity_of=lambda record: record.run_id,
+        fence_of=lambda record: record.fence,
     )
 
 

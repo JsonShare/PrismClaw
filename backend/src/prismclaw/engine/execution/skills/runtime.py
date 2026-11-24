@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import contextlib
 import difflib
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -9,11 +11,17 @@ from prismclaw.engine.execution.capabilities.catalog import (
     CapabilityCatalogService,
     SkillResolution,
 )
+from prismclaw.engine.execution.skills._preload import _build_preload_messages
 from prismclaw.engine.execution.skills.agent_adapter import (
     agent_manifest_to_skill_payload,
     build_agent_manifest_from_skill,
 )
+from prismclaw.engine.execution.skills.compliance import compute_workflow_compliance
+from prismclaw.engine.execution.skills.doc_inline import _inline_referenced_docs
+from prismclaw.engine.execution.skills.plugin_utils import _resolve_plugin_name
+from prismclaw.engine.execution.skills.profile_loader import _load_plugin_profile
 from prismclaw.engine.foundation.metrics import emit as emit_metric
+from prismclaw.engine.plugins.registry.registry import DescriptorRegistry
 from prismclaw.schema.services.skills import (
     McpPromptResolver,
     SkillExecutionStrategy,
@@ -22,16 +30,11 @@ from prismclaw.schema.services.skills import (
     SkillManifest,
     mcp_prompt_name,
 )
-from prismclaw.engine.execution.skills.compliance import compute_workflow_compliance
-from prismclaw.engine.execution.skills.doc_inline import _inline_referenced_docs
-from prismclaw.engine.execution.skills.profile_loader import _load_plugin_profile
-from prismclaw.engine.execution.skills.plugin_utils import _resolve_plugin_name
-from prismclaw.engine.execution.skills._preload import _build_preload_messages
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_plugin_name(manifest: Any) -> str | None:
+def _extract_plugin_name(manifest: SkillManifest) -> str | None:
     """从 SkillManifest 解析插件名，兼容 loaded_from 为路径或纯名称两种情况。
 
     搜索策略：
@@ -55,9 +58,19 @@ def _extract_plugin_name(manifest: Any) -> str | None:
     # Case: loaded_from 是文件路径 → 向上搜索插件根目录
     p = Path(raw)
     excluded_dirs = {
-        ".", "..", ".plugin", "skills", "agents", "commands",
-        "hooks", "safety", "tools", "output-styles", "scripts",
-        "config", "managed-agent-cookbooks",
+        ".",
+        "..",
+        ".plugin",
+        "skills",
+        "agents",
+        "commands",
+        "hooks",
+        "safety",
+        "tools",
+        "output-styles",
+        "scripts",
+        "config",
+        "managed-agent-cookbooks",
     }
     excluded_files = {"SKILL.md", "plugin.json", ".plugin", "PLUGIN.md"}
 
@@ -79,7 +92,7 @@ def _extract_plugin_name(manifest: Any) -> str | None:
     return None
 
 
-def _coerce_allowed_tools(raw: Any) -> list[str] | None:
+def _coerce_allowed_tools(raw: object) -> list[str] | None:
     if raw is None or not isinstance(raw, list):
         return None
     allowed = [item.strip() for item in raw if isinstance(item, str) and item.strip()]
@@ -96,12 +109,10 @@ def _render_skill_messages(
 ) -> list[dict[str, Any]]:
     lines = [
         f"已激活技能：{skill_name}",
-        "你已激活一个专用技能。下方指令是强制性的——"
-        "请将其视为当前任务的执行契约。",
+        "你已激活一个专用技能。下方指令是强制性的——请将其视为当前任务的执行契约。",
         "",
         "硬性规则（必须遵守，没有例外）：",
-        "1. 只能使用技能指令中描述的脚本、命令和工作流。"
-        "这些是已获授权的实现方式，专为本任务编写。",
+        "1. 只能使用技能指令中描述的脚本、命令和工作流。这些是已获授权的实现方式，专为本任务编写。",
         "2. 不要编写自己的脚本替代技能脚本。"
         "例如：docx 技能提供了 runner.js，就不要写 python-docx 代码；"
         "xlsx 技能提供了脚本，就不要写 openpyxl 代码。",
@@ -130,11 +141,10 @@ def _render_skill_messages(
     return [{"role": "user", "content": "\n".join(lines)}]
 
 
-def _coerce_skill_manifest(skill: Any) -> SkillManifest:
+def _coerce_skill_manifest(skill: object) -> SkillManifest:
     if isinstance(skill, SkillManifest):
         return skill
     return SkillManifest.model_validate(skill)
-
 
 
 class SkillRuntime:
@@ -143,8 +153,8 @@ class SkillRuntime:
         *,
         capability_catalog: CapabilityCatalogService | None = None,
         mcp_prompt_resolver: McpPromptResolver | None = None,
-        descriptor_registry: Any | None = None,
-        skill_parser: Any | None = None,
+        descriptor_registry: DescriptorRegistry | None = None,
+        skill_parser: Callable[[str], SkillManifest] | None = None,
     ) -> None:
         self._capability_catalog = capability_catalog
         self._mcp_prompt_resolver = mcp_prompt_resolver
@@ -171,7 +181,7 @@ class SkillRuntime:
 
     def resolve_skill(
         self, skill_name: str, *, workspace_path: Path, plugin_prefer: str | None = None
-    ) -> Any | None:
+    ) -> SkillManifest | None:
         _ = workspace_path
         if self._capability_catalog is None:
             return None
@@ -207,17 +217,17 @@ class SkillRuntime:
                 members.setdefault(entry.marketplace_name, set()).add(entry.name)
         return skill_names, {name: tuple(sorted(m)) for name, m in members.items()}
 
-    def _resolution_error_message(
-        self, skill_name: str, resolution: SkillResolution | None
-    ) -> str:
+    def _resolution_error_message(self, skill_name: str, resolution: SkillResolution | None) -> str:
         """activate_skill 失败时的路由消息——错误自带下一步指引，绝不自反。"""
         if resolution is not None and resolution.kind == "ambiguous":
             members = list(resolution.member_names)
             # 大包（几十个技能的 marketplace）全量列进错误会撑爆 UI，
             # 也让模型更难选；截断后指向 skill_search 按主题检索。
             shown = members[:12]
-            more = "" if len(members) <= len(shown) else (
-                f" …（共 {len(members)} 个，此处仅列前 {len(shown)} 个）"
+            more = (
+                ""
+                if len(members) <= len(shown)
+                else (f" …（共 {len(members)} 个，此处仅列前 {len(shown)} 个）")
             )
             return (
                 f"'{skill_name}' 是插件包名，不是技能名。"
@@ -233,9 +243,7 @@ class SkillRuntime:
             cand_parts: list[str] = []
             for cand in near:
                 if cand in mp_members:
-                    cand_parts.append(
-                        f"插件包 '{cand}'（技能：{', '.join(mp_members[cand])}）"
-                    )
+                    cand_parts.append(f"插件包 '{cand}'（技能：{', '.join(mp_members[cand])}）")
                 else:
                     cand_parts.append(f"'{cand}'")
             if cand_parts:
@@ -244,9 +252,10 @@ class SkillRuntime:
         return msg
 
     def _ensure_body_loaded(self, manifest: SkillManifest) -> SkillManifest:
-        """如果 body 未加载（None，frontmatter-only 模式），从文件重新读取并更新注册表中的 manifest。
+        """如果 body 未加载（None，frontmatter-only 模式），
+        从文件重新读取并更新注册表中的 manifest。
 
-        v5 渐进式披露：直接操作 DescriptorRegistry 中的 manifest 引用
+        直接操作 DescriptorRegistry 中的 manifest 引用
         （不是传入的 manifest 副本），确保后续所有消费者都能读到完整 body。
 
         调用链唯一入口：``build_skill_execution`` 在最开始调用此方法，
@@ -278,26 +287,32 @@ class SkillRuntime:
             descriptor = self._descriptor_registry.skills.get(manifest.name)
             if descriptor is not None and descriptor.manifest is not None:
                 # 用 model_copy 更新，避免 validate_assignment 的逐字段验证开销
-                descriptor.manifest = descriptor.manifest.model_copy(update={
-                    "body": full.body,
-                    "preload_skills": full.preload_skills,
-                    "declared_invoke_sequence": full.declared_invoke_sequence,
-                })
+                descriptor.manifest = descriptor.manifest.model_copy(
+                    update={
+                        "body": full.body,
+                        "preload_skills": full.preload_skills,
+                        "declared_invoke_sequence": full.declared_invoke_sequence,
+                    }
+                )
                 if descriptor.manifest.agent_config is not None:
                     descriptor.manifest.agent_config = descriptor.manifest.agent_config.model_copy(
                         update={"preload_skills": list(full.preload_skills)}
                     )
                 logger.debug(
-                    "skill body loaded on demand: %s (%d chars)", manifest.name, len(full.body)
+                    "skill body loaded on demand: %s (%d chars)",
+                    manifest.name,
+                    len(full.body or ""),
                 )
                 # Token 上限告警：技能 body 过大时会挤占 LLM 上下文
                 from prismclaw.schema.shared.utils import estimate_tokens
+
                 body_tokens = estimate_tokens(full.body or "")
                 if body_tokens > 10000:
                     logger.warning(
                         "skill body exceeds token budget: %s (~%d tokens, recommended < 10000). "
                         "Large skill bodies consume significant LLM context.",
-                        manifest.name, body_tokens,
+                        manifest.name,
+                        body_tokens,
                     )
                 return descriptor.manifest
 
@@ -324,8 +339,8 @@ class SkillRuntime:
             return None
 
         try:
-            from prismclaw.engine.plugins.loading._declarative_load import _apply_content_pipeline
             from prismclaw.engine.plugins.ingest.path_remap import PathRemapRule
+            from prismclaw.engine.plugins.loading._declarative_load import _apply_content_pipeline
         except ImportError:
             logger.warning("_apply_content_pipeline not importable, skipping delayed pipeline")
             return None
@@ -347,9 +362,9 @@ class SkillRuntime:
 
         try:
             return _apply_content_pipeline(
-                manifest.body,
+                manifest.body or "",
                 install_path=install_path or Path("."),
-                plugin_data_dir=plugin_data_dir,
+                plugin_data_dir=plugin_data_dir or install_path or Path("."),
                 marketplace_data_dir=marketplace_data_dir,
                 skill_dir=skill_dir,
                 effective_remap_rules=remap_rules,
@@ -388,20 +403,15 @@ class SkillRuntime:
             return _inline_referenced_docs(manifest.body, manifest.file_path)
         if self._mcp_prompt_resolver is None:
             raise RuntimeError(
-                f"MCP 技能 '{manifest.name}' 无法调用："
-                "当前运行环境未接入 MCP prompt 解析器。"
+                f"MCP 技能 '{manifest.name}' 无法调用：当前运行环境未接入 MCP prompt 解析器。"
             )
         arguments = (
-            {key: str(value) for key, value in invocation.args.items()}
-            if invocation.args
-            else None
+            {key: str(value) for key, value in invocation.args.items()} if invocation.args else None
         )
         # Catalog names are namespaced ``{server}:{prompt}``; prompts/get
         # needs the raw prompt name.
         prompt_name = mcp_prompt_name(manifest.name, manifest.loaded_from)
-        return self._mcp_prompt_resolver(
-            manifest.loaded_from, prompt_name, arguments
-        )
+        return self._mcp_prompt_resolver(manifest.loaded_from, prompt_name, arguments)
 
     def build_skill_execution(
         self,
@@ -420,10 +430,8 @@ class SkillRuntime:
             resolution = self._capability_catalog.resolve_skill_reference(
                 invocation.skill_name, plugin_prefer=plugin_prefer
             )
-        if resolution is None or resolution.kind != "resolved":
-            raise LookupError(
-                self._resolution_error_message(invocation.skill_name, resolution)
-            )
+        if resolution is None or resolution.kind != "resolved" or resolution.entry is None:
+            raise LookupError(self._resolution_error_message(invocation.skill_name, resolution))
         manifest = _coerce_skill_manifest(resolution.entry.manifest)
         # v5 渐进式披露：确保 body 已加载（frontmatter-only 模式下 body 为空）
         # 必须在 _resolve_instructions 和 build_agent_manifest_from_skill 之前，
@@ -476,10 +484,9 @@ class SkillRuntime:
         # --- 编排遵从度:若调用方传入了当前 active 的父工作流 state,
         # 把本次被调用的子技能名追加到 actual_invoke_sequence ---
         if parent_active_state is not None and parent_active_state.is_workflow:
-            try:
+            # 防御性容错,埋点失败不应阻塞业务
+            with contextlib.suppress(Exception):
                 parent_active_state.actual_invoke_sequence.append(invocation.skill_name)
-            except Exception:  # pragma: no cover - 防御性容错,埋点失败不应阻塞业务
-                pass
         declared_ref = getattr(manifest, "declared_invoke_sequence", ())
         declared_list = list(declared_ref) if isinstance(declared_ref, (list, tuple)) else []
         resolved_plugin_name = _resolve_plugin_name(manifest)
@@ -488,7 +495,7 @@ class SkillRuntime:
             allowed_tools_override=allowed_tools,
             is_active=True,
             clear_after_terminal_result=True,
-            # 方案 C:把本 skill 的 plugin_name 写入 state,供下一层子 skill resolve 时继承 plugin_prefer
+            # 记录 plugin_name，供下层子 skill resolve 继承 plugin_prefer
             plugin_name=resolved_plugin_name if resolved_plugin_name else None,
             # 标准技能激活路径
             invocation_context="skill",
@@ -497,14 +504,13 @@ class SkillRuntime:
             # 保存声明序列副本,供 invoke 结束时 self-contained 比对
             declared_invoke_sequence=declared_list,
         )
-        # ====================================================================
-        # preload body 注入（上限读 subcaps.skill_preload，默认 7.5K）+ 执业档案加载 + plugin_name 传播
-        # 语义分工再次明确:
-        # ・manifest.preload_skills  → 注入 LLM 上下文用(值与 declared_invoke_sequence 同步)
-        # ・declared_invoke_sequence → 给 compute_workflow_compliance 审计埋点用
-        # ====================================================================
+        # preload body 注入（上限读 subcaps.skill_preload，默认 7.5K）。
+        # 两种声明各司其职：
+        # ・manifest.preload_skills  → 注入 LLM 上下文（与 declared_invoke_sequence 同步）
+        # ・declared_invoke_sequence → 供 compute_workflow_compliance 审计
         try:
             from prismclaw.infra.settings import load_settings
+
             budget = int(load_settings().agent.context.budget.subcaps.skill_preload)
         except Exception:
             budget = 7_500
@@ -581,7 +587,9 @@ class SkillRuntime:
             workspace_path=workspace_path,
             parent_active_state=parent_active_state,
         )
-        state = self.execute_skill_execution(plan, clear_after_terminal_result=clear_after_terminal_result)
+        state = self.execute_skill_execution(
+            plan, clear_after_terminal_result=clear_after_terminal_result
+        )
         # --- 编排遵从度 emit 出口 ---
         # 对 workflow 类技能在 invoke 结束时做 declared vs actual 比对,
         # 结果 → ① state.compliance_result ② metrics 系统 (histogram+counter) ③ 审计日志。

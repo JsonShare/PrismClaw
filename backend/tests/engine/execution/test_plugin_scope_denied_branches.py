@@ -7,6 +7,7 @@
 前两项在参数校验阶段即返回，不需要真实执行器/运行时；
 第三项用真实 RunSnapshot，直接断言注入内容与日志。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,9 +22,7 @@ from prismclaw.schema.config.config import SubAgentConfig
 
 
 def _ctx(scope: frozenset[str] | None) -> ToolContext:
-    return ToolContext(
-        workspace_id="w", workspace_path=Path("/tmp"), tool_scope=scope
-    )
+    return ToolContext(workspace_id="w", workspace_path=Path("/tmp"), tool_scope=scope)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -57,9 +56,7 @@ def _activate(owner: str | None, scope: frozenset[str] | None):
         skill_runtime=_FakeSkillRuntime(),
         capability_catalog=_Catalog(owner),
     )
-    return asyncio.run(
-        tool.execute({"skill_name": "contract-review"}, _ctx(scope))
-    )
+    return asyncio.run(tool.execute({"skill_name": "contract-review"}, _ctx(scope)))
 
 
 def test_skill_of_inactive_plugin_denied():
@@ -227,8 +224,8 @@ def _run_activation(chips: list[str], caplog):
     tool_ctx = _ctx(None)
     # 用真实 RunSnapshot：激活末尾会经 project_active_skill_invocation
     # 写回 system_prompt_sections，SimpleNamespace 不够。
-    from prismclaw.engine.execution.checkpoint.persistence import RunSnapshot
     from prismclaw.engine.execution.checkpoint.models import RunState
+    from prismclaw.engine.execution.checkpoint.persistence import RunSnapshot
 
     snapshot = RunSnapshot(run_state=RunState(session_id="s1"))
     injections: list[str] = []
@@ -254,6 +251,7 @@ def _run_activation(chips: list[str], caplog):
         )
     return runtime, tool_ctx, injections
 
+
 def test_multi_plugin_only_first_persona_injected(caplog):
     """同时 @ 两个插件：只有第一个的 persona 进入注入队列；两者都解锁能力。"""
     _runtime, tool_ctx, injections = _run_activation(["legal", "fin"], caplog)
@@ -264,10 +262,7 @@ def test_multi_plugin_only_first_persona_injected(caplog):
 
 def test_multi_plugin_logs_degraded(caplog):
     _run_activation(["legal", "fin"], caplog)
-    degraded = [
-        r for r in caplog.records
-        if "plugin_persona_degraded" in r.getMessage()
-    ]
+    degraded = [r for r in caplog.records if "plugin_persona_degraded" in r.getMessage()]
     assert degraded, "缺少 plugin_persona_degraded 日志"
     msg = degraded[0].getMessage()
     assert "primary=legal" in msg and "fin" in msg
@@ -277,7 +272,4 @@ def test_single_plugin_no_degraded_log(caplog):
     _runtime, tool_ctx, injections = _run_activation(["legal"], caplog)
     assert tool_ctx.tool_scope == frozenset({"legal"})
     assert any("PERSONA::legal" in i for i in injections)
-    assert not [
-        r for r in caplog.records
-        if "plugin_persona_degraded" in r.getMessage()
-    ]
+    assert not [r for r in caplog.records if "plugin_persona_degraded" in r.getMessage()]

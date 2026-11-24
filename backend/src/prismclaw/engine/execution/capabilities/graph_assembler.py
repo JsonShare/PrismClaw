@@ -12,6 +12,8 @@ from prismclaw.schema.agent.capability import (
     CapabilityNode,
     CapabilityStatus,
     ConflictDecision,
+    JsonValue,
+    PluginSourceRef,
     RuntimeCapabilities,
 )
 
@@ -75,21 +77,23 @@ class CapabilityAssembler:
         canonical_id: str,
         kind: CapabilityKind,
         display_name: str,
-        source_ref,
+        source_ref: PluginSourceRef,
         version: str | None = None,
         priority: int = 0,
         metadata: dict[str, object] | None = None,
         projection_targets: tuple[str, ...] = (),
         policy_tags: tuple[str, ...] = (),
     ) -> CapabilityNode:
-        def _sanitize_json(value: object):
+        def _sanitize_json(value: object) -> JsonValue:
             if isinstance(value, (str, int, float, bool)) or value is None:
                 return value
             if isinstance(value, list):
                 return [_sanitize_json(item) for item in value]
             if isinstance(value, dict):
                 return {str(k): _sanitize_json(v) for k, v in value.items()}
-            raise TypeError(f"CapabilityNode.metadata must be JSON-compatible (got {type(value)!r})")
+            raise TypeError(
+                f"CapabilityNode.metadata must be JSON-compatible (got {type(value)!r})"
+            )
 
         safe_metadata = {str(key): _sanitize_json(value) for key, value in (metadata or {}).items()}
         return CapabilityNode(

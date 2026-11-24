@@ -26,9 +26,7 @@ def _blob(edits: Path, sha: str, *, age_days: int) -> Path:
 
 def _reference(edits: Path, sha: str) -> None:
     line = {"payload": {"content_ref": f"blobs/{sha}"}}
-    (edits / "review_events.jsonl").write_text(
-        json.dumps(line) + "\n", encoding="utf-8"
-    )
+    (edits / "review_events.jsonl").write_text(json.dumps(line) + "\n", encoding="utf-8")
 
 
 def test_sweep_removes_only_old_unreferenced(tmp_path: Path) -> None:

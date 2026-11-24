@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.schema.agent.domains import PluginErrorType
 
 if TYPE_CHECKING:
-    from prismclaw.schema.agent.capability import RuntimeCapabilities
     from prismclaw.engine.plugins.manifest import PluginManifest
     from prismclaw.schema.agent.capability import (
         PluginCapabilityGraph,
+        RuntimeCapabilities,
     )
 
 
@@ -59,7 +59,7 @@ class ManifestParseError(PluginError):
     file_path: str = ""
     line_no: int | None = None
     # 默认 type 与 source 覆盖基类无默认值的字段，需通过 __post_init__ 校验
-    type: PluginErrorType = PluginErrorType.MANIFEST_PARSE  # type: ignore[assignment]
+    type: PluginErrorType = PluginErrorType.MANIFEST_PARSE
 
     def __post_init__(self) -> None:
         # 若外部传了不匹配的 type 自动纠正为规范值（兼容旧字符串）
@@ -85,7 +85,7 @@ class ManifestValidationError(PluginError):
 
     file_path: str = ""
     invalid_fields: list[dict[str, Any]] = field(default_factory=list)
-    type: PluginErrorType = PluginErrorType.MANIFEST_VALIDATE  # type: ignore[assignment]
+    type: PluginErrorType = PluginErrorType.MANIFEST_VALIDATE
 
     def __post_init__(self) -> None:
         if self.type != PluginErrorType.MANIFEST_VALIDATE:
@@ -112,10 +112,7 @@ class ManifestValidationError(PluginError):
             field_msg = "; ".join(parts) if parts else "(invalid_fields malformed)"
         else:
             field_msg = "(no invalid_fields populated)"
-        return (
-            f"{plugin}Invalid manifest {self.file_path}: {field_msg} "
-            f"(source={self.source})"
-        )
+        return f"{plugin}Invalid manifest {self.file_path}: {field_msg} (source={self.source})"
 
 
 @dataclass(slots=True)
@@ -124,7 +121,7 @@ class PluginDependencyError(PluginError):
 
     missing_requirements: list[str] = field(default_factory=list)
     invalid_paths: list[str] = field(default_factory=list)
-    type: PluginErrorType = PluginErrorType.DEPENDENCY  # type: ignore[assignment]
+    type: PluginErrorType = PluginErrorType.DEPENDENCY
 
     def __post_init__(self) -> None:
         if self.type != PluginErrorType.DEPENDENCY:
@@ -149,7 +146,7 @@ class PluginActivationError(PluginError):
 
     condition_name: str = ""
     condition_value: Any = None
-    type: PluginErrorType = PluginErrorType.ACTIVATION  # type: ignore[assignment]
+    type: PluginErrorType = PluginErrorType.ACTIVATION
 
     def __post_init__(self) -> None:
         if self.type != PluginErrorType.ACTIVATION:
@@ -160,10 +157,7 @@ class PluginActivationError(PluginError):
             return self.message
         plugin = f"[{self.plugin}] " if self.plugin else ""
         value = f"={self.condition_value!r}" if self.condition_value is not None else ""
-        return (
-            f"{plugin}无法评估激活条件 {self.condition_name}{value}"
-            f"（source={self.source}）"
-        )
+        return f"{plugin}无法评估激活条件 {self.condition_name}{value}（source={self.source}）"
 
 
 @dataclass(slots=True)
@@ -172,7 +166,7 @@ class PluginActivationRuntimeError(PluginError):
 
     skill_name: str = ""
     exc_type: str | None = None
-    type: PluginErrorType = PluginErrorType.ACTIVATION_RUNTIME  # type: ignore[assignment]
+    type: PluginErrorType = PluginErrorType.ACTIVATION_RUNTIME
 
     def __post_init__(self) -> None:
         if self.type != PluginErrorType.ACTIVATION_RUNTIME:
@@ -183,10 +177,7 @@ class PluginActivationRuntimeError(PluginError):
             return self.message
         plugin = f"[{self.plugin}] " if self.plugin else ""
         exc = f" ({self.exc_type})" if self.exc_type else ""
-        return (
-            f"{plugin}激活技能 '{self.skill_name}' 时发生运行时错误{exc}"
-            f"（source={self.source}）"
-        )
+        return f"{plugin}激活技能 '{self.skill_name}' 时发生运行时错误{exc}（source={self.source}）"
 
 
 @dataclass(slots=True)
@@ -201,10 +192,10 @@ class LoadedPlugin:
     path: str
     enabled: bool = True
     version: str | None = None
-    manifest: "PluginManifest | None" = None
+    manifest: PluginManifest | None = None
     # 结构化能力字段
-    capability_graph: "PluginCapabilityGraph | None" = None
-    runtime_capabilities: "RuntimeCapabilities | None" = None
+    capability_graph: PluginCapabilityGraph | None = None
+    runtime_capabilities: RuntimeCapabilities | None = None
     resolved_user_config: dict[str, Any] = field(default_factory=dict)
     hooks: list[Any] = field(default_factory=list)
     hooks_config: dict[str, Any] = field(default_factory=dict)
@@ -265,5 +256,5 @@ class PluginLoadBatch:
     errors: list[PluginError] = field(default_factory=list)
 
     @classmethod
-    def empty(cls) -> "PluginLoadBatch":
+    def empty(cls) -> PluginLoadBatch:
         return cls()

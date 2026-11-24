@@ -3,6 +3,7 @@
 Lives in contracts (L0) so that engine (L2) can depend on these interfaces
 without circular imports.  See SDD §5.1.3.
 """
+
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

@@ -1,3 +1,4 @@
+from .hotpath import HotPathTelemetry
 from .observability import (
     CacheBreakDetector,
     EventBus,
@@ -14,7 +15,6 @@ from .observability import (
     emit_tool_execution,
     get_event_bus,
 )
-from .hotpath import HotPathTelemetry
 from .profiler import ProfilerEvent, TurnProfiler
 from .token_metrics import (
     CumulativeTokenMetrics,

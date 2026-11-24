@@ -9,20 +9,26 @@ aiohttp 打出上述 ERROR。
 取消，则吞掉该次取消信号（asyncio 只投递一次）并继续等待关闭，保证会话
 不会以「无主资源」形态泄漏。
 """
+
 from __future__ import annotations
 
 import asyncio
 import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import aiohttp
 
 
 @asynccontextmanager
-async def open_client_session(**kwargs: Any) -> AsyncIterator[Any]:
+async def open_client_session(
+    *, connector: aiohttp.BaseConnector | None = None
+) -> AsyncIterator[aiohttp.ClientSession]:
     import aiohttp
 
-    session = aiohttp.ClientSession(**kwargs)
+    session = aiohttp.ClientSession(connector=connector)
     try:
         yield session
     finally:

@@ -4,7 +4,8 @@ Both review ledgers write content-addressed blobs under
 ``<workspace>/.work/audit/edits/blobs``:
 
   * text / code revisions  -> ``ReviewRegistry``          (``review_events.jsonl``, ``content_ref``)
-  * office edits            -> ``ChangeTrackingStore``     (``log.jsonl``, ``before_ref`` / ``after_ref``)
+  * office edits            -> ``ChangeTrackingStore``     (``log.jsonl``,
+                                                            ``before_ref`` / ``after_ref``)
   * docx review artifacts   -> ``ChangeTrackingStore``     (``docx_review_artifacts.jsonl``,
                                                             ``before_ref`` / ``review_docx_ref``)
 
@@ -25,8 +26,10 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +44,11 @@ def _sha_from_ref(ref: str | None) -> str | None:
     """
     if not ref or not ref.startswith(_BLOB_REF_PREFIX):
         return None
-    sha = ref[len(_BLOB_REF_PREFIX):]
+    sha = ref[len(_BLOB_REF_PREFIX) :]
     return sha or None
 
 
-def _iter_jsonl(path: Path):
+def _iter_jsonl(path: Path) -> Iterator[Any]:
     """Yield parsed JSON objects from an append-only log, skipping blank and
     corrupt lines. A bad line must never abort bookkeeping."""
     if not path.exists():
@@ -118,7 +121,7 @@ class GcReport:
     freed_bytes: int = 0
     dry_run: bool = True
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, Any]:
         return {
             "workspace": self.workspace,
             "referenced_count": self.referenced_count,
@@ -218,9 +221,7 @@ def sweep_workspace_base(
     if not workspace_base.is_dir():
         return aggregate
 
-    for edits_dir in sorted(
-        workspace_base.glob("web_*/*/.work/audit/edits")
-    ):
+    for edits_dir in sorted(workspace_base.glob("web_*/*/.work/audit/edits")):
         try:
             part = gc_blobs(edits_dir, dry_run=dry_run, older_than_days=older_than_days)
         except Exception:

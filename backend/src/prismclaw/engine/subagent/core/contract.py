@@ -1,12 +1,21 @@
 from __future__ import annotations
-from typing import Any, TYPE_CHECKING
+
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 
+import contextlib
+
+from pydantic import BaseModel
+
 from prismclaw.schema.agent.session import SessionContextItem, SessionContextState
 from prismclaw.schema.agent.task_types import TaskSpec
-from prismclaw.schema.content.subagent import EvidenceRef, SubagentContextSnapshot, SubagentResultEnvelope
+from prismclaw.schema.content.subagent import (
+    EvidenceRef,
+    SubagentContextSnapshot,
+    SubagentResultEnvelope,
+)
 
 
 def context_snapshot_json_schema() -> dict[str, Any]:
@@ -72,7 +81,7 @@ def context_snapshot_json_schema() -> dict[str, Any]:
 
 
 def coerce_context_snapshot(
-    raw_snapshot: Any,
+    raw_snapshot: object,
     *,
     fallback_task: str,
 ) -> SubagentContextSnapshot:
@@ -90,7 +99,7 @@ def build_context_snapshot(
     *,
     task: str,
     parent_ctx: ToolContext,
-    raw_snapshot: Any | None = None,
+    raw_snapshot: object | None = None,
 ) -> SubagentContextSnapshot:
     if raw_snapshot not in (None, {}):
         return coerce_context_snapshot(raw_snapshot, fallback_task=task)
@@ -104,7 +113,10 @@ def build_context_snapshot(
     if not task_goal:
         task_goal = "继续执行被委派的任务。"
 
-    findings = _active_contents(getattr(session_state, "facts", []), limit=12 if len(getattr(session_state, "facts", [])) > 6 else 6)
+    findings = _active_contents(
+        getattr(session_state, "facts", []),
+        limit=12 if len(getattr(session_state, "facts", [])) > 6 else 6,
+    )
     constraints = _dedupe(
         [
             *(_active_contents(getattr(session_state, "constraints", []), limit=6)),
@@ -284,7 +296,7 @@ def _render_section(name: str, values: list[str]) -> list[str]:
     return lines
 
 
-def _coerce_model(raw: Any, model_type: Any) -> Any | None:
+def _coerce_model[T: BaseModel](raw: object, model_type: type[T]) -> T | None:
     if isinstance(raw, model_type):
         return raw
     if isinstance(raw, dict):
@@ -407,7 +419,7 @@ def _invoked_skill_names(ctx: ToolContext) -> list[str]:
     if isinstance(raw_invoked_state, dict):
         skills = raw_invoked_state.get("skills")
         if isinstance(skills, dict):
-            for skill_name in skills.keys():
+            for skill_name in skills:
                 if isinstance(skill_name, str) and skill_name.strip():
                     names.append(skill_name.strip())
     active_skill_name = _active_skill_name(ctx)
@@ -443,7 +455,7 @@ def _dedupe(values: list[str]) -> list[str]:
 
 
 def _wrap_plaintext_result(text: str) -> SubagentResultEnvelope:
-    sections = {
+    sections: dict[str, list[str]] = {
         "findings": [],
         "decisions": [],
         "open_questions": [],
@@ -494,7 +506,7 @@ def _wrap_plaintext_result(text: str) -> SubagentResultEnvelope:
     return SubagentResultEnvelope(summary=summary, **sections)
 
 
-def _collect_prior_evidence(session_state: Any) -> list[EvidenceRef]:
+def _collect_prior_evidence(session_state: SessionContextState | None) -> list[EvidenceRef]:
     """从 SessionContextState 中提取前轮证据"""
     raw_evidence = getattr(session_state, "evidence", [])
     if not raw_evidence:
@@ -504,8 +516,6 @@ def _collect_prior_evidence(session_state: Any) -> list[EvidenceRef]:
         if isinstance(e, EvidenceRef):
             items.append(e)
         elif isinstance(e, dict):
-            try:
+            with contextlib.suppress(Exception):
                 items.append(EvidenceRef.model_validate(e))
-            except Exception:
-                pass
     return items

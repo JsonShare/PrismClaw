@@ -14,12 +14,14 @@ self._fire_status_events(rows)，mixin 负责异步派发。周期心跳写点
 3. （可选）覆盖 _emit_row / _build_status_event 适配域专属规则
 4. Bundle 声明 task_store = 你的 store 实例 → DomainRegistry 自动完成 emitter 接线
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,8 @@ class StatusEmitterMixin:
     # ── 注入（框架层 / Bundle 调） ──────────────────────────
 
     def set_status_listener(
-        self, cb: Callable[[dict[str, Any]], Awaitable[None]] | None,
+        self,
+        cb: Callable[[dict[str, Any]], Awaitable[None]] | None,
     ) -> None:
         """注入任务状态变更监听器（web 层 emitter 接线用）。
 
@@ -83,8 +86,10 @@ class StatusEmitterMixin:
         workspace_id / stage / progress 等域专属字段。
         """
         updated_at = row.get("updated_at")
+        raw_task_id = row.get("id", row.get("task_id"))
+        task_id = int(raw_task_id) if isinstance(raw_task_id, str | int | float) else 0
         return {
-            "task_id": int(row.get("id", row.get("task_id"))),
+            "task_id": task_id,
             "status": row["status"],
             "updated_at": updated_at.isoformat() if isinstance(updated_at, datetime) else None,
         }

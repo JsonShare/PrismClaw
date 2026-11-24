@@ -2,36 +2,39 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import io
 import shutil
 import subprocess
 import tempfile
 import zipfile
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
-from prismclaw.app.auth.auth import verify_jwt
-from prismclaw.app.web.deps import get_web_deps
+from prismclaw.app.auth.auth import get_current_user, verify_jwt
 from prismclaw.app.web._routes_helpers import (
     _candidate_file_targets,
     _clean_workspace_id,
-    _csp_for_mime,
     _content_disposition_attachment,
     _content_disposition_inline,
+    _csp_for_mime,
     _raw_text_media_type,
-    _resolve_workspace_root,
     _resolve_within_root,
+    _resolve_workspace_root,
 )
-from prismclaw.app.auth.auth import get_current_user
+from prismclaw.app.web.deps import get_web_deps
 
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
+
 
 class FileEntry(BaseModel):
     name: str
@@ -124,6 +127,7 @@ class UploadResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Helper: extract user_id from request for download fallback
 # ---------------------------------------------------------------------------
+
 
 def _get_user_from_request(request: Request) -> str:
     """从 Authorization Bearer 或 _token 查询参数中提取 user_id（下载 fallback 兼容）。"""
@@ -220,7 +224,7 @@ async def list_files(
                     )
                 )
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to list directory")
+        raise HTTPException(status_code=500, detail="Failed to list directory") from None
 
     entries_all.sort(key=lambda e: (e.kind != "dir", (e.name or "").lower()))
     page = entries_all[offset : offset + limit]
@@ -249,13 +253,16 @@ async def get_file_text(
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
-        raise HTTPException(status_code=404, detail=f"File not found (workspace_root={workspace_root}; tried: {tried})")
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found (workspace_root={workspace_root}; tried: {tried})",
+        )
 
     max_bytes = 200_000
     try:
         data = target.read_bytes()
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to read file")
+        raise HTTPException(status_code=500, detail="Failed to read file") from None
 
     truncated = False
     if len(data) > max_bytes:
@@ -264,7 +271,7 @@ async def get_file_text(
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=415, detail="Not a UTF-8 text file")
+        raise HTTPException(status_code=415, detail="Not a UTF-8 text file") from None
 
     return FileTextResponse(path=rel, text=text, truncated=truncated)
 
@@ -282,12 +289,15 @@ async def get_file_raw(
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
-        raise HTTPException(status_code=404, detail=f"File not found (workspace_root={workspace_root}; tried: {tried})")
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found (workspace_root={workspace_root}; tried: {tried})",
+        )
 
     try:
         size = target.stat().st_size
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to stat file")
+        raise HTTPException(status_code=500, detail="Failed to stat file") from None
     if size > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large to preview")
 
@@ -317,7 +327,10 @@ async def download_file(
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
-        raise HTTPException(status_code=404, detail=f"File not found (workspace_root={workspace_root}; tried: {tried})")
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found (workspace_root={workspace_root}; tried: {tried})",
+        )
 
     media_type = _raw_text_media_type(str(target))
     return FileResponse(
@@ -345,24 +358,29 @@ async def get_office_preview_pdf(
     target = next((t for t in targets if t.exists() and t.is_file()), None)
     if target is None:
         tried = "; ".join(str(t) for t in targets) or "(no candidates)"
-        raise HTTPException(status_code=404, detail=f"File not found (workspace_root={workspace_root}; tried: {tried})")
+        raise HTTPException(
+            status_code=404,
+            detail=f"File not found (workspace_root={workspace_root}; tried: {tried})",
+        )
 
     try:
         st = target.stat()
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to stat file")
+        raise HTTPException(status_code=500, detail="Failed to stat file") from None
     if st.st_size > 25 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="File too large to preview")
 
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
-        raise HTTPException(status_code=501, detail="LibreOffice is not installed (soffice not found)")
+        raise HTTPException(
+            status_code=501, detail="LibreOffice is not installed (soffice not found)"
+        )
 
     from prismclaw.infra.workspace_paths import work_dir
 
     preview_dir = work_dir(workspace_root, "cache", "previews")
     preview_dir.mkdir(parents=True, exist_ok=True)
-    key_src = f"{target.resolve()}|{st.st_mtime_ns}|{st.st_size}".encode("utf-8")
+    key_src = f"{target.resolve()}|{st.st_mtime_ns}|{st.st_size}".encode()
     key = hashlib.sha256(key_src).hexdigest()
     out_pdf = preview_dir / f"{key}.pdf"
 
@@ -381,23 +399,28 @@ async def get_office_preview_pdf(
                 str(target),
             ]
             try:
-                proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+                # soffice 是外部进程，最长可跑 60s：放进线程池，别阻塞事件循环。
+                proc = await asyncio.to_thread(
+                    subprocess.run, cmd, capture_output=True, text=True, timeout=60, check=False
+                )
             except subprocess.TimeoutExpired:
-                raise HTTPException(status_code=504, detail="Office preview timed out")
+                raise HTTPException(status_code=504, detail="Office preview timed out") from None
             if proc.returncode != 0:
                 err = (proc.stderr or proc.stdout or "").strip()
-                raise HTTPException(status_code=500, detail=err or "Office preview conversion failed")
+                raise HTTPException(
+                    status_code=500, detail=err or "Office preview conversion failed"
+                )
 
             generated = tmp_dir / f"{target.stem}.pdf"
-            if not generated.exists():
-                alt = next(tmp_dir.glob("*.pdf"), None)
+            if not await asyncio.to_thread(generated.exists):
+                alt = await asyncio.to_thread(lambda: next(tmp_dir.glob("*.pdf"), None))
                 if alt is None:
                     raise HTTPException(status_code=500, detail="Office preview output not found")
                 generated = alt
             try:
-                shutil.move(str(generated), str(out_pdf))
+                await asyncio.to_thread(shutil.move, str(generated), str(out_pdf))
             except OSError:
-                raise HTTPException(status_code=500, detail="Failed to store preview")
+                raise HTTPException(status_code=500, detail="Failed to store preview") from None
 
     return FileResponse(
         path=str(out_pdf),
@@ -409,8 +432,8 @@ async def get_office_preview_pdf(
 @files_router.post("/upload", response_model=UploadResponse)
 async def upload_to_directory(
     request: Request,
-    files: list[UploadFile] = File(...),
-    user_id: str = Depends(get_current_user),
+    files: Annotated[list[UploadFile], File(...)],
+    user_id: Annotated[str, Depends(get_current_user)],
     workspace_id: str = "default",
     session_id: str | None = None,
 ) -> UploadResponse:
@@ -426,6 +449,7 @@ async def upload_to_directory(
         raise HTTPException(status_code=400, detail="No files uploaded")
 
     import uuid as _uuid
+
     from prismclaw.infra.workspace_paths import resolve_session_inbox_dir
     from prismclaw.schema.session.ids import build_web_session_key
 
@@ -480,7 +504,7 @@ async def mkdir(
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to create directory")
+        raise HTTPException(status_code=500, detail="Failed to create directory") from None
     return SimpleOkResponse()
 
 
@@ -505,7 +529,7 @@ async def write_text(
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(payload.content, encoding="utf-8")
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to write file")
+        raise HTTPException(status_code=500, detail="Failed to write file") from None
     return SimpleOkResponse()
 
 
@@ -536,7 +560,7 @@ async def delete_path(
     except HTTPException:
         raise
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to delete path")
+        raise HTTPException(status_code=500, detail="Failed to delete path") from None
     return SimpleOkResponse()
 
 
@@ -570,7 +594,7 @@ async def move_path(
                 dst_p.unlink()
         src_p.replace(dst_p)
     except OSError:
-        raise HTTPException(status_code=500, detail="Failed to move path")
+        raise HTTPException(status_code=500, detail="Failed to move path") from None
     return SimpleOkResponse()
 
 
@@ -615,12 +639,12 @@ async def search_files(
                 continue
             matches.append(SearchMatch(path=rel_path, kind="dir" if p.is_dir() else "file"))
     except OSError:
-        raise HTTPException(status_code=500, detail="Search failed")
+        raise HTTPException(status_code=500, detail="Search failed") from None
     return SearchResponse(workspace_id=wid, query=q, matches=matches, truncated=truncated)
 
 
 @files_router.get("/export")
-async def export_workspace_outputs(
+async def export_workspace_outbox(
     request: Request,
     user_id: str = Depends(_get_user_from_request),
     workspace_id: str = Query(default="default"),
@@ -629,7 +653,7 @@ async def export_workspace_outputs(
     """Stream workspace output files as a zip archive.
 
     If `file_paths` query params are provided, only those specific files are included.
-    Otherwise, all files under sessions/*/outputs/ are exported.
+    Otherwise, all files under sessions/*/outbox/ are exported.
     """
     wid = _clean_workspace_id(workspace_id)
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
@@ -646,16 +670,20 @@ async def export_workspace_outputs(
         for rel_path in file_paths:
             normalized = rel_path.strip().replace("\\", "/")
             resolved = (root / normalized).resolve()
-            if resolved.exists() and resolved.is_file() and str(resolved).startswith(str(root_resolved)):
+            if (
+                resolved.exists()
+                and resolved.is_file()
+                and str(resolved).startswith(str(root_resolved))
+            ):
                 export_files.append((normalized, resolved))
     elif sessions_dir.is_dir():
         for session_dir in sessions_dir.iterdir():
             if not session_dir.is_dir():
                 continue
-            outputs_dir = session_dir / "outputs"
-            if not outputs_dir.is_dir():
+            outbox_dir = session_dir / "outbox"
+            if not outbox_dir.is_dir():
                 continue
-            for p in outputs_dir.rglob("*"):
+            for p in outbox_dir.rglob("*"):
                 if p.is_file():
                     rel = str(p.relative_to(root))
                     export_files.append((rel, p))
@@ -664,14 +692,15 @@ async def export_workspace_outputs(
         raise HTTPException(status_code=404, detail="No output files found")
 
     def _entry_name(rel_path: str) -> str:
-        """去掉 sessions/<sid>/outputs/ 前缀，解压后直接看到交付物内容。"""
+        """去掉 sessions/<sid>/outbox/ 前缀，解压后直接看到交付物内容。"""
         import re as _re
-        m = _re.match(r"^sessions/[^/]+/outputs/(.+)$", rel_path)
+
+        m = _re.match(r"^sessions/[^/]+/outbox/(.+)$", rel_path)
         if m:
             return m.group(1)
         return rel_path
 
-    def _generate():
+    def _generate() -> Iterator[bytes]:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             for arcname, filepath in export_files:
@@ -688,7 +717,7 @@ async def export_workspace_outputs(
     if file_paths:
         zip_name = f"交付物-{len(export_files)}个-{datetime.now().strftime('%Y%m%d-%H%M')}.zip"
     else:
-        zip_name = f"workspace-{wid}-outputs.zip"
+        zip_name = f"workspace-{wid}-outbox.zip"
 
     return StreamingResponse(
         _generate(),

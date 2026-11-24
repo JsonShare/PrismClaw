@@ -107,9 +107,7 @@ def _persist_core(
         # happens to the inline reference, never to the on-disk file, so a
         # resumed/Read-back session can recover the complete result.
         persist_path.write_text(text, encoding="utf-8")
-        reference = _build_reference_text(
-            tool_use_id=tool_use_id, text=text, path=persist_path
-        )
+        reference = _build_reference_text(tool_use_id=tool_use_id, text=text, path=persist_path)
         logger.info(
             "persisted tool result: id=%s reason=%s path=%s",
             tool_use_id,
@@ -160,7 +158,7 @@ def persist_tool_result_sync(
     tool_use_id: str,
     content: list[ContentBlock],
     reason: str,
-    working_dir: str | Path,
+    working_dir: str | Path | None,
     tool_name: str = "",
 ) -> str | None:
     """Synchronous variant for the offline (non-streaming) compaction path."""
@@ -202,9 +200,7 @@ def is_persisted_content(content: object) -> bool:
         return content.startswith(PERSISTED_OUTPUT_TAG)
     if isinstance(content, list):
         for block in content:
-            if isinstance(block, TextBlock) and block.text.startswith(
-                PERSISTED_OUTPUT_TAG
-            ):
+            if isinstance(block, TextBlock) and block.text.startswith(PERSISTED_OUTPUT_TAG):
                 return True
     return False
 
@@ -229,4 +225,3 @@ async def cleanup_working_dir(working_dir: str | Path) -> int:
         return removed
 
     return await asyncio.to_thread(_rm)
-

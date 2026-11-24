@@ -6,6 +6,7 @@
 唯一入参是 ``LoopRuntime``：teardown 读到的就是 loop 内写过的同一份状态，
 不存在第二份容器，也不需要任何回填。
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,6 +24,7 @@ from prismclaw.engine.execution.query._turn_helpers import (
 from prismclaw.engine.foundation.metrics import emit
 from prismclaw.engine.hooks import HookEvent, _log_hook_outcome
 from prismclaw.engine.security.gate.constraint_guard import detect_constraint_breaches
+from prismclaw.schema.session.projection import SessionProjectionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +99,14 @@ async def run_teardown(rt: LoopRuntime) -> None:
         emit("turn.loop.steps", _r2_steps, kind="histogram")
 
         logger.info(
-            "R2 turn-loop telemetry: iterations=%s goal_unachieved=%s constraint_breach=%s terminated_by=%s",
+            (
+                "R2 turn-loop telemetry: iterations=%s "
+                "goal_unachieved=%s constraint_breach=%s terminated_by=%s"
+            ),
             rt.iteration,
-            bool(_r2_goal_unachieved), len(_r2_breaches), rt.terminated_by,
+            bool(_r2_goal_unachieved),
+            len(_r2_breaches),
+            rt.terminated_by,
         )
 
         # ── Skill invocation 清理 ──
@@ -115,12 +122,13 @@ async def run_teardown(rt: LoopRuntime) -> None:
 
         # ── Session 运行时指标日志 ──
         tree = rt.tree
-        if tree is not None and tree.get_turn_runtime_metrics_snapshots():
-            turn_metrics_snapshots = tree.get_turn_runtime_metrics_snapshots()
+        engine = SessionProjectionEngine(tree) if tree is not None else None
+        if engine is not None and engine.cache.get_turn_metrics_snapshots():
+            turn_metrics_snapshots = engine.cache.get_turn_metrics_snapshots()
             log_session_runtime_metrics(
                 logger_=logger,
                 turn_metrics_snapshots=turn_metrics_snapshots,
-                history_compaction_count=tree.get_history_compaction_count(),
+                history_compaction_count=engine.history_compaction.get_count(),
             )
             log_session_success_verdict(
                 logger_=logger,

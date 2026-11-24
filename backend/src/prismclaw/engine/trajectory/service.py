@@ -17,16 +17,22 @@ Phase 0' 解耦 critical deliverable: **core code never imports
 All I/O goes through the injected TrajectoryPersistence Protocol —
 the engine layer never imports persistence directly.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Protocol
 
-from prismclaw.schema.trajectory.trajectory_types import TrajectoryCell
-from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
-from prismclaw.engine.trajectory.bus import SessionBus
+from pydantic import BaseModel
+
 from prismclaw.engine.trajectory import bus_events as evmod
+from prismclaw.engine.trajectory.bus import SessionBus
+from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
+from prismclaw.schema.trajectory.trajectory_types import (
+    TrajectoryCell,
+    TrajectorySnapshot,
+)
 
 from .flush_worker import TrajectoryFlushWorker
 from .projection import (
@@ -37,6 +43,10 @@ from .projection import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ToolRegistryPort(Protocol):
+    def get(self, name: str) -> object | None: ...
 
 
 class TrajectoryAuditService:
@@ -65,7 +75,7 @@ class TrajectoryAuditService:
         bus: SessionBus,
         *,
         persistence: TrajectoryPersistence | None = None,
-        tool_registry: Any = None,
+        tool_registry: ToolRegistryPort | None = None,
     ) -> None:
         self.session_id = session_id
         self.bus = bus
@@ -74,7 +84,8 @@ class TrajectoryAuditService:
         self._subscribed = False
         self._handlers_registered = False
         self._flush_worker = TrajectoryFlushWorker(
-            session_id, persistence,
+            session_id,
+            persistence,
         )
         self._tool_registry = tool_registry
         # name → schema JSON (session-lifetime cache; the service lives
@@ -88,7 +99,7 @@ class TrajectoryAuditService:
 
     # ------------------------------------------------------------------ life
 
-    async def start(self, *, restore_from_db: bool = True) -> "TrajectoryAuditService":
+    async def start(self, *, restore_from_db: bool = True) -> TrajectoryAuditService:
         """Load prior state (if any) + register event handlers on self.bus.
 
         Async because it does one query for session state reconstruction
@@ -101,14 +112,14 @@ class TrajectoryAuditService:
             try:
                 prior = await self._persistence.load_state(self.session_id)
                 if prior.session_id and (
-                    prior.session_id == self.session_id
-                    or self.session_id in (None, "")
+                    prior.session_id == self.session_id or self.session_id in (None, "")
                 ):
                     self.state = prior
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "trajectory audit service start: restore failed for "
-                    "sid=%s; starting clean. %s", self.session_id, exc,
+                    "trajectory audit service start: restore failed for sid=%s; starting clean. %s",
+                    self.session_id,
+                    exc,
                 )
         # Start the async flush worker
         await self._flush_worker.start()
@@ -148,7 +159,8 @@ class TrajectoryAuditService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory audit close: worker stop failed sid=%s: %s",
-                self.session_id, exc,
+                self.session_id,
+                exc,
             )
 
         # Step 2: Unregister bus handlers
@@ -159,21 +171,23 @@ class TrajectoryAuditService:
         if force_flush and self._persistence is not None:
             try:
                 await self._persistence.flush_state(
-                    self.state, only_if_dirty=True,
+                    self.state,
+                    only_if_dirty=True,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "trajectory audit close: final flush failed sid=%s: %s",
-                    self.session_id, exc,
+                    self.session_id,
+                    exc,
                 )
 
     # ---------------------------------------------------------------- bus api
 
-    def handle_event(self, ev: object) -> None:
+    def handle_event(self, ev: BaseModel) -> None:
         """Generic subscriber registered for EVERY event type (sync).
 
- This is the firehose 风格. apply() dispatches on type.
-        Purely synchronous — no I/O, no await, O(μs).
+        This is the firehose 风格. apply() dispatches on type.
+               Purely synchronous — no I/O, no await, O(μs).
         """
         # Validate event belongs to this session (bus = per-session today,
         # but defend against shared bus misconfig silently cross-leaking).
@@ -181,23 +195,32 @@ class TrajectoryAuditService:
         ev_name = type(ev).__name__
         if ev_name == "ConversationNodeAdded":
             logger.info(
-                "trajectory handle_event: ConversationNodeAdded "
-                "self.sid=%s ev.sid=%s match=%s",
-                self.session_id, sid_attr, sid_attr == self.session_id,
+                "trajectory handle_event: ConversationNodeAdded self.sid=%s ev.sid=%s match=%s",
+                self.session_id,
+                sid_attr,
+                sid_attr == self.session_id,
             )
         if sid_attr is not None and sid_attr != self.session_id:
             logger.warning(
                 "TrajectoryAuditService sid=%s received event for sid=%s "
                 "(bus cross-leak?); dropping.",
-                self.session_id, sid_attr,
+                self.session_id,
+                sid_attr,
             )
             return
-        if ev_name in ("SessionTurnStarted", "SessionTurnFinished", "SessionIterationStarted", "SessionIterationFinished"):
+        if ev_name in (
+            "SessionTurnStarted",
+            "SessionTurnFinished",
+            "SessionIterationStarted",
+            "SessionIterationFinished",
+        ):
             logger.info(
-                "trajectory event: sid=%s type=%s", self.session_id, ev_name,
+                "trajectory event: sid=%s type=%s",
+                self.session_id,
+                ev_name,
             )
 
- # ConversationNodeAdded → per-conversation-event cell.
+        # ConversationNodeAdded → per-conversation-event cell.
         # The event carries the COMPLETE cell payload (detail texts, metrics,
         # time range, iteration) because the runner stashes an
         # LLMMetricsSnapshot into the trajectory runtime ctx before the
@@ -227,12 +250,14 @@ class TrajectoryAuditService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory apply() failed sid=%s ev=%s: %s",
-                self.session_id, type(ev).__name__, exc,
+                self.session_id,
+                type(ev).__name__,
+                exc,
             )
             return
         self.state = new_state
 
-    def _handle_cell_event(self, ev: "evmod.ConversationNodeAdded") -> None:
+    def _handle_cell_event(self, ev: evmod.ConversationNodeAdded) -> None:
         """Build a TrajectoryCell from the event
         and schedule a non-blocking async upsert.
 
@@ -246,6 +271,7 @@ class TrajectoryAuditService:
         without passing it through silently writes NULLs.
         """
         import uuid as _uuid
+
         try:
             if self._persistence is None:
                 return
@@ -293,17 +319,25 @@ class TrajectoryAuditService:
             )
             # Non-blocking schedule — never await on the bus drain path
             _ins_task = asyncio.ensure_future(self._persistence.insert_cell(cell))
-            def _log_insert_err(t: "asyncio.Task[None]") -> None:
+
+            def _log_insert_err(t: asyncio.Task[None]) -> None:
                 if t.cancelled():
                     return
                 exc = t.exception()
                 if exc is not None:
-                    logger.warning("trajectory insert_cell async failed sid=%s kind=%s: %s", self.session_id, cell.kind, exc)
+                    logger.warning(
+                        "trajectory insert_cell async failed sid=%s kind=%s: %s",
+                        self.session_id,
+                        cell.kind,
+                        exc,
+                    )
+
             _ins_task.add_done_callback(_log_insert_err)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory _handle_cell_event failed sid=%s: %s",
-                self.session_id, exc,
+                self.session_id,
+                exc,
             )
 
     def _resolve_tool_schema(self, name: str) -> str | None:
@@ -320,15 +354,16 @@ class TrajectoryAuditService:
         schema_json: str | None = None
         try:
             import json as _json
-            tool = self._tool_registry.get(name)
+
+            tool = self._tool_registry.get(name) if self._tool_registry is not None else None
             if tool is not None:
                 schema_json = _json.dumps(
                     {
                         "type": "function",
                         "function": {
-                            "name": tool.name,
-                            "description": tool.description,
-                            "parameters": tool.parameters
+                            "name": getattr(tool, "name", name),
+                            "description": getattr(tool, "description", ""),
+                            "parameters": getattr(tool, "parameters", None)
                             or {"type": "object", "properties": {}},
                         },
                     },
@@ -337,13 +372,15 @@ class TrajectoryAuditService:
                 )
         except Exception as exc:  # noqa: BLE001
             logger.debug(
-                "trajectory schema resolve failed for tool=%s: %s", name, exc,
+                "trajectory schema resolve failed for tool=%s: %s",
+                name,
+                exc,
             )
             schema_json = None
         self._schema_cache[name] = schema_json
         return schema_json
 
-    def _handle_system_cell(self, ev: "evmod.PackerFinalDone") -> None:
+    def _handle_system_cell(self, ev: evmod.PackerFinalDone) -> None:
         """Buffer the current turn's system-prompt snapshot in memory.
 
         Dedup/buffering state lives HERE (trajectory service), not in
@@ -379,20 +416,23 @@ class TrajectoryAuditService:
         try:
             payload = self._pending_system_cell
             self._pending_system_cell = None
-            asyncio.ensure_future(self._persistence.insert_system_cell(
-                session_id=self.session_id,
-                turn=payload["turn"],
-                iteration=payload["iteration"],
-                sha1_16=payload["sha1_16"],
-                full_text=payload["full_text"],
-            ))
+            asyncio.ensure_future(
+                self._persistence.insert_system_cell(
+                    session_id=self.session_id,
+                    turn=payload["turn"],
+                    iteration=payload["iteration"],
+                    sha1_16=payload["sha1_16"],
+                    full_text=payload["full_text"],
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory _flush_system_cell failed sid=%s: %s",
-                self.session_id, exc,
+                self.session_id,
+                exc,
             )
 
-    def _handle_llm_failure_cell(self, ev: "evmod.LLMRequestFailed") -> None:
+    def _handle_llm_failure_cell(self, ev: evmod.LLMRequestFailed) -> None:
         """Mark-or-synthesize the error cell for a failed LLM request.
 
         Sync (bus subscriber contract). Schedules the async
@@ -402,21 +442,24 @@ class TrajectoryAuditService:
         try:
             if self._persistence is None:
                 return
-            asyncio.ensure_future(self._persistence.mark_or_synthesize_error(
-                session_id=ev.session_id,
-                turn=ev.turn_counter,
-                iteration=ev.iteration,
-                error_code=ev.error_code,
-                error_message=ev.error_message,
-                model=ev.model or None,
-                ttft_ms=ev.ttft_ms,
-                total_ms=ev.total_ms,
-                failed_at_ms=ev.failed_at_ms,
-            ))
+            asyncio.ensure_future(
+                self._persistence.mark_or_synthesize_error(
+                    session_id=ev.session_id,
+                    turn=ev.turn_counter,
+                    iteration=ev.iteration,
+                    error_code=ev.error_code,
+                    error_message=ev.error_message,
+                    model=ev.model or None,
+                    ttft_ms=ev.ttft_ms,
+                    total_ms=ev.total_ms,
+                    failed_at_ms=ev.failed_at_ms,
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory _handle_llm_failure_cell failed sid=%s: %s",
-                self.session_id, exc,
+                self.session_id,
+                exc,
             )
 
     async def on_turn_finished(self, ev: evmod.SessionTurnFinished) -> None:
@@ -430,8 +473,7 @@ class TrajectoryAuditService:
         background, with batching and adaptive flush intervals.
         """
         logger.info(
-            "trajectory on_turn_finished: sid=%s records=%d is_dirty=%s "
-            "queue_depth=%d",
+            "trajectory on_turn_finished: sid=%s records=%d is_dirty=%s queue_depth=%d",
             self.session_id,
             len(self.state.records),
             self.state.is_dirty(),
@@ -449,13 +491,15 @@ class TrajectoryAuditService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "trajectory audit on_turn_finished submit failed sid=%s: %s",
-                self.session_id, exc,
+                self.session_id,
+                exc,
             )
             # Fallback: direct flush (rare, only if worker is broken)
             if self._persistence is not None:
                 try:
                     await self._persistence.flush_state(
-                        self.state, only_if_dirty=True,
+                        self.state,
+                        only_if_dirty=True,
                     )
                     logger.warning(
                         "trajectory audit fallback direct flush succeeded sid=%s",
@@ -464,7 +508,8 @@ class TrajectoryAuditService:
                 except Exception as fallback_exc:  # noqa: BLE001
                     logger.warning(
                         "trajectory audit fallback flush also failed sid=%s: %s",
-                        self.session_id, fallback_exc,
+                        self.session_id,
+                        fallback_exc,
                     )
 
     # ------------------------------------------------------------------ internals
@@ -488,8 +533,8 @@ class TrajectoryAuditService:
 
     # ---------------------------------------------------------------- helpers
 
-    def view(self, **kwargs):
-        return view(self.state, **kwargs)
+    def view(self, *, limit: int | None = None, ascending: bool = True) -> TrajectorySnapshot:
+        return view(self.state, limit=limit, ascending=ascending)
 
     @property
     def flush_worker_stats(self) -> dict[str, Any]:

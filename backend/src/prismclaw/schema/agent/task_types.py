@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-"""Task specification types shared across layers.
-
-Moved from kernel/agent.py to contracts so that contracts-level Protocols
-can reference these types without TYPE_CHECKING coupling to kernel.
-"""
-
 from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from prismclaw.schema.agent.task_runtime import PreflightProbeResult
+
+"""Task specification types shared across layers.
+
+Moved from kernel/agent.py to contracts so that contracts-level Protocols
+can reference these types without TYPE_CHECKING coupling to kernel.
+"""
+
 
 TaskRiskLevel = Literal["normal", "high"]
 

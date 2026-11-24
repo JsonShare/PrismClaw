@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prismclaw.app.web.deps import WebDeps
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
+    from prismclaw.engine.hooks.memory_nudge_hook import MemoryNudgeHook
 
 from prismclaw.infra.settings import Settings
 
@@ -9,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 def build_app_web_deps(
-    app: Any,
+    app: FastAPI,
     *,
     settings: Settings | None = None,
-    runner_deps: Any | None = None,
-) -> Any | None:
+    runner_deps: AgentRunnerDeps | None = None,
+) -> WebDeps | None:
     state = getattr(app, "state", None)
     if state is None:
         raise RuntimeError("app.state is not available")
@@ -43,8 +50,8 @@ def build_app_web_deps(
     from prismclaw.app.session_router import SessionRouter
     from prismclaw.app.web.chat.chat_protocol import SessionQueue
     from prismclaw.app.web.deps import WebDeps
-    from prismclaw.app.web.websocket.websocket import ConnectionRegistry
     from prismclaw.app.web.websocket.domain_task_emitter import WsDomainTaskEmitter
+    from prismclaw.app.web.websocket.websocket import ConnectionRegistry as ConnectionRegistry
     from prismclaw.assembly.plugins.reload_service import apply_app_settings
     from prismclaw.assembly.runtime_coordinator import get_app_workspace_runner_deps_async
     from prismclaw.runtime.facade.execution import cleanup_working_dir
@@ -74,9 +81,7 @@ def build_app_web_deps(
         archive_owner = old_session_id.split(":s:", 1)[0] if ":s:" in old_session_id else None
         current_task_manager.spawn(
             f"consolidate:{old_session_id}",
-            effective_runner_deps.context_memory_provider.consolidate_session(
-                old_session_id
-            ),
+            effective_runner_deps.context_memory_provider.consolidate_session(old_session_id),
             category="archive",
             owner=archive_owner,
         )
@@ -94,11 +99,16 @@ def build_app_web_deps(
         if nudge_hook is None:
             nudge_hook = web_nudge_hook
 
+        redis_client = getattr(current_state, "redis_client", None)
+        if redis_client is None or llm_client is None:
+            logger.info("SOP 提取跳过：缺少 redis_client 或 llm_client")
+            return
+
         await maybe_spawn_extraction(
             task_manager=current_task_manager,
             memory_store=current_memory_store,
             session_store=current_session_store,
-            redis_client=getattr(current_state, "redis_client", None),
+            redis_client=redis_client,
             llm_client=llm_client,
             session_id=old_session_id,
             settings=current_settings.evolution,
@@ -127,8 +137,11 @@ def build_app_web_deps(
 
     run_presence = getattr(state, "run_presence", None)
     if not isinstance(run_presence, RunPresence):
-        run_presence = RunPresence(
-            getattr(state, "redis_client", None), on_abort=_abort_local_run
+        redis_client = getattr(state, "redis_client", None)
+        run_presence = (
+            RunPresence(redis_client, on_abort=_abort_local_run)
+            if redis_client is not None
+            else None
         )
         state.run_presence = run_presence
     else:
@@ -185,13 +198,14 @@ def build_app_web_deps(
     )
 
 
-def _resolve_web_nudge_hook(runner_deps: Any) -> Any:
+def _resolve_web_nudge_hook(runner_deps: AgentRunnerDeps) -> MemoryNudgeHook | None:
     hooks = getattr(runner_deps, "hooks", None)
     hook_iter = getattr(hooks, "hooks", None)
     if not callable(hook_iter):
         return None
 
     from prismclaw.runtime.facade.hooks import MemoryNudgeHook
+
     for hook in hook_iter():
         if isinstance(hook, MemoryNudgeHook):
             return hook

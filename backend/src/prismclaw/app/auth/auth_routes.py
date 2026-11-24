@@ -83,7 +83,9 @@ def _check_password(raw: str) -> str:
         or re.search(r"[A-Za-z]", raw) is None
         or re.search(r"\d", raw) is None
     ):
-        raise HTTPException(status_code=400, detail="密码需为 8-32 位，同时包含字母和数字，且不含空格")
+        raise HTTPException(
+            status_code=400, detail="密码需为 8-32 位，同时包含字母和数字，且不含空格"
+        )
     return raw
 
 
@@ -193,7 +195,7 @@ async def register(body: RegisterRequest, request: Request) -> RegisterResponse:
                 nickname=nickname,
             )
         except IntegrityError:
-            raise HTTPException(status_code=409, detail="邮箱或昵称已被占用")
+            raise HTTPException(status_code=409, detail="邮箱或昵称已被占用") from None
 
         await clear_code(redis, prefix=prefix, email=email, scene="register")
         return RegisterResponse(

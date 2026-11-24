@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
-
-from prismclaw.schema.agent.curator import CuratorSopRepository
+from typing import TYPE_CHECKING, Literal
 
 from prismclaw.engine import curator as _curator
 from prismclaw.engine.curator import (
@@ -19,10 +17,13 @@ from prismclaw.engine.curator import (
     ReviewOutcome,
 )
 from prismclaw.engine.foundation.distributed_mutex import DistributedMutex
+from prismclaw.schema.agent.curator import CuratorL1Index, CuratorSopRepository
 from prismclaw.schema.shared.exceptions import LockAcquireError, LockLostError
 
 if TYPE_CHECKING:
     from prismclaw.engine.curator.state import CuratorStateStore
+    from prismclaw.infra.settings._memory import CuratorSettings
+    from prismclaw.schema.llm.types import LLMClient
     from prismclaw.schema.services.task_protocol import TaskManagerProtocol
     from prismclaw.schema.storage import LockManager
 
@@ -42,18 +43,19 @@ class CuratorCycle:
         self,
         *,
         sop_repo: CuratorSopRepository,
-        settings: Any,
+        settings: CuratorSettings,
         state_store: CuratorStateStore,
         lock_manager: LockManager,
         task_manager: TaskManagerProtocol,
-        l1_index: Any,
+        l1_index: CuratorL1Index,
         workspace_base_dir: Path | None = None,
-        llm_client: Any = None,
+        llm_client: LLMClient | None = None,
         mode: CycleMode = "scan_and_review",
         force_review: bool = False,
         owner_label: str = "timed",
         abort_event: asyncio.Event | None = None,
-        count_validation_signals: Callable | None = None,
+        count_validation_signals: Callable[[str, list[str]], Awaitable[dict[str, dict[str, int]]]]
+        | None = None,
     ) -> None:
         self._sop_repo = sop_repo
         self._settings = settings

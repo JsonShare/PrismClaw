@@ -17,7 +17,7 @@ category: 文档处理
 |----------|---------|
 | `$PRISMCLAW_WORKSPACE` | Current workspace root |
 | `$PRISMCLAW_TMP_DIR` | Temp directory (workspace-scoped) |
-| `$PRISMCLAW_OUTPUT_DIR` | Output directory (workspace-scoped) |
+| `$PRISMCLAW_OUTBOX_DIR` | Output directory (workspace-scoped) |
 
 **Never use `/tmp/` or hardcoded absolute paths** — they escape the workspace and cause write errors.
 

@@ -26,9 +26,12 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.schema.session.ids import derive_memory_session_key
+
+if TYPE_CHECKING:
+    from prismclaw.schema.storage.storage_types import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +68,39 @@ _MIN_SHARED_TOKENS = 2
 _MIN_OVERLAP_RATIO = 0.2
 _INFORMATIVE_MIN_LEN = 3
 
-_STOP_TOKENS = {"的", "了", "是", "在", "我", "你", "他", "她", "它", "们", "和", "与", "或",
-                "a", "the", "is", "are", "to", "of", "and", "in", "on", "for", "this", "that"}
+_STOP_TOKENS = {
+    "的",
+    "了",
+    "是",
+    "在",
+    "我",
+    "你",
+    "他",
+    "她",
+    "它",
+    "们",
+    "和",
+    "与",
+    "或",
+    "a",
+    "the",
+    "is",
+    "are",
+    "to",
+    "of",
+    "and",
+    "in",
+    "on",
+    "for",
+    "this",
+    "that",
+}
 
 
 def _tokenize(text: str) -> set[str]:
     try:
         import jieba
+
         tokens = {t.strip().lower() for t in jieba.cut_for_search(text) if t.strip()}
     except Exception:
         tokens = {t.lower() for t in text.split() if t.strip()}
@@ -115,10 +144,7 @@ def detect_user_correction(
         shared = user_tokens & content_tokens
         if not shared:
             continue
-        if (
-            len(shared) >= _MIN_SHARED_TOKENS
-            or any(_is_informative_token(t) for t in shared)
-        ):
+        if len(shared) >= _MIN_SHARED_TOKENS or any(_is_informative_token(t) for t in shared):
             hits.append(entry_id)
             continue
         denom = min(len(user_tokens), len(content_tokens))
@@ -138,7 +164,7 @@ class AttributionRecorder:
     turn's user message can be checked for explicit corrections.
     """
 
-    def __init__(self, memory_store: Any) -> None:
+    def __init__(self, memory_store: MemoryStore) -> None:
         self._memory_store = memory_store
         # session_id → pending injection records for the in-flight turn
         self._pending: dict[str, list[dict[str, Any]]] = {}
@@ -182,9 +208,7 @@ class AttributionRecorder:
         pending = self._pending.pop(session_id, None)
         if not pending:
             return
-        self._last_turn[session_id] = [
-            (rec["entry_id"], rec["entry_content"]) for rec in pending
-        ]
+        self._last_turn[session_id] = [(rec["entry_id"], rec["entry_content"]) for rec in pending]
         try:
             task = asyncio.get_running_loop().create_task(
                 self._flush_turn(session_id, turn_seq, pending)
@@ -237,17 +261,13 @@ class AttributionRecorder:
         """Entry ids injected in the current in-flight turn (for task-outcome signals)."""
         return [rec["entry_id"] for rec in self._pending.get(session_id, [])]
 
-    async def record_validation_events(
-        self, session_id: str, events: list[dict[str, Any]]
-    ) -> int:
+    async def record_validation_events(self, session_id: str, events: list[dict[str, Any]]) -> int:
         """Persist validation events (correction/task-outcome) for this session."""
         try:
             session_key = derive_memory_session_key(session_id)
             return await self._memory_store.record_validation_events(session_key, events)
         except Exception:
-            logger.warning(
-                "validation event persist failed for %s", session_id, exc_info=True
-            )
+            logger.warning("validation event persist failed for %s", session_id, exc_info=True)
             return 0
 
     @staticmethod

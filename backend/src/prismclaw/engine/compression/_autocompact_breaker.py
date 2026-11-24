@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.foundation.metrics import emit
 
@@ -18,7 +19,7 @@ class AutocompactBreaker:
     """Autocompact 熔断：连续失败计数。
 
     连续失败达到阈值后，协调器不再在 ``prompt_too_long`` 循环中
-    浪费 API 调用，而是主动抛 :class:`CircuitBreakerException`。
+    浪费 API 调用，而是主动抛 :class:`CircuitBreakerError`。
 
     状态刻意保持简单——每 session 一个计数器，生命周期由 runner
     持有，跨 turn 保留。"""
@@ -42,7 +43,7 @@ class AutocompactBreaker:
         return {"consecutive_failures": self.consecutive_failures}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "AutocompactBreaker":
+    def from_dict(cls, data: dict[str, Any] | None) -> AutocompactBreaker:
         if not isinstance(data, dict):
             return cls()
         return cls(
@@ -51,7 +52,7 @@ class AutocompactBreaker:
 
 
 def _resolve_breaker(
-    deps: Any,
+    deps: object,
     compression_runtime: CompressionRuntimeState,
 ) -> AutocompactBreaker:
     """Return the per-session autocompact breaker, lazily defaulting
@@ -69,10 +70,8 @@ def _resolve_breaker(
     except Exception:
         initial = 0
     breaker = AutocompactBreaker(consecutive_failures=initial)
-    try:
+    with contextlib.suppress(Exception):
         deps.autocompact_breaker = breaker  # type: ignore[attr-defined]
-    except Exception:
-        pass
     return breaker
 
 
@@ -86,10 +85,8 @@ def _persist_breaker_state(
     transient persistence error does not break the compaction
     flow.
     """
-    try:
+    with contextlib.suppress(Exception):
         compression_runtime.consecutive_failures = breaker.get_consecutive_failures()
-    except Exception:
-        pass
 
 
 def _persist_summary_text(
@@ -102,10 +99,8 @@ def _persist_summary_text(
     persisted text to re-anchor a reloaded session without calling
     the LLM again.
     """
-    try:
+    with contextlib.suppress(Exception):
         compression_runtime.last_successful_summary_text = (text or "")[:16_000]
-    except Exception:
-        pass
 
 
 _METRIC_AUTOCOMPACT_TRIGGER = "autocompact.trigger"

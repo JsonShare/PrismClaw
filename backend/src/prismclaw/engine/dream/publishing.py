@@ -6,7 +6,7 @@ from typing import Any
 
 from prismclaw.engine.dream.candidates import DreamMemoryCandidate
 from prismclaw.engine.dream.models import DreamPublishableArtifact, DreamPublishableMemory
-from prismclaw.schema.memory.classify import CANONICAL_TYPES, normalize_type
+from prismclaw.schema.memory.classify import normalize_type
 from prismclaw.schema.memory.memory_types import L4ArtifactEntry, MemoryEntry
 
 
@@ -73,12 +73,12 @@ def build_memory_entry_from_publishable(publishable: DreamPublishableMemory) -> 
         (
             f"{publishable.session_id}|{publishable.layer}|{publishable.memory_type}|"
             f"{publishable.memory_kind}|{content}"
-        ).encode("utf-8")
+        ).encode()
     ).hexdigest()
     confidence = coerce_confidence(publishable.confidence, 0.75)
     return MemoryEntry(
         id=f"dream:{digest[:16]}",
-        layer=publishable.layer,  # type: ignore[arg-type]
+        layer=publishable.layer,
         type=publishable.memory_type,
         content=content,
         scope=publishable.scope,
@@ -111,39 +111,45 @@ def append_unique_ref(refs: list[str], ref: str) -> list[str]:
     return merged
 
 
-def coerce_confidence(value: Any, default: float) -> float:
-    try:
-        parsed = float(value)
-    except Exception:
+def coerce_confidence(value: object, default: float) -> float:
+    if isinstance(value, (int, float, str)):
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            parsed = float(default)
+    else:
         parsed = float(default)
     return min(1.0, max(0.0, parsed))
 
 
-def preferred_str(*values: Any) -> str:
+def preferred_str(*values: object) -> str:
     for value in values:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
 
 
-def coerce_non_negative_int(value: Any, default: int) -> int:
-    try:
-        parsed = int(value)
-    except Exception:
+def coerce_non_negative_int(value: object, default: int) -> int:
+    if isinstance(value, (int, float, str)):
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError, OverflowError):
+            parsed = int(default)
+    else:
         parsed = int(default)
     return max(0, parsed)
 
 
-def _parse_optional_float(value: Any) -> float | None:
-    if value is None:
+def _parse_optional_float(value: object) -> float | None:
+    if not isinstance(value, (int, float, str)):
         return None
     try:
         return float(value)
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 
-def normalize_steps(raw: Any) -> list[str]:
+def normalize_steps(raw: object) -> list[str]:
     if isinstance(raw, list):
         return [str(item).strip() for item in raw if str(item).strip()]
     if isinstance(raw, str) and raw.strip():
@@ -151,11 +157,11 @@ def normalize_steps(raw: Any) -> list[str]:
     return []
 
 
-def infer_memory_kind(raw: Any, *, layer: str, type_: Any) -> str:
+def infer_memory_kind(raw: object, *, layer: str, type_: object) -> str:
     if isinstance(raw, str) and raw.strip():
         return raw.strip().lower()
     try:
-        type_text = normalize_type(type_)
+        type_text = normalize_type(type_ if isinstance(type_, str) else "")
     except ValueError:
         type_text = "fact"
     if layer == "L3" or type_text == "procedure":
@@ -259,7 +265,9 @@ def build_archive_payload(entries: list[MemoryEntry], *, graph_group_id: str) ->
     }
 
 
-def build_pattern_artifact(entries: list[MemoryEntry], *, graph_group_id: str) -> dict[str, Any] | None:
+def build_pattern_artifact(
+    entries: list[MemoryEntry], *, graph_group_id: str
+) -> dict[str, Any] | None:
     facts = [entry for entry in entries if entry.layer == "L2"][:3]
     procedures = [entry for entry in entries if entry.layer == "L3"][:3]
     if not facts and not procedures:
@@ -289,7 +297,9 @@ def build_pattern_artifact(entries: list[MemoryEntry], *, graph_group_id: str) -
     }
 
 
-def build_graph_artifact(entries: list[MemoryEntry], *, graph_group_id: str) -> dict[str, Any] | None:
+def build_graph_artifact(
+    entries: list[MemoryEntry], *, graph_group_id: str
+) -> dict[str, Any] | None:
     if len(entries) < 2:
         return None
     relation_payload = build_relation_payload(entries)
@@ -315,7 +325,10 @@ def build_graph_artifact(entries: list[MemoryEntry], *, graph_group_id: str) -> 
             [
                 "relations:",
                 *[
-                    f"- [{relation['type']}] {relation['source_label']} -> {relation['target_label']}"
+                    (
+                        f"- [{relation['type']}] {relation['source_label']} "
+                        f"-> {relation['target_label']}"
+                    )
                     for relation in payload["relations"][:4]
                 ],
             ]
@@ -327,7 +340,9 @@ def build_graph_artifact(entries: list[MemoryEntry], *, graph_group_id: str) -> 
     }
 
 
-def build_relation_artifact(entries: list[MemoryEntry], *, graph_group_id: str) -> dict[str, Any] | None:
+def build_relation_artifact(
+    entries: list[MemoryEntry], *, graph_group_id: str
+) -> dict[str, Any] | None:
     payload = build_relation_payload(entries)
     relations = payload["relations"]
     if not relations:
@@ -355,7 +370,9 @@ def build_relation_payload(entries: list[MemoryEntry]) -> dict[str, Any]:
     procedures = [entry for entry in entries if entry.layer == "L3"][:4]
     for procedure in procedures:
         for fact in facts:
-            relation_type = "guided_by" if fact.type in {"preference", "constraint"} else "depends_on"
+            relation_type = (
+                "guided_by" if fact.type in {"preference", "constraint"} else "depends_on"
+            )
             _append_relation(relations, seen, procedure, fact, relation_type)
     by_entity: dict[str, list[MemoryEntry]] = {}
     for entry in entries:
@@ -505,7 +522,7 @@ def build_l4_artifact_entry_from_publishable(
         payload.update(publishable.payload)
     return L4ArtifactEntry(
         id=publishable.session_id,
-        artifact_kind=publishable.artifact_kind,  # type: ignore[arg-type]
+        artifact_kind=publishable.artifact_kind,
         session_id=publishable.session_id,
         summary=publishable.summary,
         created_at=time.time(),
@@ -525,7 +542,7 @@ def build_rem_artifact_session_id(
     summary: str,
 ) -> str:
     digest = hashlib.sha1(
-        f"{session_key}|{artifact_kind}|{graph_group_id}|{summary}".encode("utf-8")
+        f"{session_key}|{artifact_kind}|{graph_group_id}|{summary}".encode()
     ).hexdigest()
     return f"{session_key}:dream:rem:{artifact_kind}:{digest[:12]}"
 
@@ -567,7 +584,7 @@ def serialize_publishable_memory(publishable: DreamPublishableMemory) -> dict[st
     }
 
 
-def deserialize_publishable_memory(raw: Any) -> DreamPublishableMemory | None:
+def deserialize_publishable_memory(raw: object) -> DreamPublishableMemory | None:
     if not isinstance(raw, dict):
         return None
     try:
@@ -612,7 +629,7 @@ def serialize_publishable_artifact(publishable: DreamPublishableArtifact) -> dic
     }
 
 
-def deserialize_publishable_artifact(raw: Any) -> DreamPublishableArtifact | None:
+def deserialize_publishable_artifact(raw: object) -> DreamPublishableArtifact | None:
     if not isinstance(raw, dict):
         return None
     try:
@@ -624,7 +641,9 @@ def deserialize_publishable_artifact(raw: Any) -> DreamPublishableArtifact | Non
             publish_state=str(raw.get("publish_state", "published")),  # type: ignore[arg-type]
             graph_group_id=preferred_str(raw.get("graph_group_id")) or None,
             source_refs=[str(item) for item in raw.get("source_refs", []) if str(item)],
-            payload=dict(raw.get("payload", {})) if isinstance(raw.get("payload", {}), dict) else {},
+            payload=dict(raw.get("payload", {}))
+            if isinstance(raw.get("payload", {}), dict)
+            else {},
             origin_stage=str(raw.get("origin_stage", "rem")),
         )
     except Exception:

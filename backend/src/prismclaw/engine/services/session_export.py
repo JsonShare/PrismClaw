@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
-from prismclaw.schema.agent.session import MessageEntry
-from prismclaw.schema.session.types import CompactionEntry, CustomEntry, ModelChangeEntry, SessionTree
 from prismclaw.schema.agent.data_types import FileBlock, ImageBlock, TextBlock
-from prismclaw.schema.shared.utils import file_reference_text
+from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.content.compaction import coerce_compaction_artifact
+from prismclaw.schema.session.types import (
+    CompactionEntry,
+    CustomEntry,
+    ModelChangeEntry,
+    SessionTree,
+)
+from prismclaw.schema.shared.utils import file_reference_text
 
 _IMAGE_DATA_PREVIEW = 256
 
@@ -81,6 +85,10 @@ def _render_message_entry(
     return lines
 
 
+def _count_or_unknown(value: int | None) -> str:
+    return "?" if value is None else str(value)
+
+
 def _render_compaction_entry(entry: CompactionEntry) -> list[str]:
     lines = [
         f"## COMPACTION — `{entry.id}` ({entry.timestamp})",
@@ -101,8 +109,8 @@ def _render_compaction_entry(entry: CompactionEntry) -> list[str]:
                 "",
                 f"- Artifact type: `{artifact.artifact_type}`",
                 f"- Artifact id: `{artifact.artifact_id}`",
-                f"- Source messages: {artifact.source_message_count if artifact.source_message_count is not None else '?'}",
-                f"- Compacted messages: {artifact.compacted_message_count if artifact.compacted_message_count is not None else '?'}",
+                f"- Source messages: {_count_or_unknown(artifact.source_message_count)}",
+                f"- Compacted messages: {_count_or_unknown(artifact.compacted_message_count)}",
             ]
         )
         if artifact.preserved_identifiers:
@@ -134,7 +142,7 @@ def _render_custom_entry(entry: CustomEntry) -> list[str]:
     ]
 
 
-def _format_content(content: Any) -> str:
+def _format_content(content: object) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):

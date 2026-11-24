@@ -24,16 +24,29 @@ shape is generalized:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 logger = logging.getLogger(__name__)
 
-_BLOCKED_NAMES = frozenset({
-    "node_modules", ".git", "venv", "__pycache__", ".venv", "env",
-    "inbox", "outputs", "tmp", ".envs", ".work",
-    "skills", "sandbox",
-})
+_BLOCKED_NAMES = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "venv",
+        "__pycache__",
+        ".venv",
+        "env",
+        "inbox",
+        "outbox",
+        "tmp",
+        ".envs",
+        ".work",
+        "skills",
+        "sandbox",
+    }
+)
 
 # 目录扫描深度上限（单一来源）。PrismClaw 以 SKILL.md 叶子终止为发现主机制，
 # 深度上限只是防止病态树的安全网。原值 3 会漏掉深层嵌套插件
@@ -80,7 +93,7 @@ def _extract_frontmatter(content: str) -> tuple[str, str]:
     return frontmatter, body
 
 
-def _scan_directory_v2(
+def _scan_directory_v2[T](
     root: Path,
     parse: Callable[[Path, str], T],
     *,
@@ -91,18 +104,18 @@ def _scan_directory_v2(
     max_depth: int = SKILL_SCAN_MAX_DEPTH,
 ) -> list[T]:
     """Scan subdirectories of ``root`` recursively up to ``max_depth``.
-    
+
     If it finds ``manifest_filename``, it stops descending into that directory,
     parses it, and returns it. The ``parse`` callable receives `(path, namespace)`.
     """
     results: list[T] = []
     scanned_count = 0
-    
+
     def _walk(current_dir: Path, current_depth: int, current_ns: list[str]) -> None:
         nonlocal scanned_count
         if current_depth > max_depth or len(results) >= max_loaded:
             return
-            
+
         try:
             entries = sorted(list(current_dir.iterdir()), key=lambda x: x.name)
         except OSError:
@@ -112,7 +125,7 @@ def _scan_directory_v2(
         for path in entries:
             if not _is_valid_entry_name(path.name):
                 continue
-                
+
             scanned_count += 1
             if scanned_count > max_candidates:
                 return
@@ -125,22 +138,23 @@ def _scan_directory_v2(
                         size = manifest_path.stat().st_size
                     except OSError:
                         continue
-                        
+
                     if size > max_file_bytes:
                         continue
-                        
+
                     if not _validate_path_containment(manifest_path, root):
                         continue
-                        
+
                     ns = ".".join(current_ns + [path.name])
-                    
+
                     from prismclaw.schema.shared.exceptions import SkillParseError
+
                     try:
                         manifest = parse(manifest_path, ns)
                     except SkillParseError as exc:
                         logger.warning("Failed to parse %s: %s", manifest_path, exc)
                         continue
-                    
+
                     results.append(manifest)
                     if len(results) >= max_loaded:
                         return

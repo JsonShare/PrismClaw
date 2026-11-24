@@ -391,7 +391,7 @@ export function useChatSocket(
         }
         break
 
-      case 'event:outputs': {
+      case 'event:outbox': {
         const files = extractMetaList<string>(msg.data, 'files', (p) => typeof p === 'string' && p.trim().length > 0)
         const targetId = convId ? resolveTargetMessageId(msg.data) : null
         if (targetId && files.length > 0) {

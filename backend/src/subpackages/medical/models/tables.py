@@ -11,6 +11,7 @@
 
 列集合常量供 Store 的 upsert 过滤使用。
 """
+
 from __future__ import annotations
 
 from sqlalchemy import (
@@ -44,7 +45,9 @@ patients = Table(
     Column("gender", String(8), comment="性别"),
     Column("birth_date", String(16), comment="出生日期（推算 age，不落库）"),
     Column("blood_type", String(8), comment="血型"),
-    Column("id_type", String(16), comment="证件类型：身份证/护照/港澳通行证/台湾通行证/军官证/其他"),
+    Column(
+        "id_type", String(16), comment="证件类型：身份证/护照/港澳通行证/台湾通行证/军官证/其他"
+    ),
     Column("id_number_masked", String(32), comment="身份证号脱敏显示"),
     Column("phone_masked", String(32), comment="手机号脱敏显示"),
     Column("id_number_hash", String(64), comment="身份证号 HMAC 哈希（精确搜索）"),
@@ -237,29 +240,89 @@ briefs = Table(
 
 # ── 列集合常量（upsert 过滤用）───────────────────────────────
 
-PATIENT_COLUMNS: frozenset[str] = frozenset({
-    "name", "gender", "birth_date", "blood_type", "id_type", "id_number_masked", "phone_masked",
-    "id_number_hash", "phone_hash", "department", "primary_diagnosis", "tnm_stage",
-    "clinical_stage", "ecog_score", "treatment_status", "current_regimen", "current_cycle",
-    "risk_level", "vitals_json", "biomarkers_json", "allergies_json", "history_json",
-    "medications_json", "labs_json", "attending_doctor", "tags_json",
-})
+PATIENT_COLUMNS: frozenset[str] = frozenset(
+    {
+        "name",
+        "gender",
+        "birth_date",
+        "blood_type",
+        "id_type",
+        "id_number_masked",
+        "phone_masked",
+        "id_number_hash",
+        "phone_hash",
+        "department",
+        "primary_diagnosis",
+        "tnm_stage",
+        "clinical_stage",
+        "ecog_score",
+        "treatment_status",
+        "current_regimen",
+        "current_cycle",
+        "risk_level",
+        "vitals_json",
+        "biomarkers_json",
+        "allergies_json",
+        "history_json",
+        "medications_json",
+        "labs_json",
+        "attending_doctor",
+        "tags_json",
+    }
+)
 
-REPORT_COLUMNS: frozenset[str] = frozenset({
-    "patient_id", "report_type", "file_name", "file_type", "file_path", "mime_type",
-    "attachments_json", "hospital_name", "doctor_name",
-    "patient_name_raw", "match_reason",
-    "status", "progress", "retry_count", "error_message", "raw_text", "visit_date",
-    "department", "diagnosis", "narrative_json", "labs_json", "medications_json",
-    "tags_json", "summary", "started_at", "finished_at",
-})
+REPORT_COLUMNS: frozenset[str] = frozenset(
+    {
+        "patient_id",
+        "report_type",
+        "file_name",
+        "file_type",
+        "file_path",
+        "mime_type",
+        "attachments_json",
+        "hospital_name",
+        "doctor_name",
+        "patient_name_raw",
+        "match_reason",
+        "status",
+        "progress",
+        "retry_count",
+        "error_message",
+        "raw_text",
+        "visit_date",
+        "department",
+        "diagnosis",
+        "narrative_json",
+        "labs_json",
+        "medications_json",
+        "tags_json",
+        "summary",
+        "started_at",
+        "finished_at",
+    }
+)
 
-CONSULTATION_COLUMNS: frozenset[str] = frozenset({
-    "session_id", "patient_id", "doctor_id", "title",
-})
+CONSULTATION_COLUMNS: frozenset[str] = frozenset(
+    {
+        "session_id",
+        "patient_id",
+        "doctor_id",
+        "title",
+    }
+)
 
-BRIEF_COLUMNS: frozenset[str] = frozenset({
-    "patient_id", "report_ids_json", "status", "version",
-    "director_plan_json", "sections_json", "citations_json",
-    "audit_result_json", "error_message", "started_at", "finished_at",
-})
+BRIEF_COLUMNS: frozenset[str] = frozenset(
+    {
+        "patient_id",
+        "report_ids_json",
+        "status",
+        "version",
+        "director_plan_json",
+        "sections_json",
+        "citations_json",
+        "audit_result_json",
+        "error_message",
+        "started_at",
+        "finished_at",
+    }
+)

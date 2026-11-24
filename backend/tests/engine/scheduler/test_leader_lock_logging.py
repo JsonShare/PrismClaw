@@ -5,6 +5,7 @@
 - 发射是变化驱动的：同一持锁者只记一次，翻转/复得后重新记录；
 - 锁 value 嵌入 owner 身份（"{owner}:{random}"），CAS 语义不变。
 """
+
 from __future__ import annotations
 
 import logging
@@ -153,11 +154,7 @@ def _engine(lock: _FakeLock) -> SchedulerEngine:
 
 
 def _failed_records(caplog: pytest.LogCaptureFixture):
-    return [
-        r
-        for r in caplog.records
-        if r.getMessage() == "scheduler.lock.acquire_failed"
-    ]
+    return [r for r in caplog.records if r.getMessage() == "scheduler.lock.acquire_failed"]
 
 
 async def test_acquire_failed_logs_info_with_holder_and_worker(
@@ -210,9 +207,7 @@ async def test_regaining_leadership_arms_reporting_again(
         await eng._ensure_leader()  # 同一 holder=B 再次失败 → 重新记录
     records = _failed_records(caplog)
     assert [r.holder for r in records] == [_OWNER_B, _OWNER_B]
-    acquired = [
-        r for r in caplog.records if r.getMessage() == "scheduler.lock.acquired"
-    ]
+    acquired = [r for r in caplog.records if r.getMessage() == "scheduler.lock.acquired"]
     assert len(acquired) == 1
     assert acquired[0].worker == _OWNER_A
 

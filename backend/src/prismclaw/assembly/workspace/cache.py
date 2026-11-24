@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
+from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
 from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 
 WarmState = Literal["warming", "ready", "stale"]
 ResolvedState = Literal["base", "warming", "ready", "stale"]
@@ -58,8 +65,8 @@ class WorkspaceRuntimeWarmCache:
         family_key: WorkspaceFamilyKey,
         *,
         generation: int,
-        base_deps: Any,
-    ) -> tuple[Any, ResolvedState]:
+        base_deps: AgentRunnerDeps,
+    ) -> tuple[AgentRunnerDeps, ResolvedState]:
         state = self.status_for(family_key, generation=generation)
         entry = self._entries.get(family_key)
         if state in {"ready", "stale"} and entry is not None and entry.scoped_deps is not None:
@@ -71,7 +78,7 @@ class WorkspaceRuntimeWarmCache:
         family_key: WorkspaceFamilyKey,
         *,
         generation: int,
-        builder: Callable[[], Awaitable[Any]],
+        builder: Callable[[], Awaitable[AgentRunnerDeps]],
     ) -> WorkspaceRuntimeWarmEntry:
         current = self._entries.get(family_key)
         if (
@@ -93,7 +100,7 @@ class WorkspaceRuntimeWarmCache:
         )
         self._entries[family_key] = entry
 
-        async def _build() -> Any:
+        async def _build() -> AgentRunnerDeps:
             started_at = time.monotonic()
             result = "ready"
             try:
@@ -127,12 +134,15 @@ class WorkspaceRuntimeWarmCache:
         return entry
 
 
-def _ensure_workspace_runner_deps_cache(state: Any) -> WorkspaceRuntimeWarmCache:
-    cache = getattr(state, "_workspace_runner_deps_cache", None)
+_WORKSPACE_CACHE_ATTR = "_workspace_runner_deps_cache"
+
+
+def _ensure_workspace_runner_deps_cache(state: object) -> WorkspaceRuntimeWarmCache:
+    cache = getattr(state, _WORKSPACE_CACHE_ATTR, None)
     if isinstance(cache, WorkspaceRuntimeWarmCache):
         return cache
     created = WorkspaceRuntimeWarmCache()
-    state._workspace_runner_deps_cache = created
+    setattr(state, _WORKSPACE_CACHE_ATTR, created)
     return created
 
 
@@ -147,14 +157,13 @@ def _workspace_family_key(
     )
 
 
-def _workspace_generation(base_deps: Any) -> int:
-    lifecycle = getattr(base_deps, "plugin_lifecycle_manager", None)
-    generation = getattr(lifecycle, "generation", 0)
-    return generation if isinstance(generation, int) else 0
+def _workspace_generation(base_deps: AgentRunnerDeps) -> int:
+    raw_generation: object = getattr(base_deps.plugin.lifecycle_manager, "generation", 0)
+    return raw_generation if isinstance(raw_generation, int) else 0
 
 
 def get_app_workspace_runner_deps_state(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
@@ -175,14 +184,12 @@ def get_app_workspace_runner_deps_state(
 
 
 def get_app_workspace_runner_deps(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
-    build_scoped_runner_deps: Callable[..., Any] | None = None,
-) -> Any | None:
+) -> AgentRunnerDeps | None:
     """Sync lookup: never blocks, returns ready/stale deps or base deps."""
-    _ = build_scoped_runner_deps
     state = getattr(app, "state", None)
     if state is None:
         return None
@@ -202,13 +209,13 @@ def get_app_workspace_runner_deps(
 
 
 async def get_app_workspace_runner_deps_async(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
-    build_scoped_runner_deps: Callable[..., Awaitable[Any]] | None = None,
+    build_scoped_runner_deps: Callable[..., Awaitable[AgentRunnerDeps]] | None = None,
     wait_for_ready: bool = True,
-) -> Any | None:
+) -> AgentRunnerDeps | None:
     """Async lookup with explicit warm-cache states.
 
     When ``wait_for_ready`` is true, this preserves the historic blocking
@@ -257,13 +264,13 @@ async def get_app_workspace_runner_deps_async(
 
 
 async def get_app_workspace_extension_manager_async(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
-    build_scoped_runner_deps: Callable[..., Awaitable[Any]] | None = None,
+    build_scoped_runner_deps: Callable[..., Awaitable[AgentRunnerDeps]] | None = None,
     wait_for_ready: bool = True,
-) -> Any | None:
+) -> ExtensionManager | None:
     runner_deps = await get_app_workspace_runner_deps_async(
         app,
         user_id=user_id,
@@ -273,33 +280,37 @@ async def get_app_workspace_extension_manager_async(
     )
     if runner_deps is None:
         return None
-    return getattr(runner_deps, "extension_manager", None)
+    extension_manager = runner_deps.plugin.extension_manager
+    if not isinstance(extension_manager, ExtensionManager):
+        return None
+    return extension_manager
 
 
 def get_app_workspace_extension_manager(
-    app: Any,
+    app: FastAPI,
     *,
     user_id: str,
     workspace_root: Path,
-    build_scoped_runner_deps: Callable[..., Any] | None = None,
-) -> Any | None:
+) -> ExtensionManager | None:
     runner_deps = get_app_workspace_runner_deps(
         app,
         user_id=user_id,
         workspace_root=workspace_root,
-        build_scoped_runner_deps=build_scoped_runner_deps,
     )
     if runner_deps is None:
         return None
-    return getattr(runner_deps, "extension_manager", None)
+    extension_manager = runner_deps.plugin.extension_manager
+    if not isinstance(extension_manager, ExtensionManager):
+        return None
+    return extension_manager
 
 
-def clear_workspace_runner_deps_cache(app: Any) -> None:
+def clear_workspace_runner_deps_cache(app: FastAPI) -> None:
     state = getattr(app, "state", None)
     if state is None:
         return
-    cache = getattr(state, "_workspace_runner_deps_cache", None)
+    cache = getattr(state, _WORKSPACE_CACHE_ATTR, None)
     if isinstance(cache, WorkspaceRuntimeWarmCache):
         cache.clear()
         return
-    state._workspace_runner_deps_cache = WorkspaceRuntimeWarmCache()
+    setattr(state, _WORKSPACE_CACHE_ATTR, WorkspaceRuntimeWarmCache())

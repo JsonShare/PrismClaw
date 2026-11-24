@@ -1,16 +1,20 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.schema.storage.persistence_types import RunSnapshotStore
+
+if TYPE_CHECKING:
+    from prismclaw.schema.storage.persistence_types import RunSnapshotLike
 
 
 def create_run_snapshot_store(
     session_factory: async_sessionmaker[AsyncSession],
     *,
-    payload_parser: Any | None = None,
+    payload_parser: Callable[[str], RunSnapshotLike | None] | None = None,
 ) -> RunSnapshotStore:
     from prismclaw.persistence.pg_checkpoint.store import PostgresRunSnapshotStore
 

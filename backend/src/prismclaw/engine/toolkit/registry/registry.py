@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Collection
 from typing import Any
 
 from prismclaw.engine.toolkit.registry.tool_runtime import Tool
-
 
 _VALID_TOOL_CLASSES: frozenset[str] = frozenset(("read", "memory-write-safe", "write"))
 
@@ -80,7 +80,7 @@ class ToolRegistry:
 
     def list_tools(
         self,
-        allowed_names: set[str] | None = None,
+        allowed_names: Collection[str] | None = None,
         *,
         subagent_depth: int | None = None,
     ) -> list[Tool]:
@@ -89,20 +89,20 @@ class ToolRegistry:
         for name, tool in self._tools.items():
             if allowed_names is not None and name not in allowed_names:
                 continue
-                    
+
             visible.append(tool)
-            
+
         # Stable sort: built-ins first, MCP second, then alphabetically by name
         def sort_key(tool: Tool) -> tuple[int, str]:
             is_mcp = hasattr(tool, "server_config") or ":" in tool.name
             return (1 if is_mcp else 0, tool.name)
-            
+
         visible.sort(key=sort_key)
         return visible
 
     def list_for_llm(
         self,
-        allowed_names: set[str],
+        allowed_names: Collection[str],
         *,
         subagent_depth: int | None = None,
     ) -> list[dict[str, Any]]:

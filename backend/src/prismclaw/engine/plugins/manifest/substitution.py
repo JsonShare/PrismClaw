@@ -27,11 +27,12 @@ Shell-quoting of substituted values is the *caller's* responsibility (hook
 commands quote via :func:`shlex.quote`; prose content does not). This module
 never quotes, keeping it content-agnostic.
 """
+
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 __all__ = [
     "PRISMCLAW_PLUGIN_ROOT",

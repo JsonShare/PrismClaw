@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from prismclaw.persistence.sql_runner import apply_core_schema
@@ -95,7 +95,7 @@ class PostgresDreamCandidateStore:
         sql = f"""
             SELECT {_SELECT_COLUMNS}
             FROM pc_dream_candidates
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             ORDER BY created_at DESC
             LIMIT :limit
         """
@@ -104,22 +104,36 @@ class PostgresDreamCandidateStore:
             return [_candidate_from_row(row) for row in result.mappings()]
 
 
-def _candidate_from_row(row: Any) -> DreamMemoryCandidate:
+def _coerce_kind(value: object) -> DreamCandidateKind:
+    text_value = str(value)
+    return "session_episode" if text_value == "session_episode" else "turn_context"
+
+
+def _coerce_status(value: object) -> DreamCandidateStatus:
+    text_value = str(value)
+    if text_value == "published":
+        return "published"
+    if text_value == "discarded":
+        return "discarded"
+    return "draft"
+
+
+def _candidate_from_row(row: RowMapping) -> DreamMemoryCandidate:
     return DreamMemoryCandidate(
         candidate_id=str(row["candidate_id"]),
         session_key=str(row["session_key"]),
         session_id=str(row["session_id"]),
-        kind=str(row["kind"]),
+        kind=_coerce_kind(row["kind"]),
         content=str(row["content"]),
         source_entry_ids=_load_json_list(row["source_entry_ids_json"]),
         created_at=float(row["created_at"]),
         updated_at=float(row["updated_at"]),
-        status=str(row["status"]),
+        status=_coerce_status(row["status"]),
         metadata=_load_json_dict(row["metadata_json"]),
     )
 
 
-def _candidate_to_params(candidate: DreamMemoryCandidate, updated_at: float) -> dict:
+def _candidate_to_params(candidate: DreamMemoryCandidate, updated_at: float) -> dict[str, object]:
     return {
         "candidate_id": candidate.candidate_id,
         "session_key": candidate.session_key,
@@ -134,7 +148,7 @@ def _candidate_to_params(candidate: DreamMemoryCandidate, updated_at: float) -> 
     }
 
 
-def _load_json_list(raw: Any) -> list[str]:
+def _load_json_list(raw: object) -> list[str]:
     if raw is None:
         return []
     if isinstance(raw, list):
@@ -149,7 +163,7 @@ def _load_json_list(raw: Any) -> list[str]:
     return [str(item) for item in value]
 
 
-def _load_json_dict(raw: Any) -> dict[str, Any]:
+def _load_json_dict(raw: object) -> dict[str, Any]:
     if raw is None:
         return {}
     if isinstance(raw, dict):

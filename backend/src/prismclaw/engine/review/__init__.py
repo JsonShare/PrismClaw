@@ -15,15 +15,6 @@ from prismclaw.engine.review.content_store import (
     ContentStore,
     FileSystemContentStore,
 )
-from prismclaw.schema.agent.review_errors import (
-    IntegrityError,
-    OfficeBlobNotFound,
-    OfficeEditError,
-    OfficeRevertConflict,
-    ReconcileConflict,
-    ReviewError,
-    ReviewSetNotFound,
-)
 from prismclaw.engine.review.events import ReviewDecision, ReviewEvent
 from prismclaw.engine.review.lifecycle import (
     GcReport,
@@ -36,6 +27,15 @@ from prismclaw.engine.review.registry import (
     get_review_registry,
 )
 from prismclaw.engine.review.review_set import ReviewSet
+from prismclaw.schema.agent.review_errors import (
+    IntegrityError,
+    OfficeBlobNotFoundError,
+    OfficeEditError,
+    OfficeRevertConflictError,
+    ReconcileConflictError,
+    ReviewError,
+    ReviewSetNotFoundError,
+)
 
 __all__ = [
     "ContentRef",
@@ -43,11 +43,11 @@ __all__ = [
     "FileSystemContentStore",
     "IntegrityError",
     "OfficeEditError",
-    "OfficeRevertConflict",
-    "OfficeBlobNotFound",
-    "ReconcileConflict",
+    "OfficeRevertConflictError",
+    "OfficeBlobNotFoundError",
+    "ReconcileConflictError",
     "ReviewError",
-    "ReviewSetNotFound",
+    "ReviewSetNotFoundError",
     "ReviewDecision",
     "ReviewEvent",
     "GcReport",

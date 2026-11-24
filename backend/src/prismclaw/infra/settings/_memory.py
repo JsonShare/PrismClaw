@@ -17,8 +17,7 @@ class MemorySettings(BaseSettings):
     archive_min_results: int = 1
     archive_enabled: bool = True
     # 意图偏置（context_router 动态配额）：key 为意图×目标维度，value 为加项。
-    # 默认值等价于 DynamicContextRouter 里的硬编码加项（prefers_tooling / requires_grounding
-    # / cold_start / follow_up）。
+    # 仅覆盖 prefers_tooling / requires_grounding 两维。
     intent_bias: dict[str, int] = Field(
         default_factory=lambda: {
             "prefers_tooling_l3": 3,
@@ -27,12 +26,8 @@ class MemorySettings(BaseSettings):
             "requires_grounding_l2": 3,
             "requires_grounding_archive": 2,
             "requires_grounding_l3": -1,
-            "cold_start_l3": 1,
-            "follow_up_l2": -2,
-            "follow_up_l3": -1,
         }
     )
-    naming_policy: Literal["human", "hash"] = Field("human")
     # SDD B1 (docs/memory-dream-sdd.md §5.1): retrieval attribution —
     # injection bookkeeping + use_count writeback + validation signals.
     attribution_enabled: bool = Field(False)
@@ -90,9 +85,7 @@ class CuratorSettings(BaseSettings):
     llm_review_enabled: bool = Field(False)
     llm_review_model: str | None = Field(None)
     llm_review_interval_seconds: int = Field(1209600)
-    llm_review_actions: list[str] = Field(
-        default_factory=lambda: ["promote"]
-    )
+    llm_review_actions: list[str] = Field(default_factory=lambda: ["promote"])
     llm_review_max_batch: int = Field(20)
 
     model_config = SettingsConfigDict(

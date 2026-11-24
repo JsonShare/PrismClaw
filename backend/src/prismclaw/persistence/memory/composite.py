@@ -5,9 +5,9 @@ import re
 import time
 from typing import TYPE_CHECKING, Any
 
+from prismclaw.persistence.memory.notary import MemoryNotary
 from prismclaw.schema.memory.memory_types import ArchiveEntry, L4ArtifactEntry, MemoryEntry
 from prismclaw.schema.shared.utils import truncate_by_tokens
-from prismclaw.persistence.memory.notary import MemoryNotary
 
 if TYPE_CHECKING:
     from prismclaw.persistence.memory.postgres import PostgresMemoryBackend
@@ -110,21 +110,19 @@ class CompositeMemoryStore:
         domain: str = "general",
     ) -> list[MemoryEntry]:
         return await self._l2.search(
-            session_key, 
-            query, 
-            layers=layers, 
-            limit=limit, 
+            session_key,
+            query,
+            layers=layers,
+            limit=limit,
             per_layer_limits=per_layer_limits,
-            domain=domain
+            domain=domain,
         )
 
     async def store(self, session_key: str, entry: MemoryEntry) -> None:
         entry = self._notarize(entry)
         await self._l2.store(session_key, entry)
         # L1 mirror = index + structured preview only (see module note).
-        l1_entry = entry.model_copy(
-            update={"layer": "L1", "content": _build_l1_preview(entry)}
-        )
+        l1_entry = entry.model_copy(update={"layer": "L1", "content": _build_l1_preview(entry)})
         await self._l1.index_update(session_key, l1_entry)
 
     async def delete(self, session_key: str, entry_id: str) -> None:
@@ -197,18 +195,12 @@ class CompositeMemoryStore:
     async def get_entry_by_id(
         self, session_key: str, entry_id: str, *, prefix_match: bool = False
     ) -> tuple[str | None, str | None]:
-        return await self._l2.get_entry_by_id(
-            session_key, entry_id, prefix_match=prefix_match
-        )
+        return await self._l2.get_entry_by_id(session_key, entry_id, prefix_match=prefix_match)
 
-    async def get_contents_by_ids(
-        self, session_key: str, entry_ids: list[str]
-    ) -> dict[str, str]:
+    async def get_contents_by_ids(self, session_key: str, entry_ids: list[str]) -> dict[str, str]:
         return await self._l2.get_contents_by_ids(session_key, entry_ids)
 
-    async def get_entries_by_ids(
-        self, session_key: str, entry_ids: list[str]
-    ) -> list[MemoryEntry]:
+    async def get_entries_by_ids(self, session_key: str, entry_ids: list[str]) -> list[MemoryEntry]:
         return await self._l2.get_entries_by_ids(session_key, entry_ids)
 
     async def record_memory_references(
@@ -219,9 +211,7 @@ class CompositeMemoryStore:
     async def writeback_use_counts(self, session_key: str, entry_ids: list[str]) -> int:
         return await self._l2.writeback_use_counts(session_key, entry_ids)
 
-    async def record_validation_events(
-        self, session_key: str, events: list[dict[str, Any]]
-    ) -> int:
+    async def record_validation_events(self, session_key: str, events: list[dict[str, Any]]) -> int:
         return await self._l2.record_validation_events(session_key, events)
 
     async def record_arbitration_audit(
@@ -280,13 +270,13 @@ class CompositeMemoryStore:
     ) -> int:
         return await self._l2.apply_entry_updates(session_key, updates)
 
-    async def verify_integrity(
-        self, session_key: str, **kw: Any
-    ) -> dict[str, Any]:
-        return await self._l2.verify_integrity(session_key, **kw)
+    async def verify_integrity(self, session_key: str, *, limit: int = 10000) -> dict[str, Any]:
+        return await self._l2.verify_integrity(session_key, limit=limit)
 
     async def get_entry_id_by_entity_key(
-        self, session_key: str, entity_key: str,
+        self,
+        session_key: str,
+        entity_key: str,
     ) -> str | None:
         return await self._l2.get_entry_id_by_entity_key(session_key, entity_key)
 
@@ -326,7 +316,7 @@ class CompositeMemoryStore:
             if tags:
                 origin_stage = entry.origin_stage or ""
                 updates["origin_stage"] = (
-                    f"{origin_stage}:{':'.join(tags)}" if origin_stage else ':'.join(tags)
+                    f"{origin_stage}:{':'.join(tags)}" if origin_stage else ":".join(tags)
                 )
             return entry.model_copy(update=updates)
         except Exception:

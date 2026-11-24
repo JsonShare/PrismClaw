@@ -1127,6 +1127,11 @@ export default function ChatArea({
               )}
           </ChatInputBox>
 
+          {/* 免责声明：与医疗咨询面板一致，放在输入框下方居中；属于底部固定区
+              （shrink-0）内的自然高度，scroller 的 flex-1 会自动让出这部分高度 */}
+          <div className="mt-1.5 text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]/80 text-center">
+            内容由 AI 生成，请仔细核查
+          </div>
         </div>
       </div>
 

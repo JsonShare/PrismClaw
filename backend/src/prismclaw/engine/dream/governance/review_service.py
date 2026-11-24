@@ -4,18 +4,38 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from prismclaw.schema.dream.dream import DreamDecisionAuditStore
-from prismclaw.schema.dream.dream_types import DreamDecisionAuditRecord
-
-from prismclaw.schema.dream.dream import DreamGovernanceStore
-from prismclaw.schema.dream.dream_types import DreamGovernanceRecord
-from prismclaw.schema.dream.dream import DreamStateStore
 from prismclaw.engine.dream.engine import DreamEngine
+from prismclaw.schema.dream.dream import (
+    DreamDecisionAuditStore,
+    DreamGovernanceStore,
+    DreamStateStore,
+)
+from prismclaw.schema.dream.dream_types import (
+    DreamDecisionAuditRecord,
+)
+from prismclaw.schema.dream.dream_types import (
+    DreamGovernanceRecord as DreamGovernanceRecord,
+)
 
 if TYPE_CHECKING:
+    from prismclaw.engine.dream.dispatch.dispatch import RedisDreamDispatchQueue
     from prismclaw.engine.dream.state.status_service import DreamStatusService
-from prismclaw.schema.storage.storage_types import MemoryStore
-from prismclaw.schema.storage.storage_types import SessionStore
+from prismclaw.schema.storage.storage_types import MemoryStore, SessionStore
+
+
+def _as_int(value: object) -> int:
+    """把松散的计数/百分比取值收窄为 int。"""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(float(value))
+        except ValueError:
+            return 0
+    return 0
+
 
 def _empty_dispatch_status() -> dict[str, object]:
     return {
@@ -70,6 +90,7 @@ def _empty_dispatch_status() -> dict[str, object]:
         },
     }
 
+
 @dataclass(slots=True)
 class DreamReviewService:
     dreaming_engine: DreamEngine
@@ -79,10 +100,12 @@ class DreamReviewService:
     state_store: DreamStateStore | None = None
     task_manager: object | None = None
     decision_audit_store: DreamDecisionAuditStore | None = None
-    dispatch_queue: object | None = None
+    dispatch_queue: RedisDreamDispatchQueue | None = None
     governance_store: DreamGovernanceStore | None = None
 
-    async def list_pending_reviews(self, session_key: str | None = None) -> list[DreamGovernanceRecord]:
+    async def list_pending_reviews(
+        self, session_key: str | None = None
+    ) -> list[DreamGovernanceRecord]:
         return await self.dreaming_engine.list_pending_reviews(session_key)
 
     async def list_governance_records(
@@ -125,7 +148,9 @@ class DreamReviewService:
             "by_publish_channel": _count_by(records, key="publish_channel"),
             "by_rollout_stage": _count_by(records, key="rollout_stage"),
             "by_target_type": _count_by(records, key="target_type"),
-            "pending_review_count": sum(1 for record in records if record.review_status == "pending_review"),
+            "pending_review_count": sum(
+                1 for record in records if record.review_status == "pending_review"
+            ),
             "shadow_pending_count": sum(
                 1
                 for record in records
@@ -137,7 +162,9 @@ class DreamReviewService:
                 if record.publish_channel == "canary" and record.review_status == "pending_review"
             ),
             "memory_record_count": sum(1 for record in records if record.target_type == "memory"),
-            "artifact_record_count": sum(1 for record in records if record.target_type == "artifact"),
+            "artifact_record_count": sum(
+                1 for record in records if record.target_type == "artifact"
+            ),
         }
 
     async def approve(
@@ -220,7 +247,12 @@ class DreamReviewService:
     ) -> dict[str, object]:
         batch_id = f"canary:{int(time.time() * 1000)}"
         plan = await self.plan_canary_actions(session_key=session_key, limit=limit, trigger=trigger)
-        items = list(plan.get("items", []))
+        raw_items = plan.get("items")
+        items: list[dict[str, object]] = (
+            [item for item in raw_items if isinstance(item, dict)]
+            if isinstance(raw_items, list)
+            else []
+        )
         if dry_run:
             await self._record_canary_decisions(batch_id, items, dry_run=True, trigger=trigger)
             return {"status": "dry_run", "batch_id": batch_id, **plan}
@@ -283,7 +315,9 @@ class DreamReviewService:
     async def list_statuses(self, session_key: str | None = None) -> list[dict[str, object]]:
         if self.status_service is None:
             return []
-        return [snapshot.to_dict() for snapshot in await self.status_service.list_statuses(session_key)]
+        return [
+            snapshot.to_dict() for snapshot in await self.status_service.list_statuses(session_key)
+        ]
 
     async def get_dispatch_status(self) -> dict[str, object]:
         queue = self.dispatch_queue
@@ -308,10 +342,7 @@ class DreamReviewService:
         queue = self.dispatch_queue
         if queue is None:
             return []
-        list_fn = getattr(queue, "list_dead_letters", None)
-        if list_fn is None:
-            return []
-        return await list_fn(session_key=session_key, limit=limit)
+        return await queue.list_dead_letters(session_key=session_key, limit=limit)
 
     async def list_dispatch_audit_events(
         self,
@@ -322,19 +353,13 @@ class DreamReviewService:
         queue = self.dispatch_queue
         if queue is None:
             return []
-        list_fn = getattr(queue, "list_audit_events", None)
-        if list_fn is None:
-            return []
-        return await list_fn(session_key=session_key, limit=limit)
+        return await queue.list_audit_events(session_key=session_key, limit=limit)
 
     async def replay_dispatch_dead_letter(self, dead_letter_stream_id: str) -> dict[str, object]:
         queue = self.dispatch_queue
         if queue is None:
             return {"status": "unavailable"}
-        replay_fn = getattr(queue, "replay_dead_letter", None)
-        if replay_fn is None:
-            return {"status": "unavailable"}
-        return await replay_fn(dead_letter_stream_id)
+        return await queue.replay_dead_letter(dead_letter_stream_id)
 
     async def list_dispatch_replay_candidates(
         self,
@@ -345,10 +370,7 @@ class DreamReviewService:
         queue = self.dispatch_queue
         if queue is None:
             return []
-        list_fn = getattr(queue, "list_replay_candidates", None)
-        if list_fn is None:
-            return []
-        return await list_fn(session_key=session_key, limit=limit)
+        return await queue.list_replay_candidates(session_key=session_key, limit=limit)
 
     async def replay_dispatch_dead_letters(
         self,
@@ -360,10 +382,9 @@ class DreamReviewService:
         queue = self.dispatch_queue
         if queue is None:
             return {"status": "unavailable"}
-        replay_fn = getattr(queue, "replay_dead_letters", None)
-        if replay_fn is None:
-            return {"status": "unavailable"}
-        return await replay_fn(session_key=session_key, limit=limit, dry_run=dry_run)
+        return await queue.replay_dead_letters(
+            session_key=session_key, limit=limit, dry_run=dry_run
+        )
 
     async def _build_dispatch_session_health(self) -> dict[str, object]:
         if self.status_service is None:
@@ -391,7 +412,9 @@ class DreamReviewService:
                     "dispatch_dead_letter_count": dead_letter_count,
                     "dispatch_replayable_dead_letter_count": replayable_count,
                     "dispatch_blocked_replay_count": blocked_count,
-                    "latest_dispatch_dead_letter_error": snapshot.quality.latest_dispatch_dead_letter_error,
+                    "latest_dispatch_dead_letter_error": (
+                        snapshot.quality.latest_dispatch_dead_letter_error
+                    ),
                     "latest_dispatch_replay_block_reason": (
                         snapshot.quality.latest_dispatch_replay_block_reason
                     ),
@@ -399,8 +422,8 @@ class DreamReviewService:
             )
         items.sort(
             key=lambda item: (
-                -int(item.get("dispatch_blocked_replay_count", 0) or 0),
-                -int(item.get("dispatch_dead_letter_count", 0) or 0),
+                -_as_int(item.get("dispatch_blocked_replay_count")),
+                -_as_int(item.get("dispatch_dead_letter_count")),
                 str(item.get("session_key", "") or ""),
             )
         )
@@ -422,7 +445,9 @@ class DreamReviewService:
     ) -> DreamGovernanceRecord | None:
         record = await self.get_governance_record(record_id)
         if record is None:
-            rejected = await self.dreaming_engine.reject_governance_record(record_id, reason=comment or reason)
+            rejected = await self.dreaming_engine.reject_governance_record(
+                record_id, reason=comment or reason
+            )
             if not rejected:
                 return None
             return DreamGovernanceRecord(
@@ -440,7 +465,9 @@ class DreamReviewService:
             # Compression review was removed; legacy compression records are
             # not acted upon by the memory governance service.
             return None
-        rejected = await self.dreaming_engine.reject_governance_record(record_id, reason=effective_comment)
+        rejected = await self.dreaming_engine.reject_governance_record(
+            record_id, reason=effective_comment
+        )
         if not rejected:
             return None
         return await self.get_governance_record(record_id)
@@ -478,7 +505,7 @@ class DreamReviewService:
                     action=str(item.get("action", "") or "hold"),
                     reason=str(item.get("reason", "") or ""),
                     health_status=str(item.get("health_status", "") or "unknown"),
-                    rollout_percentage=int(item.get("rollout_percentage", 0) or 0),
+                    rollout_percentage=_as_int(item.get("rollout_percentage")),
                     trigger=trigger,
                     dry_run=dry_run,
                     applied=bool(item.get("applied", False)),
@@ -486,12 +513,14 @@ class DreamReviewService:
                 )
             )
 
+
 def _count_by(records: list[DreamGovernanceRecord], *, key: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for record in records:
         label = str(getattr(record, key, "") or "").strip() or "unknown"
         counts[label] = counts.get(label, 0) + 1
     return counts
+
 
 def _decide_canary_action(
     record: DreamGovernanceRecord,

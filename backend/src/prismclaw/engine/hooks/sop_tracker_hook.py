@@ -114,9 +114,8 @@ class SopCandidateTracker:
             key = self._key(session_id)
             await self._redis.hset(key, turn_id, json.dumps(candidate))
             await self._maybe_evict(key)
-            
-            # Asynchronous Reflection: Trigger extraction in background when there are enough tool calls
-            # without waiting for AutoCompact to trigger it.
+
+            # 工具调用足够多时后台触发 SOP 提取，不等 AutoCompact。
             if (
                 self._task_manager is not None
                 and self._memory_store is not None
@@ -124,6 +123,7 @@ class SopCandidateTracker:
                 and self._llm_client is not None
             ):
                 from prismclaw.engine.services.sop_extraction import maybe_spawn_extraction
+
                 await maybe_spawn_extraction(
                     task_manager=self._task_manager,
                     memory_store=self._memory_store,
@@ -134,7 +134,7 @@ class SopCandidateTracker:
                     settings=self._settings,
                     nudge_hook=self._nudge_hook,
                 )
-                
+
         except Exception:
             # Never let tracker failures break the agent loop
             logger.warning(

@@ -3,22 +3,33 @@
 轮次循环已迁移至 _subagent_loop_runner.run_subagent_turn_loop（复用
 run_loop 骨架）；本 Mixin 仅保留循环所需的工具分发与进度上报辅助。
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.subagent.core._result_types import _coerce_skill_invocation
-from prismclaw.engine.subagent.core._result_types import SettledSubagentToolSurface
 from prismclaw.engine.execution.dispatch.execution_entry import execute_preflighted_tool_calls
+from prismclaw.engine.subagent.core._instance_base import _InstanceBase
+from prismclaw.engine.subagent.core._result_types import (
+    SettledSubagentToolSurface,
+    _coerce_skill_invocation,
+)
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.content_types import ToolResult
 
+if TYPE_CHECKING:
+    from prismclaw.engine.subagent.definition.manifest import AgentManifest
+    from prismclaw.engine.toolkit.subagent.subagent_progress_emitter import (
+        SubagentProgressEmitter,
+    )
+
 logger = logging.getLogger(__name__)
 
-class LoopMixin:
+
+class LoopMixin(_InstanceBase):
     # -- internal: tool helpers -----------------------------------------------------------
 
     def _settle_tool_surface(
@@ -106,7 +117,7 @@ class LoopMixin:
         *,
         sub_ctx: ToolContext,
         parent_ctx: ToolContext,
-        manifest: Any,
+        manifest: AgentManifest,
     ) -> list[ToolResult]:
         """Dispatch tool calls using shared preflighted execution wiring."""
         return await execute_preflighted_tool_calls(
@@ -162,16 +173,17 @@ class LoopMixin:
     @staticmethod
     def _resolve_progress_emitter(
         parent_ctx: ToolContext,
-        manifest: Any,
-    ) -> Any:
-        return parent_ctx.subagent_progress_emitter
+        manifest: AgentManifest,
+    ) -> SubagentProgressEmitter | None:
+        emitter: SubagentProgressEmitter | None = parent_ctx.subagent_progress_emitter
+        return emitter
 
     def _emit_progress(
         self,
-        emitter: Any,
+        emitter: SubagentProgressEmitter | None,
         *,
         sub_ctx: ToolContext,
-        manifest: Any,
+        manifest: AgentManifest,
         turn: int,
         max_turns: int,
         partial_status: str,
@@ -190,7 +202,9 @@ class LoopMixin:
             handoff_chain_id = sub_ctx.task_runtime_ctx.handoff_chain_id
             from_subagent: str | None = None
             if handoff_chain_id is not None:
-                pending = sub_ctx.pending_handoff_dispatch_extras.get("pending_handoff_source_subagent")
+                pending = sub_ctx.pending_handoff_dispatch_extras.get(
+                    "pending_handoff_source_subagent"
+                )
                 if pending is not None:
                     from_subagent = pending
             active_skill_name = sub_ctx.active_skill_name
@@ -234,10 +248,10 @@ class LoopMixin:
 
     def _emit_terminal(
         self,
-        emitter: Any,
+        emitter: SubagentProgressEmitter | None,
         *,
         sub_ctx: ToolContext,
-        manifest: Any,
+        manifest: AgentManifest,
         turn: int,
         max_turns: int,
         partial_status: str,
@@ -278,5 +292,3 @@ class LoopMixin:
         return sum(1 for m in messages if m.get("role") == "assistant")
 
     # -- internal: cleanup -----------------------------------------------------------
-
-

@@ -1,6 +1,8 @@
-from prismclaw.engine.scheduler.dispatch import (  # noqa: F401
-    RedisSchedulerDispatchQueue,
-    SchedulerDispatchConsumer,
+from prismclaw.engine.scheduler.dispatch import (
+    RedisSchedulerDispatchQueue as RedisSchedulerDispatchQueue,
 )
-from prismclaw.engine.scheduler.engine import SchedulerEngine  # noqa: F401
-from prismclaw.engine.scheduler.executor import ScheduledRunExecutor  # noqa: F401
+from prismclaw.engine.scheduler.dispatch import (
+    SchedulerDispatchConsumer as SchedulerDispatchConsumer,
+)
+from prismclaw.engine.scheduler.engine import SchedulerEngine as SchedulerEngine
+from prismclaw.engine.scheduler.executor import ScheduledRunExecutor as ScheduledRunExecutor

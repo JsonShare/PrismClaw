@@ -1,27 +1,26 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import TYPE_CHECKING, Any, Union
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any
 
-# Python 3.10 兼容:module-level 类型别名不能使用 | 语法(执行期非注解位置不支持 type.__or__)
-# 后续升级到 Python 3.11+ 可改为 type X = ... 语法。
-JsonScalar = Union[str, int, float, bool, None]
+JsonScalar = str | int | float | bool | None
 if TYPE_CHECKING:
-    JsonValue = Union[JsonScalar, dict[str, "JsonValue"], list["JsonValue"]]
+    JsonValue = JsonScalar | dict[str, "JsonValue"] | list["JsonValue"]
 else:
-    JsonValue = Union[JsonScalar, dict, list]
+    JsonValue = JsonScalar | dict | list
 
 
-class EffectClass(str, Enum):
+class EffectClass(StrEnum):
     """工具执行的效果分类——schema 层定义，被 execution/checkpoint 和 toolkit 共同引用。"""
+
     PURE_READ = "pure_read"
     LOCAL_MUTATION = "local_mutation"
     EXTERNAL_MUTATION = "external_mutation"
     UNKNOWN_EFFECT = "unknown_effect"
 
 
-class CapabilityKind(str, Enum):
+class CapabilityKind(StrEnum):
     COMMAND = "command"
     TOOL = "tool"
     AGENT = "agent"
@@ -32,7 +31,7 @@ class CapabilityKind(str, Enum):
     SKILL = "skill"
 
 
-class CapabilityStatus(str, Enum):
+class CapabilityStatus(StrEnum):
     ENABLED = "enabled"
     DISABLED = "disabled"
     SHADOWED = "shadowed"
@@ -40,7 +39,7 @@ class CapabilityStatus(str, Enum):
     DEGRADED = "degraded"
 
 
-class SourceKind(str, Enum):
+class SourceKind(StrEnum):
     BUILTIN = "builtin"
     LOCAL_PLUGIN = "local_plugin"
     MANAGED_PLUGIN = "managed_plugin"
@@ -49,14 +48,14 @@ class SourceKind(str, Enum):
     WORKSPACE = "workspace"
 
 
-class TrustLevel(str, Enum):
+class TrustLevel(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
     UNKNOWN = "unknown"
 
 
-class ScopeKind(str, Enum):
+class ScopeKind(StrEnum):
     GLOBAL = "global"
     WORKSPACE = "workspace"
     SESSION = "session"
@@ -127,9 +126,7 @@ class CapabilityGraph:
             if n.canonical_id == canonical_id and n.status == CapabilityStatus.ENABLED
         )
 
-    def get_with_plugin(
-        self, canonical_id: str, plugin_name: str | None
-    ) -> CapabilityNode | None:
+    def get_with_plugin(self, canonical_id: str, plugin_name: str | None) -> CapabilityNode | None:
         """按 plugin_name 优先匹配 ENABLED 节点,匹配不到则 fallback 到首个。"""
         enabled = [
             n

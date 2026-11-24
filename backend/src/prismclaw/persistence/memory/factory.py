@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -10,8 +10,12 @@ from prismclaw.schema.storage.storage_types import MemoryStore
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
 
+    from prismclaw.engine.security.dlp.scanner import DlpScanner
+    from prismclaw.persistence.memory.embedding import EmbeddingClient
+    from prismclaw.persistence.memory.notary import MemoryNotary
 
-def _build_embedding_client(embedding_settings: EmbeddingSettings):
+
+def _build_embedding_client(embedding_settings: EmbeddingSettings) -> EmbeddingClient | None:
     if not (embedding_settings.model or "").strip():
         return None
     from prismclaw.persistence.memory.embedding import EmbeddingClient
@@ -24,7 +28,9 @@ def _build_embedding_client(embedding_settings: EmbeddingSettings):
     )
 
 
-def _build_notary(memory_settings: MemorySettings, *, dlp_scanner: Any | None = None):
+def _build_notary(
+    memory_settings: MemorySettings, *, dlp_scanner: DlpScanner | None = None
+) -> MemoryNotary | None:
     """构建记忆公证器（写入前安全拦截器）。notary_enabled=False 时返回 None。"""
     if not memory_settings.notary_enabled:
         return None
@@ -43,7 +49,7 @@ def create_memory_store(
     redis_client: aioredis.Redis,
     *,
     key_prefix: str = "prismclaw:",
-    dlp_scanner: Any | None = None,
+    dlp_scanner: DlpScanner | None = None,
 ) -> MemoryStore:
     from prismclaw.persistence.memory.composite import CompositeMemoryStore
     from prismclaw.persistence.memory.postgres import PostgresMemoryBackend

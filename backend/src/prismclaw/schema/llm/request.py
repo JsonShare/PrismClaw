@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
+from prismclaw.schema.agent.data_types import CacheStrategySnapshot
+
 """LLM request data contract — PackedLLMRequest.
 
 Moved from core.agent.request_packing to contracts so that engine-external
 modules (dream, memory, curator, etc.) can import this data class without
 coupling to the agent layer.
 """
-
-from dataclasses import dataclass
-from typing import Any
-
-from prismclaw.schema.agent.data_types import CacheStrategySnapshot
 
 
 @dataclass

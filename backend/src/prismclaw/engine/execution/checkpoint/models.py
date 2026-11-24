@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
 from prismclaw.schema.agent.capability import EffectClass
 from prismclaw.schema.services.skills import SkillInvocationState
 
 
-class ResumeBoundary(str, Enum):
+class ResumeBoundary(StrEnum):
     BEFORE_MODEL_CALL = "before_model_call"
     BEFORE_TOOL_DISPATCH = "before_tool_dispatch"
     AFTER_TOOL_RESULT_PERSIST = "after_tool_result_persist"
     AFTER_TURN_FINALIZE = "after_turn_finalize"
 
 
-class CommitState(str, Enum):
+class CommitState(StrEnum):
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
     COMMITTED = "committed"
@@ -23,7 +24,7 @@ class CommitState(str, Enum):
     ROLLED_BACK = "rolled_back"
 
 
-class ResumeDisposition(str, Enum):
+class ResumeDisposition(StrEnum):
     AUTO_RESUME = "auto_resume"
     RESUME_BLOCKED = "resume_blocked"
     HUMAN_REVIEW = "human_review"
@@ -60,7 +61,6 @@ class RequestAssemblySnapshot(BaseModel):
     request_id: str = ""
     query_loop_revision_id: str = ""
     model: str = ""
-    request_mode: str | None = None
     messages_for_api: list[dict[str, Any]] = Field(default_factory=list)
     system: str | list[dict[str, Any]] | None = None
     context_payload: dict[str, Any] | None = None
@@ -106,7 +106,7 @@ class InvokedSkillState(BaseModel):
     active_invocation: SkillInvocationState | None = None
     skills: dict[str, InvokedSkillRecord] = Field(default_factory=dict)
 
-    def retain_durable_records(self) -> "InvokedSkillState":
+    def retain_durable_records(self) -> InvokedSkillState:
         retained_active_invocation = self.active_invocation
         if (
             retained_active_invocation is not None
@@ -169,4 +169,3 @@ class RunState(BaseModel):
     compression_state: CompressionState = Field(default_factory=CompressionState)
     active_tool_call_id: str | None = None
     approval_pending: bool = False
-
