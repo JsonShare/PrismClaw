@@ -89,12 +89,11 @@ class SummaryEngine:
 
         async def _one_stage(payload: list[dict[str, Any]]) -> str:
             assert summarize_fn is not None
-            effective_payload = build_summarizer_payload(payload)
             compact_prompt = resolve_compact_prompt(self._compaction_config)
-            effective_payload[0] = {
-                "role": "system",
-                "content": compact_prompt or HARDENED_SUMMARIZER_SYSTEM_PROMPT,
-            }
+            effective_payload = build_summarizer_payload(
+                payload,
+                system_prompt=compact_prompt or HARDENED_SUMMARIZER_SYSTEM_PROMPT,
+            )
             enabled = _resolve_no_tools_preamble_enabled(self._compaction_config)
             if enabled:
                 effective_payload = inject_no_tools_preamble(

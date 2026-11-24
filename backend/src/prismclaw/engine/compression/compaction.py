@@ -144,13 +144,6 @@ def build_compaction(
     )
 
 
-SUMMARIZER_SYSTEM_PROMPT = (
-    "请简洁地总结此前的工作进展。"
-    "1. 目标是什么？ 2. 已完成或发现了什么？ 3. 下一个立即执行的步骤是什么？"
-    "不要写客套话。返回纯文本。"
-)
-
-
 def extract_identifiers(text: str) -> set[str]:
     """Extract physical identifiers (paths, UUIDs/Hashes) from text for immune preservation."""
     identifiers = set()
@@ -169,7 +162,11 @@ def extract_identifiers(text: str) -> set[str]:
     return identifiers
 
 
-def build_summarizer_payload(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_summarizer_payload(
+    messages: list[dict[str, Any]],
+    *,
+    system_prompt: str,
+) -> list[dict[str, Any]]:
     transcript_lines: list[str] = []
     for m in messages:
         role = m.get("role", "user")
@@ -189,6 +186,6 @@ def build_summarizer_payload(messages: list[dict[str, Any]]) -> list[dict[str, A
     transcript = "\n".join(transcript_lines) if transcript_lines else "(empty)"
     user_prompt = "请总结以下对话，使助手能够在不丢失上下文的情况下继续：\n\n" + transcript
     return [
-        {"role": "system", "content": SUMMARIZER_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
