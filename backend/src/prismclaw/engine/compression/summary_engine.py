@@ -101,44 +101,41 @@ class SummaryEngine:
                     effective_payload,
                     enabled=True,
                 )
+            from prismclaw.engine.compression.history_compaction import (
+                _METRIC_COMPACT_OUTPUT_TOKENS,
+                _METRIC_COMPACT_PROMPT_TOKENS,
+            )
+            from prismclaw.engine.foundation.metrics import emit
+
             try:
-                from prismclaw.engine.compression.history_compaction import (
-                    _METRIC_COMPACT_OUTPUT_TOKENS,
-                    _METRIC_COMPACT_PROMPT_TOKENS,
+                from prismclaw.engine.foundation.telemetry.token_metrics import (
+                    estimate_message_tokens,
                 )
-                from prismclaw.engine.foundation.metrics import emit
 
-                try:
-                    from prismclaw.engine.foundation.telemetry.token_metrics import (
-                        estimate_message_tokens,
-                    )
+                prompt_tokens_est = max(
+                    1,
+                    estimate_message_tokens(list(effective_payload)),
+                )
+                emit(
+                    _METRIC_COMPACT_PROMPT_TOKENS,
+                    float(prompt_tokens_est),
+                    kind="histogram",
+                )
+            except Exception:
+                pass
+            result = await summarize_fn(effective_payload, model=model)
+            try:
+                from prismclaw.schema.shared import estimate_tokens
 
-                    prompt_tokens_est = max(
-                        1,
-                        estimate_message_tokens(list(effective_payload)),
-                    )
-                    emit(
-                        _METRIC_COMPACT_PROMPT_TOKENS,
-                        float(prompt_tokens_est),
-                        kind="histogram",
-                    )
-                except Exception:
-                    pass
-                result = await summarize_fn(effective_payload, model=model)
-                try:
-                    from prismclaw.schema.shared import estimate_tokens
-
-                    output_tokens_est = estimate_tokens(str(result))
-                    emit(
-                        _METRIC_COMPACT_OUTPUT_TOKENS,
-                        float(output_tokens_est),
-                        kind="histogram",
-                    )
-                except Exception:
-                    pass
-                return result
-            except TypeError:
-                return await summarize_fn(effective_payload)
+                output_tokens_est = estimate_tokens(str(result))
+                emit(
+                    _METRIC_COMPACT_OUTPUT_TOKENS,
+                    float(output_tokens_est),
+                    kind="histogram",
+                )
+            except Exception:
+                pass
+            return result
 
         chunks = split_into_chunks(messages, chunk_token_budget=self._chunk_token_budget)
 
