@@ -232,6 +232,13 @@ _CARRY_FORWARD_SECTION_NUMBERS = frozenset({7})
 
 _VOIDED_MARKERS = frozenset({"voided", "superseded", "cancelled", "retracted", "replaced"})
 
+# 空段声明必须与 prompts/compact_summary.md 的「（无）」契约一致。
+# 契约原文由 test_prompt_template_consistency.py 的联动守卫从 md 读取校验，
+# 这里只保存归一化后的词形，不重复抄写带括号的原文。
+_EMPTY_DECLARATION_WORDS = frozenset({"", "none", "n/a", "nothing", "- none", "无"})
+_EMPTY_DECLARATION_PREFIXES = ("no pending", "no current", "no active", "no outstanding")
+_EMPTY_DECLARATION_WRAPPERS = "-*•· \t（）()[]【】「」"
+
 
 def extract_sections(text: str) -> dict[int, str]:
     """Extract numbered sections from an 11-section compaction summary.
@@ -263,9 +270,31 @@ def _is_voided_section(text: str) -> bool:
     return any(marker in lower for marker in _VOIDED_MARKERS)
 
 
+def _normalize_empty_declaration(body: str) -> str:
+    """把空段声明的包裹形态归一为规范词形。
+
+    「（无）」/「- （无）」/「(无)。」→「无」；「None.」→「none」。
+    归一结果**只用于精确词形比对**：英文短语前缀判定必须走原始 body，
+    否则剥掉 "- " 后 "No pending appeal: ..." 会被误判为空声明。
+
+    末尾句点须先剥：对「（无）。」先剥括号会残留「）」导致漏判。
+    """
+    normalized = body.strip().rstrip(".。 ").strip()
+    return normalized.strip(_EMPTY_DECLARATION_WRAPPERS).strip()
+
+
 def _section_is_substantive(text: str) -> bool:
     """A section is substantive if it has content beyond just the header
-    and does not declare itself empty (e.g. "None", "N/A", "No pending tasks").
+    and does not declare itself empty.
+
+    One entry point, two checks:
+    1. 原始 body 保留既有的英文空声明判定（精确词形 + "no pending/..." 前缀）。
+       项目符号与括号前缀天然为前缀匹配挡住含实质指令的长句。
+    2. 归一后的词形处理 bundled prompt 的中文契约
+       (compact_summary.md: 「确无内容时该章节正文写「（无）」」) 及其包裹变体，
+       **只做精确比对，不参与前缀匹配**。
+
+    prompt-consistency 守卫测试把两处与 md 锁在一起。
     """
     lines = text.strip().splitlines()
     if len(lines) <= 1:
@@ -274,13 +303,11 @@ def _section_is_substantive(text: str) -> bool:
     if not body:
         return False
     stripped = body.strip().rstrip(".")
-    # Common LLM "empty" declarations — exact matches
-    empty_exact = frozenset({"none", "n/a", "nothing", "- none"})
-    if stripped in empty_exact:
+    if stripped in _EMPTY_DECLARATION_WORDS:
         return False
-    # Prefix patterns: "no pending tasks", "no current items", etc.
-    empty_prefixes = ("no pending", "no current", "no active", "no outstanding")
-    return not stripped.startswith(empty_prefixes)
+    if stripped.startswith(_EMPTY_DECLARATION_PREFIXES):
+        return False
+    return _normalize_empty_declaration(body) not in _EMPTY_DECLARATION_WORDS
 
 
 def carry_forward_missing_sections(

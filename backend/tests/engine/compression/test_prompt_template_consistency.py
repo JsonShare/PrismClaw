@@ -21,6 +21,10 @@ from prismclaw.engine.compression._compact_prompt import (
     _resolve_prompt_template,
     _strip_md_frontmatter,
 )
+from prismclaw.engine.compression.hardening import (
+    _section_is_substantive,
+    carry_forward_missing_sections,
+)
 from prismclaw.engine.compression.summary_engine import SummaryEngine
 from prismclaw.schema.config.config import CompactionConfig
 
@@ -165,3 +169,85 @@ def test_single_typeerror_not_swallowed():
     )) == "OK"
     assert len(ok_calls) == 1
     assert ok_calls[0][1] == "m2"
+
+# ─────────────── step 10: prompt 空段契约 ↔ hardening parser 联动守卫 ───────────────
+
+
+def test_prompt_empty_section_marker_triggers_carry_forward():
+    """prompt 明文规定的空段写法必须被判空，并触发第 7 段结转（W8/W12）。
+
+    这是跨文件契约：compact_summary.md 规定「确无内容时写「（无）」」，
+    hardening._section_is_substantive 若只认英文空声明，新摘要的每个章节
+    都必出现且写成「（无）」时，carry_forward 的缺段路径与空段路径会被
+    同时堵死，prior 摘要的待办任务将静默丢失。测试直接从 md 提取该写法，
+    prompt 一旦改写而 parser 未跟进，此处即变红。
+    """
+    body = _strip_md_frontmatter(_PROMPT_MD.read_text(encoding="utf-8"))
+    m = re.search(r"正文写「(.+?)」", body)
+    assert m is not None, "prompt 未声明空段写法"
+    marker = m.group(1)
+
+    assert _section_is_substantive(f"7. 待办任务\n{marker}") is False
+
+    prior = "1. 主要请求与意图\n- 继续推进\n\n7. 待办任务\n- 调整降糖药剂量\n"
+    new = f"1. 主要请求与意图\n- 继续推进\n\n7. 待办任务\n{marker}\n"
+    out = carry_forward_missing_sections(new, prior)
+    assert "调整降糖药剂量" in out
+    assert "[从既有摘要结转" in out
+
+
+def test_empty_section_detection_does_not_eat_substantive_content():
+    """归一化不得误伤：中英文空声明判空，含实质内容的章节仍判实质。"""
+    empty_markers = (
+        "None", "N/A", "Nothing", "No pending tasks", "- none",
+        "（无）", "(无)", "- （无）", "（无）。", "无",
+    )
+    for marker in empty_markers:
+        assert _section_is_substantive(f"7. 待办任务\n{marker}") is False, marker
+
+    substantive_bodies = (
+        "- 调整降糖药剂量",
+        "无明显异常，仍需复查",
+        "（无）。但需复核血常规",
+        "7. 待办任务",
+    )
+    for body in substantive_bodies:
+        assert _section_is_substantive(f"7. 待办任务\n{body}") is True, body
+
+    assert _section_is_substantive("7. 待办任务") is False
+
+def test_english_empty_prefix_does_not_swallow_real_content():
+    """归一剥离项目符号/括号后，英文空声明短语不得吞掉带实质指令的长句。
+
+    step 10 首次实现沿用旧代码的 startswith("no pending")，归一化剥掉
+    "- " 与括号后，"- No pending appeal: refile by Friday" 会被误判为空
+    并触发结转，把 prior 的过时待办注入新摘要。最终设计让归一结果只做
+    精确词形比对、不参与前缀匹配，此处锁住该边界。
+    """
+    sentences = (
+        "- No pending appeal: refile by Friday",
+        "* no current items, however escalate to on-call",
+        "（No pending appeal: refile by Friday）",
+    )
+    for sentence in sentences:
+        assert _section_is_substantive(f"7. 待办任务\n{sentence}") is True, sentence
+
+def test_legacy_english_empty_phrases_still_detected():
+    """既有英文空声明长写法不得因中文契约修复而丢失判空能力。
+
+    旧实现的 startswith(("no pending", ...)) 覆盖任意长度的纯空声明句。
+    若为中文标记改用整句正则并删掉前缀能力，这些写法会被判为实质，
+    carry_forward 被跳过，prior 摘要的待办静默丢失（能力回退）。
+    """
+    phrases = (
+        "No pending tasks at this time",
+        "No current items to report",
+        "no outstanding issues remain open",
+        "no active work in progress",
+        "no pending tasks were found",
+        "no pending tasks and no active items",
+        "no pending tasks!",
+        "no pending-tasks",
+    )
+    for phrase in phrases:
+        assert _section_is_substantive(f"7. 待办任务\n{phrase}") is False, phrase
