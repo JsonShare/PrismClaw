@@ -6,7 +6,6 @@ from prismclaw.schema.config.compaction_defaults import (
     DEFAULT_THRESHOLD,
 )
 from prismclaw.schema.config.config import (
-    COMPACT_SUMMARY_DEFAULT_TEMPLATE,
     FLAG_AUTOCOMPACT_BREAKER_DEFAULT,
     FLAG_SOFT_BUDGET_DEFAULT,
     AgentRunConfig,
@@ -36,7 +35,6 @@ __all__ = [
     "FLAG_AUTOCOMPACT_BREAKER_DEFAULT",
     "FLAG_SOFT_BUDGET_DEFAULT",
     "SoftBudgetConfig",
-    "COMPACT_SUMMARY_DEFAULT_TEMPLATE",
     "PerResultSummaryConfig",
     "CompactPromptConfig",
     "HistoryCompactionConfig",

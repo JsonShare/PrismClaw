@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.foundation.metrics import emit
-from prismclaw.schema.config.config import COMPACT_SUMMARY_DEFAULT_TEMPLATE, CompactionConfig
+from prismclaw.schema.config.config import CompactionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -173,35 +173,29 @@ def strip_analysis_block(text: str) -> str:
 def _resolve_prompt_template(
     template: str | None,
     *,
-    default: str,
     default_path: Path,
     config_label: str,
 ) -> str:
-    """Resolve a prompt template from config.
+    """Resolve the configured prompt template into prompt text.
 
-    Accepts three shapes (mirrors the plan §1 / §2 — operators can
-    either inline a string, point to a file, or use the upstream
-    default):
+    ``template`` has two shapes:
 
-    1. ``None`` / empty → try ``default_path`` first (single source of
-       truth), fall back to ``default`` if the file is missing.
-    2. A multi-line literal (contains a newline) → return as-is.
-    3. A single-line token → treat as a path.  Relative paths are
-       resolved against ``default_path``'s parent for convenience.
-       If the file is missing or unreadable, log a warning and fall
-       back to ``default``.
+    1. ``None`` / empty → read ``default_path`` (the bundled
+       ``compact_summary.md``, which is the single source of truth) and
+       strip its HTML comment header.  A missing file is a deployment
+       error, so ``FileNotFoundError`` propagates to the caller.
+    2. A non-empty string → a value containing a newline is treated as
+       an inline template and returned verbatim; a single-line value is
+       treated as a path (relative paths resolve against ``default_path``'s
+       parent).  If that path cannot be read, the literal string itself
+       is used instead.
 
-    ``config_label`` is used only for diagnostic messages.
+    ``config_label`` is used only for diagnostic messages on the path
+    fallback in shape 2.
     """
     if not template or not isinstance(template, str):
         # default_path 是单一真相源（R4: compact_summary 模板单份化）
-        try:
-            if default_path.is_file():
-                text = default_path.read_text(encoding="utf-8")
-                return _strip_md_frontmatter(text)
-        except OSError as exc:
-            logger.debug("prompt_template.default_path_failed label=%s err=%s", config_label, exc)
-        return default
+        return _strip_md_frontmatter(default_path.read_text(encoding="utf-8"))
     # Heuristic: multi-line inputs are always inline.  Single-line
     # inputs: try to read as a filesystem path; on failure, treat
     # the value as an inline template.  This is more permissive than
@@ -231,13 +225,15 @@ def resolve_compact_prompt(compaction_config: CompactionConfig | None) -> str | 
     is True (default); returns None when the feature is disabled so
     callers can fall back to ``HARDENED_SUMMARIZER_SYSTEM_PROMPT``.
 
-    Supports three input shapes for ``cfg.history.prompt.template``:
+    Supports two input shapes for ``cfg.history.prompt.template``:
 
-    1. ``None`` / empty → use ``COMPACT_SUMMARY_DEFAULT_TEMPLATE``.
-    2. A literal string → use it directly.
-    3. A filesystem path (``/abs/path.md`` or ``prompts/x.md``) →
-       load the file and use its contents.  Falls back to the
-       in-code default if the file is missing or unreadable.
+    1. ``None`` / empty → read the bundled ``prompts/compact_summary.md``;
+       a missing file raises ``FileNotFoundError``.
+    2. A non-empty string → a multi-line value is used inline; a
+       single-line value is treated as a filesystem path
+       (``/abs/path.md`` or ``prompts/x.md``) and the file's contents
+       are used.  If that path is missing or unreadable, the literal
+       string itself is used.
     """
     if compaction_config is None:
         return None
@@ -253,7 +249,6 @@ def resolve_compact_prompt(compaction_config: CompactionConfig | None) -> str | 
         return None
     return _resolve_prompt_template(
         cfg.template,
-        default=COMPACT_SUMMARY_DEFAULT_TEMPLATE,
         default_path=Path(__file__).resolve().parent / "prompts" / "compact_summary.md",
         config_label="history.prompt.template",
     )

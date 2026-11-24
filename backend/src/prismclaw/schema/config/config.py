@@ -13,19 +13,6 @@ from pydantic import BaseModel, Field, model_validator
 
 logger = logging.getLogger(__name__)
 
-# Single source of truth — imported from _preservation_rules.py.
-# The old dual-copy cycle is resolved by making _preservation_rules.py
-# a pure-constants module with no internal imports.
-try:
-    from prismclaw.engine.compression._preservation_rules import (
-        IDENTIFIER_PRESERVATION_INSTRUCTIONS,
-    )
-except ImportError:
-    # Schema layer may load before engine layer in some test/CLI paths
-    IDENTIFIER_PRESERVATION_INSTRUCTIONS = (
-        "在摘要中逐字保留标识符，用户事实逐字带入第10节，作废需求列在第11节。"
-    )
-
 
 class WorkspaceConfig(BaseModel):
     workspaces: dict[str, str] = Field(default_factory=lambda: {"default": "."})
@@ -118,38 +105,6 @@ class SoftBudgetConfig(BaseModel):
         return self
 
 
-# 9 章节压缩摘要模板。默认使用内置 9 章节模板（主请求 / 关键技术概念 /
-# 关键文件与产出 / 错误与修复 / 问题解决过程 / 用户消息 / 待办 /
-# 当前工作 / 可选下一步）；运营可通过 template 字段覆写为领域专用模板。
-# strip_analysis_block 控制是否移除 LLM 输出中的 <analysis> 草稿块。
-COMPACT_SUMMARY_DEFAULT_TEMPLATE = (
-    "# 关键：禁止使用任何工具。只输出文本。\n\n"
-    "你的任务是详细总结此前的对话，重点关注用户的明确请求、所做的关键决策和产出。\n\n"
-    "回答必须分成两部分：先在 <analysis> 块中进行私下推理，"
-    "然后在 <summary> 块中给出结构化摘要，供另一个 AI 继续执行任务。\n\n"
-    "<analysis>\n"
-    "1. 按时间顺序逐条分析每条消息。\n"
-    "2. 特别留意用户的具体反馈、纠正和意图变化。\n"
-    "3. 找出所有文件路径、函数名、错误码和具体取值。\n"
-    "</analysis>\n\n"
-    "<summary>\n"
-    "1. 主要请求与意图\n"
-    "2. 关键技术概念\n"
-    "3. 关键文件与产出\n"
-    "4. 错误与修复\n"
-    "5. 问题解决过程\n"
-    "6. 用户的所有消息\n"
-    "7. 待办任务\n"
-    "8. 当前工作\n"
-    "9. 可选的下一步\n"
-    "10. 用户陈述的事实与约束（逐字保留；必须从既有摘要中完整继承，任何一条都不得丢失）\n"
-    "11. 已失效/作废的需求（每条一行：作废事实 → 替代它的内容；必须从既有摘要中完整继承——"
-    "一旦丢失作废条目，它会在后续工作中被误当作当前事实复活）\n"
-    "</summary>\n\n"
-    f"{IDENTIFIER_PRESERVATION_INSTRUCTIONS}\n"
-)
-
-
 class PerResultSummaryConfig(BaseModel):
     """Per-tool-result LLM summarization.
 
@@ -221,7 +176,7 @@ class CompactPromptConfig(BaseModel):
         default=None,
         description=(
             "9-section summarization prompt. Override to use a domain-specific prompt. "
-            "None uses the built-in default (COMPACT_SUMMARY_DEFAULT_TEMPLATE)."
+            "None reads the bundled prompts/compact_summary.md."
         ),
     )
     strip_analysis_block: bool = Field(
@@ -238,12 +193,6 @@ class CompactPromptConfig(BaseModel):
             "prompt is used instead of the 9-section default."
         ),
     )
-
-
-# IDENTIFIER_PRESERVATION_INSTRUCTIONS is imported from _preservation_rules.py above.
-# Pydantic reads default values from COMPACT_SUMMARY_DEFAULT_TEMPLATE
-# (which embeds IDENTIFIER_PRESERVATION_INSTRUCTIONS) when constructing
-# CompactPromptConfig instances.
 
 
 # ─────────────────────────── Compaction sub-blocks ───────────────────────────
