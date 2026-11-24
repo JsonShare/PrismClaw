@@ -9,9 +9,8 @@
   UUID、哈希必须逐字保留，不得缩写。
 
   开头的硬性“禁止调用任何工具”前言，用于阻止自适应思考模型
-  （Sonnet 4.6+）把摘要回合消耗在工具调用上（与
-  ``prismclaw.engine.compression.history_compaction`` 中的
-  FLAG_NO_TOOLS_PREAMBLE 内联消息配套使用）。
+  （Sonnet 4.6+）把摘要回合消耗在工具调用上；运行期是否注入
+  该前置指令由 CompactionConfig.history.preamble_no_tools 控制。
 
   运维可将 ``CompactionConfig.history.prompt.template`` 指向任意文件；
   未设置时直接读取本文件（本文件即单一真相源）。

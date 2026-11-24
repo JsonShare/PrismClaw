@@ -55,7 +55,6 @@ NO_TOOLS_PREAMBLE = (
 )
 
 _METRIC_COMPACT_PREAMBLE_INJECTED = "compact.preamble_injected"
-_METRIC_COMPACT_TOOL_CALL_REJECTED = "compact.tool_call_rejected_after_preamble"
 
 
 def inject_no_tools_preamble(
@@ -66,8 +65,8 @@ def inject_no_tools_preamble(
     """Prepend ``NO_TOOLS_PREAMBLE`` to the first user message.
 
     Returns a new list; the input is not mutated.  When ``enabled``
-    is False the function is a no-op (used for the ``FLAG_NO_TOOLS_PREAMBLE``
-    off path and for tests that need a clean baseline).
+    is False the function is a no-op (the ``preamble_no_tools`` off
+    path and tests that need a clean baseline).
 
     前置指令追加在 user message 而非 system message，
     避免扰动 system 侧的 prefix-cache 键。"""

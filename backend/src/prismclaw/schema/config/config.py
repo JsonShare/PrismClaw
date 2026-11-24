@@ -2,12 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
-
-try:
-    from typing import Self
-except ImportError:
-    from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -166,10 +161,10 @@ class PerResultSummaryConfig(BaseModel):
 class CompactPromptConfig(BaseModel):
     """压缩摘要模板配置。
 
-    内置 11 章节默认模板（主要请求与意图 / 关键领域概念与术语 /
-    关键资料、文件与产出 / 错误与修复 / 问题解决过程 / 用户关键原话 /
-    待办任务 / 当前工作 / 可选的下一步 / 用户陈述的事实与约束 /
-    已失效/作废的需求）；
+    默认正文取自随包发布的 prompts/compact_summary.md（11 段：
+    主要请求与意图 / 关键领域概念与术语 / 关键资料、文件与产出 /
+    错误与修复 / 问题解决过程 / 用户关键原话 / 待办任务 / 当前工作 /
+    可选的下一步 / 用户陈述的事实与约束 / 已失效作废的需求）；
     运营可通过 template 字段覆写为领域专用模板。
     strip_analysis_block 控制是否移除 LLM 输出中的 <analysis> 草稿块。
     """
@@ -191,8 +186,8 @@ class CompactPromptConfig(BaseModel):
     enabled: bool = Field(
         default=True,
         description=(
-            "Feature flag. When False, the legacy short summarization "
-            "prompt is used instead of the 11-section default."
+            "Feature flag. When False, resolve_compact_prompt returns None "
+            "and callers use HARDENED_SUMMARIZER_SYSTEM_PROMPT instead."
         ),
     )
 
@@ -244,7 +239,10 @@ class HistoryCompactionConfig(BaseModel):
     )
     prompt: CompactPromptConfig = Field(
         default_factory=lambda: CompactPromptConfig(),
-        description="11 章节压缩摘要模板配置。覆写可使用领域专用模板；None 时使用内置默认模板。",
+        description=(
+            "11 章节压缩摘要模板配置。覆写可使用领域专用模板；"
+            "None 时读取 prompts/compact_summary.md。"
+        ),
     )
     preamble_no_tools: bool = Field(
         default=True,

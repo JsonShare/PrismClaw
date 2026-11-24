@@ -40,7 +40,6 @@ from prismclaw.engine.compression._compact_prompt import (  # noqa: F401
     _ANALYSIS_BLOCK_RE,
     _METRIC_COMPACT_ANALYSIS_STRIPPED,
     _METRIC_COMPACT_PREAMBLE_INJECTED,
-    _METRIC_COMPACT_TOOL_CALL_REJECTED,
     NO_TOOLS_PREAMBLE,
     _resolve_prompt_template,
 )
