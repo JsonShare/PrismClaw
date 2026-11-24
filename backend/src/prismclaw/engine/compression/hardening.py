@@ -225,6 +225,12 @@ _SECTION_HEADER_RE = re.compile(
     re.MULTILINE,
 )
 
+# 只匹配最外层的一对结构标记（锚定首尾）：正文里同形的字面量
+# （用户原话、标识符）必须逐字保留，不能用全局替换删除。
+_SUMMARY_WRAPPER_RE = re.compile(
+    r"^\s*<\s*summary\s*>|<\s*/\s*summary\s*>\s*$", re.IGNORECASE
+)
+
 # Sections whose content is structurally mandatory for carry-forward.
 # When the new summary is missing one of these sections that was present
 # in the prior summary, the missing section is appended verbatim.
@@ -232,9 +238,10 @@ _CARRY_FORWARD_SECTION_NUMBERS = frozenset({7})
 
 _VOIDED_MARKERS = frozenset({"voided", "superseded", "cancelled", "retracted", "replaced"})
 
-# 空段声明必须与 prompts/compact_summary.md 的「（无）」契约一致。
-# 契约原文由 test_prompt_template_consistency.py 的联动守卫从 md 读取校验，
-# 这里只保存归一化后的词形，不重复抄写带括号的原文。
+# 空段声明识别：与 prompts/compact_summary.md 的「（无）」契约保持一致。
+# WORDS 同时服务「原始 body 精确比对」与「归一后精确比对」；PREFIXES 只对
+# 原始 body 做前缀匹配；WRAPPERS 仅供归一化剥离包裹符号。契约原文由
+# test_prompt_template_consistency.py 的联动守卫从 md 读取校验，不在此抄写。
 _EMPTY_DECLARATION_WORDS = frozenset({"", "none", "n/a", "nothing", "- none", "无"})
 _EMPTY_DECLARATION_PREFIXES = ("no pending", "no current", "no active", "no outstanding")
 _EMPTY_DECLARATION_WRAPPERS = "-*•· \t（）()[]【】「」"
@@ -249,6 +256,10 @@ def extract_sections(text: str) -> dict[int, str]:
     """
     if not text or not text.strip():
         return {}
+    # 真实压缩输出经 strip_analysis_block 后仍带 <summary>/</summary>；
+    # 只剥最外层这一对，否则闭合标签会并入最后一个 section 的正文，
+    # 使「（无）」空段被误判为实质内容，W12 作废条目的结转被跳过。
+    text = _SUMMARY_WRAPPER_RE.sub("", text)
     positions: list[tuple[int, int, str]] = []  # (start, number, header_line)
     for m in _SECTION_HEADER_RE.finditer(text):
         num = int(m.group(1))

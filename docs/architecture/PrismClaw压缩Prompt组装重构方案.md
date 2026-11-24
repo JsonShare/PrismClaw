@@ -6,7 +6,7 @@
 > 评审依据：`PrismClaw压缩Prompt组装重构方案_架构评审结论.md`
 > 方法：逐文件读取真实调用链 + 运行时实测（conda `pyclaw`），结论带代码位置佐证。
 
-> **当前状态**：PR0 八步已于 2026-11-24 全部实施完成并逐步独立复核（commit `d5dd635` → `169d5cd`）；随后追加两次收尾：`9a9184d`（step 9 全案审计清理）与 step 10（修复 Step 1 引入的 carry-forward 契约回归，见 §8.6）。**PR0 主干末个提交 `9a9184d`**；其后 `bdf7e3a` 是前端文档整理，与 PR0 无关。compression 子集 `161 passed, 1 skipped / 162 collected`，全量 backend `1197 passed, 1 skipped`；ruff 对本轮改动源码全 clean；golden 三层逐字节一致（sha `b48e1a84`）。§8 为实施 runbook。prompt 文本修订已纳入本方案（§2.5 / 步骤 1）；per-result frontmatter 修复（520→167）拆出单独评估；组装器 PR1 暂缓。
+> **当前状态**：PR0 八步已于 2026-11-24 全部实施完成并逐步独立复核（commit `d5dd635` → `169d5cd`）；随后追加三次收尾：`9a9184d`（step 9 全案审计清理）、`eb37db7`（step 10 修复 Step 1 引入的 carry-forward 契约回归）与 step 11（全案复查补修结构标签导致的 W12 结转失效，见 §8.6）。**PR0 主干末个提交 `9a9184d`**；其后 `bdf7e3a` 是前端文档整理，与 PR0 无关。compression 子集 `163 passed, 1 skipped / 164 collected`，全量 backend `1199 passed, 1 skipped`；ruff 对本轮改动源码全 clean；golden 三层逐字节一致（sha `b48e1a84`）。§8 为实施 runbook。prompt 文本修订已纳入本方案（§2.5 / 步骤 1）；per-result frontmatter 修复（520→167）拆出单独评估；组装器 PR1 暂缓。
 >
 > **测试运行注意**：本沙箱下 `pytest` 默认 basetemp 会因 tmp_path 拦截报 152 errors（环境误报，非代码问题），实跑需加 `--basetemp=/tmp/pytest_basetemp_prismclaw`；全量 backend 约需 2 分钟，前台默认 120s 会被 SIGTERM，应后台运行并把输出落盘后读取。
 
@@ -503,7 +503,7 @@ PR1 阶段追加：
 
 常量 `_EMPTY_DECLARATION_WORDS / _EMPTY_DECLARATION_PREFIXES / _EMPTY_DECLARATION_WRAPPERS` 集中在模块级；prompt 正文、canonical、golden 均未改（sha `b48e1a84…` 不变）。
 
-**守卫测试**（`test_prompt_template_consistency.py` 新增 4 个）：
+**step 10 守卫测试**（`test_prompt_template_consistency.py` 新增 4 个）：
 
 | 用例 | 锁定 |
 |---|---|
@@ -523,5 +523,19 @@ PR1 阶段追加：
 2. 旧 `startswith` 对「空声明 + 换行/中文追加实质内容」（如 `no pending\n调整降糖药剂量`）判空，属 PR0 之前既有行为，非本次引入；本次不扩范围修它。
 3. `history_compaction.py:322` 仅在 `anchored != summary` 时打日志，未结转场景无告警/埋点；如需观测性另立议题。
 
-**门禁**：compression 子集 `161 passed, 1 skipped / 162 collected`；全量 backend `1197 passed, 1 skipped`；`ruff check` 对改动源码 clean（忽略该测试文件既有 ANN/SIM102 风格项）；golden 三层逐字节一致；旧常量零残留；全案例探针 0 BAD。
+**step 10 时点门禁**：compression 子集 `161 passed, 1 skipped / 162 collected`；全量 backend `1197 passed, 1 skipped`；ruff clean；golden 三层一致；全案例探针 0 BAD。最终状态见 step 11。
+
+#### step 11：全案复查补修 · 结构标签导致的 W12 结转失效
+
+step 10 收尾后按「复查修改是否存在 bug」做全案人工复核。用**真实 11 段 + `<analysis>`/`<summary>` 标签**的端到端探针（此前各轮均为单元级）发现 step 10 修复不完整：W8 已恢复，W12 仍漏。
+
+**根因（生产可达，已证）**：`compact_summary.md` 要求模型输出 `<analysis>` 与 `<summary>` 两块；`summary_engine.py:162` 的 `strip_analysis_block` **只剥 analysis**，全仓无剥离 `<summary>`/`</summary>` 的代码，`engine/state/state_protocol.py:279` 甚至主动往摘要外包这对标签。于是 `compact_result.summary` 带标签，`history_compaction.py:318` 把它交给 `carry_forward_missing_sections` → `extract_sections` 把 `</summary>` 归入**最后一个 section（第 11 段）**的正文，使「（无）\n</summary>」被判为 substantive，第 11 段作废条目的结转被跳过。
+
+**修法**：`extract_sections` 在解析前用 `_SUMMARY_WRAPPER_RE`（`^`/`$` 锚定文本首尾）只剥最外层一对结构标签。首版用全局替换被独立 verifier 判 FAIL——它会删掉正文（用户原话 / 标识符）里同形的 `<summary>` 字面量，甚至把只剩一个字面量的非空段误判为空、错误注入 prior 过时待办；改为边界锚定后消除。
+
+**新增 2 个守卫**：`test_summary_tags_do_not_hide_empty_last_section`（带标签的 W12 端到端结转）、`test_summary_literals_in_body_are_preserved`（正文同形字面量逐字保留、非空段不得被误判为空）。
+
+**独立复核**：第四轮 FAIL（全局替换误伤正文）→ 修复 → 第五轮 PASS（自写探针 BAD=0；把正则换回旧全局版后守卫全变红，证明修复真实生效而非探针恒真）。step 10 的 A/B/C/D 四组零回归。
+
+**最终门禁**：compression 子集 `163 passed, 1 skipped / 164 collected`；全量 backend `1199 passed, 1 skipped`；端到端 W8/W12 双结转；全案例探针 0 BAD；`ruff check` 对改动源码 clean；golden 三层逐字节一致；step 9 四项残留零命中（唯一 grep 命中是守卫测试自身的被禁字符串）；`_SUMMARY_TAG_RE` / `_EMPTY_DECLARATION_PHRASE_RE` 等废弃常量零残留。
 

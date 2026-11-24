@@ -24,6 +24,7 @@ from prismclaw.engine.compression._compact_prompt import (
 from prismclaw.engine.compression.hardening import (
     _section_is_substantive,
     carry_forward_missing_sections,
+    extract_sections,
 )
 from prismclaw.engine.compression.summary_engine import SummaryEngine
 from prismclaw.schema.config.config import CompactionConfig
@@ -251,3 +252,45 @@ def test_legacy_english_empty_phrases_still_detected():
     )
     for phrase in phrases:
         assert _section_is_substantive(f"7. 待办任务\n{phrase}") is False, phrase
+
+def test_summary_tags_do_not_hide_empty_last_section():
+    """结构性 <summary> 标签不得并入段落正文，否则最后一个空段被判实质。
+
+    生产链路：LLM 输出 <analysis> + <summary>，strip_analysis_block 只剥
+    analysis，compact_result.summary 仍带 <summary>/</summary>。若
+    extract_sections 不剔除标签，</summary> 会并进第 11 段，使「（无）」
+    被判为 substantive，W12 作废条目的结转被跳过。
+    """
+    prior = (
+        "<summary>\n"
+        "10. 用户陈述的事实与约束\n- 通知时间: 周六14:00\n\n"
+        "11. 已失效/作废的需求\n- 二甲双胍 (voided)\n"
+        "</summary>"
+    )
+    new = prior.replace("- 二甲双胍 (voided)", "（无）")
+    out = carry_forward_missing_sections(new, prior)
+    assert "二甲双胍" in out
+    assert "[从既有摘要结转" in out
+
+def test_summary_literals_in_body_are_preserved():
+    """只有最外层结构标签可剥离；正文里同形字面量必须逐字保留。
+
+    全局替换会删掉用户原话/标识符中的 <summary> 字面量（违反第 6/10 段
+    逐字保留契约），甚至把只剩一个字面量的非空段误判为空，从而错误注入
+    prior 的过时待办。
+    """
+    text = (
+        "<summary>\n"
+        "1. 主要请求与意图\n- 请使用 <summary> 与 </summary> 包裹输出\n\n"
+        "6. 用户关键原话\n- 用户说：输出必须用 <SUMMARY> 和 </ Summary > 包裹\n\n"
+        "7. 待办任务\n- <summary>\n"
+        "</summary>"
+    )
+    sections = extract_sections(text)
+    assert sorted(sections) == [1, 6, 7]
+    assert "<summary>" in sections[1]
+    assert "</summary>" in sections[1]
+    assert "<SUMMARY>" in sections[6]
+    assert "</ Summary >" in sections[6]
+    assert "<summary>" in sections[7]
+    assert _section_is_substantive(sections[7]) is True
