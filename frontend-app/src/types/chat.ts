@@ -48,6 +48,17 @@ export interface Message {
   inProgress?: boolean
 }
 
+export interface ReferenceSource {
+  /** 标题（无标题时退化为 URL） */
+  title: string
+  url?: string | null
+  /** 发布机构 / 数据库 / 期刊 / 厂商 */
+  publisher?: string | null
+  year?: string | null
+  /** guideline | paper | drug | database | news | web | book | report */
+  kind?: string
+}
+
 export interface MessageMetadata {
   durationMs?: number
   usage?: {
@@ -59,7 +70,7 @@ export interface MessageMetadata {
   feedback?: 'up' | 'down' | null
   /** AskUserQuestion 人机交互：后端经 tool.clarify_request 注入的待回答标识 */
   clarifyRequest?: { approvalId: string; toolCallId: string } | null
-  referenceSources?: string[]
+  referenceSources?: ReferenceSource[]
   outputFiles?: string[]
   interrupted?: boolean
   /** 回答结束后后端经 event:questions 下发的引导问题（至多 3 条，不持久化） */
@@ -185,7 +196,7 @@ export interface WSServerChatQueued {
 export interface WSServerReference {
   type: 'event:reference'
   conversation_id: string
-  data: { message_id?: string; sources: string[] }
+  data: { message_id?: string; sources: ReferenceSource[] }
 }
 
 export interface WSServerQuestions {

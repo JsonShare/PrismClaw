@@ -105,6 +105,7 @@ def test_frozen_section_order_and_stability():
         "delegation",
         "workspace",
         "data_safety",
+        "reference_sources",
         "catalogs",
     ]
     stabilities = [s.stability for s in sections]

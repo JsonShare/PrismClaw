@@ -51,6 +51,7 @@ from prismclaw.schema.session.types import (
     FEEDBACK_CUSTOM_TYPE,
     FILE_CHANGES_CUSTOM_TYPE,
     OUTPUT_FILES_CUSTOM_TYPE,
+    REFERENCE_SOURCES_CUSTOM_TYPE,
     CustomEntry,
     SessionTree,
     generate_entry_id,
@@ -405,6 +406,7 @@ def _build_conversation_messages(
     output_files_by_message: dict[str, list[str]] = {}
     file_changes_by_message: dict[str, list[dict[str, Any]]] = {}
     execution_timeline_by_message: dict[str, list[dict[str, Any]]] = {}
+    reference_sources_by_message: dict[str, list[dict[str, Any]]] = {}
     # 单条消息可能挂着多条 CustomEntry（反馈、交付物、时间线各自独立落库）；
     # 取挂靠条目的最大 seq，才保证"后到的交付物/时间线"不被增量同步跳过。
     meta_seq_by_message: dict[str, int] = {}
@@ -437,6 +439,12 @@ def _build_conversation_messages(
             nodes = data.get("nodes")
             if isinstance(mid, str) and isinstance(nodes, list):
                 execution_timeline_by_message[mid] = nodes
+        elif entry.custom_type == REFERENCE_SOURCES_CUSTOM_TYPE:
+            sources = data.get("sources")
+            if isinstance(mid, str) and isinstance(sources, list):
+                clean_sources = [s for s in sources if isinstance(s, dict)]
+                if clean_sources:
+                    reference_sources_by_message[mid] = clean_sources
         else:
             continue
         if isinstance(mid, str):
@@ -465,6 +473,8 @@ def _build_conversation_messages(
         item["file_changes"] = changes
         # 执行时间线终态 nodes 附着（与 output_files 同构），供前端历史回放（StepTimeline）。
         item["timeline"] = execution_timeline_by_message.get(mid, [])
+        # 结构化参考来源：与实时 event:reference 同字段名，刷新后来源面板不丢。
+        item["reference_sources"] = reference_sources_by_message.get(mid, [])
         item["seq"] = max(int(item.get("seq") or 0), meta_seq_by_message.get(mid, 0))
     return display
 

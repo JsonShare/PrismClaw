@@ -32,6 +32,7 @@ from prismclaw.app.web.chat._chat_helpers import (
 from prismclaw.app.web.chat.chat_adapters import (
     _await_questions_and_push,
     _generate_followup_questions_for_request,
+    _generate_reference_sources,
     _push_reference_event,
 )
 from prismclaw.app.web.chat.chat_mentions import extract_mentions
@@ -40,6 +41,7 @@ from prismclaw.app.web.chat.chat_office import (
     _extract_presented_paths,
     _filter_existing_output_files,
     _persist_file_changes_metadata,
+    _persist_reference_sources_metadata,
 )
 from prismclaw.app.web.chat.chat_protocol import (
     _get_session_queue,
@@ -82,6 +84,10 @@ from prismclaw.schema.protocol.protocol_types import ProtocolErrorCode
 from prismclaw.schema.session.ids import build_web_session_key
 from prismclaw.schema.session.output_files_metadata import persist_output_files_metadata
 from prismclaw.schema.shared.path_sanitizer import StreamingPathRedactor
+from prismclaw.schema.shared.reference_block import (
+    ReferenceBlockStreamFilter,
+    ReferenceSource,
+)
 from prismclaw.schema.shared.tool_markup import MarkupStreamFilter
 
 logger = logging.getLogger(__name__)
@@ -674,14 +680,23 @@ async def _run_chat(
     # 分片切成 `<|DSML|tool` + `_calls>` 之类，逐片清理无法识别。先由
     # MarkupStreamFilter 吞掉标记（含未闭合块），再交给路径脱敏处理正文。
     markup_filter = MarkupStreamFilter()
+    # 参考来源块（HTML 注释内的 JSON）不得进入正文：模型把来源清单写在
+    # 回答末尾，这里流式吞掉，供收尾时解析成结构化来源面板。
+    reference_filter = ReferenceBlockStreamFilter()
 
     def _feed_text(raw: str) -> str:
-        """分片入口：先剥工具标记，再做跨分片路径脱敏。"""
-        return path_redactor.feed(markup_filter.feed(raw))
+        """分片入口：先剥工具标记，再吞来源块，最后做跨分片路径脱敏。"""
+        return path_redactor.feed(reference_filter.feed(markup_filter.feed(raw)))
 
     def _drain_text() -> str:
-        """取回两级过滤器滞留的尾巴（标记未闭合块在此丢弃）。"""
-        return path_redactor.feed(markup_filter.flush()) + path_redactor.flush()
+        """取回各级过滤器滞留的尾巴（未闭合块在此丢弃）。"""
+        tail = markup_filter.flush()
+        tail = reference_filter.feed(tail) + reference_filter.flush()
+        return path_redactor.feed(tail) + path_redactor.flush()
+
+    def _take_reference_sources() -> list[ReferenceSource]:
+        """取走从流里吞掉的来源块（无块时为空，由调用方回退到 URL 抽取）。"""
+        return reference_filter.take_captured_sources()
 
     async def _emit_text(text: str) -> None:
         """推送并累积一段**已脱敏**正文。
@@ -1000,6 +1015,16 @@ async def _run_chat(
                 final_msg = full_transcript_parts[-1] if full_transcript_parts else ""
 
                 assistant_message_id = getattr(event, "assistant_message_id", None)
+                # 来源块已在 _drain_text 里流式吞掉（不会出现在正文）。没有标准块时
+                # 同步执行 URL 兜底，确保实时事件与落库使用同一份结果。
+                reference_sources = _take_reference_sources()
+                if not reference_sources:
+                    try:
+                        reference_sources = await _generate_reference_sources(
+                            deps, session_id=session_id, max_turns=5
+                        )
+                    except Exception:
+                        logger.warning("web.reference_sources.fallback_failed", exc_info=True)
                 # 先把执行过程与交付物落库，再发 done。done 的契约是"本轮已完全
                 # 落库"：客户端收到后立即 sync 取定稿正文与元数据；若先发 done，
                 # 这些晚落库的 CustomEntry seq 高于客户端水位，而前端进入 idle 后
@@ -1075,6 +1100,15 @@ async def _run_chat(
                             message_id=assistant_message_id,
                             changes=file_changes,
                         )
+                # 来源块与交付物同理：必须先落库再发 done，否则客户端在 done
+                # 后立即 sync 时取不到来源条目（其 seq 高于客户端水位）。
+                if reference_sources and assistant_message_id:
+                    await _persist_reference_sources_metadata(
+                        deps.session_store,
+                        session_id=session_id,
+                        message_id=assistant_message_id,
+                        sources=[s.model_dump() for s in reference_sources],
+                    )
                 await _emit_terminal_done(
                     final_message=final_msg,
                     usage=event.usage,
@@ -1084,10 +1118,9 @@ async def _run_chat(
                 _spawn_background(
                     _push_reference_event(
                         state,
-                        deps=deps,
                         conversation_id=msg.conversation_id,
-                        session_id=session_id,
                         assistant_message_id=assistant_message_id,
+                        sources=reference_sources,
                     ),
                     label="reference",
                     session_queue=session_queue,

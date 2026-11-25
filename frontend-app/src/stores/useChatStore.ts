@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { nextTimelineState } from '../lib/chat/timelineSync'
+import { normalizeReferenceSource } from '../lib/chat/referenceSources'
 import {
   fetchMessages,
   fetchRunningRun,
@@ -19,6 +20,7 @@ import type {
   Message,
   MessageMetadata,
   QuestionItem,
+  ReferenceSource,
   RunProjection,
   TimelineNode,
   WSServerMessage,
@@ -65,7 +67,7 @@ export interface ConvState {
   liveTimeline: TimelineNode[]
   liveOutputFiles: string[]
   /** 运行中收到的参考来源（event:reference 早于定稿时落到这里） */
-  liveReferenceSources: string[]
+  liveReferenceSources: ReferenceSource[]
   clarify: ClarifyRequest | null
   isStreaming: boolean
   queuedPosition: number | null
@@ -423,9 +425,9 @@ export const useChatStore = create<ChatStore>((set, get) => {
       // 参考来源在定稿前后都可能到达：有 id 走暂存/合并，无 id 仅在本轮运行中落 live，
       // 绝不回退到「最后一条 assistant」——那会把本轮资料挂到上一轮回答上。
       case 'event:reference': {
-        const sources = (frame.data.sources ?? []).filter(
-          (source) => typeof source === 'string' && source.trim().length > 0,
-        )
+        const sources = (frame.data.sources ?? [])
+          .map(normalizeReferenceSource)
+          .filter((source): source is ReferenceSource => source !== null)
         if (!sources.length) break
         if (frame.data.message_id) {
           mergeOrBufferMetadata(sessionId, frame.data.message_id, { referenceSources: sources })

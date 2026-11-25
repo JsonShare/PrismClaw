@@ -3,7 +3,8 @@ import { useSessionStore } from '../../stores/session'
 import { useChatStore } from '../../stores/chat'
 import { apiUrl } from '../../lib/system-adapter'
 import { isKnownTimelineNode } from '../../lib/chat/timelineSync'
-import type { ContentBlock, Conversation, FileChange, Message, TimelineNode, ToolCallInfo, WSState } from '../../types'
+import { normalizeReferenceSource } from '../../lib/chat/referenceSources'
+import type { ContentBlock, Conversation, FileChange, Message, ReferenceSource, TimelineNode, ToolCallInfo, WSState } from '../../types'
 
 interface SessionListResponse {
   id: string
@@ -29,6 +30,8 @@ export interface MessageHistoryEntry {
   output_files?: string[]
   file_changes?: FileChange[]
   timeline?: TimelineNode[]
+  /** 结构化参考来源（后端 CustomEntry: reference_sources 回放） */
+  reference_sources?: ReferenceSource[]
   /** 后端 _build_display_messages 回填的 metadata（durationMs 等） */
   metadata?: Record<string, unknown>
   tool_calls?: Array<{
@@ -156,6 +159,10 @@ export function mapHistoryEntries(entries: MessageHistoryEntry[]): Message[] {
           )
         : []
       if (fileChanges.length > 0) metadata = { ...(metadata ?? {}), fileChanges }
+      const referenceSources = (Array.isArray(e.reference_sources) ? e.reference_sources : [])
+        .map(normalizeReferenceSource)
+        .filter((s): s is ReferenceSource => s !== null)
+      if (referenceSources.length > 0) metadata = { ...(metadata ?? {}), referenceSources }
       // 执行过程持久化：后端把 timeline 终态落库（CustomEntry: execution_timeline），
       // GET messages / sync 时附着到 item.timeline。这里恢复到 message.timeline，
       // 供 MessageBubble 的 ExecutionTimeline 历史回放——刷新页面后仍能看到完整执行过程。
@@ -183,7 +190,12 @@ export function mapHistoryEntries(entries: MessageHistoryEntry[]): Message[] {
     // 仍产出了有价值的执行过程 timeline。若仅按 hasVisibleContent 过滤，这类
     // 消息会被整条丢弃，连带其 timeline 一起丢失——表现为「切换菜单再切回任务，
     // 执行过程不显示」。后端已在展示消息上附着 timeline，这里必须放行。
-    .filter((m) => hasVisibleContent(m.content) || (m.timeline != null && m.timeline.length > 0))
+    .filter(
+      (m) =>
+        hasVisibleContent(m.content) ||
+        (m.timeline != null && m.timeline.length > 0) ||
+        (m.metadata?.referenceSources?.length ?? 0) > 0,
+    )
 }
 
 // 会话在后端已不存在（多为 Redis TTL 过期、历史索引被惰性 GC 清除）：若该

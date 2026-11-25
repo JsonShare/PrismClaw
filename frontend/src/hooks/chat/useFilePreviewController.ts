@@ -9,7 +9,7 @@ import {
   fetchOfficeReviewDoc,
   markFileReviewed,
 } from '../../lib/file/fileReview'
-import type { FileChange } from '../../types'
+import type { FileChange, ReferenceSource } from '../../types'
 import type { JSONContent } from '@tiptap/core'
 
 /**
@@ -44,9 +44,13 @@ export interface FilePreviewController {
   reviewingChange: FileChange | null
   reviewHtml: JSONContent | null
   reviewHtmlError: string | null
+  /** 右侧栏当前展示的参考来源（非空时面板切成来源详情视图） */
+  activeSource: ReferenceSource | null
   openPreviewModal: (rawPath: string) => void
   openReviewInPanel: (change: FileChange) => void
   openFileFromOutputList: (path: string) => void
+  /** 右侧栏展示一条参考来源详情 */
+  openSourceInPanel: (source: ReferenceSource) => void
   downloadSingleFile: (path: string) => Promise<void>
   closePreviewModal: () => void
   reviewHandlers: ReviewHandlers
@@ -75,6 +79,7 @@ export function useFilePreviewController({
   const [reviewingChange, setReviewingChange] = useState<FileChange | null>(null)
   const [reviewHtml, setReviewHtml] = useState<JSONContent | null>(null)
   const [reviewHtmlError, setReviewHtmlError] = useState<string | null>(null)
+  const [activeSource, setActiveSource] = useState<ReferenceSource | null>(null)
   const reviewHtmlPathRef = useRef<string | null>(null)
   const previewBlobUrlRef = useRef<string | null>(null)
   // 快速切换文件时 cancel guard：旧 fetch 回来发现 path 已不是当前目标就丢弃。
@@ -161,6 +166,7 @@ export function useFilePreviewController({
     setReviewingChange(null)
     setReviewHtml(null)
     setReviewHtmlError(null)
+    setActiveSource(null)
   }, [activeConvId, revokePreviewBlobUrl])
 
   const closePreviewModal = useCallback(() => {
@@ -169,6 +175,7 @@ export function useFilePreviewController({
     setSelectedFile(null)
     setSelectedFileError(null)
     setReviewingChange(null)
+    setActiveSource(null)
   }, [revokePreviewBlobUrl])
 
   const loadFileBlobUrl = useCallback(
@@ -281,18 +288,33 @@ export function useFilePreviewController({
     return url || null
   }, [])
 
+  // 参考来源详情：右侧栏复用一个"来源详情"视图（标题/机构/年份 + 打开原文）。
+  // 外链网页无法安全嵌入 iframe（医疗站点普遍 X-Frame-Options/ CSP 拒绝），
+  // 因此这里给的是来源元信息 + 跳转入口，而不是网页预览。
+  const openSourceInPanel = useCallback((source: ReferenceSource) => {
+    setTaskFilesOpen(true)
+    setActiveSource(source)
+    setReviewingChange(null)
+    revokePreviewBlobUrl()
+    setPreviewBlob(null)
+    setSelectedFile(null)
+    setSelectedFileError(null)
+  }, [revokePreviewBlobUrl])
+
   const openPreviewModal = useCallback(
     (rawPath: string) => {
       setTaskFilesOpen(true)
       setReviewingChange(null)
+      setActiveSource(null)
       const extractedUrl = extractHttpUrl(rawPath)
       if (extractedUrl) {
-        setSelectedFile(extractedUrl)
-        setSelectedFileError(null)
-        // 先清旧 blob + 标记加载中 → 右侧面板切换文件时不会悬浮旧内容
+        // 纯 URL 也走来源详情视图：旧逻辑把它当文件塞进 selectedFile，
+        // 因为拿不到 blob，面板会永久停在「加载中…」。
+        setActiveSource({ title: extractedUrl, url: extractedUrl, kind: 'web' })
         revokePreviewBlobUrl()
         setPreviewBlob(null)
-        setSelectedFileLoading(true)
+        setSelectedFile(null)
+        setSelectedFileError(null)
         return
       }
 
@@ -338,6 +360,7 @@ export function useFilePreviewController({
         setPreviewBlob(null)
       }
       setReviewingChange(change)
+      setActiveSource(null)
       setTaskFilesOpen(true)
     },
     [revokePreviewBlobUrl, loadFileBlobUrl],
@@ -461,9 +484,11 @@ export function useFilePreviewController({
     reviewingChange,
     reviewHtml,
     reviewHtmlError,
+    activeSource,
     openPreviewModal,
     openReviewInPanel,
     openFileFromOutputList,
+    openSourceInPanel,
     downloadSingleFile,
     closePreviewModal,
     reviewHandlers,

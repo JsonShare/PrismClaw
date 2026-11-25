@@ -1,6 +1,7 @@
-import type { ContentBlock, Message, RunProjection, TimelineNode } from '../types'
+import type { ContentBlock, Message, ReferenceSource, RunProjection, TimelineNode } from '../types'
 import { markersToReadable } from '../lib/chat/markers'
 import { isKnownTimelineNode } from '../lib/chat/timelineSync'
+import { normalizeReferenceSource } from '../lib/chat/referenceSources'
 import { http } from './request'
 
 export interface SessionMeta {
@@ -34,6 +35,8 @@ interface RawMessage {
   feedback?: string | null
   output_files?: string[]
   timeline?: unknown[]
+  /** 后端落库的结构化参考来源（CustomEntry: reference_sources） */
+  reference_sources?: unknown[]
   metadata?: Message['metadata'] | null
   /** 后端标记：这一轮仍在产出，正文由 live 叠加层渲染，不得落进权威层 */
   in_progress?: boolean
@@ -112,6 +115,12 @@ function normalizeMessage(raw: RawMessage): Message {
   if (outputFiles.length) metadata = { ...(metadata ?? {}), outputFiles }
 
   const timeline: TimelineNode[] = Array.isArray(raw.timeline) ? raw.timeline.filter(isKnownTimelineNode) : []
+
+  // 刷新后来源面板不丢：后端把结构化来源挂在 reference_sources 上回放。
+  const referenceSources = (Array.isArray(raw.reference_sources) ? raw.reference_sources : [])
+    .map(normalizeReferenceSource)
+    .filter((s): s is ReferenceSource => s !== null)
+  if (referenceSources.length) metadata = { ...(metadata ?? {}), referenceSources }
 
   return {
     id: raw.id || `msg_${Math.random().toString(36).slice(2)}`,

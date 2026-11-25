@@ -17,6 +17,7 @@ from urllib.parse import quote
 from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.session import SessionTree
 from prismclaw.schema.shared.path_sanitizer import redact_server_paths
+from prismclaw.schema.shared.reference_block import strip_reference_block
 from prismclaw.schema.shared.tool_markup import strip_tool_markup
 
 # OOXML 段落锚点前缀：document_reader 在每段前加 ``[w14:paraId] `` 供 docx
@@ -100,13 +101,16 @@ _SYSTEM_REMINDER_BLOCK = re.compile(
 )
 
 
-def _sanitize_text(text: str) -> str:
+def _sanitize_text(text: str, *, strip_references: bool = False) -> str:
     out = text or ""
     out = _SYSTEM_REMINDER_BLOCK.sub("", out)
     out = _THINKING_BLOCK.sub("", out)
     # 端点缺 tool-call parser 时模型会把原生调用标记写进正文；历史落库的旧
     # 消息也可能带着它们，回放出口统一剔除（与实时链路 strip_noise 同源）。
     out = strip_tool_markup(out)
+    # 仅 assistant 的来源块是内部协议；用户可能原样讨论这段语法，不能删其正文。
+    if strip_references:
+        out = strip_reference_block(out)
     out = redact_server_paths(out)
     return out.strip()
 
@@ -163,15 +167,24 @@ def _try_recover_repr_blocks(raw: str) -> list[dict[str, Any]] | None:
     return blocks
 
 
-def _sanitize_content(content: object, *, workspace_id: str | None = None) -> object:
+def _sanitize_content(
+    content: object,
+    *,
+    workspace_id: str | None = None,
+    strip_references: bool = False,
+) -> object:
     if isinstance(content, str):
         # Backward-compat: old sessions may have Python repr strings from
         # the buggy str(list[ContentBlock]) in event_logger.message_entry().
         recovered = _try_recover_repr_blocks(content)
         if recovered is not None:
             # Recurse into the list branch below for normal sanitization
-            return _sanitize_content(recovered, workspace_id=workspace_id)
-        return _sanitize_text(content)
+            return _sanitize_content(
+                recovered,
+                workspace_id=workspace_id,
+                strip_references=strip_references,
+            )
+        return _sanitize_text(content, strip_references=strip_references)
     if not isinstance(content, list):
         return content
     cleaned: list[dict[str, Any]] = []
@@ -180,7 +193,7 @@ def _sanitize_content(content: object, *, workspace_id: str | None = None) -> ob
             if block.get("type") == "text" and isinstance(block.get("text"), str):
                 # 去 OOXML 段落锚点前缀 [w14:paraId]，该内部编辑句柄对用户无意义
                 text = _PARA_ID_PREFIX_RE.sub("", block["text"], count=1)
-                text = _sanitize_text(text)
+                text = _sanitize_text(text, strip_references=strip_references)
                 if text:
                     cleaned.append({**block, "text": text})
                 continue
@@ -199,7 +212,7 @@ def _sanitize_content(content: object, *, workspace_id: str | None = None) -> ob
             if isinstance(block_text, str):
                 # 去 OOXML 段落锚点前缀 [w14:paraId]（同 dict 分支）
                 sanitized = _PARA_ID_PREFIX_RE.sub("", block_text, count=1)
-                sanitized = _sanitize_text(sanitized)
+                sanitized = _sanitize_text(sanitized, strip_references=strip_references)
                 if sanitized:
                     cleaned.append({"type": "text", "text": sanitized})
             continue
@@ -468,7 +481,11 @@ def _build_display_messages(
             if _is_ask_result:
                 flush_assistant()
             continue
-        sanitized_content = _sanitize_content(entry.content, workspace_id=workspace_id)
+        sanitized_content = _sanitize_content(
+            entry.content,
+            workspace_id=workspace_id,
+            strip_references=entry.role == "assistant",
+        )
         has_visible_content = _message_has_visible_content(sanitized_content)
         # assistant entry 携带 tool_calls 时本身即为可见内容（工具调用需进
         # timeline），即便无文本也不应被跳过。partial 同理：异常终止 run 的

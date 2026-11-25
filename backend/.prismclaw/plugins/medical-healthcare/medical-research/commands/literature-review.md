@@ -76,9 +76,10 @@ PICO: [Population] + [Intervention] vs [Comparison] → [Outcome]
 
 ## 结论与启示
 [研究结论和临床/政策启示]
-
-## 参考文献
-[完整引用列表]
 ```
+
+> 参考文献不再写在正文里：按系统提示的 `<reference_sources>` 约定，在回答末尾追加
+> `<!--references [{"title": "...", "publisher": "PubMed", "year": "2024", "url": "https://pubmed.ncbi.nlm.nih.gov/...", "kind": "paper"}] -->`
+> 来源块，界面会渲染成可点击的「参考来源」卡片。
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考框架，不构成医疗建议或诊断。具体医疗问题，请咨询持有效执业证的医师。

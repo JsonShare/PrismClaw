@@ -1,7 +1,7 @@
 import { ErrorBoundary } from '../../../components/ui/ErrorBoundary'
 import { ChatHeader } from '../../../components/chat/ChatHeader'
 import ChatArea from '../../../components/chat/ChatArea'
-import type { FileChange, Workspace } from '../../../types'
+import type { FileChange, ReferenceSource, Workspace } from '../../../types'
 import type { ConversationController } from '../../../hooks/chat/useConversationController'
 
 interface ChatSectionProps {
@@ -23,6 +23,7 @@ interface ChatSectionProps {
   onRemoveServerWorkspace: (id: string) => Promise<void>
   isWorkspacesLoading: boolean
   onOpenReviewInPanel?: (change: FileChange) => void
+  onOpenSource?: (source: ReferenceSource) => void
   conversationId: string
   // 会话级状态/动作不再逐层透传：ChatArea 自行订阅 store，交互统一走 controller。
   controller: ConversationController
@@ -57,6 +58,7 @@ export function ChatSection(props: ChatSectionProps) {
           onRemoveServerWorkspace={props.onRemoveServerWorkspace}
           isWorkspacesLoading={props.isWorkspacesLoading}
           onOpenReviewInPanel={props.onOpenReviewInPanel}
+          onOpenSource={props.onOpenSource}
           conversationId={props.conversationId}
           controller={props.controller}
           prefillInput={props.prefillInput}

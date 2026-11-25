@@ -64,6 +64,18 @@ export interface ToolCallInfo {
   endedAt?: number
 }
 
+export interface ReferenceSource {
+  /** 标题（无标题时退化为 URL） */
+  title: string
+  url?: string | null
+  /** 发布机构 / 数据库 / 期刊 / 药品厂商 */
+  publisher?: string | null
+  /** 年份，字符串以兼容 "2024" 与 "2024-03" */
+  year?: string | null
+  /** guideline | paper | drug | database | news | web | book | report */
+  kind?: string
+}
+
 export interface MessageMetadata {
   durationMs?: number
   usage?: {
@@ -76,7 +88,7 @@ export interface MessageMetadata {
   followupQuestions?: string[]
   /** AskUserQuestion 人机交互：后端经 tool.clarify_request 注入的待回答标识 */
   clarifyRequest?: { approvalId: string; toolCallId: string } | null
-  referenceSources?: string[]
+  referenceSources?: ReferenceSource[]
   outputFiles?: string[]
   /** 后端经 event:file_changes 注入的文件变更审阅数据（来自 ToolResult.metadata["file_change"]） */
   fileChanges?: FileChange[]
@@ -210,7 +222,7 @@ export interface WSServerChatQueued {
 export interface WSServerReference {
   type: 'event:reference'
   conversation_id: string
-  data: { message_id?: string; sources: string[] }
+  data: { message_id?: string; sources: ReferenceSource[] }
 }
 
 export interface WSServerQuestions {

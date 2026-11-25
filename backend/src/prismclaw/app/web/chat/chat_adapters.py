@@ -16,6 +16,10 @@ from prismclaw.schema.services.chat_assistant import (
     extract_reference_sources,
     generate_followup_questions,
 )
+from prismclaw.schema.shared.reference_block import (
+    ReferenceSource,
+    normalize_reference_sources,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,26 +97,28 @@ async def _generate_reference_sources(
     *,
     session_id: str,
     max_turns: int = 5,
-) -> list[str]:
-    return await extract_reference_sources(
+) -> list[ReferenceSource]:
+    """兜底路径：模型没输出结构化来源块时，从转录里捞 URL。"""
+    urls = await extract_reference_sources(
         deps.session_store,
         session_id=session_id,
         max_turns=max_turns,
     )
+    return normalize_reference_sources(urls)
 
 
 async def _push_reference_event(
     state: ConnectionState,
     *,
-    deps: AgentDeps,
     conversation_id: str,
-    session_id: str,
     assistant_message_id: str | None,
+    sources: list[ReferenceSource] | None = None,
 ) -> None:
-    sources = await _generate_reference_sources(deps, session_id=session_id, max_turns=5)
-    if not sources:
+    """推送调用方已定稿并落库的同一份来源，不在后台重新抽取。"""
+    resolved = sources or []
+    if not resolved:
         return
-    data: dict[str, Any] = {"sources": sources}
+    data: dict[str, Any] = {"sources": [s.model_dump() for s in resolved]}
     if assistant_message_id:
         data["message_id"] = assistant_message_id
     try:

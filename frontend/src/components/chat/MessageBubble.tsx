@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronRight, Clock, CornerDownRight, Copy, Download, FileText, Loader2, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
-import type { ContentBlock, FileBlock, FileChange, ImageBlock, Message } from '../../types'
+import type { ContentBlock, FileBlock, FileChange, ImageBlock, Message, ReferenceSource } from '../../types'
 import MarkdownRenderer, { RichMarkdown } from './MarkdownRenderer'
+import ReferenceSources from './ReferenceSources'
 import { renderMarkdownToHtml } from '../../lib/render/markdown-export'
 import SystemMessage from './SystemMessage'
 import ErrorBubble from './ErrorBubble'
@@ -47,6 +48,8 @@ interface Props {
   token?: string
   conversationId?: string
   onOpenReviewInPanel?: (change: FileChange) => void
+  /** 点击参考来源条目：在右侧栏打开来源详情（不新开标签页） */
+  onOpenSource?: (source: ReferenceSource) => void
 }
 
 function formatTimestamp(ts: number): string {
@@ -764,6 +767,7 @@ export default function MessageBubble({
   token,
   conversationId: _conversationId,
   onOpenReviewInPanel: _onOpenReviewInPanel,
+  onOpenSource,
 }: Props) {
   if (message.role === 'system') {
     return <SystemMessage message={message} />
@@ -783,6 +787,7 @@ export default function MessageBubble({
   const uploaded = useMemo(() => (isUser ? extractLegacyUploadedAttachmentText(text) : { text, attachments: [] as UploadedAttachmentDisplay[] }), [isUser, text])
   const displayText = isUser ? uploaded.text : text
   const uploadAttachments = isUser ? uploaded.attachments : []
+  const referenceSources = message.metadata?.referenceSources ?? []
 
   const fileAttachments = useMemo(() => mergeDisplayedFileAttachments(files, uploadAttachments), [files, uploadAttachments])
   const renderedAttachments = useMemo<Array<UploadedAttachmentDisplay | (typeof attachments)[number]>>(() => {
@@ -1073,6 +1078,12 @@ export default function MessageBubble({
                     <div className="break-words px-1">
                       <RichMarkdown key={`msg-${message.id}`} content={displayText} streaming={isStreaming} />
                     </div>
+                  ) : null}
+
+                  {/* 参考来源：正文只讲结论，来源统一走这个折叠面板（不再在正文
+                      末尾罗列链接）。点击条目在右侧栏打开来源详情。 */}
+                  {!isStreaming && referenceSources.length > 0 ? (
+                    <ReferenceSources sources={referenceSources} onOpenSource={onOpenSource} />
                   ) : null}
 
                 {!isStreaming && (renderedAttachments.length > 0 || displayOutputFiles.length > 0) ? (

@@ -6,6 +6,7 @@ from typing import Any
 
 from prismclaw.schema.session import (
     FILE_CHANGES_CUSTOM_TYPE,
+    REFERENCE_SOURCES_CUSTOM_TYPE,
     CustomEntry,
     generate_entry_id,
     now_iso,
@@ -138,3 +139,60 @@ async def _persist_file_changes_metadata(
         await session_store.commit_events([event])
     except Exception:
         logger.warning("web.file_changes.persist.append_failed", exc_info=True)
+
+
+async def _persist_reference_sources_metadata(
+    session_store: SessionStore | None,
+    *,
+    session_id: str,
+    message_id: str,
+    sources: list[dict[str, Any]],
+) -> None:
+    """把结构化参考来源挂到该条 assistant 消息上，供刷新后回放。"""
+    normalized = [s for s in sources if isinstance(s, dict)]
+    if not message_id or not normalized:
+        return
+    if session_store is None:
+        return
+    try:
+        tree = await session_store.load(session_id)
+    except Exception:
+        logger.warning("web.reference_sources.persist.load_failed", exc_info=True)
+        return
+    if tree is None:
+        return
+    if message_id not in tree.entries:
+        return
+    # 同一轮重复收尾时不追加第二条：先看已有挂靠条目能否直接覆盖。
+    for existing in tree.entries.values():
+        if not isinstance(existing, CustomEntry):
+            continue
+        if existing.custom_type != REFERENCE_SOURCES_CUSTOM_TYPE:
+            continue
+        if (existing.data or {}).get("message_id") != message_id:
+            continue
+        updated = CustomEntry(
+            id=existing.id,
+            parent_id=existing.parent_id,
+            timestamp=now_iso(),
+            custom_type=REFERENCE_SOURCES_CUSTOM_TYPE,
+            data={"message_id": message_id, "sources": normalized},
+        )
+        try:
+            event = _event_logger.entry_updated(session_id, updated, leaf_id=tree.leaf_id)
+            await session_store.commit_events([event])
+        except Exception:
+            logger.warning("web.reference_sources.persist.append_failed", exc_info=True)
+        return
+    entry = CustomEntry(
+        id=generate_entry_id(tree.all_entry_ids()),
+        parent_id=tree.leaf_id,
+        timestamp=now_iso(),
+        custom_type=REFERENCE_SOURCES_CUSTOM_TYPE,
+        data={"message_id": message_id, "sources": normalized},
+    )
+    try:
+        event = _event_logger.entry_updated(session_id, entry, leaf_id=entry.id)
+        await session_store.commit_events([event])
+    except Exception:
+        logger.warning("web.reference_sources.persist.append_failed", exc_info=True)

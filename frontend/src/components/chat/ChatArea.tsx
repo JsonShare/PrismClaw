@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDown, Loader2 } from 'lucide-react'
-import type { AttachmentBlock, FileChange, Message, Workspace } from '../../types'
+import type { AttachmentBlock, FileChange, Message, ReferenceSource, Workspace } from '../../types'
 import MessageBubble, { extractQuestionPlainText } from './MessageBubble'
 import EmptyStateSuggestions from './EmptyStateSuggestions'
 import ChatInputBox, { type ChatInputBoxProps } from './ChatInputBox'
@@ -63,6 +63,8 @@ interface Props {
   onRemoveServerWorkspace?: (id: string) => Promise<void>
   isWorkspacesLoading?: boolean
   onOpenReviewInPanel?: (change: FileChange) => void
+  /** 点击参考来源条目：在右侧栏打开来源详情 */
+  onOpenSource?: (source: ReferenceSource) => void
 }
 
 const STREAMING_ID = '__streaming__'
@@ -89,6 +91,7 @@ export default function ChatArea({
   onRemoveServerWorkspace,
   isWorkspacesLoading = false,
   onOpenReviewInPanel,
+  onOpenSource,
 }: Props) {
   const { toast } = useToast()
   const [input, setInput] = useState('')
@@ -1028,6 +1031,7 @@ export default function ChatArea({
                       token={token}
                       conversationId={conversationId}
                       onOpenReviewInPanel={onOpenReviewInPanel}
+                      onOpenSource={onOpenSource}
                     />
                   </div>
                 )

@@ -4,11 +4,13 @@ import { useChatStore } from '../../stores/chat'
 import { useSessionStore } from '../../stores/session'
 import { useTaskStore } from '../../stores/tasks'
 import { apiUrl } from '../../lib/system-adapter'
+import { normalizeReferenceSource } from '../../lib/chat/referenceSources'
 import { mapHistoryEntries } from './useSessionLoader'
 import type { MessageHistoryEntry } from './useSessionLoader'
 import type {
   Message,
   MessageMetadata,
+  ReferenceSource,
   RunProjection,
   WSClientMessage,
   WSDomainTaskUpdated,
@@ -344,7 +346,14 @@ export function useChatSocket(
       }
 
       case 'event:reference': {
-        const sources = extractMetaList<string>(msg.data, 'sources', (s) => typeof s === 'string' && s.trim().length > 0)
+        // 后端下发结构化来源（标题/机构/年份/类型）。
+        const sources = extractMetaList<unknown>(
+          msg.data,
+          'sources',
+          (s) => !!s && typeof s === 'object',
+        )
+          .map(normalizeReferenceSource)
+          .filter((s): s is ReferenceSource => s !== null)
         const targetId = convId ? resolveTargetMessageId(msg.data) : null
         if (targetId && sources.length > 0) {
           mergeOrBufferMetadata(convId!, targetId, { referenceSources: sources })

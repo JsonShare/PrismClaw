@@ -100,9 +100,9 @@ category: 临床诊疗
 - [建议2：如需要干预的异常项目]
 - [建议3：如与治疗方案的关联调整]
 
-### 信息来源
-- lab_results_analysis MCP 工具分析结果
-- 患者历史化验数据
+> 来源不写入正文：按系统提示 `<reference_sources>` 约定，在回答末尾追加
+> `<!--references [{"title": "lab_results_analysis 分析结果", "kind": "database"}, {"title": "患者历史化验数据", "kind": "database"}] -->`
+> 来源块，界面会渲染成「参考来源」卡片。
 ```
 
 ## 安全声明

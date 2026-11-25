@@ -58,6 +58,7 @@ FEEDBACK_CUSTOM_TYPE = "feedback"
 OUTPUT_FILES_CUSTOM_TYPE = "output_files"
 FILE_CHANGES_CUSTOM_TYPE = "file_changes"
 EXECUTION_TIMELINE_CUSTOM_TYPE = "execution_timeline"
+REFERENCE_SOURCES_CUSTOM_TYPE = "reference_sources"
 DECISION_LEDGER_EVENT_CUSTOM_TYPE = "decision_ledger_event"
 TRANSIENT_RETRY_NOTICE_CUSTOM_TYPE = "transient_retry_notice"
 RUN_PROJECTION_CUSTOM_TYPE = "run_projection"
@@ -150,6 +151,11 @@ class _CustomPayloadFileChanges(BaseModel):
 
 class _CustomPayloadExecutionTimeline(BaseModel):
     custom_type: Literal["execution_timeline"]
+    data: dict[str, Any]
+
+
+class _CustomPayloadReferenceSources(BaseModel):
+    custom_type: Literal["reference_sources"]
     data: dict[str, Any]
 
 
@@ -271,6 +277,7 @@ CustomPayload = Annotated[
     | _CustomPayloadOutputFiles
     | _CustomPayloadFileChanges
     | _CustomPayloadExecutionTimeline
+    | _CustomPayloadReferenceSources
     | _CustomPayloadResultCompactionReference
     | _CustomPayloadDecisionLedgerEvent
     | _CustomPayloadTransientRetryNotice
@@ -301,6 +308,7 @@ CustomType = Literal[
     "output_files",
     "file_changes",
     "execution_timeline",
+    "reference_sources",
     "context_compaction_reference",
     "result_compaction_reference",
     "decision_ledger_event",

@@ -80,9 +80,9 @@ category: 临床诊疗
 |---|---|---|---|
 | [日期] | [级别] | [原因] | [状态] |
 
-### 信息来源
-- FDA 药品召回数据库
-- drug_recall_check MCP 工具查询结果
+> 来源不写入正文：按系统提示 `<reference_sources>` 约定，在回答末尾追加
+> `<!--references [{"title": "FDA 药品召回数据库", "publisher": "FDA", "kind": "database", "url": "https://www.accessdata.fda.gov/scripts/enforcement/enforce_rpt-Product-Tabs.cfm"}] -->`
+> 来源块，界面会渲染成「参考来源」卡片。
 ```
 
 ## 安全声明

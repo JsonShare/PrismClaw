@@ -19,6 +19,10 @@ from prismclaw.infra.settings import WebSettings
 from prismclaw.schema.agent.types import RunRequest
 from prismclaw.schema.content.streaming import Done, ReasoningChunk, TextChunk
 from prismclaw.schema.services.chat_service import ChatService
+from prismclaw.schema.shared.reference_block import (
+    ReferenceBlockStreamFilter,
+    strip_reference_block,
+)
 from prismclaw.schema.shared.tool_markup import MarkupStreamFilter
 
 if TYPE_CHECKING:
@@ -147,12 +151,13 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str) -> AsyncIte
     # 流式通道必须用有状态过滤器：标记可能被 token 切分跨两个 chunk，
     # 逐片 strip_tool_markup 无法识别半截标记，会把残留漏给调用方。
     markup_filter = MarkupStreamFilter()
+    reference_filter = ReferenceBlockStreamFilter()
 
     async for event in _chat_service.start_conversation(
         request, tool_workspace_path=tool_workspace
     ):
         if isinstance(event, TextChunk):
-            text = markup_filter.feed(event.text or "")
+            text = reference_filter.feed(markup_filter.feed(event.text or ""))
             if not text:
                 continue
             chunk = {
@@ -191,7 +196,7 @@ async def _stream_sse(request: RunRequest, model: str, user_id: str) -> AsyncIte
         elif isinstance(event, Done):
             # 吐回过滤器滞留的尾巴：不推等于正文缺结尾（正文可能以路径字符
             # 或半截标记结束，被 holdback 扣住了）。
-            tail = markup_filter.flush()
+            tail = reference_filter.feed(markup_filter.flush()) + reference_filter.flush()
             if tail:
                 tail_chunk = {
                     "id": completion_id,
@@ -246,7 +251,7 @@ async def _complete_response(request: RunRequest, model: str, user_id: str) -> d
         "role": "assistant",
         # 与 Web 实时链路同源清洗：端点缺 tool-call parser 时模型会把原生工具
         # 调用标记（<|DSML|calls>…）当正文吐出来，这条通道也必须剥掉。
-        "content": strip_noise("".join(collected_text)),
+        "content": strip_reference_block(strip_noise("".join(collected_text))),
     }
     # Reasoning passthrough (non-stream path). Only attached when present so
     # non-reasoning models get the standard shape unchanged.

@@ -86,9 +86,9 @@ category: 临床诊疗
 - [建议2：如需要皮试]
 - [建议3：如给药前预防措施]
 
-### 信息来源
-- allergy_check MCP 工具检测结果
-- 药物交叉反应数据库
+> 来源不写入正文：按系统提示 `<reference_sources>` 约定，在回答末尾追加
+> `<!--references [{"title": "allergy_check 检测结果", "kind": "database"}, {"title": "药物交叉反应数据库", "kind": "database"}] -->`
+> 来源块，界面会渲染成「参考来源」卡片。
 ```
 
 ## 安全声明

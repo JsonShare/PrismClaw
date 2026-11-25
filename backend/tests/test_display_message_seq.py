@@ -92,3 +92,31 @@ def test_group_seq_resets_between_turns() -> None:
     )
     messages = _build_display_messages(tree)
     assert [m["seq"] for m in messages] == [1, 5, 8, 9]
+
+
+def test_only_assistant_reference_block_is_stripped() -> None:
+    user_text = '用户示例\n<!--references\n[{"title":"用户字面值"}]\n-->\n后续正文'
+    tree = _tree(
+        [
+            _user("u1", 1, user_text),
+            _assistant(
+                "a1",
+                2,
+                '答案\n<!--references\n[{"title":"内部来源","url":"https://example.com"}]\n-->',
+            ),
+        ]
+    )
+
+    messages = _build_display_messages(tree)
+
+    assert messages[0]["content"] == user_text
+    assert messages[1]["content"] == "答案"
+
+
+def test_user_unclosed_reference_block_does_not_swallow_tail() -> None:
+    user_text = "请原样保留 <!--references\n这只是用户输入的后续正文"
+    tree = _tree([_user("u1", 1, user_text)])
+
+    messages = _build_display_messages(tree)
+
+    assert messages[0]["content"] == user_text

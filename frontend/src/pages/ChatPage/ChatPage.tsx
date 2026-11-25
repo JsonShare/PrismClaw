@@ -22,13 +22,14 @@ import { purgeConversation } from '../../stores'
 import { fuzzyFilter } from '../../lib/fuzzy'
 import { skipCodeToMessage, type SkippedFile } from '../../lib/chat/attachments'
 import { normalizeWorkspacePath } from '../../lib/chat/paths'
-import { apiUrl } from '../../lib/system-adapter'
+import { normalizeReferenceUrl } from '../../lib/chat/referenceSources'
+import { apiUrl, openExternal } from '../../lib/system-adapter'
 import { SessionSearchModal } from '../../components/modals/SessionSearchModal'
 import { DOMAIN_NAV_MAP } from '../../domains/_lazy_map.generated'
 import { WorkspaceSelectorModal } from '../../components/modals/WorkspaceSelectorModal'
 import { SettingsPage } from './sections/SettingsPage'
 
-import type { Conversation } from '../../types'
+import type { Conversation, ReferenceSource } from '../../types'
 
 import { ChatSidebar } from './ChatSidebar'
 import { ChatRightPanel } from './ChatRightPanel'
@@ -758,6 +759,14 @@ export default function ChatPage() {
   const filePreview = useFilePreviewController({ token, backendWorkspaceId })
   // 解构给下方窗口缩放自折叠 effect 用（读取/回写面板开关）。
   const { taskFilesOpen, setTaskFilesOpen } = filePreview
+  const handleOpenSource = useCallback((source: ReferenceSource) => {
+    if (isXl) {
+      filePreview.openSourceInPanel(source)
+      return
+    }
+    const url = normalizeReferenceUrl(source.url)
+    if (url) openExternal(url)
+  }, [filePreview.openSourceInPanel, isXl])
 
   /* ---- 预览栏可拖拽宽度：列表态 / 预览态各自记忆一份 ---- */
   const [rightListWidth, setRightListWidth] = useState<number>(() =>
@@ -1158,6 +1167,7 @@ export default function ChatPage() {
               onRemoveServerWorkspace={handleRemoveServerWorkspace}
               isWorkspacesLoading={workspacesLoading}
               onOpenReviewInPanel={isXl ? filePreview.openReviewInPanel : undefined}
+              onOpenSource={handleOpenSource}
               conversationId={activeConvId ?? ''}
               controller={controller}
               prefillInput={pendingInputPrefill ?? navigationPrefill}
@@ -1182,6 +1192,7 @@ export default function ChatPage() {
               selectedFile={filePreview.selectedFile}
               previewBlob={filePreview.previewBlob}
               reviewingChange={filePreview.reviewingChange}
+              activeSource={filePreview.activeSource}
               reviewHtml={filePreview.reviewHtml}
               reviewHtmlError={filePreview.reviewHtmlError}
               selectedFileError={filePreview.selectedFileError}

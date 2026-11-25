@@ -60,9 +60,9 @@ category: 临床诊疗
 - [需要警惕的预警征象]
 - [何时需要立即复诊]
 
-### 信息来源
-- symptom_lookup MCP 工具匹配结果
-- ICD-10 编码数据库
+> 来源不写入正文：按系统提示 `<reference_sources>` 约定，在回答末尾追加
+> `<!--references [{"title": "symptom_lookup 匹配结果", "kind": "database"}, ...] -->`
+> 来源块（title 填所用工具/数据库名称，有 URL 时补 url），界面会渲染成「参考来源」卡片。
 ```
 
 ## 安全声明

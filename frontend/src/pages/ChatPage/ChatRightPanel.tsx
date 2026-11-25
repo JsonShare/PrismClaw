@@ -11,7 +11,8 @@ import {
 import { FilePreviewWithReview } from '../../components/file/FilePreviewWithReview'
 import FileIcon from '../../components/file/FileIcon'
 import { SubagentTree } from '../../components/chat/SubagentTree'
-import type { FileChange, SubagentPanelItem, ToolCallInfo } from '../../types'
+import { SourceDetailPanel } from './SourceDetailPanel'
+import type { FileChange, ReferenceSource, SubagentPanelItem, ToolCallInfo } from '../../types'
 import type { JSONContent } from '@tiptap/core'
 import iconOpen from '../../images/other_icon/open.png'
 
@@ -39,6 +40,8 @@ interface ChatRightPanelProps {
   selectedFile: string | null
   previewBlob: Blob | null
   reviewingChange: FileChange | null
+  /** 参考来源详情（非空时面板显示来源视图，优先于空文件态） */
+  activeSource: ReferenceSource | null
   reviewHtml: JSONContent | null
   reviewHtmlError: string | null
   selectedFileError: string | null
@@ -87,7 +90,9 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
     >
       {props.taskFilesOpen ? (
         <>
-          {props.selectedFile ? (
+          {props.activeSource ? (
+            <SourceDetailPanel source={props.activeSource} onClose={props.closePreviewModal} />
+          ) : props.selectedFile ? (
             props.previewBlob && props.reviewingChange ? (
               <FilePreviewWithReview
                 key={props.selectedFile}
