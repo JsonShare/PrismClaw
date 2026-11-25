@@ -144,20 +144,17 @@ async def evaluate_no_tool_governance(
     2. 空答复 / 纯推理已超上限 → ``no_response_exhausted`` 硬边界终态；
     3. 其余交内核：无契约 → ``complete_open``；有契约 → 准则逐条评估。
     """
-    from prismclaw.engine.execution.checkpoint import ResumeBoundary
     from prismclaw.engine.execution.dispatch.response_handling import (
         append_assistant_response,
         complete_no_tool_turn,
         decide_no_tool_turn,
     )
     from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
-    from prismclaw.engine.execution.loop.terminal import persist_snapshot_fn
     from prismclaw.engine.execution.loop.tree_writer import _append
 
     deps = rt.deps
     request = rt.request
     tree = rt.tree
-    snapshot = rt.snapshot
     task_runtime = rt.task_runtime
     evidence_ledger = rt.evidence_ledger  # 引用语义：append 直接修改 rt 上的同一个 list
 
@@ -168,15 +165,27 @@ async def evaluate_no_tool_governance(
         response_policy=response_policy,
     )
 
-    # ── 1. 空答复 / 纯推理 / 文本化工具调用的响应质量重试（不属于完成判定） ──
-    if decision_no_tool.action == "retry":
-        state_machine.record_retry(decision_no_tool.classification)
+    async def _persist_turn_response() -> None:
+        """本回合模型答复落树。
+
+        每个完成的 LLM 回合都必须留下 assistant 消息：它是用户所见正文的
+        唯一持久来源。受理分支由 ``complete_no_tool_turn`` 负责落树，其余
+        分支（重试 / 不受理 / 终止）在此统一落，避免正文只存在于前端流式状态。
+        """
+        text = strip_noise(response.text or "")
+        if not text:
+            return
         await append_assistant_response(
             deps=deps,
             tree=tree,
             append_entry=_append,
-            text=strip_noise(response.text or ""),
+            text=text,
         )
+
+    # ── 1. 空答复 / 纯推理 / 文本化工具调用的响应质量重试（不属于完成判定） ──
+    if decision_no_tool.action == "retry":
+        state_machine.record_retry(decision_no_tool.classification)
+        await _persist_turn_response()
         drive_prompt = _build_goal_drive_prompt(
             contract=kernel.state.contract,
             headline=_EMPTY_RESPONSE_HEADLINES.get(
@@ -235,6 +244,7 @@ async def evaluate_no_tool_governance(
         logger.info("gov_persist_timing phase=review total=%.0fms", _review_persist_ms)
 
     if decision.verdict == "TERMINATE":
+        await _persist_turn_response()
         if decision.code == TerminalReason.BLOCKED_DECLARED:
             code = block_intent.code if block_intent is not None else "blocked"
             message = (
@@ -257,14 +267,9 @@ async def evaluate_no_tool_governance(
 
     # ── 5. 不受理：驱动继续（携带缺口） ──
     if decision.verdict == "REPAIR":
+        await _persist_turn_response()
         gaps = tuple(gap.detail or gap.code for gap in decision.gaps)
         if decision.code == "blocked_rejected":
-            await append_assistant_response(
-                deps=deps,
-                tree=tree,
-                append_entry=_append,
-                text=strip_noise(response.text or ""),
-            )
             headline = "阻塞申报暂不受理：尚未执行任何尝试。"
             if block_intent is not None:
                 gaps = (*gaps, f"申报理由：{block_intent.code} — {block_intent.message}")
@@ -286,32 +291,18 @@ async def evaluate_no_tool_governance(
             ),
         )
 
-    # ── 6. 受理完成：终态 mutation + done 事件 ──
-    # 终态标签（"done" / "max_tokens"）由调用方统一赋值，此处不写。
-    _gov_p_t0 = time.monotonic()
-    terminal_mutation = _build_task_terminal_mutation(
-        task_runtime,
-        actor_kind="loop",
-        evidence_ids=list(review_evidence_ids),
-    )
-    task_runtime, completion_applied, completion_reason = await _evaluate_and_apply_task_mutation(
-        deps=deps,
-        tree=tree,
-        snapshot=snapshot,
-        task_runtime=task_runtime,
-        mutation=terminal_mutation,
-        evidence_records=evidence_ledger,
-    )
-    _mutation_ms = (time.monotonic() - _gov_p_t0) * 1000
-    if not completion_applied:
-        raise RuntimeError(f"completion mutation rejected after review: {completion_reason}")
-    rt.task_runtime = task_runtime
-    run_state.current_phase = "finalize_turn"
-    _set_resume_boundary(snapshot, boundary=ResumeBoundary.AFTER_TURN_FINALIZE)
-    _gov_p_t0 = time.monotonic()
-    await persist_snapshot_fn(rt)
-    _snapshot_ms = (time.monotonic() - _gov_p_t0) * 1000
-    _gov_p_t0 = time.monotonic()
+    # ── 6. 受理完成：公共治理层收尾（终态 mutation + snapshot + memory）──
+    review_evidence_ids: list[str] = []
+    if review is not None:
+        for outcome in review.outcomes:
+            if outcome.status == "met":
+                review_evidence_ids.extend(outcome.evidence_ids)
+        review_evidence_ids = list(dict.fromkeys(review_evidence_ids))
+    await finalize_completion_core(rt, evidence_ids=review_evidence_ids)
+
+    # preflight + not tool_calls 路径专用：落最终 assistant message + Done。
+    # post 路径内核 COMPLETE 时 assistant 已由 execute_tools 落树，Done 由
+    # continue_.py 直接构造（不再调 complete_no_tool_turn 避免重复落树）。
     done_event = await complete_no_tool_turn(
         deps=deps,
         request=request,
@@ -329,28 +320,69 @@ async def evaluate_no_tool_governance(
             "cache_read": total_cache_read_tokens,
         },
     )
-    _complete_ms = (time.monotonic() - _gov_p_t0) * 1000
-    _gov_p_t0 = time.monotonic()
-    await _persist_session_memory_snapshot(
-        deps,
-        tree,
-        session_id=request.session_id,
-    )
-    _mem_snap_ms = (time.monotonic() - _gov_p_t0) * 1000
-    _gov_total_ms = _review_persist_ms + _mutation_ms + _snapshot_ms + _complete_ms + _mem_snap_ms
-    logger.info(
-        "gov_persist_timing phase=acceptance review=%.0fms mutation=%.0fms "
-        "snapshot=%.0fms complete=%.0fms mem_snapshot=%.0fms total=%.0fms",
-        _review_persist_ms,
-        _mutation_ms,
-        _snapshot_ms,
-        _complete_ms,
-        _mem_snap_ms,
-        _gov_total_ms,
-    )
     return NoToolGovernanceResult(
         decision=decision,
         done_event=done_event,
+    )
+
+
+# ---------------------------------------------------------------------------
+# finalize_completion_core — 公共治理层收尾
+# ---------------------------------------------------------------------------
+
+
+async def finalize_completion_core(
+    rt: LoopRuntime,
+    *,
+    evidence_ids: list[str],
+) -> None:
+    """内核裁决 COMPLETE 后的公共治理层收尾。
+
+    被两条路径调用：
+    - preflight + not tool_calls → evaluate_no_tool_governance 内部
+    - post + contract satisfied → continue_.py 直接调
+
+    统一做终态 mutation（task_runtime → complete）+ snapshot 落库 +
+    resume boundary 写入 + memory snapshot。两条路径的差异（是否需要
+    complete_no_tool_turn 落 assistant message + Done event）由调用方
+    各自处理——post 路径 execute_tools 已落 assistant，不再重复。
+    """
+    from prismclaw.engine.execution.checkpoint import ResumeBoundary
+    from prismclaw.engine.execution.loop.terminal import persist_snapshot_fn
+    from prismclaw.engine.execution.state.task_persistence import (
+        _evaluate_and_apply_task_mutation,
+    )
+
+    deps = rt.deps
+    tree = rt.tree
+    snapshot = rt.snapshot
+    task_runtime = rt.task_runtime
+    run_state = rt.run_state
+    evidence_ledger = rt.evidence_ledger
+
+    terminal_mutation = _build_task_terminal_mutation(
+        task_runtime,
+        actor_kind="loop",
+        evidence_ids=evidence_ids,
+    )
+    task_runtime, completion_applied, completion_reason = (
+        await _evaluate_and_apply_task_mutation(
+            deps=deps,
+            tree=tree,
+            snapshot=snapshot,
+            task_runtime=task_runtime,
+            mutation=terminal_mutation,
+            evidence_records=evidence_ledger,
+        )
+    )
+    if not completion_applied:
+        raise RuntimeError(f"completion mutation rejected after review: {completion_reason}")
+    rt.task_runtime = task_runtime
+    run_state.current_phase = "finalize_turn"
+    _set_resume_boundary(snapshot, boundary=ResumeBoundary.AFTER_TURN_FINALIZE)
+    await persist_snapshot_fn(rt)
+    await _persist_session_memory_snapshot(
+        deps, tree, session_id=rt.request.session_id,
     )
 
 

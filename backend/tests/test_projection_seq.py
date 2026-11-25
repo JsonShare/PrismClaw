@@ -77,6 +77,11 @@ class _MiniRedisClient:
         self.lists.setdefault(key, []).extend(values)
         return len(self.lists[key])
 
+    async def lrange(self, key: str, start: int, end: int) -> list:
+        items = self.lists.get(key, [])
+        stop = len(items) if end == -1 else end + 1
+        return list(items[start:stop])
+
     async def hgetall(self, key: str) -> dict:
         return dict(self.hashes.get(key, {}))
 
@@ -138,6 +143,32 @@ def test_redis_projection_stamps_insert_event_seq() -> None:
     # a1 被 seq=4 的 ENTRY_UPDATED 覆盖
     assert parsed["a1"]["seq"] == 4
     assert order == ["u1", "a1", "t1"]
+
+
+def test_message_update_not_in_order_is_appended() -> None:
+    """I1：ENTRY_UPDATED 承载的 MessageEntry 若不在 order 中，投影必须补进。
+
+    回归：早期 Web 层用 ENTRY_UPDATED 新建中断兜底消息，只写 entries 不写
+    order，展示层按 order 渲染 → 正文与挂在其上的 timeline 全部不可见。
+    """
+    events = _events() + [
+        _event(
+            6,
+            SessionEventType.ENTRY_UPDATED,
+            {
+                "entry": {
+                    "id": "orphan",
+                    "parent_id": "a1",
+                    "type": "message",
+                    "role": "assistant",
+                    "content": "补写正文",
+                },
+                "leaf_id": "orphan",
+            },
+        )
+    ]
+    _, order = _run_projection(events)
+    assert order[-1] == "orphan"
 
 
 def test_redis_projection_stamps_unparsed_entry_without_mutating_event() -> None:

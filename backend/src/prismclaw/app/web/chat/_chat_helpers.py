@@ -412,38 +412,31 @@ async def _persist_execution_timeline(
         logger.warning("web.timeline.persist.append_failed", exc_info=True)
 
 
-async def _persist_partial_assistant_message(
+async def _persist_streamed_assistant_message(
     deps: AgentDeps,
     *,
     session_id: str,
-    projector: TaskExecutionProjector,
-    transcript_text: str,
+    text: str,
 ) -> str | None:
-    """异常终止 run 的兜底落库：合成 partial assistant 消息并返回其 entry id。
+    """把前端已流式推送、但引擎未落树的答复补写为一条 assistant 消息。
 
-    正常 Done 路径的 assistant 消息由 agent 骨架落树（assistant_message_id
-    非空）；但异常终止（ErrorEvent / runner 崩溃）时骨架不落终态消息，
-    assistant_message_id 恒为 None → _persist_execution_timeline 因
-    「message_id 不在 tree.entries」被跳过，执行过程（reasoning + 工具
-    调用明细）刷新后永久丢失。本函数按系统既有存储逻辑（MessageEntry +
-    entry_updated + commit_events，与 _persist_execution_timeline 同构）
-    补一条 partial 消息作为 timeline 挂靠点：
+    仅在「本 run 引擎没有落任何 assistant 消息」时调用（流式中被 abort：
+    LLM 响应未完成，骨架没有可落的消息对象），用于让正文与 timeline 有
+    合法的挂靠点。必须走消息事件（``message_entry``）而非 ``entry_updated``：
+    前者由投影追加进 ``order``，后者只写 ``entries``，会导致刷新后不可见。
 
-      - content = 已流式推送的转录文本（可能为空，空文本仍承载 timeline）；
-      - partial=True 标记中断语义，_build_display_messages 的可见性过滤
-        （has_visible_content）会保留它——正文为空时也必须有这条消息，
-        否则 timeline 挂在无人引用的 message_id 上，历史回放永不显示。
-
-    幂等性：同一 run 的异常路径只调用一次（ErrorEvent 分支 / except 分支
-    互斥），无重入风险。返回 None = 落库失败（树加载/提交异常），调用方
-    应跳过 timeline 持久化而不是崩溃。
+    返回新 entry id；树不可用或提交失败返回 None（调用方跳过 timeline）。
     """
-    if not projector.has_content() and not (transcript_text or "").strip():
+    body = (text or "").strip()
+    if not body:
+        return None
+    store = deps.session_store
+    if store is None:
         return None
     try:
-        tree = await _load_tree_for_write(deps, session_id)
+        tree = await store.load(session_id)
     except Exception:
-        logger.warning("web.partial_message.persist.load_failed", exc_info=True)
+        logger.warning("web.streamed_message.persist.load_failed", exc_info=True)
         return None
     if tree is None:
         return None
@@ -452,16 +445,16 @@ async def _persist_partial_assistant_message(
         parent_id=tree.leaf_id,
         timestamp=now_iso(),
         role="assistant",
-        content=(transcript_text or "").strip(),
-        partial=True,
+        content=body,
+        metadata={"interrupted": True},
     )
     try:
-        event = _event_logger.entry_updated(session_id, entry, leaf_id=entry.id)
-        await _commit_events(deps, [event])
+        events = _event_logger.message_entry(session_id, entry, entry.id)
+        await _commit_events(deps, events)
         invalidate_tree_cache(session_id)
         return entry.id
     except Exception:
-        logger.warning("web.partial_message.persist.append_failed", exc_info=True)
+        logger.warning("web.streamed_message.persist.append_failed", exc_info=True)
         return None
 
 

@@ -340,10 +340,19 @@ class CompletionKernel:
         self._budget = budget
         self._recovery = recovery
         self.last_review: ReviewResult | None = None
+        # 收敛提示一次性护栏：after_tool_call 注入"请给出最终答复"提示
+        # 后置位，防止后续工具回合重复注入同一个提示。内核完成判定
+        # 是 contract satisfied + 模型停手——收敛提示只是引导模型
+        # 说出最终答复，不是完成判定的一部分。
+        self.finalize_injected: bool = False
 
     @property
     def state(self) -> CompletionState:
         return self._state
+
+    @property
+    def reviewer(self) -> CompletionReviewer:
+        return self._reviewer
 
     def decide(self, event: LoopEvent) -> Decision:
         """裁决入口：委托 ``_decide`` 产出裁决，随后统一留痕（SDD §10）。
@@ -385,10 +394,12 @@ class CompletionKernel:
         return decision
 
     def _decide(self, event: LoopEvent) -> Decision:
-        # 每次裁决只暴露本次的评估结果：早退分支（预算 / 非停止）不留下
-        # 上一次的 last_review，否则治理层会为未评估的裁决写下陈旧留痕。
+        # 每次裁决只暴露本次的评估结果——预算早退不留下上一次的
+        # last_review，否则治理层会为未评估的裁决写下陈旧留痕。
         self.last_review = None
 
+        # 1. 硬边界：预算 / 恢复链熔断。独立于契约评估——预算耗尽或
+        #    恢复额度用尽时没有"继续跑"的可能。
         if (
             code := self._budget.check(
                 iteration=event.iteration,
@@ -396,37 +407,56 @@ class CompletionKernel:
         ) is not None:
             return Decision("TERMINATE", code)
 
-        if not event.is_stop:
-            if event.site == "all_blocked":
-                recovery_code = self._recovery.consult("all_tools_denied")
-                if recovery_code is None:
-                    # 全拒是不可自愈故障：额度用尽即终态，不再回到顶部重发。
-                    return Decision(
-                        "TERMINATE",
-                        TerminalReason.BLOCKED_TOOLS_DENIED,
-                        (Gap("all_tools_denied", "工具调用被策略整体拒绝，重试无法改变结果。"),),
-                    )
+        if event.site == "all_blocked":
+            recovery_code = self._recovery.consult("all_tools_denied")
+            if recovery_code is None:
+                # 全拒是不可自愈故障：额度用尽即终态，不再回到顶部重发。
                 return Decision(
-                    "RESTART",
-                    recovery_code,
-                    (Gap("all_tools_denied_retry", "全拒后给予一次重规划机会。"),),
+                    "TERMINATE",
+                    TerminalReason.BLOCKED_TOOLS_DENIED,
+                    (Gap("all_tools_denied", "工具调用被策略整体拒绝，重试无法改变结果。"),),
                 )
-            if event.site == "post":
-                # 只有「工具真正执行过」的回合才算非恢复轮。若在每个
-                # 非停止事件上都清零，all_blocked 链会在下一轮 preflight
-                # 被清空，全拒熔断永远不触发（旧实现即此缺陷）。
-                self._recovery.note_progress()
+            return Decision(
+                "RESTART",
+                recovery_code,
+                (Gap("all_tools_denied_retry", "全拒后给予一次重规划机会。"),),
+            )
+
+        # 只有「工具真正执行过」的回合才算非恢复轮。若在每个事件上都
+        # 清零，all_blocked 链会在下一轮 preflight 被清空，全拒熔断
+        # 永远不触发（旧实现即此缺陷）。
+        if not event.is_stop and event.site == "post":
+            self._recovery.note_progress()
+
+        # 2. 契约评估（每次裁决都跑——不再被 is_stop 守卫）。
+        #    引擎是完成判定的唯一权威：交付物齐不齐不依赖模型自愿停手。
+        contract = self._state.contract
+        if contract is None:
+            # 无机械完成要求：模型停手 = 完成；还想跑 = 继续。
+            if event.is_stop:
+                return Decision("COMPLETE", "complete_open")
             return Decision("PROCEED", "ok")
 
-        if self._state.contract is None:
-            # 无完成要求：交付物是文本，机械侧无产物可核。
-            return Decision("COMPLETE", "complete_open")
-
-        review = self._reviewer.evaluate(self._state.contract, self._state.ledger)
+        review = self._reviewer.evaluate(contract, self._state.ledger)
         self.last_review = review
 
-        # 完成优先于过时的阻塞申报：带缺口的答复才算未完成。
-        if event.declares_blocked and not review.accepted:
+        if review.accepted:
+            if event.is_stop:
+                # 模型停手 + 契约齐 = 真完成。
+                return Decision("COMPLETE", "complete_verified")
+            # 契约齐但模型还没停手——循环继续跑一轮，让模型输出最终答复。
+            # after_tool_call 会读 last_review.accepted 注入收敛提示（"不要再调
+            # 工具，给出最终答复"），下一轮 preflight + is_stop 时走正常
+            # COMPLETE 路径落树。内核在此不直接终止循环，避免跳过最终答复。
+            return Decision("PROCEED", "contract_satisfied_waiting_final")
+
+        # 3. 契约未 satisfied 的续跑 / REPAIR 决策。
+        if not event.is_stop:
+            return Decision("PROCEED", "ok")
+
+        # 4. is_stop=True 但契约未 satisfied：治理层收尾（REPAIR / TERMINATE）。
+        #    完成优先于过时的阻塞申报：带缺口的答复才算未完成。
+        if event.declares_blocked:
             if self._state.repairs >= 1 or self._state.ledger:
                 return Decision(
                     "TERMINATE",
@@ -441,18 +471,15 @@ class CompletionKernel:
                 (Gap("blocked_without_attempt", "尚未执行任何尝试就申报阻塞。"),),
             )
 
-        if review.accepted:
-            return Decision("COMPLETE", "complete_verified")
-
         gaps = tuple(Gap(outcome.code, outcome.describe()) for outcome in review.gaps)
 
-        if self._state.contract.enforcement == "advisory":
+        if contract.enforcement == "advisory":
             if self._state.advisory_nudged:
                 return Decision("COMPLETE", "complete_advisory")
             self._state.advisory_nudged = True
             return Decision("REPAIR", "advisory_nudge", gaps)
 
-        if self._state.repairs >= self._state.contract.max_repairs:
+        if self._state.repairs >= contract.max_repairs:
             return Decision("TERMINATE", TerminalReason.BLOCKED_NO_PROGRESS, gaps)
 
         self._state.repairs += 1

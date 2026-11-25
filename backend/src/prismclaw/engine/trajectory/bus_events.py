@@ -306,12 +306,8 @@ class LLMResponseReceived(BaseModel):
 class LLMRequestFailed(BaseModel):
     """LLM 失败事件 — LLM 调用异常时 publish.
 
-    重构清理: 删除 partial_chunks / partial_text_chars / attempt 字段.
-      * partial_*: 在 llm.py 内部 nonlocal 维护, runner 作用域不可见;
-        部分正文的持久化由消费方（Web 收尾路径）负责，事件层不携带.
-      * attempt: 无消费者. 事件层携带但 RequestAuditRecord model 无该字段,
-        apply 不写, read_snapshot_v2 返回的 model_dump 不含, API 读不到.
-        重试审计若将来需要, 应走 metrics counter, 不在事件层提前设计.
+    事件层不携带部分正文或重试计数：部分正文在消费方按收尾路径落库，重试审计
+    走 metrics counter。
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")

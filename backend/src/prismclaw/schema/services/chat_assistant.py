@@ -168,7 +168,7 @@ async def load_recent_transcript(
     for entry in reversed(branch):
         if getattr(entry, "type", None) != "message":
             continue
-        if getattr(entry, "partial", False):
+        if getattr(entry, "interrupted", False):
             continue
         role = getattr(entry, "role", "")
         if role not in roles:

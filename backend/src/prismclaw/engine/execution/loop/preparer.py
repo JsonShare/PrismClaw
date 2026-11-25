@@ -505,11 +505,16 @@ class RunPreparer:
 
             _tls = snapshot.run_state.tool_loop_state
             if _tls:
-                _tls["convergence_advisory_sent"] = False
                 # 冻结集合属于「本轮预算收尾」状态，随本轮预算一起归零。
                 # 否则上一轮收尾时冻结的搜索工具会在新用户轮次继续隐藏，
                 # 新问题看起来像「搜索工具不可用」。
                 _tls["frozen_tools"] = []
+
+            # kernel 级一次性护栏：新 run 起点重置。
+            # 否则上一个 run 设的 finalize_injected=True 会阻止新 run 的收敛提示。
+            _kernel = getattr(rt, "completion_kernel", None)
+            if _kernel is not None:
+                _kernel.finalize_injected = False
 
             run_state.loop_state.steps_spent = 0
             run_state.loop_state.tool_calls_spent = 0

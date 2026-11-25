@@ -659,6 +659,27 @@ class TaskExecutionProjector:
             return (min(segs) if segs else 0, 1)
 
         all_nodes = step_nodes + orphan_nodes + reasoning_nodes
+
+        # ── 最终答案切割：timeline 不承载最终答复的正文 ──
+        # 正文（full_transcript_parts 拼接的最终 MessageEntry content）是
+        # 正文区的唯一真相；此处若保留最后一轮 text，会把完整病历/答复同时
+        # 塞进 timeline 灰框 → 双显。只清 text，保留 reasoning（思考过程）
+        # 和 operations（工具调用）。若该轮只有 text（纯最终答案无思考无工具），
+        # 清掉后前端不会生成冗余的「迭代过语」行。
+        last_seg = max(
+            (
+                it.segment_id
+                for n in step_nodes + orphan_nodes
+                for it in n.iterations
+            ),
+            default=None,
+        )
+        if last_seg is not None:
+            for n in step_nodes + orphan_nodes:
+                for it in n.iterations:
+                    if it.segment_id == last_seg:
+                        it.text = ""
+
         all_nodes.sort(key=time_key)
         return all_nodes
 

@@ -41,12 +41,6 @@ class ToolLoopState:
     # 模型无视签名冻结重试达 escalate_above（此处只作嫌疑信号，
     # 不产生终态）。
     frozen_call_defied: bool = False
-    # 收敛软信号一次性护栏（D1，sdd-convergence-efficiency）：
-    # 完成契约机械核验无缺口时注入一次收尾 advisory（"交付已齐备，
-    # 停止调用工具，给出最终答复"），置位后不再注入——advisory 是
-    # 信息不是催促，模型收到后仍不停止则尊重其自治（终态只在停止时
-    # 由 CompletionKernel 裁决）。
-    convergence_advisory_sent: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -59,7 +53,6 @@ class ToolLoopState:
             "last_external_signature": self.last_external_signature,
             "tool_attempt_events": self.tool_attempt_events,
             "frozen_call_defied": self.frozen_call_defied,
-            "convergence_advisory_sent": self.convergence_advisory_sent,
         }
 
     @classmethod
@@ -77,5 +70,4 @@ class ToolLoopState:
             last_external_signature=str(data.get("last_external_signature") or ""),
             tool_attempt_events=list(data.get("tool_attempt_events") or []),
             frozen_call_defied=bool(data.get("frozen_call_defied", False)),
-            convergence_advisory_sent=bool(data.get("convergence_advisory_sent", False)),
         )

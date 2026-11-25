@@ -11,7 +11,7 @@ import redis.asyncio as aioredis
 from prismclaw.infra.redis import resolve
 from prismclaw.persistence.lock.redis import LockAcquireError
 from prismclaw.persistence.session.base import _generate_session_id, emit_commit_metrics
-from prismclaw.schema.agent.session import SessionHeader
+from prismclaw.schema.agent.session import MessageEntry, SessionHeader
 from prismclaw.schema.session import (
     SessionEvent,
     SessionEventType,
@@ -376,6 +376,7 @@ class RedisSessionStore:
         """
         entries_to_add: list[tuple[str, str]] = []
         entries_to_update: list[tuple[str, str]] = []
+        message_update_ids: list[str] = []
         order_ids: list[str] = []
         leaf_id: str | None = None
         msg_count_incr = 0
@@ -417,6 +418,8 @@ class RedisSessionStore:
                     if typed_entry:
                         typed_entry.seq = event.seq
                         entries_to_update.append((entry_id, typed_entry.model_dump_json()))
+                        if isinstance(typed_entry, MessageEntry):
+                            message_update_ids.append(entry_id)
                     else:
                         # 不能就地改调用方的 dict：事件对象可能被复用/序列化。
                         patched_entry = {**entry_data, "seq": event.seq}
@@ -429,10 +432,30 @@ class RedisSessionStore:
 
         hdr_raw = await self._client.get(self._hdr_key(session_id))
 
+        # I1：可见 MessageEntry 必须在 order 中（展示层只按 order 渲染）。
+        # ENTRY_UPDATED 本是「patch 已存在的非消息 entry」的通道；若写入方
+        # 用它承载一条尚不在 order 的消息，这里把它补进 order，杜绝
+        # 「entries 有、order 无」的不可见消息。
+        missing_order_ids: list[str] = []
+        if message_update_ids:
+            existing_order = await resolve(self._client.lrange(self._order_key(session_id), 0, -1))
+            known_ids = {str(item) for item in existing_order} | set(order_ids)
+            for entry_id in message_update_ids:
+                if entry_id not in known_ids:
+                    known_ids.add(entry_id)
+                    missing_order_ids.append(entry_id)
+                    logger.warning(
+                        "session.projection.message_update_not_in_order session=%s entry=%s",
+                        session_id,
+                        entry_id,
+                    )
+
         async with self._client.pipeline(transaction=True) as pipe:
             if entries_to_add:
                 pipe.hset(self._entries_key(session_id), mapping=dict(entries_to_add))
                 pipe.rpush(self._order_key(session_id), *order_ids)
+            if missing_order_ids:
+                pipe.rpush(self._order_key(session_id), *missing_order_ids)
             if entries_to_update:
                 pipe.hset(self._entries_key(session_id), mapping=dict(entries_to_update))
             if leaf_id is not None:

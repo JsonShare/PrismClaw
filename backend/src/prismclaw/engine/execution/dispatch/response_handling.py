@@ -118,6 +118,42 @@ async def complete_no_tool_turn(
     # 入口处统一 strip_noise：assistant 落树、hooks 观测、以及
     # 回灌给 next turn 的 session_messages 都不该看到模型内部草稿与工具标记。
     cleaned = strip_noise(response_text or "")
+
+    # 收敛场景 fallback：模型被收敛提示约束后可能输出空/极短文本（"好的"、
+    # "直接结束"）——此时不再落空 assistant entry，也不把空文本当最终答复。
+    # 从 tree 上读最后一条已落树的非空 assistant entry（通常是上一轮带
+    # tool_calls 同时输出的完整正文，如 Iter 1 的 write 回合）。
+    _min_final_len = 20  # 20 字符以下视为"未给出有效答复"，触发 fallback
+    if len(cleaned) < _min_final_len:
+        _fallback_text = ""
+        _fallback_entry_id: str | None = None
+        for seq in reversed(tree.order):
+            _e = tree.entries.get(seq)
+            if (
+                _e is not None
+                and getattr(_e, "role", None) == "assistant"
+                and getattr(_e, "content", "")
+                and len(str(getattr(_e, "content", ""))) >= _min_final_len
+            ):
+                _fallback_text = str(_e.content)
+                _fallback_entry_id = _e.id
+                break
+        if _fallback_text and _fallback_entry_id:
+            await deps.hooks.notify_response(
+                ResponseObservation(
+                    session_id=request.session_id,
+                    assistant_text=cleaned,  # hooks 观测用实际模型输出
+                    tool_calls=[],
+                )
+            )
+            return Done(
+                final_message=_fallback_text,
+                assistant_message_id=_fallback_entry_id,
+                usage=usage_totals,
+            )
+        # 无可用 fallback（极端场景：模型全程未输出任何有效答复）
+        cleaned = cleaned or ""  # 保持原 cleaned，继续走完流程
+
     assistant_entry = await append_assistant_response(
         deps=deps,
         tree=tree,

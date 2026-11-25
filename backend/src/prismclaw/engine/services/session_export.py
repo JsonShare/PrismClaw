@@ -62,7 +62,7 @@ def _render_message_entry(
 ) -> list[str]:
     lines: list[str] = []
     role_label = entry.role.upper()
-    suffix = " (interrupted)" if entry.partial else ""
+    suffix = " (interrupted)" if entry.interrupted else ""
     lines.append(f"## {role_label}{suffix} — `{entry.id}` ({entry.timestamp})")
     lines.append("")
     lines.append(_format_content(entry.content))

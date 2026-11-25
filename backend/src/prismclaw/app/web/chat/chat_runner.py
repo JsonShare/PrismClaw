@@ -19,8 +19,8 @@ from prismclaw.app.web.chat._chat_helpers import (
     _get_workspace_runner_deps,
     _load_tree_for_write,
     _persist_execution_timeline,
-    _persist_partial_assistant_message,
     _persist_run_projection,
+    _persist_streamed_assistant_message,
     _push_run_snapshot,
     _push_task_runtime_event,
     _push_timeline_event,
@@ -78,6 +78,7 @@ from prismclaw.schema.agent import (
     ToolCallStart,
     ToolClarifyRequest,
 )
+from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.agent.types import AgentDeps, RunRequest
 from prismclaw.schema.content.streaming import SubagentProgressItem
 from prismclaw.schema.protocol.protocol_types import ProtocolErrorCode
@@ -91,6 +92,25 @@ from prismclaw.schema.shared.reference_block import (
 from prismclaw.schema.shared.tool_markup import MarkupStreamFilter
 
 logger = logging.getLogger(__name__)
+
+
+async def _last_assistant_message_id(deps: AgentDeps, session_id: str) -> str | None:
+    """取 order 中最后一条 assistant 消息 id（直接读库，绕过 200ms 树缓存）。"""
+    store = deps.session_store
+    if store is None:
+        return None
+    try:
+        tree = await store.load(session_id)
+    except Exception:
+        logger.warning("web.assistant_anchor.load_failed", exc_info=True)
+        return None
+    if tree is None:
+        return None
+    for entry_id in reversed(tree.order):
+        entry = tree.entries.get(entry_id)
+        if isinstance(entry, MessageEntry) and entry.role == "assistant":
+            return entry.id
+    return None
 
 
 async def _lifecycle_broadcaster(
@@ -535,30 +555,87 @@ async def _run_chat(
                 seq,
             )
 
+    async def _finalize_artifacts(
+        anchor_id: str | None,
+        *,
+        reference_sources: list[ReferenceSource] | None,
+    ) -> None:
+        """交付物 / 文件变更 / 来源块：落库 + 推送，必须在 done 之前完成。
+
+        正常与异常终态共用同一策略：优先 LLM 声明的文件（与本次 outbox 增量
+        取交集，交集为空退回声明），未声明时用增量兜底。
+        """
+        _current = ArtifactScanner(tool_workspace_path).scan(_outbox_scope)
+        auto_scanned = [
+            path
+            for path, signature in _current.items()
+            if outbox_baseline.get(path) != signature
+        ]
+        auto_set = set(auto_scanned)
+        if output_files:
+            validated = [f for f in output_files if f in auto_set]
+            all_output_files = validated if validated else output_files
+        else:
+            all_output_files = auto_scanned
+        final_output_files = _filter_existing_output_files(
+            _dedupe_simple(all_output_files),
+            tool_workspace_path,
+            session_root=session_root,
+        )
+        if final_output_files:
+            await send_event(
+                state,
+                SERVER_OUTBOX,
+                msg.conversation_id,
+                {"message_id": anchor_id, "files": final_output_files},
+            )
+            if anchor_id:
+                await persist_output_files_metadata(
+                    deps.session_store,
+                    session_id=session_id,
+                    message_id=anchor_id,
+                    files=final_output_files,
+                )
+        if file_changes:
+            await send_event(
+                state,
+                SERVER_FILE_CHANGES,
+                msg.conversation_id,
+                {"message_id": anchor_id, "changes": file_changes},
+            )
+            if anchor_id:
+                await _persist_file_changes_metadata(
+                    deps.session_store,
+                    session_id=session_id,
+                    message_id=anchor_id,
+                    changes=file_changes,
+                )
+        if reference_sources and anchor_id:
+            await _persist_reference_sources_metadata(
+                deps.session_store,
+                session_id=session_id,
+                message_id=anchor_id,
+                sources=[s.model_dump() for s in reference_sources],
+            )
+
     async def _finalize_terminated_run(
         *,
         error_code: str,
         message: str,
         aborted: bool,
     ) -> None:
-        """异常终止的唯一收尾路径：正文只持久化一次、终态只发送一次。
+        """异常终止的唯一收尾路径：锚点 → timeline → 交付物 → 终态帧。
 
-        软着陆（超时 / 预算耗尽）：已流出的正文本身就是连贯答案
-        （模型在正常生成中被截断，不会输出系统状态词），直接落库 + 发
-        done，不追加任何系统说明。error 帧也省略（无额外信息量）。
+        锚点优先复用引擎本 run 已落的 assistant 消息（正常生成被截断时正文
+        已在树中）；只有引擎一条都没落（流式中被 abort）才用已流式推送的
+        转录补写一条。这样既不会丢正文，也不会产生与已有消息重复的副本。
 
-        其余错误（阻塞 / 内部 / 上游 LLM）：保留 error 帧交代真实原因；
-        已流出的正文照常落库并随 done 下发，避免刷新后正文消失。
-
-        用户 abort：不落 partial（看到哪算哪），只发 done(aborted=true)。
+        软着陆（超时 / 预算耗尽）不追加系统说明、不发 error 帧；仅在完全
+        无内容时补发终止原因，避免前端表现为「任务直接断了」。
         """
-        nonlocal assistant_message_id
-        # 单次收尾护栏：终态已送达、或本轮已有落库挂靠点时不再重复落库，
-        # 避免「ErrorEvent 收尾后又抛异常」产生第二条内容相同的 partial。
         if terminal_done_sent:
             return
-        # 异常/中止收尾：先把 redactor 滞留的尾巴推出并计入正文，否则已流出的
-        # 结尾会缺字，落库内容与用户已看到的正文不一致。
+        # 先把 redactor 滞留的尾巴推出并计入正文，保证落库与用户所见一致。
         try:
             await _emit_text(_drain_text())
         except Exception:
@@ -566,41 +643,13 @@ async def _run_chat(
         if _current_part[0]:
             full_transcript_parts.append(_current_part[0])
             _current_part[0] = ""
-        body = "\n\n".join(p for p in full_transcript_parts if p).strip()
-
-        if error_code == "aborted":
-            # 用户主动中止：不发 error 帧、不追加系统说明，但**已流出的正文必须
-            # 落库**。done 只是"去服务端对账"的信号，正文一律来自展示投影——
-            # 不落库的话，中止后客户端 sync 到 idle 会把这段正文清掉（旧前端是
-            # 在 done 里本地合成 partial 消息保住的，新契约下该兜底已删除）。
-            if body or projector.has_content():
-                if assistant_message_id is None:
-                    assistant_message_id = (
-                        await _persist_partial_assistant_message(
-                            deps,
-                            session_id=session_id,
-                            projector=projector,
-                            transcript_text=body,
-                        )
-                        or assistant_message_id
-                    )
-                if assistant_message_id and projector.has_content():
-                    await _persist_execution_timeline(
-                        deps,
-                        session_id=session_id,
-                        message_id=assistant_message_id,
-                        projector=projector,
-                    )
-            await _emit_terminal_done(
-                final_message=body,
-                usage={},
-                aborted=True,
-                message_id=assistant_message_id,
-            )
-            return
+        # TERMINATE 兜底：正文只取最后一条非空 TextChunk（可能是模型最后一次
+        # 输出的过语或半段答复），不拼所有迭代——迭代过语属于 timeline 灰框。
+        _ts_parts = [p for p in full_transcript_parts if p and p.strip()]
+        body = _ts_parts[-1] if _ts_parts else ""
 
         soft_landing = error_code in _SOFT_LANDING_CODES
-        if not soft_landing and message:
+        if not aborted and not soft_landing and message:
             await send_event(
                 state,
                 SERVER_ERROR,
@@ -608,45 +657,46 @@ async def _run_chat(
                 {"message": message, "code": error_code},
             )
 
-        if not body and not projector.has_content():
-            # 软着陆的前提是「已流出的正文自成答案」。预算在 prepare 阶段耗尽
-            # （最后一轮还没调 LLM）时没有任何正文，静默 done 会让前端表现为
-            # 「任务直接断了」。此时必须把终止原因送到前端。
-            if soft_landing:
-                await send_event(
-                    state,
-                    SERVER_ERROR,
-                    msg.conversation_id,
-                    {"message": message or "任务已终止", "code": error_code},
-                )
-            await _emit_terminal_done(final_message="", usage={}, aborted=aborted, message_id=None)
-            return
-
-        content = body
-        if assistant_message_id is None:
-            assistant_message_id = (
-                await _persist_partial_assistant_message(
+        invalidate_tree_cache(session_id)
+        anchor = await _last_assistant_message_id(deps, session_id)
+        # TERMINATE 兜底：中间轮 assistant entry content 已置空（轮次逻辑），
+        # 正文只能靠 complete_no_tool_turn 落的终态轮。若被预算耗尽等中断，
+        # 终态轮不存在 → 把 full_transcript_parts 里模型最后输出的 TextChunk
+        # 补写进 session tree，让正文蓝框至少有内容可见。
+        if body:
+            # 直接补写一条（不更新已有空 content 的 entry）——简洁可靠
+            anchor = (
+                await _persist_streamed_assistant_message(
                     deps,
                     session_id=session_id,
-                    projector=projector,
-                    transcript_text=content,
+                    text=body,
                 )
-                or assistant_message_id
+                or anchor
             )
-        # 与正常收尾同契约：done 之前把执行过程挂到 partial 上，否则中止/超时
-        # 场景的 timeline 会错过客户端水位，只能靠手动刷新才看得到。
-        if assistant_message_id and projector.has_content():
+        if anchor and projector.has_content():
             await _persist_execution_timeline(
                 deps,
                 session_id=session_id,
-                message_id=assistant_message_id,
+                message_id=anchor,
                 projector=projector,
             )
+        await _finalize_artifacts(
+            anchor,
+            reference_sources=_take_reference_sources() or None,
+        )
+
+        if anchor is None and not body and not projector.has_content() and soft_landing:
+            await send_event(
+                state,
+                SERVER_ERROR,
+                msg.conversation_id,
+                {"message": message or "任务已终止", "code": error_code},
+            )
         await _emit_terminal_done(
-            final_message=content,
+            final_message=body,
             usage={},
             aborted=aborted,
-            message_id=assistant_message_id,
+            message_id=anchor,
         )
 
     try:
@@ -667,8 +717,8 @@ async def _run_chat(
 
     lifecycle_task: asyncio.Task[Any] | None = None
     run_projection_task: asyncio.Task[Any] | None = None
-    # 正文累积状态在 try 之前初始化：except 崩溃路径引用它们构建 partial
-    # 消息持久化（不变量 I3：final_message == 全量流式文本），必须保证
+    # 正文累积状态在 try 之前初始化：except 崩溃路径引用它们构建中断补写
+    # 消息（不变量 I3：final_message == 全量流式文本），必须保证
     # rc.active=True 之后的任何异常入口触达时均已绑定。
     full_transcript_parts: list[str] = []
     _current_part: list[str] = [""]
@@ -1040,75 +1090,10 @@ async def _run_chat(
                             message_id=assistant_message_id,
                             projector=projector,
                         )
-                # 交付物确定策略：
-                # - 优先：LLM 通过 present_files 主动声明的文件（LLM 知道哪些是最终交付物）
-                # - 验证：自动扫描 outbox/ 确认声明文件确实存在且有变更
-                # - 兜底：LLM 未调用 present_files 时，自动扫描 outbox/ 中有变更的文件
-                #   （覆盖 agent 遗忘/被 doom-loop 打断的场景，避免已生成的交付物不展示）
-                _current = ArtifactScanner(tool_workspace_path).scan(_outbox_scope)
-                auto_scanned = [
-                    path
-                    for path, signature in _current.items()
-                    if outbox_baseline.get(path) != signature
-                ]
-                auto_set = set(auto_scanned)
-                if output_files:
-                    # 取交集：LLM 声明 + 文件确实存在且有变更
-                    validated = [f for f in output_files if f in auto_set]
-                    # 交集为空时退回信任 LLM 声明（可能是路径格式差异或 baseline 误判）
-                    all_output_files = validated if validated else output_files
-                else:
-                    # 兜底：agent 未声明时，展示 outbox/ 中本次执行新生成/变更的文件
-                    all_output_files = auto_scanned
-                final_output_files = _filter_existing_output_files(
-                    _dedupe_simple(all_output_files),
-                    tool_workspace_path,
-                    session_root=session_root,
+                await _finalize_artifacts(
+                    assistant_message_id,
+                    reference_sources=reference_sources,
                 )
-                if final_output_files:
-                    await send_event(
-                        state,
-                        SERVER_OUTBOX,
-                        msg.conversation_id,
-                        {
-                            "message_id": assistant_message_id,
-                            "files": final_output_files,
-                        },
-                    )
-                    if assistant_message_id:
-                        await persist_output_files_metadata(
-                            deps.session_store,
-                            session_id=session_id,
-                            message_id=assistant_message_id,
-                            files=final_output_files,
-                        )
-
-                if file_changes:
-                    await send_event(
-                        state,
-                        SERVER_FILE_CHANGES,
-                        msg.conversation_id,
-                        {
-                            "message_id": assistant_message_id,
-                            "changes": file_changes,
-                        },
-                    )
-                    if assistant_message_id:
-                        await _persist_file_changes_metadata(
-                            deps.session_store,
-                            session_id=session_id,
-                            message_id=assistant_message_id,
-                            changes=file_changes,
-                        )
-                # 来源块与交付物同理：必须先落库再发 done，否则客户端在 done
-                # 后立即 sync 时取不到来源条目（其 seq 高于客户端水位）。
-                if reference_sources and assistant_message_id:
-                    await _persist_reference_sources_metadata(
-                        deps.session_store,
-                        session_id=session_id,
-                        message_id=assistant_message_id,
-                        sources=[s.model_dump() for s in reference_sources],
-                    )
                 await _emit_terminal_done(
                     final_message=final_msg,
                     usage=event.usage,
@@ -1150,8 +1135,8 @@ async def _run_chat(
                     active=False,
                 )
                 # 异常退出：正文已实时推送到正文区，收尾统一走 _finalize_terminated_run。
-                # 中止不在这里短路：done 已不再携带正文，中止的 partial 必须由本
-                # 路径落库后再发 done，客户端才能在 idle 对账后仍看到已流出的内容。
+                # 中止不在这里短路：done 已不再携带正文；done 前必须保证
+                # 正文已落库（引擎已落 assistant 消息则复用，否则走消息事件补写）。
                 aborted = event.error_code == "aborted"
                 await _finalize_terminated_run(
                     error_code=event.error_code,
@@ -1202,18 +1187,12 @@ async def _run_chat(
         )
         try:
             if projector.has_content():
-                # 挂靠到收尾落库的 partial 消息上，让执行过程可持久化回放。
+                # 只更新运行态快照；timeline 的落库已在 _finalize_terminated_run
+                # 内完成（done 之前），此处重复落库会产生一条重复的 timeline entry。
                 exc_snapshot_mid = assistant_message_id
                 session_queue.get_or_create_web_runtime_projection(
                     msg.conversation_id
                 ).timeline_snapshot = projector.build_snapshot_dict(exc_snapshot_mid)
-                if exc_snapshot_mid:
-                    await _persist_execution_timeline(
-                        deps,
-                        session_id=session_id,
-                        message_id=exc_snapshot_mid,
-                        projector=projector,
-                    )
                 await _push_task_runtime_event(
                     state,
                     deps=deps,

@@ -1,7 +1,7 @@
 [project]
 name = "prismclaw"
 version = "0.1.0"
-description = "a multi-channel AI assistant gateway with compute-storage separation"
+description = "Multi-user · Multi-agent"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [
@@ -60,7 +60,7 @@ browser = [
     "playwright>=1.63.0",
     "numpy>=2.4.6",
 ]
-# 业务域模块由 scripts/compile/domains.yaml + scripts/compile/domains-registry.mjs 统一管理
+# 业务域功能模块由 scripts/compile/domains.yaml + scripts/compile/domains-registry.mjs 统一管理
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
@@ -100,7 +100,7 @@ filterwarnings = [
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
-# .prismclaw 是随项目分发的第三方技能资产（启动时同步到 ~/.prismclaw/assets），
+# .prismclaw 技能扩展资产（启动时同步到 ~/.prismclaw/assets），
 exclude = [".prismclaw"]
 
 [tool.ruff.lint]

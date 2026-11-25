@@ -67,7 +67,7 @@ class DreamCandidateCollector:
         source_ids = [
             entry.id
             for entry in tree.get_branch()
-            if isinstance(entry, MessageEntry) and not entry.partial
+            if isinstance(entry, MessageEntry) and not entry.interrupted
         ]
         source_count = len(source_ids)
         anchor_id = str(tree.leaf_id or session_id)
@@ -99,7 +99,7 @@ def _recent_message_entries(entries: list[Any], *, limit: int) -> list[MessageEn
     for entry in reversed(entries):
         if not isinstance(entry, MessageEntry):
             continue
-        if entry.partial:
+        if entry.interrupted:
             continue
         text = extract_text_from_content(entry.content).strip()
         if not text:
@@ -128,7 +128,7 @@ def _build_session_episode_summary(entries: list[Any]) -> str:
     for entry in entries:
         if not isinstance(entry, MessageEntry):
             continue
-        if entry.partial or entry.role not in {"user", "assistant"}:
+        if entry.interrupted or entry.role not in {"user", "assistant"}:
             continue
         text = extract_text_from_content(entry.content).strip()
         if not text:

@@ -125,8 +125,11 @@ async def terminate(
         rt.tool_loop_state.frozen_call_signatures.clear()
         rt.tool_loop_state.tool_attempt_events.clear()
         rt.tool_loop_state.frozen_call_defied = False
-        rt.tool_loop_state.convergence_advisory_sent = False
         rt.state_machine.update_tool_loop_state(rt.tool_loop_state)
+
+    # kernel 级一次性护栏：run 终止时重置，防止 checkpoint 恢复时跨 run 污染。
+    if rt.completion_kernel is not None:
+        rt.completion_kernel.finalize_injected = False
 
     # 闭集收敛：terminated_by 显式给出时优先；否则 code 必须本身就是
     # 合法的 TerminalReason（内核/治理的终态码），否则在此刻抛错，

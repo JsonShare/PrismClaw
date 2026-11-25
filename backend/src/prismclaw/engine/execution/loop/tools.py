@@ -1,11 +1,12 @@
-"""tools — 工具执行前/后回调与 execute_tools 主体。
+"""tools — 工具执行前回调与 execute_tools 主体。
 
 由 ``build_loop_config`` 绑定到 ExecutePort：
 - ``gate_tool_call``（原 before_tool_call）：冻结签名 + 安全门
-- ``after_tool_call``：完成契约收敛提示
 - ``execute_tools``：工具执行主流程（handoff dispatch → 执行 → 证据 → 投影 → 落树）
 
-所有运行期依赖通过 ``rt: LoopRuntime`` 显式访问。
+所有运行期依赖通过 ``rt: LoopRuntime`` 显式访问。完成裁决全权由
+``CompletionKernel`` 负责——契约 satisfied 直接终止循环，不再通过
+收敛提示间接驱动模型自愿停手。
 """
 
 from __future__ import annotations
@@ -126,36 +127,45 @@ async def gate_tool_call(
 # ---------------------------------------------------------------------------
 # after_tool_call
 # ---------------------------------------------------------------------------
+#
+# 完成裁决由 CompletionKernel 在每次 should_continue 时统一评估，收敛提示
+# 是对内核结果的薄封装：内核共享的 reviewer 评估 contract satisfied →
+# 注入一次性"请给出最终答复"提示引导模型结束本轮。内核是 contract
+# review 的唯一权威，此处独立评估只是时机需要（after_tool_call 发生在
+# kernel post._decide 之前，但 ledger 已被 execute_tools 更新）。
 
 
 async def after_tool_call(
     rt: LoopRuntime,
     after_ctx: AfterToolCallContext,
 ) -> AfterToolCallResult | None:
-    """工具执行后处理（只做观测与一次收尾提示，不做裁决）。
+    """工具执行后钩子（当前唯一职责：收敛提示注入）。
 
-    POST_TOOL hooks 已下沉到 execute_tool_calls 逐调用派发。此处保留：
-    * 收敛软提示：完成契约机械核验无缺口时注入一次"请收尾"提示。
+    after_tool_call 发生在 kernel post._decide 之前（agent_loop Step 3d
+    在 Step 4 之前），而 execute_tools 刚跑完 → ledger 已更新但 kernel
+    还没跑 post 裁决。所以收敛提示需要在此自行跑一次 contract review
+    （reviewer 和内核共用同一个实例，口径一致）。
+
+    收敛护栏用 kernel.finalize_injected —— 一次性状态归内核管理。
     """
-    _completion_state = rt.completion_state
-    tool_loop_state = rt.tool_loop_state
-    state_machine = rt.state_machine
-
-    _state = after_ctx.state
-
-    if _state is not None and after_ctx.tool_calls and _completion_state.contract is not None:
-        from prismclaw.engine.execution.control.artifacts import ArtifactScanner
-        from prismclaw.engine.execution.control.kernel import CompletionReviewer
-
-        _review = CompletionReviewer(ArtifactScanner(rt.tool_workspace_path)).evaluate(
-            _completion_state.contract, rt.evidence_ledger
-        )
-        if _review.accepted and not tool_loop_state.convergence_advisory_sent:
-            tool_loop_state.convergence_advisory_sent = True
-            state_machine.update_tool_loop_state(tool_loop_state)
+    kernel = rt.completion_kernel
+    completion_state = rt.completion_state
+    contract = completion_state.contract
+    if (
+        kernel is not None
+        and contract is not None
+        and contract.enforcement == "strict"  # ← 关键：只对 strict 注入
+        and not kernel.finalize_injected
+        and after_ctx.tool_calls  # 只在本轮确实执行了工具时注入
+    ):
+        # strict 契约有明确的交付物路径 → 文件齐全就是真完成 → 注入收敛
+        # advisory 契约只有 "outbox 有文件" 的粗判定 → 可能是多步任务的
+        # 中间产物（如 bash 下载的临时文件），不能提前注入收敛
+        _review = kernel.reviewer.evaluate(contract, rt.evidence_ledger)
+        if _review.accepted:
+            kernel.finalize_injected = True
             logger.info(
-                "convergence: deliverables complete at iter=%d — injecting final-answer advisory",
-                _state.perf.llm_calls,
+                "convergence: strict contract satisfied — injecting final-answer advisory",
             )
             from prismclaw.engine.execution.loop.types import AfterToolCallResult
 
@@ -164,9 +174,9 @@ async def after_tool_call(
                     {
                         "role": "user",
                         "content": (
-                            "[系统提示：所有必需的交付物均已产出并通过校验"
-                            "（写入与完成策略证据齐全）。不要再调用任何工具，"
-                            "请立即给出最终答复。]"
+                            "[系统提示：所有必需的交付物均已产出并通过校验。"
+                            "不要再调用任何工具，也不要再重复输出任务正文。"
+                            "直接结束本轮——自然收尾点明交付物即可。]"
                         ),
                     }
                 ]
@@ -228,17 +238,20 @@ async def execute_tools(
     from prismclaw.schema.agent import HeartbeatEvent
 
     try:
-        # ── 0. Persist assistant message (with tool_calls) ──
+        # ── 0. Persist assistant message (tool_calls only) ──
+        # 中间轮次：response.text 是执行过语，属于 timeline projector 的职责
+        # （TextChunk → _emit_text → projector.on_iteration_text → timeline 灰框），
+        # 不应同时落进 session tree MessageEntry.content 导致正文蓝框重复。
+        # 终态轮次（无 tool_calls, complete_no_tool_turn）才落完整答复正文。
         from prismclaw.engine.execution.dispatch.response_handling import (
             append_assistant_response,
         )
-        from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
 
         await append_assistant_response(
             deps=deps,
             tree=tree,
             append_entry=_append,
-            text=strip_noise(response.text or ""),
+            text="",
             tool_calls=response.tool_calls,
         )
         # 被拒调用（before_tool_call block）的 tool 结果随之落树。

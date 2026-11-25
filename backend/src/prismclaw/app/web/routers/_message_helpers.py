@@ -343,10 +343,8 @@ def _build_display_messages(
     pending_assistant_last_raw_final: Any = None
     pending_assistant_id: str | None = None
     pending_assistant_ts: Any = None
-    # 异常终止 run 的兜底 partial 消息可能正文为空、无 tool_calls，仅作为
-    # execution_timeline 的挂靠点存在。聚合丢弃它会让刷新后执行过程永久
-    # 丢失（timeline 挂在无人引用的 id 上）。
-    pending_assistant_partial: bool = False
+    # 异常终止时补写的消息（metadata.interrupted）聚合后仍要给用户可见标记。
+    pending_assistant_interrupted: bool = False
     # 展示消息聚合了多条 entry，增量对账需要"这组里最新的那次触碰"，
     # 因此与 tool_calls 同生命周期地追踪组内最大 seq，flush 时一并落盘。
     pending_assistant_seq: int = 0
@@ -361,12 +359,11 @@ def _build_display_messages(
             pending_assistant_last_raw_final, \
             pending_assistant_id, \
             pending_assistant_ts, \
-            pending_assistant_partial, \
+            pending_assistant_interrupted, \
             pending_assistant_seq
         if (
             not pending_assistant_text_parts
             and not pending_tool_calls
-            and not pending_assistant_partial
             # 正文为空但挂着元数据（时间线/交付物）的回合必须出条，作为挂靠点。
             and not (retain_ids is not None and pending_assistant_id in retain_ids)
         ):
@@ -375,22 +372,21 @@ def _build_display_messages(
             pending_assistant_last_raw_final = None
             pending_assistant_id = None
             pending_assistant_ts = None
-            pending_assistant_partial = False
+            pending_assistant_interrupted = False
             pending_assistant_seq = 0
             return
-        # 正文 = 完整转录：聚合所有迭代的自然语言过程说明，
-        # 以 "\n\n" 连接，与实时流式提交的最终消息保持一致（invariant I3）。
+        # 正文 = 最后一条非空的自然语言答复（单一真相源）。
+        # 中间迭代的过语已由 timeline projector._segment_texts 收集并在灰框展示，
+        # 不应同时拼进正文蓝框。终态轮次（complete_no_tool_turn）的完整答复
+        # 落 session tree assistant entry，是正文的唯一来源。
+        # 若 TERMINATE（预算耗尽等异常终止）导致最后一条 assistant 为空，
+        # 往前找到最近的非空 part，保证正文至少有内容可见。
         all_texts = list(pending_assistant_text_parts)
-        if len(all_texts) == 1 and pending_assistant_last_raw_final is not None:
-            content = pending_assistant_last_raw_final
-        elif len(all_texts) >= 1:
-            content = "\n\n".join(all_texts)
-        else:
-            content = (
-                pending_assistant_last_raw_final
-                if pending_assistant_last_raw_final is not None
-                else ""
-            )
+        content = ""
+        for part in reversed(all_texts):
+            if part.strip():
+                content = part
+                break
         payload: dict[str, Any] = {
             "id": pending_assistant_id,
             "role": "assistant",
@@ -405,8 +401,8 @@ def _build_display_messages(
         metadata: dict[str, Any] = {}
         if _asst_ms is not None and last_user_ts_ms is not None:
             metadata["durationMs"] = max(0, _asst_ms - last_user_ts_ms)
-        # partial 表示该轮 assistant 未正常收尾（中止/异常），刷新后仍需给用户可见标记
-        if pending_assistant_partial:
+        # 异常终止补写的消息：刷新后仍需给用户可见的中断标记
+        if pending_assistant_interrupted:
             metadata["interrupted"] = True
         if metadata:
             payload["metadata"] = metadata
@@ -455,7 +451,7 @@ def _build_display_messages(
         pending_assistant_last_raw_final = None
         pending_assistant_id = None
         pending_assistant_ts = None
-        pending_assistant_partial = False
+        pending_assistant_interrupted = False
         pending_assistant_seq = 0
 
     for entry in ordered:
@@ -488,20 +484,13 @@ def _build_display_messages(
         )
         has_visible_content = _message_has_visible_content(sanitized_content)
         # assistant entry 携带 tool_calls 时本身即为可见内容（工具调用需进
-        # timeline），即便无文本也不应被跳过。partial 同理：异常终止 run 的
-        # 兜底 partial 消息可能正文为空但挂着 execution_timeline——被过滤
-        # 会让刷新后执行过程永久丢失（timeline 挂在无人引用的 id 上）。
+        # timeline），即便无文本也不应被跳过；正文为空但挂了 timeline /
+        # 交付物元数据的回合由 retain_ids 保住。
         has_tool_calls = entry.role == "assistant" and bool(entry.tool_calls)
-        is_partial_assistant = entry.role == "assistant" and entry.partial
         is_retained = (
             entry.role == "assistant" and retain_ids is not None and entry.id in retain_ids
         )
-        if (
-            not has_visible_content
-            and not has_tool_calls
-            and not is_partial_assistant
-            and not is_retained
-        ):
+        if not has_visible_content and not has_tool_calls and not is_retained:
             continue
 
         if entry.role == "user":
@@ -535,8 +524,8 @@ def _build_display_messages(
             # 记录元数据（末迭代覆盖中间迭代，id/ts 指向最后一个 assistant entry）
             pending_assistant_id = entry.id
             pending_assistant_ts = entry.timestamp
-            # 异常终止兜底 partial 标记（正文/工具均空时仍保住聚合输出）
-            pending_assistant_partial = pending_assistant_partial or bool(entry.partial)
+            # 异常终止补写标记（正文/工具为空时仍保住聚合输出）
+            pending_assistant_interrupted = pending_assistant_interrupted or entry.interrupted
             pending_assistant_seq = max(pending_assistant_seq, entry.seq)
             # 正文 = 完整转录（含中间迭代的自然语言过程说明）；
             # 思考/reasoning 与工具调用由前端分别渲染。

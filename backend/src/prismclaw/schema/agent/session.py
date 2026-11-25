@@ -135,7 +135,6 @@ class MessageEntry(SessionEntryBase):
     enriched_content: str | list[ContentBlock] | None = None
     tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
-    partial: bool = False
     # tool-result failure flag ( — drives the red timeline span
     # and the ledger error marker). Set by the tool execution loop when the
     # ToolResult carries is_error.
@@ -149,6 +148,11 @@ class MessageEntry(SessionEntryBase):
     # 服务端 user entry 与客户端乐观气泡据此对齐：客户端收到带该值的 user
     # 消息时原地 re-key，而不是再追加一个重复气泡。
     client_message_id: str | None = None
+
+    @property
+    def interrupted(self) -> bool:
+        """该消息是在异常终止时由流式转录补写的（非完整模型回合）。"""
+        return bool((self.metadata or {}).get("interrupted"))
 
 
 class SessionEventType(StrEnum):

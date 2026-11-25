@@ -4,7 +4,7 @@ import json
 import logging
 import uuid
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -224,10 +224,21 @@ def build_completion_contract(
 
 
 class CompletionReviewer:
-    """准则逐条评估器。只读产物事实与证据台账，纯函数式，不写状态。"""
+    """准则逐条评估器。只读产物事实与证据台账，纯函数式，不写状态。
 
-    def __init__(self, scanner: ArtifactScanner) -> None:
+    ``artifact_candidates`` 提供「本次 run 实际产出」的绝对路径（outbox 增量）。
+    ``target=None`` 的准则按 ``wrote_paths ∪ artifact_candidates`` 评估：
+    只认工具入参声明的路径会漏掉 bash/脚本等「写入发生在命令内部」的产物。
+    """
+
+    def __init__(
+        self,
+        scanner: ArtifactScanner,
+        *,
+        artifact_candidates: Callable[[], Iterable[str]] | None = None,
+    ) -> None:
         self._scanner = scanner
+        self._artifact_candidates = artifact_candidates
 
     def evaluate(
         self,
@@ -243,8 +254,10 @@ class CompletionReviewer:
         evidence_ids = tuple(
             dict.fromkeys(record.evidence_id for record in records if record.wrote_paths)
         )
+        run_artifacts = tuple(self._artifact_candidates()) if self._artifact_candidates else ()
         outcomes = tuple(
-            self._evaluate(criterion, wrote_paths, evidence_ids) for criterion in contract.criteria
+            self._evaluate(criterion, wrote_paths, evidence_ids, run_artifacts)
+            for criterion in contract.criteria
         )
         for outcome in outcomes:
             emit(
@@ -265,10 +278,15 @@ class CompletionReviewer:
         criterion: Criterion,
         wrote_paths: tuple[str, ...],
         evidence_ids: tuple[str, ...],
+        run_artifacts: tuple[str, ...],
     ) -> CriterionOutcome:
         if criterion.kind == "unverifiable":
             return CriterionOutcome(criterion, "unverifiable")
-        candidates = (criterion.target,) if criterion.target else wrote_paths
+        candidates = (
+            (criterion.target,)
+            if criterion.target
+            else tuple(dict.fromkeys((*wrote_paths, *run_artifacts)))
+        )
         if not candidates:
             return CriterionOutcome(criterion, "unmet")
 

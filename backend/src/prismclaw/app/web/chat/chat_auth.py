@@ -87,9 +87,8 @@ async def handle_abort(
     rc = session_queue.get_run_control(msg.conversation_id)
     if rc.is_active():
         # 只发中止信号，不在这里发 chat.done：done 的契约是"本轮已完全落库"，
-        # 此刻已流出的正文还没落库。收尾（落 partial + 翻 active + 发 done）由
-        # chat_runner 的 ErrorEvent(aborted) 路径统一完成，避免双写与
-        # "先清空、后出现"的闪烁。
+        # 此刻已流出的正文还没落库。收尾（锚点复用 / 中断补写 + timeline + 交付物
+        # + 发 done）由 chat_runner 的 ErrorEvent(aborted) 路径统一完成。
         rc.stop()
         session_queue.release_pending_approvals(msg.conversation_id)
     else:

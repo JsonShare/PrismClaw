@@ -119,6 +119,50 @@ def test_advisory_contract_without_evidence_reports_gap(tmp_path: Path):
     assert "file_missing" in [outcome.code for outcome in result.gaps]
 
 
+def test_advisory_contract_accepts_run_artifact_delta(tmp_path: Path):
+    """advisory 契约 + 无 wrote_paths 证据，但本次 run 有 outbox 增量 → 受理。
+
+    回归：bash / officecli 在命令内部写文件时 wrote_paths 为空，旧实现连续
+    报 file_missing，直到工具预算耗尽被判超预算终止（产物其实早已生成）。
+    """
+    contract = build_completion_contract(_spec(goal="产出季度报告"))
+    outbox = tmp_path / "sessions" / "s1" / "outbox"
+    outbox.mkdir(parents=True)
+    artifact = outbox / "report.md"
+    artifact.write_text("# 报告\n结论：完成。\n", encoding="utf-8")
+    reviewer = CompletionReviewer(
+        ArtifactScanner(tmp_path),
+        artifact_candidates=lambda: (str(artifact),),
+    )
+    result = reviewer.evaluate(contract, [])
+    assert result.accepted
+    assert all(outcome.status == "met" for outcome in result.outcomes)
+
+
+def test_artifact_candidates_reports_only_run_delta(tmp_path: Path):
+    """outbox 增量的口径：run 启动前的历史产物不算，run 内新增/变更才算。"""
+    from types import SimpleNamespace
+
+    from prismclaw.engine.execution.loop.runtime import _artifact_candidates
+    from prismclaw.infra.workspace_paths import ensure_session_layout
+
+    session_root = ensure_session_layout(tmp_path, "s1")
+    outbox = session_root / "outbox"
+    outbox.mkdir(parents=True, exist_ok=True)
+    (outbox / "old.md").write_text("历史产物", encoding="utf-8")
+
+    get_delta = _artifact_candidates(
+        SimpleNamespace(
+            request=SimpleNamespace(session_id="s1"),
+            tool_workspace_path=tmp_path,
+        )
+    )
+    assert get_delta is not None
+    (outbox / "new.md").write_text("本次产物", encoding="utf-8")
+
+    assert get_delta() == (str(outbox / "new.md"),)
+
+
 def test_production_with_targets_but_no_reports_file_missing(tmp_path: Path):
     """有 targets 但没产物 → 三条准则全 unmet（文件不存在，后续也无法验证空/可解析）。"""
     contract = build_completion_contract(_spec(goal="产出季度报告", declared=("out.md",)))

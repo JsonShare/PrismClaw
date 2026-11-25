@@ -7,7 +7,9 @@ prepare 阶段构造并填充「入参 / run 级状态」，``build_runtime`` �
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -101,6 +103,35 @@ TERMINAL_MESSAGES: dict[str, str] = {
 }
 
 
+def _artifact_candidates(rt: LoopRuntime) -> Callable[[], tuple[str, ...]] | None:
+    """本次 run 的产物增量（session outbox 相对 run 起点）。
+
+    ``Criterion(target=None)`` 需要「本次运行产出的文件」作为候选。仅靠工具
+    入参推导 ``wrote_paths`` 会漏掉 bash / 脚本内部写文件的场景；这里对
+    session outbox 做一次基线快照，判定时取增量绝对路径。
+    """
+    from prismclaw.engine.execution.control.artifacts import ArtifactScanner, Scope
+    from prismclaw.infra.workspace_paths import ensure_session_layout
+
+    session_id = getattr(rt.request, "session_id", "") or ""
+    if not rt.tool_workspace_path or not session_id:
+        return None
+    session_root = ensure_session_layout(rt.tool_workspace_path, session_id)
+    scope = Scope(kind="session", root=str(session_root), prefixes=("outbox",))
+    scanner = ArtifactScanner(session_root)
+    baseline = scanner.scan(scope)
+
+    def _delta() -> tuple[str, ...]:
+        root = Path(scope.root)
+        return tuple(
+            str(root / path)
+            for path, signature in scanner.scan(scope).items()
+            if baseline.get(path) != signature
+        )
+
+    return _delta
+
+
 def build_runtime(rt: LoopRuntime) -> LoopRuntime:
     """装配 LoopRuntime：预算、完成内核、终态文案、责任投影器一次生成。
 
@@ -143,7 +174,10 @@ def build_runtime(rt: LoopRuntime) -> LoopRuntime:
     )
     rt.completion_kernel = CompletionKernel(
         state=rt.completion_state,
-        reviewer=CompletionReviewer(ArtifactScanner(rt.tool_workspace_path)),
+        reviewer=CompletionReviewer(
+            ArtifactScanner(rt.tool_workspace_path),
+            artifact_candidates=_artifact_candidates(rt),
+        ),
         budget=rt.budget_guard,
         recovery=rt.recovery,
     )

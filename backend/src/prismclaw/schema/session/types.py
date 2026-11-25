@@ -435,7 +435,6 @@ def _event_to_message_entry(
             enriched_content=data.get("enriched_content"),
             tool_calls=None,
             tool_call_id=data.get("tool_call_id"),
-            partial=False,
             is_error=bool(data.get("is_error") or False),
             tool_name=data.get("tool_name"),
             metadata=data.get("metadata"),
@@ -457,7 +456,6 @@ def _event_to_message_entry(
         enriched_content=data.get("enriched_content"),
         tool_calls=raw_tool_calls,
         tool_call_id=None,
-        partial=False,
         client_message_id=data.get("client_message_id"),
         metadata=data.get("metadata"),
     )

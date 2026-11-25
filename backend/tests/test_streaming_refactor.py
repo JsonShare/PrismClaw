@@ -1,7 +1,8 @@
 """Regression tests for the path-B streaming refactor.
 
 Locks the two riskiest contract changes:
-  - I3: reload body == live full transcript (Claude Code mode).
+  - I3: reload body == last non-empty assistant turn (final answer),
+    intermediate turns with tool_calls are timeline-only.
 
 Doom-loop guard tests moved to test_doom_loop_guard.py (record/evaluate
 two-phase contract).
@@ -19,9 +20,12 @@ def _tree(entries: dict[str, MessageEntry], order: list[str]) -> SimpleNamespace
     return SimpleNamespace(entries=entries, order=order)
 
 
-def test_reload_body_is_full_transcript():
-    """Reload must render ALL assistant turns (incl. intermediate drafts) as
-    the body, joined with '\\n\\n' — matching the live streamed transcript."""
+def test_reload_body_is_last_nonempty_turn():
+    """正文蓝框只取最后一条非空 assistant content。
+    
+    中间迭代的过语（a1）已通过 timeline projector 收集并在灰框展示，
+    不应再拼进正文蓝框。终态轮次 a2 的完整答复是正文的唯一来源。
+    """
     entries = {
         "u1": MessageEntry(id="u1", parent_id=None, role="user", content="请帮我查一下北京天气"),
         "a1": MessageEntry(
@@ -52,12 +56,9 @@ def test_reload_body_is_full_transcript():
     assistants = [m for m in msgs if m["role"] == "assistant"]
     assert len(assistants) == 1
     body = assistants[0]["content"]
-    # Both turns present (not just the final answer).
-    assert "我先检索一下天气资料。" in body
-    assert "根据检索结果，北京今天晴，25°C。" in body
-    # Exact join matches live contract ("\n\n".join per-turn parts).
-    assert body == "我先检索一下天气资料。\n\n根据检索结果，北京今天晴，25°C。"
-    # Tool calls preserved in the payload.
+    # 正文只显示最后一轮非空答复（a2），不拼中间过语（a1）
+    assert body == "根据检索结果，北京今天晴，25°C。"
+    # Tool calls 保留在 payload（a1 的工具调用）
     assert assistants[0]["tool_calls"][0]["name"] == "read"
 
 

@@ -152,6 +152,10 @@ async def should_continue(
                 }
             )
         return decision
+    # 内核 COMPLETE 只在 is_stop=True 时返回（preflight 路径模型停手
+    # + contract satisfied / 无 contract）。post 路径 contract satisfied
+    # + not is_stop 时内核返回 PROCEED + last_review.accepted=True，
+    # after_tool_call 会读内核结果注入收敛提示引导下一轮输出最终答复。
 
     # ── 预算临限提醒（不改变裁决，只提醒一次）──
     _budget_dim = rt.budget_guard.warn(iteration=state.perf.llm_calls)

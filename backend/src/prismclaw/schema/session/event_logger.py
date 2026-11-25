@@ -65,7 +65,6 @@ def build_user_message_entry(data: dict[str, Any]) -> dict[str, Any]:
         "content": data.get("content", ""),
         "tool_calls": None,
         "tool_call_id": None,
-        "partial": False,
         "metadata": data.get("metadata"),
     }
 
@@ -87,7 +86,6 @@ def build_assistant_message_entry(data: dict[str, Any]) -> dict[str, Any]:
         "content": data.get("content", ""),
         "tool_calls": None,
         "tool_call_id": None,
-        "partial": False,
         "metadata": data.get("metadata"),
     }
 
@@ -109,7 +107,6 @@ def build_tool_result_entry(data: dict[str, Any]) -> dict[str, Any]:
         "content": data.get("content", ""),
         "tool_calls": None,
         "tool_call_id": data.get("tool_call_id"),
-        "partial": False,
         "metadata": data.get("metadata"),
     }
 
