@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 __all__ = [
     "ReferenceSource",
+    "ReferenceSection",
     "ReferenceBlockStreamFilter",
     "normalize_reference_sources",
     "parse_reference_block",
@@ -38,20 +39,42 @@ REFERENCE_KINDS = frozenset(
 )
 
 MAX_SOURCES = 12
+MAX_SECTIONS = 12
 
 _OPEN_MARKER = "<!--references"
 _OPEN_RE = re.compile(r"<!--\s*references\b", re.IGNORECASE)
 _CLOSE_MARKER = "-->"
 
 
+class ReferenceSection(BaseModel):
+    """RAG 文档的结构化小节（如药品的「主要成分」「用法用量」）。"""
+
+    title: str = ""
+    content: str = ""
+
+
 class ReferenceSource(BaseModel):
-    """一条参考来源。仅 url 或 title 至少有其一。"""
+    """一条参考来源。仅 url 或 title 至少有其一。
+
+    ``origin`` 区分两类来源：
+    - ``web``：外部网页，前端右侧栏用 iframe 预览 ``url``
+    - ``rag``：知识库检索结果，前端右侧栏展示 ``snippet`` / ``abstract`` /
+      ``sections`` 等结构化内容（检索功能尚未接入，字段先预留）
+    """
 
     title: str = ""
     url: str | None = None
     publisher: str | None = None
     year: str | None = None
     kind: str = "web"
+    # ---- RAG 来源预留字段（web 来源留空） ----
+    origin: str = "web"
+    authors: str | None = None
+    impact_factor: str | None = None
+    doi: str | None = None
+    snippet: str | None = None
+    abstract: str | None = None
+    sections: list[ReferenceSection] | None = None
 
 
 def _clean_str(value: object, *, limit: int = 300) -> str | None:
@@ -68,6 +91,16 @@ def _clean_str(value: object, *, limit: int = 300) -> str | None:
     return text[:limit]
 
 
+def _clean_text(value: object, *, limit: int) -> str | None:
+    """长文本清洗：收敛行内空白但保留段落换行（检索片段/摘要靠段落可读）。"""
+    if not isinstance(value, str):
+        return None
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    text = "\n".join(" ".join(line.split()) for line in text.split("\n")).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text[:limit] or None
+
+
 def _clean_url(value: object) -> str | None:
     url = _clean_str(value)
     if not url:
@@ -81,20 +114,27 @@ def _clean_url(value: object) -> str | None:
     return url
 
 
+def _clean_sections(value: object) -> list[ReferenceSection] | None:
+    if not isinstance(value, list):
+        return None
+    out: list[ReferenceSection] = []
+    for raw in value:
+        if not isinstance(raw, dict):
+            continue
+        title = _clean_str(raw.get("title"), limit=80) or ""
+        content = _clean_text(raw.get("content"), limit=4000) or ""
+        if not title and not content:
+            continue
+        out.append(ReferenceSection(title=title, content=content))
+        if len(out) >= MAX_SECTIONS:
+            break
+    return out or None
+
+
 def _coerce_source(raw: object) -> ReferenceSource | None:
+    # 模型对象先拍平，dict / 模型两条路径共用同一套清洗逻辑。
     if isinstance(raw, ReferenceSource):
-        title = raw.title.strip()
-        url = _clean_url(raw.url)
-        if not title and not url:
-            return None
-        kind = (raw.kind or "web").lower()
-        return ReferenceSource(
-            title=title or (url or ""),
-            url=url,
-            publisher=raw.publisher,
-            year=raw.year,
-            kind=kind if kind in REFERENCE_KINDS else "web",
-        )
+        raw = raw.model_dump()
     if isinstance(raw, str):
         url = _clean_url(raw)
         if not url:
@@ -102,19 +142,41 @@ def _coerce_source(raw: object) -> ReferenceSource | None:
         return ReferenceSource(url=url, title=url, kind="web")
     if not isinstance(raw, dict):
         return None
+
     title = _clean_str(raw.get("title"))
     url = _clean_url(raw.get("url"))
+    authors = _clean_str(raw.get("authors"), limit=300)
+    impact_factor = _clean_str(raw.get("impact_factor"), limit=32)
+    doi = _clean_str(raw.get("doi"), limit=200)
+    snippet = _clean_text(raw.get("snippet"), limit=2000)
+    abstract = _clean_text(raw.get("abstract"), limit=4000)
+    sections = _clean_sections(raw.get("sections"))
     if not title and not url:
         return None
+
     kind = (_clean_str(raw.get("kind"), limit=32) or "web").lower()
     if kind not in REFERENCE_KINDS:
         kind = "web"
+
+    # 未显式标注 origin 时按内容推断：带检索片段/摘要/小节且无外链 → 视为 RAG。
+    origin = (_clean_str(raw.get("origin"), limit=16) or "").lower()
+    if origin not in {"web", "rag"}:
+        has_rag_payload = bool(snippet or abstract or sections or doi or authors)
+        origin = "rag" if has_rag_payload and not url else "web"
+
     return ReferenceSource(
         title=title or (url or ""),
         url=url,
         publisher=_clean_str(raw.get("publisher"), limit=80),
         year=_clean_str(raw.get("year"), limit=16),
         kind=kind,
+        origin=origin,
+        authors=authors,
+        impact_factor=impact_factor,
+        doi=doi,
+        snippet=snippet,
+        abstract=abstract,
+        sections=sections,
     )
 
 
@@ -128,7 +190,7 @@ def normalize_reference_sources(raw_items: object) -> list[ReferenceSource]:
         source = _coerce_source(raw)
         if source is None:
             continue
-        key = (source.url or source.title).lower()
+        key = (source.doi or source.url or source.title).lower()
         if key in seen:
             continue
         seen.add(key)

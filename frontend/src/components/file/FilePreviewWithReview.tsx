@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
+  BookOpen,
   Check,
   Eye,
   FileText,
+  FileWarning,
   GitCompare,
   Loader2,
   Pencil,
   RotateCcw,
+  RotateCw,
   X,
 } from 'lucide-react'
-import type { FileChange } from '../../types'
+import type { FileChange, ReferenceSource } from '../../types'
 import type { JSONContent } from '@tiptap/core'
 import { FilePreview } from './FilePreview'
 import { PreviewBoundary } from './PreviewBoundary'
@@ -20,6 +23,13 @@ import { DocxReviewHost, type DocxReviewHostRef } from './docxReview/DocxReviewH
 import { OfficeReviewEditor } from './officeReview/OfficeReviewEditor'
 import { Surface } from '../ui/Surface'
 import { saveDocxNativeReviewed } from '../../lib/file/fileReview'
+import { openExternal } from '../../lib/system-adapter'
+import {
+  buildReferenceMarkdown,
+  normalizeReferenceUrl,
+  referenceDisplayTitle,
+  referenceKindLabel,
+} from '../../lib/chat/referenceSources'
 
 type ViewMode = 'preview' | 'review' | 'edit'
 
@@ -74,9 +84,30 @@ function ModeTab({
   )
 }
 
+/** 加载 / 失败状态图标：与系统一致的线面材质，不展示任何错误码 */
+function StatusGlyph({ status }: { status: 'loading' | 'error' }) {
+  return (
+    <div className="flex h-14 w-14 items-center justify-center rounded-[14px] border border-[var(--c-border)] bg-[var(--c-surface-2)]">
+      {status === 'loading' ? (
+        <Loader2 size={22} className="animate-spin text-[var(--c-text-secondary)]" />
+      ) : (
+        <FileWarning size={24} className="text-[var(--c-warning)]" />
+      )}
+    </div>
+  )
+}
+
 interface FilePreviewWithReviewProps {
-  file: Blob
+  file?: Blob
   fileName: string
+  /** RAG 来源预览：展示检索片段/摘要/结构化小节，同样复用本面板外壳 */
+  ragPreview?: ReferenceSource
+  /** 文件内容尚未就绪时的壳状态：由本面板统一渲染加载中 / 加载失败 */
+  loadState?: {
+    status: 'loading' | 'error'
+  }
+  /** 加载失败时展示「重试」，由调用方重新拉取文件 */
+  onRetry?: () => void
   /** 工作区相对路径，用于保存/回滚 */
   filePath?: string
   change?: FileChange
@@ -103,15 +134,19 @@ interface FilePreviewWithReviewProps {
 }
 
 /**
- * 融合组件：文件预览 / 审阅 / 编辑通过模式切换共存。
+ * 右侧栏统一预览面板：文件预览 / 审阅 / 编辑 / RAG 来源共用同一外壳。
  * - Preview：完整展示文件内容（FilePreview）
  * - Review：完整展示差异审阅 + Accept/Reject 操作栏
  * - Edit：文本编辑器，可手动修改内容后保存；支持回滚到备份版本
- * 三种模式独占同一区域，通过顶部 tab 切换。
+ * - RAG：传 `ragPreview` 时转成 Markdown，复用 `FilePreview`（file-viewer）渲染
+ * 各模式独占同一区域，文件模式通过顶部 tab 切换。
  */
 export function FilePreviewWithReview({
   file,
   fileName,
+  ragPreview,
+  loadState,
+  onRetry,
   change,
   reviewDoc,
   reviewError,
@@ -139,6 +174,22 @@ export function FilePreviewWithReview({
   const [rejected, setRejected] = useState(change?.reviewed === 'rejected')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /* ---- 来源模式：RAG / 后端结构化数据共用右侧栏，交给 file-viewer ---- */
+  const isRag = Boolean(ragPreview)
+  const isSource = isRag
+  const ragUrl = normalizeReferenceUrl(ragPreview?.url)
+  // RAG 来源转成 Markdown 文档，直接交给 FilePreview（file-viewer）渲染，
+  // 不再单独手写一套文档排版。
+  const ragMarkdown = useMemo(
+    () => (ragPreview ? buildReferenceMarkdown(ragPreview) : ''),
+    [ragPreview],
+  )
+  const ragDoc = useMemo(
+    () => new Blob([ragMarkdown], { type: 'text/markdown; charset=utf-8' }),
+    [ragMarkdown],
+  )
+  const sourceTitle = isRag ? referenceDisplayTitle(ragPreview!) : fileName
 
   /* ---- Edit 模式状态 ---- */
   const [editContent, setEditContent] = useState('')
@@ -174,7 +225,7 @@ export function FilePreviewWithReview({
 
   /* ---- 从 Blob 读取文本内容（Edit 模式需要） ---- */
   useEffect(() => {
-    if (mode !== 'edit') return
+    if (mode !== 'edit' || !file) return
     // Blob 变化时（如回滚/保存后重新 fetch）必须重新读取
     const blobChanged = file !== lastLoadedBlobRef.current
     if (!blobChanged && editContent && !editDirty) return // 同一 Blob 且已加载，不重复读
@@ -339,50 +390,63 @@ export function FilePreviewWithReview({
         className="grid grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-2.5 shrink-0"
         style={{ borderBottom: '1px solid var(--c-border)' }}
       >
-        {/* 左区：模式切换 tab */}
+        {/* 左区：模式切换 tab / 来源标识 */}
         <div className="flex items-center shrink-0">
-          <div className="flex items-center gap-1">
-            {hasChange && (
+          {loadState ? null : isRag ? (
+            <span className="inline-flex items-center gap-1.5 px-2 text-[length:var(--fs-sm)] font-medium text-[var(--c-text-secondary)]">
+              <BookOpen size={14} />
+              {referenceKindLabel(ragPreview?.kind)}
+            </span>
+          ) : (
+            <div className="flex items-center gap-1">
+              {hasChange && (
+                <ModeTab
+                  active={tabReviewActive}
+                  onClick={() => setMode('review')}
+                  icon={<GitCompare size={14} />}
+                  label="审阅"
+                >
+                  {change && <DiffBadge insertions={change.insertions} deletions={change.deletions} />}
+                </ModeTab>
+              )}
               <ModeTab
-                active={tabReviewActive}
-                onClick={() => setMode('review')}
-                icon={<GitCompare size={14} />}
-                label="审阅"
-              >
-                {change && <DiffBadge insertions={change.insertions} deletions={change.deletions} />}
-              </ModeTab>
-            )}
-            <ModeTab
-              active={tabPreviewActive}
-              onClick={() => setMode('preview')}
-              icon={<Eye size={14} />}
-              label="预览"
-            />
-            {canEdit && onSaveContent && (
-              <ModeTab
-                active={tabEditActive}
-                onClick={() => setMode('edit')}
-                icon={<Pencil size={14} />}
-                label="编辑"
+                active={tabPreviewActive}
+                onClick={() => setMode('preview')}
+                icon={<Eye size={14} />}
+                label="预览"
               />
-            )}
-          </div>
+              {canEdit && onSaveContent && (
+                <ModeTab
+                  active={tabEditActive}
+                  onClick={() => setMode('edit')}
+                  icon={<Pencil size={14} />}
+                  label="编辑"
+                />
+              )}
+            </div>
+          )}
         </div>
 
-        {/* 中区：文件标题 */}
-        <div className="flex items-center justify-center gap-2 min-w-0 overflow-hidden">
-          <FileText size={15} className="text-[var(--c-text-secondary)]/50 shrink-0" />
-          <span
-            className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)] truncate"
-            title={fileName}
-          >
-            {fileName}
-          </span>
-          {change && (
-            <span className="px-1.5 py-0.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] bg-[var(--c-accent)]/8 text-[var(--c-accent)] shrink-0">
-              {KIND_LABEL[change.kind]}
+        {/* 中区：标题（来源模式附来源信息） */}
+        <div className="flex flex-col items-center justify-center min-w-0 overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0 max-w-full">
+            {isRag ? (
+              <BookOpen size={15} className="text-[var(--c-text-secondary)]/50 shrink-0" />
+            ) : (
+              <FileText size={15} className="text-[var(--c-text-secondary)]/50 shrink-0" />
+            )}
+            <span
+              className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)] truncate"
+              title={sourceTitle}
+            >
+              {sourceTitle}
             </span>
-          )}
+            {!isSource && change && (
+              <span className="px-1.5 py-0.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] bg-[var(--c-accent)]/8 text-[var(--c-accent)] shrink-0">
+                {KIND_LABEL[change.kind]}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 右区：操作按钮 */}
@@ -400,7 +464,7 @@ export function FilePreviewWithReview({
         </div>
       </Surface>
 
-      {hasChange && (
+      {!isSource && hasChange && (
         <div className="px-4 py-2 border-b border-[var(--c-border)]/25 bg-[var(--c-surface-2)]/45 shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span
@@ -432,21 +496,84 @@ export function FilePreviewWithReview({
         </div>
       )}
 
-      {/* ── 内容区：根据 mode 渲染 ── */}
+      {/* ── 内容区：来源 / 文件模式 ── */}
       <Surface bordered={false} className="flex-1 min-w-0 min-h-0 overflow-hidden w-full">
+        {loadState ? (
+          <div
+            role={loadState.status === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+            className="grid h-full place-items-center overflow-y-auto px-6 pb-20 pt-10"
+          >
+            <div className="flex w-full max-w-[280px] flex-col items-center text-center">
+              <StatusGlyph status={loadState.status} />
+              <div className="mt-5 text-[length:var(--fs-md)] font-semibold text-[var(--c-text)]">
+                {loadState.status === 'loading' ? '正在打开文件' : '无法打开这个文件'}
+              </div>
+              <p className="mt-1.5 text-[length:var(--fs-sm)] leading-6 text-[var(--c-text-secondary)]">
+                {loadState.status === 'loading'
+                  ? '马上就好，请稍等片刻。'
+                  : '文件可能已被移动、删除，或服务暂时不可用。'}
+              </p>
+              {loadState.status === 'error' ? (
+                <div className="mt-5 flex items-center gap-2">
+                  {onRetry ? (
+                    <button type="button" onClick={onRetry} className="btn btn-sm btn-primary">
+                      <RotateCw size={13} />
+                      重试
+                    </button>
+                  ) : null}
+                  {onClose ? (
+                    <button type="button" onClick={onClose} className="btn btn-sm btn-secondary">
+                      关闭
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {/* ── RAG 来源：转 Markdown 后交给 file-viewer 预览 ── */}
+        {isRag ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="min-h-0 flex-1">
+              <FilePreview
+                file={ragDoc}
+                fileName={`${sourceTitle}.md`}
+                className="w-full h-full"
+              />
+            </div>
+            {ragUrl ? (
+              <div className="shrink-0 border-t border-[var(--c-border)] px-4 py-2.5">
+                <button
+                  type="button"
+                  onClick={() => openExternal(ragUrl)}
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--c-border)] py-2
+                             text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] transition-colors
+                             hover:bg-[var(--c-surface-2)]/60 hover:text-[var(--c-text)]"
+                >
+                  查看原文
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* ── Preview 模式 ── */}
-        {tabPreviewActive && (
+        {!isSource && tabPreviewActive && (
           <PreviewBoundary>
-            <FilePreview
-              file={file}
-              fileName={fileName}
-              className="w-full h-full"
-            />
+            {file ? (
+              <FilePreview
+                file={file}
+                fileName={fileName}
+                className="w-full h-full"
+              />
+            ) : null}
           </PreviewBoundary>
         )}
 
         {/* ── Review 模式 ── */}
-        {tabReviewActive && (
+        {!isSource && tabReviewActive && (
           change ? (
             <div className="h-full flex flex-col">
               {/* 差异区域 */}
@@ -546,7 +673,7 @@ export function FilePreviewWithReview({
         )}
 
         {/* ── Edit 模式 ── */}
-        {tabEditActive && (
+        {!isSource && tabEditActive && (
           <div className="h-full flex flex-col">
             {editLoading ? (
               <div className="flex-1 flex items-center justify-center text-[var(--c-text-secondary)]/40 text-[length:var(--fs-sm)]">

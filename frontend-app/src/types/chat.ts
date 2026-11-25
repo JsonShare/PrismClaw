@@ -48,6 +48,15 @@ export interface Message {
   inProgress?: boolean
 }
 
+/** 来源形态：external web link 或知识库（RAG）检索结果 */
+export type ReferenceOrigin = 'web' | 'rag'
+
+/** RAG 文档的结构化小节 */
+export interface ReferenceSection {
+  title: string
+  content: string
+}
+
 export interface ReferenceSource {
   /** 标题（无标题时退化为 URL） */
   title: string
@@ -57,6 +66,15 @@ export interface ReferenceSource {
   year?: string | null
   /** guideline | paper | drug | database | news | web | book | report */
   kind?: string
+  /** web：打开外链；rag：小程序端仅展示元信息/片段 */
+  origin?: ReferenceOrigin
+  /** ---- 以下为 RAG 来源预留字段 ---- */
+  authors?: string | null
+  impactFactor?: string | null
+  doi?: string | null
+  snippet?: string | null
+  abstract?: string | null
+  sections?: ReferenceSection[] | null
 }
 
 export interface MessageMetadata {

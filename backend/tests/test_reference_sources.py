@@ -41,6 +41,47 @@ def test_reference_sources_reject_non_http_urls_but_keep_titles() -> None:
     ]
 
 
+def test_reference_sources_preserve_rag_fields_and_infer_origin() -> None:
+    sources = normalize_reference_sources(
+        [
+            {
+                "title": "布鲁氏菌病诊疗方案(2023年版)",
+                "publisher": "中国感染控制杂志",
+                "year": "2024-01-01",
+                "kind": "guideline",
+                "authors": "张黎;周梦兰;田晓彤",
+                "impact_factor": "2.319",
+                "doi": "10.12138/j.issn.1671-9638.20245429",
+                "snippet": "（二）病原学检查\n\n1. 细菌培养：……\n\n2. 核酸检测：……",
+                "abstract": "布鲁氏菌病是一种人畜共患传染病。",
+                "sections": [{"title": "主要成分", "content": "尿肠球菌、枯草杆菌"}],
+            },
+            {
+                "title": "外链来源",
+                "url": "https://example.com/guide",
+                "snippet": "网页也带了摘要，但 origin 仍为 web",
+                "origin": "web",
+            },
+            {
+                "title": "显式 RAG",
+                "origin": "rag",
+                "impact_factor": 12.5,
+            },
+        ]
+    )
+
+    rag, web, explicit = sources
+    assert rag.origin == "rag"
+    assert rag.authors == "张黎;周梦兰;田晓彤"
+    assert rag.impact_factor == "2.319"
+    assert rag.doi == "10.12138/j.issn.1671-9638.20245429"
+    assert rag.snippet is not None and "\n\n" in rag.snippet
+    assert rag.sections is not None and rag.sections[0].title == "主要成分"
+    assert web.origin == "web"
+    assert explicit.origin == "rag"
+    assert explicit.impact_factor == "12.5"
+
+
 class _FakeChatService:
     def __init__(self, events: list[object]) -> None:
         self._events = events

@@ -64,16 +64,35 @@ export interface ToolCallInfo {
   endedAt?: number
 }
 
+/** 来源形态：external web link 或知识库（RAG）检索结果 */
+export type ReferenceOrigin = 'web' | 'rag'
+
+/** RAG 文档的结构化小节（如药品说明书的「主要成分」「用法用量」） */
+export interface ReferenceSection {
+  title: string
+  content: string
+}
+
 export interface ReferenceSource {
   /** 标题（无标题时退化为 URL） */
   title: string
   url?: string | null
   /** 发布机构 / 数据库 / 期刊 / 药品厂商 */
   publisher?: string | null
-  /** 年份，字符串以兼容 "2024" 与 "2024-03" */
+  /** 年份/日期，字符串以兼容 "2024" 与 "2024-03-01" */
   year?: string | null
   /** guideline | paper | drug | database | news | web | book | report */
   kind?: string
+  /** web：右侧栏 iframe 打开 url；rag：右侧栏展示检索片段/摘要 */
+  origin?: ReferenceOrigin
+  /** ---- 以下为 RAG 来源预留字段 ---- */
+  authors?: string | null
+  impactFactor?: string | null
+  doi?: string | null
+  /** 检索命中片段（可能被截断） */
+  snippet?: string | null
+  abstract?: string | null
+  sections?: ReferenceSection[] | null
 }
 
 export interface MessageMetadata {

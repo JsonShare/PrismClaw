@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatStore, useSessionStore } from '../../stores'
-import { apiUrl } from '../../lib/system-adapter'
+import { apiUrl, openExternal } from '../../lib/system-adapter'
 import { normalizeWorkspacePath } from '../../lib/chat/paths'
 import {
   revertFileChange,
@@ -44,14 +44,16 @@ export interface FilePreviewController {
   reviewingChange: FileChange | null
   reviewHtml: JSONContent | null
   reviewHtmlError: string | null
-  /** 右侧栏当前展示的参考来源（非空时面板切成来源详情视图） */
+  /** 右侧栏当前展示的 RAG 来源（非空时面板切成来源详情视图） */
   activeSource: ReferenceSource | null
   openPreviewModal: (rawPath: string) => void
   openReviewInPanel: (change: FileChange) => void
   openFileFromOutputList: (path: string) => void
-  /** 右侧栏展示一条参考来源详情 */
+  /** 右侧栏以 file-viewer 展示一条 RAG / 后端结构化来源 */
   openSourceInPanel: (source: ReferenceSource) => void
   downloadSingleFile: (path: string) => Promise<void>
+  /** 重新拉取当前选中文件（加载失败后重试） */
+  retrySelectedFile: () => void
   closePreviewModal: () => void
   reviewHandlers: ReviewHandlers
 }
@@ -232,6 +234,10 @@ export function useFilePreviewController({
     [rawFileUrl, revokePreviewBlobUrl, token],
   )
 
+  const retrySelectedFile = useCallback(() => {
+    if (selectedFile) void loadFileBlobUrl(selectedFile)
+  }, [loadFileBlobUrl, selectedFile])
+
   const downloadSingleFile = useCallback(
     async (path: string) => {
       if (!token) return
@@ -288,9 +294,7 @@ export function useFilePreviewController({
     return url || null
   }, [])
 
-  // 参考来源详情：右侧栏复用一个"来源详情"视图（标题/机构/年份 + 打开原文）。
-  // 外链网页无法安全嵌入 iframe（医疗站点普遍 X-Frame-Options/ CSP 拒绝），
-  // 因此这里给的是来源元信息 + 跳转入口，而不是网页预览。
+  // 参考来源预览：右侧栏复用文件预览位，RAG / 后端结构化来源转 Markdown 交给 file-viewer。
   const openSourceInPanel = useCallback((source: ReferenceSource) => {
     setTaskFilesOpen(true)
     setActiveSource(source)
@@ -303,20 +307,15 @@ export function useFilePreviewController({
 
   const openPreviewModal = useCallback(
     (rawPath: string) => {
+      const extractedUrl = extractHttpUrl(rawPath)
+      if (extractedUrl) {
+        // 网页链接不在右栏内嵌（主流站点普遍禁止 iframe），直接交给系统浏览器。
+        openExternal(extractedUrl)
+        return
+      }
       setTaskFilesOpen(true)
       setReviewingChange(null)
       setActiveSource(null)
-      const extractedUrl = extractHttpUrl(rawPath)
-      if (extractedUrl) {
-        // 纯 URL 也走来源详情视图：旧逻辑把它当文件塞进 selectedFile，
-        // 因为拿不到 blob，面板会永久停在「加载中…」。
-        setActiveSource({ title: extractedUrl, url: extractedUrl, kind: 'web' })
-        revokePreviewBlobUrl()
-        setPreviewBlob(null)
-        setSelectedFile(null)
-        setSelectedFileError(null)
-        return
-      }
 
       const normalized = normalizeWorkspacePath(rawPath)
       if (!normalized) {
@@ -490,6 +489,7 @@ export function useFilePreviewController({
     openFileFromOutputList,
     openSourceInPanel,
     downloadSingleFile,
+    retrySelectedFile,
     closePreviewModal,
     reviewHandlers,
   }

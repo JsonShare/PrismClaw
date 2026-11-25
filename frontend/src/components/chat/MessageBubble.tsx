@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronRight, Clock, CornerDownRight, Copy, Download, FileText, Loader2, MoreHorizontal, Share2, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { Check, ChevronRight, Clock, CornerDownRight, Copy, Download, FileText, Loader2, MoreHorizontal, ThumbsDown, ThumbsUp } from 'lucide-react'
 import type { ContentBlock, FileBlock, FileChange, ImageBlock, Message, ReferenceSource } from '../../types'
 import MarkdownRenderer, { RichMarkdown } from './MarkdownRenderer'
 import ReferenceSources from './ReferenceSources'
@@ -43,12 +43,11 @@ interface Props {
   onOpenFilePreview?: (path: string) => void
   onCopy?: (message: Message) => void | Promise<void>
   onFeedback?: (messageId: string, vote: 'up' | 'down' | null) => void | Promise<void>
-  onShare?: (message: Message) => void | Promise<void>
   workspaceId?: string
   token?: string
   conversationId?: string
   onOpenReviewInPanel?: (change: FileChange) => void
-  /** 点击参考来源条目：在右侧栏打开来源详情（不新开标签页） */
+  /** 点击参考来源条目：外链新标签打开，RAG 来源进右侧栏 */
   onOpenSource?: (source: ReferenceSource) => void
 }
 
@@ -295,7 +294,7 @@ function escapeHtml(s: string): string {
 
 /** 从消息 content（string | ContentBlock[]）中提取纯文本问题（仅 text 块） */
 export function extractQuestionPlainText(content: string | ContentBlock[]): string {
-  // 导出/分享用的是可读文本：正文里的内联卡片标记还原成 `@标题`
+  // 导出用的是可读文本：正文里的内联卡片标记还原成 `@标题`
   if (typeof content === 'string') return markersToReadable(content).replace(/\s+/g, ' ').trim()
   return content
     .filter((b): b is ContentBlock & { type: 'text' } => b.type === 'text' && !isSystemNoteText(b.text))
@@ -762,7 +761,6 @@ export default function MessageBubble({
   onOpenFilePreview,
   onCopy,
   onFeedback,
-  onShare,
   workspaceId,
   token,
   conversationId: _conversationId,
@@ -779,7 +777,6 @@ export default function MessageBubble({
 
   const isUser = message.role === 'user'
   const [copyOk, setCopyOk] = useState(false)
-  const [shareOk, setShareOk] = useState(false)
   const [isDownloadingAll, setIsDownloadingAll] = useState(false)
   const [downloadAllError, setDownloadAllError] = useState<string | null>(null)
 
@@ -1081,9 +1078,12 @@ export default function MessageBubble({
                   ) : null}
 
                   {/* 参考来源：正文只讲结论，来源统一走这个折叠面板（不再在正文
-                      末尾罗列链接）。点击条目在右侧栏打开来源详情。 */}
+                      末尾罗列链接）。点击条目在右侧栏预览网页。 */}
                   {!isStreaming && referenceSources.length > 0 ? (
-                    <ReferenceSources sources={referenceSources} onOpenSource={onOpenSource} />
+                    <ReferenceSources
+                      sources={referenceSources}
+                      onOpenSource={onOpenSource}
+                    />
                   ) : null}
 
                 {!isStreaming && (renderedAttachments.length > 0 || displayOutputFiles.length > 0) ? (
@@ -1242,22 +1242,7 @@ export default function MessageBubble({
                       <ThumbsDown size={14} fill={downActive ? 'currentColor' : 'none'} />
                     </button>
 
-                    <button
-                      type="button"
-                      className="btn btn-icon btn-ghost"
-                      title={shareOk ? '已准备分享' : '分享'}
-                      onClick={async () => {
-                        try {
-                          await onShare?.(message)
-                          setShareOk(true)
-                          window.setTimeout(() => setShareOk(false), 1200)
-                        } catch {}
-                      }}
-                    >
-                      {shareOk ? <Check size={14} /> : <Share2 size={14} />}
-                    </button>
-
-                    {/* ─── 导出菜单（三个点）：放在 Share 之后、Clock 之前 ─── */}
+                    {/* ─── 导出菜单（三个点）：放在反馈按钮之后、Clock 之前 ─── */}
                     <div ref={exportMenuRef} className="relative">
                       <button
                         type="button"

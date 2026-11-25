@@ -52,14 +52,19 @@ export default function ReferenceRow({ sources, live = false }: ReferenceRowProp
       {open ? (
         <ExecSheet title='参考来源' onClose={() => setOpen(false)}>
           {list.map((source, idx) => {
-            const subtitle = [referenceKindLabel(source.kind), referenceSubtitle(source)]
+            const url = normalizeReferenceUrl(source.url)
+            const subtitle = [
+              referenceKindLabel(source.kind),
+              referenceSubtitle(source),
+              source.impactFactor ? `影响因子 ${source.impactFactor}` : null,
+            ]
               .filter(Boolean)
               .join(' · ')
             return (
               <View
-                className='exec-item is-link'
-                key={`${source.url ?? source.title}-${idx}`}
-                onClick={() => openSource(source)}
+                className={`exec-item${url ? ' is-link' : ''}`}
+                key={`${source.url ?? source.doi ?? source.title}-${idx}`}
+                onClick={url ? () => openSource(source) : undefined}
               >
                 <Icon name='search' size={14} color='#4B5563' strokeWidth={1.8} />
                 <View style={{ flex: 1, minWidth: 0 }}>
@@ -70,7 +75,9 @@ export default function ReferenceRow({ sources, live = false }: ReferenceRowProp
                     </Text>
                   ) : null}
                 </View>
-                <Icon name='chevron-right' size={13} color='#C3C9D5' strokeWidth={2} />
+                {url ? (
+                  <Icon name='chevron-right' size={13} color='#C3C9D5' strokeWidth={2} />
+                ) : null}
               </View>
             )
           })}

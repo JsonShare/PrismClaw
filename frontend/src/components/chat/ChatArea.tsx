@@ -63,7 +63,7 @@ interface Props {
   onRemoveServerWorkspace?: (id: string) => Promise<void>
   isWorkspacesLoading?: boolean
   onOpenReviewInPanel?: (change: FileChange) => void
-  /** 点击参考来源条目：在右侧栏打开来源详情 */
+  /** 点击参考来源条目：外链新标签打开，RAG 来源进右侧栏 */
   onOpenSource?: (source: ReferenceSource) => void
 }
 
@@ -274,20 +274,6 @@ export default function ChatArea({
       }
     },
     [conversationId, setMessageFeedback, token],
-  )
-
-  const handleShare = useCallback(
-    async (m: Message): Promise<void> => {
-      const text = contentToText(m.content)
-      if (!text.trim()) return
-      const nav = navigator as any
-      if (typeof nav.share === 'function') {
-        await nav.share({ text })
-        return
-      }
-      await copyToClipboard(text)
-    },
-    [contentToText, copyToClipboard],
   )
 
   const activeConvId = useSessionStore((s) => s.activeConvId)
@@ -1021,7 +1007,6 @@ export default function ChatArea({
                       onOpenFile={onOpenFilePreview}
                       onCopy={handleCopy}
                       onFeedback={handleFeedback}
-                      onShare={handleShare}
                       onRetry={
                         item.role === 'error'
                           ? () => controller.retryMessage(item.id)

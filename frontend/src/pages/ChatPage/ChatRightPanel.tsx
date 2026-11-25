@@ -6,12 +6,14 @@ import {
   Clock,
   Wrench,
   Download,
-  X,
 } from 'lucide-react'
 import { FilePreviewWithReview } from '../../components/file/FilePreviewWithReview'
 import FileIcon from '../../components/file/FileIcon'
 import { SubagentTree } from '../../components/chat/SubagentTree'
-import { SourceDetailPanel } from './SourceDetailPanel'
+import {
+  referenceDisplayTitle,
+  referenceIsRag,
+} from '../../lib/chat/referenceSources'
 import type { FileChange, ReferenceSource, SubagentPanelItem, ToolCallInfo } from '../../types'
 import type { JSONContent } from '@tiptap/core'
 import iconOpen from '../../images/other_icon/open.png'
@@ -40,7 +42,7 @@ interface ChatRightPanelProps {
   selectedFile: string | null
   previewBlob: Blob | null
   reviewingChange: FileChange | null
-  /** 参考来源详情（非空时面板显示来源视图，优先于空文件态） */
+  /** 参考来源预览（非空时面板显示网址视图，优先于空文件态） */
   activeSource: ReferenceSource | null
   reviewHtml: JSONContent | null
   reviewHtmlError: string | null
@@ -71,6 +73,8 @@ interface ChatRightPanelProps {
   skillsForPanel: string[]
   setTrajectoryOpen: (v: boolean) => void
   closePreviewModal: () => void
+  /** 重新拉取当前选中文件（加载失败页的重试） */
+  retrySelectedFile: () => void
   reviewHandlers: ReviewHandlers
 }
 
@@ -90,8 +94,14 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
     >
       {props.taskFilesOpen ? (
         <>
-          {props.activeSource ? (
-            <SourceDetailPanel source={props.activeSource} onClose={props.closePreviewModal} />
+          {props.activeSource && referenceIsRag(props.activeSource) ? (
+            <FilePreviewWithReview
+              key={`source:rag:${props.activeSource.doi ?? props.activeSource.title}`}
+              fileName={referenceDisplayTitle(props.activeSource)}
+              ragPreview={props.activeSource}
+              onClose={props.closePreviewModal}
+              className="w-full h-full"
+            />
           ) : props.selectedFile ? (
             props.previewBlob && props.reviewingChange ? (
               <FilePreviewWithReview
@@ -124,26 +134,15 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
                 onClose={props.closePreviewModal}
                 className="w-full h-full"
               />
-            ) : props.selectedFileError ? (
-              <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between px-4 py-2.5 shrink-0">
-                  <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]">{props.selectedFile?.split('/').pop()}</span>
-                  <button type="button" onClick={props.closePreviewModal} className="btn btn-icon btn-ghost">
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="flex-1 flex items-center justify-center text-[length:var(--fs-sm)] text-[var(--c-error)]">{props.selectedFileError}</div>
-              </div>
             ) : (
-              <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between px-4 py-2.5 shrink-0">
-                  <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]">{props.selectedFile?.split('/').pop()}</span>
-                  <button type="button" onClick={props.closePreviewModal} className="btn btn-icon btn-ghost">
-                    <X size={16} />
-                  </button>
-                </div>
-                <div className="flex-1 flex items-center justify-center text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">加载中…</div>
-              </div>
+              <FilePreviewWithReview
+                key={props.selectedFile}
+                fileName={props.selectedFile?.split('/').pop() || ''}
+                loadState={props.selectedFileError ? { status: 'error' } : { status: 'loading' }}
+                onRetry={props.retrySelectedFile}
+                onClose={props.closePreviewModal}
+                className="w-full h-full"
+              />
             )
           ) : (
             <div className="flex-1 overflow-y-auto px-4 pt-4 space-y-4">

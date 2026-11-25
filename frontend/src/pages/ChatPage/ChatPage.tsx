@@ -22,7 +22,7 @@ import { purgeConversation } from '../../stores'
 import { fuzzyFilter } from '../../lib/fuzzy'
 import { skipCodeToMessage, type SkippedFile } from '../../lib/chat/attachments'
 import { normalizeWorkspacePath } from '../../lib/chat/paths'
-import { normalizeReferenceUrl } from '../../lib/chat/referenceSources'
+import { normalizeReferenceUrl, referenceIsRag } from '../../lib/chat/referenceSources'
 import { apiUrl, openExternal } from '../../lib/system-adapter'
 import { SessionSearchModal } from '../../components/modals/SessionSearchModal'
 import { DOMAIN_NAV_MAP } from '../../domains/_lazy_map.generated'
@@ -759,14 +759,15 @@ export default function ChatPage() {
   const filePreview = useFilePreviewController({ token, backendWorkspaceId })
   // 解构给下方窗口缩放自折叠 effect 用（读取/回写面板开关）。
   const { taskFilesOpen, setTaskFilesOpen } = filePreview
+  // 网页来源交给系统浏览器新标签；RAG / 后端结构化来源走右栏 file-viewer。
   const handleOpenSource = useCallback((source: ReferenceSource) => {
-    if (isXl) {
+    if (referenceIsRag(source)) {
       filePreview.openSourceInPanel(source)
       return
     }
     const url = normalizeReferenceUrl(source.url)
     if (url) openExternal(url)
-  }, [filePreview.openSourceInPanel, isXl])
+  }, [filePreview.openSourceInPanel])
 
   /* ---- 预览栏可拖拽宽度：列表态 / 预览态各自记忆一份 ---- */
   const [rightListWidth, setRightListWidth] = useState<number>(() =>
@@ -1222,6 +1223,7 @@ export default function ChatPage() {
               skillsForPanel={panelData.skillsForPanel}
               setTrajectoryOpen={setTrajectoryOpen}
               closePreviewModal={filePreview.closePreviewModal}
+              retrySelectedFile={filePreview.retrySelectedFile}
               reviewHandlers={filePreview.reviewHandlers}
             />
           </>

@@ -5,7 +5,12 @@
  * 这里做一次形状校验，渲染层只处理 ReferenceSource。
  */
 
-import type { ReferenceSource } from '../../types'
+import type { ReferenceOrigin, ReferenceSection, ReferenceSource } from '../../types'
+
+/** 来源是否来自知识库检索（RAG）。 */
+export function referenceIsRag(source: ReferenceSource | null | undefined): boolean {
+  return source?.origin === 'rag'
+}
 
 const KIND_LABELS: Record<string, string> = {
   guideline: '指南',
@@ -22,9 +27,11 @@ export function referenceKindLabel(kind?: string | null): string {
   return KIND_LABELS[(kind ?? 'web').toLowerCase()] ?? KIND_LABELS.web
 }
 
-/** 副标题：机构 · 年份 */
+/** 副标题：作者 · 机构 · 年份 */
 export function referenceSubtitle(source: ReferenceSource): string {
-  return [source.publisher, source.year].filter((v): v is string => !!v && v.trim().length > 0).join(' · ')
+  return [source.authors, source.publisher, source.year]
+    .filter((v): v is string => !!v && v.trim().length > 0)
+    .join(' · ')
 }
 
 export function referenceDisplayTitle(source: ReferenceSource): string {
@@ -52,17 +59,57 @@ export function normalizeReferenceUrl(raw: unknown): string | null {
   }
 }
 
+function cleanStr(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function normalizeSections(raw: unknown): ReferenceSection[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: ReferenceSection[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const entry = item as Record<string, unknown>
+    const title = cleanStr(entry.title) ?? ''
+    const content = cleanStr(entry.content) ?? ''
+    if (!title && !content) continue
+    out.push({ title, content })
+    if (out.length >= 12) break
+  }
+  return out.length > 0 ? out : null
+}
+
 export function normalizeReferenceSource(raw: unknown): ReferenceSource | null {
   if (!raw || typeof raw !== 'object') return null
   const item = raw as Record<string, unknown>
   const url = normalizeReferenceUrl(item.url)
-  const title = typeof item.title === 'string' && item.title.trim() ? item.title.trim() : null
+  const title = cleanStr(item.title)
   if (!url && !title) return null
+
+  const snippet = cleanStr(item.snippet)
+  const abstract = cleanStr(item.abstract)
+  const sections = normalizeSections(item.sections)
+  const authors = cleanStr(item.authors)
+  const doi = cleanStr(item.doi)
+  const rawOrigin = cleanStr(item.origin)?.toLowerCase()
+  const origin: ReferenceOrigin =
+    rawOrigin === 'rag' || rawOrigin === 'web'
+      ? rawOrigin
+      : !url && (snippet || abstract || sections || doi || authors)
+        ? 'rag'
+        : 'web'
+
   return {
     title: title ?? (url as string),
     url,
-    publisher: typeof item.publisher === 'string' && item.publisher.trim() ? item.publisher.trim() : null,
-    year: typeof item.year === 'string' && item.year.trim() ? item.year.trim() : null,
-    kind: typeof item.kind === 'string' && item.kind.trim() ? item.kind.trim() : 'web',
+    publisher: cleanStr(item.publisher),
+    year: cleanStr(item.year),
+    kind: cleanStr(item.kind) ?? 'web',
+    origin,
+    authors,
+    impactFactor: cleanStr(item.impact_factor),
+    doi,
+    snippet,
+    abstract,
+    sections,
   }
 }
