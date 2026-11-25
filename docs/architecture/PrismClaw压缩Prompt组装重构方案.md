@@ -6,7 +6,7 @@
 > 评审依据：`PrismClaw压缩Prompt组装重构方案_架构评审结论.md`
 > 方法：逐文件读取真实调用链 + 运行时实测（conda `pyclaw`），结论带代码位置佐证。
 
-> **当前状态**：PR0 八步已于 2026-11-24 全部实施完成并逐步独立复核（commit `d5dd635` → `169d5cd`）；随后追加三次收尾：`9a9184d`（step 9 全案审计清理）、`eb37db7`（step 10 修复 Step 1 引入的 carry-forward 契约回归）与 step 11（全案复查补修结构标签导致的 W12 结转失效，见 §8.6）。**PR0 主干末个提交 `9a9184d`**；其后 `bdf7e3a` 是前端文档整理，与 PR0 无关。compression 子集 `163 passed, 1 skipped / 164 collected`，全量 backend `1199 passed, 1 skipped`；ruff 对本轮改动源码全 clean；golden 三层逐字节一致（sha `b48e1a84`）。§8 为实施 runbook。prompt 文本修订已纳入本方案（§2.5 / 步骤 1）；per-result frontmatter 修复（520→167）拆出单独评估；组装器 PR1 暂缓。
+> **当前状态**：PR0 八步已于 2026-11-24 全部实施完成并逐步独立复核（commit `d5dd635` → `169d5cd`）；随后追加四次收尾：`9a9184d`（step 9 全案审计清理）、`eb37db7`（step 10 修复 Step 1 引入的 carry-forward 契约回归）、`25e1edc`（step 11 结构标签导致的 W12 结转失效，见 §8.6）、`dd5a730`（step 12 result scope frontmatter 剥离，评审 B4 收口，见 §8.7；该提交另含与压缩无关的 office 读取器改动）。**PR0 主干末个提交 `9a9184d`**；其间 `bdf7e3a` 是前端文档整理，与 PR0 无关。当前门禁：compression 子集 `170 passed, 1 skipped / 171 collected`，全量 backend `1206 passed, 1 skipped`；`ruff check` 对本轮改动源码全 clean（全仓 1654 条既有告警见 §8.7）；history golden 三层 `b48e1a84` 逐字节不变，result scope 另立三元 golden（`447B` / `506B`）。§8 为实施 runbook。prompt 文本修订已纳入本方案（§2.5 / 步骤 1）；组装器 PR1 暂缓。
 >
 > **测试运行注意**：本沙箱下 `pytest` 默认 basetemp 会因 tmp_path 拦截报 152 errors（环境误报，非代码问题），实跑需加 `--basetemp=/tmp/pytest_basetemp_prismclaw`；全量 backend 约需 2 分钟，前台默认 120s 会被 SIGTERM，应后台运行并把输出落盘后读取。
 
@@ -26,6 +26,8 @@
 ---
 
 ## 1. 现状：三条组装路径 + 四条注入/后处理路径
+
+> 本章是**重构前（PR0 之前）的现状快照**，保留用于解释问题来源。其中 per-result「不剥离 frontmatter / 模型收到 520 字」已在 step 12 改变（见 §8.7），其余描述仍是 PR0 的改动依据。
 
 ### 1.1 参与文件与职责
 
@@ -165,7 +167,7 @@ class PromptSource:
 ```
 
 - **测试注入隔离**：`inline=` 从生产 `PromptSource` 构造函数移除；测试用 `tests/` 内的 `TestPromptSource` 子类或 monkeypatch 路径常量，避免"为测试保留的生产分支"。`TestPromptSource` 不从 `prompt_assembly/__init__.py` 导出；加测试断言生产 bootstrap 构造的 source `prompt_source == "file"`。
-- **per-result 的 frontmatter 语义**：结果级路径不纳入本次，保持现状（520 字含注释头，不剥离）。若 PR1 纳入，其 frontmatter 处理须单独评估（剥离后为 167 字），禁止复用 history 的字节基线。
+- **per-result 的 frontmatter 语义**：**已由 step 12 收口（§8.7）**——定性为修 bug，剥离后 520 字 → 167 字，result scope 立独立三元 golden；「禁止复用 history 字节基线」的约束仍然有效。
 - **fail-loud 触发时机**：风险描述为"压缩时抛错并由 circuit breaker 处理"，并加启动期 md 存在性轻量校验；archive 的宽泛 `except Exception`（`archive.py:113-118`）会吞异常，需在 PR1 单独收窄。
 
 ### 2.4 契约归属矩阵
@@ -266,6 +268,7 @@ class PromptSource:
 |---|---|---|
 | 机制一致 golden | PR0 步骤 1 之后（文本已换） | 组装机制不变：system prompt + 注入后 user message 逐字节相等。**需新建 `backend/tests/fixtures/` 目录**（当前不存在） |
 | 文本修正允许清单 | PR0 步骤 1 | 544 字现行版 → §2.5 目标全文是唯一合法 diff；含 W8/W12、领域标题、事实层级规则，其他变化一律失败 |
+| result scope 内容 golden | step 12（`dd5a730`） | per-result 模型可见正文（剥离注释头后 447 B）+ 拼装后的完整 prompt（506 B）逐字节锁定；manifest `scope=result`，与 history golden 强制不相等（评审 B4：禁止跨 scope 复用基线）。详见 §8.7 |
 
 ---
 
@@ -323,7 +326,7 @@ PR1 阶段追加：
 | archive 路径吞掉模板缺失异常 | 缺失行为为 `FileNotFoundError`，`archive.py:113-118` 宽泛 except 会吞掉它并在 PR0 阶段静默降级；该路径在 PR1 收窄 except，PR0 不触碰 |
 | 运维 inline 覆盖字段的存废 | **保留**：实测确认是活逻辑——`summary_engine.py:93` → `resolve_compact_prompt`（`_compact_prompt.py:227`）→ `_resolve_prompt_template`（`:173-224`）消费；`config.py:220-226` 为对外 schema 契约；`agent.yaml:67` 与 `agent.example.yaml:70` 显式声明 `template: null`；无 env 旁路。PR1 的 `PromptSource` 须提供等价 inline / 路径覆盖能力。**注意区分**：代码内常量 `COMPACT_SUMMARY_DEFAULT_TEMPLATE` 才是冗余（默认路径优先读 md，常量仅 md 缺失时回退），在 PR0 步骤 3 删除 |
 | prompt 文本修订改变模型可见内容 | 这是**有意的修复**（544 字 → §2.5 目标全文：补 W8/W12 + 领域适配 + 事实层级）；用文本修正允许清单约束唯一合法 diff，其他变化一律失败。不调整触发阈值或注入位置，避免变量混改无法归因 |
-| per-result 520→167 | 已拆出单独评估，本次不改变模型可见内容 |
+| per-result 520→167 | **已执行（step 12，§8.7）**：定性为修 bug，剥离 HTML 注释头后模型可见正文 520 字 → 167 字，另立 result scope 独立 golden |
 | 一次改太多难定位 | PR0 八步逐步提交；PR1 不在此次范围 |
 
 **明确不做**：
@@ -484,7 +487,7 @@ PR1 阶段追加：
 8. 人工审 `git diff`：无兼容旧逻辑、无为测试保留的生产分支、无新增 if/else；确认 `_preservation_rules.py` 与 `hardening.py` 未被改动。
 
 
-### 8.6 PR0 后追加修复（step 9 / step 10）
+### 8.6 PR0 后追加修复（step 9 / step 10 / step 11）
 
 #### step 9：全案审计清理（`9a9184d`）
 
@@ -538,4 +541,39 @@ step 10 收尾后按「复查修改是否存在 bug」做全案人工复核。�
 **独立复核**：第四轮 FAIL（全局替换误伤正文）→ 修复 → 第五轮 PASS（自写探针 BAD=0；把正则换回旧全局版后守卫全变红，证明修复真实生效而非探针恒真）。step 10 的 A/B/C/D 四组零回归。
 
 **最终门禁**：compression 子集 `163 passed, 1 skipped / 164 collected`；全量 backend `1199 passed, 1 skipped`；端到端 W8/W12 双结转；全案例探针 0 BAD；`ruff check` 对改动源码 clean；golden 三层逐字节一致；step 9 四项残留零命中（唯一 grep 命中是守卫测试自身的被禁字符串）；`_SUMMARY_TAG_RE` / `_EMPTY_DECLARATION_PHRASE_RE` 等废弃常量零残留。
+
+### 8.7 step 12 · result scope 的 frontmatter 剥离（评审 B4 收口）
+
+**触发**：评审 B4 —— 方案 §2.3 让 `PromptSource.get()` 统一剥 frontmatter，而 `_load_per_result_prompt()` 原先是对 md 裸 `read_text()`；两处处置不一致，方案既未说明 520→167 是修 bug 还是意外回归，也没有 result scope 的独立字节基线。裁决要求：**先定性、再立独立 golden、禁止复用 history 断言**。
+
+**定性：修 bug，不是回归**。三条证据：① 注释头自述为「运维按路径覆盖 / 原文在此重复一份」，属人读元数据；② 剥离后的正文与内联常量 `P2_2_PER_RESULT_PROMPT` **逐字相等**（由守卫锁定），即文件存在与文件缺失两条路径本来就该给出同一套指令；③ history scope 的 `compact_summary.md` 一直经 `_strip_md_frontmatter` 剥离（`_resolve_prompt_template`），result scope 裸读是遗漏而非设计。
+
+**改动**：`_result_llm_summary.py` 引入 `_strip_md_frontmatter`，`_load_per_result_prompt()` 读盘后剥离；`OSError` 路径仍回退内联常量。history 侧代码与 golden 未动。
+
+**字节证据**（`tests/fixtures/per_result_summary_golden.sha256.json`）：
+
+| 层 | 字符 | 字节 | sha256 前缀 |
+|---|---|---|---|
+| before（md 原文，含注释头） | 520 | 1116 | `537325ff…` |
+| after（剥离后模型可见正文） | 167 | 447 | `38666a5d…` |
+| full prompt（正文 + `Tool:` / `Result:` 包装，`probe_tool` + 固定 raw_text） | — | 506 | `e938a785…` |
+
+**守卫测试**（`test_per_result_prompt_consistency.py`，7 个，与 history 一致性测试文件严格隔离）：
+
+| 用例 | 锁定 |
+|---|---|
+| `test_loaded_prompt_has_no_frontmatter` | 模型可见正文不得出现 `<!--` 与文件名 |
+| `test_loaded_prompt_matches_inline_fallback` | 文件存在 / 缺失两条路径指令一致 |
+| `test_result_golden_is_independent_from_history` | manifest `scope=result`，且 body golden ≠ history golden |
+| `test_loaded_prompt_matches_result_golden` | 装载结果逐字节 = body golden |
+| `test_md_body_matches_result_golden_after_strip` | md 被改而 golden 未跟进即变红 |
+| `test_model_visible_prompt_matches_golden` | spy 捕获 summarizer 实收 prompt = full golden |
+| `test_missing_file_falls_back_to_inline` | 读盘失败回退内联常量，且该常量不含注释头 |
+
+**已知限制（如实记录）**：
+
+1. result scope 的 md 与内联常量仍是双写——PR0 只把 **history** 收敛到单一真相源。当前用 `test_loaded_prompt_matches_inline_fallback` 把两者锁在一起；真正收敛属 PR1 范畴（若启动）。
+2. `ruff check` 全仓 `1654` 条既有告警（测试目录的 ANN 规则占多数，同目录 `test_prompt_template_consistency.py` 亦有 22 条）；本次**改动源码** clean，新测试文件的 `ANN201/ANN001` 与既有测试同源，未单独清理，避免只修一个新文件造成目录内风格分裂。
+
+**门禁**：compression 子集 `170 passed, 1 skipped / 171 collected`（= step 11 的 163 + 7）；全量 backend `1206 passed, 1 skipped`（= 1199 + 7）；history golden 三层逐字节不变（system `b48e1a84…` / user `3bee3eca…`）；step 12 未触及 `extract_sections`，W8/W12 结转不受影响。
 

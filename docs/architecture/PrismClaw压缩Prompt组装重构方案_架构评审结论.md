@@ -44,6 +44,7 @@
 - 证据：`_result_llm_summary.py:46-58` 的 `_load_per_result_prompt()` 直接 `read_text()`，**不剥离** frontmatter；实测 `per_result_summary.md` 原始 **520 字**（含 HTML 注释头）、剥离后 **167 字**。方案 §2.3 `PromptSource.get()` 统一 `strip_frontmatter`，切换后模型可见内容少 353 字。
 - 方案既没说这是有意修 bug 还是意外回归，也没有 result scope 的独立基线。
 - 修正：先决定"保留 bug（520）还是修 bug（167）"；若是后者，列为独立的一次"有意的模型可见内容变更"，result scope 单独设 golden，禁止复用 history 的一致性断言。
+- **收口（2026-11-25，step 12 / `dd5a730`）**：按「修 bug」处置——`_load_per_result_prompt()` 读盘后经 `_strip_md_frontmatter` 剥离，520 字 → 167 字；result scope 另立三元 golden（正文 447 B / 完整 prompt 506 B，manifest `scope=result` 且断言 ≠ history golden），7 个守卫测试锁定。详见重构方案 §8.7。
 
 ### B5 · `config=None` / `enabled=False` 的 fallback 在新 spec 中无处安放
 **三票**（refactor-critic #5 / domain-auditor F3 / test-quality I4 部分）。
