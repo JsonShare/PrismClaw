@@ -148,6 +148,14 @@ class MemoryRuntimeBundle:
     nudge_hook: Any = None
 
 
+def _resolve_bootstrap_files(settings: Settings) -> list[str]:
+    """读 workspaces.bootstrap_files；显式配置空列表表示关闭 bootstrap，不能回落默认值。"""
+    configured = getattr(getattr(settings, "workspaces", None), "bootstrap_files", None)
+    if configured is None:
+        return ["AGENTS.md"]
+    return list(configured)
+
+
 def _build_provider_specs(providers: dict[str, Any]) -> dict[str, dict[str, dict[str, Any]]]:
     """Convert infra.settings.ProviderSettings.models to ProviderModelSpecs format."""
     result: dict[str, dict[str, dict[str, Any]]] = {}
@@ -342,9 +350,7 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
             },
         }
     )
-    bootstrap_files = list(
-        getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"]
-    )
+    bootstrap_files = list(_resolve_bootstrap_files(settings))
     # Wire engine-layer configs (eliminate Service Locator anti-pattern)
     from prismclaw.engine.execution.request.model_fallback import hydrate_spec_registry
     from prismclaw.engine.toolkit.file.read_image import set_vision_config
@@ -578,9 +584,7 @@ def build_memory_runtime(
 
     context_engine = DefaultContextEngine(
         workspace_store=workspace_store,
-        bootstrap_files=list(
-            getattr(getattr(settings, "workspaces", None), "bootstrap_files", None) or ["AGENTS.md"]
-        ),
+        bootstrap_files=list(_resolve_bootstrap_files(settings)),
         memory_store=memory_store,
         memory_settings=settings.memory,
         keep_recent_tokens=settings.agent.context.compaction.history.keep_recent_tokens,
@@ -870,7 +874,7 @@ def assemble_runner_deps(
         runtime_client=_build_runtime_client(),
     )
     prs = kernel_runtime.config.context.compaction.tool_results.per_result_summary
-    if prs.enabled and kernel_runtime.llm is not None:
+    if prs.enabled:
         deps.summarize_fn = _build_summarize_fn(kernel_runtime.llm)
     return deps
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
-import inspect
 import json
 import logging
 import time
@@ -30,10 +29,12 @@ from prismclaw.runtime.facade.trajectory import (
 )
 from prismclaw.schema.agent import DecisionLedgerEvent
 from prismclaw.schema.agent.session import MessageEntry, SessionEvent
-from prismclaw.schema.agent.task_runtime import ProbeSignal, RecoveryProbeResult
+from prismclaw.schema.agent.task_runtime import EvidenceRecord, ProbeSignal, RecoveryProbeResult
 from prismclaw.schema.agent.types import AgentDeps
 from prismclaw.schema.session.event_logger import SessionEventLogger
+from prismclaw.schema.session.projection import SessionProjectionEngine
 from prismclaw.schema.session.types import (
+    DECISION_LEDGER_EVENT_CUSTOM_TYPE,
     RUN_PROJECTION_CUSTOM_TYPE,
     CustomEntry,
     RunProjectionPayload,
@@ -89,22 +90,21 @@ def _resolve_tool_workspace_path(
     return base.resolve()
 
 
-def _call_sync_tree_accessor(tree: SessionTree, name: str) -> object | None:
-    accessor = getattr(tree, name, None)
-    if not callable(accessor):
-        return None
-    if inspect.iscoroutinefunction(accessor):
-        return None
-    try:
-        value: object = accessor()
-    except Exception:
-        logger.warning("web.task_runtime.accessor_failed: %s", name, exc_info=True)
-        return None
-    if inspect.isawaitable(value):
-        if inspect.iscoroutine(value):
-            value.close()
-        return None
-    return value
+def _decision_ledger_events(tree: SessionTree) -> list[DecisionLedgerEvent]:
+    """按时间顺序取出分支上的决策账本事件（解析失败的单条跳过）。"""
+    events: list[DecisionLedgerEvent] = []
+    for entry in tree.get_branch():
+        if not isinstance(entry, CustomEntry):
+            continue
+        if entry.custom_type != DECISION_LEDGER_EVENT_CUSTOM_TYPE:
+            continue
+        if not isinstance(entry.data, dict):
+            continue
+        try:
+            events.append(DecisionLedgerEvent.model_validate(entry.data))
+        except Exception:
+            logger.warning("web.decision_ledger.invalid_entry", exc_info=True)
+    return events
 
 
 def _model_dump_if_supported(value: object) -> dict[str, Any] | None:
@@ -127,8 +127,8 @@ def _serialize_runtime_subagent_items(
 
 
 def _extract_latest_recovery_probe_payload(tree: SessionTree) -> dict[str, Any] | None:
-    decision_events = _call_sync_tree_accessor(tree, "get_decision_ledger_events")
-    if not isinstance(decision_events, list):
+    decision_events = _decision_ledger_events(tree)
+    if not decision_events:
         return None
     for event in reversed(decision_events):
         if not isinstance(event, DecisionLedgerEvent):
@@ -181,16 +181,15 @@ def _build_task_runtime_projection_payload(
     *,
     web_runtime: ConversationWebRuntimeProjection | None = None,
 ) -> dict[str, Any] | None:
-    task_runtime = _call_sync_tree_accessor(tree, "get_latest_task_runtime")
+    task_projection = SessionProjectionEngine(tree).task
+    task_runtime = task_projection.get_latest_task_runtime()
     task_payload: dict[str, Any] | None = None
     if task_runtime is not None:
         task_payload = _model_dump_if_supported(task_runtime)
 
-    latest_review = _call_sync_tree_accessor(tree, "get_latest_review_decision")
-    task_spec = _call_sync_tree_accessor(tree, "get_latest_task_spec")
-    evidence_items = _call_sync_tree_accessor(tree, "get_evidence_ledger")
-    if not isinstance(evidence_items, list):
-        evidence_items = []
+    latest_review = task_projection.get_latest_review_decision()
+    task_spec = task_projection.get_latest_task_spec()
+    evidence_items: list[EvidenceRecord] = task_projection.get_evidence_ledger()
     recent_evidence = evidence_items[-6:]
     recent_evidence_payload = [
         payload

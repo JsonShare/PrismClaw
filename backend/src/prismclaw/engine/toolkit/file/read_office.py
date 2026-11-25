@@ -28,6 +28,7 @@ from prismclaw.engine.toolkit.office.document_reader import (
     STRUCTURED_OFFICE_FORMATS,
     TIERS,
     Block,
+    Cursor,
     build_ocr_page_blocks,
     cache_dir,
     close_doc,
@@ -65,7 +66,7 @@ _ALL_SUPPORTED_SUFFIXES = set(DOC_FORMATS) | _STRUCT_OFFICE_SUFFIXES
 _OCR_TOTAL_BUDGET = 100.0
 
 if TYPE_CHECKING:
-    from prismclaw.engine.toolkit.office.document_reader import Cursor, DocLike
+    from prismclaw.engine.toolkit.office.document_reader import DocLike
 
 
 def _fmt_for_path(path: str) -> str | None:
@@ -245,6 +246,15 @@ def _read_paged_document(
     hash8 = content_hash8(raw)
     deadline = time.monotonic() + _OCR_TOTAL_BUDGET
 
+    # 游标绑定内容摘要：把 A 文档的 after 用在 B 文档上（或内容已被改写）
+    # 时坐标会整体错位，与其静默返回错位内容，不如明确报错要求重读。
+    if start is not None and start.hash8 != hash8:
+        return error_result(
+            call_id,
+            "read：续读游标与当前文件不匹配（文件已变更或游标来自其它文件），"
+            "请不带 after 重新读取",
+        )
+
     doc = open_doc(raw, fmt, workspace_path=workspace_path, source_rel_path=source_rel)
     try:
         total_pages = page_count(doc, fmt)
@@ -294,7 +304,12 @@ def _read_paged_document(
     finally:
         close_doc(doc, fmt)
 
+    dropped: Block | None = None
     if not batch and limit is not None and isinstance(limit, int) and limit > 0:
+        if len(blocks) > limit:
+            # 截断不是终点：记下第一个被丢弃的块，渲染后据此给续读游标，
+            # 否则本页剩余块静默消失且没有任何继续读取的提示。
+            dropped = blocks[limit]
         blocks = blocks[:limit]
 
     blocks = _with_scan_guidance(blocks, tier, vision_attempted(target))
@@ -308,6 +323,10 @@ def _read_paged_document(
             page_end = next_cursor.page
     else:
         body, next_cursor = render_blocks(blocks, hash8=hash8, tier=tier, start=start)
+        if next_cursor is None and dropped is not None:
+            next_cursor = Cursor(
+                hash8=hash8, page=dropped.page, index=dropped.index, tier=tier
+            )
 
     header = render_page_header(
         raw_path,
@@ -392,23 +411,35 @@ def _read_vision_pages(
     ocr_targets = [p for p in pending if p in images]
     if not ocr_targets:
         # 全部渲染失败：页级错误已在 blocks 里，直接返回。
+        blocks.sort(key=lambda block: (block.page, block.index))
         return blocks, page_end, ("；".join(notes) if notes else None)
     if time.monotonic() >= deadline:
         # 预算已尽：不再派发，也不落缓存；未处理的页不计入响应。
         notes.append(f"p{ocr_targets[0]} 起的 {len(ocr_targets)} 页因超时预算未处理")
+        blocks.sort(key=lambda block: (block.page, block.index))
         return blocks, page_end, "；".join(notes)
 
     results: dict[int, list[Block]] = {}
 
     def _run(p: int) -> tuple[int, list[Block]]:
-        return p, _ocr_from_jpeg(
-            p,
-            images[p],
-            target=target,
-            workspace_path=workspace_path,
-            source_rel=source_rel,
-            deadline=deadline,
-        )
+        try:
+            return p, _ocr_from_jpeg(
+                p,
+                images[p],
+                target=target,
+                workspace_path=workspace_path,
+                source_rel=source_rel,
+                deadline=deadline,
+            )
+        except Exception as exc:  # noqa: BLE001 - 单页落盘/组装失败不应丢弃整批
+            return p, [
+                Block(
+                    kind="unsupported",
+                    page=p,
+                    index=1,
+                    text=f"该页 OCR 结果处理失败（{type(exc).__name__}）：{exc}",
+                )
+            ]
 
     with ThreadPoolExecutor(max_workers=OCR_CONCURRENCY) as pool:
         for p, page_blocks in pool.map(_run, ocr_targets):

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from prismclaw.engine.compression._compact_prompt import _strip_md_frontmatter
 from prismclaw.engine.foundation.metrics import emit
 
 if TYPE_CHECKING:
@@ -44,16 +45,19 @@ P2_2_PER_RESULT_PROMPT = (
 
 
 def _load_per_result_prompt() -> str:
-    """Prefer the on-disk ``per_result_summary.md`` when present,
-    fall back to the inline constant otherwise.
+    """Load the on-disk ``per_result_summary.md``, stripping its HTML
+    comment header before it reaches the LLM; fall back to the inline
+    constant when the file is unreadable.
 
-    The file is the operator-facing override point; the inline
-    constant guarantees the feature works on a fresh checkout with
-    no files read.
+    The header is operator-facing metadata only.  The remaining body is
+    byte-identical (after ``.strip()``) to ``P2_2_PER_RESULT_PROMPT``, so
+    the file-present and file-missing paths deliver the same instructions.
+    This is an intentional 520→167 model-visible-content change; the
+    result-scope golden is kept separate from the history golden (§8.7).
     """
     candidate = Path(__file__).resolve().parent / "prompts" / "per_result_summary.md"
     try:
-        return candidate.read_text(encoding="utf-8")
+        return _strip_md_frontmatter(candidate.read_text(encoding="utf-8"))
     except OSError:
         return P2_2_PER_RESULT_PROMPT
 

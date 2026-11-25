@@ -248,7 +248,8 @@ async def _load_and_verify(session_id: str, user_id: str) -> SessionTree:
     tree = await store.load(session_id)
     if tree is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if not tree.header.session_key.startswith(f"web:{user_id}"):
+    # 必须带结尾冒号：``web:admin`` 是 ``web:admin2`` 的前缀，缺冒号会越权。
+    if not tree.header.session_key.startswith(f"web:{user_id}:"):
         raise HTTPException(status_code=403, detail="Access denied")
     return tree
 
@@ -557,8 +558,8 @@ async def list_sessions(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
-    limit: int = 10,
-    offset: int = 0,
+    limit: int = Query(10, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
     """返回会话列表（分页），消除 N+1 查询。
 
@@ -755,8 +756,8 @@ async def update_session_model_settings(
 async def get_messages(
     request: Request,
     session_id: str,
-    offset: int = 0,
-    limit: int = 50,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=500),
     user_id: str = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     try:
@@ -1014,7 +1015,10 @@ async def get_session_trajectory_audit(
     # retry with the "s:" prefix before giving up.
     try:
         await _load_and_verify(resolved_session_id, user_id)
-    except Exception:
+    except HTTPException as exc:
+        # 只有「不存在」才值得换 s: 前缀重试；403/500 必须原样抛出。
+        if exc.status_code != 404:
+            raise
         if not resolved_session_id.startswith(f"{base_session_key}:s:"):
             alt_session_id = resolved_session_id.replace(
                 f"{base_session_key}:",
@@ -1133,7 +1137,10 @@ async def get_session_trajectory_cells(
     # Step 1: ownership gate — try alt "s:" prefix if first fails
     try:
         await _load_and_verify(resolved_session_id, user_id)
-    except Exception:
+    except HTTPException as exc:
+        # 只有「不存在」才值得换 s: 前缀重试；403/500 必须原样抛出。
+        if exc.status_code != 404:
+            raise
         if not resolved_session_id.startswith(f"{base_session_key}:s:"):
             alt_session_id = resolved_session_id.replace(
                 f"{base_session_key}:",

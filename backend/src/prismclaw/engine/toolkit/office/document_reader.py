@@ -49,8 +49,12 @@ if TYPE_CHECKING:
 
         def save(self, fp: io.BytesIO, *, format: str, quality: int = ...) -> None: ...
 
+        def close(self) -> None: ...
+
     class _PdfBitmap(Protocol):
         def to_pil(self) -> _PilImage: ...
+
+        def close(self) -> None: ...
 
     class _PdfObject(Protocol):
         @property
@@ -84,8 +88,11 @@ if TYPE_CHECKING:
 
         tag: str
         attrib: dict[str, str]
+        text: str | None
 
         def iter(self, tag: str | None = None) -> Iterator[_XmlNode]: ...
+
+        def iterchildren(self, tag: str | None = None) -> Iterator[_XmlNode]: ...
 
         def getparent(self) -> _XmlNode | None: ...
 
@@ -148,6 +155,9 @@ SCHEMA_VERSION = 2
 # 单次返回的字符上限。超出时在自然边界截断并给出 /c 游标续读。
 # 非运营旋钮：取值使一屏约 3k token，与 read 的默认分页量级一致。
 _WINDOW_CHAR_BUDGET = 6000
+
+# 剩余预算低于该值时不再切分单块：切出的碎片过短，还会让游标推进得极慢。
+_MIN_CUT_CHARS = 200
 
 # OCR 转录文本少于该长度时保留页面图像：图表页/封面的版面会随转录丢失，
 # 模型可二次 read 看原图。与「有没有文本层」的判据不同量级。
@@ -471,13 +481,27 @@ def parse_pdf_page_with_modality(
                 ],
                 {"chars": 0, "ratio": 0.0, "scanned": False},
             )
-        blocks = _parse_pdf_page_locked(
-            pdf_page,
-            page,
-            workspace_path=workspace_path,
-            source_rel_path=source_rel_path,
-        )
-        modality = _page_modality_of(pdf_page, blocks)
+        # 文本层/对象流损坏同样只影响本页，不能逃出这个边界。
+        try:
+            blocks = _parse_pdf_page_locked(
+                pdf_page,
+                page,
+                workspace_path=workspace_path,
+                source_rel_path=source_rel_path,
+            )
+            modality = _page_modality_of(pdf_page, blocks)
+        except Exception as exc:  # noqa: BLE001 - 同上
+            return (
+                [
+                    Block(
+                        kind="unsupported",
+                        page=page,
+                        index=1,
+                        text=(f"该页内容流无法解析（{type(exc).__name__}），PDF 中此页可能损坏"),
+                    )
+                ],
+                {"chars": 0, "ratio": 0.0, "scanned": False},
+            )
     return blocks, modality
 
 
@@ -554,9 +578,17 @@ def render_page_images(
             try:
                 pdf_page = doc[page - 1]
                 bitmap = pdf_page.render(scale=dpi / 72)
-                buf = io.BytesIO()
-                bitmap.to_pil().convert("RGB").save(buf, format="JPEG", quality=85)
-                images[page] = buf.getvalue()
+                try:
+                    image = bitmap.to_pil().convert("RGB")
+                    try:
+                        buf = io.BytesIO()
+                        image.save(buf, format="JPEG", quality=85)
+                        images[page] = buf.getvalue()
+                    finally:
+                        image.close()
+                finally:
+                    # 150dpi 单页约 6MB 原生内存，不显式释放会滞留到 GC。
+                    bitmap.close()
             except Exception as exc:  # noqa: BLE001 - 单页渲染失败不影响其它页
                 failures[page] = f"该页渲染失败（{type(exc).__name__}），可能页面结构损坏"
     return images, failures
@@ -628,45 +660,66 @@ def _parse_docx(
     if workspace_path is not None:
         rel_map, media = _docx_media(doc)
 
+    from docx.oxml.table import CT_Tbl
+    from docx.oxml.text.paragraph import CT_P
     from docx.table import Table
     from docx.text.paragraph import Paragraph
 
-    body = doc.element.body
-    for child in body.iterchildren():
-        tag = child.tag.rsplit("}", 1)[-1]
-        if tag == "p":
-            para = Paragraph(child, doc)
-            text = _paragraph_text(para)
-            if text:
-                blocks.append(Block(kind="text", page=1, index=next_index(), text=text))
-            if workspace_path is not None:
-                for rid, degrees in _paragraph_images(child):
-                    target = rel_map.get(rid)
-                    if not target or target not in media:
-                        continue
-                    image_counter += 1
-                    ext = Path(target).suffix.lower() or ".png"
-                    rel = _save_image(
-                        workspace_path,
-                        source_rel_path,
-                        image_counter,
-                        ext,
-                        _orient_image(media[target], degrees),
-                    )
-                    blocks.append(
-                        Block(
-                            kind="image",
-                            page=1,
-                            index=next_index(),
-                            source_path=rel,
-                            mime_type=IMAGE_MIME_BY_EXT.get(ext, "image/png"),
-                        )
-                    )
-        elif tag == "tbl":
-            table = Table(child, doc)
-            rows = tuple(tuple(cell.text.strip() for cell in row.cells) for row in table.rows)
-            blocks.append(Block(kind="table", page=1, index=next_index(), rows=rows))
+    def emit_paragraph(node: _XmlNode) -> None:
+        nonlocal image_counter
+        if not isinstance(node, CT_P):
+            return
+        para = Paragraph(node, doc)
+        text = _paragraph_text(para)
+        if text:
+            blocks.append(Block(kind="text", page=1, index=next_index(), text=text))
+        # 文本框内容不是 Paragraph.text 的一部分，需单独取。
+        for textbox in _textbox_texts(node):
+            blocks.append(Block(kind="text", page=1, index=next_index(), text=textbox))
+        if workspace_path is None:
+            return
+        for rid, degrees in _paragraph_images(node):
+            target = rel_map.get(rid)
+            if not target or target not in media:
+                continue
+            image_counter += 1
+            ext = Path(target).suffix.lower() or ".png"
+            rel = _save_image(
+                workspace_path,
+                source_rel_path,
+                image_counter,
+                ext,
+                _orient_image(media[target], degrees),
+            )
+            blocks.append(
+                Block(
+                    kind="image",
+                    page=1,
+                    index=next_index(),
+                    source_path=rel,
+                    mime_type=IMAGE_MIME_BY_EXT.get(ext, "image/png"),
+                )
+            )
 
+    def emit_children(container: _XmlNode) -> None:
+        for child in container.iterchildren():
+            tag = child.tag.rsplit("}", 1)[-1]
+            if tag == "p":
+                emit_paragraph(child)
+            elif tag == "tbl":
+                if not isinstance(child, CT_Tbl):
+                    continue
+                table = Table(child, doc)
+                rows = tuple(
+                    tuple(cell.text.strip() for cell in row.cells) for row in table.rows
+                )
+                blocks.append(Block(kind="table", page=1, index=next_index(), rows=rows))
+            elif tag == "sdt":
+                # 内容控件（w:sdt）包着正文；只遍历直接子节点会整段丢掉。
+                for sub in child.iterchildren():
+                    if sub.tag.rsplit("}", 1)[-1] == "sdtContent":
+                        emit_children(sub)
+    emit_children(doc.element.body)
     return blocks
 
 
@@ -686,6 +739,26 @@ def _paragraph_text(para: Paragraph) -> str:
     if para_id:
         return f"[{para_id}] {text}"
     return text
+
+
+def _textbox_texts(node: _XmlNode) -> list[str]:
+    """取段落内文本框（``w:txbxContent``）的文字，按出现顺序。"""
+    out: list[str] = []
+    for elem in node.iter():
+        if elem.tag.rsplit("}", 1)[-1] != "txbxContent":
+            continue
+        paragraphs: list[str] = []
+        for p in elem.iter():
+            if p.tag.rsplit("}", 1)[-1] != "p":
+                continue
+            text = "".join(
+                t.text or "" for t in p.iter() if t.tag.rsplit("}", 1)[-1] == "t"
+            ).strip()
+            if text:
+                paragraphs.append(text)
+        if paragraphs:
+            out.append("\n".join(paragraphs))
+    return out
 
 
 def _paragraph_para_id(para: Paragraph) -> str | None:
@@ -1527,7 +1600,11 @@ def load_page(target: Path, page: int, tier: str = "text") -> list[Block] | None
     if expected is not None and expected != _digest(payload):
         return None
 
-    blocks = [_block_from_dict(item) for item in data]
+    # 缓存文件对模型可写：任何字段异常都按未命中重解析，不能让 ValueError 逃出。
+    try:
+        blocks = [_block_from_dict(item) for item in data]
+    except (KeyError, TypeError, ValueError):
+        return None
     if any(block.page != page for block in blocks):
         return None
     return blocks
@@ -1695,10 +1772,16 @@ def _soft_cut(text: str, budget: int) -> int:
     return budget
 
 
+def _table_body(block: Block) -> str:
+    return "\n".join("    | " + " | ".join(row) + " |" for row in block.rows)
+
+
 def render_block(block: Block, char_offset: int = 0) -> str:
     if block.kind == "table":
-        body = "\n".join("    | " + " | ".join(row) + " |" for row in block.rows)
-        return f"b{block.index} [table]\n{body}"
+        body = _table_body(block)
+        if char_offset <= 0:
+            return f"b{block.index} [table]\n{body}"
+        return f"b{block.index} [table] (续 {char_offset}+)\n{body[char_offset:]}"
     if block.kind == "image":
         path = to_model_path(block.source_path) if block.source_path else "(未落盘)"
         return f"b{block.index} [image: {path} — 使用 read 识别图片内容]"
@@ -1745,6 +1828,10 @@ def render_blocks(
     for pos in range(start_at, len(blocks)):
         block = blocks[pos]
         offset = start_offset if pos == start_at else 0
+        body_src = _sliceable_body(block)
+        # 续读偏移已越过块尾（内容被改写变短）时跳过，避免游标原地打转。
+        if body_src is not None and offset >= len(body_src):
+            continue
         rendered = render_block(block, char_offset=offset)
         # 批量读取跨页时插入页边界：块号只在页内唯一，不分页模型无法区分。
         if last_page is not None and block.page != last_page:
@@ -1754,12 +1841,13 @@ def render_blocks(
             parts.append(rendered)
             used += len(rendered) + 1
             continue
+        # 超长单块（含整张表格）在自然边界切分：不切分就只能返回指向自己的
+        # 游标，调用方会永远读到同一块的开头。
         remaining = char_budget - used
-        if block.kind == "text" and remaining > 200:
-            tail = block.text[offset:]
-            cut = _soft_cut(tail, remaining)
+        if body_src is not None and remaining > _MIN_CUT_CHARS:
+            cut = _soft_cut(body_src[offset:], remaining)
             if cut > 0:
-                parts.append(_partial_text(block, offset, cut))
+                parts.append(_partial_block(block, offset, cut))
                 return "\n\n".join(parts), Cursor(
                     hash8=hash8,
                     page=block.page,
@@ -1771,6 +1859,22 @@ def render_blocks(
             hash8=hash8, page=block.page, index=block.index, tier=tier
         )
     return "\n\n".join(parts), None
+
+
+def _sliceable_body(block: Block) -> str | None:
+    """可字符切分的块正文（表格与文本）；图片/不支持块无正文。"""
+    if block.kind == "table":
+        return _table_body(block)
+    if block.kind == "text":
+        return block.text
+    return None
+
+
+def _partial_block(block: Block, offset: int, cut: int) -> str:
+    if block.kind == "table":
+        body = _table_body(block)[offset : offset + cut]
+        return f"b{block.index} [table] (续 {offset}+)\n{body}"
+    return _partial_text(block, offset, cut)
 
 
 def _partial_text(block: Block, offset: int, cut: int) -> str:

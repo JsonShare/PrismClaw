@@ -1,0 +1,23 @@
+{
+  "scope": "result",
+  "purpose": "result-scope model-visible-content golden; kept strictly separate from the history compact_summary golden (review B4)",
+  "prompt_file": "src/prismclaw/engine/compression/prompts/per_result_summary.md",
+  "before": {
+    "chars": 520,
+    "bytes": 1116,
+    "sha256": "537325ffd344cf427184158fdf3261c9d2e4c97f2178eb78ef9398ead5aeb92e",
+    "note": "HTML comment header was fed to the LLM as part of the prompt"
+  },
+  "after": {
+    "chars": 167,
+    "bytes": 447,
+    "sha256": "38666a5da1df85faa9621068b02516768f9cc00e7cb537dcac49af4548669216"
+  },
+  "full_prompt": {
+    "bytes": 506,
+    "sha256": "e938a7857643fa4f78b7a736456b303be1378b3cad9cf5f9f3a90bc4a4548d81",
+    "tool_name": "probe_tool",
+    "raw_text": "示例工具结果\nexit_code=0\n"
+  },
+  "captured_after_step": "step 12"
+}

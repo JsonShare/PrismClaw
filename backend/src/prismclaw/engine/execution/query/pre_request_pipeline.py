@@ -395,10 +395,11 @@ class PreRequestPipeline:
             preflight = compression_preparation.preflight
 
         # 4. State Pruning:替换状态只保留当前请求仍在使用的 tool_call_id，防止无界增长。
-        if new_turn_state.replacement_state:
-            request_messages = preflight.packed_request.messages if preflight is not None else []
+        # 必须拿到打包后的消息才能判断「仍在使用」；preflight 缺失时无从判断，
+        # 传空集会把全部冻结替换/seen_ids 清空（反而丢掉缓存前缀稳定性）。
+        if new_turn_state.replacement_state and preflight is not None:
             removed_ids = new_turn_state.replacement_state.retain_only(
-                _collect_active_tool_call_ids(request_messages)
+                _collect_active_tool_call_ids(preflight.packed_request.messages)
             )
             for removed_id in removed_ids:
                 audit_trail.append(

@@ -63,7 +63,8 @@ async def _load_and_verify(session_id: str, user_id: str) -> SessionTree:
     tree = await store.load(session_id)
     if tree is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if not tree.header.session_key.startswith(f"web:{user_id}"):
+    # 必须带结尾冒号：``web:admin`` 是 ``web:admin2`` 的前缀，缺冒号会越权。
+    if not tree.header.session_key.startswith(f"web:{user_id}:"):
         raise HTTPException(status_code=403, detail="Access denied")
     return tree
 
@@ -196,7 +197,8 @@ async def apply_office_edit(
     except OfficeEditError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"office apply failed: {exc}") from exc
+        logger.exception("office apply failed")
+        raise HTTPException(status_code=500, detail="office apply failed") from exc
 
     return result
 
