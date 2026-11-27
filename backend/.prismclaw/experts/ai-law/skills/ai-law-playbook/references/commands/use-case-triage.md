@@ -9,9 +9,6 @@ argument_hint: '[描述用例，或''batch''以批量分类列表]'
 category: AI治理
 ---
 
-
-
-
 # /aig-use-case-triage（AI 用例合规分类）
 
 1. 阅读执业档案。确认用例登记册和红线已填充——如果没有，停止并指向设置。
@@ -27,8 +24,6 @@ category: AI治理
 ---
 
 ## 事项上下文
-
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`，跳过本段——skills 使用执业级上下文。
 
 ---
 
@@ -263,6 +258,5 @@ category: AI治理
 - 它不对接近的案例做出重要性判断。它应用法规框架；人类决定边界。
 - 它不替代完整的 AIA（AI合规评估）。有条件批准的高风险用例应运行 `skills/ai-law-playbook/references/commands/aia-generation.md`。
 - 它不涵盖中国内地以外的 AI 治理法规（EU AI Act/GDPR等）。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

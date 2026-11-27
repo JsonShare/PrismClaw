@@ -115,7 +115,7 @@ class ActivateSkillTool:
             source="model",
         )
 
-        # 专家包作用域门控：未启用的能力包下的技能不可加载。
+        # 专家包作用域门控：未启用的专家包下的技能不可加载。
         # 复用 catalog 的解析契约（与 build_skill_execution 同一解析路径），
         # 避免用技能名前缀去猜归属。解析不到就交给下游维持原有错误路径。
         _scope = context.session_scope
@@ -142,7 +142,7 @@ class ActivateSkillTool:
             ):
                 return error_result(
                     call_id,
-                    f"skill_scope_denied:{_owner}（该技能属于未启用的能力包「{_owner}」）",
+                    f"skill_scope_denied:{_owner}（该技能属于未启用的专家包「{_owner}」）",
                 )
 
         try:

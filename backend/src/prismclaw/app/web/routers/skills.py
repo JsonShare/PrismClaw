@@ -80,6 +80,9 @@ class SkillListItem(BaseModel):
     expert_description: str | None = None
     # 所属专家包类型：agent=专家、team=专家团；非专家包来源为 None
     expert_type: str | None = None
+    # 所属专家包分组：英文 id + 中文名，供前端分组筛选；非专家包来源为 None
+    expert_category_id: str | None = None
+    expert_category_name: str | None = None
     editable: bool = False
 
 
@@ -93,9 +96,6 @@ class CatalogSkillResponse(BaseModel):
 class SkillPackageResponse(BaseModel):
     expert_name: str
     expert_description: str | None = None
-    # 包来源：agent=专家、team=专家团；非专家来源的内置技能包为 None。
-    # 前端据此把「专家自带的技能」从技能选择器里剔除。
-    expert_type: str | None = None
     skills: list[CatalogSkillResponse]
 
 
@@ -308,7 +308,6 @@ async def list_deployed_skills(
     experts = sorted(builtin.list_experts(), key=lambda expert: expert.name)
     groups: list[SkillPackageResponse] = []
     for expert in experts:
-        kind: str | None = None
         if expert.source == "experts":
             manifest = expert.manifest
             kind = "team" if manifest is not None and manifest.expert_type == "team" else "expert"
@@ -336,10 +335,34 @@ async def list_deployed_skills(
                     expert_description=(
                         expert.manifest.description if expert.manifest is not None else None
                     ),
-                    expert_type=kind,
                     skills=skills,
                 )
             )
+
+    # 全局基础技能（来自 extra_skill_dirs，expert_name=None）单独成组。
+    # 它们是所有专家共享的运行时能力，不属于任何专家包；技能选择列表
+    # 只展示这一组，专家自有技能随专家启用，不在此处单列。
+    base: dict[str, Any] = {}
+    for expert in experts:
+        for skill in getattr(expert, "inherited_skills", []) or []:
+            if is_user_visible(skill):
+                base.setdefault(skill.name, skill)
+    if base:
+        groups.append(
+            SkillPackageResponse(
+                expert_name="base",
+                expert_description="全局基础技能（所有专家共享）",
+                skills=[
+                    CatalogSkillResponse(
+                        id=skill.name,
+                        name=skill.name,
+                        name_zh=skill.name_zh,
+                        description=skill.description,
+                    )
+                    for skill in sorted(base.values(), key=lambda item: item.name)
+                ],
+            )
+        )
     return groups
 
 
@@ -428,19 +451,20 @@ async def list_skills(
     except RuntimeError:
         expert_registry = None
 
-    def _expert_type_of(name: str | None) -> str | None:
+    def _manifest_of(name: str | None):
+        """取专家包清单；注册表缺失或未命中时返回 None。"""
         if not name or expert_registry is None:
             return None
         try:
             package = expert_registry.get(name)
         except ExpertError:
             return None
-        manifest = package.manifest if package is not None else None
-        return manifest.expert_type if manifest is not None else None
+        return package.manifest if package is not None else None
 
     out: list[SkillListItem] = []
     for entry in entries:
         m = entry.manifest
+        expert_manifest = _manifest_of(entry.expert_name)
         if not is_user_visible(m):
             continue
         if scope == "assets" and not _is_asset_skill(m, asset_root):
@@ -484,7 +508,9 @@ async def list_skills(
                 category=m.category,
                 expert_name=entry.expert_name,
                 expert_description=entry.expert_description,
-                expert_type=_expert_type_of(entry.expert_name),
+                expert_type=(expert_manifest.expert_type if expert_manifest else None),
+                expert_category_id=(expert_manifest.category_id if expert_manifest else None),
+                expert_category_name=(expert_manifest.category_name if expert_manifest else None),
                 editable=bool(m.editable),
             )
         )

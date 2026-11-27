@@ -7,12 +7,9 @@ argument_hint: '[规章制度主题——例如 ''远程办公''、''加班管�
 category: 劳动用工
 ---
 
-
-
-
 # /policy-drafting
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 省市足迹、员工手册位置。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 省市足迹、员工手册位置。
 2. 使用以下工作流。
 3. 起草核心规章制度。检查足迹中每个省市是否需要变体。
 4. 输出：核心制度 + 省市补充。标记法律目前正在变化的领域。
@@ -20,8 +17,6 @@ category: 劳动用工
 ---
 
 ## 事项上下文
-
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `skills/employment-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -34,7 +29,7 @@ category: 劳动用工
 
 ## 加载上下文
 
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 省市足迹、员工手册位置和格式。
+`执业配置文件（请按当前系统指引创建）` → 省市足迹、员工手册位置和格式。
 
 ## 工作流
 
@@ -144,6 +139,5 @@ category: 劳动用工
 - 批准规章制度。它起草；人批准，民主程序决定。
 - 推行制度。向员工传达是 HR 工作流（且须满足公示告知要求）。
 - 覆盖中国所有省市——仅覆盖足迹中的。如果足迹扩展，重新运行。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

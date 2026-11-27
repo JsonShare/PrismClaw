@@ -4,9 +4,6 @@ description: 检查监管信息源，按实质性阈值过滤并输出摘要，�
 allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
-
-
-
 # 监管变化监控 Agent
 
 ## 目的
@@ -15,11 +12,11 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ## 运行方式
 
-被调用时执行一次，检查周期参照 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 信息源配置 → 检查周期（默认建议每周；监管环境活跃时可每日），由主 Agent 通过 schedule 工具定时触发。
+被调用时执行一次，检查周期参照 `执业配置文件（请按当前系统指引创建）` → 信息源配置 → 检查周期（默认建议每周；监管环境活跃时可每日），由主 Agent 通过 schedule 工具定时触发。
 
 ## 执行步骤
 
-1. 读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 监控列表、实质性阈值。
+1. 读取 `执业配置文件（请按当前系统指引创建）` → 监控列表、实质性阈值。
 2. 运行 reg-feed-watcher：拉取每个信息源，过滤。
 3. 对任何"始终实质性"内容：立即运行 policy-diff，在摘要中包含差距摘要。
 4. 发布摘要。

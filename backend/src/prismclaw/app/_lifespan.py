@@ -502,6 +502,16 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             app=app,
         )
         await domain_registry.apply_infrastructure(domain_bundles, infra_ctx)
+        # 域自建 SQL：启动时自动扫描 <域包>/deploy/sql/*.sql，按文件名升序执行。
+        # 约定见 docs/architecture/biz_domain/domain-package-template.md。
+        from prismclaw.persistence.sql_runner import apply_domain_sql
+
+        for _domain_bundle in domain_bundles:
+            try:
+                await apply_domain_sql(db_engine, _domain_bundle)
+            except Exception as exc:
+                logger.exception("Domain '%s' SQL 脚本执行失败", _domain_bundle.name)
+                domain_registry.record_error(_domain_bundle.name, f"sql: {exc}")
         infra_bundle.domain_stores.update(infra_ctx.domain_stores)
         # 保存 domain_stores 到 app.state，供路由访问（旧路径，渐进迁移）
         app.state.domain_stores = infra_ctx.domain_stores

@@ -2,9 +2,6 @@
   "name": "corporate-law",
   "version": "1.0.0",
   "description": "Runs due diligence, tabular review and disclosure schedules, drafts board documents and tracks entity compliance.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/corporate-law.md"
   ],
@@ -28,16 +25,15 @@
     "en": "Equity Structure & M&A Diligence"
   },
   "displayDescription": {
-    "zh": "运行尽调、表格审查与披露时间表，起草董事会文件并跟踪实体合规。",
+    "zh": "运行尽职调查、披露清单审查与时间表管理，起草董事会与股东会文件，并跟踪实体持续合规。",
     "en": "Runs due diligence, tabular review and disclosure schedules, drafts board documents and tracks entity compliance."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "commercial-ip",
   "defaultInitPrompt": {
     "zh": "对【目标公司】做交割前法律尽调，输出问题清单与披露时间表。",
     "en": "Run pre-closing diligence on [target] and produce an issue list with a disclosure schedule."
   },
-  "plugin": "corporate-law",
   "tags": [
     {
       "zh": "并购尽调",
@@ -66,5 +62,6 @@
       "en": "List entity compliance filings and deadlines this year."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "商事与知产"
 }

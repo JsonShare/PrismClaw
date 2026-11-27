@@ -39,7 +39,7 @@ class OfficialRedirects(urllib.request.HTTPRedirectHandler):
 def fetch_bytes(url, limit):
     validate_url(url)
     opener = urllib.request.build_opener(OfficialRedirects())
-    request = urllib.request.Request(url, headers={'User-Agent': 'DoctorBuddy-SourceReader/1.0'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'PrismClaw-SourceReader/1.0'})
     with opener.open(request, timeout=45) as response:
         validate_url(response.url)
         raw = response.read(limit + 1)

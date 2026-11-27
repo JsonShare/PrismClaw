@@ -266,7 +266,6 @@ OR
 
 The protocol, informed consent form(s), recruitment materials, and all participant materials will be submitted to the IRB for review and approval.  Approval of both the protocol and the consent form must be obtained before any participant is enrolled.  Any amendment to the protocol will require review and approval by the IRB before the changes are implemented to the study.  All changes to the consent form will be IRB approved; a determination will be made regarding whether a new consent needs to be obtained from participants who provided consent, using a previously approved consent form.]
 
-
 ---
 
 ### Section 1: PROTOCOL SUMMARY (150 lines)
@@ -377,7 +376,6 @@ This section contains three major components. Generate each with appropriate det
 **Marking:** X = performed; X--------------X = continuous; Footnotes: ^a^, ^b^, ^c^
 
 **Visit Windows:** Screening ≤28 days; Baseline Day 1; Early ±1-3d; Mid ±3-7d; Late/monthly ±7-14d; Follow-up ±14-28d
-
 
 ---
 
@@ -703,7 +701,6 @@ This is a critical section requiring detailed criteria.
 - Recruitment materials: Subject to IRB approval
 - Retention strategies: How will participants be retained? (regular communication, flexible scheduling, minimizing participant burden, reimbursement for time/travel)
 - Enrollment targets and timeline: Target enrollment rate, enrollment period duration
-
 
 ---
 

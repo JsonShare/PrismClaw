@@ -239,13 +239,6 @@ services:
       # SafetyGate + Runtime-Agent 连接（template_id → agent URL 路由表）
       PRISMCLAW_RUNTIME_AGENT_URLS: '{"default-v1":"http://runtime-agent-default:9001","restricted-v1":"http://runtime-agent-restricted:9001"}'
       PRISMCLAW_RUNTIME_HMAC_SECRET: ${HMAC_SECRET:?set HMAC_SECRET in deploy/.env}
-      # 插件远端 MCP 凭据（deploy/configs/mcp.prod.yaml 的 plugin_overrides 引用）。
-      # 留空则该 server 连接失败并被标记，不影响其它 server 与主流程。
-      PRISMCLAW_MCP_SLACK_TOKEN: ${PRISMCLAW_MCP_SLACK_TOKEN:-}
-      PRISMCLAW_MCP_GOOGLE_DRIVE_TOKEN: ${PRISMCLAW_MCP_GOOGLE_DRIVE_TOKEN:-}
-      PRISMCLAW_MCP_COURTLISTENER_TOKEN: ${PRISMCLAW_MCP_COURTLISTENER_TOKEN:-}
-      PRISMCLAW_MCP_LINEAR_TOKEN: ${PRISMCLAW_MCP_LINEAR_TOKEN:-}
-      PRISMCLAW_MCP_ATLASSIAN_TOKEN: ${PRISMCLAW_MCP_ATLASSIAN_TOKEN:-}
       # web-search-mcp (streamable-http, token authenticated)
       WEB_SEARCH_MCP_URL: http://web-search-mcp:9002/mcp
       WEB_SEARCH_MCP_TOKEN: ${WEB_SEARCH_MCP_TOKEN:?set WEB_SEARCH_MCP_TOKEN in deploy/.env}
@@ -260,8 +253,8 @@ services:
       # redis/storage 的归属文件是 infra.yaml，写在 server.yaml 里会被覆盖。
       - ./configs/server.yaml:/app/backend/configs/server.yaml:ro
       - ./configs/infra.yaml:/app/backend/configs/infra.yaml:ro
-      # Overlay the production MCP config onto the dev-oriented repo default
-      - ./configs/mcp.prod.yaml:/app/backend/configs/mcp.yaml:ro
+      # 生产 MCP 连接器注册表覆盖仓库默认（backend/configs/mcp.json）
+      - ./configs/mcp.prod.json:/app/backend/configs/mcp.json:ro
       # 工作区根：与 runtime-agent 挂**同一个卷、同一个容器路径**（C 批定为
       # /workspace，见 deploy/configs/server.yaml 的 workspaces.default）。
       - prismclaw-workspaces:/workspace

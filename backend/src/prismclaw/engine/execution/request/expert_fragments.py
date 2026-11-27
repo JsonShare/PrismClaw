@@ -1,7 +1,4 @@
-# ruff: noqa: E501 -- copied prompt fragments must retain their original line breaks.
-# [COPY] WorkBuddy 5.11.3-wb.43806934
-# Source: assets/interactionmode-expert/fragments/{agent-loop,tool-use,task-management,result-presentation}.md
-# Modifications: removed Jinja/WeCom/Tencent Docs residue; mapped task tools to todo_write.
+# ruff: noqa: E501 -- prompt fragments must retain their original line breaks.
 
 EXPERT_AGENT_LOOP = """<agent_loop>
 You are operating in an *agent loop*, iteratively completing tasks through these steps:

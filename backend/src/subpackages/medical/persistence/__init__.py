@@ -1,12 +1,12 @@
-"""医疗域持久化存储 — MedicalStore + KbStore + Schema + Helpers。
+"""医疗域持久化存储 — MedicalStore + KbStore + Helpers。
 
 PEP 562 惰性导入：Store 类依赖 sqlalchemy，统一惰性导入保持一致性。
+DDL 位于域包 ``deploy/sql/*.sql``，由核心启动时自动扫描执行。
 """
 
 __all__ = [
     "MedicalStore",
     "KbStore",
-    "ensure_medical_schema",
     "row_to_dict",
     "get_medical_store",
     "get_kb_store",
@@ -16,7 +16,6 @@ __all__ = [
 _LAZY_IMPORTS: dict[str, str] = {
     "MedicalStore": ".medical_store",
     "KbStore": ".kb_store",
-    "ensure_medical_schema": ".schema",
     "row_to_dict": ".helpers",
     "get_medical_store": ".helpers",
     "get_kb_store": ".helpers",

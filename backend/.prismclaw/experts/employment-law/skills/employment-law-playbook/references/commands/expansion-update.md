@@ -7,18 +7,15 @@ argument_hint: '[省市或国家名称]'
 category: 劳动用工
 ---
 
-
-
-
 # /expansion-update
 
 返回到打开的扩展追踪器并根据上次会话后发生的情况更新项目状态。重新计算现在已解除阻止的项目，标记任何逾期项目，并提示下一个优先事项。
 
 ## 说明
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。
+1. 加载 `执业配置文件（请按当前系统指引创建）`。
 
-2. 识别追踪器文件：`${WORKBUDDY_EXPERT_DATA}/expansion-[slug].yaml`。如果不存在，响应："未找到 [省市/国家] 的扩展追踪器。运行 `skills/employment-law-playbook/references/commands/expansion-kickoff.md [省市/国家]` 来启动一个。"
+2. 识别追踪器文件：`{expert_runtime_dir}/expansion-[slug].yaml`。如果不存在，响应："未找到 [省市/国家] 的扩展追踪器。运行 `skills/employment-law-playbook/references/commands/expansion-kickoff.md [省市/国家]` 来启动一个。"
 
 3. 读取追踪器。显示当前状态：
 
@@ -67,6 +64,5 @@ category: 劳动用工
 ```
 
 > 详细的追踪器架构、项目状态规则和依赖逻辑见 `employment-expansion-workflow` 及其 `references/`——在进行实质性工作之前加载它。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

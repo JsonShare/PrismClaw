@@ -6,8 +6,15 @@ shares no configuration files with the PrismClaw main app.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: 服务自身的 .env（mcp_servers/web-search-mcp/.env）。引擎从仓库根目录以
+#: ``python -m web_search_mcp`` 拉起进程，cwd 不是包目录，所以这里给绝对路径；
+#: 进程 cwd 下的 .env 仍然生效并优先。
+_PACKAGE_ENV = Path(__file__).resolve().parents[2] / ".env"
 
 
 def _split_csv(raw: str) -> list[str]:
@@ -17,7 +24,7 @@ def _split_csv(raw: str) -> list[str]:
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="WSM_",
-        env_file=".env",
+        env_file=(str(_PACKAGE_ENV), ".env"),
         env_file_encoding="utf-8",
         populate_by_name=True,
         extra="ignore",

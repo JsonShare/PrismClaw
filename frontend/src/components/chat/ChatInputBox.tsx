@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Square, Plus, X, LoaderCircle, Sparkles, Mic, Pause,
 } from 'lucide-react'
@@ -30,6 +30,7 @@ import { useToast } from '../../lib/toast'
 import FileLibraryModal from './FileLibraryModal'
 import { DRAFT_SESSION_KEY, EMPTY_EXPERT_STATE, useSessionStore } from '../../stores/session'
 import type { ExpertState } from '../../stores/session'
+import { useChatStore } from '../../stores/chat'
 import iconSend from '../../images/other_icon/send.png'
 
 /** 专家不可用原因码 → 用户可读文案（码与后端 ExpertErrorCode 一致）。 */
@@ -171,6 +172,9 @@ export interface ChatInputBoxProps {
 /** 单条消息可携带的引用文件上限（上下文预算保护） */
 const MAX_CONTEXT_REFS = 20
 
+/** 落地页发送时还没有会话 id：技能清理目标先占位，会话创建后再解析 */
+const PENDING_CONV_ID = '__pending__'
+
 export default function ChatInputBox({
   input, isUploading, isOptimizing, isRecording, isTranscribing, isStreaming,
   isClarifying, isDragging, pendingAttachments,
@@ -233,18 +237,20 @@ export default function ChatInputBox({
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const packages = await res.json() as Array<{
           expert_name: string
-          expert_type?: string | null
           skills: Array<{ id: string; name: string; name_zh?: string | null; description?: string }>
         }>
         if (!cancelled) {
-          setSkills(packages.flatMap((pkg) => pkg.skills.map((skill) => ({
-            id: skill.id,
-            name: skill.name,
-            nameZh: skill.name_zh ?? null,
-            description: skill.description ?? '',
-            pluginName: pkg.expert_name,
-            expertType: pkg.expert_type ?? null,
-          }))))
+          // 技能选择只列全局基础技能（后端 expert_name='base' 分组）。
+          // 专家包自有技能随专家启用，不在这里单独勾选。
+          setSkills(packages
+            .filter((pkg) => pkg.expert_name === 'base')
+            .flatMap((pkg) => pkg.skills.map((skill) => ({
+              id: skill.id,
+              name: skill.name,
+              nameZh: skill.name_zh ?? null,
+              description: skill.description ?? '',
+              pluginName: '基础技能',
+            }))))
         }
       } catch {
         if (!cancelled) setSkills([])
@@ -278,7 +284,7 @@ export default function ChatInputBox({
   const chips = collectChips(input)
   const fileChips = chips.filter((c) => c.kind === 'file')
 
-  // 会话选择状态是技能 chip 的唯一真相源；发送清空正文后仍保留已选技能。
+  // 会话选择状态是技能 chip 的唯一真相源。
   useEffect(() => {
     const editor = editorRef.current
     if (!editor) return
@@ -292,6 +298,51 @@ export default function ChatInputBox({
       if (!rendered.includes(skillId)) editor.insertChip({ kind: 'skill', value: skillId })
     }
   }, [editorRef, input, sessionKey, selectedSkillIds])
+
+  // ── 技能随本轮消费 ──
+  // 选中的技能属于「本轮输入」，正文里的卡片标记才是唯一真相源，所以发送后要
+  // 连同正文一起清空。本地立即清（chip 立刻消失、面板回到未选中）；服务端的会话
+  // 选择必须等本轮 run 结束后再清：run 构建专家作用域时会读
+  // header.selected_skill_ids，提前清空会让该技能所属包变成「未启用」，技能就
+  // 解锁不了自己包的工具（skill_scope_denied）。
+  const skillPurgeSawStreamingRef = useRef(false)
+  // null=无待清；PENDING_CONV_ID=落地页刚发送；其它=待清的会话 id
+  const [skillPurgeConvId, setSkillPurgeConvId] = useState<string | null>(null)
+
+  const consumeSelectedSkills = useCallback(() => {
+    if (selectedSkillIds.length === 0) return
+    skillPurgeSawStreamingRef.current = false
+    setSkillPurgeConvId(activeConvId ?? PENDING_CONV_ID)
+    useSessionStore.getState().setSelectedSkillIds(sessionKey, [])
+  }, [activeConvId, selectedSkillIds, sessionKey])
+
+  const skillPurgeStreaming = useChatStore((s) =>
+    skillPurgeConvId && skillPurgeConvId !== PENDING_CONV_ID
+      ? s.convStates[skillPurgeConvId]?.isStreaming ?? false
+      : false,
+  )
+
+  useEffect(() => {
+    if (!skillPurgeConvId || !token) return
+    if (skillPurgeConvId === PENDING_CONV_ID) {
+      if (activeConvId) setSkillPurgeConvId(activeConvId)
+      return
+    }
+    if (skillPurgeStreaming) {
+      skillPurgeSawStreamingRef.current = true
+      return
+    }
+    // 必须见过本轮真正开跑才清，否则 run 还没读 header 就把作用域授权丢了。
+    if (!skillPurgeSawStreamingRef.current) return
+    skillPurgeSawStreamingRef.current = false
+    const convId = skillPurgeConvId
+    setSkillPurgeConvId(null)
+    void fetch(apiUrl(`/api/sessions/${encodeURIComponent(convId)}/skills`), {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selected_skill_ids: [] }),
+    }).catch(() => {})
+  }, [activeConvId, skillPurgeConvId, skillPurgeStreaming, token])
 
   // 内容区左右边缘与底部按钮对齐：左=➕图标视觉位置（按钮圆心偏左），右=发送组右缘
   const contentPadLeft = isLanding ? 'pl-[24px]' : 'pl-[20px]'
@@ -552,14 +603,6 @@ export default function ChatInputBox({
   }, [consumeTrigger, editorRef, handleSkillToggle])
 
   // 技能面板保持展开以便多选；仅在服务端确认后更新 chip。
-  // 技能弹窗只列「技能」本体：专家、专家团自带的技能不在这里出现。
-  // 判定用包级语义标记 expert_type（agent/team），纯技能包为 null。
-  // 旧后端不返回该字段时（undefined → null）不做过滤，避免整表被清空。
-  const pickerSkills = useMemo(
-    () => skills.filter((skill) => !skill.expertType),
-    [skills],
-  )
-
   const handleSkillPanelPick = useCallback((skillId: string) => {
     setPlusMenuOpen(false)
     void handleSkillToggle(skillId)
@@ -591,7 +634,8 @@ export default function ChatInputBox({
     const text = trigger && editor ? editor.deleteBeforeCaret(trigger.length) : (editor?.getValue() ?? input)
     onSubmit(text)
     editor?.blur()
-  }, [trigger, input, onSubmit, editorRef])
+    consumeSelectedSkills()
+  }, [trigger, input, onSubmit, editorRef, consumeSelectedSkills])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     if (!trigger) return false
@@ -762,7 +806,7 @@ export default function ChatInputBox({
               maxSelect={maxRefFiles}
               onConfirm={(items) => onAddRefs?.(items)}
             />
-            <SkillSelector open={skillPanelOpen} onClose={() => setSkillPanelOpen(false)} selected={selectedSkillIds} onChange={handleSkillPanelPick} skills={pickerSkills} loading={skillsLoading} />
+            <SkillSelector open={skillPanelOpen} onClose={() => setSkillPanelOpen(false)} selected={selectedSkillIds} onChange={handleSkillPanelPick} skills={skills} loading={skillsLoading} />
             <PluginSelector open={pluginPanelOpen} onClose={() => setPluginPanelOpen(false)} selected={expertState.expert_id} onChange={handleExpertPanelPick} experts={experts} loading={expertsLoading} token={token} />
             <ContextPicker
               open={contextFlyoutOpen}

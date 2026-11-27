@@ -4,7 +4,7 @@ export interface Skill {
   desc: string
   tags: string[]
   installed: boolean
-  origin?: 'system' | 'plaza' | 'workspace' | 'expert' | 'project' | 'bundled' | 'personal' | 'managed' | 'mcp' | 'marketplace' | 'builtin'
+  origin?: 'system' | 'plaza' | 'workspace' | 'expert' | 'project' | 'bundled' | 'personal' | 'managed' | 'mcp' | 'builtin'
   location?: string
   content?: string
   groupPath?: string[]

@@ -68,9 +68,9 @@ class ToolContext:
     progress_batch_id: str | None = None
     subagent_progress_emitter: Any = None
     hook_registry: HookRegistry | None = None
-    hook_dispatcher: Any = None  # 专家包声明式钩子分发器；deepcopy 时排除，由 sub_agent 回填
+    hook_dispatcher: Any = None  # 进程内 hook 分发器；deepcopy 时排除，由 sub_agent 回填
     capability_catalog: Any = None
-    # 会话级能力作用域：专家包、能力包、人格来源、工具面、工具归属的唯一装配结果。
+    # 会话级能力作用域：专家包、人格来源、工具面、工具归属的唯一装配结果。
     # None = 无作用域上下文（headless/测试/装配未就绪），表示不做任何作用域限制。
     session_scope: Scope | None = None
     team_registry: Any = None

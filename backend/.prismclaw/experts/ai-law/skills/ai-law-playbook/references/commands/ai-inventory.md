@@ -8,9 +8,6 @@ argument_hint: '[list | add | edit <id> | classify <id> | show <id>]'
 category: AI治理
 ---
 
-
-
-
 # /ai-inventory
 
 ## 何时运行
@@ -20,11 +17,11 @@ category: AI治理
 ## 要做什么
 
 1. **阅读配置。**阅读
-   `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。
-   如果它不存在或仍有 `[PLACEHOLDER]` 标记，请引导用户先运行 `skills/ai-law-playbook/references/commands/cold-start-interview.md`。
+   `执业配置文件（请按当前系统指引创建）`。
+   如果它不存在或仍有 `[PLACEHOLDER]` 标记，请引导用户先运行 请先配置相关执业信息后再进行定制审查。
 
 2. **阅读清单。**清单位于
-   `${WORKBUDDY_EXPERT_DATA}/ai-systems.yaml`。
+   `{expert_runtime_dir}/ai-systems.yaml`。
    如果它不存在，请在第一次运行 `add` 时使用空的 `systems:` 列表创建它。
 
 3. **根据参数分派：**
@@ -178,6 +175,5 @@ systems:
 - **`[verify]` 标记保留。** 它们不是回避——它们就是重点。不要在输出中剥离它们。
 - **标记实质性修改。** 每当系统修改超出配置时，提示用户重新运行 `/ai-inventory classify`——修改可以改变角色。
 - **不要从表格声明义务。** 如果被询问，在对话中进行分析，并将需要正式记录的内容路由到 `/aia-generation`。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

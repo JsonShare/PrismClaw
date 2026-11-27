@@ -173,11 +173,9 @@ class ConnectionMixin(_MCPBackendBase):
         async with self._get_lock(name):
             self._stderr_buffers.setdefault(name, deque(maxlen=_STDERR_BUFFER_LINES))
 
-            # SDD context-governance W7-4: marketplace experts ship env
-            # template placeholders like "<在本地填入 EHR FHIR 基础 URL>".
-            # Spawning those processes just produces "Connection closed"
-            # warnings every startup (13× on this install). Detect the
-            # placeholder BEFORE spawning and mark the server disabled —
+            # 专家包分发的连接器配置常带 "<在本地填入 EHR FHIR 基础 URL>"
+            # 这类模板占位符。直接 spawn 会让每次启动都刷 "Connection closed"。
+            # 因此在 spawn 之前识别占位符并把该连接器标记为 disabled——
             # a clean, expected state, not a failure. Deleting the expert
             # config would be wrong (breaks users who fill the values).
             for key, raw_value in config.env.items():

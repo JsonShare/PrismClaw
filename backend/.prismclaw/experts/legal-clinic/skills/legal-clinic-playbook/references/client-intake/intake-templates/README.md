@@ -1,5 +1,3 @@
-
-
 # 执业领域接案模板
 
 由冷启动时从教授的接案表格中填充。如未提供，`skills/legal-clinic-playbook/references/commands/client-intake.md` 第 2 步的默认问题集会作为兜底。

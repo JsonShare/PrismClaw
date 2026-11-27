@@ -62,26 +62,20 @@ def test_reload_body_is_last_nonempty_turn():
     assert assistants[0]["tool_calls"][0]["name"] == "read"
 
 
-def test_assistant_bubbles_around_hitl_tool_not_merged():
-    """HITL 提问气泡 a1 与其后的回复 a2 必须各自独立成气泡。
+def test_multiple_hitl_steps_keep_one_assistant_bubble():
+    """同一用户提问中的多轮 HITL 只是执行步骤，不得切成多个回答气泡。
 
-    关键回归护栏：若处理 tool 结果时未先 flush 前置的提问气泡 a1，a1 会被
-    a2 覆盖而丢失 / 并入 a2。本测试显式构造 [u1, a1, t1, a2] 兜住该回归。
+    用户答案只落在 ask 工具结果里；所有问答与后续正文属于同一轮执行。
+    最终展示必须是一条 user + 一条 assistant，正文取最后的完整答复，
+    各次 ask 工具调用及答案仍保留在该 assistant 的执行数据中。
     """
     entries = {
-        # 上传记录：普通 user 气泡，必须照常出现
-        "u1": MessageEntry(
-            id="u1",
-            parent_id=None,
-            role="user",
-            content=[{"type": "file", "path": "/w/x.docx", "name": "x.docx"}],
-        ),
-        # 助手提问（AskUserQuestion）
+        "u1": MessageEntry(id="u1", parent_id=None, role="user", content="请处理这份文档"),
         "a1": MessageEntry(
             id="a1",
             parent_id="u1",
             role="assistant",
-            content="请选择处理方式。",
+            content="先确认处理方向。",
             tool_calls=[
                 {
                     "id": "c1",
@@ -92,37 +86,94 @@ def test_assistant_bubbles_around_hitl_tool_not_merged():
                 }
             ],
         ),
-        # 用户作答只作为 ask 工具结果存在，不落独立 user entry
         "t1": MessageEntry(
             id="t1",
             parent_id="a1",
             role="tool",
-            content="排期文档处理：评估排期合理性",
+            content="按排期处理",
             tool_call_id="c1",
+            tool_name="ask_user_question",
         ),
-        # 答案之后 agent 的后续回复（真实 HITL 流程必有）
         "a2": MessageEntry(
-            id="a2", parent_id="t1", role="assistant", content="已按排期处理，请查收。"
+            id="a2",
+            parent_id="t1",
+            role="assistant",
+            content="再确认输出格式。",
+            tool_calls=[
+                {
+                    "id": "c2",
+                    "function": {
+                        "name": "ask_user_question",
+                        "arguments": '{"questions":[{"question":"输出什么格式？","header":"格式"}]}',
+                    },
+                }
+            ],
+        ),
+        "t2": MessageEntry(
+            id="t2",
+            parent_id="a2",
+            role="tool",
+            content="输出 Markdown",
+            tool_call_id="c2",
+            tool_name="ask_user_question",
+        ),
+        "a3": MessageEntry(
+            id="a3", parent_id="t2", role="assistant", content="已按排期处理并输出 Markdown。"
         ),
     }
-    tree = _tree(entries, ["u1", "a1", "t1", "a2"])
+    tree = _tree(entries, ["u1", "a1", "t1", "a2", "t2", "a3"])
     msgs = _build_display_messages(tree, review_utils=None)
 
-    user_msgs = [m for m in msgs if m["role"] == "user"]
-    assert len(user_msgs) == 1, [m["id"] for m in user_msgs]
-    assert user_msgs[0]["id"] == "u1"
-    assert "排期文档处理" not in (user_msgs[0].get("content") or "")
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
+    assistant = msgs[1]
+    assert assistant["id"] == "a3"
+    assert assistant["content"] == "已按排期处理并输出 Markdown。"
+    assert [tc["id"] for tc in assistant["tool_calls"]] == ["c1", "c2"]
+    assert [tc["result"] for tc in assistant["tool_calls"]] == ["按排期处理", "输出 Markdown"]
 
-    # 提问气泡 a1 与后续回复 a2 必须各自独立成气泡（不能被覆盖/合并/丢失）
-    assistant_msgs = [m for m in msgs if m["role"] == "assistant"]
-    assert len(assistant_msgs) == 2, [m["id"] for m in assistant_msgs]
-    assert {m["id"] for m in assistant_msgs} == {"a1", "a2"}
-    # a1 携带 ask_user 工具调用（时间线据此渲染「人机交互」步骤）
-    a1 = next(m for m in assistant_msgs if m["id"] == "a1")
-    assert any(tc.get("name", "").lower().find("ask") >= 0 for tc in a1.get("tool_calls", []))
-    # a2 携带其自身回复正文
-    a2 = next(m for m in assistant_msgs if m["id"] == "a2")
-    assert "已按排期处理" in (a2.get("content") or "")
+
+def test_legacy_hitl_answer_does_not_create_user_turn():
+    """旧会话遗留的 clarification_answer user entry 也只作执行步骤回放。"""
+    entries = {
+        "u1": MessageEntry(id="u1", parent_id=None, role="user", content="请处理这份文档"),
+        "a1": MessageEntry(
+            id="a1",
+            parent_id="u1",
+            role="assistant",
+            content="请选择处理方式。",
+            tool_calls=[
+                {
+                    "id": "c1",
+                    "function": {"name": "ask_user_question", "arguments": "{}"},
+                }
+            ],
+        ),
+        "t1": MessageEntry(
+            id="t1",
+            parent_id="a1",
+            role="tool",
+            content="按排期处理",
+            tool_call_id="c1",
+            tool_name="ask_user_question",
+        ),
+        "u2": MessageEntry(
+            id="u2",
+            parent_id="t1",
+            role="user",
+            content="按排期处理",
+            metadata={"kind": "clarification_answer", "ask_tool_call_id": "c1"},
+        ),
+        "a2": MessageEntry(
+            id="a2", parent_id="u2", role="assistant", content="已按排期处理，请查收。"
+        ),
+    }
+    tree = _tree(entries, ["u1", "a1", "t1", "u2", "a2"])
+    msgs = _build_display_messages(tree, review_utils=None)
+
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
+    assert msgs[0]["id"] == "u1"
+    assert msgs[1]["id"] == "a2"
+    assert msgs[1]["content"] == "已按排期处理，请查收。"
 
 
 async def test_clarification_answer_stays_in_tool_result(monkeypatch):

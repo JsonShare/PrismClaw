@@ -7,12 +7,9 @@ argument_hint: '[subject, or point at class notes/casebook section]'
 category: 法学学习
 ---
 
-
-
-
 # /outline-builder
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 大纲偏好、现有大纲。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 大纲偏好、现有大纲。
 2. 应用以下工作流。
 3. 以学生的格式构建。如果扩展现有大纲，完全匹配其结构。
 
@@ -71,14 +68,14 @@ category: 法学学习
 
 这不是为学生写——它是将学生指向他们已经拥有的两件东西并要求他们协调。将错误规则放入大纲并从中学习的 1L 是此 skill 存在以防止的失败模式。仅当以下情况时应用此规则：
 
-1. 学生实际上传或编写了 skill 可以引用的材料（`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → Seed materials 中的种子材料，或正在扩展的大纲的早期部分），以及
+1. 学生实际上传或编写了 skill 可以引用的材料（`执业配置文件（请按当前系统指引创建）` → Seed materials 中的种子材料，或正在扩展的大纲的早期部分），以及
 2. 陈述的规则与学生自己的材料在特定的实质点上不一致——不是措辞，不是细节水平。
 
 不要从你自己的知识自愿提供更正。不要引用案例书，除非学生上传了它。只将学生自己的材料引用给他们。目标是训练学生信任和验证他们自己的工作，而不是提供正确答案。
 
 ## Load context
 
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 大纲偏好（格式、深度、现有大纲位置）。
+`执业配置文件（请按当前系统指引创建）` → 大纲偏好（格式、深度、现有大纲位置）。
 
 如果现有大纲存在：阅读一个。完全匹配其结构。标题、深度、案例如何整合、是否有假设。
 
@@ -157,6 +154,5 @@ Match theirs.
 - Replace the student's own synthesis. 你没有构建的大纲是你不会知道的大纲。此 skill *helps* 构建——学生应该驱动。
 - Guarantee exam coverage. 概述整个教学大纲；教授将测试他们想要的任何内容。
 - **Invent rules to fill gaps.** 如果我没有来源材料并且对规则没有信心，大纲获得 `[GAP — fill from class notes]` 而不是捏造的规则。在大纲学习之前检查每个 `[VERIFY]` 和 `[UNCERTAIN]` 标记。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

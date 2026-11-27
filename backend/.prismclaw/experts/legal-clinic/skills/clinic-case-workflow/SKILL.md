@@ -9,8 +9,6 @@ invocation_policy: user_only
 priority: 10
 ---
 
-
-
 # clinic-case-workflow
 
 ## 场景分流

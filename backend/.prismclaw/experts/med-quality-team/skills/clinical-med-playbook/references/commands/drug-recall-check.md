@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `skills/clinical-med-playbook/references/practice-profile/PLUGIN.md` 获取执业档案。
+检查会话中的执业配置。
 2. 获取目标药品信息：药品名称（通用名或商品名）、NDC 编号（如有）。
 3. 调用 `drug_recall_check` 工具（MCP）查询 FDA 召回数据库。
 4. 逐项检查召回信息：

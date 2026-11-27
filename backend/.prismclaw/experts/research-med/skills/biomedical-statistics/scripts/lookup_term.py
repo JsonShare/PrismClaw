@@ -72,7 +72,7 @@ def lookup_term(term, output_dir, context=None, fetch=None, clock=time.monotonic
         if remaining <= 0:
             raise TimeoutError('Term source lookup reached its 60 second budget')
         opener = urllib.request.build_opener(OfficialRedirects())
-        request = urllib.request.Request(url, headers={'User-Agent': 'DoctorBuddy-TermReader/1.0'})
+        request = urllib.request.Request(url, headers={'User-Agent': 'PrismClaw-TermReader/1.0'})
         with opener.open(request, timeout=min(15, remaining)) as response:
             validate_url(response.url)
             raw = response.read(limit + 1)

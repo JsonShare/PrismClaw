@@ -1,4 +1,4 @@
-# 调度器
+# 16 — 调度器 (Scheduler)
 
 ## 职责概述
 
@@ -16,9 +16,11 @@
 
 **[查看交互式架构图](../diagrams/16-scheduler.html)**
 
-## 架构范式：event notification，不是 work queue
+## 架构总览
 
-一次定时 fire 是一个**没有时长上限的普通 chat turn**，而 Redis Streams 的 PEL / `XAUTOCLAIM` 隐含「工作有界、可以用时间窗口判断 worker 已死」。两者不相容：不设执行时长上限就**无法区分「跑得慢」与「进程已死」**，任何自动恢复都要引入时间窗口 / 心跳 / 租约，等于把刚删掉的租约重新加回来。
+### 为什么是事件通知，不是工作队列
+
+一次定时 fire 是一个**没有时长上限的普通 chat turn**，而 Redis Streams 的 PEL / `XAUTOCLAIM` 隐含「工作有界、可以用时间窗口判断 worker 已死」。两者不相容：不设执行时长上限就**无法区分「跑得慢」与「进程已死」**，任何自动恢复都要引入时间窗口 / 心跳 / 租约，等于把租约重新加回来。
 
 因此本模块采用：
 
@@ -203,7 +205,7 @@ await _run_chat(state, msg, app.state.web_deps.web_settings)
 | 组件 | 职责 |
 |------|------|
 | `gateway/event_codec.py` | 转发线格式单一真源：`encode_forward_event(user_id, frame)` / `decode_forward_event` / `web_session_key` |
-| `gateway/factory.py` | `_dispatch_forwarded_event` 按 `user_id` 查**本机** `ConnectionRegistry` 并直投 `ws.send_json`；`app` 惰性引用，适配插件重载后重建的 `web_deps` |
+| `gateway/factory.py` | `_dispatch_forwarded_event` 按 `user_id` 查**本机** `ConnectionRegistry` 并直投 `ws.send_json`；`app` 惰性引用，适配专家包重载后重建的 `web_deps` |
 | `web/connection.py` | `_fanout_to_peer_connections` 本地优先；本机无连接时才 `route("web:{user_id}", payload)` 转发一次 |
 | `web/websocket/websocket.py` | `broadcast_to_user` 走同一路由，保证 `scheduled_task.*` 到达用户实际连接节点 |
 | `gateway/router.py` | `route()` 任何 Redis 异常都兜底 `"local"`，绝不穿透到 `send_event`；`CancelledError` 仍传播 |
@@ -329,7 +331,7 @@ Worker B (Leader): _watch_invalidation_with_reconnect() → pubsub.listen()
 
 ## 配置项
 
-`SchedulerSettings`（`infra/settings/_plugins.py`）：
+`SchedulerSettings`（`infra/settings/_experts.py`）：
 
 | 属性 | 说明 |
 |------|------|
@@ -354,9 +356,9 @@ Redis Streams 队列参数（`dispatch.py` 构造参数）：
 
 Consumer 参数：`max_concurrent=3`、`max_per_user=2`，均为**每节点**值。
 
-## 已知边界与未修问题
+## 已知边界
 
 - 单 owner affinity：同一用户多连接跨节点时只有 owner 节点收到帧
 - `max_concurrent_*` 是每节点语义，不是全局硬上限
-- 真实两节点端到端 cron 验收（A1–A8）尚未跑过
-- 模型端点 `enable_thinking=False` 未透传导致 `text_chars=0`、`search-loop FREEZE` 收敛过晚、memory selector 每轮 8s 固定超时 —— 属模型端点 / 引擎收敛，不在调度状态机范围
+- leader 锁切换期间最多一个 tick 周期的触发空窗，不补触发
+- 模型端点 `enable_thinking=False` 未透传导致 `text_chars=0`、search-loop 收敛过晚、memory selector 每轮 8s 固定超时 —— 属模型端点 / 引擎收敛，不在调度状态机范围

@@ -2,9 +2,6 @@
   "name": "informatics-med",
   "version": "1.0.0",
   "description": "Designs FHIR R4 resource mappings and EHR integration, extracts clinical data and troubleshoots data quality.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/informatics-med.md"
   ],
@@ -29,12 +26,11 @@
     "en": "Designs FHIR R4 resource mappings and EHR integration, extracts clinical data and troubleshoots data quality."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "02-Engineering",
+  "categoryId": "medical-ops",
   "defaultInitPrompt": {
     "zh": "为 Epic 的 SMART-on-FHIR 对接给出资源映射与实现步骤。",
     "en": "Give resource mappings and implementation steps for Epic SMART-on-FHIR."
   },
-  "plugin": "informatics-med",
   "tags": [
     {
       "zh": "FHIR 集成",
@@ -63,5 +59,6 @@
       "en": "Troubleshoot common errors in this FHIR resource mapping."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "医疗运营"
 }

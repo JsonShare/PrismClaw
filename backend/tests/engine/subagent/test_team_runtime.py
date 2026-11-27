@@ -140,6 +140,7 @@ def _team_package(
         "displayDescription": "团" * 40,
         "avatar": "avatar.png",
         "categoryId": "08-Test",
+        "categoryName": "测试分组",
         "defaultInitPrompt": {"en": "Start", "zh": "开始"},
         "tags": ["team", "test", "orchestration"],
         "quickPrompts": [

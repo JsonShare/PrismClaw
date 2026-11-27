@@ -26,10 +26,8 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/feature-risk-assessment/`：单个功能或产品领域的深度风险评估
 - `skills/product-law-playbook/`：执业资料与流程参考
 - `skills/product-law-playbook/references/commands/`：命令流程参考
-- `skills/product-law-playbook/references/practice-profile/`：执业档案模板
 - `skills/product-law-playbook/references/subagents/`：子代理参考定义
 - `skills/product-law-playbook/references/launch-review/`：发布审查类别框架
-- `skills/product-law-playbook/references/mcp/`：MCP 配置记录（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：许可证
 
@@ -42,4 +40,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-命令流程保存在 `skills/product-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+命令流程保存在 `skills/product-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

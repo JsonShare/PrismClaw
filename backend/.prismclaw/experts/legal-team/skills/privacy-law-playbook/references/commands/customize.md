@@ -9,13 +9,11 @@ category: 数据隐私
 customizes: privacy-legal
 ---
 
-
-
 # 自定义数据隐私配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一层级的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一层级的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -40,7 +38,7 @@ customizes: privacy-legal
 - *剧本中的新 DSAR 豁免：* "`/dsar-response` 将在事实匹配的评估步骤中呈现此豁免。"
 - *风险姿态中间 → 保守：* "我会标记更多活动以进行 PIA 升级，建议更严格的 SCC 条款，并在保留方面更加保守。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并注意影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并注意影响范围。修改后保存。
 
 ## 关闭
 

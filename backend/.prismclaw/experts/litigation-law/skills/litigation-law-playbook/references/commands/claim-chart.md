@@ -7,12 +7,9 @@ argument_hint: '[--patent | --civil] [--infringement | --invalidity | --review |
 category: 争议诉讼
 ---
 
-
-
-
 # /claim-chart
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 角色、工作产品标题、决策姿态、文档存储。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 角色、工作产品标题、决策姿态、文档存储。
 2. 如果事项工作区已启用，确认或选择活跃事项；加载 `matter.md`（立场、管辖法院、阶段、理论、诉状）。
 3. 遵循以下工作流和参考。
 4. 模式选择：
@@ -52,20 +49,19 @@ category: 争议诉讼
 
 ## 事项背景
 
-检查执业档案 PLUGIN.md 中的 `## 事项工作区`。如果 `Enabled` 为 `✗`（内部法务用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/litigation-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md`——特别是案件理论、诉状/起诉状（对于实际主张的要件）、管辖法院、任何生效判决或约定的解释（专利模式）。
-
+检查执业档案 事项配置段。如果 `Enabled` 为 `✗`（内部法务用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。。
 ---
 
 ## 加载背景
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 角色、工作产品标题、决策姿态、文档存储、案件理论脚手架
+- `执业配置文件（请按当前系统指引创建）` → 角色、工作产品标题、决策姿态、文档存储、案件理论脚手架
 - 活跃事项的 `matter.md` — 索赔、抗辩、立场、管辖法院、阶段、理论
 - 民事模式：起诉状或反诉状（对于实际主张的诉因）、答辩（对于积极抗辩）、相关法条和司法解释，以及证据语料库——庭审笔录、声明书、已提交文件、鉴定意见。
 - 专利模式：专利证书、主张权利要求、说明书、申请历史档案、被指控产品材料或现有技术参考文件、任何无效宣告决定（国家知识产权局）或法院关于权利要求解释的判决。
 
-**冲突关卡——不可绕过。** 在构建要件分析表之前，检查 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
+**冲突关卡——不可绕过。** 在构建要件分析表之前，检查 `{expert_runtime_dir}/matters/_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
-> "我在事项台账中看不到 [事项 slug]。先运行 `skills/litigation-law-playbook/references/commands/matter-intake.md`，以便冲突检查运行并设置事项工作区。我不会对未经 intake 的事项构建要件分析表——冲突检查是关卡。"
+> "我在事项台账中看不到 [事项 slug]。先运行 `skills/litigation-law-playbook/references/commands/matter-intake.md`，以便冲突检查运行并初始化事项目录。我不会对未经 intake 的事项构建要件分析表——冲突检查是关卡。"
 
 不要在未经 intake 的事项上继续。
 
@@ -276,7 +272,7 @@ category: 争议诉讼
 
 ## 输出
 
-前置 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` `## 输出` 中的工作产品标题。
+前置 `执业配置文件（请按当前系统指引创建）` `## 输出` 中的工作产品标题。
 
 ### Markdown 表格（始终）
 
@@ -342,6 +338,5 @@ category: 争议诉讼
 - **不替代专家分析。**
 - **不送达、提交或签署任何内容。** 每个输出都是草稿。
 - **不外推。** 如果证据不在，单元格为 `needs-evidence`/`gap`——绝不猜测。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

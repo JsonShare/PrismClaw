@@ -8,9 +8,6 @@ argument_hint: <--send | --respond | --counter> [上下文或传入通知路径]
 category: 知识产权
 ---
 
-
-
-
 # /takedown
 
 三种模式。选择一种：
@@ -21,9 +18,9 @@ category: 知识产权
 
 ## 说明
 
-1. **阅读执业档案。** 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。如果包含 `[PLACEHOLDER]` 标记或不存在，停止并说："此 plugin 需要先设置才能提供有用的输出。运行 `skills/ip-law-playbook/references/commands/cold-start-interview.md`——takedown skill 依赖于你的审批矩阵和执业档案。"
+1. **阅读执业档案。** 加载 `执业配置文件（请按当前系统指引创建）`。如果包含 `[PLACEHOLDER]` 标记或不存在，停止并说："此 plugin 需要先设置才能提供有用的输出。运行 请先配置相关执业信息后再进行定制审查——takedown skill 依赖于你的审批矩阵和执业档案。"
 
-2. **检查事项工作区。** 按照 `## Matter workspaces`：如果 `Enabled` 为 `✗`，跳过。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/ip-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"
+2. **检查事项工作区。** 按照 `## Matter workspaces`：如果 `Enabled` 为 `✗`，跳过。。"
 
 3. **根据 `$ARGUMENTS` 分派：**
    - `--send` → 运行发送模式（下文）。逐步完成识别作品、识别侵权材料、合理使用门控(*Lenz*)、善意信念、准确性/授权、起草 §512(c)(3) 通知、运行醒目门控、写入输出。
@@ -75,9 +72,8 @@ DMCA §512 是**美国联邦法律**。它适用于受美国管辖的服务提�
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `## IP practice profile`（如有版权注册）、`## Enforcement posture` → `Approval matrix → DMCA takedown (ordinary)` 行、`## Outputs`（工作产品标题、角色）、`## Who's using this`（角色——律师 vs. 非律师）
-- **事项上下文。** 检查执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户默认），跳过事项机制。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/ip-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。" 将输出写入活跃事项的文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/takedown/<slug>/`（或执业级的 `takedown/<slug>/`）。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
-
+- `执业配置文件（请按当前系统指引创建）` → `## IP practice profile`（如有版权注册）、`## Enforcement posture` → `Approval matrix → DMCA takedown (ordinary)` 行、`## Outputs`（工作产品标题、角色）、`## Who's using this`（角色——律师 vs. 非律师）
+- 
 ## 发送模式——起草 §512(c)(3) 撤除通知
 
 ### 步骤 1：识别受版权保护的作品
@@ -402,7 +398,7 @@ DMCA §512 是**美国联邦法律**。它适用于受美国管辖的服务提�
 
 如果用户是非律师：
 
-> 反通知同意联邦法院管辖权，并在伪证处罚下声明。你是否已与你司法管辖区的持牌律师、事务律师、大律师或其他授权法律专业人士审查了此事？这不是 WorkBuddy 审查层；这是你需要持牌专业判断的步骤。对话简报：[生成一页摘要]。推荐资源：你专业监管机构的推荐服务（美国的州律协、英格兰和威尔士的 SRA/Bar Standards Board、苏格兰/NI/爱尔兰/加拿大/澳大利亚的 Law Society，或你司法管辖区的同等机构）；法学院 IP 诊所；ABA IP section（美国）。
+> 反通知同意联邦法院管辖权，并在伪证处罚下声明。你是否已与你司法管辖区的持牌律师、事务律师、大律师或其他授权法律专业人士审查了此事？这不是 （外部 AI 产品） 审查层；这是你需要持牌专业判断的步骤。对话简报：[生成一页摘要]。推荐资源：你专业监管机构的推荐服务（美国的州律协、英格兰和威尔士的 SRA/Bar Standards Board、苏格兰/NI/爱尔兰/加拿大/澳大利亚的 Law Society，或你司法管辖区的同等机构）；法学院 IP 诊所；ABA IP section（美国）。
 
 在没有明确互动前不要写入最终输出。
 
@@ -431,6 +427,5 @@ DMCA §512 是**美国联邦法律**。它适用于受美国管辖的服务提�
 - **绕过门控。** 门控在 `--send` 和 `--counter` 模式中每次都运行。
 - **编造引用。** 包含的任何引用都有来源标记并标记为验证；无静默补充。
 - **处理非美国制度。** DMCA 是美国特有的。对于 EU DSA、UK OSA、India IT Rules 和其他制度——标记并路由。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

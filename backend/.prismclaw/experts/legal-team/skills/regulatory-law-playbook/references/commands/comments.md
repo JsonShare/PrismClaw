@@ -6,9 +6,6 @@ argument_hint: '[可选：--decide CMT-ID]'
 category: 监管合规
 ---
 
-
-
-
 # /comments
 
 ## 目的
@@ -17,8 +14,8 @@ category: 监管合规
 
 ## 加载上下文
 
-`${WORKBUDDY_EXPERT_DATA}/comment-tracker.yaml` → 所有跟踪的征求意见稿及其状态。
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 默认评议决策所有者。
+`{expert_runtime_dir}/comment-tracker.yaml` → 所有跟踪的征求意见稿及其状态。
+`执业配置文件（请按当前系统指引创建）` → 默认评议决策所有者。
 
 ## 默认视图——开放评议期
 
@@ -65,7 +62,7 @@ category: 监管合规
 
 ## 后果行动关卡（向监管机构提交评议意见）
 
-**在将决定记录为"filing"之前——并且始终在生成提交就绪的意见函或监管机构回应草案之前：** 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是 **非律师**：
+**在将决定记录为"filing"之前——并且始终在生成提交就绪的意见函或监管机构回应草案之前：** 阅读 `执业配置文件（请按当前系统指引创建）` 中的 `## 谁在使用这个`。如果角色是 **非律师**：
 
 > 向监管机构提交评议意见有法律后果。这是公司立场的公开声明，它在规则制定或执法事项中记录在案，此处采取的立场约束公司，并可在后续程序中对其使用。你是否已与律师审查此内容？如果是，继续。如果否，这是带给他们的简报：
 >
@@ -94,6 +91,5 @@ category: 监管合规
 - 监控评议后活动。一旦提交决定，此台账的工作就完成了——通过 `skills/regulatory-law-playbook/references/commands/reg-feed-watcher.md` 跟进规则制定进展。
 
 > `comment-decision` `gap_type` 语义、每次发送的通知确认规则和 comment-tracker.yaml schema 存在于 **gap-surfacer** 参考技能中——在进行实质性工作之前加载它。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

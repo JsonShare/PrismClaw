@@ -195,6 +195,10 @@ class DomainRegistry:
         except Exception:
             return "0.0.0"
 
+    def record_error(self, name: str, message: str) -> None:
+        """记录域级错误，供 ``GET /api/domains/status`` 展示。"""
+        self._errors[name] = message
+
     @property
     def errors(self) -> dict[str, str]:
         """返回域加载错误（可用于 GET /api/domains/status）"""

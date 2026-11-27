@@ -4,9 +4,6 @@ description: 监控具有法定截止日期的在职员工休假——带薪年�
 allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 ---
 
-
-
-
 # 休假跟踪 Agent（中国劳动法）
 
 ## 目的
@@ -31,7 +28,7 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 
 不跟踪无法定截止日期或重要法律节点的带薪休假、其他酌情假期。
 
-> **依赖跟踪器前请研究适用制度。** 对于 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的每个省市，确认当前有效的休假法规、雇主法定义务、员工资格要求，以及任何修正案或新的省市规定。引用控制性法规和实施条例，附精确引用。核实时效性——各省市生育奖励假、陪产假等尤其频繁变动。若对任何省市的现行法律状态存在不确定性，请标记并不要陈述未经确认的规则。
+> **依赖跟踪器前请研究适用制度。** 对于 `执业配置文件（请按当前系统指引创建）` 中的每个省市，确认当前有效的休假法规、雇主法定义务、员工资格要求，以及任何修正案或新的省市规定。引用控制性法规和实施条例，附精确引用。核实时效性——各省市生育奖励假、陪产假等尤其频繁变动。若对任何省市的现行法律状态存在不确定性，请标记并不要陈述未经确认的规则。
 
 ## 运行方式
 
@@ -41,7 +38,7 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 
 ### 第一步 — 读取执业档案
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`，提取：
+读取 `执业配置文件（请按当前系统指引创建）`，提取：
 - 省市足迹及团队已研究记录的任何省市特定休假规则
 - HRIS 系统和休假数据访问权限（`## Systems` 部分）
 - 升级表
@@ -52,7 +49,7 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 查询所有处于活跃休假状态的员工。拉取：员工标识符、省市、休假类型、开始日期、已用时间（对医疗期/产假至关重要——按实际计量）、预期返岗日期、审批状态、证明文件状态。
 
 **若为手动方式：**
-读取 `${WORKBUDDY_EXPERT_DATA}/leave-register.yaml`。若文件不存在，提示：
+读取 `{expert_runtime_dir}/leave-register.yaml`。若文件不存在，提示：
 > "未找到休假登记册。请连接您的 HRIS，或将当前休假电子表格上传至此进行加载。您也可以使用 `skills/employment-law-playbook/references/commands/log-leave.md` 逐条添加休假记录。"
 等待数据提供后继续。
 
@@ -87,7 +84,7 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 
 仅呈现需要决策或行动的条目，不呈现无临近截止日期的正常休假。
 
-提醒层级（阈值为 Agent 级别默认值——可在 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中根据团队偏好调整）：
+提醒层级（阈值为 Agent 级别默认值——可在 `执业配置文件（请按当前系统指引创建）` 中根据团队偏好调整）：
 - 立即行动：决策或截止日期在 3 个工作日内
 - 本周需行动：7 天内
 - 即将到来：约 30 天内
@@ -169,15 +166,15 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*"]
 下次计划检查：[日期]
 ```
 
-若登记册中活跃休假超过约 10 项，或用户随时要求：提供仪表板（参见 PLUGIN.md `## Outputs → Dashboard offer for data-heavy outputs`）。针对此输出定制提案——按休假状态（立即/本周/即将到来/正常）统计数量、截止日期时间线，以及含员工、休假类型、省市、已用时间 vs 权利、预期返岗的可排序登记册。
+若登记册中活跃休假超过约 10 项，或用户随时要求：提供仪表板（参见 系统配置 `## Outputs → Dashboard offer for data-heavy outputs`）。针对此输出定制提案——按休假状态（立即/本周/即将到来/正常）统计数量、截止日期时间线，以及含员工、休假类型、省市、已用时间 vs 权利、预期返岗的可排序登记册。
 
 ### 第六步 — 更新登记册
 
-运行后，更新 `${WORKBUDDY_EXPERT_DATA}/leave-register.yaml`，包含重新计算的字段（若从 HRIS 拉取则含已用时间、last_checked 时间戳、状态变更）。不要覆盖律师手动添加的任何 `notes` 字段。
+运行后，更新 `{expert_runtime_dir}/leave-register.yaml`，包含重新计算的字段（若从 HRIS 拉取则含已用时间、last_checked 时间戳、状态变更）。不要覆盖律师手动添加的任何 `notes` 字段。
 
 ## 休假登记册格式
 
-`${WORKBUDDY_EXPERT_DATA}/leave-register.yaml`：
+`{expert_runtime_dir}/leave-register.yaml`：
 
 ```yaml
 - employee_id: [姓名、职位或匿名 ID]

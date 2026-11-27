@@ -7,9 +7,6 @@ argument_hint: '[粘贴或描述发明披露——或只是标题，我会询问
 category: 知识产权
 ---
 
-
-
-
 # /invention-intake
 
 **这是非专家的第一遍筛选，而非可专利性
@@ -21,8 +18,8 @@ category: 知识产权
 
 ## 说明
 
-1. 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。如果它
-   包含 `[PLACEHOLDER]`，停止并指向 `skills/ip-law-playbook/references/commands/cold-start-interview.md`。如果
+1. 阅读 `执业配置文件（请按当前系统指引创建）`。如果它
+   包含 `[PLACEHOLDER]`，停止并指向 请先配置相关执业信息后再进行定制审查。如果
    执业档案显示仅商标或版权（无专利执业），
    说明并路由用户到其他地方——这是错误的工具。
 2. 遵循以下工作流。
@@ -32,7 +29,6 @@ category: 知识产权
 4. 运行六个筛选：新颖性信号、显而易见性标志、§ 101 资格、
    公开披露 / 禁止日期、可检测性、战略价值。每个筛选
    获得带有单行推理的 ✓ / 🟡 / 🔴 裁决。
-5. 将发明筛选备忘录写入事项文件夹（如果事项
    活跃）或执业输出文件夹。根据角色应用工作产品标题。
 6. 结论裁决：**追求**（安排先有艺术搜索和律师
    审查）/ **调查**（需要对特定开放项目提供更多信息） /
@@ -86,16 +82,13 @@ category: 知识产权
 ## Matter context
 
 **Matter context.** 检查执业级
-PLUGIN.md 中的 `## Matter workspaces`。
+系统配置 中的 `## Matter workspaces`。
 如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的
 其余部分——skills 使用执业级上下文，事项机制不可见。
 如果已启用且没有活跃事项，询问："这是哪个事项的？
-运行 `skills/ip-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。" 加载
+。" 加载
 活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。
-将输出写入事项文件夹
-`${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。
-除非 `跨事项上下文` 为 `on`，否则永远不要阅读另一个事项的文件。
-
+`{expert_runtime_dir}/matters/<matter-slug>/`。
 发明披露是 **净队** 或
 **高度**保密的特别常见候选，在事项开放时。尊重 `matter.md` 中的事项保密标记。
 发明内容本质上是敏感的——不要在特权渠道之外总结、引用或引用它。
@@ -105,8 +98,8 @@ PLUGIN.md 中的 `## Matter workspaces`。
 ## 首先加载执业档案
 
 **在阅读披露之前，阅读
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。** 如果它
-缺失或仍包含占位符，停止并运行 `skills/ip-law-playbook/references/commands/cold-start-interview.md`。执业
+`执业配置文件（请按当前系统指引创建）`。** 如果它
+缺失或仍包含占位符，停止并运行 请先配置相关执业信息后再进行定制审查。执业
 档案告诉你：
 
 - 公司的**专利申请策略** — 进攻性（建立断言
@@ -428,6 +421,5 @@ Alice/Mayo 分析。"** 非专家不应调用接近的 § 101
 > 底层披露）与专利律师分享。如果尚未聘请律师，
 > [来自档案的联系 / "您专业监管机构的 IP 推荐服务 —— 美国的州律师协会、英格兰和威尔士的 SRA/律师标准委员会、苏格兰/北爱尔兰/爱尔兰/加拿大/澳大利亚的律师协会，或您所在司法管辖区的同等机构"] 是
 > 起点。**
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

@@ -1,4 +1,4 @@
-"""FastMCP server exposing the single ``search`` tool and the ASGI HTTP app."""
+"""MCPServer (mcp>=2) exposing the single ``search`` tool and the ASGI HTTP app."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from starlette.responses import JSONResponse
 
@@ -46,7 +46,7 @@ async def lifespan(_app: Any):
         await close_state()
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "web-search-mcp",
     instructions=(
         "通用网络检索能力：`search` 按信息需求执行多轮网络搜索并返回带引用来源的 markdown 报告；"
@@ -67,9 +67,9 @@ mcp = FastMCP(
     ),
     annotations=ToolAnnotations(
         title="Web retrieval agent",
-        readOnlyHint=True,
-        destructiveHint=False,
-        openWorldHint=True,
+        read_only_hint=True,
+        destructive_hint=False,
+        open_world_hint=True,
     ),
     structured_output=False,
 )
@@ -105,8 +105,8 @@ async def search_tool(
     # full contract payload (returned verbatim by the low-level server).
     return CallToolResult(
         content=[TextContent(type="text", text=markdown.rstrip())],
-        structuredContent=payload,
-        isError=False,
+        structured_content=payload,
+        is_error=False,
     )
 
 
@@ -118,9 +118,9 @@ async def search_tool(
     ),
     annotations=ToolAnnotations(
         title="Fetch a web page",
-        readOnlyHint=True,
-        destructiveHint=False,
-        openWorldHint=True,
+        read_only_hint=True,
+        destructive_hint=False,
+        open_world_hint=True,
     ),
     structured_output=False,
 )
@@ -135,14 +135,14 @@ async def fetch_tool(url: str) -> CallToolResult:
     if policy_error:
         return CallToolResult(
             content=[TextContent(type="text", text=f"URL 被策略拒绝：{policy_error}")],
-            isError=True,
+            is_error=True,
         )
     if not settings.anysearch_api_key:
         return CallToolResult(
             content=[
                 TextContent(type="text", text="抓取能力未配置：缺少 anysearch API key。")
             ],
-            isError=True,
+            is_error=True,
         )
     page = await fetch_page(state, url)
     if page is None:
@@ -150,13 +150,13 @@ async def fetch_tool(url: str) -> CallToolResult:
             content=[
                 TextContent(type="text", text=f"抓取失败：{url}（站点无法抽取或访问被拒）")
             ],
-            isError=True,
+            is_error=True,
         )
     text = f"# {page['title'] or url}\n\n来源：{page['url']}\n\n{page['content']}".rstrip()
     return CallToolResult(
         content=[TextContent(type="text", text=text)],
-        structuredContent=page,
-        isError=False,
+        structured_content=page,
+        is_error=False,
     )
 
 
@@ -166,7 +166,7 @@ async def _health(_request: Any) -> JSONResponse:
 
 
 def build_http_app():
-    """ASGI app: FastMCP's /mcp endpoint plus an unauthenticated /health."""
+    """ASGI app: MCPServer's /mcp endpoint plus an unauthenticated /health."""
     app = mcp.streamable_http_app()
     app.add_middleware(TokenAuthMiddleware, token=settings.token)
     return app

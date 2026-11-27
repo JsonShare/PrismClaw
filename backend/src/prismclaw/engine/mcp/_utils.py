@@ -18,10 +18,9 @@ def _redact_config_value(text: str, raw_value: str) -> str:
     return text
 
 
-# SDD context-governance W7-4: marketplace expert configs ship template
-# placeholders like "<在本地填入 EHR FHIR R4 基础 URL>" (angle-bracketed
-# prose, distinct from ${VAR} env references). Values of this shape can
-# never be valid credentials/URLs — detect and skip before spawning.
+# 连接器配置常带 "<在本地填入 EHR FHIR R4 基础 URL>" 这类模板占位符
+# （尖括号包住的散文，区别于 ${VAR} 环境变量引用）。这种形状不可能是合法
+# 凭据或 URL，因此在 spawn 前识别并跳过。
 def _is_unfilled_placeholder(value: str) -> bool:
     text = str(value or "").strip()
     return bool(text) and bool(_UNFILLED_PLACEHOLDER_RE.match(text))

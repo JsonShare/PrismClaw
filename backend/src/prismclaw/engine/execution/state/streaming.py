@@ -47,8 +47,8 @@ async def _apply_fresh_governance_fields(
     # 实测延续消息（"改成表格"→3 个无关 workflow）与真实短任务（"做个PPT"=3分）
     # 的 BM25 分数分布重叠，置信度阈值无法区分二者，词汇重叠不反映任务语义；
     # 轮次是唯一可靠信号。首轮是技能发现价值最高点（模型零任务上下文）；
-    # 延续轮/会话中途新任务的发现由静态层兜底（项目技能全量 + marketplace
-    # 包索引永不截断 + skill_search）。
+    # 延续轮/会话中途新任务的发现由静态层兜底（项目技能全量 + 专家包
+    # 索引永不截断 + skill_search）。
     # 三分支：唯一命中留给 _try_auto_activate_skill 自动激活；多命中写 hints
     # 供动态段提示；零命中/异常不产出。
     if task_spec.turn_index == 1:

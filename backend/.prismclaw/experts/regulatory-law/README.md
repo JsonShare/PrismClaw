@@ -27,10 +27,8 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/gap-surfacer/`：内规差异台账、到期提醒与状态报告
 - `skills/regulatory-law-playbook/`：执业资料与流程参考
 - `skills/regulatory-law-playbook/references/commands/`：命令流程参考
-- `skills/regulatory-law-playbook/references/practice-profile/`：执业档案模板
 - `skills/regulatory-law-playbook/references/subagents/`：子代理参考定义
 - `skills/regulatory-law-playbook/references/gap-surfacer/`：差异与评议台账模板
-- `skills/regulatory-law-playbook/references/mcp/`：MCP 配置记录（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：许可证
 
@@ -43,4 +41,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-命令流程保存在 `skills/regulatory-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+命令流程保存在 `skills/regulatory-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

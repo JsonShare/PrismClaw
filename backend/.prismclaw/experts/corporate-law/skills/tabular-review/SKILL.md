@@ -7,14 +7,11 @@ category: 公司法务
 invocation_policy: user_only
 ---
 
-
-
-
 # 表格化审查
 
 执行顺序：
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 尽调结构、阈值、内部格式。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 尽调结构、阈值、内部格式。
 2. 确认：哪些文件、哪些列、输出去哪里。
 3. 构建类型化模式。写入 `.review-schema.yaml`。与用户确认。
 4. 样本运行（3-5 份文件）。调整模式。确认。
@@ -32,13 +29,6 @@ invocation_policy: user_only
 - **样本大小 `<n>`：** 模式检查的样本大小。默认 5。
 
 ---
-
-## 事项上下文
-
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/corporate-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `跨事项上下文` 为 `on`，否则永远不要阅读另一个事项的文件。
-
----
-
 ## 目的
 
 你有一堆文件和一个需要在每份文件上一致回答的问题列表。一份尽调请求清单。一次供应商合同审计。一个租约组合审查。输出是一张表：文件行、数据点列，每个单元格都可追溯到来源中的确切文字。
@@ -49,8 +39,8 @@ invocation_policy: user_only
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 尽调结构、重要性阈值、内部格式偏好
-- `${WORKBUDDY_EXPERT_DATA}/deals/[code]/deal-context.md` 如果在处理特定交易
+- `执业配置文件（请按当前系统指引创建）` → 尽调结构、重要性阈值、内部格式偏好
+- `{expert_runtime_dir}/deals/[code]/deal-context.md` 如果在处理特定交易
 - 现有模式文件（如果用户有的话）（`.review-schema.yaml`）
 
 ## 列类型系统
@@ -188,7 +178,7 @@ schema:
 **CSV**（`.csv`，始终）：
 值用一个文件，引用和位置用一个伴随文件（`_sources.csv`）。保持主文件干净，证据跟踪完整。
 
-**Excel**（`.xlsx`）或 **Google Sheets**——用户使用哪个。询问；不要猜测。两者遵循相同的工作簿结构（见 `excel-output` 和 `gsheets-output`）。对于 Excel：如果可用使用 WorkBuddy in Excel（Office agent），`openpyxl` 备用。对于 Sheets：如果可用使用 Sheets MCP，通过 ADC 的 Sheets API，CSV 导入备用。在电子表格输出中：
+**Excel**（`.xlsx`）或 **Google Sheets**——用户使用哪个。询问；不要猜测。两者遵循相同的工作簿结构（见 `excel-output` 和 `gsheets-output`）。对于 Excel：如果可用使用 （外部 AI 产品） in Excel（Office agent），`openpyxl` 备用。对于 Sheets：如果可用使用 Sheets MCP，通过 ADC 的 Sheets API，CSV 导入备用。在电子表格输出中：
 - 每个数据列与包含引用和位置的隐藏来源列配对。可见列单元格上的单元格注释（Excel）或备注（Sheets）在悬停时显示引用。
 - 按状态颜色编码：白色 = 已答复，黄色 = 不清楚或需要审查，灰色 = 不存在。
 - 每个数据列后有一个 `Verified` 列，默认为空。审查者填写它。这是使表格可审计的验证/标记模式——交易团队可以一眼看到人工实际检查了什么。
@@ -209,7 +199,7 @@ schema:
 
 ## 以下一步决策树结束
 
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而不是锁定。树就是输出；律师选择。
+技能自带下一步决策树，按分支自然结束根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
@@ -227,6 +217,5 @@ schema:
 ## 输出保障措施
 
 每个输出都获得工作产品标题。每个单元格都获得来源引用或标记状态。摘要明确说明需要验证。Excel `Verified` 列使验证状态可审计。这不是让你跳过阅读的工具；这是使阅读更快的工具。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
 
 from prismclaw.engine.experts.loading._declarative_load import (
@@ -52,10 +53,12 @@ class DeclarativeLoadStrategy(LoadStrategy):
         agent_loader: ExpertAgentLoader,
         data_base_dir: Path | None = None,
         skill_scanner: SkillScanner | None = None,
+        extra_skill_dirs: Sequence[Path] = (),
     ) -> None:
         self._agent_loader = agent_loader
         self._data_base_dir = data_base_dir
         self._skill_scanner = skill_scanner
+        self._extra_skill_dirs = tuple(extra_skill_dirs)
 
     def can_handle(self, install_path: Path) -> bool:
         if not install_path.is_dir():
@@ -81,6 +84,7 @@ class DeclarativeLoadStrategy(LoadStrategy):
             data_base_dir=effective_data_base_dir,
             dialect="declarative",
             skill_scanner=self._skill_scanner,
+            extra_skill_dirs=self._extra_skill_dirs,
         )
 
 
@@ -89,11 +93,13 @@ def default_strategies(
     agent_loader: ExpertAgentLoader,
     data_base_dir: Path | None = None,
     skill_scanner: SkillScanner | None = None,
+    extra_skill_dirs: Sequence[Path] = (),
 ) -> list[LoadStrategy]:
     return [
         DeclarativeLoadStrategy(
             agent_loader=agent_loader,
             data_base_dir=data_base_dir,
             skill_scanner=skill_scanner,
+            extra_skill_dirs=extra_skill_dirs,
         ),
     ]

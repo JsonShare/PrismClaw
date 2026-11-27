@@ -14,14 +14,12 @@ category: 法律援助专家
 ## 资料索引
 - `references/commands/` — 命令流程（参考文档，不是可调用的 `/命令`）
 - `references/mcp/` — 原 MCP 配置（仅供查阅；专家包不内嵌 MCP）
-- `references/plugin-docs/` — 原插件文档
-- `references/practice-profile/` — 执业档案模板与配置说明
 - `references/plausibility-bands/` — 各辖区期限合理性区间（缺失辖区须先补齐）
 - `references/client-intake/` — 各执业领域接案模板
 - `references/supervisor-review-queue/` — 督导复核队列记录
 
 ## 使用约定
 
-- 先读 `references/practice-profile/PLUGIN.md` 确认执业档案状态；仍有未填占位项时先走冷启动流程。
+检查会话中的执业配置。
 - 需要具体流程时再读对应 `references/commands/*.md`，不要一次性加载全部资料。
-- `references/mcp/` 只是原始配置记录；所需工具必须由 WorkBuddy 侧全局连接器提供。
+- `references/mcp/` 只是原始配置记录；所需工具必须由 系统全局连接器提供。

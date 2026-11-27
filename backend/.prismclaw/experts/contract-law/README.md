@@ -29,17 +29,13 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/contract-law-playbook/`：执业资料与流程参考（原根级 references 已折叠至此）
 - `skills/`：7 个技能（`commercial-renewal-workflow`、`commercial-review-workflow`、`contract-law-playbook`、`nda-review`、`saas-msa-review`、`stakeholder-summary`、`vendor-agreement-review`）
 - `skills/contract-law-playbook/references/commands/`：原命令流程
-- `skills/contract-law-playbook/references/practice-profile/`：执业档案模板
 - `skills/contract-law-playbook/references/subagents/`：原始子代理
-- `skills/contract-law-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
 ## 注意事项
-
-- 执业档案未配置时先提示运行冷启动流程，不使用占位符的默认配置继续实质审查。
 - 不得在未核实法律依据时承诺条款的法律效力。
 
 ## 命令说明
 
-原命令保存在 `skills/contract-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+原命令保存在 `skills/contract-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

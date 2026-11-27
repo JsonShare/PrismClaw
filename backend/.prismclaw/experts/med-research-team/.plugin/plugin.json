@@ -2,9 +2,6 @@
   "name": "med-research-team",
   "version": "1.0.0",
   "description": "Chinese clinical research team covering protocol design, evidence synthesis, data feasibility and research data compliance.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "license": "Apache-2.0",
   "expertType": "team",
   "agentName": "med-research-lead",
@@ -49,7 +46,7 @@
     "en": "Chinese clinical research team covering protocol design, evidence synthesis, data feasibility and research data compliance."
   },
   "avatar": "avatars/team.png",
-  "categoryId": "12-IndustryConsultant",
+  "categoryId": "research",
   "defaultInitPrompt": {
     "zh": "帮我设计这个临床研究方案，并做证据与科研数据合规审查。",
     "en": "Help me design this clinical study protocol and review the evidence and research data compliance."
@@ -168,5 +165,6 @@
         "zh": "伦理审查专家"
       }
     }
-  ]
+  ],
+  "categoryName": "医学科研"
 }

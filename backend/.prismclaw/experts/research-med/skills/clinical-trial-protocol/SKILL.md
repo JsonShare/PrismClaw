@@ -99,7 +99,7 @@ scripts/
 ### 1. clinical trials MCP Server (Required)
 
 **Installation:**
-- WorkBuddy 侧需先连接对应 MCP 连接器后本 skill 才可用；专家包不内嵌 MCP 配置
+- （外部 AI 产品） 侧需先连接对应 MCP 连接器后本 skill 才可用；专家包不内嵌 MCP 配置
 - 未连接时只能产出方案框架，不检索在研试验，也不声称已核对相似试验或监管指导原则
 
 **Available Tools:**
@@ -112,7 +112,6 @@ location - City, state, or country (e.g., "California", "Boston")
 status - "recruiting" (default), "active", "completed", "all"
 phase - Trial phase: "1", "2", "3", "4", "early_phase1"
 max_results - Default 25, max 100
-
 
 `get_trial_details` - Get comprehensive details for a specific trial using its nct_id (e.g., "NCT04267848"). Returns eligibility criteria, outcomes, study design, and contact information.
 
@@ -468,7 +467,6 @@ Each subskill is designed to:
 
 Clinical trial protocols are complex, high-stakes documents requiring expertise across multiple disciplines. Professional consultation with clinical trial experts, biostatisticians, and regulatory affairs specialists is essential before proceeding with clinical study planning.
 
-
 ## Implementation Requirements
 
 When this skill is invoked:
@@ -516,9 +514,6 @@ When this skill is invoked:
    - **Research Only:** Display research summary location and offer to continue with full protocol
    - **Full Protocol:** Congratulate user, display protocol location and next steps
    - Remind user of disclaimers
-
-
-
 
 ---
 

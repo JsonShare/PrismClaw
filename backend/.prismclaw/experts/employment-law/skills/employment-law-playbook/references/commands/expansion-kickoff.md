@@ -7,21 +7,18 @@ argument_hint: '[省市或国家名称]'
 category: 劳动用工
 ---
 
-
-
-
 # /expansion-kickoff
 
 为新省市或国家启动劳动法律合规项目——收集接收信息、运行用工形式框架分析、起草跨职能合规问题、提取省市/国家特定标志、创建持久追踪器。
 
 ## 说明
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 省市足迹、升级表。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 省市足迹、升级表。
 2. 加载 `employment-expansion-workflow` 并按省市分支运行完整工作流；境外用工不在本包范围。
-3. 如果此省市/国家的追踪器文件已存在（`${WORKBUDDY_EXPERT_DATA}/expansion-[slug].yaml`），
+3. 如果此省市/国家的追踪器文件已存在（`{expert_runtime_dir}/expansion-[slug].yaml`），
    标记它："[省市/国家] 的扩张追踪器已存在。使用
    `skills/employment-law-playbook/references/commands/expansion-update.md [省市/国家]` 来更新它，或确认你想重新开始。"
-4. 完成后创建 `${WORKBUDDY_EXPERT_DATA}/expansion-[slug].yaml`。
+4. 完成后创建 `{expert_runtime_dir}/expansion-[slug].yaml`。
 
 ## 中国境内省市扩张关注点
 
@@ -59,6 +56,5 @@ category: 劳动用工
 ```
 
 > 详细的用工形式框架、跨职能合规问题、简报模板与追踪器架构见 `employment-expansion-workflow` 及其 `references/`——在进行实质性工作之前加载它。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

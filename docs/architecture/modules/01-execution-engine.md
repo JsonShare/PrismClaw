@@ -4,7 +4,7 @@
 
 ## 职责概述
 
-执行引擎是 PrismClaw Agent 的运行时核心，负责 LLM 流式交互、工具调度、状态持久化和迭代控制。其设计哲学是 **"骨架与肌肉分离"**：`run_loop()` 作为纯控制流骨架不依赖任何子系统，只消费 `LoopConfig` 的三个端口（Prepare / Stream / Execute）与可选插槽；`wiring.build_loop_config()` 是唯一知道子系统存在的端口绑定点，`runtime.build_runtime()` 负责装配 `LoopRuntime`（预算、完成内核、终态文案、责任投影器）。
+执行引擎是 PrismClaw Agent 的运行时核心，负责系统提示装配、LLM 流式交互、工具调度、状态持久化和迭代控制。其设计哲学是 **"骨架与肌肉分离"**：`run_loop()` 作为纯控制流骨架不依赖任何子系统，只消费 `LoopConfig` 的三个端口（Prepare / Stream / Execute）与可选插槽；`wiring.build_loop_config()` 是唯一知道子系统存在的端口绑定点，`runtime.build_runtime()` 负责装配 `LoopRuntime`（预算、完成内核、终态文案、责任投影器）。
 
 ## 架构总览
 
@@ -26,9 +26,9 @@
 │     │          │          │          │          │                │
 │     ▼          ▼          ▼          ▼          ▼                │
 │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐             │
-│  │Query │  │Dispatch      │  │Handoff│  │Check-│  │State │      │
-│  │PreReq│─→│Pipeline+Exec │─→│Super- │  │point │  │Govn- │      │
-│  │Pipe  │  │+StreamingEx  │  │visor  │  │State │  │ance  │      │
+│  │Query │  │Dispatch      │  │Skills│  │Check-│  │State │      │
+│  │PreReq│─→│Pipeline+Exec │─→│Dis-  │  │point │  │Govn- │      │
+│  │Pipe  │  │+StreamingEx  │  │patch │  │State │  │ance  │      │
 │  └──────┘  └──────┬───────┘  └───────┘  └──────┘  └──────┘      │
 │                    │                                             │
 │     ┌──────────────▼──────────────┐                             │
@@ -53,8 +53,8 @@
 | `loop/` | Agent 循环骨架、run 级容器、终态副作用 |
 | `dispatch/` | LLM 流式调用管道、工具执行编排、StreamingExecutor 并发 |
 | `query/` | PreRequestPipeline — LLM 请求功能性管道 |
+| `request/` | 系统提示装配 — 静态壳、每轮 suffix、动态块布局（本文件 §12） |
 | `checkpoint/` | RunState 模型、RunStateMachine 状态机 |
-| `handoff/` | HandoffSupervisor — sub_agent 调度链管理 |
 | `capabilities/` | CapabilityCatalogService — 运行时目录 |
 | `state/` | 无工具回合治理 |
 | `skills/` | 技能系统（独立文档 02-skill-system.md） |
@@ -71,7 +71,7 @@
 |------------|------|------|
 | `PreparePort.prepare_next_turn` | `(state) -> TurnUpdate` | 每轮上下文重建 |
 | `StreamPort.stream_llm` | `(state) -> AsyncIterator` | LLM 流式调用，写入 `state.llm_outcome` |
-| `ExecutePort.execute_tools` | `(state, response, calls)` | handoff 分派 + 工具执行 + 落树 |
+| `ExecutePort.execute_tools` | `(state, response, calls)` | 工具执行 + 技能分发 + 落树 |
 | `ExecutePort.before_tool_call` | `(before_ctx) -> BeforeToolCallResult \| None` | 冻结签名 + 安全门 |
 | `ExecutePort.after_tool_call` | `(after_ctx) -> AfterToolCallResult \| None` | 完成契约收敛提示 |
 | `LoopConfig.should_continue` | `(state, response, *, event) -> Decision` | 续跑 / 终态唯一裁决 |
@@ -116,7 +116,7 @@ prepare_next_turn
 | LLM 流式 | `stream_llm` | 流式调用 LLM，收集 usage |
 | 预检 | `should_continue` (pre) | 预算 / abort / max_iterations 检查 |
 | 工具执行前 | `before_tool_call` | 冻结工具签名 + pre-tool hooks 拦截（PRE_TOOL hooks 在 dispatch 层逐调用派发） |
-| 工具执行 | `execute_tools` | Handoff dispatch + 工具执行 + Skill dispatch |
+| 工具执行 | `execute_tools` | 工具执行 + Skill dispatch |
 | 工具执行后 | `after_tool_call` | 完成契约机械核验；无缺口时注入一次收尾提示（POST_TOOL hooks 在 dispatch 层逐调用派发） |
 | 轮次后检 | `should_continue` (post) | 工具循环 / 所有工具被拒 / abort 检查；终态交由 `CompletionKernel` 唯一裁决 |
 
@@ -179,13 +179,14 @@ Session 初始化、TaskSpec 构建、Hook dispatch、ToolContext 构造、Recov
 核心编排流程：
 
 ```
-plan_handoff_dispatch()
-    → apply_handoff_dispatch_plan()
-    → execute_tool_calls_with_handoff()
+execute_tool_calls_for_turn()
+    → parse_tool_calls()
     → postprocess_tool_results()
     → project_tool_result_entries()
     → persist_projected_tool_result_entries()
 ```
+
+子代理调度不在本层：`sub_agent` 工具是普通内置工具（`engine/subagent/tool.py`），由 `SubAgentTool.execute()` 自己完成深度校验 → 目标解析 → sync/parallel/background 分发。
 
 **Error Fatigue 机制：** 连续 3 次相同错误注入 critic advisory，避免无限重试。
 
@@ -245,36 +246,14 @@ plan_handoff_dispatch()
 - `load_tool_loop_state()` — 加载工具循环状态
 - `update_tool_loop_state()` — 写回工具循环状态
 
-### 9. HandoffSupervisor (`handoff/supervisor.py`)
+### 9. 子代理调度（`engine/subagent/`，非本目录）
 
-管理 sub_agent 调度链：
+`execution/` 不持有 handoff 子系统。子代理派发是普通内置工具 `sub_agent`（`engine/subagent/tool.py`）：
 
-- `resolve_dispatch_extras()` — 匹配/合并 handoff 请求
-- `max_handoff_chain_length` — 默认 5，防止无限递归
-- `CapExceededInfo` + `HandoffDispatchExtras` — 数据类
-
-**`request_handoff` 工具**（`handoff/request_handoff.py`）：子代理专用的内置工具，允许一个 Agent 将任务移交给另一个 Agent。
-
-| 参数 | 类型 | 约束 | 说明 |
-|------|------|------|------|
-| `target` | string | `^[a-z][a-z0-9-]*$` | 目标 Agent 名称 |
-| `task` | string | 8-8192 codepoints | 任务描述，作为目标 Agent 的初始用户消息 |
-| `context_hint` | string | 0-16384 codepoints | 可选上下文提示 |
-
-约束：仅子代理可用（`subagent_depth > 0`）；每轮循环仅允许一次 handoff 尝试；aborting/timed_out 状态下 handoff 被丢弃。
-
-**`can_handoff_to` 白名单机制**（`AgentManifest` 字段）：
-
-| 场景 | 行为 |
-|------|------|
-| `can_handoff_to` 省略（`None`） | 开放模式——不检查白名单，但 target 必须在 catalog 中存在 |
-| `can_handoff_to` 非空列表 | 白名单模式——target 必须在列表中 |
-| `can_handoff_to` 空列表 | 不允许——Pydantic 验证报错 |
-| `allowed_tools` 排除 `request_handoff` 但声明了 `can_handoff_to` | 不允许——白名单不可达 |
-
-**运行时校验流程**：`request_handoff.execute()` → 检查 subagent_depth → 验证参数 → 检查 handoff_request_seen → 检查 abort/timeout → 查询 CapabilityCatalogService → 检查白名单 → 构建 HandoffPayload
-
-**Handoff 链追踪**：每次 handoff 生成唯一的 `handoff_chain_id`，维护 `hop_index` 和 `effective_hop_index`，确保完整链路可审计。
+- 调用方提供 `agents[]`（1–8 个）+ `execution_mode`（`sync` / `parallel`）+ 可选 `dispatch_mode=background`。
+- 深度闸门：`context.subagent_depth >= settings.max_depth` 直接拒绝，子代理不能再创建子代理。
+- 团队闸门：团队成员（`scope.member`）派发他人返回 `TEAM_SPAWN_BY_MEMBER`。
+- 契约细节见 [09-subagent.md](09-subagent.md)。
 
 ### 10. 工具循环策略 (`dispatch/call_handling.py`)
 
@@ -334,7 +313,73 @@ Check 2 的指纹是「同调用 + 逐字节同结果」，对「同文件不同
 功能性管道构建 LLM 请求，不修改 tree 或全局状态。
 核心类型：`PreparedTurn`
 
-### 12. 无工具回合治理 (`state/governance.py`)
+### 12. 系统提示装配 (`request/`)
+
+每轮请求的 system prompt 由 `request/system_prompt.py` 的两个入口拼出：`build_frozen_prefix()` 产出**静态壳**，`build_per_turn_suffix()` 产出**每轮 suffix**，再由 `loop/_turn_helpers.build_turn_context_layout()` 与动态块合并。静态壳按 cache key 复用（workspace、生效模型、可见工具集、技能/子代理目录指纹），壳外的记忆、会话状态、运行时状态每轮重建。
+
+**静态壳：固定 10 段，顺序即拼接顺序**
+
+| # | section | 构造者 | 可截断 | priority / stability | evict_rank |
+|---|---------|--------|--------|----------------------|-----------|
+| 1 | `role` | `build_identity_text()` + `build_preferences_text()` | 否 | critical / stable | — |
+| 2 | `expert` | `inputs.expert_persona`（无专家时整段缺失） | 否 | critical / stable | — |
+| 3 | `principles` | 常量 `_PRINCIPLES_BODY` | 否 | critical / stable | — |
+| 4 | `tools` | `tooling_section()`，按实际工具名裁剪路由条款 | 是 | high / stable | 3 |
+| 5 | `delegation` | `delegation_section()`，仅当存在 `sub_agent` | 否 | high / stable | — |
+| 6 | `workspace` | `workspace_section()`，仅当有 `workspace_path` | 是 | high / stable | 1 |
+| 7 | `data_safety` | 常量 `_SENSITIVE_DATA_SAFETY`，恒注入 | 否 | critical / stable | — |
+| 8 | `reference_sources` | 常量 `_REFERENCE_SOURCES_GUIDE` | 否 | critical / stable | — |
+| 9 | `catalogs` | `packages_section` + `skills_section` + `subagents_section` | 是 | high / semi_stable | 2 |
+| 10 | `bootstrap` | 项目约定（如 `AGENTS.md`），可空 | 是 | high / semi_stable | 0 |
+
+`role` 与 `expert` 是两个独立段：通用身份不因选择专家而改写，专家人格也不拼进 `<role>`。空文本的段由 `_section()` 返回 `None` 后整段缺失，因此 `delegation` / `workspace` / `catalogs` / `bootstrap` 常为空。L1 记忆索引已移出静态壳，避免缓存命中冻结记忆。
+
+**每轮 suffix：固定 5 段**
+
+| # | section | 触发条件 | 可截断 |
+|---|---------|----------|--------|
+| 1 | `hooks_prepend` | hook 返回 prepend | 是 |
+| 2 | `domain_advisory` | 领域建议非空 | 是 |
+| 3 | `l1_snapshot` | L1 索引非空，按 `subcaps.l1_snapshot`（默认 500）逐行截断 | 是 |
+| 4 | `hooks_append` | hook 返回 append | 是 |
+| 5 | `runtime_context` | 恒出（时间行必有） | 否 |
+
+`runtime_context` 内部按固定子标签拼接：`<system_time>` / `<time_rule>` → `<active_skill>` / `<skill_status>` / `<allowed_tools>` → `<task_spec>`（goal / preflight / constraints）→ 多条 `<strategy>`。
+
+**动态块**
+
+`assemble()` 产出的动态块按序进入布局：`memory_facts`、`memory_procedures`、`memory_archives`、`session_state`、`history_compaction`（占位符，摘要由打包阶段渲染）、`runtime_goal_status` / `runtime_follow_up_attention`；布局阶段再追加 `attachment_guidance`、`extra_system`、`fact_sheet`。
+
+**缓存断点**
+
+静态段全部 `cacheable=True`，因此壳内没有缓存断点；动态段统一 `cacheable=False`，`SystemPromptSectionState.cache_break_sections` 即从首个动态段开始的断点清单。`stable` 段在前、`semi_stable` 段收尾，缓存断点依赖该顺序。
+
+**占位符与变量替换**
+
+| 语法 | 作用域 | 缺失 / 特殊行为 |
+|------|--------|-----------------|
+| `${NAME}`（可含点号） | 专家包内容：技能正文（激活时延迟替换）、hook 命令、command 正文；`PLUGIN.md` 原文注入、不做替换 | 值为 `None` 或键不存在时**保留字面量**；单次替换、不回扫，防止递归 |
+| `{ratio:.0%}` | 仅预算警告文本（`compression/prompts/budget_warning.md`） | 模板损坏回落内置警告 |
+| `$PRISMCLAW_WORKSPACE` / `$PRISMCLAW_OUTBOX_DIR` / `$PRISMCLAW_UPLOADS_DIR` | 不是引擎替换，而是写给模型看的 bash 环境变量契约 | 仅在 `workspace_path` 与 `session_id` 同时存在时输出 |
+
+结论：没有 Jinja / `{{ }}` 模板；系统提示正文不做占位符替换，所有变量由 Python 函数拼接；`${...}` 只处理 4 个路径变量（`PRISMCLAW_PLUGIN_ROOT` / `PRISMCLAW_PLUGIN_DATA` / `PRISMCLAW_USER_HOME` / `SKILL_DIR`）。
+
+**失败与降级**
+
+| 故障 | 行为 | 阻断本轮 |
+|------|------|---------|
+| `IDENTITY.md` / `PREFERENCES.md` 缺失或为空 | 空串，`role` 段仍出，仅告警一次 | 否 |
+| 用户档案超 4000 字符 | `_PROFILE_MAX_CHARS` 硬截断并追加 `…` | 否 |
+| 任一 section 构造抛异常 | 无 try/except，异常上抛为准备失败 | 是 |
+| hook `before_prompt_build` 抛异常 | 记日志后跳过该 hook，其余继续 | 否 |
+| bootstrap 读取失败 | 跳过 `bootstrap` 段 | 否 |
+| 专家人格读取失败 | 人格空串 + `EXPERT_UNAVAILABLE` | 否 |
+| 人格超过上下文 50% | 整段置空 + `EXPERT_PROMPT_TOO_LONG`，不截断、不改 header | 否 |
+| 非截断段超预算 | 保留全部内容，只记 `still_over_budget_non_truncatable` 审计事件 | 否 |
+
+预算常量、裁剪顺序与历史压缩算法见 [07-context-compression.md](07-context-compression.md)，此处只描述装配结构。
+
+### 13. 无工具回合治理 (`state/governance.py`)
 
 **`evaluate_no_tool_governance()`** — 当 Agent 一轮没有调用工具时的治理决策：
 
@@ -345,14 +390,14 @@ Check 2 的指纹是「同调用 + 逐字节同结果」，对「同文件不同
 | `await_confirmation` | 等待确认 |
 | `repair` | 修复 |
 
-### 13. CapabilityCatalogService (`capabilities/catalog.py`)
+### 14. CapabilityCatalogService (`capabilities/catalog.py`)
 
 统一运行时目录，三类条目：
 - `SkillCatalogEntry`
 - `ToolCatalogEntry`
 - `AgentCatalogEntry`
 
-### 14. AgentHook 协议与 HookDispatcher (`engine/hooks/`)
+### 15. AgentHook 协议与 HookDispatcher (`engine/hooks/`)
 
 **AgentHook Protocol** 定义 Agent 循环的 Hook 协议，由 `HookRegistry` 管理：
 
@@ -428,7 +473,7 @@ RunState.recovery_state → RunPreparer 构造 RecoveryPolicy(limit, chain)
 | 端口绑定 | `wiring.build_loop_config(rt)` | 原地装配 LoopRuntime 并绑定端口 |
 | 运行时装配 | `runtime.build_runtime(rt)` | 原地填充预算 / 完成内核 / 投影器 |
 | LLM 调用 | `call_llm_stream_with_outcome()` | 流式 LLM 请求 |
-| 工具执行 | `execute_tool_calls_with_handoff()` | 工具调度入口 |
+| 工具执行 | `execute_tool_calls_for_turn()` | 工具调度入口 |
 | 终态裁决 | `CompletionKernel.decide()` | run 级终态唯一出口 |
 | 终态副作用 | `terminal.mark_task_blocked()` / `persist_snapshot_fn()` | 任务阻断与快照持久化 |
 | 状态操作 | `RunStateMachine` | RunState CRUD |
@@ -448,7 +493,7 @@ execution/
   │                       loop/_loop_helpers.py
   ├── loop/runner.py → loop/{preparer,wiring,teardown,types}.py,
   │                    loop/agent_loop.py
-  ├── loop/deps.py → AgentRunnerDeps + 子容器（Dream/Plugin/Persistence）
+  ├── loop/deps.py → AgentRunnerDeps + 子容器（Dream/Expert/Persistence）
   ├── loop/tree_writer.py → loop/deps.py, loop/_bootstrap_helpers.py,
   │                         schema/session/types.py
   ├── loop/entry_runtime.py → loop/tree_writer.py, loop/deps.py
@@ -457,14 +502,13 @@ execution/
   │                           dispatch/call_handling.py
   ├── dispatch/streaming_executor.py → (concurrent.futures)
   ├── checkpoint/state_machine.py → checkpoint/models.py
-  ├── handoff/supervisor.py → (schema types)
   ├── query/pre_request_pipeline.py → (schema types)
   └── state/governance.py → (schema types)
 ```
 
 **外部依赖（通过 callback 注入，非直接 import）：**
 - `engine/security/gate/` — RuleGate / pre-tool hooks（通过 `before_tool_call` callback）
-- `engine/plugins/hooks/` — HookDispatcher（通过 `after_tool_call` callback）
+- `engine/hooks/` — HookRegistry / HookDispatcher（通过 `after_tool_call` callback）
 - `engine/execution/skills/` — SkillRuntime（通过工具结果后处理）
 
 **关键源码索引：**
@@ -475,7 +519,7 @@ execution/
 | AgentHook Protocol + HookRegistry + HookDispatcher | `engine/hooks/__init__.py` |
 | AllowedToolsPolicy | `schema/agent/security.py` |
 | 7-Reducer Governance 链 | `engine/toolkit/registry/governance.py` |
-| request_handoff 工具 | `engine/execution/handoff/request_handoff.py` |
+| sub_agent 工具 | `engine/subagent/tool.py` |
 | Agent Loop 核心（仅 run_loop） | `engine/execution/loop/agent_loop.py` |
 | 端口绑定 | `engine/execution/loop/wiring.py` |
 | 运行时容器 | `engine/execution/loop/runtime.py` |
@@ -492,6 +536,7 @@ execution/
 |--------|------|--------|------|
 | `_resolve_is_concurrency_safe` | `streaming_executor.py` | — | 并发安全判定 |
 | Semaphore 并发数 | `StreamingExecutor` | 10 | safe_tools 最大并发 |
-| `max_handoff_chain_length` | `HandoffSupervisor` | 5 | Sub-agent 调度链深度上限 |
 | Error fatigue 阈值 | `call_handling.py` | 3 | 连续相同错误注入 advisory |
 | Search-loop 条件 | `call_handling.py` | 双条件 | 调用次数 + 输出字符占比 |
+| 用户档案字符上限 | `request/system_prompt.py` | 4000 | `_PROFILE_MAX_CHARS`，超出硬截断 |
+| 包索引上限 | `request/system_prompt.py` | 5 | `_PACKAGE_LIST_LIMIT`，超出提示用检索 |

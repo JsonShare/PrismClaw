@@ -2,9 +2,6 @@
   "name": "contract-law",
   "version": "1.0.0",
   "description": "Reviews supplier agreements and NDAs against playbooks, tracks renewals, and delivers business-readable risk summaries.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/contract-law.md"
   ],
@@ -28,16 +25,15 @@
     "en": "Contract Review & Negotiation"
   },
   "displayDescription": {
-    "zh": "按剧本审查供应商协议与NDA，追踪续约并输出业务可读的风险摘要。",
+    "zh": "按审查剧本逐条审查供应商协议与 NDA，追踪续约与期限风险，并输出业务可直接阅读的风险摘要。",
     "en": "Reviews supplier agreements and NDAs against playbooks, tracks renewals, and delivers business-readable risk summaries."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "commercial-ip",
   "defaultInitPrompt": {
     "zh": "按我们的剧本审这份 SaaS 协议，标出红线条款并给出业务可读摘要。",
     "en": "Review this SaaS agreement against our playbook and flag red-line clauses with a business-readable summary."
   },
-  "plugin": "contract-law",
   "tags": [
     {
       "zh": "合同审查",
@@ -66,5 +62,6 @@
       "en": "List agreements needing renewal or notice within 90 days."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "商事与知产"
 }

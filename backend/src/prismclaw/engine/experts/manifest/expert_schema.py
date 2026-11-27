@@ -53,7 +53,7 @@ class ExpertMember(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True, str_strip_whitespace=True)
 
     id: str = Field(min_length=1)
-    # WorkBuddy 的规范表使用 name、模板使用 displayName；两种输入都接受，统一输出 displayName。
+    # 两种输入都接受，统一输出 displayName：manifest 里常见 displayName，旧模板里可能用 name。
     display_name: ExpertLocalizedText = Field(
         validation_alias=AliasChoices("displayName", "name"),
         serialization_alias="displayName",
@@ -79,10 +79,11 @@ class ExpertPackageManifest(BaseModel):
     members: list[ExpertMember] | None = None
     display_name: ExpertLocalizedText = Field(alias="displayName")
     profession: ExpertLocalizedText
-    # 中文目标 40–50 字（仅告警）；中文字符串与 WorkBuddy 的 en/zh 映射两种表示均接受。
+    # 中文目标 40–50 字（仅告警）；接受中文字符串或 en/zh 映射两种表示。
     display_description: str | ExpertLocalizedText = Field(alias="displayDescription")
     avatar: str = Field(min_length=1)
     category_id: str = Field(alias="categoryId", min_length=1)
+    category_name: str = Field(alias="categoryName", min_length=1)
     default_init_prompt: ExpertLocalizedText = Field(alias="defaultInitPrompt")
     tags: list[str | ExpertLocalizedText] | None = None
     quick_prompts: list[ExpertLocalizedText] | None = Field(default=None, alias="quickPrompts")

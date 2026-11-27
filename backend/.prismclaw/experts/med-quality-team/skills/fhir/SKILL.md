@@ -13,7 +13,7 @@ This skill orchestrates the `fhir` MCP server (local stdio, runs on the user's m
 
 ## 0. Prerequisite
 
-This package does not bundle the `fhir` MCP server. If the fhir MCP's `status` is not an available tool, the MCP connector is not connected — tell the user to connect it in WorkBuddy (and confirm Node is on PATH for the local stdio server), then restart. Without the MCP this skill cannot read from an EHR.
+This package does not bundle the `fhir` MCP server. If the fhir MCP's `status` is not an available tool, the MCP connector is not connected — tell the user to connect it in （外部 AI 产品） (and confirm Node is on PATH for the local stdio server), then restart. Without the MCP this skill cannot read from an EHR.
 
 ## 0.5 适用范围（中国大陆语境）
 
@@ -71,7 +71,6 @@ Extract in this session from the collected `{id, text}` pairs（本包不含 cli
 ## 5. Disconnect
 
 When the user is done, call the fhir MCP's `disconnect`. Under the default `user/*` scope you can switch patients without reconnecting; under `launch/patient`, switching means disconnect → connect again.
-
 
 ---
 

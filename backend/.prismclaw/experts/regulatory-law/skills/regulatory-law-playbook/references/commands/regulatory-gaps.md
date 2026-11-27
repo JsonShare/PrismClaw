@@ -11,10 +11,9 @@ category: 监管合规
 参考实现：agent-for-legal-cn/legal-skillpack-regulatory-legal/skills/regulatory-gaps/
 -->
 
-
 # /regulatory-gaps
 
-1. 读内规差异台账 `${WORKBUDDY_EXPERT_DATA}/gap-tracker.yaml`
+1. 读内规差异台账 `{expert_runtime_dir}/gap-tracker.yaml`
 2. 如果 `--close`：标记内规差异为关闭，附解决方案说明
 3. 如果 `--accept`：记录风险接受理由和接受人，状态 → risk-accepted
 4. 否则：按年龄和重要性报告开放的内规差异
@@ -99,6 +98,5 @@ category: 监管合规
 - 本技能（`regulatory-gaps`）管理所有差异的台账视图
 - 监管截止日（`regulatory_deadline`）比内部截止日（`due`）更紧——始终优先显示 `regulatory_deadline`
 - 只有在监管回函确认通过验收后，才能将 `INS-` 类任务标 `status: closed`
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

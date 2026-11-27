@@ -5,6 +5,7 @@
         dev-cloud build-cloud run-cloud stop-cloud \
         docker-build docker-run docker-stop docker-logs \
         mcp-dev mcp-test mcp-http \
+        mcp-law-dev mcp-law-test mcp-law-corpus \
         test
 
 help:
@@ -25,6 +26,11 @@ help:
 	@echo "    make mcp-dev           以 stdio 模式启动 (引擎默认接入方式)"
 	@echo "    make mcp-http          以 streamable-http 模式本地启动 (:9002)"
 	@echo ""
+	@echo "  ================ china-law-mcp (conda pyclaw) ================"
+	@echo "    make mcp-law-corpus    拉取语料到 ~/.prismclaw/database (两份克隆)"
+	@echo "    make mcp-law-test      运行 china-law-mcp 单测"
+	@echo "    make mcp-law-dev       以 stdio 启动 (18 个工具，官方实现)"
+	@echo ""
 	@echo "  ================ 测试 ================"
 	@echo "    make test              全量单测"
 	@echo ""
@@ -35,22 +41,49 @@ help:
 test:
 	cd backend && python -m pytest tests/ -q
 
-# ---------- web-search-mcp (独立 MCP 服务) ----------
+# ---------- web-search-mcp (独立 MCP 服务，运行环境 conda pyclaw) ----------
+# 依赖安装（一次性）: uv pip install -e mcp_servers/web-search-mcp \
+#                        --python $(conda info --base)/envs/pyclaw/bin/python
 
 MCP_DIR := mcp_servers/web-search-mcp
+MCP_PY := conda run -n pyclaw python
 
 mcp-test:
-	cd $(MCP_DIR) && .venv/bin/python -m pytest -q
+	cd $(MCP_DIR) && $(MCP_PY) -m pytest -q
 
-# stdio 模式由引擎通过 backend/configs/mcp.yaml 自动拉起；此 target 仅用于
+# stdio 模式由引擎通过 backend/configs/mcp.json 自动拉起；此 target 仅用于
 # 手工冒烟（JSON-RPC 经 stdin/stdout）。
 mcp-dev:
-	cd $(MCP_DIR) && .venv/bin/python -m web_search_mcp --transport stdio
+	cd $(MCP_DIR) && $(MCP_PY) -m web_search_mcp --transport stdio
 
 # 需要 WSM_TOKEN，例如: WSM_TOKEN=dev-token make mcp-http
 mcp-http:
 	@if [ -z "$${WSM_TOKEN:-}" ]; then echo "✗ 请先设置 WSM_TOKEN"; exit 1; fi
-	cd $(MCP_DIR) && .venv/bin/python -m web_search_mcp --transport http --host 0.0.0.0 --port 9002
+	cd $(MCP_DIR) && $(MCP_PY) -m web_search_mcp --transport http --host 0.0.0.0 --port 9002
+
+# ---------- china-law-mcp (中国法律检索，运行环境 conda pyclaw) ----------
+# 跑的是官方 server 的只读副本（mcp_servers/china-law-mcp/vendor/global-law），18 个工具。
+# 语料是 global-law 克隆：CLM_GLOBAL_LAW_ROOT 指向它，make mcp-law-corpus 可拉取。
+# 依赖安装（一次性）: conda run -n pyclaw pip install -e mcp_servers/china-law-mcp
+
+LAW_MCP_DIR := mcp_servers/china-law-mcp
+LAW_PY := conda run -n pyclaw python
+DB_DIR ?= $(HOME)/.prismclaw/database
+GLOBAL_LAW_DIR ?= $(DB_DIR)/global-law
+ACTS_DIR ?= $(DB_DIR)/china-law
+
+# 拉取两份语料（存在就跳过）；之后启动时自动把 china-law 链成 global-law/china/national/acts
+mcp-law-corpus:
+	@test -d $(GLOBAL_LAW_DIR)/.git || git clone --depth 1 https://github.com/lexifina/global-law $(GLOBAL_LAW_DIR)
+	@test -d $(ACTS_DIR)/.git || git clone https://github.com/lexifina/china-law $(ACTS_DIR)
+	# commit-graph 写在 china-law 仓库里才有用：历史读取发生在它内部
+	cd $(ACTS_DIR) && git commit-graph write --reachable --changed-paths
+
+mcp-law-test:
+	cd $(LAW_MCP_DIR) && PYTHONPATH=src $(LAW_PY) -m pytest -q
+
+mcp-law-dev:
+	cd $(LAW_MCP_DIR) && PYTHONPATH=src $(LAW_PY) -m china_law_mcp
 
 # ---------- 云端 Web 部署 (FastAPI + React) ----------
 

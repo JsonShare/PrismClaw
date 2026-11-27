@@ -289,7 +289,6 @@ python scripts/setup_fhir_project.py my_fhir_api
 
 Creates a FastAPI project with correct models, OperationOutcome helpers, and Patient CRUD endpoints.
 
-
 ---
 
 ## 本地化与边界

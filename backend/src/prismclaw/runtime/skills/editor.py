@@ -28,9 +28,9 @@ Design invariants (verified against the real scanner):
   anywhere else is rejected, so a poisoned catalog entry cannot make the
   editor write outside managed directories.
 * Origin policy mirrors the delete guard for *system-provided* origins only
-  (bundled / workspace / builtin stay read-only). Expert- and marketplace-
-  provided skills are editable **only** when they opt in via
-  ``editable: true``; the fail-closed default still locks every other skill.
+  (bundled / workspace / builtin stay read-only). Expert-provided skills are
+  editable **only** when they opt in via ``editable: true``; the fail-closed
+  default still locks every other skill.
   Caveat (surfaced to users): a expert update/reinstall can overwrite an
   edited SKILL.md and silently drop both the edits and the opt-in flag.
 """

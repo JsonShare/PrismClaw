@@ -37,7 +37,7 @@ def _patch(monkeypatch):
 
 async def test_tool_returns_markdown_content_and_structured_contract() -> None:
     result = await search_tool(query="api docs", num_results=3, language="en", fetch=True)
-    assert result.isError is False
+    assert result.is_error is False
 
     # TextContent: markdown report + machine footer
     assert len(result.content) == 1
@@ -51,7 +51,7 @@ async def test_tool_returns_markdown_content_and_structured_contract() -> None:
     assert machine["results"][0]["url"] == "https://docs.example.com/api"
 
     # structuredContent: full contract payload (engine adapter reads search_evidence)
-    payload = result.structuredContent
+    payload = result.structured_content
     assert set(payload) == {
         "query",
         "result_count",
@@ -76,15 +76,15 @@ async def test_tool_registered_with_readonly_annotation() -> None:
 
     tool = by_name["search"]
     assert tool.annotations is not None
-    assert tool.annotations.readOnlyHint is True
-    assert tool.annotations.destructiveHint is False
-    props = tool.inputSchema["properties"]
+    assert tool.annotations.read_only_hint is True
+    assert tool.annotations.destructive_hint is False
+    props = tool.input_schema["properties"]
     assert set(props) == {"query", "num_results", "language", "fetch"}
-    assert tool.inputSchema["required"] == ["query"]
+    assert tool.input_schema["required"] == ["query"]
 
     fetch_tool = by_name["fetch"]
     assert fetch_tool.annotations is not None
-    assert fetch_tool.annotations.readOnlyHint is True
-    assert fetch_tool.annotations.destructiveHint is False
-    assert set(fetch_tool.inputSchema["properties"]) == {"url"}
-    assert fetch_tool.inputSchema["required"] == ["url"]
+    assert fetch_tool.annotations.read_only_hint is True
+    assert fetch_tool.annotations.destructive_hint is False
+    assert set(fetch_tool.input_schema["properties"]) == {"url"}
+    assert fetch_tool.input_schema["required"] == ["url"]

@@ -39,6 +39,9 @@ class ExpertDescriptor(BaseDescriptor):
     namespace: str = ""
     root_path: Path | None = None
     skills: list[SkillManifest] = field(default_factory=list)
+    # 继承的全局基础技能：注册为全局能力（不加专家前缀、expert_name=None），
+    # 与本包自有 skills 分开持有，避免污染包级技能清单。
+    inherited_skills: list[SkillManifest] = field(default_factory=list)
     agents: list[AgentManifest] = field(default_factory=list)
     commands: list[ExpertCommandCapability] = field(default_factory=list)
     output_styles: dict[str, str] = field(default_factory=dict)

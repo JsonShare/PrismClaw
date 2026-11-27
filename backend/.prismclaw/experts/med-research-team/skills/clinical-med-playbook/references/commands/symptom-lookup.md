@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `skills/clinical-med-playbook/references/practice-profile/PLUGIN.md` 获取执业档案。
+检查会话中的执业配置。
 2. 获取患者症状描述。
 3. **症状消毒**：
    - 提取核心症状关键词

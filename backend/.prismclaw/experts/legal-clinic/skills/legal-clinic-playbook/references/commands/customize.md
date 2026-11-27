@@ -9,13 +9,11 @@ category: 法律诊所
 customizes: legal-clinic
 ---
 
-
-
 # 自定义法律诊所配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`，获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`，获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 

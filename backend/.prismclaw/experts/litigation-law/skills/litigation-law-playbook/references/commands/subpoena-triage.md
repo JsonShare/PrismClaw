@@ -5,18 +5,15 @@ argument_hint: '[path-to-request] [--slug=custom-slug]'
 category: 争议诉讼
 ---
 
-
-
-
 # /subpoena-triage
 
 1. 从提供的路径阅读请求文件。
 2. 分类（中国5类分类——见下方）。
-3. 如果是监察委/刑事侦查类 → 停止，根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 升级刑事法律顾问。否则继续。
-4. 加载 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` 进行交叉检查。加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → landscape、特权惯例、升级规范。
+3. 如果是监察委/刑事侦查类 → 停止，根据 `执业配置文件（请按当前系统指引创建）` 升级刑事法律顾问。否则继续。
+4. 加载 `{expert_runtime_dir}/matters/_log.yaml` 进行交叉检查。加载 `执业配置文件（请按当前系统指引创建）` → landscape、特权惯例、升级规范。
 5. 遵循以下工作流和参考。
 6. 提取关键字段，分析范围/负担/保密，生成回应框架 + 合规计划 + 截止日历。
-7. 编写 `${WORKBUDDY_EXPERT_DATA}/inbound/[slug]/triage.md`。复制或链接文件到 `${WORKBUDDY_EXPERT_DATA}/inbound/[slug]/incoming.[ext]`。
+7. 编写 `{expert_runtime_dir}/inbound/[slug]/triage.md`。复制或链接文件到 `{expert_runtime_dir}/inbound/[slug]/incoming.[ext]`。
 8. 交接：如果未设置保全通知，则 `/legal-hold --issue`；如果重要性需要，则 `/matter-intake`；如果是现有事项中的协查请求，则 `/matter-briefing [slug]`。
 
 ---
@@ -110,8 +107,8 @@ category: 争议诉讼
 ## Load context
 
 - 请求文件（用户提供路径或放入会话中）
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` ——用于相关事项查找和证据保全状态
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → landscape（我们打交道的监管机构）、内部特权惯例、升级规范
+- `{expert_runtime_dir}/matters/_log.yaml` ——用于相关事项查找和证据保全状态
+- `执业配置文件（请按当前系统指引创建）` → landscape（我们打交道的监管机构）、内部特权惯例、升级规范
 
 ## Workflow
 
@@ -166,7 +163,7 @@ category: 争议诉讼
 **保密性**
 - 可能涉及律师职业保密义务（律师法第38条）？（几乎总是是的，对于任何涉及律师的法律工作产品）
 - 其他保密——商业秘密、国家秘密、个人信息（PIPL）
-- 将需要保密审查——根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 标记格式
+- 将需要保密审查——根据 `执业配置文件（请按当前系统指引创建）` 标记格式
 
 **其他异议理由**
 - 超出管辖范围
@@ -206,7 +203,7 @@ category: 争议诉讼
 
 ### Step 8: Write triage
 
-输出：`${WORKBUDDY_EXPERT_DATA}/inbound/[slug]/triage.md`。
+输出：`{expert_runtime_dir}/inbound/[slug]/triage.md`。
 
 ```markdown
 [工作产品标题——根据 plugin 配置 ## Outputs——因角色而异；参见 `## Who's using this`]
@@ -323,7 +320,7 @@ category: 争议诉讼
 
 ### Step 9: Hand off
 
-**在回应请求之前（送达异议、提供文件、出庭作证或提交申请——对发出机构的任何实质性回应）：** 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的 `## Who's using this`。如果角色是非律师：
+**在回应请求之前（送达异议、提供文件、出庭作证或提交申请——对发出机构的任何实质性回应）：** 阅读 `执业配置文件（请按当前系统指引创建）` 中的 `## Who's using this`。如果角色是非律师：
 
 > 回应调查令/协查请求有法律后果——错过截止期限有妨害诉讼风险、配合过度暴露保密信息、配合不足有被指责妨害调查的风险。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >
@@ -333,14 +330,14 @@ category: 争议诉讼
 
 没有明确的是，不要越过此门槛继续。分类、范围界定和内部日历不需要门槛——对发出机构的回应需要。
 
-- 如果归类为 **类型五（监察委/刑事侦查）** → 停止，根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 标记升级，不要继续标准分类。
+- 如果归类为 **类型五（监察委/刑事侦查）** → 停止，根据 `执业配置文件（请按当前系统指引创建）` 标记升级，不要继续标准分类。
 - 如果归类为 **类型三（行政协查）**：标记适用监管机构特定规范；建议外部专业律师。
 - 否则：提议创建事项（通常是肯定的——协查请求几乎总是足够重要以跟踪）。
 - 如果未发布具有请求范围的证据保全通知，立即交接给 `/legal-hold --issue`。
 
 ## Close with the next-steps decision tree
 
-根据 PLUGIN.md `## Outputs` 结束下一步决策树。自定义选项以适应此 skill 刚生成的内容。
+根据 系统配置 `## Outputs` 结束下一步决策树。自定义选项以适应此 skill 刚生成的内容。
 
 ## What this skill does not do
 
@@ -348,6 +345,5 @@ category: 争议诉讼
 - **处理类型五（监察委/刑事侦查）。** 升级。这超出了分类范围。
 - **跨管辖区验证规则。** 步骤 0 研究产生此请求的适用规则；skill 不会独立确认有效性或当地变体。在行动前标记律师验证。
 - **决定PIPL第41条批准申请策略。** 标记需要专业合规分析和律师判断。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

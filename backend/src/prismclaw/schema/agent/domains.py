@@ -39,7 +39,6 @@ class SkillSource(StrEnum):
     PROJECT = "project"
     PERSONAL = "personal"
     MANAGED = "managed"
-    MARKETPLACE = "marketplace"
     WORKSPACE = "workspace"
     BUILTIN = "builtin"
 
@@ -93,7 +92,11 @@ class InvocationPolicy(StrEnum):
 
 
 def resolve_invocation_policy(frontmatter: Mapping[str, object]) -> InvocationPolicy:
-    """解析 SKILL.md 调用策略：显式字段优先，其次 WorkBuddy 布尔字段。"""
+    """解析 SKILL.md 调用策略。
+
+    显式 ``InvocationPolicy`` 字段优先；否则由 disable / user_invocable /
+    disable_model_invocation 三个布尔字段派生。
+    """
     raw = frontmatter.get(FM.INVOCATION_POLICY)
     if raw is not None:
         if isinstance(raw, InvocationPolicy):
@@ -156,8 +159,9 @@ class SkillExecutionMode(StrEnum):
         return None
 
 
-# marketplace 历史同义词 → 规范值映射（parser 中 _parse_execution_mode 用;
-# SkillExecutionMode._missing_ 也复用同一张表,确保 SkillExecutionMode("agent") 直接返回 SUBAGENT.
+# execution_mode 解析别名 → 规范值映射（parser 的 _parse_execution_mode 与
+# SkillExecutionMode._missing_ 共用同一张表，确保 SkillExecutionMode("agent")
+# 直接返回 SUBAGENT）。
 EXECUTION_MODE_SYNONYMS: dict[str, SkillExecutionMode] = {
     "agent": SkillExecutionMode.SUBAGENT,
     "workflow": SkillExecutionMode.FORK,
@@ -190,46 +194,16 @@ def exe_mode_valid_values() -> tuple[str, ...]:
 
 
 # ==========================================================================
-# 4. Expert error type：兼容 v3 常量与 v4 多子类规范值
+# 4. 专家包加载错误类型
 # ==========================================================================
 class PackageErrorType(StrEnum):
-    """PackageError.type 全量规范值。
+    """``PackageError.type`` 的规范取值。"""
 
-    消费端分支时用语义化 helper（is_manifest / is_dependency）即可。
-    """
-
-    # 多子类规范值
     MANIFEST_PARSE = "manifest_parse"
     MANIFEST_VALIDATE = "manifest_validate"
     DEPENDENCY = "dependency"
     ACTIVATION = "activation"
     ACTIVATION_RUNTIME = "activation_runtime"
-
-    # 错误类型常量
-    MANIFEST_PARSE_ERROR = "manifest_parse_error"
-    HOOK_LOAD_FAILED = "hook_load_failed"
-    MCP_CONFIG_INVALID = "mcp_config_invalid"
-    EXPERT_NOT_FOUND = "expert_not_found"
-    MARKETPLACE_BLOCKED_BY_POLICY = "marketplace_blocked_by_policy"
-    EXPERT_CACHE_MISS = "expert_cache_miss"
-    PATH_NOT_FOUND = "path_not_found"
-    DEPENDENCY_MISSING = "dependency_missing"
-    CIRCULAR_DEPENDENCY = "circular_dependency"
-    CROSS_MARKETPLACE_DEPENDENCY = "cross_marketplace_dependency"
-    GENERIC_ERROR = "generic_error"
-
-    @classmethod
-    def is_manifest(cls, err_type: object) -> bool:
-        return err_type in {cls.MANIFEST_PARSE, cls.MANIFEST_VALIDATE, cls.MANIFEST_PARSE_ERROR}
-
-    @classmethod
-    def is_dependency(cls, err_type: object) -> bool:
-        return err_type in {
-            cls.DEPENDENCY,
-            cls.DEPENDENCY_MISSING,
-            cls.CIRCULAR_DEPENDENCY,
-            cls.CROSS_MARKETPLACE_DEPENDENCY,
-        }
 
 
 # ==========================================================================
@@ -287,7 +261,6 @@ class PDS(StrEnum):
     """Expert discovery source（discovery_engine 入口分类。"""
 
     BUILTIN = "builtin"
-    MARKETPLACE = "marketplace"
     SESSION = "session"
     WORKSPACE = "workspace"
     PERSONAL = "personal"

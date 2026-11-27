@@ -129,6 +129,7 @@ async def test_invalid_fixture_is_rejected_as_a_whole_package(
         "displayDescription",
         "avatar",
         "categoryId",
+        "categoryName",
         "defaultInitPrompt",
     ],
 )

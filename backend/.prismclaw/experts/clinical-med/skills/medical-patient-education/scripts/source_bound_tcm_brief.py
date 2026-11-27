@@ -120,7 +120,7 @@ def fetch_source(url, directory):
     parsed = urlparse(url)
     if parsed.scheme not in ('http', 'https') or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError('Source requires a public HTTP(S) URL without credentials')
-    request = Request(url, headers={'User-Agent': 'Mozilla/5.0 DoctorBuddy-source-check/1.0'})
+    request = Request(url, headers={'User-Agent': 'Mozilla/5.0 PrismClaw-source-check/1.0'})
     with urlopen(request, timeout=25) as response:
         raw = response.read(6 * 1024 * 1024 + 1)
         charset = response.headers.get_content_charset() or 'utf-8'

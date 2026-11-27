@@ -8,18 +8,15 @@ argument_hint: '[paste draft OR path to file]'
 category: 法学学习
 ---
 
-
-
-
 # /legal-writing
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 班级、写作技能水平、过去反馈模式。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 班级、写作技能水平、过去反馈模式。
 2. 应用以下框架。
 3. 从头到尾阅读完整草稿。识别结构类型（memo / brief / paper / essay）。
 4. 给出结构化反馈：首先是结构，然后是分析深度、清晰度和风格、前 3 个修复。在我不确定的任何实质性规则调用上标记 `[VERIFY]`。
 5. 最多 1-2 个标记的示例措辞——说明结构动作，绝不是学生主题上的实质性内容。每个示例都标记"write yours — don't copy"。
 6. 如果被要求重写：优雅地拒绝。提供针对性的结构性反馈代替。
-7. 附加到 `${WORKBUDDY_EXPERT_DATA}/writing-feedback/[student]/tracker.md` 以进行模式检测。
+7. 附加到 `{expert_runtime_dir}/writing-feedback/[student]/tracker.md` 以进行模式检测。
 
 ---
 
@@ -31,7 +28,7 @@ category: 法学学习
 
 ## 为什么规则很严格
 
-使用 WorkBuddy 写备忘录的学生是没有学会写备忘录的学生。在考试中——或在律所——那个学生比通过自己的草稿挣扎的学生更慢、更不自信、更错误。法学院写作练习的重点是挣扎。此 skill 保留了它。
+使用 （外部 AI 产品） 写备忘录的学生是没有学会写备忘录的学生。在考试中——或在律所——那个学生比通过自己的草稿挣扎的学生更慢、更不自信、更错误。法学院写作练习的重点是挣扎。此 skill 保留了它。
 
 示例措辞被允许少量使用，因为看到结构动作（而不是内容）是真正有教学意义的——从未读过结构良好的分析段落的 1L 不能从头开始发明一个。展示一次动作，标记，与写分析不同。
 
@@ -43,7 +40,7 @@ category: 法学学习
 
 ## Load context
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → class, assignment type (if known), writing skill level, graded-essay feedback history
+- `执业配置文件（请按当前系统指引创建）` → class, assignment type (if known), writing skill level, graded-essay feedback history
 - Student-provided draft
 - Optional: rubric or assignment prompt if the student shares one
 
@@ -138,7 +135,7 @@ category: 法学学习
 
 ### 步骤 5：跟踪模式
 
-将会话摘要附加到 `${WORKBUDDY_EXPERT_DATA}/writing-feedback/[student]/tracker.md`：
+将会话摘要附加到 `{expert_runtime_dir}/writing-feedback/[student]/tracker.md`：
 
 ```markdown
 ## [date] — [assignment type / subject]
@@ -159,7 +156,7 @@ category: 法学学习
 
 ## 以下一步决策树结束
 
-按照 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚产生的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+根据此 skill 刚刚产生的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
@@ -168,6 +165,5 @@ category: 法学学习
 - **像教授一样评分。** 教授有 rubrics、特定作业的期望，以及对课程测试内容的多年背景。此 skill 根据一般法律写作标准评分；在教授反馈之外使用，而不是代替。
 - **验证每个实质性规则。** 在其不确定的任何事情上标记 `[VERIFY]`；学生必须根据他们的大纲/来源进行检查。
 - **详尽地修复引用形式。** 标记常见错误并在边缘情况下标记 `[VERIFY]`。不是 Bluebook 检查器。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

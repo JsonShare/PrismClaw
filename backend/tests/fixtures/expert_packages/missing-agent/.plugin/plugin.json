@@ -4,16 +4,39 @@
   "description": "Medical research expert for evidence review, study design and statistics.",
   "expertType": "agent",
   "agentName": "missing-agent",
-  "displayName": {"en": "Medical Research Lead", "zh": "医学科研专家"},
-  "profession": {"en": "Medical Research Lead", "zh": "医学科研专家"},
+  "displayName": {
+    "en": "Medical Research Lead",
+    "zh": "医学科研专家"
+  },
+  "profession": {
+    "en": "Medical Research Lead",
+    "zh": "医学科研专家"
+  },
   "displayDescription": "覆盖文献综述、研究设计、统计分析与学术写作，输出带证据等级的科研结论，可直接用于投稿准备。",
   "avatar": "avatars/research-lead.png",
   "categoryId": "08-Medical",
-  "defaultInitPrompt": {"en": "What are we researching?", "zh": "这次要研究什么问题？"},
-  "tags": ["research", "evidence", "medical"],
+  "defaultInitPrompt": {
+    "en": "What are we researching?",
+    "zh": "这次要研究什么问题？"
+  },
+  "tags": [
+    "research",
+    "evidence",
+    "medical"
+  ],
   "quickPrompts": [
-    {"en": "What are we researching?", "zh": "这次要研究什么问题？"},
-    {"en": "Review this paper", "zh": "帮我审阅这篇论文"},
-    {"en": "Design a study", "zh": "设计一个研究方案"}
-  ]
+    {
+      "en": "What are we researching?",
+      "zh": "这次要研究什么问题？"
+    },
+    {
+      "en": "Review this paper",
+      "zh": "帮我审阅这篇论文"
+    },
+    {
+      "en": "Design a study",
+      "zh": "设计一个研究方案"
+    }
+  ],
+  "categoryName": "医疗"
 }

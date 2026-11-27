@@ -1,6 +1,6 @@
 ---
 name: regulatory-customize
-description: '引导式自定义你的监管执业档案——更改一件事而不重新运行整个冷启动访谈。调整关注的监管机构、 政策库索引、重要性阈值、内规差异响应流程、信息源配置或事项工作区路径。当用户说"更改我的
+description: '引导式自定义你的监管执业档案——更改一件事而不重新运行整个冷启动访谈。调整关注的监管机构、 政策库索引、重要性阈值、内规差异响应流程、信息源配置或输出路径。当用户说"更改我的
   [某事]"、 "添加监管机构"、"更新我的关注清单"、"编辑我的阈值"或"自定义"时使用。
 
   '
@@ -9,13 +9,11 @@ category: 监管合规
 customizes: regulatory-legal
 ---
 
-
-
 # 自定义监管合规配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一层级的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一层级的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -41,7 +39,7 @@ customizes: regulatory-legal
 - *收紧重要性阈值：* "`/reg-feed-watcher` 摘要将更短——低于新阈值的项目将从每周摘要中删除但保持可搜索。"
 - *向库添加新政策：* "`/policy-diff` 将在将新规则与库匹配时包括此政策。评议台账将标记影响此政策的评议。"
 
-对于共享档案更改（company name、industry、jurisdictions、practice setting、stage）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并注意影响范围。修改后保存。
+对于共享档案更改（company name、industry、jurisdictions、practice setting、stage）：写入 `{expert_runtime_dir}/company-profile.md` 并注意影响范围。修改后保存。
 
 ## 关闭
 

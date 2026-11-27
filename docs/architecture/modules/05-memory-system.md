@@ -1,10 +1,8 @@
-# 05 — 记忆系统
-
-> 最后修订：2026-11-03（对齐记忆体系重构 SDD v1.4 实施结果，见 `docs/architecture/sdd-memory-refactor.md`）
+# 05 — 记忆系统 (Memory System)
 
 ## 职责概述
 
-记忆系统负责 Agent 长期知识的写入仲裁、自动提取、归因追踪与结构化检索。四层存储的权威介质（与旧文档的差异以本表为准）：
+记忆系统负责 Agent 长期知识的写入仲裁、自动提取、归因追踪与结构化检索。四层存储与介质：
 
 | 层 | 职责 | 介质 |
 |---|---|---|
@@ -14,13 +12,13 @@
 | L4 | 归档层（会话归档 + pattern/graph/relation 制品） | PostgreSQL `pc_memory_l4_artifacts` + `pc_memory_edges` |
 
 核心能力：
-- **写入仲裁**（B2）：五态决策门控（ADD/UPDATE/SUPERSEDE/CONTEST/NOOP），`gateway_mode` 缺省 off
-- **自动提取**（A4）：纯聊天回合的事实自动抽取，零工具调用
-- **写入质量控制**（D7）：type 受控词表归一、confidence/origin_stage 确定性补齐、entry_id 回传
-- **归因追踪**（B1）：注入记账 + use_count 回写 + 用户纠错检测（`attribution_enabled=True` 时）
-- **验证信号影子闭环**（D9/T1-5）：`attribution_enabled=False`（生产默认）时由 `ValidationSignalLedger` 产出 task-outcome 信号 + use_count 回写，curator 毕业不依赖归因开关
-- **检索降级**（D2）：超时/异常降级为确定性启发式 fallback（500ms 内超时、去零命中、连续失败熔断）
-- **L1 结构化预览**（D6）：`[type|subject|age] tail… (id=<8位短id>)`，短 id 支持模型直接 archive
+- **写入仲裁**：五态决策门控（ADD/UPDATE/SUPERSEDE/CONTEST/NOOP），`gateway_mode` 缺省 off
+- **自动提取**：纯聊天回合的事实自动抽取，零工具调用
+- **写入质量控制**：type 受控词表归一、confidence/origin_stage 确定性补齐、entry_id 回传
+- **归因追踪**：注入记账 + use_count 回写 + 用户纠错检测（`attribution_enabled=True` 时）
+- **验证信号影子闭环**：`attribution_enabled=False`（生产默认）时由 `ValidationSignalLedger` 产出 task-outcome 信号 + use_count 回写，curator 毕业不依赖归因开关
+- **检索降级**：超时/异常降级为确定性启发式 fallback（500ms 内超时、去零命中、连续失败熔断）
+- **L1 结构化预览**：`[type|subject|age] tail… (id=<8位短id>)`，短 id 支持模型直接 archive
 
 ## 架构总览
 
@@ -32,7 +30,7 @@
 │                                                                 │
 │   ┌──────────────────┐           ┌──────────────────────┐      │
 │   │  MemoryWrite     │  五态仲裁 │                      │      │
-│   │  Gateway  (B2)   │──────────→│     MemoryStore      │      │
+│   │  Gateway     │──────────→│     MemoryStore      │      │
 │   │  (mode=off 默认) │           │  L1 Redis / L2-L4 PG │      │
 │   └──────────────────┘           └──────────┬───────────┘      │
 │                                             │                   │
@@ -48,7 +46,7 @@
 │                                             │                   │
 │   ┌──────────────────┐  use_count/验证信号   │                   │
 │   │ AttributionRec.  │←────────────────────│                   │
-│   │ ValidationLedger │ （D9 影子闭环）      │                   │
+│   │ ValidationLedger │ （影子闭环）        │                   │
 │   └──────────────────┘                      │                   │
 │                                             │                   │
 │                    检索管线（含降级）        │                   │
@@ -78,9 +76,9 @@
 
 模型侧唯一记忆写入/归档入口（action=save/archive）。
 
-- **写入质量控制（D7）**：type 走受控词表（`schema/memory/classify.py`：`CANONICAL_TYPES` = fact/preference/constraint/procedure/observation/decision）；`normalize_type()` 只做大小写/空白归一与缺省 fact，**不做别名映射**；memory 工具对词表外取值直接报错，`MemoryEntry` 构造期对词表外取值直接失败。读侧不做兼容映射，词表外类型视为不合法数据；confidence=0.7、origin_stage=`memorize_tool` 确定性补齐；save 返回 8 位短 id。`decision` 为一等类型：dream 评分与检索衰减均对其单独处理（永不衰减）。`auto_sop` 是系统内部类型（`SOP_MEMORY_TYPE`），由 `sop_extraction` 写入、curator 消费，不在模型可写词表中
+- **写入质量控制**：type 走受控词表（`schema/memory/classify.py`：`CANONICAL_TYPES` = fact/preference/constraint/procedure/observation/decision）；`normalize_type()` 只做大小写/空白归一与缺省 fact，**不做别名映射**；memory 工具对词表外取值直接报错，`MemoryEntry` 构造期对词表外取值直接失败。读侧不做兼容映射，词表外类型视为不合法数据；confidence=0.7、origin_stage=`memorize_tool` 确定性补齐；save 返回 8 位短 id。`decision` 为一等类型：dream 评分与检索衰减均对其单独处理（永不衰减）。`auto_sop` 是系统内部类型（`SOP_MEMORY_TYPE`），由 `sop_extraction` 写入、curator 消费，不在模型可写词表中
 - **层由 type 派生**：procedure → L3，其余 → L2；模型侧不暴露 `layer` 参数（两个自由参数会制造 fact@L3 之类的矛盾状态）
-- **守卫（D8）**：`_has_non_error_tool_use` 只认 `MessageEntry.is_error == False` 的工具执行
+- **守卫**：`_has_non_error_tool_use` 只认 `MessageEntry.is_error == False` 的工具执行
 - **archive**：按 entry_id（8 位短 id <=> 完整 id 前缀匹配）下架条目
 
 ### ChatCapture（`engine/memory/capture.py`）
@@ -105,7 +103,7 @@
 - **核心方法**：`record_injection()` / `mark_turn_complete()` / `last_turn_injections()` / `pending_entry_ids()` / `record_validation_events()` / `build_validation_event()`
 - **函数**：`detect_user_correction()`（`_NEGATION_MARKERS` / `_MIN_SHARED_TOKENS = 2` / `_MIN_OVERLAP_RATIO = 0.2`，jieba 分词）
 
-### ValidationSignalLedger（`engine/memory/validation_signals.py`，D9/T1-5 新增）
+### ValidationSignalLedger（`engine/memory/validation_signals.py`）
 
 无归因环境的最小验证信号簿记，**独立于 `attribution_enabled`**，生产默认配置下无条件装配：
 
@@ -117,22 +115,22 @@
 ### MemoryQueryPlanner（`engine/compression/memory_query_planner.py`）
 
 - **核心函数**：`build_evidence_strategy()`（新增 `graph_available` 参数，缺省 False）
-- **能力探测（D10）**：graph 扩展由 `memory_graph_enabled` 真实能力决定，开关关闭时策略不再谎报 enabled
+- **能力探测**：graph 扩展由 `memory_graph_enabled` 真实能力决定，开关关闭时策略不再谎报 enabled
 - **策略类型**：procedure_first / fact_episode_first / balanced；TemporalMode：current_only / include_history
 
 ### MemoryRetriever（`engine/compression/memory_retriever.py`）
 
-- **核心方法**：`retrieve_evidence()` / `build_evidence_strategy()` / `get_l1_snapshot()` / `after_turn()` / `consolidate_session()` / `_expand_via_edges()`（E7）
+- **核心方法**：`retrieve_evidence()` / `build_evidence_strategy()` / `get_l1_snapshot()` / `after_turn()` / `consolidate_session()` / `_expand_via_edges()`
 - **检索预算双路径**：交互 3s（禁 LLM selector）/ 非交互 20s（启 LLM selector）
-- **降级（D2）**：`TimeoutError→timeout_fallback` / 非超时异常→`error_fallback` / 连续 3 次失败→熔断 300s 直走 fallback；`_heuristic_fallback()` 零 LLM/向量/BM25：扫 active 条目（≤500）关键词交集打分（去零 + 30 天衰减微调），500ms 独立短超时
-- **影子记账（T1-8）**：注入后 emit `memory_shadow_use_count` + ledger 登记
+- **降级**：`TimeoutError→timeout_fallback` / 非超时异常→`error_fallback` / 连续 3 次失败→熔断 300s 直走 fallback；`_heuristic_fallback()` 零 LLM/向量/BM25：扫 active 条目（≤500）关键词交集打分（去零 + 30 天衰减微调），500ms 独立短超时
+- **影子记账**：注入后 emit `memory_shadow_use_count` + ledger 登记
 - **协议**：`MemoryRetrievalSettings`（search_l2_quota / search_l3_quota / archive_max_results / archive_enabled / archive_min_similarity / memory_graph_enabled）
 
 ### MemorySelector（`engine/compression/memory_selector.py`）
 
-- **LLM selector 预算（D16）**：`_SELECTOR_LIMIT_S = 8.0`，`asyncio.wait_for` 包装（接口无 timeout 参数；取消后服务端费用照计为已知代价），超限走 `heuristic_timeout` 兜底
-- **启发式两阶段排序（D5）**：检索序 → relevance band（rank≤3→3 / ≤10→2 / ≤20→1 / 其余→0）为首位；层级 bias 仅同带内 tie-break
-- **Ranking v2（B4）**：`_composite_scores()` = relevance × decay × use_factor × confidence（`ranking_v2_enabled=True` 时）；abstention shadow/hard
+- **LLM selector 预算**：`_SELECTOR_LIMIT_S = 8.0`，`asyncio.wait_for` 包装（接口无 timeout 参数；取消后服务端费用照计为已知代价），超限走 `heuristic_timeout` 兜底
+- **启发式两阶段排序**：检索序 → relevance band（rank≤3→3 / ≤10→2 / ≤20→1 / 其余→0）为首位；层级 bias 仅同带内 tie-break
+- **Ranking v2**：`_composite_scores()` = relevance × decay × use_factor × confidence（`ranking_v2_enabled=True` 时）；abstention shadow/hard
 
 ### MemoryFormatter（`engine/compression/memory_formatter.py`）
 
@@ -178,7 +176,7 @@ attribution_enabled=False（默认）：
   → curator 毕业双路径（use_count OR positive≥2 且 negative==0）
 ```
 
-### 4. 归档流（L4）
+### 4. 归档流
 
 ```
 会话 consolidate → archive_session_background()
@@ -206,7 +204,7 @@ attribution_enabled=False（默认）：
 - **Redis**：L1 索引（hash + TTL 30d）、Gateway 锁
 - **PostgreSQL**：L2/L3 条目（含 bm25vector 全文索引；embedding 列仅当启用向量腿时使用）
 - **LLM Client**：Gateway 仲裁、ChatCapture 提取、Selector 选择
-- **EdgeStore**：E7 边扩展（`memory_graph_enabled` 门控）
+- **EdgeStore**：边扩展（`memory_graph_enabled` 门控）
 
 ## 配置项与关键常量
 
@@ -222,4 +220,4 @@ attribution_enabled=False（默认）：
 | `ARCHIVE_CACHE_MAX_ENTRIES` | 200 | `memory_retriever.py` | 归档缓存 |
 | `_DECAY_LAMBDA_SHORT_TERM/DEFAULT/DECISION` | 0.05/0.005/0.0 | `memory_selector.py` | 衰减率 |
 
-**配置开关现状（D14 未决，缺省全关）**：`attribution_enabled=False`、`gateway_mode=off`、`ranking_v2_enabled=False`、`memory_graph_enabled=False`、`notary_enabled=False`、`memory_forgetting_budget_entries=0`。
+**配置开关现状（缺省全关）**：`attribution_enabled=False`、`gateway_mode=off`、`ranking_v2_enabled=False`、`memory_graph_enabled=False`、`notary_enabled=False`、`memory_forgetting_budget_entries=0`。

@@ -8,8 +8,6 @@ export interface SkillCatalogItem {
   nameZh: string | null
   description: string
   pluginName: string
-  /** 所属包类型：agent=专家、team=专家团；纯技能包为 null */
-  expertType: string | null
 }
 
 export interface SkillSelectorProps {

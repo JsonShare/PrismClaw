@@ -2,9 +2,6 @@
   "name": "employment-law",
   "version": "1.0.0",
   "description": "Reviews hiring and termination risks, worker classification and leave deadlines; runs investigations and drafts policies.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/employment-law.md"
   ],
@@ -29,16 +26,15 @@
     "en": "Labor Contracts & Termination"
   },
   "displayDescription": {
-    "zh": "审查招聘解雇风险、工人分类与休假期限，开展内部调查并起草用工政策。",
+    "zh": "审查招聘与解雇风险、员工分类与休假期限，开展内部调查并起草劳动合同、员工手册等用工政策。",
     "en": "Reviews hiring and termination risks, worker classification and leave deadlines; runs investigations and drafts policies."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "09-OperationsHR",
+  "categoryId": "commercial-ip",
   "defaultInitPrompt": {
     "zh": "审查这份解雇方案，列出所在地特有风险与程序要求。",
     "en": "Review this termination plan and list jurisdiction-specific risks and steps."
   },
-  "plugin": "employment-law",
   "tags": [
     {
       "zh": "用工合规",
@@ -67,5 +63,6 @@
       "en": "Draft handbook supplements for cross-province remote work."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "商事与知产"
 }

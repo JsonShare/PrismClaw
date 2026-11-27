@@ -22,7 +22,14 @@ priority: 7
 - 单率精度样本量（给定p、绝对容许误差和双侧alpha）：读[精度规划](references/proportion-planning.md)，运行proportion_sample_size.py --format markdown，直接交同次正文。
 - 只展示文献RCT已报告的效应量和置信区间：读[逐研究森林图](references/study-forest.md)，用render_study_forest.py，不做新推断。
 - 原始数据的描述统计、两组t检验、单因素方差分析与多重比较、行向Z：用analyze.py，按下方流程，不另写统计算法。
-- 登记表外的方法（回归、生存、ROC、非参数、单侧检验、纵向推断等）：说明未支持的具体方法和未执行范围，不临时手写替代算法，不改名套用表内method；不依赖该方法的读数、描述和绘图照常完成。
+- 影响因素/预测建模（线性、Logistic、Cox 回归，含单因素筛选与多因素校正）：改用 `sino-regression` 技能，用它的 scripts/main.py，不在此处手写回归。
+- 组间差异且需要非参数检验（Mann-Whitney、Kruskal-Wallis、Wilcoxon）或卡方/Fisher：改用 `sino-differential` 技能，它按正态性与方差齐性自动选法并给效应量。
+- 样本量与检验效能（给定 d、alpha、power 反推 n）：改用 `sino-power` 技能；本技能只覆盖单率精度样本量。
+- 统计结果解读（把 P 值、效应量、置信区间转成可发表的结论表述，含多重比较与亚组解读）：改用 `sino-interpreter` 技能。
+- 生成期刊格式的统计报告（含结果表格、方法段落与复现包）：改用 `sino-report` 技能。
+- 生成临床试验 CSR（临床研究总结报告）的统计部分：改用 `sino-csr` 技能。
+- 生存分析（KM 曲线、log-rank、Cox）：本技能不支持。需要时用 lifelines 另写脚本，并说明这是新增计算而非本技能能力。
+- 登记表外且没有对应技能的方法（ROC、单侧检验、纵向混合模型等）：说明未支持的具体方法和未执行范围，不临时手写替代算法，不改名套用表内method；不依赖该方法的读数、描述和绘图照常完成。
 
 ## analyze.py 流程
 

@@ -2,9 +2,6 @@
   "name": "ip-law",
   "version": "1.0.0",
   "description": "Runs trademark and patent triage, FTO classification and infringement notices; reviews OSS compliance and renewals.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/ip-law.md"
   ],
@@ -13,7 +10,8 @@
     "./skills/ip-law-playbook",
     "./skills/ip-patent-workflow",
     "./skills/ip-portfolio-workflow",
-    "./skills/ip-trademark-workflow"
+    "./skills/ip-trademark-workflow",
+    "./skills/nature-paper-to-patent"
   ],
   "expertType": "agent",
   "agentName": "ip-law",
@@ -26,16 +24,15 @@
     "en": "Trademark, Patent & Infringement"
   },
   "displayDescription": {
-    "zh": "开展商标专利初筛、FTO 分类与侵权通知，审查开源合规并跟踪权利续展。",
+    "zh": "开展商标与专利初筛、FTO 自由实施分类与侵权通知审查，核对开源许可合规并跟踪权利续展期限。",
     "en": "Runs trademark and patent triage, FTO classification and infringement notices; reviews OSS compliance and renewals."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "commercial-ip",
   "defaultInitPrompt": {
     "zh": "对这个发明披露做初步专利性评估，列出需要补强的部分。",
     "en": "Assess this invention disclosure for initial patentability and gaps."
   },
-  "plugin": "ip-law",
   "tags": [
     {
       "zh": "商标专利",
@@ -64,5 +61,6 @@
       "en": "Review IP clauses and open-source dependency risks in this contract."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "商事与知产"
 }

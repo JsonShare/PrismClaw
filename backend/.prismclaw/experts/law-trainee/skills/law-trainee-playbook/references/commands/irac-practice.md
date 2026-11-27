@@ -8,17 +8,14 @@ argument_hint: '[粘贴论文 OR 草稿路径 OR --generate-hypo]'
 category: 法学学习
 ---
 
-
-
-
 # /irac-practice
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 课程、考试格式、大纲位置、学习风格。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 课程、考试格式、大纲位置、学习风格。
 2. 应用以下框架。
 3. 确定模式：学生提供的假设 + 答案，或 skill 生成的假设配合学生的答案。
 4. 仔细阅读答案。对照预期的 IRAC 组件映射。
 5. 输出结构化反馈：发现/遗漏的问题、规则准确性、分析深度、组织、评分波段、前 3 个修复，最多 1-2 个标记的示例措辞（从不完整的 IRAC 模范）。
-6. 附加到 `${WORKBUDDY_EXPERT_DATA}/irac-sessions/[student]/tracker.md` 用于模式检测。3+ 次会话后显示模式。
+6. 附加到 `{expert_runtime_dir}/irac-sessions/[student]/tracker.md` 用于模式检测。3+ 次会话后显示模式。
 
 ---
 
@@ -46,8 +43,8 @@ category: 法学学习
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 当前课程、考试格式、大纲位置、学习风格
-- `${WORKBUDDY_EXPERT_DATA}/irac-sessions/[student]/tracker.md`（如果存在）——跨会话模式跟踪
+- `执业配置文件（请按当前系统指引创建）` → 当前课程、考试格式、大纲位置、学习风格
+- `{expert_runtime_dir}/irac-sessions/[student]/tracker.md`（如果存在）——跨会话模式跟踪
 - 学生提供的假设（如果在特定提示上练习）和他们的书面答案
 
 ## 工作流
@@ -145,7 +142,7 @@ category: 法学学习
 
 ### 步骤 4：跟踪模式
 
-附加到 `${WORKBUDDY_EXPERT_DATA}/irac-sessions/[student]/tracker.md`：
+附加到 `{expert_runtime_dir}/irac-sessions/[student]/tracker.md`：
 
 ```markdown
 ## [日期] — [学科 / 假设主题]
@@ -171,7 +168,7 @@ category: 法学学习
 
 ## 以下一步决策树结束
 
-按照 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
@@ -180,6 +177,5 @@ category: 法学学习
 - **对 skill 不太了解的司法管辖区或领域的内容正确性进行评分。** 在这些情况下，skill 仅评分结构并说明——"我可以评分你的 IRAC 形状，但无法在这里验证规则。"
 - **给出精确的数字分数。** 仅 Pass/borderline/not-yet 波段。评分是定性的；精确度是虚假的精确度。
 - **替代教授的评分。** 教授有 rubrics 和偏好，此 skill 不知道。使用反馈来改进；不要将其视为最终词。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

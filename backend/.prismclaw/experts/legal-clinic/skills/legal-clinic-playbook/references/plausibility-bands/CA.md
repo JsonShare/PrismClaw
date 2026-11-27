@@ -1,5 +1,3 @@
-
-
 # 合理性区间 — 加利福尼亚州（以及联邦，始终加载）
 
 以下是粗略的合理性区间，而非精确计算结果。如果学生输入的截止日期超出区间，`skills/legal-clinic-playbook/references/commands/deadlines.md --add` 流程会将其标记为需要重新检查。该 skill **不进行计算**——它捕获学生自己工作中的严重算术错误。此处所有引用均为 `[model knowledge — verify]`，除非督导律师已将其替换为通过连接器检索或用户提供的来源。

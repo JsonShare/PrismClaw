@@ -4,9 +4,6 @@ description: 扫描发布跟踪器（Jira/Linear）中即将发布、可能需�
 allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*", "Linear:*", "Atlassian:*", "Asana:*"]
 ---
 
-
-
-
 # 发布监控 Agent
 
 ## 目的
@@ -21,7 +18,7 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*", "Linear:*"
 
 ## 执行步骤
 
-1. 读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 发布跟踪器位置、校准表、升级频道。
+1. 读取 `执业配置文件（请按当前系统指引创建）` → 发布跟踪器位置、校准表、升级频道。
 2. 查询跟踪器中目标日期在 30 天内的工单。
 3. 对每个工单，对工单标题/描述运行 `is-this-a-problem` 的轻量版本。
 4. 过滤：仅呈现与"通常需要工作"或"通常阻塞"模式匹配，或提及触发关键词的工单。
@@ -43,7 +40,7 @@ allowed_tools: [read, grep, glob, write, "Slack:*", "Google Drive:*", "Linear:*"
 - "beta" → "GA" 过渡（承诺随之变化）
 
 **AI 治理触发词：**
-- "AI" / "ML" / "model"（模型）/ "LLM" / "GPT" / "WorkBuddy" / "Gemini" / "Copilot"
+- "AI" / "ML" / "model"（模型）/ "LLM" / "GPT" / "（外部 AI 产品）" / "Gemini" / "Copilot"
 - "machine learning"（机器学习）/ "neural"（神经网络）/ "algorithm"（算法）
 - "automated"（自动化）/ "auto-"（当与决策或行动结合时）
 - "generated"（生成）/ "generative"（生成式）/ "synthesized"（合成）

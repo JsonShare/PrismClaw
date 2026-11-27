@@ -2,9 +2,6 @@
   "name": "research-med",
   "version": "1.0.0",
   "description": "Builds search strategies and review outlines, designs study protocols and statistics plans, runs statistics and figures, drafts manuscripts and grant outlines, translates medical text, and lists ethics tasks.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/research-med.md"
   ],
@@ -19,7 +16,24 @@
     "./skills/medical-manuscript-writing",
     "./skills/medical-ppt",
     "./skills/medical-scientific-figures",
-    "./skills/medical-translation"
+    "./skills/medical-translation",
+    "./skills/nature-reviewer",
+    "./skills/scientific-brainstorming",
+    "./skills/epidemiologist-analyst",
+    "./skills/nature-response",
+    "./skills/nature-data",
+    "./skills/nature-citation",
+    "./skills/nature-shared",
+    "./skills/sino-regression",
+    "./skills/sino-differential",
+    "./skills/sino-power",
+    "./skills/clinical-trial-finder",
+    "./skills/biologist-analyst",
+    "./skills/chemist-analyst",
+    "./skills/precision-immune-assessment",
+    "./skills/sino-interpreter",
+    "./skills/sino-report",
+    "./skills/sino-csr"
   ],
   "expertType": "agent",
   "agentName": "research-med",
@@ -32,16 +46,15 @@
     "en": "Literature Review & Trial Design"
   },
   "displayDescription": {
-    "zh": "制定检索策略与综述大纲，设计研究方案与统计计划，并列出伦理注册待办。",
+    "zh": "制定检索策略与综述大纲，设计研究方案与统计分析计划，执行统计复核并列出伦理注册待办。",
     "en": "Builds search strategies and review outlines, designs study protocols and statistics plans, and lists ethics tasks."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "12-IndustryConsultant",
+  "categoryId": "research",
   "defaultInitPrompt": {
     "zh": "为【研究课题】做文献综述大纲与检索式。",
     "en": "Build a literature review outline and search strategy for [topic]."
   },
-  "plugin": "research-med",
   "tags": [
     {
       "zh": "文献综述",
@@ -70,5 +83,6 @@
       "en": "Choose statistical methods for this RWD study and list bias controls."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "医学科研"
 }

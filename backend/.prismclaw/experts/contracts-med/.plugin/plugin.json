@@ -2,9 +2,6 @@
   "name": "contracts-med",
   "version": "1.0.0",
   "description": "Answers questions on medical and vendor agreements with clause-by-clause interpretation and source citations.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/contracts-med.md"
   ],
@@ -23,16 +20,15 @@
     "en": "Vendor & Clinical Agreements"
   },
   "displayDescription": {
-    "zh": "对医疗与采购协议做问答式分析，逐条给出带原文引用的解读与风险提示。",
+    "zh": "对医疗与采购协议做问答式分析，逐条给出带原文引用的解读、风险提示与修改建议，供业务复核确认。",
     "en": "Answers questions on medical and vendor agreements with clause-by-clause interpretation and source citations."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "commercial-ip",
   "defaultInitPrompt": {
     "zh": "这份医疗合同的关键条款有哪些？逐条标注原文位置。",
     "en": "What are the key clauses in this medical contract? Cite the source for each."
   },
-  "plugin": "contracts-med",
   "tags": [
     {
       "zh": "合同问答",
@@ -61,5 +57,6 @@
       "en": "Explain this liability limitation clause and flag open questions."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "商事与知产"
 }

@@ -44,18 +44,14 @@ class MedicalBundle:
     # ── 基础设施：数据库 Schema + 持久化存储 ──────────────────────
 
     async def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
-        """注册医疗域持久化存储并确保数据库 Schema 就绪。"""
+        """注册医疗域持久化存储；DDL 由核心扫描 ``deploy/sql`` 自动执行。"""
         from ..persistence.brief_store import BriefStore
         from ..persistence.kb_store import KbStore
         from ..persistence.medical_store import MedicalStore
-        from ..persistence.schema import ensure_medical_schema
 
         ctx.register_store("medical", MedicalStore(ctx.db_engine))
         ctx.register_store("medical_kb", KbStore(ctx.db_engine))
         ctx.register_store("medical_briefs", BriefStore(ctx.db_engine))
-
-        # 确保 DDL 就绪；失败由域注册器统一记录
-        await ensure_medical_schema(ctx.db_engine)
 
     # ── 运行时：工具 + 钩子 + 治理规则 + 域扩展 ────────────────────
 

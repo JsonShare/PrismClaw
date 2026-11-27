@@ -8,13 +8,11 @@ category: 劳动用工
 customizes: employment-legal
 ---
 
-
-
 # 自定义劳动用工配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一级的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一级的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -40,7 +38,7 @@ customizes: employment-legal
 - *经济补偿金姿态从 N 改为 N+1（含代通知金）：* "`/termination-review` 将在经济补偿金计算中使用新的基准（含代通知金1个月）。"
 - *风险姿态 中等 → 保守：* "我将标记更多解除以供升级，推荐更有保护性的解除协议语言，在竞业限制协议上更严格，并对三期女职工和医疗期员工的解除设置更高的阈值。"
 
-对于共享档案更改（公司名称、行业、省市、执业设置、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并说明影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、省市、执业设置、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并说明影响范围。修改后保存。
 
 ## 关闭
 

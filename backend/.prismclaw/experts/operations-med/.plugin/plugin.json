@@ -2,16 +2,14 @@
   "name": "operations-med",
   "version": "1.0.0",
   "description": "Handles insurance claims, record management, appointments and inventory checks, and analyzes care gaps.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/operations-med.md"
   ],
   "skills": [
     "./skills/insurance-claims-workflow",
     "./skills/operations-med-playbook",
-    "./skills/record-management-workflow"
+    "./skills/record-management-workflow",
+    "./skills/prior-auth-review-skill"
   ],
   "expertType": "agent",
   "agentName": "operations-med",
@@ -24,16 +22,15 @@
     "en": "Claims & Records Operations"
   },
   "displayDescription": {
-    "zh": "处理保险理赔、病历归档调取、预约与库存检查，并分析人群照护缺口与随访。",
+    "zh": "处理保险理赔、病历归档与调取、预约安排与库存检查，并分析人群照护缺口与随访依从性。",
     "en": "Handles insurance claims, record management, appointments and inventory checks, and analyzes care gaps."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "09-OperationsHR",
+  "categoryId": "medical-ops",
   "defaultInitPrompt": {
     "zh": "核对这份理赔材料并给出提交与追踪步骤。",
     "en": "Check this claim packet and give submission and tracking steps."
   },
-  "plugin": "operations-med",
   "tags": [
     {
       "zh": "保险理赔",
@@ -62,5 +59,6 @@
       "en": "Generate this week’s inventory and appointment availability list."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "医疗运营"
 }

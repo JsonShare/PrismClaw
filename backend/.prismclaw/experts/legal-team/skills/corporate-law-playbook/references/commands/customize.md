@@ -1,7 +1,7 @@
 ---
 name: corporate-customize
 description: '引导式自定义公司执业档案——只改一项，无需重跑整个冷启动访谈。 调整风险姿态、升级联系人、活跃模块（M&A / 董事会 / 上市公司 /
-  实体管理）、 重要性阈值、披露日程格式、同意先例、或事项工作区路径。 当用户说"修改我的[某项]"、"更新我的档案"、"编辑我的配置"或"自定义"时使用。
+  实体管理）、 重要性阈值、披露日程格式、同意先例、或输出路径。 当用户说"修改我的[某项]"、"更新我的档案"、"编辑我的配置"或"自定义"时使用。
 
   '
 argument_hint: '[章节名称，或描述你想修改的内容]'
@@ -9,13 +9,11 @@ category: 公司法务
 customizes: corporate-legal
 ---
 
-
-
 # 自定义公司法务配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一级的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一级的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -41,7 +39,7 @@ customizes: corporate-legal
 - *打开上市公司模块：* "下次你在该领域运行任何内容时，我会提示你提供申报日历和披露控制信息。"
 - *AI 批量审查信任"逐行检查"改为"抽查 10%"：* "`/ai-tool-handoff` 将 QA 10% 样本，而非每次提取。"
 
-共享档案的修改（公司名称、行业、司法管辖区、执业环境、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并说明影响范围。修改后保存。
+共享档案的修改（公司名称、行业、司法管辖区、执业环境、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并说明影响范围。修改后保存。
 
 ## 关闭
 

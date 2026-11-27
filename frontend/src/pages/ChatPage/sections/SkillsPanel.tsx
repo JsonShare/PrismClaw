@@ -29,10 +29,18 @@ interface ServerSkillItem {
   expert_description?: string | null
   /** 所属专家包类型：agent=专家、team=专家团 */
   expert_type?: string | null
+  /** 所属专家包分组：英文 id（categoryId） */
+  expert_category_id?: string | null
+  /** 所属专家包分组：中文名（categoryName），前端分组展示用 */
+  expert_category_name?: string | null
 }
 
 /** 面板内使用的技能条目：额外携带所属专家包类型，用于「专家 / 专家团」分栏。 */
-type PanelSkill = Skill & { expertType: 'agent' | 'team' | null }
+type PanelSkill = Skill & {
+  expertType: 'agent' | 'team' | null
+  /** 专家包声明的分组中文名；为空时回退关键词推断 */
+  expertCategoryName: string | null
+}
 
 /**
  * 推导技能所属专家名。
@@ -125,24 +133,24 @@ function ExpertIconTile({ name, Icon, size = 36 }: { name: string; Icon: LucideI
   )
 }
 
-/**
- * 专家包的领域分类：由包名与所含技能的分类/标题/描述派生，仅用于「专家 / 专家团」的二级筛选。
- * 规则顺序即优先级（医疗合规归医疗，法务合规归法律）。
- */
-const EXPERT_DOMAIN_RULES: Array<[RegExp, string]> = [
-  [/(医疗|临床|医学|诊疗|病历|用药|护理|medical|clinic|health)/i, '医疗'],
-  [/(法务|法律|合同|诉讼|合规|隐私|知识产权|监管|legal|law|compliance|privacy)/i, '法律'],
-  [/(科研|研究|文献|论文|实验|学术|research)/i, '科研'],
-  [/(办公|文档|表格|会议|演示|邮件|office|document|meeting)/i, '办公'],
+/** 专家包分组的展示顺序：与 plugin.json 的 categoryName 对应，固定 chips 排列。 */
+const EXPERT_DOMAIN_ORDER = [
+  '临床诊疗',
+  '健康管理',
+  '中医与心理',
+  '医疗运营',
+  '医学科研',
+  '诉讼仲裁',
+  '商事与知产',
+  '合规监管',
+  '法律援助与实训',
 ]
-const EXPERT_DOMAIN_ORDER = ['医疗', '法律', '科研', '办公', '其他']
 
-function expertDomainOf(name: string, skills: Skill[]): string {
-  const text = [name, ...skills.map((s) => `${s.title} ${s.category || ''} ${s.desc}`)]
-    .join(' ')
-    .toLowerCase()
-  for (const [re, domain] of EXPERT_DOMAIN_RULES) {
-    if (re.test(text)) return domain
+function expertDomainOf(skills: Skill[]): string {
+  // 分组由专家包清单的 categoryName 显式声明，前端不再猜测。
+  for (const s of skills) {
+    const declared = (s as PanelSkill).expertCategoryName
+    if (declared) return declared
   }
   return '其他'
 }
@@ -311,7 +319,7 @@ export default function SkillsPanel() {
           const desc = typeof s.description === 'string' ? s.description : ''
           const source = typeof s.source === 'string' ? s.source : ''
           const tags = source ? [source] : ['本地']
-          const VALID_ORIGINS = ['plaza', 'workspace', 'system', 'expert', 'project', 'bundled', 'personal', 'managed', 'mcp', 'marketplace', 'builtin'] as const
+          const VALID_ORIGINS = ['plaza', 'workspace', 'system', 'expert', 'project', 'bundled', 'personal', 'managed', 'mcp', 'builtin'] as const
           const rawOrigin = typeof s.origin === 'string' ? s.origin : ''
           const origin = (VALID_ORIGINS as readonly string[]).includes(rawOrigin) ? rawOrigin as Skill['origin'] : 'system' as Skill['origin']
           const groupPath = Array.isArray(s.group_path)
@@ -343,6 +351,8 @@ export default function SkillsPanel() {
               : s.expert_type === 'agent'
                 ? 'agent'
                 : null) as PanelSkill['expertType'],
+            expertCategoryName:
+              typeof s.expert_category_name === 'string' ? s.expert_category_name : null,
           }
         })
         .filter((s) => s.id)
@@ -456,7 +466,7 @@ export default function SkillsPanel() {
       .map(([name, list]) => ({
         name,
         skills: list,
-        domain: expertDomainOf(name, list),
+        domain: expertDomainOf(list),
         ...expertCardMeta(list),
       }))
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -467,9 +477,12 @@ export default function SkillsPanel() {
     const tabs: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部' }]
     if (activeTop !== 'skills') {
       const present = new Set(expertPackages.map((p) => p.domain))
-      for (const domain of EXPERT_DOMAIN_ORDER) {
-        if (present.has(domain)) tabs.push({ key: domain, label: domain })
-      }
+      // 已知领域按预设顺序优先；其余（来自 categoryName 的新分组）按出现顺序追加。
+      const ordered = [
+        ...EXPERT_DOMAIN_ORDER.filter((d) => present.has(d)),
+        ...[...present].filter((d) => !EXPERT_DOMAIN_ORDER.includes(d)),
+      ]
+      for (const domain of ordered) tabs.push({ key: domain, label: domain })
       return tabs
     }
     const present = new Map<string, number>()

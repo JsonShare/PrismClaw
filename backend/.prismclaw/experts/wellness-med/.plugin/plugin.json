@@ -2,9 +2,6 @@
   "name": "wellness-med",
   "version": "1.0.0",
   "description": "Aggregates sleep, nutrition, fitness and constitution data into health reports and extracts medical entities; no diagnosis.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/wellness-med.md"
   ],
@@ -18,7 +15,10 @@
     "./skills/rehabilitation-analyzer",
     "./skills/sleep-analyzer",
     "./skills/tcm-constitution-analyzer",
-    "./skills/weightloss-analyzer"
+    "./skills/weightloss-analyzer",
+    "./skills/travel-health-analyzer",
+    "./skills/occupational-health-analyzer",
+    "./skills/speech-pathology-ai"
   ],
   "expertType": "agent",
   "agentName": "wellness-med",
@@ -31,16 +31,15 @@
     "en": "Lifestyle & Rehabilitation"
   },
   "displayDescription": {
-    "zh": "汇总睡眠营养运动与体质数据生成健康报告，抽取医学实体，不替代医师诊断。",
+    "zh": "汇总睡眠、营养、运动与体质数据生成健康报告，抽取医学实体并给出改善建议，不替代医师诊断。",
     "en": "Aggregates sleep, nutrition, fitness and constitution data into health reports and extracts medical entities; no diagnosis."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "12-IndustryConsultant",
+  "categoryId": "wellness",
   "defaultInitPrompt": {
     "zh": "根据这份睡眠与营养数据生成结构化健康分析报告。",
     "en": "Generate a structured health report from this sleep and nutrition data."
   },
-  "plugin": "wellness-med",
   "tags": [
     {
       "zh": "健康报告",
@@ -69,5 +68,6 @@
       "en": "Draft an emergency card with allergies and baseline conditions."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "健康管理"
 }

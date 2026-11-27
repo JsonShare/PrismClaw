@@ -28,8 +28,6 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `agents/informatics-med.md`：专家定义
 - `skills/`：4 个技能（`doc-extract`、`fhir`、`fhir-developer`、`informatics-med-playbook`）
 - `skills/informatics-med-playbook/`：执业资料与流程参考
-- `skills/informatics-med-playbook/references/practice-profile/`：执业档案模板
-- `skills/informatics-med-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -38,4 +36,3 @@ Agent 型（单个 AI 专家），expertType = agent。
 - 对接生产系统前需在测试环境验证；不得绕过授权访问患者数据。
 
 ## 命令说明
-

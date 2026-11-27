@@ -6,16 +6,13 @@ argument_hint: '[--days N to change window | --missed for lapsed windows]'
 category: 商事合同
 ---
 
-
-
-
 # /renewal-tracker
 
 显示什么续约以及你必须在何时之前取消。
 
 ## Instructions
 
-1. **阅读 `${WORKBUDDY_EXPERT_DATA}/renewal-register.yaml`**（配置目录——在 plugin 更新后保留）。
+1. **阅读 `{expert_runtime_dir}/renewal-register.yaml`**（配置目录——在 plugin 更新后保留）。
 2. **默认模式：** 模式 2 ——接下来 90 天内将发生什么，使用半开区间按紧急程度分组，使每个截止期限恰好落入一个区间：🔴 0–13 天、🟠 14–44 天、🟡 45–89 天。第 14、45 和 90 天是边界——每个属于恰好一个区间，而不是两个。
 3. **`--days N`：** 更改窗口。
 4. **`--missed`：** 模式 4 ——已过且没有记录取消的取消截止期限。
@@ -46,7 +43,7 @@ category: 商事合同
 
 ## 登记册
 
-位于 `${WORKBUDDY_EXPERT_DATA}/renewal-register.yaml`（配置目录——在 plugin 更新后保留）。每个条目：
+位于 `{expert_runtime_dir}/renewal-register.yaml`（配置目录——在 plugin 更新后保留）。每个条目：
 
 ```yaml
 - counterparty: "示例科技有限公司"
@@ -135,7 +132,7 @@ category: 商事合同
 - [ ] [Counterparty] ——定价未限制；在我们失去杠杆之前从替代方案获取报价
 ```
 
-如果登记册在窗口中有超过约 10 个续约，或任何时候用户询问：提供仪表板（请参阅 PLUGIN.md `## Outputs → Dashboard offer for data-heavy outputs`）。为此输出塑造提议——按紧急层级的计数（🔴 / 🟠 / 🟡）、取消时间线和带有对手方、续约日期、年度 $ 和所有者的可排序登记册。
+如果登记册在窗口中有超过约 10 个续约，或任何时候用户询问：提供仪表板（请参阅 系统配置 `## Outputs → Dashboard offer for data-heavy outputs`）。为此输出塑造提议——按紧急层级的计数（🔴 / 🟠 / 🟡）、取消时间线和带有对手方、续约日期、年度 $ 和所有者的可排序登记册。
 
 ### 模式 3：扫描 [CLM]/电子签名工具以填充登记册
 
@@ -181,13 +178,12 @@ category: 商事合同
 
 ## 集成：renewal-watcher agent
 
-此 plugin 中的 renewal-watcher agent 按计划（默认每周）运行此 skill，并将"即将到来"报告发布到 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `## House style` → `## House style` → 工产品去向的命名频道。模式 2 是代理的主要输出。
+此 plugin 中的 renewal-watcher agent 按计划（默认每周）运行此 skill，并将"即将到来"报告发布到 `执业配置文件（请按当前系统指引创建）` → `## House style` → `## House style` → 工产品去向的命名频道。模式 2 是代理的主要输出。
 
 ## 此 skill 不做的事
 
 - 它不取消合同。它告诉你何时决定。
 - 它不决定是否续约。它显示截止期限和业务所有者。
 - 它不阅读合同以查找续约日期——这在审查时发生。如果合同在登记册中没有续约日期，它是手动添加的，有人需要填补空白。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

@@ -6,17 +6,14 @@ argument_hint: '[path-to-incoming] [--slug=custom-slug]'
 category: 争议诉讼
 ---
 
-
-
-
 # /demand-received
 
 1. 从提供的路径阅读入站文档。
-2. 加载 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` 进行组合交叉检查。
-3. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 风险校准、业务格局、催告函实践。
+2. 加载 `{expert_runtime_dir}/matters/_log.yaml` 进行组合交叉检查。
+3. 加载 `执业配置文件（请按当前系统指引创建）` → 风险校准、业务格局、催告函实践。
 4. 遵循以下工作流和参考。
 5. 提取字段；交叉检查组合；评估实体价值；提出附带建议的选项。
-6. 写入 `${WORKBUDDY_EXPERT_DATA}/inbound/[slug]/triage.md`。复制或链接入站文档到 `${WORKBUDDY_EXPERT_DATA}/inbound/[slug]/incoming.[ext]`。
+6. 写入 `{expert_runtime_dir}/inbound/[slug]/triage.md`。复制或链接入站文档到 `{expert_runtime_dir}/inbound/[slug]/incoming.[ext]`。
 7. 按用户选择交接：
    - 创建事项 → 预填充的 `matter-intake`
    - 用反催告回应 → 预填充的 `demand-intake`
@@ -54,8 +51,8 @@ category: 争议诉讼
 ## 加载上下文
 
 - 入站文档（用户提供路径或放入会话中）
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` — 扫描相关事项（同一对方、通过实体关系重叠的对方、或事项类型 + 近期日期）
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 风险校准（用于实体价值评估）、业务格局（发送者是否为常见对手方？）、催告函实践（内部语气和回应默认值）
+- `{expert_runtime_dir}/matters/_log.yaml` — 扫描相关事项（同一对方、通过实体关系重叠的对方、或事项类型 + 近期日期）
+- `执业配置文件（请按当前系统指引创建）` → 风险校准（用于实体价值评估）、业务格局（发送者是否为常见对手方？）、催告函实践（内部语气和回应默认值）
 
 ## 工作流
 
@@ -98,7 +95,7 @@ category: 争议诉讼
 - **对方实力** — 如果他们明天上法院/申请仲裁，他们的故事是什么？
 - **我方实力** — 我们可能的抗辩是什么？
 - **要求的损害赔偿 vs. 可能的** — 要求是否与他们赢得时法院/仲裁庭会判决的金额相称？
-- **杠杆和压力** — 他们可信地准备好起诉/申请仲裁了吗？他们有能力吗？根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 他们是否为重复诉讼对手方？
+- **杠杆和压力** — 他们可信地准备好起诉/申请仲裁了吗？他们有能力吗？根据 `执业配置文件（请按当前系统指引创建）` 他们是否为重复诉讼对手方？
 
 输出分流评级：**具有实体价值 / 有争议 / 薄弱 / 无意义**。直说。用户在做分流，不是在写简报。
 
@@ -142,7 +139,7 @@ category: 争议诉讼
 
 ### 步骤 6：写入分流
 
-输出：`${WORKBUDDY_EXPERT_DATA}/inbound/[slug]/triage.md`。
+输出：`{expert_runtime_dir}/inbound/[slug]/triage.md`。
 
 ```markdown
 [工作产品标题——根据插件配置 ## Outputs——因角色而异；见 `## 谁在使用这个`]
@@ -253,11 +250,9 @@ category: 争议诉讼
 - 创建事项 → 交接给 `/matter-intake` 附：对方、类型、`source: demand-letter`（入站）、以防御性框架的初始理论，预填充。
 - 以反催告回应 → 交接给 `/demand-intake` 附：对方、分流中的上下文、期望结果作为回应。
 - 链接到现有事项 → 更新该事项在 `_log.yaml` 中的 `related_matters`；向其 `history.md` 附加事件。
-- 独立 → 保留在 `${WORKBUDDY_EXPERT_DATA}/inbound/`；组合无变更。
+- 独立 → 保留在 `{expert_runtime_dir}/inbound/`；组合无变更。
 
 ## 以下一步决策树结束
-
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。
 
 ## 此 skill 不做什么
 
@@ -265,6 +260,5 @@ category: 争议诉讼
 - **发送回应。** 草稿在 `demand-draft` 中起草；此 skill 在分流决定处停止。
 - **最终确定实体价值。** 评级是用于分流的阅读；正式的实体价值意见由外部律师或更彻底的分析做出。
 - **做出事项创建决定。** 浮出建议；用户决定。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

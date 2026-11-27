@@ -2,9 +2,6 @@
   "name": "legal-team",
   "version": "1.0.0",
   "description": "Chinese enterprise legal team covering contracts, corporate, employment, privacy, product, regulatory, AI governance and IP.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "license": "Apache-2.0",
   "expertType": "team",
   "agentName": "legal-team-lead",
@@ -87,7 +84,7 @@
     "en": "Chinese enterprise legal team covering contracts, corporate, employment, privacy, product, regulatory, AI governance and IP."
   },
   "avatar": "avatars/team.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "legal-service",
   "defaultInitPrompt": {
     "zh": "帮我分诊这个跨职能法律问题，并交给合适的法务专家分析",
     "en": "Triage this cross-functional legal issue and route it to the right specialists."
@@ -274,5 +271,6 @@
         "zh": "知识产权专家"
       }
     }
-  ]
+  ],
+  "categoryName": "法律援助与实训"
 }

@@ -1,0 +1,66 @@
+{
+  "name": "psych-counseling",
+  "version": "1.0.0",
+  "description": "Psychological analysis and psychoeducation from Jungian and cognitive frameworks, with crisis-signal detection and referral. Analysis and support only; never diagnosis or treatment.",
+  "agents": [
+    "./agents/psych-counseling.md"
+  ],
+  "skills": [
+    "./skills/jungian-psychologist",
+    "./skills/crisis-detection-intervention-ai",
+    "./skills/psychologist-analyst",
+    "./skills/grief-companion",
+    "./skills/hrv-alexithymia-expert",
+    "./skills/modern-drug-rehab-computer"
+  ],
+  "expertType": "agent",
+  "agentName": "psych-counseling",
+  "displayName": {
+    "en": "Psychology & Counseling Expert",
+    "zh": "心理与咨询专家"
+  },
+  "profession": {
+    "zh": "心理学与心理支持",
+    "en": "Psychology & Counseling"
+  },
+  "displayDescription": {
+    "zh": "用荣格与认知心理学框架解释情绪、行为与梦，识别危机信号并转介。只做分析与支持，不做诊断与治疗。",
+    "en": "Psychological analysis and psychoeducation from Jungian and cognitive frameworks, with crisis-signal detection and referral. Analysis and support only; never diagnosis or treatment."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "tcm-psych",
+  "defaultInitPrompt": {
+    "zh": "我最近总做一个被追赶的梦，从荣格的角度可以怎么理解？",
+    "en": "I keep dreaming of being chased. How would a Jungian approach understand this?"
+  },
+  "tags": [
+    {
+      "zh": "荣格分析",
+      "en": "Jungian Analysis"
+    },
+    {
+      "zh": "危机识别",
+      "en": "Crisis Detection"
+    },
+    {
+      "zh": "行为模式",
+      "en": "Behavioral Patterns"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "我最近总做一个被追赶的梦，从荣格的角度可以怎么理解？",
+      "en": "I keep dreaming of being chased. How would a Jungian approach understand this?"
+    },
+    {
+      "zh": "帮我用阴影工作的方式分析我一直回避的那部分自我。",
+      "en": "Walk me through shadow work on a part of myself I keep avoiding."
+    },
+    {
+      "zh": "我在团队决策里总随大流，从群体动力学角度解释一下原因。",
+      "en": "I always go along with the group in team decisions. Explain this through group dynamics."
+    }
+  ],
+  "license": "Apache-2.0",
+  "categoryName": "中医与心理"
+}

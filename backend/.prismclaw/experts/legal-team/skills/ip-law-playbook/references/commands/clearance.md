@@ -8,22 +8,18 @@ argument_hint: '[描述提议商标、商品/服务和司法管辖区——或�
 category: 知识产权
 ---
 
-
-
-
 # /clearance
 
 **这是分类,而非清除意见。** 商标清除意见需要完整的专业搜索和注册商标律师的判断。"无明显冲突"结果意味着分类没有发现任何内容——并不意味着商标是清晰的。客户在通过了淘汰搜索的商标上被起诉。
 
 ## 说明
 
-1. 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。如果它包含 `[PLACEHOLDER]`,停止并指向 `skills/ip-law-playbook/references/commands/cold-start-interview.md`。
+1. 阅读 `执业配置文件（请按当前系统指引创建）`。如果它包含 `[PLACEHOLDER]`,停止并指向 请先配置相关执业信息后再进行定制审查。
 2. 遵循以下工作流。
 3. 运行 intake(商标、商品/服务、类别、司法管辖区、视觉/样式)。
 4. 针对内在障碍进行淘汰检查——通用、描述性、欺骗性、地理、姓氏、虚假连接、禁止事项、功能性。
 5. 针对已连接的内容(Solve Intelligence、CourtListener、Descrybe 或任何可用的 MCP)进行相似商标搜索。如果没有连接任何内容,在输出中说明并继续进行因素分析。
 6. 遍历适用电路的混淆可能性因素——du Pont / Polaroid / Sleekcraft / 其他。标记每个;从不结论。
-7. 将分类备忘录写入事项文件夹(如果事项活跃)或执业输出文件夹。根据角色应用工作产品标题。
 8. 以推荐的下一步和如果角色是非律师的非律师关卡结束。
 
 此 skill 从不认为商标是清晰的。如果不确定,标记——律师决定。
@@ -54,32 +50,30 @@ category: 知识产权
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`(内部用户的默认值),跳过本段的其余部分——skills 使用执业级上下文,事项机制不可见。如果已启用且没有活跃事项,询问:"这是哪个事项的? Run `skills/ip-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`,否则永远不要阅读另一个事项的文件。
-
 ---
 
 ## 首先加载执业档案
 
-在运行清除之前,阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。拉取:
+在运行清除之前,阅读 `执业配置文件（请按当前系统指引创建）`。拉取:
 
 - **角色** 来自 `## Who's using this`(律师 vs. 非律师改变工作产品标题和下面的非律师关卡)
 - **注册于** 和 **执行于** 来自 `## IP practice profile` 和 `## Enforcement posture`(如果用户未指定的默认司法管辖区)
 - **集成** 来自 `## Available integrations`(CourtListener / Solve Intelligence / Descrybe ——每个确定可运行哪些搜索、后备是什么以及输出中归因什么)
 - **决策姿态** 来自 `## Decision posture on subjective legal calls` ——此 skill 从不结论"没有混淆相似"
 
-如果 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 包含 `[PLACEHOLDER]` 或 `[Your Company Name]`,提出此反弹:
+如果 `执业配置文件（请按当前系统指引创建）` 包含 `[PLACEHOLDER]` 或 `[Your Company Name]`,提出此反弹:
 
 > 我注意到你尚未配置执业档案——那是我如何为你的执业定制姿态、司法管辖区和批准链的方式。
 >
 > **两个选择:**
-> - 运行 `skills/ip-law-playbook/references/commands/cold-start-interview.md`(2 分钟)以配置你的档案,然后我会为你的执业定制运行此。
+> - 运行 请先配置相关执业信息后再进行定制审查(2 分钟)以配置你的档案,然后我会为你的执业定制运行此。
 > - 说 **"provisional"**,我会针对通用默认运行此——美国司法管辖区、中等风险偏好、律师角色、无剧本——并标记每个输出 `[PROVISIONAL — configure your profile for tailored output]` 以便你在承诺前可以看到我做什么。
 
 ### 临时模式
 
 如果用户说"provisional",使用这些通用默认正常运行清除:中等风险偏好、律师角色、美国司法管辖区(USPTO + 普通法)、无剧本(运行完整分析而不是匹配立场列表)。用 `[PROVISIONAL]` 标记审阅者备注和每个发现块。在输出末尾,附加:
 
-> "这是针对默认假设的通用运行。运行 `skills/ip-law-playbook/references/commands/cold-start-interview.md` 以获得针对你的执业校准的输出——你的剧本、你的司法管辖区、你的风险偏好。2 分钟。"
+> "这是针对默认假设的通用运行。运行 请先配置相关执业信息后再进行定制审查 以获得针对你的执业校准的输出——你的剧本、你的司法管辖区、你的风险偏好。2 分钟。"
 
 ---
 
@@ -128,7 +122,7 @@ category: 知识产权
 
 ### 用户连接了什么
 
-阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的 `## Available integrations`:
+阅读 `执业配置文件（请按当前系统指引创建）` 中的 `## Available integrations`:
 
 - **如果商标搜索连接器可用**(Solve Intelligence、Descrybe ——或任何暴露 TM 注册搜索的 MCP):跨相关类别和司法管辖区运行初步搜索。将每个结果归因于其来源。注意搜索日期和范围(哪些注册处、哪些类别、精确匹配 vs. 模糊、设计搜索与否)。
 - **如果法律研究连接器可用**(针对诉讼的 CourtListener 获取案例法和 TTAB 决定):扫描涉及商标或近似变体的报告争议。相同归因规则。
@@ -217,7 +211,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 - **实际混淆。** 任何证据(错误查询、调查、评论、社交帖子)。
 - **扩张可能性**(桥接差距)。年长用户是否可能扩张到年轻用户的车道,反之亦然。
 
-根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的决策姿态:
+根据 `执业配置文件（请按当前系统指引创建）` 中的决策姿态:
 
 - **永远不要结论"没有混淆相似"。**
 - 如果不确定,写:"发现相似商标——在采用前需要混淆评估。"或:"因素两面走;需要律师判断。"
@@ -239,7 +233,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 
 ## 输出格式
 
-在前面加上 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` `## Outputs` 中的工作产品标题。
+在前面加上 `执业配置文件（请按当前系统指引创建）` `## Outputs` 中的工作产品标题。
 
 ```markdown
 [WORK-PRODUCT HEADER]
@@ -309,7 +303,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 - [具体下一步 1 — 例如,"在采用前跨 USPTO、州注册处、普通法来源、EUIPO 和 UK IPO 进行完整专业搜索"]
 - [具体下一步 2 — 例如,"如果意图继续,对第 25 类的 `APEXLEAF` 商标进行设计审查"]
 - [具体下一步 3 — 例如,"重构商标——当前形式是描述性的,需要次要含义"]
-- [根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 路由——执业档案中命名的商标 OC 或内部 IP 法律顾问]
+- [根据 `执业配置文件（请按当前系统指引创建）` 路由——执业档案中命名的商标 OC 或内部 IP 法律顾问]
 
 ## 引用验证
 
@@ -337,7 +331,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 
 ## 输出位置
 
-如果事项工作区已启用且事项活跃,将输出写入 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/outbox/clearance-<mark-slug>-YYYY-MM-DD.md`。否则写入 `${WORKBUDDY_EXPERT_DATA}/outbox/clearance-<mark-slug>-YYYY-MM-DD.md` 并向用户展示路径。
+如果事项工作区已启用且事项活跃,将输出写入 `{expert_runtime_dir}/matters/<matter-slug>/outbox/clearance-<mark-slug>-YYYY-MM-DD.md`。否则写入 `{expert_runtime_dir}/outbox/clearance-<mark-slug>-YYYY-MM-DD.md` 并向用户展示路径。
 
 如果事项活跃,向事项的 `history.md` 附加一行。
 
@@ -345,7 +339,7 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 
 ## 以下一步决策树结束
 
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的自定义选项——五个默认分支(起草 X、升级、获取更多事实、观察等待、其他)是起点,而非锁定。树就是输出;律师选择。
+根据此 skill 刚刚生成的自定义选项——五个默认分支(起草 X、升级、获取更多事实、观察等待、其他)是起点,而非锁定。树就是输出;律师选择。
 
 ## 此 skill 不做什么
 
@@ -361,6 +355,5 @@ skill 应在相似商标部分输出相邻家族块,并带有确认提示:
 ## 语气
 
 干脆、具体、诚实地说明范围。阅读此输出的律师应该在十秒钟内知道分类发现了什么、它没发现什么,以及任何人采用商标之前必须发生什么。无对冲散文。顶部的护栏和混淆上的"此 skill 不结论"行做范围工作。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

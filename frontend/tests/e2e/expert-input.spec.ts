@@ -78,9 +78,21 @@ test.describe('专家与技能输入区', () => {
     await expect(send).toBeEnabled()
   })
 
-  test('技能 chip 可增删，随消息回放并在刷新后恢复', async ({ page }) => {
+  test('技能 chip 可增删，发送后随本轮清空', async ({ page }) => {
     let selectedSkillIds: string[] = []
     const messages: Array<Record<string, unknown>> = []
+    let sock: { send: (data: string) => void } | null = null
+
+    // 覆盖 beforeEach 的 WS 桩：需要在测试里主动发 chat.done 结束本轮。
+    await page.routeWebSocket('**/api/ws', (ws) => {
+      sock = ws as unknown as { send: (data: string) => void }
+      setTimeout(() => ws.send(frame('hello')), 50)
+      ws.onMessage((message) => {
+        if (String(message).includes('"identify"')) {
+          ws.send(frame('ready', { conversations: [], protocol_version: 1 }))
+        }
+      })
+    })
 
     await page.route('**/api/**', async (route) => {
       const request = route.request()
@@ -98,6 +110,9 @@ test.describe('专家与技能输入区', () => {
           items: [{ id: SESSION_ID, title: '技能测试', created_at: '2026-01-01T00:00:00Z' }],
           has_more: false,
         })
+      }
+      if (path === `/api/conversations/${SESSION_ID}/sync`) {
+        return json({ settled_seq: 0, run_state: 'idle', messages: [], has_more: false })
       }
       if (path === `/api/sessions/${SESSION_ID}`) {
         return json({
@@ -149,14 +164,31 @@ test.describe('专家与技能输入区', () => {
     await page.getByRole('button', { name: '移除技能 draft', exact: true }).click()
     await deleteRequest
     await expect(editor.locator('[data-chip][data-kind="skill"]')).toHaveCount(0)
+    // 技能面板单选即关闭，再次选择需要重新打开
+    await expect(editor).toHaveText('写一段介绍')
 
+    await page.getByRole('button', { name: '添加', exact: true }).click()
+    await page.getByRole('menuitem', { name: '技能', exact: true }).click()
     await page.getByRole('button', { name: /草稿/ }).click()
     await expect(editor.locator('[data-chip][data-kind="skill"]')).toHaveCount(1)
+
+    // 发送后技能随本轮消费：消息气泡保留卡片，输入框立即清空。
+    const purgeRequest = page.waitForRequest((request) =>
+      request.url().endsWith(`/api/sessions/${SESSION_ID}/skills`)
+      && request.method() === 'PUT'
+      && JSON.stringify(request.postDataJSON().selected_skill_ids) === '[]',
+    )
     await page.getByRole('button', { name: '发送', exact: true }).click()
     await expect(page.locator('.msg-chip .msg-chip-label')).toHaveText('draft')
+    await expect(editor.locator('[data-chip][data-kind="skill"]')).toHaveCount(0)
+
+    // 本轮结束后才清服务端选择（不能在 run 读 header 前清掉作用域授权）。
+    sock?.send(frame('chat.done', { aborted: false }))
+    await purgeRequest
+    await expect.poll(() => selectedSkillIds).toEqual([])
 
     await page.reload()
-    await expect(page.getByRole('textbox', { name: /发消息/ }).locator('[data-chip][data-kind="skill"]')).toHaveCount(1)
+    await expect(page.getByRole('textbox', { name: /发消息/ }).locator('[data-chip][data-kind="skill"]')).toHaveCount(0)
   })
 
   test('快速连续选择多个技能不会丢失前一次选择', async ({ page }) => {
@@ -217,6 +249,9 @@ test.describe('专家与技能输入区', () => {
     await page.getByRole('button', { name: '添加', exact: true }).click()
     await page.getByRole('menuitem', { name: '技能', exact: true }).click()
     await page.getByRole('button', { name: /草稿/ }).click()
+    // 技能面板单选即关闭，多选靠多次打开面板（并发保护仍要覆盖）
+    await page.getByRole('button', { name: '添加', exact: true }).click()
+    await page.getByRole('menuitem', { name: '技能', exact: true }).click()
     await page.getByRole('button', { name: /复核/ }).click()
 
     await expect.poll(() => putBodies.length).toBe(2)

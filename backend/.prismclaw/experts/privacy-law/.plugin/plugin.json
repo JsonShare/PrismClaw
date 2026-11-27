@@ -2,9 +2,6 @@
   "name": "privacy-law",
   "version": "1.0.0",
   "description": "Classifies processing activities, generates PIAs, reviews DPAs, drafts DSAR responses and monitors policy drift.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/privacy-law.md"
   ],
@@ -28,12 +25,11 @@
     "en": "Classifies processing activities, generates PIAs, reviews DPAs, drafts DSAR responses and monitors policy drift."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "compliance",
   "defaultInitPrompt": {
     "zh": "为这个新数据处理活动生成隐私影响评估草稿。",
     "en": "Generate a PIA draft for this new data processing activity."
   },
-  "plugin": "privacy-law",
   "tags": [
     {
       "zh": "隐私影响评估",
@@ -62,5 +58,6 @@
       "en": "Draft a DSAR response and flag the statutory deadline."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "合规监管"
 }

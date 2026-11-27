@@ -2,9 +2,6 @@
   "name": "law-trainee",
   "version": "1.0.0",
   "description": "Trains legal reasoning with Socratic questioning, case briefs and IRAC grading; never writes assignments for the student.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/law-trainee.md"
   ],
@@ -24,16 +21,15 @@
     "en": "Case Drills & Document Training"
   },
   "displayDescription": {
-    "zh": "用苏格拉底式提问、案例摘要与 IRAC 评分训练法律思维，只训练不代写作业。",
+    "zh": "用苏格拉底式提问、案例摘要与 IRAC 结构评分训练法律思维，只做训练点评，不代写作业或出具意见。",
     "en": "Trains legal reasoning with Socratic questioning, case briefs and IRAC grading; never writes assignments for the student."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "12-IndustryConsultant",
+  "categoryId": "legal-service",
   "defaultInitPrompt": {
     "zh": "用苏格拉底式提问带我分析这个案例，不要直接给答案。",
     "en": "Walk me through this case with Socratic questions; do not give the answer."
   },
-  "plugin": "law-trainee",
   "tags": [
     {
       "zh": "苏格拉底训练",
@@ -62,5 +58,6 @@
       "en": "Grade my IRAC exercise and point out reasoning gaps."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "法律援助与实训"
 }

@@ -29,9 +29,7 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/legal-clinic-playbook/`：执业资料与流程参考
 - `skills/`：5 个技能（`clinic-case-workflow`、`clinic-client-workflow`、`clinic-management-workflow`、`clinic-supervisor-workflow`、`legal-clinic-playbook`）
 - `skills/legal-clinic-playbook/references/commands/`：命令流程（参考文档）
-- `skills/legal-clinic-playbook/references/practice-profile/`：执业档案模板
 - `skills/legal-clinic-playbook/references/plausibility-bands/`：期限合理性区间（`CN.md` 中国已填充；`CA.md` 加州已填充；`IL.md` 占位结构）
-- `skills/legal-clinic-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -43,4 +41,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-流程参考文档位于 `skills/legal-clinic-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+流程参考文档位于 `skills/legal-clinic-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

@@ -1,5 +1,7 @@
 ---
 name: officecli
+name_zh: Office 文档处理
+category: 文档处理
 description: Create, analyze, proofread, and modify Office documents (.docx, .xlsx, .pptx) using the officecli CLI tool. Use when the user wants to create, inspect, check formatting, find issues, add charts, or modify Office documents.
 ---
 

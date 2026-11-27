@@ -2,9 +2,6 @@
   "name": "med-quality-team",
   "version": "1.0.0",
   "description": "Chinese medical quality team covering clinical review, health-data quality and compliance review.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "license": "Apache-2.0",
   "expertType": "team",
   "agentName": "med-quality-lead",
@@ -48,7 +45,7 @@
     "en": "Chinese medical quality team covering clinical review, health-data quality and compliance review."
   },
   "avatar": "avatars/team.png",
-  "categoryId": "12-IndustryConsultant",
+  "categoryId": "medical-ops",
   "defaultInitPrompt": {
     "zh": "帮我复盘这起医疗质量事件，先临床复核再做合规审查。",
     "en": "Help me review this medical quality incident, starting with clinical review and ending with compliance review."
@@ -150,5 +147,6 @@
         "zh": "数据质控专家"
       }
     }
-  ]
+  ],
+  "categoryName": "医疗运营"
 }

@@ -15,10 +15,9 @@ category: 监管合规
 参考实现：agent-for-legal-cn/legal-skillpack-regulatory-legal/skills/regulatory-incoming-letter/
 -->
 
-
 # /regulatory-incoming-letter
 
-1. 读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 公司画像、escalation_path、归口部门联系人
+1. 读 `执业配置文件（请按当前系统指引创建）` → 公司画像、escalation_path、归口部门联系人
 2. 用下面的 7 阶段工作流
 3. 录入（OCR + 字段抽取）→ 自动归类（6 分法）→ 按类处置 → 任务派发 → 进度跟踪 → 上报材料汇总 → 闭环
 4. 关键截止日自动锁到监管要求回复期前的内部缓冲日期（默认 5 个工作日）
@@ -26,10 +25,6 @@ category: 监管合规
 ---
 
 ## 事项上下文
-
-**事项上下文**：核查实务层级 `PLUGIN.md` 中 `## 事项工作区`。如果 `已启用` 是 `✗`（企业内部法务用户默认），跳过本段——技能用实务层级上下文，事项机制不可见。如果启用且没有当前事项，问："这是哪个事项？跑 `regulatory-matter-workspace switch <slug>` 或说切到实务层级。"
-
-对监管下发函的特殊处理：**每一份独立的监管函件都可以视作一个独立事项**（特别是涉及处罚/约谈类高风险函件）。建议在私人执业场景下为重要函件单独建事项，企业内部法务场景下走实务层级 + 内规差异台账（`gap-tracker.yaml`）跟踪。
 
 ---
 
@@ -91,7 +86,7 @@ reg-feed-watcher 可能会捕获到"金管总局自查工作函"等普遍性通�
 
 ### 1.3 抽取结果保存
 
-抽取后落地为结构化 YAML 文件到 `${WORKBUDDY_EXPERT_DATA}/incoming-letters/<letter-id>/letter.yaml`，附原始扫描件 / 文本副本到同目录。
+抽取后落地为结构化 YAML 文件到 `{expert_runtime_dir}/incoming-letters/<letter-id>/letter.yaml`，附原始扫描件 / 文本副本到同目录。
 
 `letter-id` 命名建议：`YYYY-MM-DD-<监管缩写>-<文号尾号>`，例如 `2026-05-25-金管沪-XX`。
 
@@ -206,7 +201,7 @@ reg-feed-watcher 可能会捕获到"金管总局自查工作函"等普遍性通�
 
 ## 第 4 步：任务派发（拆解为 inspection-task）
 
-将函件要求事项拆解为 N 条 `inspection-task` 类型的整改事项，写入 `${WORKBUDDY_EXPERT_DATA}/gap-tracker.yaml`：
+将函件要求事项拆解为 N 条 `inspection-task` 类型的整改事项，写入 `{expert_runtime_dir}/gap-tracker.yaml`：
 
 ```yaml
 gaps:
@@ -457,6 +452,5 @@ gaps:
 - **不**做监管沟通策略建议（如"要不要主动联系执法人员"等——这是合规/公关策略，超出本技能范围）
 
 详细 6 分法处置规则见 `letter-classification-rules`；`inspection-task` 模板见 `inspection-task-template`。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

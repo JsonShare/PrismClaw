@@ -42,6 +42,9 @@ services:
       PRISMCLAW_STORAGE_SESSION_BACKEND: redis
       PRISMCLAW_STORAGE_LOCK_BACKEND: redis
       PRISMCLAW_AFFINITY_ENABLED: "true"
+      # 模块发布版本/包 hash 对齐；current 缺失或不符时健康检查 fail-closed。
+      PRISMCLAW_MODULE_RELEASE_COORDINATED: "true"
+      PRISMCLAW_MODULE_RELEASE_KEY_PREFIX: ${PRISMCLAW_MODULE_RELEASE_KEY_PREFIX:-prismclaw:modules}
       # Redis 密码：deploy/configs/infra.yaml 的 redis.password 用 {env:} 引用
       REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in deploy/.env}
       # ── Web channel auth ─────────────────────────────────────────────

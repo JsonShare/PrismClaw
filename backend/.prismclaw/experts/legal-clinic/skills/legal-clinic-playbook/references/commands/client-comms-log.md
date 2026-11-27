@@ -8,15 +8,12 @@ argument_hint: '[case-id] [--add（默认） | --read | --summary | --patterns]'
 category: 法律诊所
 ---
 
-
-
-
 # /client-comms-log
 
 1. 使用以下工作流。
 2. 需要 case-id（如果未提供则提示）。
 3. 按标记路由：
-   - `--add`（默认）：捕获方向、媒介、学生、摘要、行动项目、后续到期。与用户确认。追加（最近优先）到 `${WORKBUDDY_EXPERT_DATA}/client-comms/[case-id]/log.md`。
+   - `--add`（默认）：捕获方向、媒介、学生、摘要、行动项目、后续到期。与用户确认。追加（最近优先）到 `{expert_runtime_dir}/client-comms/[case-id]/log.md`。
    - `--read`：显示最近的 N 个条目。
    - `--summary`：一段式压缩阅读。
    - `--patterns`：扫描未回复的沟通、错过的后续、语言差距、语气转变、联系空白。监督导向。
@@ -39,8 +36,8 @@ category: 法律诊所
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/client-comms/[case-id]/log.md`（如果存在）— 追加目标
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 不大量阅读；此 skill 是案件范围的
+- `{expert_runtime_dir}/client-comms/[case-id]/log.md`（如果存在）— 追加目标
+- `执业配置文件（请按当前系统指引创建）` → 不大量阅读；此 skill 是案件范围的
 
 ## 模式
 
@@ -65,7 +62,7 @@ category: 法律诊所
 
 **写入之前：** 向用户显示格式化的条目并请求确认。诊所记录应该在写入之前审查，而不是之后。
 
-**追加**到 `${WORKBUDDY_EXPERT_DATA}/client-comms/[case-id]/log.md`。如果日志不存在，创建它并带有标题：
+**追加**到 `{expert_runtime_dir}/client-comms/[case-id]/log.md`。如果日志不存在，创建它并带有标题：
 
 ```markdown
 # 沟通日志——[案件名称]
@@ -116,6 +113,5 @@ category: 法律诊所
 - **编辑过去的条目。** 仅追加。如果条目错误，写一个新条目引用并更正它。日志的完整性取决于不重写历史。
 - **强制记录纪律。** 如果学生没有记录通话，skill 无法知道。记录卫生是诊所文化问题；skill 只是使记录变得容易。
 - **处理特权或仅限律师的备注。** 如果学生需要记录战略思维，那应该进入案件的内部分析文件，而不是沟通日志。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

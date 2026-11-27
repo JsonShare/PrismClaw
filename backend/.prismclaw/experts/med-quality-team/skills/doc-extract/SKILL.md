@@ -52,7 +52,6 @@ const text = extract(lit, "/path/to/file.pdf"); // string | null
 
 调用方自行管理缓存与临时文件；本脚本不写盘。
 
-
 ---
 
 ## 医疗安全声明

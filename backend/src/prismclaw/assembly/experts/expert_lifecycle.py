@@ -160,7 +160,17 @@ class ExpertLifecycleManager:
         extension_manager = self._build_extension_manager()
         from prismclaw.assembly.experts.load_wiring import assemble_expert_load_result
 
-        load_result = await assemble_expert_load_result(directories=directories)
+        # 全局基础技能（asset_skills_dir）单向注入：所有专家包激活时自动可见，
+        # 但全局 skill 加载时不反向依赖专家技能目录。
+        extra_skill_dirs: list[Path] = []
+        _asset = self._settings.skills.asset_skills_dir
+        if _asset:
+            extra_skill_dirs.append(Path(_asset).expanduser())  # noqa: ASYNC240
+
+        load_result = await assemble_expert_load_result(
+            directories=directories,
+            extra_skill_dirs=extra_skill_dirs,
+        )
         from prismclaw.engine.experts.registry.expert_registry import (
             ExpertRegistry,
             ExpertRegistryIssue,

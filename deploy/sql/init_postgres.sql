@@ -249,6 +249,8 @@ CREATE TABLE IF NOT EXISTS pc_scheduled_tasks (
     consecutive_failures INTEGER NOT NULL DEFAULT 0,
     created_at           DOUBLE PRECISION NOT NULL,
     max_age_days         INTEGER NOT NULL DEFAULT 30,
+    valid_from           DOUBLE PRECISION,
+    valid_until          DOUBLE PRECISION,
     missed_policy        VARCHAR NOT NULL DEFAULT 'skip',
     CONSTRAINT ck_pc_sched_tasks_last_status
         CHECK (last_status IN ('idle','running','success','failed','disabled')),
@@ -258,6 +260,13 @@ CREATE TABLE IF NOT EXISTS pc_scheduled_tasks (
 
 CREATE INDEX IF NOT EXISTS idx_pc_sched_tasks_user_workspace
     ON pc_scheduled_tasks (user_id, workspace_id);
+
+-- 存量库升级：有效期区间（CREATE TABLE IF NOT EXISTS 不会补列）
+ALTER TABLE pc_scheduled_tasks
+    ADD COLUMN IF NOT EXISTS valid_from DOUBLE PRECISION;
+ALTER TABLE pc_scheduled_tasks
+    ADD COLUMN IF NOT EXISTS valid_until DOUBLE PRECISION;
+
 CREATE INDEX IF NOT EXISTS idx_pc_sched_tasks_enabled
     ON pc_scheduled_tasks (enabled) WHERE enabled = true;
 

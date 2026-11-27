@@ -8,13 +8,10 @@ argument_hint: '[学科, 或 --mbe / --essay / --session <n>]'
 category: 法学学习
 ---
 
-
-
-
 # /bar-prep-questions
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 律师考试司法管辖区、考试格式（NextGen / 传统 UBE / 州特定）、薄弱学科、预备课程。
-2. 也加载 `${WORKBUDDY_EXPERT_DATA}/study-plan.yaml`（如果存在）——它告诉你今天安排了什么学科以及哪些子主题仍然薄弱。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 律师考试司法管辖区、考试格式（NextGen / 传统 UBE / 州特定）、薄弱学科、预备课程。
+2. 也加载 `{expert_runtime_dir}/study-plan.yaml`（如果存在）——它告诉你今天安排了什么学科以及哪些子主题仍然薄弱。
 3. 应用以下框架。
 4. **考试类型门控（不要跳过）。** 如果执业档案中没有考试格式或司法管辖区，在生成任何内容之前询问。NextGen Bar Exam 和传统 UBE 测试的学科有实质性差异——学习错误的列表是唯一无法恢复的错误。指向学生的 NCBE 司法管辖区页面（<https://www.ncbex.org/>）以确认他们的考试格式和学科范围。
 5. **司法管辖区规则门控。** 如果学生的司法管辖区有州特定组成部分（CA、LA、NY Law Exam、FL 州论文、VA 等），并且该学科是多数规则与州规则分歧的地方（Evidence、PR、Civ Pro、Criminal），询问此会话是 UBE/多数规则、州特定还是混合。不要静默默认。
@@ -43,7 +40,7 @@ category: 法学学习
 
 不要假设学科列表。在生成任何问题之前：
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 并阅读律师考试司法管辖区和考试日期。
+1. 加载 `执业配置文件（请按当前系统指引创建）` 并阅读律师考试司法管辖区和考试日期。
 2. 如果执业档案未指定学生参加的考试格式（NextGen / 传统 UBE / 州特定），**询问**：
 
    > 你参加哪个律师考试？
@@ -140,13 +137,13 @@ Skill 不够自信地了解每个州的特性。如果学生的司法管辖区�
 
 ## 加载上下文
 
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 律师考试司法管辖区、考试格式（NextGen / 传统 UBE / 州特定）、薄弱学科、预备课程。如果未指定考试格式，在继续之前运行上面的"考试类型"门控。如果指定了司法管辖区，应用 `## 司法管辖区处理` 规则——按哪个规则体系管辖标记问题，并明确标记分歧。
+`执业配置文件（请按当前系统指引创建）` → 律师考试司法管辖区、考试格式（NextGen / 传统 UBE / 州特定）、薄弱学科、预备课程。如果未指定考试格式，在继续之前运行上面的"考试类型"门控。如果指定了司法管辖区，应用 `## 司法管辖区处理` 规则——按哪个规则体系管辖标记问题，并明确标记分歧。
 
-也加载 `${WORKBUDDY_EXPERT_DATA}/study-plan.yaml`（如果存在）（由 `study-plan` skill 编写）。如果计划有今天安排的会话或指定了要加权的薄弱学科，尊重它。
+也加载 `{expert_runtime_dir}/study-plan.yaml`（如果存在）（由 `study-plan` skill 编写）。如果计划有今天安排的会话或指定了要加权的薄弱学科，尊重它。
 
 ## 会话模式
 
-`--session <n>` 在特定学科上运行专注的 N 题会话，跟踪表现，并将会话结果写回 `${WORKBUDDY_EXPERT_DATA}/study-plan.yaml` 的 `session_history`，以便学习计划适应。
+`--session <n>` 在特定学科上运行专注的 N 题会话，跟踪表现，并将会话结果写回 `{expert_runtime_dir}/study-plan.yaml` 的 `session_history`，以便学习计划适应。
 
 学生可能使用的触发措辞："let's do 5 questions on Contracts"、"run me 10 Evidence questions"、"`skills/law-trainee-playbook/references/commands/session.md` Evidence 10"。
 
@@ -183,7 +180,7 @@ session_history:
     jurisdiction_mode: mixed  # or ube / state-specific
 ```
 
-如果没有 `study-plan.yaml` 存在，将会话历史写入 `${WORKBUDDY_EXPERT_DATA}/session-history.yaml`，以便未来会话仍可适当加权。
+如果没有 `study-plan.yaml` 存在，将会话历史写入 `{expert_runtime_dir}/session-history.yaml`，以便未来会话仍可适当加权。
 
 ## MBE 模式
 
@@ -194,7 +191,7 @@ session_history:
 经典 MBE 格式（传统 UBE）：事实模式 + 调用 + 四个答案选择，一个正确。
 NextGen 格式：参考 NCBE 网站上发布的 NextGen 样本问题了解当前权威格式并模仿该结构。
 
-学科分布：向薄弱学科加权**在实际测试学生考试的学科范围内**。如果 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 说 Evidence 和 Civ Pro 薄弱，60% 的问题来自这些。
+学科分布：向薄弱学科加权**在实际测试学生考试的学科范围内**。如果 `执业配置文件（请按当前系统指引创建）` 说 Evidence 和 Civ Pro 薄弱，60% 的问题来自这些。
 
 难度：律师考试级别。不是法学院问题识别器难度（那个更高）。律师考试问题是关于知道黑字规则并干净地应用它。
 
@@ -271,6 +268,5 @@ NextGen 格式：参考 NCBE 网站上发布的 NextGen 样本问题了解当前
 - 预测律师考试。没有人能。学习一切。
 - 替你通过律师考试。显然。
 - **在不标记的情况下陈述它不够自信的规则。** 如果我不确定规则是对的，你会看到 `[UNCERTAIN]` 或 `[VERIFY]`——在依赖问题前对照预备课程检查引用的规则。自信陈述的错误规则比我跳过的学习会话更糟糕。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

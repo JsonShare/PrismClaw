@@ -22,7 +22,7 @@ import urllib.request
 
 BASE_URL = "https://clinicaltrials.gov/api/v2"
 TIMEOUT = 30
-UA = "WorkBuddy-clinical-med/0.1"
+UA = "PrismClaw-clinical-med/0.1"
 
 VALID_STATUS = {
     "RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION",

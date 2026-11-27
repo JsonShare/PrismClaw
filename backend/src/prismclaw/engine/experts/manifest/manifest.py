@@ -1,7 +1,8 @@
-"""专家包 Manifest Schema。
+"""专家包 Manifest 的不透明解析模型。
 
-支持的字段：metadata、hooks、commands、agents、skills、dependencies。
-不支持的字段：channels、lsp_servers、keywords、settings、output_styles。
+本模型只负责把 ``.plugin/plugin.json`` 解析成对象，字段是否存在由包级校验
+``validate_expert_package`` 决定：``hooks``、``commands``、``mcp`` 等禁项在该层
+显式拒绝，不在此处做语义解释。
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ class ExpertManifest(BaseModel):
     version: str | None = None
     description: str | None = None
     author: ExpertAuthor | None = None
-    dependencies: list[str] | None = None  # "name" 或 "name@marketplace"
+    dependencies: list[str] | None = None  # 非空字符串形式的包名列表
     expert_type: Literal["agent", "team"] | None = Field(default=None, alias="expertType")
     agent_name: str | None = Field(default=None, alias="agentName")
 

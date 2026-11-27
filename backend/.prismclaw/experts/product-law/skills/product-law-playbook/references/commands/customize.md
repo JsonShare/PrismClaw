@@ -9,13 +9,11 @@ category: 产品合规
 customizes: product-legal
 ---
 
-
-
 # 自定义产品合规配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一层级的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一层级的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -39,7 +37,7 @@ customizes: product-legal
 - *新的发布审查类别：* "`/launch-review` 将为此类别添加一个部分。`/is-this-a-problem` 将在分流中模式匹配它。"
 - *营销声明姿态收紧：* "`/marketing-claims-review` 将标记更多需要证实或重写的语言。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并注意影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并注意影响范围。修改后保存。
 
 ## 关闭
 

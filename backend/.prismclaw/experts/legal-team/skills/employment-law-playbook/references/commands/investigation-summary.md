@@ -7,9 +7,6 @@ argument_hint: '[事项名称] [受众: hr / leadership / outside-counsel]'
 category: 劳动用工
 ---
 
-
-
-
 # /investigation-summary
 
 从保密调查备忘录起草精简的、面向受众的摘要。HR 摘要不包含律师的法律分析。领导层摘要为高级别概览。外部律师简报包含完整上下文。
@@ -52,6 +49,5 @@ category: 劳动用工
 ```
 
 > 详细的受众剥离规则和摘要模板位于 `internal-investigation` 参考 skill 中——在进行实质性工作之前加载它。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

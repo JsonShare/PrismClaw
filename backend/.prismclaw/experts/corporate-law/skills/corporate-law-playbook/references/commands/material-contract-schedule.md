@@ -16,8 +16,6 @@ category: 公司法务
 
 ## Matter context
 
-**Matter context.** Check `## Matter workspaces` in the practice-level PLUGIN.md. If `Enabled` is `✗` (the default for in-house users), skip the rest of this paragraph — skills use practice-level context and the matter machinery is invisible. If enabled and there is no active matter, ask: "Which matter is this for? Run `skills/corporate-law-playbook/references/commands/matter-workspace.md switch <slug>` or say `practice-level`." Load the active matter's `matter.md` for matter-specific context and overrides. Write outputs to the matter folder at `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`. Never read another matter's files unless `Cross-matter context` is `on`.
-
 ---
 
 ## Purpose
@@ -27,7 +25,7 @@ The purchase agreement has a rep: "Schedule 3.X lists all Material Contracts." T
 ## Load context
 
 - Purchase agreement draft — for the definition of "Material Contract" and the schedule format
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → materiality thresholds (may differ from the agreement definition — use the agreement's)
+- `执业配置文件（请按当前系统指引创建）` → materiality thresholds (may differ from the agreement definition — use the agreement's)
 - Diligence findings from diligence-issue-extraction — contract-level data
 
 ## Workflow
@@ -116,7 +114,6 @@ Separately (not in the schedule itself — this is internal), track which schedu
 
 > The consent overlay and any pre-delivery working draft of the schedule are derived from privileged diligence materials and inherit their privilege and confidentiality status — distribution beyond the privilege circle can waive privilege. The schedule itself, once delivered as an exhibit to the executed PA, is a deal document and is not privileged; strip any internal annotations before delivery.
 
-
 | Schedule # | Counterparty | Consent required | Status | Owner | Due |
 |---|---|---|---|---|---|
 | 3.X(a)(1) | [name] | Yes — CoC §12.2 | Requested | [name] | [date] |
@@ -142,6 +139,5 @@ Before delivering:
 - It doesn't decide the materiality definition — that's in the purchase agreement.
 - It doesn't obtain consents — it tracks which ones are needed.
 - It doesn't draft the rep — it populates the schedule the rep references.
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

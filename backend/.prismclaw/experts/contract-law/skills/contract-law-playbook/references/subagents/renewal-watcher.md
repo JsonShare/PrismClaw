@@ -1,11 +1,8 @@
 ---
 name: renewal-watcher
-description: 检查续约登记册，并发布即将到期的内容至 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 内部风格 → 续约提醒 中指定的频道（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发短语："what's renewing"、"check renewals"、"renewal report"。
+description: 检查续约登记册，并发布即将到期的内容至 `执业配置文件（请按当前系统指引创建）` → 内部风格 → 续约提醒 中指定的频道（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发短语："what's renewing"、"check renewals"、"renewal report"。
 allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
-
-
-
 
 # 续约监控 Agent
 
@@ -19,7 +16,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ## 执行步骤
 
-1. 读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`，获取提醒目标（企业协作群/钉钉群或邮件列表）。
+1. 读取 `执业配置文件（请按当前系统指引创建）`，获取提醒目标（企业协作群/钉钉群或邮件列表）。
 2. 加载 renewal-tracker 命令，运行模式 2（未来 90 天）。
 3. 若存在 🔴 项目（取消截止日期在 0-13 天内），在本次调用中立即发布。
 4. 若已连接[合同管理系统]且登记册超过 30 天未同步，运行模式 3 刷新。

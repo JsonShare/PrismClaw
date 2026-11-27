@@ -7,17 +7,7 @@ category: 雇佣法务
 invocation_policy: user_only
 ---
 
-
-
-
 # 员工手册/规章制度更新
-
-## 事项上下文
-
-**事项上下文。** 检查执业级 PLUGIN.md 是否配置了事项工作区（`## Matter workspaces` 段；未配置即按关闭处理）。如果未启用（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/employment-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `跨事项上下文` 为 `on`，否则永远不要阅读另一个事项的文件。
-
----
-
 ## 目的
 
 规章制度更改有连锁效应。更改加班管理政策，你就影响了加班费基数认定、年休假政策交叉引用和三个省市补充。此 skill 在连锁效应变成不一致之前找到它们。
@@ -27,7 +17,7 @@ invocation_policy: user_only
 
 ## 加载上下文
 
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 员工手册位置、省市补充列表、更新节奏。
+`执业配置文件（请按当前系统指引创建）` → 员工手册位置、省市补充列表、更新节奏。
 
 ## 工作流
 
@@ -59,7 +49,7 @@ invocation_policy: user_only
 
 ### 步骤 4：省市补充影响
 
-对于 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的每个省市补充：
+对于 `执业配置文件（请按当前系统指引创建）` 中的每个省市补充：
 
 - 此补充是否修改正在更改的部分？
 - 更改是否使补充过时、错误或不完整？
@@ -133,6 +123,5 @@ invocation_policy: user_only
 - 批准规章制度更改。HR/法务负责人做这件事（并须满足民主程序要求）。
 - 向员工传达更改（须通过公示告知方式）。
 - 跟踪员工签收情况。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

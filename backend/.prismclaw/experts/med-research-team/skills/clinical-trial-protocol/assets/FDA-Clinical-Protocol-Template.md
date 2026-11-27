@@ -40,7 +40,6 @@ Code of Federal Regulations (CFR)
 
 - [21 CFR Part 56: Institutional Review Boards](https://www.ecfr.gov/cgi-bin/text-idx?SID=64724709940d94a34270c77fdb8d307f&mc=true&node=pt21.1.56&rgn=div5)
 
-
 - [21 CFR Part 58: Good Laboratory Practice for Nonclinical Laboratory Studies](http://www.ecfr.gov/cgi-bin/text-idx?SID=90f8b344173d4c43e0c515d0a0cbc4de&mc=true&node=pt21.1.58&rgn=div5)
 
 - [21 CFR Part 210: Current Good Manufacturing Practice In Manufacturing, Processing, Packing, Or Holding Of Drugs; General](http://www.ecfr.gov/cgi-bin/text-idx?SID=90f8b344173d4c43e0c515d0a0cbc4de&mc=true&node=pt21.4.210&rgn=div5)
@@ -82,11 +81,9 @@ Department of Health and Human Services (HHS)
 
 - [The HIPAA Privacy Rule](http://www.hhs.gov/hipaa/for-professionals/privacy/)
 
-
 [HIPAA Privacy Rule: Information for Researchers](https://www.hhs.gov/hipaa/for-professionals/special-topics/research/index.html)
 
 International Conference on Harmonisation of Technical Requirements for Registration of Pharmaceuticals for Human Use (ICH)
-
 
 - [Guidance for Industry, E6 (R2) Good Clinical Practice: Consolidated Guidance](http://www.fda.gov/downloads/Drugs/GuidanceComplianceRegulatoryInformation/Guidances/UCM464506.pdf)
 - [Guidance for Industry, M3(R2) Nonclinical Safety Studies for the Conduct of Human Clinical Trials and Marketing Authorization for Pharmaceuticals](http://www.fda.gov/downloads/drugs/guidancecomplianceregulatoryinformation/guidances/ucm073246.pdf)
@@ -121,7 +118,6 @@ National Institutes of Health (NIH)
 
 - [NIH Grants Policy Statement, Section 8.2 Availability of Research Results: Publications, Intellectual Property Rights, and Sharing Research Resources](http://grants.nih.gov/grants/policy/nihgps/HTML5/section_8/8.2_availability_of_research_results_publications__intellectual_property_rights__and_sharing_research_resources.htm)
 
-
 - [NIH Policy on the Dissemination of NIH-Funded Clinical Trial Information](https://www.gpo.gov/fdsys/pkg/FR-2016-09-21/pdf/2016-22379.pdf)
 - [NIH Public Access Policy Details](http://publicaccess.nih.gov/policy.htm)
 
@@ -150,7 +146,6 @@ Other
 - [Citing Medicine, 2nd edition: The NLM Style Guide for Authors, Editors, and Publishers](http://www.ncbi.nlm.nih.gov/books/NBK7256/)
 
 - [CONSORT statement](http://www.consort-statement.org/)
-
 
 - [International Committee of Medical Journal Editors (ICMJE): Recommendations](http://www.icmje.org/recommendations/)
 
@@ -568,7 +563,6 @@ An objective is the purpose for performing the study in terms of the scientific 
 
 *Primary and secondary endpoints should be adjusted for multiplicity. If a claim is sought for the secondary endpoints, the statistical plan for adjustment for multiplicity should be aligned with those objectives.*
 
-
 | OBJECTIVES | ENDPOINTS | JUSTIFICATION FOR ENDPOINTS |
 |------------|-----------|----------------------------|
 | **Primary** | | |
@@ -579,7 +573,6 @@ An objective is the purpose for performing the study in terms of the scientific 
 | *Tertiary/exploratory objective(s) serve as a basis for explaining or supporting findings of primary analyses and for suggesting further hypotheses for later research.* | *Exploratory endpoints should be specified. Exploratory endpoints may include clinically important events that are expected to occur too infrequently to show a treatment effect or endpoints that for other reasons are thought to be less likely to show an effect but are included to explore new hypotheses.* | *Briefly explain why the endpoint(s) were chosen.* |
 
 *Endpoints that are not listed in an alpha conserving plan will be considered exploratory.*
-
 
 # 4 STUDY DESIGN
 
@@ -1665,7 +1658,6 @@ When the study is completed, access to study data and/or samples will be provide
 
 *Provide the name and contact information of the Principal Investigator and the Medical Monitor.*
 
-
   **Principal Investigator**   **Medical Monitor**
 
   *Name, degree, title*        *Name, degree, title*
@@ -1677,7 +1669,6 @@ When the study is completed, access to study data and/or samples will be provide
   *Phone Number*               *Phone Number*
 
   *Email*                      *Email*
-
 
 *In addition, briefly describe any study leadership committees (e.g.: Steering Committee, Executive Committee, Subcommittee) and their roles. Note that it is not necessary to list specific members. Also, describe country-specific administrative requirements or functions that materially affect the conduct of the study. The MOP should include a list of study team roles and responsibilities of those involved in the conduct, management, or oversight of the trial.*
 
@@ -1875,7 +1866,6 @@ In addition, this study will comply with the NIH Genomic Data Sharing Policy, wh
 
 *The list below includes abbreviations utilized in this template. However, this list should be customized for each protocol (i.e., abbreviations not used should be removed and new abbreviations used should be added to this list).*
 
-
   AE        Adverse Event
   ---------
   ANCOVA    Analysis of Covariance
@@ -1976,17 +1966,14 @@ In addition, this study will comply with the NIH Genomic Data Sharing Policy, wh
 
   US        United States
 
-
 **
 
 ## 10.4 Protocol Amendment History
 
 *The table below is intended to capture changes of IRB-approved versions of the protocol, including a description of the change and rationale. A Summary of Changes table for the current amendment is located in the Protocol Title Page.*
 
-
   **Version**   **Date**   **Description of Change**   **Brief Rationale**
   ------------- ----------
-
 
 # 11 REFERENCES
 

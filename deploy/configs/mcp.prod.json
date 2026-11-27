@@ -1,0 +1,17 @@
+{
+  "connectors": {
+    "web-search-mcp": {
+      "enabled": true,
+      "transport": "streamable-http",
+      "url": "{env:WEB_SEARCH_MCP_URL}",
+      "headers": {
+        "X-WSM-Token": "{env:WEB_SEARCH_MCP_TOKEN}"
+      },
+      "trust_annotations": true,
+      "forced_tool_class": "read",
+      "deferred": false,
+      "connect_timeout_seconds": 15.0,
+      "call_timeout_seconds": 90.0
+    }
+  }
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,6 +21,9 @@ logger = logging.getLogger(__name__)
 REQUIRED_EXTENSIONS = ("vchord", "pg_tokenizer", "vchord_bm25", "vector")
 
 SchemaTarget = AsyncEngine | async_sessionmaker[AsyncSession]
+
+#: 域自建 SQL 脚本目录（相对域包根），启动时自动扫描并按文件名升序执行。
+DOMAIN_SQL_SUBDIR = Path("deploy") / "sql"
 
 _DOLLAR_TAG = re.compile(r"\$[A-Za-z0-9_]*\$")
 _APPLIED: set[tuple[str, str]] = set()
@@ -208,16 +212,44 @@ async def apply_core_schema(target: SchemaTarget) -> None:
     )
 
 
-async def apply_domain_schema(target: SchemaTarget, domain_key: str) -> None:
-    path = sql_root() / f"init_{domain_key}.sql"
-    if not path.is_file():
-        logger.error(
-            "域 %s 已激活，但缺少初始化脚本：%s\n"
-            "请补齐该文件，或在 domains.yaml 将 %s.enabled 设为 false / 使用 "
-            "PRISMCLAW_DOMAINS 裁剪。\n（仅含注释的空文件是允许的）",
-            domain_key,
-            path,
-            domain_key,
-        )
-        return
-    await _apply_file(target, path, required=False)
+def domain_sql_dir(bundle: object) -> Path | None:
+    """定位域包内的 ``deploy/sql`` 目录。
+
+    约定：``subpackages/<域>/deploy/sql/*.sql``。从 Bundle 类的模块文件
+    向上最多 4 层查找，兼容 ``integration/bundle.py`` 与扁平 ``bundle.py``。
+    找不到返回 ``None``（该域没有自建业务表）。
+    """
+    module = sys.modules.get(type(bundle).__module__)
+    module_file = getattr(module, "__file__", None)
+    if not module_file:
+        return None
+
+    current = Path(module_file).resolve().parent
+    for _ in range(4):
+        candidate = current / DOMAIN_SQL_SUBDIR
+        if candidate.is_dir():
+            return candidate
+        if current == current.parent:
+            break
+        current = current.parent
+    return None
+
+
+async def apply_domain_sql(target: SchemaTarget, bundle: object) -> int:
+    """启动时扫描并执行域自建 SQL 脚本，返回执行的文件数。
+
+    - 文件名升序执行，建议使用 ``001_``、``002_`` 之类的前缀固定顺序。
+    - 每个文件独立持有 advisory lock，语句须为 ``IF NOT EXISTS`` 等幂等写法。
+    - 域没有 ``deploy/sql`` 目录视为「无业务表」，跳过且不报错。
+    """
+    name = getattr(bundle, "name", "unknown")
+    sql_dir = domain_sql_dir(bundle)
+    if sql_dir is None:
+        logger.debug("域 %s 未提供 %s，跳过 SQL 扫描", name, DOMAIN_SQL_SUBDIR)
+        return 0
+
+    files = sorted(path for path in sql_dir.glob("*.sql") if path.is_file())
+    for path in files:
+        await _apply_file(target, path, required=False)
+    logger.info("域 %s SQL 扫描完成：%s（%d 个文件）", name, sql_dir, len(files))
+    return len(files)

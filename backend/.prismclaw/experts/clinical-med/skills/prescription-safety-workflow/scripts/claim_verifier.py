@@ -193,7 +193,7 @@ def _run_tests() -> None:
 
 
 def _cli_main(argv: list[str]) -> None:
-    """WorkBuddy 技能 CLI 入口。
+    """PrismClaw 技能 CLI 入口。
 
     --selftest           运行内置自测，打印每条 PASS/FAIL。
     --input <json文件>   从文件读取输入 JSON，调用 verify() 并打印结果 JSON。

@@ -7,12 +7,9 @@ argument_hint: '[--init | --report [--days N] | --update [--from-report] | --swe
 category: 公司法务
 ---
 
-
-
-
 # /entity-compliance
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `## Entity Management`（实体表、司法管辖区、注册代理人）。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → `## Entity Management`（实体表、司法管辖区、注册代理人）。
 2. 根据标志路由到以下正确模式：
    - 无标志或 `--init`：模式 1 ——从实体表初始化跟踪器
    - `--report`：模式 2 ——显示即将到期的截止期限和逾期项目
@@ -20,14 +17,14 @@ category: 公司法务
    - `--sweep`：模式 3c ——逐个浏览未知/逾期项目
    - `--audit`：模式 4 ——完整健康审计
    - `--export`：模式 5 ——生成 CSV 或表格导出
-3. 读/写 `${WORKBUDDY_EXPERT_DATA}/entities/compliance-tracker.yaml`。
+3. 读/写 `{expert_runtime_dir}/entities/compliance-tracker.yaml`。
 4. 任何更新后：显示变更摘要和下一步行动。
 
 ---
 
 ## 目的
 
-工商年报公示、营业执照续期、外商投资企业年报、税务合规申报——每个主体每年都有自己的合规时间表和错过截止期限的后果。此 skill 维护一个单一的 YAML 跟踪器，知道什么到期、何时到期、以及哪个主体到期。跟踪器是你拥有的文件，WorkBuddy 按命令更新它，你在需要共享时导出它。
+工商年报公示、营业执照续期、外商投资企业年报、税务合规申报——每个主体每年都有自己的合规时间表和错过截止期限的后果。此 skill 维护一个单一的 YAML 跟踪器，知道什么到期、何时到期、以及哪个主体到期。跟踪器是你拥有的文件，（外部 AI 产品） 按命令更新它，你在需要共享时导出它。
 
 ## 重要：截止日期说明
 
@@ -68,7 +65,7 @@ category: 公司法务
 
 ## Tracker file
 
-位于 `${WORKBUDDY_EXPERT_DATA}/entities/compliance-tracker.yaml`。结构：
+位于 `{expert_runtime_dir}/entities/compliance-tracker.yaml`。结构：
 
 ```yaml
 # 主体合规跟踪器 - 中国公司合规
@@ -131,7 +128,7 @@ entities:
 
 ### Step 1: Load entity table
 
-阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `## Entity Management` → 实体表。如果实体表已填充（从冷启动时的组织结构图上传），直接使用它。如果没有，要求用户运行冷启动模块或提供实体列表。
+阅读 `执业配置文件（请按当前系统指引创建）` → `## Entity Management` → 实体表。如果实体表已填充（从冷启动时的组织结构图上传），直接使用它。如果没有，要求用户运行冷启动模块或提供实体列表。
 
 ### Step 2: For each entity × jurisdiction, confirm the filing requirements
 
@@ -186,7 +183,7 @@ custom_jurisdictions:
 
 ### Step 3: Write the tracker
 
-生成 `${WORKBUDDY_EXPERT_DATA}/entities/compliance-tracker.yaml`，其中包含所有实体及其计算的申报要求。设置初始状态：
+生成 `{expert_runtime_dir}/entities/compliance-tracker.yaml`，其中包含所有实体及其计算的申报要求。设置初始状态：
 - 如果 last_filed 在当前申报期内，则为 `current`
 - 如果在 90 天内到期且当前期间无 last_filed，则为 `due_soon`
 - 如果到期日期已过且当前期间无 last_filed，则为 `overdue`
@@ -249,7 +246,7 @@ GOOD STANDING：
   过去 12 个月内未确认的实体：[list]
 ```
 
-如果跟踪器涵盖超过约 10 个实体，或任何时候用户询问：提供仪表板（请参阅 PLUGIN.md `## Outputs → Dashboard offer for data-heavy outputs`）。为此输出塑造提议——按申报状态计数（逾期 / 即将到期 / 已申报 / 未知），按良好信誉状态计数，以及带有司法管辖区、申报类型和下次到期日期的可排序实体表。
+如果跟踪器涵盖超过约 10 个实体，或任何时候用户询问：提供仪表板（请参阅 系统配置 `## Outputs → Dashboard offer for data-heavy outputs`）。为此输出塑造提议——按申报状态计数（逾期 / 即将到期 / 已申报 / 未知），按良好信誉状态计数，以及带有司法管辖区、申报类型和下次到期日期的可排序实体表。
 
 ---
 
@@ -259,7 +256,7 @@ GOOD STANDING：
 
 ### Consequential-action gate (file SOI / annual report)
 
-**在指示或确认申报之前：** 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的 `## Who's using this`。如果角色是 **非律师**：
+**在指示或确认申报之前：** 阅读 `执业配置文件（请按当前系统指引创建）` 中的 `## Who's using this`。如果角色是 **非律师**：
 
 > 与州务卿提交信息声明、年度报告或特许经营税申报表有法律后果——这是实体的正式陈述，它带有费用，错过或错误的申报可能导致失去良好信誉或特许经营税违约。您在申报前是否与律师（或合格的注册代理人）审查了此内容？如果是，继续记录申报。如果否，这是带给他们的简报：
 >
@@ -279,10 +276,10 @@ GOOD STANDING：
 `skills/corporate-law-playbook/references/commands/entity-compliance.md` --update
 ```
 
-律师告诉 WorkBuddy 申报了什么：
+律师告诉 （外部 AI 产品） 申报了什么：
 > "我们在 3 月 1 日为 [Entity] 提交了特拉华年度报告。费用是 $450。"
 
-WorkBuddy 更新：
+（外部 AI 产品） 更新：
 - `last_filed` → 3 月 1 日日期
 - `last_fee` → $450
 - `status` → `current`
@@ -294,7 +291,7 @@ WorkBuddy 更新：
 `skills/corporate-law-playbook/references/commands/entity-compliance.md` --update --from-report
 ```
 
-用户上传 CT Corp、National Registered Agents 或类似的合规报告（PDF、CSV 或 Excel）。WorkBuddy 阅读它并更新匹配的实体：
+用户上传 CT Corp、National Registered Agents 或类似的合规报告（PDF、CSV 或 Excel）。（外部 AI 产品） 阅读它并更新匹配的实体：
 
 从报告中，为每个实体提取：
 - 申报类型和到期日期
@@ -351,10 +348,10 @@ WorkBuddy 更新：
 - `confirmed_good_standing` 超过 12 个月的实体——过时；值得刷新，特别是如果预期 M&A 或融资。
 
 **外国资格差距：**
-- 基于 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 实体表：公司的运营足迹（办公室、员工）所在的州是否有实体未外国合格？这需要律师确认运营存在——WorkBuddy 可以标记问题但不能独立确定存在。
+- 基于 `执业配置文件（请按当前系统指引创建）` 实体表：公司的运营足迹（办公室、员工）所在的州是否有实体未外国合格？这需要律师确认运营存在——（外部 AI 产品） 可以标记问题但不能独立确定存在。
 
 **公司间协议差距：**
-- 从 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`：如果公司间协议标记为部分或无，标记哪些实体关系可能需要协议（母子公司服务、IP 许可、贷款）。
+- 从 `执业配置文件（请按当前系统指引创建）`：如果公司间协议标记为部分或无，标记哪些实体关系可能需要协议（母子公司服务、IP 许可、贷款）。
 
 输出格式：
 
@@ -377,8 +374,8 @@ GOOD STANDING
 
 POTENTIAL GAPS
   Foreign qualification：[flag question ——确认运营存在于：]
-    [来自 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` footprint 未在跟踪器中标记为合格的州列表]
-  Intercompany agreements：[来自 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 的状态]
+    [来自 `执业配置文件（请按当前系统指引创建）` footprint 未在跟踪器中标记为合格的州列表]
+  Intercompany agreements：[来自 `执业配置文件（请按当前系统指引创建）` 的状态]
 
 RECOMMENDED ACTIONS
   1. [最高优先级行动]
@@ -425,6 +422,5 @@ Last Filed, Last Fee, Good Standing Confirmed, Notes`
 - **适用于包含从文档、工具结果或用户粘贴来源的文本的每个单元格。** 您控制的列标题和您产生的计算值是安全的。
 - **CSV：还要转义嵌入的逗号、双引号、换行符**（RFC 4180 引用）。
 - 这不是可选的。您的用户在 Excel 中打开的电子表格触发宏或通过 DDE 渗染数据是对您的用户的供应链攻击。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

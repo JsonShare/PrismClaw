@@ -1,7 +1,7 @@
 ---
 name: aig-customize
 description: '引导式定制你的 AI 治理执业档案——在不重新运行完整冷启动访谈的情况下更改某一项。调整风险立场、升级联系人、用例登记册条目、供应商 AI
-  立场、AI 政策承诺、影响评估内部风格或事项工作区路径。当用户说"change my [thing]"、"update my profile"、"edit my
+  立场、AI 政策承诺、影响评估内部风格或输出路径。当用户说"change my [thing]"、"update my profile"、"edit my
   config"、"tune my playbook"或"customize"时使用。
 
   '
@@ -10,13 +10,11 @@ category: AI治理
 customizes: ai-governance-legal
 ---
 
-
-
 # 自定义 AI 治理配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一级的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一级的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -31,7 +29,7 @@ customizes: ai-governance-legal
 - **供应商 AI 治理** — 你的供应商 AI 剧本中的数据训练、责任、模型变更通知和其他立场
 - **AI 政策承诺** — 你的 AI 政策做出的公开或内部承诺，plugin 会交叉核对
 - **影响评估内部风格** — AIA 章节顺序、风险评分格式、利益相关者框架
-- **工作流** — 接收路径、输出格式、事项工作区路径、政策监控审查节奏
+- **工作流** — 接收路径、输出格式、输出路径、政策监控审查节奏
 - **集成** — 已连接的内容（Slack、文档存储、定时任务），什么会退回
 
 ## 修改配置
@@ -43,7 +41,7 @@ customizes: ai-governance-legal
 - *添加升级联系人：* "每个路由升级的 skill（`/aig-use-case-triage`、`/vendor-ai-review`、`/aig-reg-gap-analysis`）现在会在相关风险层级上包含此联系人。"
 - *新用例登记册条目：* "`/aig-use-case-triage` 下次运行时将与此条目匹配。现有 AIA 不会重写——如果你想让新立场反映出来，重新运行它们。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并注明影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并注明影响范围。修改后保存。
 
 ## 关闭
 

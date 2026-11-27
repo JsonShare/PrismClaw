@@ -8,12 +8,9 @@ argument_hint: '[the question]'
 category: 产品合规
 ---
 
-
-
-
 # /is-this-a-problem
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 风险校准。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 风险校准。
 2. 运行以下分流工作流。
 3. 模式匹配。检查常见陷阱。
 4. 一分钟内回答：✅ 可以 / ⚠️ 需要看一下 / 🛑 暂停。一句话原因。
@@ -27,13 +24,11 @@ category: 产品合规
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/product-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
-
 ---
 
 ## 目的地检查
 
-在生成输出之前，检查它要去哪里。如果用户命名了目的地（频道、分发列表、对手方、"每个人"），询问它是否在特权圈内。公共频道、公司范围列表、对手方/对方律师、供应商和客户（对于工作产品）放弃保护。当目的地看起来在圈外时，标记它并提供（a）仅限律师使用的特权版本，（b）更广泛频道的清理版本，或（c）两者——不要默默应用特权标题然后帮助将其粘贴到标题不保护它的地方。请参阅此 plugin 的 PLUGIN.md 中的规范 `## Shared guardrails → Destination check`。
+在生成输出之前，检查它要去哪里。如果用户命名了目的地（频道、分发列表、对手方、"每个人"），询问它是否在特权圈内。公共频道、公司范围列表、对手方/对方律师、供应商和客户（对于工作产品）放弃保护。当目的地看起来在圈外时，标记它并提供（a）仅限律师使用的特权版本，（b）更广泛频道的清理版本，或（c）两者——不要默默应用特权标题然后帮助将其粘贴到标题不保护它的地方。请参阅此 plugin 的 系统配置 中的规范 `## Shared guardrails → Destination check`。
 
 ## 目的
 
@@ -43,7 +38,7 @@ category: 产品合规
 
 ## 加载校准
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `## Risk calibration`。此 skill 的全部意义就是针对该表进行模式匹配。
+读取 `执业配置文件（请按当前系统指引创建）` → `## Risk calibration`。此 skill 的全部意义就是针对该表进行模式匹配。
 
 ## 分流
 
@@ -88,7 +83,7 @@ category: 产品合规
 
 **对于 Slack（常见情况）：**
 
-Slack 分流回复是内部法律建议。如果回复被粘贴到与非法律人员广泛共享的工单、文档或频道中，请在前面加上 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` `## Outputs` 中的工作产品标题（因用户角色而异——见 `## Who's using this`）：
+Slack 分流回复是内部法律建议。如果回复被粘贴到与非法律人员广泛共享的工单、文档或频道中，请在前面加上 `执业配置文件（请按当前系统指引创建）` `## Outputs` 中的工作产品标题（因用户角色而异——见 `## Who's using this`）：
 
 ```
 [WORK-PRODUCT HEADER — per plugin config ## Outputs]
@@ -138,7 +133,6 @@ Slack 分流回复是内部法律建议。如果回复被粘贴到与非法律�
 
 ## 以下一步决策树结束
 
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
-
+根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

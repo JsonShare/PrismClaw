@@ -79,4 +79,8 @@ class ExpertRegistry:
         skills: set[str] = set()
         for expert in self._packages:
             skills.update(qualified_skill_id(expert.name, skill.name) for skill in expert.skills)
+            # 全局基础技能以裸名注册（不属于任何专家包），同样允许被勾选。
+            skills.update(
+                skill.name for skill in getattr(expert, "inherited_skills", []) or []
+            )
         return tuple(sorted(skills))

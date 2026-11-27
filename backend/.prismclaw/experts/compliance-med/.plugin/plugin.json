@@ -2,16 +2,14 @@
   "name": "compliance-med",
   "version": "1.0.0",
   "description": "Audits healthcare data compliance against PIPL/DSL and medical regulations, with HIPAA reviews where the entity is US-scoped; delivers PIAs, breach response and audit trails.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/compliance-med.md"
   ],
   "skills": [
     "./skills/data-privacy-workflow",
     "./skills/hipaa-compliance-workflow",
-    "./skills/compliance-med-playbook"
+    "./skills/compliance-med-playbook",
+    "./skills/iso-13485-certification"
   ],
   "expertType": "agent",
   "agentName": "compliance-med",
@@ -24,16 +22,15 @@
     "en": "Privacy & Compliance Audit"
   },
   "displayDescription": {
-    "zh": "以《个人信息保护法》《数据安全法》为主口径开展合规与隐私审计，输出 PIA、泄露响应与整改清单；美国 HIPAA 体系按辖区适用。",
+    "zh": "以《个人信息保护法》《数据安全法》为主口径开展合规与隐私审计，输出 PIA、泄露响应与整改清单。",
     "en": "Audits healthcare data compliance against PIPL/DSL and medical regulations, with HIPAA reviews where the entity is US-scoped; delivers PIAs, breach response and audit trails."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "compliance",
   "defaultInitPrompt": {
     "zh": "对这个数据处理场景做隐私影响评估。",
     "en": "Run a privacy impact assessment for this data processing scenario."
   },
-  "plugin": "compliance-med",
   "tags": [
     {
       "zh": "合规体系核查",
@@ -62,5 +59,6 @@
       "en": "Draft a breach response checklist and timeline."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "合规监管"
 }

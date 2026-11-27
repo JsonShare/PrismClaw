@@ -229,7 +229,6 @@ Prose only where a table can't carry the meaning. A 40-contract comparison lands
 
 **Medical Disclaimer:** This skill analyzes contract text as written. It does not provide legal advice, medical advice, or compliance certification. Contract interpretations presented are machine-generated readings for informational purposes only. Always consult qualified legal counsel for binding interpretations of contract terms, especially those affecting patient care, regulatory compliance, or financial obligations under healthcare agreements. Deliverable is a research note, not formal legal advice: for lawyers it is a working draft for their review; for non-lawyers it is an informal note and must be checked with a licensed lawyer before use.
 
-
 ---
 
 ## 医疗安全声明

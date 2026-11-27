@@ -1,41 +1,42 @@
-# 08 — MCP 集成
+# 08 — MCP 集成 (MCP Integration)
 
 ## 职责概述
 
-MCP（Model Context Protocol）集成模块负责将外部 MCP 服务器桥接到 PrismClaw 的工具系统中，管理服务器生命周期、工具注册与调度、网络安全策略。它通过 Mixin 架构将配置、连接、生命周期、注册与适配器逻辑解耦，支持 stdio / SSE / Streamable HTTP 三种传输协议，并提供沙箱隔离与网络 ACL 安全层。
+MCP（Model Context Protocol）集成模块负责将外部 MCP 服务器桥接到 PrismClaw 的工具系统中，管理服务器生命周期、工具注册与调度、网络安全策略。它通过 Mixin 架构将配置、连接、生命周期、注册与适配器逻辑解耦，支持 stdio / SSE / Streamable HTTP / HTTP 四种传输协议，并提供沙箱隔离与网络 ACL 安全层。
 
 核心能力：
 - **服务器生命周期管理**：非阻塞后台 supervisor + 连接超时 + 自动重连
 - **工具桥接**：MCPToolAdapter 将 MCP 工具映射为 PrismClaw Tool Protocol
-- **双名模式**（J1）：`name`（注册表键 `server:tool`）与 `_sdk_key`（SDK 调度键）分离
+- **双名模式**：`name`（注册表键 `server:tool`）与 `_sdk_key`（SDK 调度键）分离
 - **沙箱隔离**：bubblewrap 文件系统/网络/环境变量隔离
 - **网络 ACL**：Fail-Closed 白名单 + 通配符匹配 + per-server 域名策略
 - **Composite/Declarative 模式**：多管理器聚合 + 纯声明式只读模式
 - **运行时遥测**：per-server 工具调用/失败/超时/拒绝统计
+- **部署级连接器注册表**：`backend/configs/mcp.json` + `ConnectorRegistry`，只暴露 `enabled=true` 的 connector
+- **工具归属**：部署级 MCP 工具的 `expert_name` 为 `None`（核心工具），不参与专家包工具作用域门控
 
 ## 架构总览
 
 **[查看交互式架构图](../diagrams/08-mcp-integration.html)**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     MCP 集成系统总览                              │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              MCPClientManager                              │   │
-│  │  (ConfigMixin + ConnectionMixin + LifecycleMixin           │   │
-│  │   + RegistryMixin + AdapterMixin)                          │   │
-│  │                                                            │   │
-│  │  ┌──────────────┐  ┌───────────────┐  ┌───────────────┐  │   │
-│  │  │ ConfigMixin  │  │ConnectionMixin│  │LifecycleMixin │  │   │
-│  │  │ 沙箱策略     │  │ 连接/重连/死亡│  │ supervisor    │  │   │
-│  │  │ 遥测记录     │  │ 环境变量解析  │  │ connect_all   │  │   │
-│  │  └──────┬───────┘  └───────┬───────┘  └───────┬───────┘  │   │
-│  │         │                  │                   │           │   │
-│  │  ┌──────┴───────┐  ┌──────┴────────┐          │           │   │
-│  │  │RegistryMixin │  │ AdapterMixin  │          │           │   │
-│  │  │ 工具注册/注销│  │ 适配器构建    │          │           │   │
-│  │  │ 日志脱敏     │  │ 双名模式(J1)  │          │           │  
+MCPClientManager（每个进程一个实例，五个 Mixin 合成）
+  ├── ConfigMixin        沙箱策略 · 遥测记录 · 占位符与环境变量解析
+  ├── ConnectionMixin    连接 / 重连 / 死亡处理
+  ├── LifecycleMixin     supervisor · connect_all · ready 门控
+  ├── RegistryMixin      工具注册注销 · 日志脱敏 · 状态查询
+  └── AdapterMixin       MCPToolAdapter 构建（双名模式）
+        │
+        ▼
+  ConnectorRegistry（backend/configs/mcp.json）
+        │  只暴露 enabled=true 的 connector
+        ▼
+  McpSettings → 每 server 一份 McpServerConfig（transport / timeout / sandbox）
+        │
+        ├─ ToolRegistry    注册 server:tool，供 LLM 调度
+        ├─ SandboxPolicy   wrap_mcp_stdio() 沙箱包装
+        └─ McpNetworkAcl   fail-closed 域名白名单
+```
 
 ## 核心组件
 
@@ -44,7 +45,7 @@ MCP（Model Context Protocol）集成模块负责将外部 MCP 服务器桥接�
 MCP 服务器生命周期管理器，每个 PrismClaw 进程一个实例。
 
 - **类**：`MCPClientManager(ConfigMixin, ConnectionMixin, LifecycleMixin, RegistryMixin, AdapterMixin)`
-- **构造参数**：`settings: McpSettings`、`task_manager: TaskManagerProtocol`
+- **构造参数**：`settings: McpSettings`、`task_manager: TaskManagerProtocol`、`expert_name: str | None = None`（部署级连接器不传，工具归属 `None`）
 - **核心状态**：
   - `_adapters: dict[str, list[Any]]` — per-server 适配器列表
   - `_servers: dict[str, ServerStatus]` — 服务器状态
@@ -73,6 +74,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   - `_sdk_key`：SDK 调度键（默认等于 `remote_tool.name`），`execute()` 使用
 - **属性**：
   - `server_name` / `remote_tool` / `server_config` / `group` / `sdk_key`
+  - `expert_name` — 归属专家包；部署级连接器为 `None`（核心工具）
   - `description` — 从 `remote_tool.description` 获取
   - `parameters` — 从 `remote_tool.inputSchema` 获取
   - `tool_class` — read / write（由 `_derive_tool_class()` 决定）
@@ -115,7 +117,7 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
   - `_restart_server_impl()` — 重启实现（旧适配器注销 → 重连 → 新适配器注册）
   - `_handle_server_death()` — 处理服务器死亡（注销适配器 + 标记 failed）
 - **连接流程**：
-  1. 检查 unfilled placeholder（市场插件模板检测）
+  1. 检查 unfilled placeholder（模板占位符检测）
   2. 环境变量解析（`_substitute_env_placeholder()`）
   3. 构建服务器参数
   4. 沙箱包装（stdio + sandbox.enabled）
@@ -196,20 +198,29 @@ MCP 工具到 PrismClaw Tool Protocol 的桥接适配器。
 - **Fail-Closed**：未注册 server → 返回 False
 - **匹配顺序**：全局白名单 → server-specific 白名单 → 未指定 server 时扫描所有已注册域名
 
+### ConnectorRegistry（`engine/mcp/connectors.py`）
+
+`backend/configs/mcp.json` 的唯一连接器注册表视图，也是启用判定的唯一来源。
+
+- **类**：`ConnectorRegistry`
+- **配置文件**：`backend/configs/mcp.json`，结构 `{"connectors": {<name>: {...}}}`
+- **只读视图**：`servers` 属性只返回 `enabled=true` 的条目；`has_enabled` / `settings()` 供 `app/_lifespan.py` 决定是否创建 `MCPClientManager`
+- **不变量**：未启用的 connector 不连接、不注册工具
+
 ### McpSettings / McpServerConfig（`engine/mcp/settings.py` + `schema/services/mcp_settings.py`）
 
-MCP 配置模型。
+MCP 配置模型；运行期 `McpSettings` 由 `ConnectorRegistry.settings()` 构造。
 
 - **类**：`McpSettings`
-  - `enabled: bool` — 全局开关（默认禁用）
-  - `servers: dict[str, McpServerConfig]` — 服务器配置
+  - `enabled: bool` — 是否存在启用连接器（派生值）
+  - `servers: dict[str, McpServerConfig]` — 已启用连接器配置
 - **类**：`McpServerConfig`
   - `enabled: bool` / `transport: str`（stdio / sse / streamable-http / http）
   - `command: str | None` / `args: list[str]` / `env: dict[str, str]`
   - `url: str | None` / `headers: dict[str, str]`
   - `connect_timeout_seconds: float` / `call_timeout_seconds: float`
   - `forced_tool_class: Literal["read", "write"] | None`
-  - `trust_annotations: bool`
+  - `trust_annotations: bool` / `server_read_only: bool` / `deferred: bool`
   - `sandbox: McpSandboxConfig`
 - **类**：`McpSandboxConfig`
   - `enabled: bool` / `filesystem: dict` / `network: dict` / `env_allowlist: list[str]`
@@ -314,6 +325,7 @@ MCP 代理请求 → McpNetworkAcl.is_allowed(host, server_name)
 
 | 接口 | 来源 | 说明 |
 |------|------|------|
+| `ConnectorRegistry.servers` / `settings()` | `connectors.py` | 只读连接器视图与运行时 McpSettings |
 | `MCPClientManager.start_background()` | `client_manager.py` | 非阻塞启动 |
 | `MCPClientManager.is_ready()` | `_mixin_lifecycle.py` | 就绪检查 |
 | `MCPClientManager.wait_ready()` | `_mixin_lifecycle.py` | 等待就绪 |
@@ -337,6 +349,7 @@ MCP 代理请求 → McpNetworkAcl.is_allowed(host, server_name)
 
 ## 依赖关系
 
+- **ConnectorRegistry**：`engine/mcp/connectors.py` — `backend/configs/mcp.json` 唯一入口，构造运行时 `McpSettings`
 - **mcp SDK**：`ClientSessionGroup`、`ClientSession`、`StdioServerParameters`、`SseServerParameters`、`StreamableHttpParameters`、`mcp_types`
 - **anyio**：ClosedResourceError / BrokenResourceError 检测
 - **SandboxPolicy**：bubblewrap 沙箱包装（`wrap_mcp_stdio()`）
@@ -347,25 +360,28 @@ MCP 代理请求 → McpNetworkAcl.is_allowed(host, server_name)
 
 ## 配置项
 
+配置源：`backend/configs/mcp.json`（部署级连接器注册表，顶层唯一键为 `connectors`）。
+
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `mcp.enabled` | false | MCP 全局开关 |
-| `mcp.servers.<name>.enabled` | — | 单服务器开关 |
-| `mcp.servers.<name>.transport` | — | 传输协议（stdio/sse/streamable-http/http） |
-| `mcp.servers.<name>.command` | — | stdio 命令 |
-| `mcp.servers.<name>.args` | [] | 命令参数 |
-| `mcp.servers.<name>.env` | {} | 环境变量（支持 `{env:VAR}` 占位符） |
-| `mcp.servers.<name>.url` | — | SSE/HTTP URL |
-| `mcp.servers.<name>.headers` | {} | HTTP headers（支持 `{env:VAR}` 占位符） |
-| `mcp.servers.<name>.connect_timeout_seconds` | — | 连接超时 |
-| `mcp.servers.<name>.call_timeout_seconds` | — | 调用超时 |
-| `mcp.servers.<name>.forced_tool_class` | None | 强制工具类别 |
-| `mcp.servers.<name>.trust_annotations` | — | 信任 readOnlyHint 注解 |
-| `mcp.servers.<name>.sandbox.enabled` | — | 沙箱隔离开关 |
-| `mcp.servers.<name>.sandbox.filesystem` | — | 文件系统沙箱配置 |
-| `mcp.servers.<name>.sandbox.network` | — | 网络沙箱配置 |
-| `mcp.servers.<name>.sandbox.env_allowlist` | — | 环境变量白名单 |
-| `mcp_network_acl.default_policy` | deny | 默认策略（deny-all） |
-| `mcp_network_acl.global_domains` | [] | 全局白名单域名 |
+| `connectors` | — | 连接器注册表；`ConnectorRegistry` 只暴露 `enabled=true` 的条目 |
+| `connectors.<name>.enabled` | true | 单连接器开关；未启用不连接、不注册工具 |
+| `connectors.<name>.transport` | stdio | 传输协议（stdio/sse/streamable-http/http） |
+| `connectors.<name>.command` | — | stdio 命令 |
+| `connectors.<name>.args` | [] | 命令参数 |
+| `connectors.<name>.env` | {} | 环境变量（支持 `{env:VAR}` 占位符） |
+| `connectors.<name>.url` | — | SSE/HTTP URL |
+| `connectors.<name>.headers` | {} | HTTP headers（支持 `{env:VAR}` 占位符） |
+| `connectors.<name>.connect_timeout_seconds` | 30.0 | 连接超时 |
+| `connectors.<name>.call_timeout_seconds` | 60.0 | 调用超时 |
+| `connectors.<name>.forced_tool_class` | None | 强制工具类别 |
+| `connectors.<name>.trust_annotations` | true | 按 readOnlyHint 推导工具类别；False 时强制 write |
+| `connectors.<name>.server_read_only` | false | 只读连接器：write 类工具对 LLM 不可见 |
+| `connectors.<name>.deferred` | true | 工具延迟披露，经 `tool_search` 发现；核心能力 server 可设 false |
+| `connectors.<name>.sandbox.enabled` | stdio 且非 npx/uvx 为 true，其余 false | 沙箱隔离开关 |
+| `connectors.<name>.sandbox.filesystem` | {} | 文件系统沙箱配置 |
+| `connectors.<name>.sandbox.network` | {} | 网络沙箱配置 |
+| `connectors.<name>.sandbox.env_allowlist` | — | 环境变量白名单 |
+| `McpNetworkAcl.default_policy` | deny | 构造参数（非 `mcp.json` 键）；默认 deny-all |
 | `_TOOL_COUNT_WARN_THRESHOLD` | 100 | 工具数警告阈值 |
 | `_STDERR_BUFFER_LINES` | 200 | stderr 缓冲行数 |

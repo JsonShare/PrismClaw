@@ -127,12 +127,10 @@ class LegalBundle:
     depends_on: list[str] = []
     task_store: Any | None = None  # Protocol 数据成员；本域无长任务 store
 
-    # ── 基础设施：执行法律域初始化脚本（当前为占位） ──────────────
+    # ── 基础设施：DDL 由核心启动扫描 deploy/sql 自动执行 ──────────
 
     async def on_build_infrastructure(self, ctx: DomainInfrastructureContext) -> None:
-        from prismclaw.persistence.sql_runner import apply_domain_schema
-
-        await apply_domain_schema(ctx.db_engine, "legal")
+        """法律域无持久化存储需要注册；DDL 由核心扫描 ``deploy/sql`` 自动执行。"""
 
     # ── 运行时：注册法律域上下文注入钩子 ──────────────────────────
 

@@ -5,7 +5,7 @@ description = "Standalone MCP server: single search tool with built-in retrieval
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
 dependencies = [
-    "mcp[cli]>=1.12.4,<2.0",
+    "mcp>=2.0,<3.0",
     "httpx>=0.27.0,<1.0",
     "markdownify>=0.11.0,<1.0",
     "beautifulsoup4>=4.12.0",

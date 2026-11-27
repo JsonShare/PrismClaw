@@ -6,40 +6,88 @@
   "agentName": "team-lead-mismatch-team-lead",
   "teamInfo": {
     "leadAgent": "clinical-lead",
-    "memberAgents": ["medication-safety"]
+    "memberAgents": [
+      "medication-safety"
+    ]
   },
   "members": [
     {
       "id": "team-lead-mismatch-team-lead",
-      "name": {"en": "Clinical Lead", "zh": "主诊医师"},
-      "displayName": {"en": "Clinical Lead", "zh": "主诊医师"},
-      "profession": {"en": "Clinical Lead", "zh": "主诊医师"},
+      "name": {
+        "en": "Clinical Lead",
+        "zh": "主诊医师"
+      },
+      "displayName": {
+        "en": "Clinical Lead",
+        "zh": "主诊医师"
+      },
+      "profession": {
+        "en": "Clinical Lead",
+        "zh": "主诊医师"
+      },
       "avatar": "avatars/clinical-lead.png",
       "role": "member"
     },
     {
       "id": "medication-safety",
-      "name": {"en": "Medication Safety", "zh": "用药安全"},
-      "displayName": {"en": "Medication Safety", "zh": "用药安全"},
-      "profession": {"en": "Pharmacist", "zh": "临床药师"},
+      "name": {
+        "en": "Medication Safety",
+        "zh": "用药安全"
+      },
+      "displayName": {
+        "en": "Medication Safety",
+        "zh": "用药安全"
+      },
+      "profession": {
+        "en": "Pharmacist",
+        "zh": "临床药师"
+      },
       "avatar": "avatars/medication-safety.png",
       "role": "member"
     }
   ],
-  "displayName": {"en": "Clinical Team", "zh": "临床诊疗专家团"},
-  "profession": {"en": "Clinical Team", "zh": "临床诊疗专家团"},
+  "displayName": {
+    "en": "Clinical Team",
+    "zh": "临床诊疗专家团"
+  },
+  "profession": {
+    "en": "Clinical Team",
+    "zh": "临床诊疗专家团"
+  },
   "displayDescription": "由主诊医师统筹，联合用药安全、病历文书与证据检索角色，覆盖问诊、鉴别诊断、用药核对与病程记录全流程。",
   "avatar": "avatars/team.png",
   "categoryId": "08-Medical",
-  "defaultInitPrompt": {"en": "Describe the case.", "zh": "请描述这个病例。"},
+  "defaultInitPrompt": {
+    "en": "Describe the case.",
+    "zh": "请描述这个病例。"
+  },
   "tags": [
-    {"en": "clinical", "zh": "临床"},
-    {"en": "diagnosis", "zh": "诊断"},
-    {"en": "medication", "zh": "用药"}
+    {
+      "en": "clinical",
+      "zh": "临床"
+    },
+    {
+      "en": "diagnosis",
+      "zh": "诊断"
+    },
+    {
+      "en": "medication",
+      "zh": "用药"
+    }
   ],
   "quickPrompts": [
-    {"en": "Describe the case.", "zh": "请描述这个病例。"},
-    {"en": "Review the medication list", "zh": "帮我核对用药清单"},
-    {"en": "Draft the progress note", "zh": "起草病程记录"}
-  ]
+    {
+      "en": "Describe the case.",
+      "zh": "请描述这个病例。"
+    },
+    {
+      "en": "Review the medication list",
+      "zh": "帮我核对用药清单"
+    },
+    {
+      "en": "Draft the progress note",
+      "zh": "起草病程记录"
+    }
+  ],
+  "categoryName": "医疗"
 }

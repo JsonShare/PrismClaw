@@ -62,6 +62,7 @@ def _expert_package(
         ),
         "avatar": "avatars/lead.png",
         "categoryId": "test",
+        "categoryName": "测试分组",
         "defaultInitPrompt": {"en": "Start", "zh": "开始"},
         "tags": ["test", "demo", "expert"],
         "quickPrompts": [
@@ -99,6 +100,10 @@ def api_client(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[TestClient, FakeRedisSessionStore]:
     writer = _expert_package(tmp_path, "writer", skills=("draft",))
+    # 继承的全局基础技能：应以独立的 base 组出现在技能目录中。
+    writer.inherited_skills = [
+        SkillManifest(name="pdf", name_zh="PDF 处理", description="pdf base skill")
+    ]
     team = _expert_package(tmp_path, "clinical-team", expert_type="team")
     disabled = _expert_package(tmp_path, "disabled-expert", skills=("blocked",))
     research = _expert_package(
@@ -279,7 +284,7 @@ def test_skill_list_is_grouped_by_package_and_filters_disabled(
 
     assert response.status_code == 200
     groups = response.json()
-    assert [group["expert_name"] for group in groups] == ["research", "writer"]
+    assert [group["expert_name"] for group in groups] == ["research", "writer", "base"]
     research = groups[0]
     assert research["expert_description"] == "research package description"
     skill_ids = [skill["id"] for skill in research["skills"]]
@@ -289,6 +294,11 @@ def test_skill_list_is_grouped_by_package_and_filters_disabled(
     assert search["name"] == "search"
     assert search["name_zh"] == "search 中文名"
     assert groups[1]["skills"][0]["id"] == "writer:draft"
+
+    # 基础技能单独成组，使用裸名 ID（不拼接专家前缀）。
+    base = groups[2]
+    assert [skill["id"] for skill in base["skills"]] == ["pdf"]
+    assert base["skills"][0]["name_zh"] == "PDF 处理"
 
 
 def test_replace_and_remove_skill_selection(

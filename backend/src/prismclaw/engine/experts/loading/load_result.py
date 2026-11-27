@@ -150,6 +150,9 @@ class ExpertPackage:
     manifest: ExpertManifest | None = None
     # 结构化能力字段（声明式专家包加载产物）
     skills: list[Any] = field(default_factory=list)
+    # 继承的全局基础技能（extra_skill_dirs）。仅用于运行时能力装配，
+    # 不计入本包技能清单，也不参与 selected_skill_ids 等选择层 ID 生成。
+    inherited_skills: list[Any] = field(default_factory=list)
     agents: list[Any] = field(default_factory=list)
     commands: list[Any] = field(default_factory=list)
     output_styles: dict[str, str] = field(default_factory=dict)

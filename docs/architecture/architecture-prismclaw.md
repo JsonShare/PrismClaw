@@ -74,7 +74,7 @@
 ```
 app      (L4) 通信层：HTTP/WS 路由、JWT 认证、网关、SPA 托管
   ↓
-assembly (L3) 编配层：依赖注入、Bundle 启动、插件装配
+assembly (L3) 编配层：依赖注入、Bundle 启动、专家运行时装配与热更新
   ↓
 runtime  (L2) 运行时层：会话编排、能力刷新、engine 门面（facade）
   ↓
@@ -110,7 +110,7 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 
 - 首次启动自动建表、自动创建管理员（bootstrap 环境变量）
 - 前端静态资源由服务端托管，不需要单独部署站点
-- 配置收敛在 `backend/configs/*.yaml` + 环境变量，复制一套即可交付新客户
+- 配置收敛在 `backend/configs/`（yaml / json）+ 环境变量，复制一套即可交付新客户
 - 领域通过参数或领域包开关启用，不重新编译前端
 
 完整步骤见 [DEPLOY.md](../../deploy/DEPLOY.md)。
@@ -121,9 +121,9 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 
 | # | 模块 | 一句话职责 | 文档 |
 |---|------|-----------|------|
-| 1 | 执行引擎 | Agent Loop、工具调度、终止与恢复 | [01](modules/01-execution-engine.md) |
+| 1 | 执行引擎 | 系统提示装配、Agent Loop、工具调度、终止与恢复 | [01](modules/01-execution-engine.md) |
 | 2 | 技能系统 | 技能发现/激活/调度/遵从度 | [02](modules/02-skill-system.md) |
-| 3 | 插件系统 | 插件加载、生命周期、Hook、信任 | [03](modules/03-plugin-system.md) |
+| 3 | 专家体系 | 专家/团队/技能/连接器、作用域治理、热更新 | [03](modules/03-expert-system.md) |
 | 4 | 沙箱安全 | 门控决策、隔离执行、审计、DLP | [04](modules/04-sandbox-security.md) |
 | 5 | 记忆系统 | 四层记忆、写入仲裁、检索降级 | [05](modules/05-memory-system.md) |
 | 6 | Dreaming | 三阶段记忆整理与治理 | [06](modules/06-dream-engine.md) |
@@ -138,9 +138,9 @@ docker compose exec postgres pg_dump -U postgres prismclaw > backup.sql     # �
 | 15 | 策展器 | 后台扫描与记忆毕业 | [15](modules/15-curator.md) |
 | 16 | 调度器 | 定时任务调度与执行 | [16](modules/16-scheduler.md) |
 
-领域设计：医疗 → [medical-domain-design.md](biz_domain/medical/medical-domain-design.md)、法律 → [legal-domain-design.md](biz_domain/legal/legal-domain-design.md)、领域包机制 → [domain-bundle-design.md](biz_domain/_shared/domain-bundle-design.md)
+业务域规范 → [功能架构](biz_domain/domain-bundle-design.md)、[分包标准范本](biz_domain/domain-package-template.md)。域自身的功能设计文档随各后端子包（`backend/src/subpackages/<域>/docs/`），不进入架构目录。
 
-子代理后台执行（P1a：`dispatch_mode=background`、状态机、取消与终态投递）的设计细节见 [09-subagent.md](modules/09-subagent.md) 的「后台执行」一节。
+子代理后台执行（`dispatch_mode=background`、状态机、取消与终态投递）的设计细节见 [09-subagent.md](modules/09-subagent.md) 的「后台执行」一节。
 
 ---
 

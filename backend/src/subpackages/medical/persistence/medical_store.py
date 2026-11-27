@@ -2,7 +2,7 @@
 
 使用 AsyncEngine 执行，不使用 ORM。
 
-表集（与 deploy/sql/init_medical.sql 一致）：
+表集（与 deploy/sql/001_init.sql 一致）：
 - pc_medical_patients          患者档案 + 画像（合并原 patients + patients_extended）
 - pc_medical_patient_reports   统一临床文档表（合并原 patient_reports + processing_tasks + records）
 - pc_medical_consultations     咨询会话登记（域侧记录，核心不感知）

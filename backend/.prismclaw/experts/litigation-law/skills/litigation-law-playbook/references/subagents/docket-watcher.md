@@ -4,9 +4,6 @@ description: 扫描活跃案件组合中的法院案卷，拉取新提交文件�
 allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
-
-
-
 # 案卷监控 Agent
 
 ## 目的
@@ -35,7 +32,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ## 运行范围与频率建议
 
-被调用时执行一次扫描，检查范围按 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 概况 → 常见法院，以及 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` 中的每案件设置确定；如需周期运行，由主 Agent 通过 schedule 工具定时触发。
+被调用时执行一次扫描，检查范围按 `执业配置文件（请按当前系统指引创建）` → 概况 → 常见法院，以及 `{expert_runtime_dir}/matters/_log.yaml` 中的每案件设置确定；如需周期运行，由主 Agent 通过 schedule 工具定时触发。
 
 - **默认：** 扫描 `_log.yaml` 中所有 `status` 不在 `closed` 的案件（建议每周一次）。
 - **提高频率：** 14天内有即将到来听证的案件、处于开庭或举证期限届满阶段的案件，或任何标记为 `risk: critical` 的案件（建议每日一次）。
@@ -44,9 +41,9 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ## 执行步骤
 
-> **前置条件**: 运行本 Agent 前需先执行 `skills/litigation-law-playbook/references/commands/cold-start-interview.md` 创建配置文件。如果步骤 1 中路径不存在，提示用户先运行冷启动访谈。
+> **前置条件**: 运行本 Agent 前需先执行 请先配置相关执业信息后再进行定制审查 创建配置文件。如果步骤 1 中路径不存在，提示用户先运行冷启动访谈。
 
-1. 读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（内部风格、升级规则和常见法院列表）和 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml`（活跃案件组合——每案件 `id`、司法管辖区、案卷标识符、上次检查时间戳和未完成待办事项）。如果这些文件不存在，输出提示并终止。
+1. 读取 `执业配置文件（请按当前系统指引创建）`（内部风格、升级规则和常见法院列表）和 `{expert_runtime_dir}/matters/_log.yaml`（活跃案件组合——每案件 `id`、司法管辖区、案卷标识符、上次检查时间戳和未完成待办事项）。如果这些文件不存在，输出提示并终止。
 
 2. 对每个有案卷标识符的活跃案件，通过以下方式检查新进展：
    - **元典（YuanDian）MCP**：查询裁判文书网中的新裁判文书。
@@ -67,7 +64,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 4. 与每个案件的 `history.md` 和未完成待办事项交叉核对。呈现案件态势变化（裁判、开庭日期设定、举证期限通知、上诉期届满）以及已超出内部截止日期的待办事项。
 
-5. 将每案件分节的报告写入 `${WORKBUDDY_EXPERT_DATA}/out/docket-report-<date>.md`，并将案卷系统可导入的机器可读 `${WORKBUDDY_EXPERT_DATA}/out/deadlines.yaml` 写入。更新每个案件的 `history.md`，添加注明本次检查内容的日期条目。按 PLUGIN.md 中的升级频道将摘要发布至企业协作/钉钉。
+5. 将每案件分节的报告写入 `{expert_runtime_dir}/out/docket-report-<date>.md`，并将案卷系统可导入的机器可读 `{expert_runtime_dir}/out/deadlines.yaml` 写入。更新每个案件的 `history.md`，添加注明本次检查内容的日期条目。按 系统配置 中的升级频道将摘要发布至企业协作/钉钉。
 
 ## 输出
 

@@ -8,9 +8,6 @@ argument_hint: '[描述事实和涉及的权利——或只说事实，我会询
 category: 知识产权
 ---
 
-
-
-
 # /infringement-triage
 
 **这是分流，而非侵权或不侵权的裁定。**
@@ -18,7 +15,7 @@ category: 知识产权
 
 ## 说明
 
-1. 读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。如果包含 `[PLACEHOLDER]`，停止并指向 `skills/ip-law-playbook/references/commands/cold-start-interview.md`。
+1. 读取 `执业配置文件（请按当前系统指引创建）`。如果包含 `[PLACEHOLDER]`，停止并指向 请先配置相关执业信息后再进行定制审查。
 2. 遵循以下工作流。
 3. 询问涉及哪项权利——商标/版权/专利/商业秘密/混合。如果混合，分别运行每项；不要合并。
 4. 运行通用 intake（当事方立场——先用权利方或被指控方、司法管辖区、时间、证据）。
@@ -28,7 +25,6 @@ category: 知识产权
    - **专利** — 权利要求图表第一遍（路由到 `fto-triage` 输出结构）；字面解读 + 等效原则；间接侵权 + 分散侵权；需要考虑的无效抗辩。
    - **商业秘密** — 秘密性 + 合理措施 + 侵用；抢先 + 逆向工程标志。
 6. 产出列出方向的标志清单——什么对先用权利方切割、什么对被指控方切割、什么是混合的。永远不得出结论。
-7. 将分流备忘录写入事项文件夹或执业输出文件夹。按角色应用工作产品标题。
 8. 以推荐的下一步、非律师关卡（如果角色是非律师），以及——如果执业立场支持主张——通过 `skills/ip-law-playbook/references/commands/cease-desist.md` 起草停止侵权函或通过 `skills/ip-law-playbook/references/commands/takedown.md` 提交版权通知的提议结束。不要自动起草。
 
 此 skill 永远不得出结论。如果不确定，标记——律师决定。
@@ -65,15 +61,11 @@ category: 知识产权
 
 ## 事项上下文
 
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 为 `✗`（内部用户的默认值），跳过本段其余内容——skill 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/ip-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/` 的事项文件夹。除非 `Cross-matter context` 为 `on`，否则永远不要读取另一个事项的文件。
-
-侵权分流通常导致起草停止侵权函或路由版权通知。如果执业是私人执业且还没有活跃事项，开启一个——分流、停止侵权函和任何后续回应都应该在一个工作区中。
-
 ---
 
 ## 首先加载执业档案
 
-在运行分流之前，读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。提取：
+在运行分流之前，读取 `执业配置文件（请按当前系统指引创建）`。提取：
 
 - **角色**，来自 `## 谁在使用这个`。
 - **执法立场**，来自 `## 执法立场` — 分流输出应以与声明立场（激进/稳健/保守）和相关函件类型的指定审批人一致的路由建议结束。
@@ -86,14 +78,14 @@ category: 知识产权
 > 我注意到您尚未配置执业档案——那是我如何为您的执业定制立场、司法管辖区和审批链的方式。
 >
 > **两个选择：**
-> - 运行 `skills/ip-law-playbook/references/commands/cold-start-interview.md`（2 分钟）以配置您的档案，然后我会为您的执业定制运行此分流。
+> - 运行 请先配置相关执业信息后再进行定制审查（2 分钟）以配置您的档案，然后我会为您的执业定制运行此分流。
 > - 说 **"provisional"**，我会用通用默认值运行此分流——美国司法管辖区、中等风险偏好、律师角色、无手册——并为每个输出标注 `[PROVISIONAL — configure your profile for tailored output]`，以便您在承诺前看到我能做什么。
 
 ### 临时模式
 
 如果用户说"provisional"，使用这些通用默认值正常运行侵权分流：中等风险偏好、律师角色、美国司法管辖区、无手册（做完整分析而不是匹配立场列表）。用 `[PROVISIONAL]` 标记审阅者注释和每个发现块。在输出末尾附加：
 
-> "这是针对默认假设的通用运行。运行 `skills/ip-law-playbook/references/commands/cold-start-interview.md` 以获得针对您执业校准的输出——您的手册、您的司法管辖区、您的风险偏好。2 分钟。"
+> "这是针对默认假设的通用运行。运行 请先配置相关执业信息后再进行定制审查 以获得针对您执业校准的输出——您的手册、您的司法管辖区、您的风险偏好。2 分钟。"
 
 ---
 
@@ -313,7 +305,7 @@ category: 知识产权
 
 ## 输出格式（所有模式）
 
-在前面附上 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` `## 输出` 中的工作产品标题。
+在前面附上 `执业配置文件（请按当前系统指引创建）` `## 输出` 中的工作产品标题。
 
 ```markdown
 [工作产品标题]
@@ -355,7 +347,7 @@ category: 知识产权
 - [来自律师的正式意见/按执业档案路由给 IP 外部律师]
 - [证据保全和保留——如果诉讼时效时钟在走]
 - [做出决定前需要发展的事实——例如，访问日志、申请历史、市场调查、调查证据]
-- [按照 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` `## 执法立场` 路由，如果立场是主张]
+- [按照 `执业配置文件（请按当前系统指引创建）` `## 执法立场` 路由，如果立场是主张]
 
 ## 引用验证
 
@@ -382,7 +374,7 @@ category: 知识产权
 
 ## 输出位置
 
-如果事项工作区已启用且事项处于活跃状态，写入 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/outbox/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md`。否则写入 `${WORKBUDDY_EXPERT_DATA}/outbox/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
+如果事项工作区已启用且事项处于活跃状态，写入 `{expert_runtime_dir}/matters/<matter-slug>/outbox/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md`。否则写入 `{expert_runtime_dir}/outbox/infringe-<mode>-<subject-slug>-YYYY-MM-DD.md` 并显示路径。
 
 如果事项处于活跃状态，向事项的 `history.md` 追加一行。
 
@@ -404,7 +396,7 @@ category: 知识产权
 
 ## 以下一步决策树结束
 
-根据 PLUGIN.md `## 输出` 以下一步决策树结束。根据此 skill 刚刚生成的内容定制选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
+根据 系统配置 `## 输出` 以下一步决策树结束。根据此 skill 刚刚生成的内容定制选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
@@ -420,6 +412,5 @@ category: 知识产权
 ## 语气
 
 逐因素、逐标记。没有对冲散文。顶部的护栏做范围工作；分析做分析。律师应该离开时知道哪些因素被标记，哪些抗辩适用，以及他们接下来需要做什么以便主张或撤退。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

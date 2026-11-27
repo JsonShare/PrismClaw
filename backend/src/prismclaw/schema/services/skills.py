@@ -53,7 +53,7 @@ class SkillInvocationState(BaseModel):
     # ---- 方案 C:scope/expert 一等支持 ----
     # 当前 skill 属于哪个 expert(若不是 expert 技能则为 None),
     # 用于在下一层技能 resolve 时优先命中同 expert 内版本的 command/skill,
-    # 避免跨 expert 重名(cold-start-interview/matter-workspace 等)导致的错 body 命中。
+    # 避免跨 expert 重名(如 matter-workspace/customize 等)导致的错 body 命中。
     expert_name: str | None = None
     # ---- command/skill 统一建模 ----
     # 区分当前调用来源于技能激活还是命令 dispatch:

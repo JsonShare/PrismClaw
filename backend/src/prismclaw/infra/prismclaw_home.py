@@ -1,4 +1,4 @@
-"""启动时把项目内的 ``backend/.prismclaw`` 同步到 ``~/.prismclaw/assets``。
+"""启动时把项目内的 ``backend/.prismclaw`` 覆盖到 ``~/.prismclaw/assets``。
 
 这条链路存在的根因是：SKILL.md / PLUGIN.md / agent definition 里写的
 全是 home-relative 路径（LLM 和人类写文档天然偏向 ``~`` 前缀），但 repo 里的
@@ -7,26 +7,21 @@
 
 启动时同步后，**所有运行时代码和 SKILL.md 文档统一只认 ``~/.prismclaw/assets``**。
 
-同步策略（谨慎）：
+同步策略：每次启动先清空 ``~/.prismclaw/assets``，再把 ``backend/.prismclaw/``
+整体拷回去（排除 ``.work/``、``.bash_state``、``__pycache__``、``*.pyc`` 等
+运行时产物）。
 
-只同步 **静态能力目录** —— skills / experts / agents / IDENTITY / PREFERENCES
-这些由 repo 管控、没有运行时写入的内容。运行时数据（workspaces / runtime /
-memory / cache / experts-data / data / server.yaml / .work/ 等）留在 home 根，
-sync 绝不触碰。
+运行时数据（workspaces / runtime / memory / cache / experts-data / data /
+server.yaml / .work/ 等）留在 home 根，sync 绝不触碰。
 
-目标树里若出现 repo 之外的文件（用户或专家包写进去的数据），sync **保留它们**，
-只收敛受管文件。整棵 rmtree 重拷会静默删掉这些数据。
-
-旧位置清理（零存量兼容）：首次启动迁 assets/ 前，rmentree home 根裸的 skills/
-experts/agents/IDENTITY.md/PREFERENCES.md/.gitignore（项目未上线，全部可牺牲）。
-
-幂等：多次启动 sync 结果相同。旧位置清理只跑一次（清理 marker 存在则跳过）。
+覆盖是全量替换而非增量收敛：``assets/`` 里的一切（历史残留、用户写进去的
+文件、旧 mtime 副本）都会被清掉，保证运行时看到的永远是 repo 当前内容。
+专家包数据必须写在 ``~/.prismclaw/experts-data/``，不要写进 ``assets/``。
 """
 
 from __future__ import annotations
 
 import filecmp
-import json
 import logging
 import shutil
 from dataclasses import dataclass, field
@@ -34,20 +29,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# 静态能力目录名 —— backend/.prismclaw 下的 repo 管控内容
-# 运行时数据目录（workspaces / runtime / memory / cache / experts-data / data / .work/）
-# 永远不在这里，也不应该在 backend/.prismclaw 里出现。
-_STATIC_TOP_LEVEL: tuple[str, ...] = (
-    "skills",
-    "experts",
-    "agents",
-    "IDENTITY.md",
-    "PREFERENCES.md",
-    ".gitignore",
-)
-
-# sync 时排除的运行时产物 —— dev 开发目录里可能混入 engine 运行痕迹，
-# 绝不该随静态能力同步到 ~/.prismclaw/assets。
+# 拷贝时排除的运行时产物 —— dev 开发目录里可能混入 engine 运行痕迹，
+# 绝不该随能力目录同步到 ~/.prismclaw/assets。
 #   .bash_state            bash 持久会话恢复钩子（含 dev 绝对路径）
 #   .work/                 workspace 系统目录（tmp/runtime_jobs/bash_state 等）
 #   __pycache__/           Python 编译缓存
@@ -85,12 +68,12 @@ class SyncResult:
         return not self.failed and not self.drifted
 
 
-def _list_files(root: Path) -> dict[str, float]:
-    """相对路径 → mtime；排除与 _RUNTIME_IGNORE 一致的运行时产物。"""
+def _list_files(root: Path) -> set[str]:
+    """受管文件相对路径集合；排除与 _RUNTIME_IGNORE 一致的运行时产物。"""
     if not root.is_dir():
-        return {}
+        return set()
     return {
-        str(p.relative_to(root)): p.stat().st_mtime
+        str(p.relative_to(root))
         for p in root.rglob("*")
         if p.is_file()
         and "__pycache__" not in p.parts
@@ -99,121 +82,45 @@ def _list_files(root: Path) -> dict[str, float]:
     }
 
 
-def _verify_synced(source: Path, target: Path, names: tuple[str, ...]) -> list[str]:
-    """比对源与目标的**受管文件**集合与 mtime，返回漂移项。
+def _verify_tree(source: Path, target: Path) -> list[str]:
+    """比对源树与目标树的文件集合与内容，返回漂移项。
 
-    只在「源里有的文件」范围内比对：目标里多出来的文件是用户/专家包数据，
-    由 :func:`_prune_managed` 有意保留，不属于漂移。
+    覆盖后仍然不一致说明拷贝没有真正落盘（权限、只读挂载、NFS 缓存等），
+    必须让启动失败，而不是让运行时继续使用旧内容。比较内容而非 mtime：
+    `copy2` 虽保留 mtime，但部分文件系统会把时间戳取整，用 mtime 判定会
+    制造永久假漂移。
     """
     drifted: list[str] = []
-    for name in names:
-        src = source / name
-        if not src.exists():
-            continue
-        dst = target / name
-        if src.is_file():
-            if not dst.is_file() or src.stat().st_size != dst.stat().st_size:
-                drifted.append(name)
-            continue
-        src_files = _list_files(src)
-        dst_files = _list_files(dst)
-        for rel in sorted(set(src_files) - set(dst_files)):
-            drifted.append(f"{name}/{rel} 缺失")
-        for rel in sorted(set(src_files) & set(dst_files)):
-            if abs(src_files[rel] - dst_files[rel]) > 1.0:
-                drifted.append(f"{name}/{rel} mtime 未同步")
+    src_files = _list_files(source)
+    dst_files = _list_files(target)
+    for rel in sorted(src_files - dst_files):
+        drifted.append(f"{rel} 缺失")
+    for rel in sorted(dst_files - src_files):
+        drifted.append(f"{rel} 多余")
+    for rel in sorted(src_files & dst_files):
+        if not filecmp.cmp(source / rel, target / rel, shallow=False):
+            drifted.append(f"{rel} 内容不一致")
     return drifted
 
 
-def _unmanaged_files(src: Path, dst: Path) -> list[str]:
-    """目标树中存在、但源树中不存在的相对路径。
-
-    这些是用户/运行时在只读能力目录里留下的文件 —— 覆盖前必须显式拦住，
-    否则 ``rmtree`` 会把它们静默删掉。专家包数据本应写在 ``experts-data/``，
-    这条检查是第二道防线：即使某个专家包仍按旧习惯写进 ``assets/``，
-    也不会在下次启动时无声丢失。
-    """
-    if not dst.is_dir():
-        return []
-    src_files = set(_list_files(src))
-    return sorted(rel for rel in _list_files(dst) if rel not in src_files)
-
-
-def _manifest_path(target: Path) -> Path:
-    return target / ".sync-manifest.json"
-
-
-def _read_manifest(target: Path) -> set[str]:
-    """读取上次同步落下的受管文件清单（相对 ``assets/`` 的路径）。"""
-    path = _manifest_path(target)
-    if not path.is_file():
-        return set()
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        logger.warning("sync: 忽略损坏的清单 %s", path)
-        return set()
-    files = data.get("files") if isinstance(data, dict) else None
-    return set(files) if isinstance(files, list) else set()
-
-
-def _write_manifest(target: Path, files: set[str]) -> None:
-    path = _manifest_path(target)
-    try:
-        path.write_text(
-            json.dumps({"files": sorted(files)}, ensure_ascii=False, indent=0),
-            encoding="utf-8",
-        )
-    except OSError:
-        logger.error("sync: 写清单失败 %s", path, exc_info=True)
-
-
-def _prune_managed(src: Path, dst: Path, previous: set[str], prefix: str) -> set[str]:
-    """把 ``dst`` 收敛为与 ``src`` 一致，返回本次的受管文件清单。
-
-    删除依据是**上次同步的清单**而非「源里没有」：
-      * 上次在清单里、这次不在源里 → repo 已移除 → 删除；
-      * 从未出现在清单里 → 用户/专家包写入的数据 → 原地保留。
-
-    没有清单时（首次同步）不做任何删除，宁可留下旧文件也不误删用户数据。
-    """
-    if not dst.is_dir():
-        shutil.copytree(src, dst, symlinks=False, ignore=_RUNTIME_IGNORE)
-        return {f"{prefix}/{rel}" for rel in _list_files(src)}
-
-    managed = _list_files(src)
-    for rel in sorted(set(previous) - set(managed)):
-        stale = dst / rel.removeprefix(f"{prefix}/")
-        try:
-            if stale.is_file():
-                stale.unlink()
-        except OSError:
-            logger.error("sync: 删除旧文件失败 %s", stale, exc_info=True)
-    for rel in managed:
-        src_file, dst_file = src / rel, dst / rel
-        try:
-            # 内容相同时跳过写盘。不能用 size+mtime 近似：repo 里同长度
-            # 改一行（如改个阈值）会被误判为已同步，改动静默失效。
-            if dst_file.is_file() and filecmp.cmp(src_file, dst_file, shallow=False):
-                continue
-            dst_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_file, dst_file)
-        except OSError:
-            logger.error("sync: 同步文件失败 %s", dst_file, exc_info=True)
-    return {f"{prefix}/{rel}" for rel in managed}
+def _reset_dir(path: Path) -> None:
+    """清空目录（保留目录本身）。非目录的同名路径一并删除。"""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+    path.mkdir(parents=True, exist_ok=True)
 
 
 def sync_prismclaw_home(project_root: Path) -> SyncResult:
-    """把 backend/.prismclaw 里的静态能力目录同步到 ~/.prismclaw/assets。
+    """把 ``backend/.prismclaw`` 整体覆盖到 ``~/.prismclaw/assets``。
 
-    每启动调用一次。语义是「收敛」而非「重拷」：repo 管控的文件以源为准
-    （同名覆盖、源已删除的旧文件清掉），**非 repo 管控的文件原地保留**。
-    后者是用户/专家包数据，整棵删除会让它们静默丢失。
+    每启动调用一次。语义是「覆盖」：先清空 ``assets/``，再整体拷贝源目录，
+    保证运行时看到的永远是 repo 当前内容，不做增量比对、不保留任何残留。
 
-    返回 :class:`SyncResult`：``failed`` 记录同步失败项，``drifted`` 记录
-    副本后仍与源不一致的受管文件。两者任一非空即说明**运行时不使用 repo
-    的最新内容**，调用方必须记 ERROR（旧实现只写 debug 日志，导致改动
-    静默失效）。
+    返回 :class:`SyncResult`：``failed`` 记录拷贝失败项，``drifted`` 记录
+    覆盖后仍与源不一致的文件。两者任一非空即说明**运行时不使用 repo 的
+    最新内容**，调用方必须记 ERROR 并中止启动。
     """
     source = _resolve_backend_prismclaw(project_root)
     home = Path.home() / ".prismclaw"
@@ -232,45 +139,15 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
     target.mkdir(parents=True, exist_ok=True)
 
     result = SyncResult(target=target)
-    previous = _read_manifest(target)
-    current: set[str] = set()
-    for name in _STATIC_TOP_LEVEL:
-        src_entry = source / name
-        if not src_entry.exists():
-            continue
-
-        dst_entry = target / name
-
-        if src_entry.is_dir():
-            # 目录：只收敛 repo 管控的文件，未受管文件（用户/专家包数据）原地保留。
-            if dst_entry.exists() and not dst_entry.is_dir():
-                # 目标被同名文件占位 → 视为冲突，记录失败，不擅自删除
-                logger.error("sync: 目标 %s 是文件而非目录", dst_entry)
-                result.failed.append(name)
-                continue
-            unmanaged = _unmanaged_files(src_entry, dst_entry)
-            if unmanaged:
-                logger.warning(
-                    "sync: %s 下有 %d 个非 repo 管控文件（用户/专家包数据），将保留不删：%s",
-                    name,
-                    len(unmanaged),
-                    unmanaged[:5],
-                )
-            try:
-                current |= _prune_managed(src_entry, dst_entry, previous, name)
-                result.synced += 1
-            except Exception:
-                logger.error("sync: 同步目录失败 %s → %s", src_entry, dst_entry, exc_info=True)
-                result.failed.append(name)
-        else:
-            # 单文件：直接覆盖
-            try:
-                shutil.copy2(src_entry, dst_entry)
-                current.add(name)
-                result.synced += 1
-            except Exception:
-                logger.error("sync: 拷文件失败 %s → %s", src_entry, dst_entry, exc_info=True)
-                result.failed.append(name)
+    try:
+        # 每次启动先清空 assets/，再整体拷贝 backend/.prismclaw/：
+        # 运行时看到的永远是 repo 当前内容，不做增量比对、不保留任何残留。
+        _reset_dir(target)
+        shutil.copytree(source, target, symlinks=False, ignore=_RUNTIME_IGNORE, dirs_exist_ok=True)
+        result.synced = 1
+    except Exception:
+        logger.error("sync: 覆盖失败 %s → %s", source, target, exc_info=True)
+        result.failed.append("assets")
 
     for name in ("IDENTITY.md", "PREFERENCES.md"):
         if not (target / name).is_file():
@@ -279,10 +156,8 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
                 target / name,
             )
 
-    # 拷贝完成后比对源/目标：拷贝"没报错"不等于"内容一致"。
-    result.drifted = _verify_synced(source, target, _STATIC_TOP_LEVEL)
-    if not result.failed:
-        _write_manifest(target, current)
+    # 覆盖完成后比对源/目标：拷贝"没报错"不等于"内容一致"。
+    result.drifted = _verify_tree(source, target)
 
     logger.info(
         "sync_prismclaw_home: source=%s → target=%s, entries_synced=%d, failed=%d, drifted=%d",

@@ -4,9 +4,6 @@ description: 扫描 VDR 中新上传的文件，标记与高优先级类别匹�
 allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
-
-
-
 # 数据室监控 Agent
 
 ## 目的
@@ -15,13 +12,13 @@ VDR 往往在电话会议前一晚 11 点才更新。此 Agent 在被调用时�
 
 ## 运行方式
 
-被调用时执行一次；尽职调查活跃期间建议每日检查，由主 Agent 通过 schedule 工具定时触发。检查清单状态的输出周期按 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 交易团队简报周期确定。
+被调用时执行一次；尽职调查活跃期间建议每日检查，由主 Agent 通过 schedule 工具定时触发。检查清单状态的输出周期按 `执业配置文件（请按当前系统指引创建）` → 交易团队简报周期确定。
 
 ## 集成说明
 
-向企业协作/钉钉发布需要在您的环境中配置相应 MCP 服务器（lark MCP）。此插件不内置。若未配置即时通讯 MCP，将数据室更新和检查清单状态写入 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/updates/[date].md` 并通知用户——不得静默失败。
+向企业协作/钉钉发布需要在您的环境中配置相应 MCP 服务器（lark MCP）。此插件不内置。若未配置即时通讯 MCP，将数据室更新和检查清单状态写入 `{expert_runtime_dir}/deals/[code]/updates/[date].md` 并通知用户——不得静默失败。
 
-VDR 工具（Box、Intralinks、Datasite）同为外部 MCP——若均未连接，提示用户提供 VDR 导出文件，或请其手动更新 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/vdr-inventory.md`。
+VDR 工具（Box、Intralinks、Datasite）同为外部 MCP——若均未连接，提示用户提供 VDR 导出文件，或请其手动更新 `{expert_runtime_dir}/deals/[code]/vdr-inventory.md`。
 
 ## 执行步骤
 

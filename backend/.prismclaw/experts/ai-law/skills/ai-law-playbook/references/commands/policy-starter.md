@@ -7,12 +7,9 @@ argument_hint: '[optional — scope hint, e.g. ''firm-wide'', ''legal team only'
 category: AI治理
 ---
 
-
-
-
 # /policy-starter
 
-1. 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。如果执业档案未填充，停止并指导运行 `skills/ai-law-playbook/references/commands/cold-start-interview.md`。
+1. 阅读 `执业配置文件（请按当前系统指引创建）`。如果执业档案未填充，停止并指导运行 请先配置相关执业信息后再进行定制审查。
 2. 使用以下框架。
 3. 运行范围访谈——政策需要覆盖哪些章节，谁是受众，部署上下文是什么。不要跳到起草。
 4. 网络搜索与部署上下文相关的最新发布模型政策和指导（ABA、州律师协会、ILTA、CLOC、NIST、同行律所/同行公司政策、当前州 AI 法律、欧盟 AI 法案、适用部门监管机构）。
@@ -30,13 +27,11 @@ category: AI治理
 
 ## Matter context
 
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？Run `skills/ai-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。永远不要阅读另一个事项的文件，除非 `Cross-matter context` 为 `on`。
-
 ---
 
 ## Purpose
 
-很多律所和内部团队还没有书面 AI 使用政策，或者运行 2024 年版本的，没有提及州 AI 法律、欧盟 AI 法案实施法案、2025 年 COPPA 修正案，或者他们最终对 Copilot 和 WorkBuddy for Work 做了什么。此 skill 产生**草案**政策带给决策者——GC、管理合伙人、执行委员会、董事会、IT 负责人、HR 负责人——不是要分发的完成政策。
+很多律所和内部团队还没有书面 AI 使用政策，或者运行 2024 年版本的，没有提及州 AI 法律、欧盟 AI 法案实施法案、2025 年 COPPA 修正案，或者他们最终对 Copilot 等 AI 产品 做了什么。此 skill 产生**草案**政策带给决策者——GC、管理合伙人、执行委员会、董事会、IT 负责人、HR 负责人——不是要分发的完成政策。
 
 此 skill 的纪律：
 
@@ -47,7 +42,7 @@ category: AI治理
 
 此 skill 不会最终确定、分发、发布或甚至对困难调用推荐特定立场。它产生草案并显示选择。
 
-## Read `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` first
+## Read `执业配置文件（请按当前系统指引创建）` first
 
 在起草之前，始终阅读执业档案。驱动草案的章节：
 
@@ -198,6 +193,5 @@ Not for adoption, distribution, posting, or reliance until reviewed, adapted, an
 ## Output scope reminder
 
 此 skill 产生的文档到达 HR、IT 和更广泛的业务——不仅仅是法律。保持语言足够简单，非律师能理解。法律精确性在 `[review]` 标记和来源中，而不是术语中。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

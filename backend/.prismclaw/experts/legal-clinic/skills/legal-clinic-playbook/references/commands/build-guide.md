@@ -8,16 +8,13 @@ argument_hint: '[可选：执业领域——例如，''immigration''、''housing
 category: 法律诊所
 ---
 
-
-
-
 # /build-guide
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 角色（必须是督导律师）、执业领域、司法管辖区。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 角色（必须是督导律师）、执业领域、司法管辖区。
 2. 使用以下工作流。
 3. 如果用户不是督导律师，停止并重定向（学生运行 `skills/legal-clinic-playbook/references/commands/ramp.md`）。
 4. 逐步进行：执业领域 → 接案问题 → 教育学姿态 → 审查门控 → 跨插件检查 → 本地规则。
-5. 写入 `${WORKBUDDY_EXPERT_DATA}/guides/<practice-area>.md`。按需创建 `guides/` 目录。
+5. 写入 `{expert_runtime_dir}/guides/<practice-area>.md`。按需创建 `guides/` 目录。
 6. 提供试运行——在配置的姿态下运行 `skills/legal-clinic-playbook/references/commands/draft.md`，让督导看到学生看到的内容。
 
 ```
@@ -40,7 +37,7 @@ category: 法律诊所
 
 ## 工作成果标头
 
-此 skill 的每个输出都是面向督导的配置产物，不是学生工作成果。不要在此 skill 的输出前面添加 `[AI-ASSISTED DRAFT — requires student analysis and attorney review]`——该标签用于学生输出。此 skill 写入的指南文件是督导配置文档；它位于插件配置目录中的 PLUGIN.md 旁边，不在事项工作区中。
+此 skill 的每个输出都是面向督导的配置产物，不是学生工作成果。不要在此 skill 的输出前面添加 `[AI-ASSISTED DRAFT — requires student analysis and attorney review]`——该标签用于学生输出。此 skill 写入的指南文件是督导配置文档；它位于插件配置目录中的 系统配置 旁边，不在事项工作区中。
 
 ## 指南应解决的关键事项
 
@@ -59,9 +56,9 @@ category: 法律诊所
 
 ### 步骤 1：检查角色
 
-这是一个督导 skill。读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `## 谁在使用这个` → 角色。如果角色不是"督导律师"，说：
+这是一个督导 skill。读取 `执业配置文件（请按当前系统指引创建）` → `## 谁在使用这个` → 角色。如果角色不是"督导律师"，说：
 
-> 此 skill 面向督导——它配置面向学生 skills 的行为方式。如果您是督导，请确保您的执业档案角色在 `skills/legal-clinic-playbook/references/commands/cold-start-interview.md` 中设置为"督导律师"。如果您是学生，这不是适合您的 skill——运行 `skills/legal-clinic-playbook/references/commands/ramp.md` 进行入职，或请您的督导为诊所撰写指南。
+> 此 skill 面向督导——它配置面向学生 skills 的行为方式。如果您是督导，请确保您的执业档案角色在 请先配置相关执业信息后再进行定制审查 中设置为"督导律师"。如果您是学生，这不是适合您的 skill——运行 `skills/legal-clinic-playbook/references/commands/ramp.md` 进行入职，或请您的督导为诊所撰写指南。
 
 如果角色不是督导律师则停止。
 
@@ -71,9 +68,9 @@ category: 法律诊所
 
 如果回答是"其他"，要求一个简短名称——该名称成为文件名（小写、连字符：`immigration-removal-defense.md`、`transactional-nonprofit.md` 等）。
 
-检查 `PLUGIN.md` → `## 诊所档案` → 执业领域中列出的执业领域。如果选择的执业领域未列在那里，注明："我会写这个指南，但您的执业档案没有将 [area] 列为诊所的执业领域之一。这没问题——您可以稍后用 `skills/legal-clinic-playbook/references/commands/cold-start-interview.md --redo` 添加——但面向学生的 skills 在档案列出之前不会将接案路由到此领域。"
+检查 `系统配置` → `## 诊所档案` → 执业领域中列出的执业领域。如果选择的执业领域未列在那里，注明："我会写这个指南，但您的执业档案没有将 [area] 列为诊所的执业领域之一。这没问题——您可以稍后用 请先配置相关执业信息后再进行定制审查 添加——但面向学生的 skills 在档案列出之前不会将接案路由到此领域。"
 
-如果 `${WORKBUDDY_EXPERT_DATA}/guides/<practice-area>.md` 已有指南存在，提供："[area] 的指南已存在于 [path]。您想要 (a) 逐节修订，(b) 从头开始覆盖，还是 (c) 先看看里面有什么？"
+如果 `{expert_runtime_dir}/guides/<practice-area>.md` 已有指南存在，提供："[area] 的指南已存在于 [path]。您想要 (a) 逐节修订，(b) 从头开始覆盖，还是 (c) 先看看里面有什么？"
 
 ### 步骤 3：接案问题
 
@@ -137,11 +134,11 @@ category: 法律诊所
 
 > 您的诊所在哪些法院执业？学生需要使用哪些本地规则或表单？
 
-检查 `PLUGIN.md` → `## 司法管辖区`——州和主要法院已在冷启动时设置。此步骤用于执业领域特定的本地规则和表单（例如，"住房法院关于简易程序答复的常规命令"、"当地外勤办公室的 USCIS 提交地址"、"家事法院自助中心表单以及在哪里找到它们"）。提供捕获学生面向 skills 在起草或建议时应使用的简短指针列表。
+检查 `系统配置` → `## 司法管辖区`——州和主要法院已在冷启动时设置。此步骤用于执业领域特定的本地规则和表单（例如，"住房法院关于简易程序答复的常规命令"、"当地外勤办公室的 USCIS 提交地址"、"家事法院自助中心表单以及在哪里找到它们"）。提供捕获学生面向 skills 在起草或建议时应使用的简短指针列表。
 
 ### 步骤 8：写入指南
 
-写入 `${WORKBUDDY_EXPERT_DATA}/guides/<practice-area>.md`。如果 `guides/` 目录不存在则创建。使用此结构：
+写入 `{expert_runtime_dir}/guides/<practice-area>.md`。如果 `guides/` 目录不存在则创建。使用此结构：
 
 ```markdown
 # 执业领域指南：[执业领域]
@@ -149,7 +146,7 @@ category: 法律诊所
 *由督导律师通过 `skills/legal-clinic-playbook/references/commands/build-guide.md` 撰写。面向学生 skills 在产生输出之前阅读此指南。随时可直接编辑。*
 
 **最后更新：** [日期]
-**撰写者：** [来自 PLUGIN.md 的督导律师姓名]
+**撰写者：** [来自 系统配置 的督导律师姓名]
 
 ---
 
@@ -211,7 +208,7 @@ category: 法律诊所
 
 ## 本地规则和司法管辖区
 
-**法院：** [来自 PLUGIN.md 或此执业领域的其他法院]
+**法院：** [来自 系统配置 或此执业领域的其他法院]
 **执业领域特定的本地规则和表单：**
 - [指针 1]
 - [指针 2]
@@ -221,7 +218,7 @@ category: 法律诊所
 
 然后告诉督导：
 
-> 您的指南位于 `${WORKBUDDY_EXPERT_DATA}/guides/<practice-area>.md`。每个使用此诊所插件 [执业领域] 的学生将有遵循它的 skills。随时直接编辑文件更改任何内容，或重新运行 `skills/legal-clinic-playbook/references/commands/build-guide.md` 修订某个部分。您可以有多个指南——每个执业领域一个。
+> 您的指南位于 `{expert_runtime_dir}/guides/<practice-area>.md`。每个使用此诊所插件 [执业领域] 的学生将有遵循它的 skills。随时直接编辑文件更改任何内容，或重新运行 `skills/legal-clinic-playbook/references/commands/build-guide.md` 修订某个部分。您可以有多个指南——每个执业领域一个。
 
 ### 步骤 9：提供试运行
 
@@ -231,7 +228,7 @@ category: 法律诊所
 
 ## 输出
 
-skill 的"输出"是写入 `${WORKBUDDY_EXPERT_DATA}/guides/<practice-area>.md` 的文件。与督导的对话是访谈；书面指南是产物。
+skill 的"输出"是写入 `{expert_runtime_dir}/guides/<practice-area>.md` 的文件。与督导的对话是访谈；书面指南是产物。
 
 写入后，显示简短确认：
 
@@ -246,10 +243,9 @@ skill 的"输出"是写入 `${WORKBUDDY_EXPERT_DATA}/guides/<practice-area>.md` 
 
 ## 此 skill 不做什么
 
-- **全局配置插件。** 指南是每个执业领域的。对于插件范围的配置（督导方式、司法管辖区、执业领域），那是 `skills/legal-clinic-playbook/references/commands/cold-start-interview.md`。
+- **全局配置插件。** 指南是每个执业领域的。对于插件范围的配置（督导方式、司法管辖区、执业领域），那是 请先配置相关执业信息后再进行定制审查。
 - **撰写学生工作成果。** 这是面向督导的配置，不是给客户的草稿。
 - **覆盖冷启动中的督导方式。** 督导模型（正式审查队列 / 可配置标记 / 更轻触）在设置时设置。指南中的审查门控为该执业领域细化该模型；它们不替代它。
 - **使学生 skill 跳过 AI 辅助标头、置信度标记或验证提示。** 那些是共享护栏基线。指南改变姿态，不改变护栏。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

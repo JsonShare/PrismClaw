@@ -1,7 +1,7 @@
 ---
 name: ip-customize
 description: '引导式自定义您的 IP 执业档案——更改一件事而不 重新运行整个冷启动访谈。调整风险姿态、升级 联系人、投资组合范围、品牌保护策略、执行姿态、
-  清除阈值、OSS 审查规则或事项工作区路径。当 用户说"更改我的 [某事]"、"更新我的档案"、"编辑我的配置"、 或"自定义"时使用。
+  清除阈值、OSS 审查规则或输出路径。当 用户说"更改我的 [某事]"、"更新我的档案"、"编辑我的配置"、 或"自定义"时使用。
 
   '
 argument_hint: '[section name, or describe what you want to change]'
@@ -9,13 +9,11 @@ category: 知识产权
 customizes: ip-legal
 ---
 
-
-
 # 自定义知识产权配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一层的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一层的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -42,7 +40,7 @@ customizes: ip-legal
 - *执法姿态激进 → 中等：* "`/cease-desist` 将为模糊情况提供治愈信草稿作为第一选项，而不是直接发送 C&D。"
 - *新的阻止许可 OSS 许可证：* "`/oss-review` 将使包含此许可证的审查失败，而不是警告。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并说明影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并说明影响范围。修改后保存。
 
 ## 关闭
 

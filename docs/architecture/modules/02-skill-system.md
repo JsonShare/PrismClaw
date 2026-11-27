@@ -4,7 +4,7 @@
 
 ## 职责概述
 
-技能系统为 Agent 提供可组合的、声明式的能力扩展机制。每个 Skill 由 `SkillManifest` 声明，通过 `SkillRuntime` 构建执行策略，支持 inline（内联执行）、fork（分支执行）和 subagent（子代理执行）三种模式。系统通过 workflow compliance 机制确保实际调用序列与声明的 `declared_invoke_sequence` 一致，并通过 `RuntimeControlArtifact` 从工具结果中提取技能上下文修改。
+技能系统为 Agent 提供可组合的、声明式的能力扩展机制。每个 Skill 由 `SkillManifest` 声明，通过 `SkillRuntime` 构建执行策略，支持 inline（内联执行）、fork（分支执行）和 subagent（子代理执行）三种模式。技能以 canonical 名 `{expert_name}:{skill_name}` 注册；发现面采用渐进式披露（索引 → 按需加载 → `skill_search` 检索），避免把全部技能正文塞进系统提示。系统通过 workflow compliance 机制确保实际调用序列与声明的 `declared_invoke_sequence` 一致，并通过 `RuntimeControlArtifact` 从工具结果中提取技能上下文修改。
 
 ## 架构总览
 
@@ -30,11 +30,11 @@
 │  │Compli│  │Profil│  │DocIn │  │Preloa│  │Agent │              │
 │  │ance  │  │eLoad │  │line  │  │d     │  │Adapt │              │
 │  │合规  │  │er    │  │引用  │  │Build │  │er    │              │
-│  │检查  │  │档案  │  │内嵌  │  │30K   │  │Sk→Ag │              │
+│  │检查  │  │档案  │  │内嵌  │  │7.5K  │  │Sk→Ag │              │
 │  └──────┘  └──────┘  └──────┘  └──────┘  └──────┘              │
 │                                                                 │
 │  激活流程: SkillDispatch → SkillRuntime.build()                  │
-│           → resolve instructions (fs/plugin/MCP)                 │
+│           → resolve instructions (fs/expert/MCP)                 │
 │           → ProfileLoader + DocInline + Preload                  │
 │           → Compliance(declared vs actual)                       │
 │           → execute (inline / fork / subagent)                   │
@@ -50,10 +50,10 @@
 **`build_skill_execution()`** — 构建完整执行策略：
 
 ```
-resolve skill (SkillManifest 查找)
+resolve skill (canonical `{expert_name}:{skill_name}` 查找)
     → ensure body loaded (渐进式披露：frontmatter-only → full body)
-    → resolve instructions (区分 filesystem/plugin vs MCP)
-    → plugin instructions (从 PluginProfile 合并)
+    → resolve instructions (区分 filesystem/expert vs MCP)
+    → expert profile（从专家包 PLUGIN.md 合并）
     → preload + profile (子技能预加载 + 上下文构建)
     → SkillExecutionStrategy
 ```
@@ -67,7 +67,7 @@ resolve skill (SkillManifest 查找)
 
 | 来源 | 解析方式 |
 |------|---------|
-| filesystem / plugin | inline refs（`references/*.md` 路径内嵌） |
+| filesystem / expert | inline refs（`references/*.md` 路径内嵌） |
 | MCP | `prompts/get` 协议获取 |
 
 ### 2. Skill Dispatch (`skill_dispatch.py`)
@@ -95,18 +95,18 @@ resolve skill (SkillManifest 查找)
 
 ### 4. Profile Loader (`profile_loader.py`)
 
-**`_load_plugin_profile()`** — 读取插件级别的 profile 文档：
+**`_load_expert_profile()`** — 读取专家包级别的运行配置文档：
 
-路径：`~/.prismclaw/assets/plugins/<plugin>/PLUGIN.md`（回退 `README.md`）
+路径：`~/.prismclaw/assets/experts/<expert>/PLUGIN.md`（回退 `README.md`）
 
 ### 5. Doc Inline (`doc_inline.py`)
 
 **`_inline_referenced_docs()`** — 扫描技能 body 中的引用路径并内嵌内容：
 
-| 常量 | 值 | 作用 |
-|------|-----|------|
-| `_MAX_SINGLE_REF_BYTES` | 10 KB | 单个引用文件最大字节数 |
-| `_MAX_TOTAL_INLINE_BYTES` | 30 KB | 内嵌总字节数上限 |
+| 配置项 | 默认值 | 作用 |
+|--------|--------|------|
+| `doc_inline_min_chars` | 2500 | 单个引用文档内联预算（token 估算） |
+| `doc_inline_max_chars` | 7500 | 内联总预算（token 估算） |
 
 引用路径模式：`references/*.md`
 
@@ -127,7 +127,7 @@ resolve skill (SkillManifest 查找)
 | partial | 部分内容 | 超预算截断 |
 | name listing | 仅名称 | 预算不足时降级 |
 
-**字符预算：** 30K 字符
+**预算：** 默认 7,500 tokens（`agent.context.budget.subcaps.skill_preload`）
 
 ### 8. Schema 合约 (`schema/services/skills.py`)
 
@@ -137,8 +137,21 @@ resolve skill (SkillManifest 查找)
 |------|---------|
 | `SkillManifest` | `declared_invoke_sequence`, `pipeline_context` |
 | `SkillInvocation` | 单次技能调用记录 |
-| `SkillInvocationState` | `plugin_name`, `invocation_context`, `is_workflow`, `declared_invoke_sequence`, `actual_invoke_sequence`, `compliance_result` |
+| `SkillInvocationState` | `expert_name`, `invocation_context`, `is_workflow`, `declared_invoke_sequence`, `actual_invoke_sequence`, `compliance_result` |
 | `SkillExecutionStrategy` | 执行策略（inline / fork / subagent） |
+| `SkillSource` | `bundled` / `expert` / `mcp` / `project` / `personal` |
+
+## 渐进披露与会话选择
+
+技能正文不随系统提示全量下发，而是三层披露：
+
+| 层 | 内容 | 上限 |
+|----|------|------|
+| 1 | 项目技能逐个列名（`skills_section`），专家包技能不进此段 | 项目技能数量本身有界 |
+| 2 | 专家包索引（`packages_section`）：只给包名 + 描述 + 能力计数，不列技能名 | `_PACKAGE_LIST_LIMIT = 5`，描述截断 30 token |
+| 3 | `skill_search` 按关键词检索具体技能，再用 `activate_skill` 激活正文 | 按需 |
+
+检索与激活共用同一套命名解析：canonical 名 `{expert}:{skill}` 优先；只给裸名时按包别名匹配，同名多候选判为歧义并报错，不回退取第一个。会话内勾选走 `replace_session_skill_selection()`，上限 `MAX_SELECTED_SKILLS = 20`，结果写入 `SessionHeader.selected_skill_ids`；授权口径是**包级**——命中包的技能随之进入 `tool_owners`，不引入逐技能白名单。
 
 ## 关键数据流
 
@@ -150,12 +163,12 @@ SkillManifest 查找
 ensure body loaded (frontmatter → full body)
     ↓
 resolve instructions:
-    ├── filesystem/plugin → inline refs (doc_inline.py)
+    ├── filesystem/expert → inline refs (doc_inline.py)
     └── MCP → prompts/get
     ↓
-plugin instructions (profile_loader.py)
+expert profile (profile_loader.py)
     ↓
-preload sub-skills (_preload.py, 30K 预算)
+preload sub-skills (_preload.py, 7.5K token 预算)
     ↓
 SkillExecutionStrategy 构建
 ```
@@ -189,6 +202,8 @@ compute_workflow_compliance():
 | Agent 适配 | `build_agent_manifest_from_skill()` | Skill → Agent manifest 转换 |
 | 文档内嵌 | `_inline_referenced_docs()` | 引用文件内嵌到 body |
 | 预加载 | `_build_preload_messages()` | 子技能渐进式预加载 |
+| 技能检索 | `SkillDiscoveryRuntime.search()` | 按关键词检索可用技能 |
+| 会话勾选 | `replace_session_skill_selection()` | 写入 `selected_skill_ids`，上限 20 |
 
 ## 依赖关系
 
@@ -199,7 +214,7 @@ skills/
   ├── skill_dispatch.py → runtime.py (RuntimeControlArtifact 提取)
   ├── compliance.py → (schema types)
   ├── profile_loader.py → (filesystem read)
-  ├── doc_inline.py → (filesystem read, 10K/30K 限制)
+  ├── doc_inline.py → (filesystem read, 2500/7500 token 预算)
   ├── agent_adapter.py → (schema types)
   └── _preload.py → runtime.py (子技能内容获取)
 ```
@@ -207,7 +222,7 @@ skills/
 **外部依赖：**
 - `engine/execution/loop/` — Agent Loop 调用 SkillRuntime
 - `engine/execution/dispatch/` — 工具结果中提取 RuntimeControlArtifact
-- `engine/plugins/` — PluginProfile 读取
+- `engine/experts/` — 专家包加载与 `PLUGIN.md` 运行配置读取
 - `schema/services/skills.py` — SkillManifest 合约
 - MCP SDK — `prompts/get` 协议
 
@@ -215,7 +230,7 @@ skills/
 
 | 配置项 | 位置 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `_MAX_SINGLE_REF_BYTES` | `doc_inline.py` | 10 KB | 单个引用文件最大字节数 |
-| `_MAX_TOTAL_INLINE_BYTES` | `doc_inline.py` | 30 KB | 内嵌总字节数上限 |
-| Preload 字符预算 | `_preload.py` | 30K | 子技能预加载字符预算 |
+| `doc_inline_min_chars` | `doc_inline.py`（`subcaps`） | 2500 | 单个引用文档内联预算（token 估算） |
+| `doc_inline_max_chars` | `doc_inline.py`（`subcaps`） | 7500 | 内联总预算（token 估算） |
+| `skill_preload` | `_preload.py`（`subcaps`） | 7500 | 子技能预加载 token 预算 |
 | `declared_invoke_sequence` | `SkillManifest` | — | 声明的工具调用序列 |

@@ -25,8 +25,6 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/aig-ai-governance-workflow/`：AI 盘点、供应商审查、用例分级、影响评估与制度监控的分流入口
 - `skills/ai-law-playbook/`：执业资料与流程参考
 - `skills/ai-law-playbook/references/commands/`：命令流程参考
-- `skills/ai-law-playbook/references/practice-profile/`：执业档案模板
-- `skills/ai-law-playbook/references/mcp/`：MCP 配置记录（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：许可证
 
@@ -39,4 +37,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-命令流程保存在 `skills/ai-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+命令流程保存在 `skills/ai-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

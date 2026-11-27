@@ -2,9 +2,6 @@
   "name": "regulatory-law",
   "version": "1.0.0",
   "description": "Monitors regulatory sources, diffs policy libraries, tracks comment deadlines and gaps, and writes weekly briefs.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/regulatory-law.md"
   ],
@@ -25,16 +22,15 @@
     "en": "Regulatory Tracking & Gap Analysis"
   },
   "displayDescription": {
-    "zh": "监视权威监管源、比对政策库、跟踪意见期限与差距，并编写团队周报摘要。",
+    "zh": "监视权威监管信息源、比对政策库差异、跟踪征求意见期限与合规差距，并定期编写团队周报摘要。",
     "en": "Monitors regulatory sources, diffs policy libraries, tracks comment deadlines and gaps, and writes weekly briefs."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "compliance",
   "defaultInitPrompt": {
     "zh": "汇总本周与我们业务相关的新规与征求意见稿。",
     "en": "Summarize this week’s new rules and consultations relevant to our business."
   },
-  "plugin": "regulatory-law",
   "tags": [
     {
       "zh": "监管监测",
@@ -63,5 +59,6 @@
       "en": "Write a Monday-ready regulatory brief for the team."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "合规监管"
 }

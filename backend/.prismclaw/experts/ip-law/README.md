@@ -29,9 +29,7 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/ip-law-playbook/`：执业资料与流程参考（原根级 references 已折叠至此）
 - `skills/`：5 个技能（`ip-contract-workflow`、`ip-law-playbook`、`ip-patent-workflow`、`ip-portfolio-workflow`、`ip-trademark-workflow`）
 - `skills/ip-law-playbook/references/commands/`：原命令流程
-- `skills/ip-law-playbook/references/practice-profile/`：执业档案模板
 - `skills/ip-law-playbook/references/subagents/`：原始子代理
-- `skills/ip-law-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -41,4 +39,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-原命令保存在 `skills/ip-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+原命令保存在 `skills/ip-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

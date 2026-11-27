@@ -29,9 +29,7 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/clinical-med-playbook/`：执业资料与流程参考
 - `skills/`：10 个技能（`clinical-assessment-workflow`、`clinical-case-review`、`clinical-documentation`、`clinical-evidence`、`clinical-med-playbook`、`clinical-note-extract`、`clinical-trial-lookup`、`medical-patient-education`、`prescription-safety-workflow`、`treatment-plan-writer`）
 - `skills/clinical-med-playbook/references/commands/`：命令流程参考文档
-- `skills/clinical-med-playbook/references/practice-profile/`：执业档案模板
 - `skills/clinical-med-playbook/references/subagents/`：子代理定义
-- `skills/clinical-med-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -41,4 +39,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-原命令保存在 `skills/clinical-med-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+原命令保存在 `skills/clinical-med-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

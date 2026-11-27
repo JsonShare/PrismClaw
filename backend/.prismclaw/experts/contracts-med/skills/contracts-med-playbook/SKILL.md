@@ -13,9 +13,8 @@ category: 医疗合同专家
 
 ## 资料索引
 - `references/mcp/` — MCP 配置记录（仅供查阅；专家包不内嵌 MCP）
-- `references/practice-profile/` — 执业档案模板与配置说明
 
 ## 使用约定
 
-- 先读 `references/practice-profile/PLUGIN.md` 确认执业档案状态；仍有未填占位项时先走冷启动流程。
-- `references/mcp/` 只是原始配置记录；所需工具必须由 WorkBuddy 侧全局连接器提供。
+检查会话中的执业配置。
+- `references/mcp/` 只是原始配置记录；所需工具必须由 系统全局连接器提供。

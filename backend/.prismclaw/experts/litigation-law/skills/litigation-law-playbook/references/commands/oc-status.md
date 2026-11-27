@@ -5,20 +5,17 @@ argument_hint: '[--all | --slug=foo | --no-gmail]'
 category: 争议诉讼
 ---
 
-
-
-
 # /oc-status
 
 要每周运行，请设置循环提醒来调用 `skills/litigation-law-playbook/references/commands/oc-status.md`。自动调度需要计划任务集成，未包含在内。
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml`，按默认规则（或按标志）过滤。
-2. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 外部律师指令风格、签署人默认值、预算立场。
+1. 加载 `{expert_runtime_dir}/matters/_log.yaml`，按默认规则（或按标志）过滤。
+2. 加载 `执业配置文件（请按当前系统指引创建）` → 外部律师指令风格、签署人默认值、预算立场。
 3. 遵循以下工作流和参考。
 4. 对于范围内的每个事项：阅读 `matter.md` + `history.md`，起草每个事项的电子邮件。
-5. 将 markdown 写入 `${WORKBUDDY_EXPERT_DATA}/oc-status/[YYYY-MM-DD]/[slug].md`。
+5. 将 markdown 写入 `{expert_runtime_dir}/oc-status/[YYYY-MM-DD]/[slug].md`。
 6. 如果 Gmail MCP 已认证：创建 Gmail 草稿。否则：仅 markdown，在摘要中注明。
-7. 写入 `${WORKBUDDY_EXPERT_DATA}/oc-status/[YYYY-MM-DD]/_summary.md`——运行了什么、跳过了什么以及原因。
+7. 写入 `{expert_runtime_dir}/oc-status/[YYYY-MM-DD]/_summary.md`——运行了什么、跳过了什么以及原因。
 
 ---
 
@@ -30,10 +27,10 @@ category: 争议诉讼
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` — 过滤和字段来源
-- `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/matter.md` — 事项上下文（当前姿态、未决问题）
-- `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md` — 近期事件以提供询问内容的参考
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 外部律师指令风格、签署人姓名/电子邮件、预算立场
+- `{expert_runtime_dir}/matters/_log.yaml` — 过滤和字段来源
+- `{expert_runtime_dir}/matters/[slug]/matter.md` — 事项上下文（当前姿态、未决问题）
+- `{expert_runtime_dir}/matters/[slug]/history.md` — 近期事件以提供询问内容的参考
+- `执业配置文件（请按当前系统指引创建）` → 外部律师指令风格、签署人姓名/电子邮件、预算立场
 
 ## 过滤——哪些事项？
 
@@ -54,7 +51,7 @@ category: 争议诉讼
 
 每封电子邮件有相同的骨架；内容按事项特定。
 
-**主题行：** 按内部惯例（来自 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 外部律师指令风格；后备：`[事项：[事项名称]] — 每周状态更新`）
+**主题行：** 按内部惯例（来自 `执业配置文件（请按当前系统指引创建）` 外部律师指令风格；后备：`[事项：[事项名称]] — 每周状态更新`）
 
 **正文骨架：**
 
@@ -71,20 +68,20 @@ category: 争议诉讼
 
 3. **待决决定** — [从 matter.md 中提取需要外部律师输入的未决问题；如果没有，省略此编号项并重新编号]
 
-4. **预算** — [按 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 预算立场为月度/季度/按请求]。相对于 [matter.md 中的预算授权] 我们在什么位置？有什么差异要标记？
+4. **预算** — [按 `执业配置文件（请按当前系统指引创建）` 预算立场为月度/季度/按请求]。相对于 [matter.md 中的预算授权] 我们在什么位置？有什么差异要标记？
 
 [如果重要且相关：5. 具体要求——例如，"请在 [日期] 之前发送驳回动议的最新草稿"——从 matter.md 未决问题中提取。]
 
-[签名——姓名、角色、联系方式。来自 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 外部律师指令的签署人默认值。]
+[签名——姓名、角色、联系方式。来自 `执业配置文件（请按当前系统指引创建）` 外部律师指令的签署人默认值。]
 ```
 
-按 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 外部律师指令风格调整语气——有些律所用"尊敬的律师"正式风格；有些用名字加要点。匹配。
+按 `执业配置文件（请按当前系统指引创建）` 外部律师指令风格调整语气——有些律所用"尊敬的律师"正式风格；有些用名字加要点。匹配。
 
 ## 输出
 
 ### Markdown 草稿
 
-写入：`${WORKBUDDY_EXPERT_DATA}/oc-status/[YYYY-MM-DD]/[slug].md`
+写入：`{expert_runtime_dir}/oc-status/[YYYY-MM-DD]/[slug].md`
 
 每个文件是一封电子邮件，格式为：
 
@@ -94,10 +91,10 @@ category: 争议诉讼
 # [事项名称] — 外部律师状态请求 — [YYYY-MM-DD]
 
 **收件：** [日志中的 outside_counsel.email]（[outside_counsel.lead]，[outside_counsel.firm]）
-**发件：** [来自 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 的签署人姓名/电子邮件]
+**发件：** [来自 `执业配置文件（请按当前系统指引创建）` 的签署人姓名/电子邮件]
 **主题：** [主题行]
 
-> 上方的工作产品标题适用于此内部记录。下方的外发电子邮件正文发送给已聘用的外部律师，这本身是特权通信——在发送的电子邮件顶部应用内部特权标记（`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 特权惯例），通常是 `Privileged & Confidential — Attorney-Client Communication / Attorney Work Product`，不是此内部工作产品标题。
+> 上方的工作产品标题适用于此内部记录。下方的外发电子邮件正文发送给已聘用的外部律师，这本身是特权通信——在发送的电子邮件顶部应用内部特权标记（`执业配置文件（请按当前系统指引创建）` 特权惯例），通常是 `Privileged & Confidential — Attorney-Client Communication / Attorney Work Product`，不是此内部工作产品标题。
 
 ---
 
@@ -120,7 +117,7 @@ category: 争议诉讼
 
 ### 运行摘要
 
-处理所有事项后，写入 `${WORKBUDDY_EXPERT_DATA}/oc-status/[YYYY-MM-DD]/_summary.md`：
+处理所有事项后，写入 `{expert_runtime_dir}/oc-status/[YYYY-MM-DD]/_summary.md`：
 
 ```markdown
 # 外部律师状态运行 — [YYYY-MM-DD]
@@ -160,7 +157,6 @@ category: 争议诉讼
 - **生成它没有的内容。** 如果 `matter.md` 很薄，电子邮件就短，询问广泛的状态问题。skill 不会凭空发明具体问题。
 - **重试失败。** 如果 Gmail 草稿创建在运行中途失败，skill 记录失败并继续使用 markdown。用户可以在修复认证后重试。
 - **重写 history.md。** 读取它获取上下文；不修改。（如果外部律师的回复浮出新事件，使用 `/matter-update [slug]` 记录。）
-- **强制最低模板。** 如果内部语气是"一行，名字，结束"，草稿遵守这一点并跳过要点结构。匹配 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。
-
+- **强制最低模板。** 如果内部语气是"一行，名字，结束"，草稿遵守这一点并跳过要点结构。匹配 `执业配置文件（请按当前系统指引创建）`。
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

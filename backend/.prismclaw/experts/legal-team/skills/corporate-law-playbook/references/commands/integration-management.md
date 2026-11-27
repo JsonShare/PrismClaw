@@ -10,9 +10,6 @@ argument_hint: '[--init | --contracts | --report | --update | --export [--format
 category: 公司法务
 ---
 
-
-
-
 # /integration-management
 
 1. 加载 deal-context.md 以获取交易代码、目标公司、关闭日期、交易主管。
@@ -24,14 +21,12 @@ category: 公司法务
    - `--report`：模式 3 — 生成状态报告
    - `--update`：模式 4 — 手动更新或解析上传的状态文件
    - `--export`：模式 5 — CSV 或表格导出
-5. 读/写 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/integration-tracker.yaml`。
+5. 读/写 `{expert_runtime_dir}/deals/[code]/integration-tracker.yaml`。
 6. 任何写入后：显示变更摘要并浮现任何新标志。
 
 ---
 
 ## 事项上下文
-
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## Matter workspaces`。如果 `Enabled` 为 `✗`（内部用户的默认值），跳过本段的其余部分——skills 使用执业级上下文，事项机制不可见。如果已启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/corporate-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `Cross-matter context` 为 `on`，否则永远不要阅读另一个事项的文件。
 
 ---
 
@@ -43,7 +38,7 @@ category: 公司法务
 
 ## 跟踪器文件
 
-位于 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/integration-tracker.yaml`。读取 `deal-context.md` 获取交易代码、目标名称、关闭日期和交易主管。如果 `closing-checklist.yaml` 存在，从中继承任何交易后项目。
+位于 `{expert_runtime_dir}/deals/[code]/integration-tracker.yaml`。读取 `deal-context.md` 获取交易代码、目标名称、关闭日期和交易主管。如果 `closing-checklist.yaml` 存在，从中继承任何交易后项目。
 
 ```yaml
 # integration-tracker.yaml
@@ -152,9 +147,9 @@ contracts:
 
 ### 步骤 1：加载交易上下文
 
-读取 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/deal-context.md`。如果未找到：询问交易代码名、目标公司、关闭日期、交易主管和外部律师。如果 deal-context.md 不存在则写入它。
+读取 `{expert_runtime_dir}/deals/[code]/deal-context.md`。如果未找到：询问交易代码名、目标公司、关闭日期、交易主管和外部律师。如果 deal-context.md 不存在则写入它。
 
-读取 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/closing-checklist.yaml`（如果存在）。任何标记为交易后的项目都成为第 1 天或第 30 天的工作计划项目（从 closing-checklist 继承状态）。
+读取 `{expert_runtime_dir}/deals/[code]/closing-checklist.yaml`（如果存在）。任何标记为交易后的项目都成为第 1 天或第 30 天的工作计划项目（从 closing-checklist 继承状态）。
 
 ### 步骤 2：读取交易输入
 
@@ -168,7 +163,7 @@ contracts:
 > - 交易摘要或条款清单（给我关键经济条款和时间表）
 > - 来自外部律师的整合待办事项或交易后检查清单
 > - 现有工作计划或整合跟踪器（我将导入并从中继续）
-> - 关闭检查清单——如果由 M&A 冷启动 skill 生成，我将从 `${WORKBUDDY_EXPERT_DATA}/deals/[code]/closing-checklist.yaml` 自动继承它
+> - 关闭检查清单——如果由 M&A 冷启动 skill 生成，我将从 `{expert_runtime_dir}/deals/[code]/closing-checklist.yaml` 自动继承它
 > - 仅必要同意列表（如果购买协议由外部律师持有）
 >
 > **如果你没有任何书面内容：** 用简单语言告诉我交易——谁被收购、何时关闭、主要开放项目是什么——我将从标准的第 1/30/90/180 天工作计划构建一个入门跟踪器，供你编辑。
@@ -424,13 +419,13 @@ contracts:
 `skills/corporate-law-playbook/references/commands/integration-management.md` --update [--deal [code]]
 ```
 
-**手动更新：** 律师告诉 WorkBuddy 什么发生了变化。
+**手动更新：** 律师告诉 （外部 AI 产品） 什么发生了变化。
 
 > "我们获得了 Salesforce 同意。将其标记为已获得，分配给 [name]，日期为今天。"
 > "实体合理化决定是合并。更新状态并将合并申报添加到第 180 天。"
 > "[对手方] 拒绝了同意。标记它并注意我们需要外部律师就这是否触发购买协议赔偿主张提供建议。"
 
-WorkBuddy 更新相关跟踪器条目，重新计算任何下游状态（例如，如果所有第 1 层同意现在都已获得，将购买协议义务标记为已满足），并显示变更内容。
+（外部 AI 产品） 更新相关跟踪器条目，重新计算任何下游状态（例如，如果所有第 1 层同意现在都已获得，将购买协议义务标记为已满足），并显示变更内容。
 
 **上传更新：** 工作流负责人或外部律师发送状态文件。
 
@@ -482,7 +477,6 @@ CSV 格式——每个项目一行，由 `section` 列指示章节。
 - 它不跟踪收益分期绩效。收益分期里程碑和支付日期作为参考日期出现在跟踪器中，所有者设置为财务。业务驱动数字。
 - 它在状态报告时不实时读取合同。合同状态是律师在跟踪器中更新的内容。skill 在报告时读取跟踪器，而不是合同。
 
-
 ## 公式注入防护
 
 在 Excel、Sheets 或 CSV 输出中写入任何单元格之前，中和公式注入。来自对手方的文本（合同引用、当事方名称、注册代理人数据、CLM 导出）是攻击者控制的。以 `=`、`+`、`-`、`@`、制表符、回车或换行符开头的单元格将被解释为公式或破坏行结构。
@@ -491,6 +485,5 @@ CSV 格式——每个项目一行，由 `section` 列指示章节。
 - **适用于包含从文档、工具结果或用户粘贴来源的文本的每个单元格。** 你控制的列标题和你产生的计算值是安全的。
 - **CSV：还要转义嵌入的逗号、双引号、换行符**（RFC 4180 引用）。
 - 这不是可选的。你的用户在 Excel 中打开的电子表格触发宏或通过 DDE 渗染数据是对你的用户的供应链攻击。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

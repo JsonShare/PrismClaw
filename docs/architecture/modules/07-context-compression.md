@@ -1,4 +1,4 @@
-# 07 — 上下文压缩
+# 07 — 上下文压缩 (Context Compression)
 
 ## 职责概述
 
@@ -44,7 +44,7 @@
 │  │  │  ┌───────────────────┐  ┌──────────────────────────┐ │ │   │
 │  │  │  │ Compression       │  │  HistoryCompactor        │ │ │   │
 │  │  │  │ Orchestrator      │  │  LLM摘要+去重+标识符保持 │ │ │   │
-│  │  │  │ CB+预测触发+SDD   │──→│  PreservationContract   │ │ │   │
+│  │  │  │ CB+预测触发+软降级│──→│  PreservationContract   │ │ │   │
 │  │  │  └───────────────────┘  └──────────────────────────┘ │ │   │
 │  │  │                                                      │ │   │
 │  │  │  ┌───────────────────┐  ┌──────────────────────────┐ │ │   │
@@ -263,7 +263,7 @@
 
 - **关键常量**：`IDENTIFIER_PRESERVATION_INSTRUCTIONS` — 标识符保持指令
 - **关键常量**：`HARDENED_SUMMARIZER_SYSTEM_PROMPT` — 加固摘要提示
-  - 包含 W8（用户事实必须存活）和 W12（已废弃需求必须作为 voided 存活）
+  - 包含两条硬约束：用户事实必须存活；已废弃需求必须作为 voided 存活
 - **核心函数**：
   - `has_real_conversation()` — 检测真实对话
   - `strip_tool_result_details()` — 剥离工具结果 details 字段

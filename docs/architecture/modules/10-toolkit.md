@@ -1,4 +1,4 @@
-# 工具集
+# 10 — 工具集 (Toolkit)
 
 ## 职责概述
 
@@ -88,6 +88,7 @@ class ReadTool:
     #   文档（.pdf/.docx/.xls/.md/.rst/.rtf/.odt/.ods/.odp/.epub/.ofd/.html/
     #   .htm/.mhtml/.mht/.csv/.tsv）→ read_office 按页分支；
     #   结构化 Office（.xlsx/.pptx）→ 保留结构锚点的行式读取 + 内嵌图片清单
+```
 
 ### 文档按页读取（document_reader）
 

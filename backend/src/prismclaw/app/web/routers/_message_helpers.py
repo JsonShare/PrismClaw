@@ -458,23 +458,8 @@ def _build_display_messages(
             continue
         if entry.role == "tool":
             pending_assistant_seq = max(pending_assistant_seq, entry.seq)
-            # AskUserQuestion 是执行边界：提问气泡必须在工具结果处收束，
-            # 否则用户作答后的续执行文本会被并入提问气泡（HITL 答案本身
-            # 只作为该工具结果存在，不再额外落 user entry）。
-            _tool_name = str(entry.tool_name or "").lower()
-            _is_ask_result = "ask_user" in _tool_name or "askuser" in _tool_name
-            if not _is_ask_result:
-                for _tc in pending_tool_calls:
-                    if _tc.get("id") != entry.tool_call_id:
-                        continue
-                    _fn = _tc.get("function")
-                    _name = (
-                        str((_fn or {}).get("name") or "").lower() if isinstance(_fn, dict) else ""
-                    )
-                    _is_ask_result = "ask_user" in _name or "askuser" in _name
-                    break
-            if _is_ask_result:
-                flush_assistant()
+            # 工具结果（包括 AskUserQuestion 的用户答案）都属于当前执行过程，
+            # 不是展示层轮次边界；只有真正的下一条用户提问才能收束当前回答。
             continue
         sanitized_content = _sanitize_content(
             entry.content,
@@ -493,6 +478,14 @@ def _build_display_messages(
             continue
 
         if entry.role == "user":
+            # 旧版本曾把 HITL 答案落成带标记的 user entry。回放时跳过它，
+            # 且不 flush：它是当前执行步骤，不是新的用户提问或回答边界。
+            _legacy_meta = getattr(entry, "metadata", None)
+            if (
+                isinstance(_legacy_meta, dict)
+                and _legacy_meta.get("kind") == "clarification_answer"
+            ):
+                continue
             flush_assistant()
             last_user_ts_ms = _iso_to_ms(entry.timestamp)
             out.append(

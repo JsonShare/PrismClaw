@@ -4,16 +4,13 @@ description: 汇总近期签署的含有剧本偏差的协议，并在律师记�
 allowed_tools: [read, grep, glob, write, "yuandian:*"]
 ---
 
-
-
-
 # 交易复盘 Agent
 
 ## 目的
 
 交易结束，所有人继续前行，而关于*为何*接受某个偏差的机构知识也随之流失。此 Agent 被调用时汇总近期（默认过去 7 天）签署的含有剧本偏差的协议，让律师在记忆尚新时记录背景。
 
-输出结果写入 `${WORKBUDDY_EXPERT_DATA}/deviation-log.yaml`。playbook-monitor Agent 读取该日志，当出现规律性偏差时提出剧本更新建议——但仅针对律师未标记为一次性例外的交易。
+输出结果写入 `{expert_runtime_dir}/deviation-log.yaml`。playbook-monitor Agent 读取该日志，当出现规律性偏差时提出剧本更新建议——但仅针对律师未标记为一次性例外的交易。
 
 ## 运行方式
 
@@ -23,14 +20,14 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ### 第一步 — 读取执业档案
 
-完整读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`，提取：
+完整读取 `执业配置文件（请按当前系统指引创建）`，提取：
 - 每个条款类别的所有剧本立场（标准、可接受的备用方案、绝不接受）
 - 已签署合同存储位置（`已签署合同存放位置` 字段）
 - 交易破坏者条款（那件事）
 
 ### 第二步 — 获取近期已签署协议
 
-使用 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的存储位置：
+使用 `执业配置文件（请按当前系统指引创建）` 中的存储位置：
 
 - **若已连接合同管理系统（CLM）：** 如已配置 CLM MCP 服务器，使用其搜索/查询工具查询过去 7 天内状态为已执行/已签署的协议；否则使用 Grep 搜索本地合同目录。
 - **若使用企业协作云文档/钉钉文档/企业微信：** 如已配置企业协作 MCP 服务器，通过其消息工具在指定文件夹中搜索过去 7 天内创建或修改、带有签署标识的文件；否则使用联网检索工具或提示用户手动上传。
@@ -45,7 +42,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 对每份检索到的协议：
 
 1. 从标题识别协议类型（MSA、NDA、SOW、SaaS 订阅等）。
-2. 从 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 确定适用的剧本章节。
+2. 从 `执业配置文件（请按当前系统指引创建）` 确定适用的剧本章节。
 3. 从已签署协议中提取关键条款立场：责任限额、赔偿、数据保护、期限与终止、适用法律，以及"那件事"中涉及的任何条款。
 4. 将每项立场与剧本对比：
    - **无偏差：** 符合标准立场或可接受的备用方案 → 跳过，不汇报
@@ -83,7 +80,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ```
 [#] [交易] — [条款]
-剧本立场：[`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的标准立场]
+剧本立场：[`执业配置文件（请按当前系统指引创建）` 中的标准立场]
 已签立场：[协议中的实际内容]
 严重程度：[轻微 / 中等 / ⚠️ 严重]
 
@@ -116,7 +113,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 
 ### 第六步 — 写入 deviation-log.yaml
 
-将结构化条目追加至 `${WORKBUDDY_EXPERT_DATA}/deviation-log.yaml`，每份已处理协议各一条。
+将结构化条目追加至 `{expert_runtime_dir}/deviation-log.yaml`，每份已处理协议各一条。
 
 含偏差的协议：
 
@@ -159,7 +156,7 @@ allowed_tools: [read, grep, glob, write, "yuandian:*"]
 [N] 份协议已审阅 | [N] 份含偏差 | [N] 条偏差已记录
 ⚠️ 本周严重偏差：[N — 列出对方名称，或"无"]
 🚫 已从规律分析中排除：[N 笔标记为一次性例外的交易，或"无"]
-已记录至：${WORKBUDDY_EXPERT_DATA}/deviation-log.yaml
+已记录至：{expert_runtime_dir}/deviation-log.yaml
 Playbook monitor 将在频率达到阈值时呈现规律并提出建议。
 ```
 

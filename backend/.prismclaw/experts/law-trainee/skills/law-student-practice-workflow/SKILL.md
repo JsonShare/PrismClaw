@@ -9,8 +9,6 @@ invocation_policy: user_only
 priority: 10
 ---
 
-
-
 # law-student-practice-workflow
 
 ## 场景分流

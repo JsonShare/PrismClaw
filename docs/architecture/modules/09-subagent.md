@@ -1,4 +1,4 @@
-# 子代理
+# 09 — 子代理 (Subagent)
 
 ## 职责概述
 
@@ -72,44 +72,36 @@ class AgentManifest(BaseModel):
     name: str                    # kebab-case 格式，验证器强制
     description: str
     context_mode: Literal["inherit", "isolated"]
-    execution_mode: Literal["sync", "parallel"]
     max_inherit_messages: int          # 默认值 20
     model: str | None
-    allowed_tools: list[str]
-    max_turns: int | None
+    max_turns: int | None              # alias "maxTurns"
     timeout_seconds: float | None
-    preload_skills: list[str]
-    can_handoff_to: list[str]    # 验证器检查格式一致性
-    system_prompt: str | None
+    preload_skills: list[str]          # alias "skills"
+    system_prompt: str
 ```
 
 验证器：
 - `name` 必须匹配 `kebab-case` 正则
-- `can_handoff_to` 中的每个名称也必须是 kebab-case
-- `can_handoff_to` 中列出的工具必须在 `allowed_tools` 中存在
+- 解析器要求 `name` 与 `.md` 文件名一致
 
 **声明式配置：.md Frontmatter**
 
-Agent 通过 `.md` 文件的 YAML frontmatter 声明自身配置，无需编写 Python 代码。插件内置的 subagent 文件位于 `~/.prismclaw/assets/plugins/<domain>/<sub-plugin>/agents/`，工作区自定义的位于 `<workspace>/.work/agents/`。
+Agent 通过 `.md` 文件的 YAML frontmatter 声明自身配置，无需编写 Python 代码。专家包内置的 subagent 文件位于 `~/.prismclaw/assets/experts/<expert>/agents/`，工作区自定义的位于 `<workspace>/.work/agents/`。
 
 ```yaml
 ---
 name: chart-watcher                    # 必需。小写字母+数字+连字符，1-64字符
 description: 监控电子病历中的异常生命体征  # 必需。1-1024字符
-when_to_use: 需要监控体征时...          # 可选。触发条件描述，0-2048字符
 context_mode: isolated                  # "inherit" | "isolated"，默认 "isolated"
-execution_mode: parallel                # "sync" | "parallel"，默认 "parallel"
 max_inherit_messages: 20                # 1-100，仅 context_mode="inherit" 时生效
 model: Qwen3.5-27B                      # 可选。指定模型
-allowed_tools: [read, bash]             # 可选。白名单，None=不限制
 max_turns: 15                            # 可选。最大迭代轮次
 timeout_seconds: 240.0                   # 可选。超时秒数
 preload_skills: [clinical-assessment]   # 可选。预加载技能
-can_handoff_to: [reviewer]             # 可选。Handoff 白名单，None=开放，非空=白名单
 ---
 ```
 
-验证规则：`name` 必须与文件名一致；`can_handoff_to` 不允许空列表；声明 `can_handoff_to` 时 `allowed_tools` 必须包含 `request_handoff`。
+验证规则：`name` 必须与文件名一致。派发时由 `sub_agent` 工具统一校验深度、团队归属与目标存在性；`AgentManifest` 使用 `extra="ignore"`，未识别字段被静默忽略。
 
 ### SubAgentRegistry（定义层）
 
@@ -119,13 +111,14 @@ class SubAgentRegistry:
     # 从 <workspace>/.work/agents/ 下 BFS 扫描 <name>.md
     # 构造时自动扫描（__init__），无需显式调用 discover()
     def _do_scan_layer(self, ...)  # 统一扫描器，含硬停保护
-    def diagnose(self)             # 3 类缺口分析
+    def diagnose(self)             # 各发现层快照 + name mismatch 分析
 ```
 
-诊断类别：
-1. name mismatches（文件名与 YAML name 不一致）
-2. can_handoff_to unknown targets（指向未注册代理）
-3. allowed_tools gaps（声明的工具不在实际注册表中）
+诊断内容（`_FullDiagnostics`）：
+1. `layers`（逐层扫描明细：文件、解析结果、硬停）
+2. `merged_names`（合并后的代理名清单）
+3. `name_mismatches`（manifest.name 与文件 stem / namespace 不一致）
+4. `registry_settings`（`enabled` / `max_depth` 快照）
 
 **解析与加载流程**：
 
@@ -139,12 +132,12 @@ class SubAgentRegistry:
 |------|------|------|
 | `AgentManifest` | `engine/subagent/definition/manifest.py` | Pydantic 数据模型，验证所有字段 |
 | `parse_agent_md()` | `engine/subagent/definition/parser.py` | 解析 .md 文件，提取 frontmatter + body |
-| `SubAgentRegistry` | `engine/subagent/definition/registry.py` | 五层优先级目录扫描 + 名称去重 |
-| `DefaultPluginAgentLoader` | `assembly/plugins/agent_manifest_loader.py` | 插件级 Agent 加载器 |
+| `SubAgentRegistry` | `engine/subagent/definition/registry.py` | 项目目录扫描 + 名称去重 |
+| `DefaultExpertAgentLoader` | `assembly/experts/agent_manifest_loader.py` | 专家包级 Agent 加载器 |
 
-**五层优先级**（由低到高）：内置层（builtin）→ 插件层（plugin）→ 工作区层（workspace）→ 用户层（user）→ 会话层（session）。后加载的同名 Agent 覆盖先加载的。解析错误以 WARNING 记录并跳过。
+**目录来源**：项目级 Agent 扫描 `<workspace>/.work/agents/`（v4 起原多层目录收敛为单一 project 目录，`source="project"`）；专家包内 `<expert>/agents/` 由 `DefaultExpertAgentLoader` 在专家包加载时扫描注册（`source="plugin:{expert}"`）。同名以后加载者覆盖；解析错误以 WARNING 记录并跳过。
 
-**运行时加载**：`PluginManager 启动 → DefaultPluginAgentLoader.scan_agents_dir() → SubAgentRegistry._scan_layer(agents_path, source) → parse_agent_md()`。注册表在 `__init__` 完成后即完全填充，无懒加载。
+**运行时加载**：`专家包加载（assembly/experts/load_wiring.py）→ DefaultExpertAgentLoader.scan_agents_dir() → SubAgentRegistry._scan_layer(agents_path, source) → parse_agent_md()`。项目注册表在 `__init__` 完成后即完全填充，无懒加载。
 
 ### AgentInstance（核心执行层）
 
@@ -180,7 +173,6 @@ class ContextMixin:
     def _resolve_model()
     def _resolve_timeout()
     def _resolve_max_turns()
-    def _resolve_allowed_tools()
     def _collect_memory_injection()
 ```
 
@@ -269,7 +261,7 @@ class SessionParallelTaskStore:
     """session-store-backed 实现；append 依赖 commit_events 的内部锁，不再外层加锁"""
 ```
 
-### 后台执行（P1a）
+### 后台执行
 
 `background` 是 `sub_agent` 的调用参数，而非 manifest 属性（一次调用可含多个 agent，manifest 级开关会产生混合语义）：
 
@@ -317,17 +309,16 @@ P1b（多副本）未实现，开放前必须先修复以下单进程假设：
 ```python
 # runtime/follow_up.py
 class SessionFollowUpSnapshot:
-    latest_handoff_request: ...
-    parallel_task_summary: ...
-    parallel_task_attention: ...
-    follow_up_attention: ...
+    parallel_task_summary: dict | None
+    parallel_task_attention: dict | None
+    follow_up_attention: dict | None
 
 def session_follow_up_snapshot()    # 构建快照
 def render_follow_up_status()       # 渲染状态文本
 def build_session_follow_up_note()  # 构建 session 注入笔记
 ```
 
-注意逻辑优先级：handoff > fork。note 只在存在活跃任务（scheduled/running），或任务记录出现在最后一条 assistant 消息之后时注入；已被回复覆盖的旧任务不重复提示。
+note 只在存在活跃任务（scheduled/running），或任务记录出现在最后一条 assistant 消息之后时注入；已被回复覆盖的旧任务不重复提示。
 
 ### 系统提示组装
 
@@ -355,17 +346,24 @@ MAX_FILE_BYTES = 256_000
 
 | Agent | 职责 | 工具 |
 |-------|------|------|
-| **explorer** | 只读核对事实与出处：位置、现状、原文 | `read`, `grep`, `glob`, `web-search-mcp:search`, `web-search-mcp:fetch` |
-| **executor** | 在划定范围内修改或生成内容，并自行验证生效 | `read`, `grep`, `glob`, `write`, `edit`, `bash`, `web-search-mcp:search`, `web-search-mcp:fetch` |
-| **reviewer** | 独立验收结论或产出，给出可复现依据 | `read`, `grep`, `glob`, `bash` |
+| **explorer** | 只读核对事实与出处：位置、现状、原文 | 共享 `EXPERT_MODE_TOOLS`（约束靠 system_prompt 的只读要求） |
+| **executor** | 在划定范围内修改或生成内容，并自行验证生效 | 共享 `EXPERT_MODE_TOOLS` |
+| **reviewer** | 独立验收结论或产出，给出可复现依据 | 共享 `EXPERT_MODE_TOOLS` |
+
+`EXPERT_MODE_TOOLS` 的实际内容（`engine/execution/tools/expert_mode.py:3`）：
+`read`、`write`、`edit`、`glob`、`grep`、`bash`、`todo_write`、`present_files`、
+`ask_user_question`、`activate_skill`、`skill_search`、`tool_search`。
+MCP 能力不在此集合内，需经 `tool_search` 发现后使用。
 
 协作拓扑：不设固定的角色瀑布流或必经审查节点。主 Agent 负责规划、任务拆解、
 写入范围分工、冲突裁决、架构取舍与最终综合；子代理只承担边界清晰的能力单元。
-三个角色共用同一套生命周期和结果契约；默认 `context_mode="isolated"`，工具权限
-由 manifest 的 `allowed_tools` 显式限定。
+三个角色共用同一套生命周期和结果契约；默认 `context_mode="isolated"`。
+工具面不来自 manifest 声明——所有子代理统一拿 `SUBAGENT_TOOL_SURFACE`
+（即 `EXPERT_MODE_TOOLS`，`restricted=True` 永不回退全放行，见
+`engine/subagent/tool_surface.py`）。
 
-医疗、法律等垂直领域能力由插件提供（经 `subagent_search` 发现），系统不内置领域
-专家——插件侧已有专用数据源（FHIR、病历、法规库）和执业档案，内置角色无法替代，
+医疗、法律等垂直领域能力由专家包提供（经 `subagent_search` 发现），系统不内置领域
+专家——专家包侧已有专用数据源（FHIR、病历、法规库）和执业档案，内置角色无法替代，
 并列存在只会造成重复派发与命名冲突。
 
 ### 生命周期与协作
@@ -380,20 +378,23 @@ MAX_FILE_BYTES = 256_000
 多 Agent 结果以独立 `results[]` 返回，保留各自的证据、结论与置信度；聚合器不自动
 去重、不合并结论、不计算全体最低置信度，综合由主 Agent 完成。
 
-### 插件领域 Agent
+### 专家领域 Agent
 
-插件子目录下的领域 Agent 聚焦特定业务域，当前无 Handoff 能力，默认
-`context_mode="isolated"`。内置 Agent 的工具权限全部由 manifest 显式限定；插件 Agent
-同样声明 `allowed_tools`，MCP 工具可用 `<server>:*` 前缀通配，运行时按注册表展开，
-避免在清单里枚举远端工具名。
+专家包下的领域 Agent 聚焦特定业务域，默认 `context_mode="isolated"`。团队专家
+（`expertType=team`）在会话启动时由 `engine/execution/loop/preparer.py` 注册
+`team_create`（`TeamCreateTool`）：派发前必须先注册当次运行的团队成员，仅当前 team
+lead 可派发成员，成员之间不可互连（`team_guard.py`）。工具面不区分内置与专家 Agent：
+两者统一取 `SUBAGENT_TOOL_SURFACE` 的 `EXPERT_MODE_TOOLS` 白名单，只在激活 Skill 时
+再按 skill 的 `allowed_tools` 收窄。专家包 Agent MD 若声明 `tools` / `allowed_tools`
+会在校验期直接报 `MANIFEST_AGENT_TOOLS_FORBIDDEN`。
 
-| 维度 | 内置 Agent | 插件领域 Agent |
+| 维度 | 内置 Agent | 专家领域 Agent |
 |------|-----------|-----------|
 | **定位** | 与领域无关的通用能力单元（查事实/做产出/验收） | 特定业务域的一次性工作流（监控/审查/分析） |
-| **工具权限** | 显式白名单，只读角色无写入能力 | 显式白名单：本地读写 + 指定 MCP server（`<server>:*`） |
+| **工具权限** | `SUBAGENT_TOOL_SURFACE`（`EXPERT_MODE_TOOLS`，restricted） | 同一工具面；领域能力经 skill / MCP 注册表提供 |
 | **编排** | 主 Agent 直接派发，支持持久协作 | 通过 `subagent_search` 发现后派发 |
 | **调度** | 主 Agent 按需派发 | 同样按需派发；周期运行需主 Agent 经 `schedule` 工具触发，系统无 agent 级调度器 |
-| **安全性** | 工具级隔离 + 生命周期边界 | 工具级白名单 + 业务级约束（system_prompt 声明"此 Agent 不会做的事"） |
+| **安全性** | 工具面 + 生命周期边界 | 同一工具面 + 业务级约束（system_prompt 声明"此 Agent 不会做的事"） |
 
 ### 工具权限隔离机制
 
@@ -433,7 +434,9 @@ AllowedToolsPolicy → ActorIdentity → ReadOnlyPermission → HeadlessMode
 | `SkillGatedReducer` | 技能门控——仅激活技能声明的工具 |
 | `DiscoveryReducer` | 发现机制相关限制 |
 
-**运行时权限解析**：Agent 的 `allowed_tools` 与当前激活 Skill 的 `allowed_tools` 取交集：`effective_allowed = manifest_allowed ∩ skill_allowed`。
+**运行时权限解析**：子代理不读 manifest 的工具声明，统一由 `SUBAGENT_TOOL_SURFACE`
+给出 `EXPERT_MODE_TOOLS` 白名单；激活 Skill 时再按 `allowed_tools_override` 取交集
+（`effective = surface ∩ skill.allowed_tools`）。
 
 ## 关键数据流
 
@@ -561,12 +564,10 @@ _collect_evidence_from_messages()（模块级函数）
 | `MAX_TURNS_CEILING` | `core/constants.py` | 最大 turn 数硬上限 | `50` |
 | `MAX_FILES_PER_LAYER` | `core/constants.py` | 每层最大文件数 | `200` |
 | `MAX_FILE_BYTES` | `core/constants.py` | 单文件最大字节数 | `256_000` |
-| `AgentManifest.context_mode` | `.md` frontmatter | 上下文模式 | — |
-| `AgentManifest.execution_mode` | `.md` frontmatter | 执行模式 | — |
+| `AgentManifest.context_mode` | `.md` frontmatter | 上下文模式 | `isolated` |
+| `AgentManifest.max_inherit_messages` | `.md` frontmatter | 可继承父会话消息条数（仅 inherit 生效） | `20` |
 | `AgentManifest.max_turns` | `.md` frontmatter | 自定义 turn 上限 | — |
 | `AgentManifest.timeout_seconds` | `.md` frontmatter | 自定义超时 | — |
-| `AgentManifest.preload_skills` | `.md` frontmatter | 预加载技能列表 | `[]` |
-| `AgentManifest.can_handoff_to` | `.md` frontmatter | 可交接代理列表 | `[]` |
+| `AgentManifest.preload_skills` | `.md` frontmatter | 预加载技能列表（alias `skills`） | `[]` |
 | `AgentManifest.model` | `.md` frontmatter | 指定模型 | — |
-| `AgentManifest.allowed_tools` | `.md` frontmatter | 允许的工具列表 | `None` (alias "tools") |
 | `SubAgentConfig.max_parallel_per_turn` | `schema/config/config.py` | 本会话同时执行的子代理上限（含后台闸门） | `5` |

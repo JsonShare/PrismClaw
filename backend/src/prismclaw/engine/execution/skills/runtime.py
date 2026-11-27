@@ -149,7 +149,7 @@ class SkillRuntime:
         """activate_skill 失败时的路由消息——错误自带下一步指引，绝不自反。"""
         if resolution is not None and resolution.kind == "ambiguous":
             members = list(resolution.member_names)
-            # 大包（几十个技能的 marketplace）全量列进错误会撑爆 UI，
+            # 专家包技能多时全量列进错误会撑爆 UI，
             # 也让模型更难选；截断后指向 skill_search 按主题检索。
             shown = members[:12]
             more = (

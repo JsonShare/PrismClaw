@@ -27,8 +27,6 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `agents/contracts-med.md`：专家定义
 - `skills/`：2 个技能（`contracts`、`contracts-med-playbook`）
 - `skills/contracts-med-playbook/`：执业资料与流程参考
-- `skills/contracts-med-playbook/references/practice-profile/`：执业档案模板
-- `skills/contracts-med-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -36,4 +34,3 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 - 合同解释不构成法律意见；重大争议转交法务专家团或执业律师。
 - 交付为草稿或研究笔记，签署与对外发送前须由律师复核；未核实的法规与阈值标 [待核验]。
-

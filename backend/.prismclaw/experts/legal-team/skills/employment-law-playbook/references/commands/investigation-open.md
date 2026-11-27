@@ -7,16 +7,13 @@ argument_hint: '[指控的简要描述]'
 category: 劳动用工
 ---
 
-
-
-
 # /investigation-open
 
 打开新的调查事项——运行接收、生成来源检查清单、创建持久调查日志。
 
 ## 说明
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`。
+1. 加载 `执业配置文件（请按当前系统指引创建）`。
 2. 加载 `internal-investigation` 参考 skill 并运行模式 1（打开）。
 3. 如果具有相同 slug 的事项已存在，在覆盖前发出警告。
 
@@ -40,6 +37,5 @@ category: 劳动用工
 ```
 
 > 详细的接收、保密形成要求、来源检查清单和日志模板位于 `internal-investigation` 参考 skill 中——在进行实质性工作之前加载它。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

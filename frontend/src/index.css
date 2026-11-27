@@ -1198,6 +1198,9 @@ code, pre {
 }
 .rich-input .input-chip[data-kind='skill'] {
   padding: 3px 24px 3px 25px;
+  /* 圆角端（999px 的两个半圆）本身在布局盒内，但 3px 外边距会让光标紧贴圆弧，
+     视觉上像被半圆切到；左右各留 6px 给光标与前后文字。 */
+  margin: 0 6px;
   border-color: transparent;
   border-radius: 999px;
   background: var(--c-surface-2);

@@ -5,15 +5,12 @@ argument_hint: '[slug] [简要事件描述]'
 category: 争议诉讼
 ---
 
-
-
-
 # /matter-update
 
 1. 遵循以下工作流和参考。
-2. 确认 slug 存在于 `${WORKBUDDY_EXPERT_DATA}/matters/` 和 `_log.yaml` 中。
+2. 确认 slug 存在于 `{expert_runtime_dir}/matters/` 和 `_log.yaml` 中。
 3. 提示事件类型、日期（默认今天）、摘要以及任何日志字段更新（风险变更、状态变更、下一个截止日期变更、重大性重新分类）。
-4. 附加日期条目到 `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md`。
+4. 附加日期条目到 `{expert_runtime_dir}/matters/[slug]/history.md`。
 5. 更新 `_log.yaml`——将 `last_updated` 设为今天，应用任何字段更新。
 6. 确认。
 
@@ -27,14 +24,14 @@ category: 争议诉讼
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` — 查找行
-- `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md` — 附加目标
-- `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/matter.md` — 参考（不要重写）
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` — 风险校准（如重新评估风险）
+- `{expert_runtime_dir}/matters/_log.yaml` — 查找行
+- `{expert_runtime_dir}/matters/[slug]/history.md` — 附加目标
+- `{expert_runtime_dir}/matters/[slug]/matter.md` — 参考（不要重写）
+- `执业配置文件（请按当前系统指引创建）` — 风险校准（如重新评估风险）
 
 **冲突门槛——不可绕过。** 在记录更新之前，检查 `_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
-> "我在事项日志中看不到 [matter slug]。首先运行 `skills/litigation-law-playbook/references/commands/matter-intake.md`，以便冲突检查运行并设置事项工作区。我不会向未管理的事项附加历史——冲突检查是门槛，在事项被接收之前没有 `history.md` 可附加。"
+> "我在事项日志中看不到 [matter slug]。首先运行 `skills/litigation-law-playbook/references/commands/matter-intake.md`，以便冲突检查运行并初始化事项目录。我不会向未管理的事项附加历史——冲突检查是门槛，在事项被接收之前没有 `history.md` 可附加。"
 
 ## 输入
 
@@ -82,11 +79,11 @@ Slug（必需）。如果未提供，询问——附上最近更新事项的短�
 
 ### 4前. 和解接受门槛
 
-如果策略更新是**和解接受**（公司正在接受和解要约、签署和解协议或授权原则上接受——而不仅仅是记录提出或收到的要约）：阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是非律师：
+如果策略更新是**和解接受**（公司正在接受和解要约、签署和解协议或授权原则上接受——而不仅仅是记录提出或收到的要约）：阅读 `执业配置文件（请按当前系统指引创建）` 中的 `## 谁在使用这个`。如果角色是非律师：
 
 > 接受和解有法律后果——它解决主张、通常需要豁免、可能影响保险、税务和相关事项。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >
-> [生成一页摘要：事项、拟议和解条款（金额、结构性、豁免范围、保密、不贬损）、涉及的敞口、授权阶梯状态（见 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 和解授权）、可能出什么问题、在接受前要问律师什么。]
+> [生成一页摘要：事项、拟议和解条款（金额、结构性、豁免范围、保密、不贬损）、涉及的敞口、授权阶梯状态（见 `执业配置文件（请按当前系统指引创建）` 和解授权）、可能出什么问题、在接受前要问律师什么。]
 >
 > 如果你需要在你所在的司法管辖区找到持牌律师、事务律师、大律师或其他授权法律专业人士：你所在专业监管机构的转介服务是最快的起点（美国的州律师协会、英格兰和威尔士的 SRA/律师标准委员会、苏格兰/北爱尔兰/爱尔兰/加拿大/澳大利亚的律师协会，或你所在司法管辖区的同等机构）。
 
@@ -110,7 +107,7 @@ Slug（必需）。如果未提供，询问——附上最近更新事项的短�
 **理由：** [一句话]
 ```
 
-如果重大性变为 `reserved` 或 `disclosed`，且事项之前没有准备金或披露，将事件标记为需要根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 重大性阈值通知财务 / 审计委员会。
+如果重大性变为 `reserved` 或 `disclosed`，且事项之前没有准备金或披露，将事件标记为需要根据 `执业配置文件（请按当前系统指引创建）` 重大性阈值通知财务 / 审计委员会。
 
 ### 5. 种子文档提示（可选）
 
@@ -118,7 +115,7 @@ Slug（必需）。如果未提供，询问——附上最近更新事项的短�
 
 ## 写入
 
-### 附加到 `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md`
+### 附加到 `{expert_runtime_dir}/matters/[slug]/history.md`
 
 最新的在顶部，直接在标题后面的 `---` 下方。
 
@@ -136,7 +133,7 @@ Slug（必需）。如果未提供，询问——附上最近更新事项的短�
 
 如果没有字段变更，省略"字段变更"块。
 
-### 更新 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml`
+### 更新 `{expert_runtime_dir}/matters/_log.yaml`
 
 - 应用任何字段变更。
 - 设置 `last_updated: [today]`（或用户覆盖的事件日期——日志跟踪记录最后被触碰的时间）。
@@ -152,6 +149,5 @@ Slug（必需）。如果未提供，询问——附上最近更新事项的短�
 - 编辑过去的历史条目。更正是引用并纠正先前条目的新条目。
 - 静默更改日志。每个字段变更在写入前都展示给用户。
 - 决定新发展是否需要准备金/披露。它浮出问题（"这可能推动重大性——要重新分类吗？"），用户回答。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

@@ -2,9 +2,6 @@
   "name": "clinical-med",
   "version": "1.0.0",
   "description": "Structures patient summaries, triage and lab interpretation, checks medication and allergy risks, drafts clinical documents and patient education; drafts require clinician review.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/clinical-med.md"
   ],
@@ -18,7 +15,11 @@
     "./skills/treatment-plan-writer",
     "./skills/clinical-evidence",
     "./skills/clinical-documentation",
-    "./skills/medical-patient-education"
+    "./skills/medical-patient-education",
+    "./skills/clinical-reports",
+    "./skills/clinical-decision-support",
+    "./skills/medical-imaging-review",
+    "./skills/shi-xuefei-complex-cardiovascular-case-review"
   ],
   "expertType": "agent",
   "agentName": "clinical-med",
@@ -31,16 +32,15 @@
     "en": "History Triage & Medication Safety"
   },
   "displayDescription": {
-    "zh": "整理病史摘要、分诊与检验解读，审查用药过敏风险，输出须医师复核的草稿。",
+    "zh": "整理病史摘要、分诊与检验结果解读，审查用药与过敏风险，输出须医师复核、不可直接执行的草稿。",
     "en": "Structures patient summaries, triage and lab interpretation, checks medication and allergy risks; drafts require clinician review."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "12-IndustryConsultant",
+  "categoryId": "clinical",
   "defaultInitPrompt": {
     "zh": "把这份患者病史整理成结构化草稿，标出用药与过敏风险。",
     "en": "Summarize this patient history and flag medication and allergy risks."
   },
-  "plugin": "clinical-med",
   "tags": [
     {
       "zh": "病史摘要",
@@ -69,5 +69,6 @@
       "en": "Extract structured fields and suggest ICD-10 codes from this note."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "临床诊疗"
 }

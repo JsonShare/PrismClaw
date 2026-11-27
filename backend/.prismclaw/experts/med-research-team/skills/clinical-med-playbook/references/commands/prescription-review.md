@@ -13,7 +13,7 @@ category: 临床诊疗
 
 ## 执行步骤
 
-1. 读取 `skills/clinical-med-playbook/references/practice-profile/PLUGIN.md` 获取执业档案。
+检查会话中的执业配置。
 2. 获取处方信息：药品、剂量、给药途径、频次、疗程、患者信息。
 3. 逐一检查以下项目：
 

@@ -8,8 +8,6 @@ category: 法律诊所
 invocation_policy: user_only
 ---
 
-
-
 # clinic-supervisor-workflow
 
 ## 场景分流

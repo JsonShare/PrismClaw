@@ -1,11 +1,8 @@
 ---
 name: ip-renewal-watcher
-description: 读取知识产权投资组合登记册，计算到期事项，并发布按优先级排序的截止日期报告至 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 续约提醒 中指定的频道（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发短语："what's renewing"、"IP deadlines"、"portfolio check"、"IP renewal report"。
+description: 读取知识产权投资组合登记册，计算到期事项，并发布按优先级排序的截止日期报告至 `执业配置文件（请按当前系统指引创建）` → 续约提醒 中指定的频道（由主 Agent 按需调用，可通过 schedule 工具定时触发）。触发短语："what's renewing"、"IP deadlines"、"portfolio check"、"IP renewal report"。
 allowed_tools: [read, grep, glob, write, "Solve Intelligence:*", "CourtListener:*", "Descrybe:*", "Slack:*", "Google Drive:*"]
 ---
-
-
-
 
 # 知识产权续约监控 Agent
 
@@ -19,7 +16,7 @@ allowed_tools: [read, grep, glob, write, "Solve Intelligence:*", "CourtListener:
 
 ## 执行步骤
 
-1. 读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`，获取提醒目标（Slack 频道、邮件列表或内联）和工作成果标题规则。
+1. 读取 `执业配置文件（请按当前系统指引创建）`，获取提醒目标（Slack 频道、邮件列表或内联）和工作成果标题规则。
 
 2. 加载 `ip-portfolio-workflow` 技能。为每项资产刷新计算截止日期——不仅信任存储日期——然后以 90 天窗口运行模式 2。
 

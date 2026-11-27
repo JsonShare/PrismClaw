@@ -1,6 +1,6 @@
 ---
 name: litigation-customize
-description: '引导式自定义您的诉讼执业档案——无需重新运行整个冷启动访谈即可更改一项。调整执业角色、方（原告/被告/混合）、风险校准、环境、内部风格、升级联系人、严重性词汇或事项工作区路径。当用户说"change
+description: '引导式自定义您的诉讼执业档案——无需重新运行整个冷启动访谈即可更改一项。调整执业角色、方（原告/被告/混合）、风险校准、环境、内部风格、升级联系人、严重性词汇或输出路径。当用户说"change
   my [thing]"、"update my profile"、"edit my config"或"customize"时使用。
 
   '
@@ -9,13 +9,11 @@ category: 争议诉讼
 customizes: litigation-legal
 ---
 
-
-
 # 自定义争议诉讼配置
 
 ## 读取当前配置
 
-读取 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`（以及上一层的 `${WORKBUDDY_EXPERT_DATA}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
+读取 `执业配置文件（请按当前系统指引创建）`（以及上一层的 `{expert_runtime_dir}/company-profile.md`），获取当前自定义配置。如果插件配置不存在或仍包含 `[PLACEHOLDER]` 值，提示用户先运行冷启动访谈。
 
 ## 显示可自定义项
 
@@ -41,7 +39,7 @@ customizes: litigation-legal
 - *风险校准收紧高风险阈值：* "更多传入催告和调查令将通过 `/matter-briefing` 和 `/oc-status` 路由。"
 - *新增知识产权事项的常设外部律师：* "`/oc-status` 将在 IP 标记事项的每周扫描中包括此律所。"
 
-对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `${WORKBUDDY_EXPERT_DATA}/company-profile.md` 并注意影响范围。修改后保存。
+对于共享档案更改（公司名称、行业、司法管辖区、执业设置、阶段）：写入 `{expert_runtime_dir}/company-profile.md` 并注意影响范围。修改后保存。
 
 ## 关闭
 

@@ -29,8 +29,6 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/law-trainee-playbook/`：执业资料与流程参考
 - `skills/`：3 个技能（`law-student-practice-workflow`、`law-student-session-workflow`、`law-trainee-playbook`）
 - `skills/law-trainee-playbook/references/commands/`：命令流程（参考文档）
-- `skills/law-trainee-playbook/references/practice-profile/`：执业档案模板
-- `skills/law-trainee-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -40,4 +38,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-流程参考文档位于 `skills/law-trainee-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+流程参考文档位于 `skills/law-trainee-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

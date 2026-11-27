@@ -1,4 +1,4 @@
-# Web 层
+# 12 — Web 层 (Web Layer)
 
 ## 职责概述
 
@@ -7,11 +7,11 @@ Web 层是 PrismClaw 面向用户的 HTTP/WebSocket 交付层，负责：
 - 应用生命周期管理（启动/关闭编排、健康检查、基础设施初始化）
 - JWT 认证与用户管理
 - WebSocket 双向通信（聊天、中止、工具审批、心跳）
-- HTTP REST API（会话管理、文件操作、工作区管理、技能、设置、Office 预览）
+- HTTP REST API（会话管理、文件操作、工作区管理、技能/专家、设置、Office 预览）
 - OpenAI 兼容 API（`/api/v1/chat/completions`、`/api/v1/models`）
 - 多 Worker 网关路由（会话亲和性、消息转发）
 - 安全中间件（CSP、HSTS、速率限制、分布式追踪）
-- 聊天命令适配（斜杠命令拦截与插件命令路由）
+- 聊天命令适配（斜杠命令拦截与专家命令路由）
 
 ## 架构总览
 
@@ -211,14 +211,14 @@ async def _run_chat(state: ConnectionState, msg: ChatSendMessage):
     # 4. 构建 RunRequest
     # 5. chat_service.start_conversation() → 异步事件流
     # 6. 事件处理:
-    #    - IterationBoundary: 迭代分隔 + full_transcript_parts 分段
-    #    - TextChunk: 即时推送 chat.delta（所有轮次，零缓冲）+ 累计 full_transcript_parts
+    #    - IterationBoundary: 切段（上一轮结束）+ 全量 timeline snapshot
+    #    - TextChunk: 即时推送 chat.delta（带 segmentId，零缓冲）
     #    - ReasoningChunk: 时间线推理增量推送
     #    - ToolCallStart: 工具执行开始 + 时间线 step/orphan 卡片
     #    - ToolCallEnd: 工具执行结束 + 时间线更新
     #    - ToolApprovalRequest: 审批请求
     #    - HeartbeatEvent: 阶段心跳
-    #    - Done: final_message = "\n\n".join(full_transcript_parts)（全转录）+ chat.done
+    #    - Done: final_message 取引擎终态轮（complete_no_tool_turn）+ chat.done
     #    - ErrorEvent: 错误处理
     # 7. 输出文件收集 + 交付物确定
     # 8. 文件变更通知
@@ -226,7 +226,7 @@ async def _run_chat(state: ConnectionState, msg: ChatSendMessage):
 ```
 
 关键机制：
-- **单 pass 实时正文（PrismClaw 模式）**：所有轮次的 `TextChunk` 即时推送 `chat.delta`，token 级零缓冲；`Done` 时提交 `final_message = "\n\n".join(full_transcript_parts)` 作为全转录权威提交源（与实时流逐字节相等，I3 不变量）。中间轮过程文本保留在正文，不撤回、不归入思考区。
+- **正文 = 终态轮**：所有 `TextChunk` 即时推送 `chat.delta`（带 `segmentId`，零缓冲）。正文只呈现「运行结束时仍在进行的那一轮」的文本；轮次一旦结束（下一轮 `llm_start`）或出现工具调用，其文本即属过程过语，只进执行时间线。`Done` 的 `final_message` 直接取引擎 `complete_no_tool_turn` 落库的终态轮内容，Web 层不再把流式片段拼成第二条真相源。
 - **chat.done 指数退避**：覆盖 WS 短暂断开（退避序列 0.5, 1, 2, 4, 6, 8, 10, 15s，共 8 次）
 - **交付物确定策略**：仅 LLM 通过 `present_files` 主动声明的文件才展示；自动扫描 `outbox/` 仅用于验证
 
@@ -269,10 +269,10 @@ class ConversationWebRuntimeProjection:
 ```python
 async def try_handle_slash_command(state, msg) → ChatSendMessage | None:
     # 1. _SLASH_COMMAND_RE 匹配 /command_name args
-    # 2. ExtensionManager.get_plugin_command_runtime(command_name)
+    # 2. ExtensionManager.get_expert_command_runtime(command_name)
     # 3. runtime.build_invocation_prompt(args)
     # 4. 返回修改后的 ChatSendMessage（content → invocation_prompt）
-    # 5. 注入 _command_identity（skill_name + plugin_name）
+    # 5. 注入 _command_identity（skill_name + expert_name）
     # 未匹配 → 返回 None（走正常聊天流程）
 ```
 
@@ -372,6 +372,12 @@ POST   /workspaces           # 创建工作区
 DELETE /workspaces/{id}      # 删除工作区
 GET    /workspaces/outbox   # 聚合交付物文件
 
+# experts.py — experts_router
+GET    /experts                          # 专家包目录
+GET    /experts/{expert_id}              # 专家包详情
+POST   /sessions/{session_id}/expert      # 选择会话专家
+DELETE /sessions/{session_id}/expert      # 取消会话专家
+
 # openai_compat.py — openai_router (prefix="/api/v1")
 POST /api/v1/chat/completions   # OpenAI 兼容聊天（stream/non-stream）
 GET  /api/v1/models             # 模型列表
@@ -418,11 +424,11 @@ def _install_tracing(app):           # OpenTelemetry 分布式追踪
             → RunRequest 构建
             → chat_service.start_conversation()
             → 事件流处理:
-              TextChunk → SERVER_CHAT_DELTA（即时推送，零缓冲）+ 累计 full_transcript_parts
+              TextChunk → SERVER_CHAT_DELTA（即时推送，带 segmentId）
               ToolCallStart → 时间线 step/orphan 卡片
               ToolCallEnd → 时间线更新 + SERVER_TASK_RUNTIME
               ReasoningChunk → 时间线推理增量
-              Done → SERVER_CHAT_DONE（final_message=全转录，指数退避重试）
+              Done → SERVER_CHAT_DONE（final_message=引擎终态轮，指数退避重试）
                 → 输出文件收集 + SERVER_OUTBOX
                 → 文件变更 + SERVER_FILE_CHANGES
                 → 追问生成 + SERVER_QUESTIONS
@@ -527,6 +533,7 @@ Web 层
   ├── engine.dream.dispatch          — Dream 调度
   ├── engine.scheduler               — 调度系统
   ├── engine.execution.skills        — 技能管理
+  ├── engine.experts                 — 专家包目录与会话专家选择
   ├── persistence.session            — Session 存储
   ├── persistence.user               — 用户存储（PostgreSQL）
   ├── persistence.lock               — 分布式锁

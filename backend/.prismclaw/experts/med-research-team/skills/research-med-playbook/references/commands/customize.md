@@ -10,7 +10,7 @@ customizes: medical-research
 
 ## 读取当前配置
 
-读取 `skills/research-med-playbook/references/practice-profile/PLUGIN.md`，获取当前自定义配置。
+检查会话中的执业配置。
 
 ## 显示可自定义项
 

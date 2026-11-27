@@ -6,18 +6,15 @@ argument_hint: '[可选事项名称]'
 category: 争议诉讼
 ---
 
-
-
-
 # /matter-intake
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 风险校准（用于分流）、landscape（用于上下文、冲突方法）、stakeholders（用于通知谁）。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 风险校准（用于分流）、landscape（用于上下文、冲突方法）、stakeholders（用于通知谁）。
 2. 遵循以下工作流和参考。
 3. 运行统一 intake：识别、冲突检查、来源、风险分流、重要性、外部律师、内部所有者、证据保全通知、关键日期、初始姿态。
 4. 从事项名称生成 slug（小写、连字符、年份）。
-5. 创建 `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/matter.md` — 完整叙述 intake。
-6. 创建 `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md` — 以 intake 为第一个条目进行种子化。
-7. 向 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` 附加结构化行。
+5. 创建 `{expert_runtime_dir}/matters/[slug]/matter.md` — 完整叙述 intake。
+6. 创建 `{expert_runtime_dir}/matters/[slug]/history.md` — 以 intake 为第一个条目进行种子化。
+7. 向 `{expert_runtime_dir}/matters/_log.yaml` 附加结构化行。
 8. 与用户确认："这是我将要写的行——有任何编辑吗？"
 
 ---
@@ -30,8 +27,8 @@ category: 争议诉讼
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` — 风险校准（分流阈值、重要性、和解阶梯）、landscape（stakeholders、外部律师名册）。
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` — 确认 slug 唯一性。
+- `执业配置文件（请按当前系统指引创建）` — 风险校准（分流阈值、重要性、和解阶梯）、landscape（stakeholders、外部律师名册）。
+- `{expert_runtime_dir}/matters/_log.yaml` — 确认 slug 唯一性。
 
 ## Intake
 
@@ -49,10 +46,10 @@ category: 争议诉讼
 
 ### 2. 冲突检查
 
-在继续之前，按照 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → Conflicts clearance 运行冲突步骤。
+在继续之前，按照 `执业配置文件（请按当前系统指引创建）` → Conflicts clearance 运行冲突步骤。
 
 - **状态：** `cleared | pending | not-run | waived`
-- **方法：** 匹配 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 声明的内容（`corporate-legal | outside-counsel | system-check | informal | other`）。
+- **方法：** 匹配 `执业配置文件（请按当前系统指引创建）` 声明的内容（`corporate-legal | outside-counsel | system-check | informal | other`）。
 - **由谁清理：** 名称 / 团队 / 律所
 - **清理日期：** YYYY-MM-DD
 - **检查对象：** 运行的具体名称/实体的简要列表（对方当事人、已知关联方、对方代理律师（如已知）、关键证人）。薄是可以的；"否"不可以。
@@ -65,9 +62,9 @@ category: 争议诉讼
 - `waived` → 罕见；需要冲突放弃理由（编写放弃不在本 skill 范围内——捕获放弃存在、谁签署了它、它在哪里）。
 - `not-run` → **停止。这是一个关卡。** 在冲突姿态解决之前，skill 不会创建 `matter.md`、`history.md` 或 `_log.yaml` 条目。三个可接受的路径：
 
-  **路径 1 — 现在运行冲突。** 暂停此 intake。按照 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` Conflicts clearance 清理。带着 `status: cleared` 或 `status: waived` 附带理由返回。
+  **路径 1 — 现在运行冲突。** 暂停此 intake。按照 `执业配置文件（请按当前系统指引创建）` Conflicts clearance 清理。带着 `status: cleared` 或 `status: waived` 附带理由返回。
 
-  **路径 2 — 标记待定并附上所有者 + 到期日。** 仅当 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` Conflicts clearance 声明并行 intake 可接受时允许。
+  **路径 2 — 标记待定并附上所有者 + 到期日。** 仅当 `执业配置文件（请按当前系统指引创建）` Conflicts clearance 声明并行 intake 可接受时允许。
 
   **路径 3 — 绕过并附有记录的理由。** 仅当用户明确确认绕过时。在 `conflicts.override` 中记录：
 
@@ -92,17 +89,17 @@ category: 争议诉讼
 
 ### 4. 风险分流——对照内部校准
 
-- 严重性：high | medium | low（参考 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 严重性带——金额以人民币计）
-- 可能性：high | medium | low（参考 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 可能性带）
+- 严重性：high | medium | low（参考 `执业配置文件（请按当前系统指引创建）` 严重性带——金额以人民币计）
+- 可能性：high | medium | low（参考 `执业配置文件（请按当前系统指引创建）` 可能性带）
 - 结果风险评级（按照矩阵）：high | medium | low | critical
 - 损害敞口范围（最佳估计，以人民币计）
 - 非金钱敞口（禁令？整改令？媒体曝光？先例？）
 
-如果 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的风险校准薄，不要伪造精确度。使用用户的直觉并记录薄度。
+如果 `执业配置文件（请按当前系统指引创建）` 中的风险校准薄，不要伪造精确度。使用用户的直觉并记录薄度。
 
 ### 5. 重要性
 
-对照 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的内部阈值：
+对照 `执业配置文件（请按当前系统指引创建）` 中的内部阈值：
 - `reserved | disclosed | monitored | none`
 - 如果 `reserved`：储备金额以及是否已通知财务
 - 如果 `disclosed`（适用A股上市公司）：公告位置（上交所/深交所）
@@ -120,7 +117,7 @@ category: 争议诉讼
 
 ### 7. 内部所有者
 
-从 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` landscape——涉及哪些内部 stakeholder？
+从 `执业配置文件（请按当前系统指引创建）` landscape——涉及哪些内部 stakeholder？
 - 业务负责人
 - HR 合作伙伴（如劳动争议）
 - 通讯/公关联系人（如声誉风险）
@@ -160,7 +157,7 @@ category: 争议诉讼
 
 在写入前确认 slug 在 `_log.yaml` 中唯一。
 
-### `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/matter.md`
+### `{expert_runtime_dir}/matters/[slug]/matter.md`
 
 ```markdown
 [工作产品标头——根据 plugin 配置 ## Outputs — 因角色而异；见 `## Who's using this`]
@@ -231,7 +228,7 @@ category: 争议诉讼
 | [例如，起诉状] | [路径或"not yet shared"] |
 ```
 
-### `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md`
+### `{expert_runtime_dir}/matters/[slug]/history.md`
 
 将历史文件种子化为以 intake 为条目零：
 
@@ -247,7 +244,7 @@ category: 争议诉讼
 [来源、谁带入、初始分流摘要、分配的外部律师、证据保全通知发布是/否。]
 ```
 
-### 附加到 `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml`
+### 附加到 `{expert_runtime_dir}/matters/_log.yaml`
 
 按照 schema 添加一行。示例：
 
@@ -313,13 +310,12 @@ category: 争议诉讼
 
 ## 关闭时使用下一步决策树
 
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
+根据此 skill 刚刚生成的自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
 - **自己运行冲突检查。** 它记录结果、状态、方法和检查的实体。实际清理发生在内部执业档案声明的任何系统（或判断）中。如果用户说"已清理"，skill 按面值接受并捕获元数据。
 - 决定初始理论。它捕获用户所说的；它不发明一个。
 - 发布证据保全通知。如果缺少则标记。用户发布它。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

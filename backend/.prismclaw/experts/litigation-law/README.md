@@ -29,9 +29,7 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/litigation-law-playbook/`：执业资料与流程参考
 - `skills/`：6 个技能（`litigation-demand-workflow`、`litigation-discovery-workflow`、`litigation-evidence-workflow`、`litigation-law-playbook`、`litigation-matter-workflow`、`litigation-trial-workflow`）
 - `skills/litigation-law-playbook/references/commands/`：命令流程（参考文档）
-- `skills/litigation-law-playbook/references/practice-profile/`：执业档案模板
 - `skills/litigation-law-playbook/references/subagents/`：原始子代理
-- `skills/litigation-law-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -41,4 +39,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-流程参考文档位于 `skills/litigation-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+流程参考文档位于 `skills/litigation-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

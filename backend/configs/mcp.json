@@ -3,13 +3,50 @@
     "web-search-mcp": {
       "enabled": true,
       "transport": "stdio",
-      "command": "uv",
-      "args": ["run", "--directory", "mcp_servers/web-search-mcp", "python", "-m", "web_search_mcp"],
+      "command": "conda",
+      "args": [
+        "run",
+        "--no-capture-output",
+        "-n",
+        "pyclaw",
+        "python",
+        "-m",
+        "web_search_mcp"
+      ],
       "trust_annotations": true,
       "deferred": false,
       "connect_timeout_seconds": 30.0,
       "call_timeout_seconds": 60.0,
-      "sandbox": { "enabled": false }
+      "sandbox": {
+        "enabled": false
+      }
+    },
+    "china-law-mcp": {
+      "enabled": true,
+      "transport": "stdio",
+      "command": "conda",
+      "args": [
+        "run",
+        "--no-capture-output",
+        "-n",
+        "pyclaw",
+        "python",
+        "-m",
+        "china_law_mcp"
+      ],
+      "env": {
+        "CLM_GLOBAL_LAW_ROOT": "~/.prismclaw/database/global-law",
+        "CLM_ACTS_ROOT": "~/.prismclaw/database/china-law",
+        "CLM_JURISDICTIONS": "china"
+      },
+      "trust_annotations": true,
+      "server_read_only": true,
+      "deferred": false,
+      "connect_timeout_seconds": 60.0,
+      "call_timeout_seconds": 100.0,
+      "sandbox": {
+        "enabled": false
+      }
     }
   }
 }

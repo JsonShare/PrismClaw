@@ -6,19 +6,16 @@ argument_hint: '[slug] [--skip-gate] [--version=N]'
 category: 争议诉讼
 ---
 
-
-
-
 # /demand-draft
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/demand-letters/[slug]/intake.md`。如果缺失或战略块为空（对于重大催告），拒绝。
-2. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 催告函实践、内部风格、种子文档表。
+1. 加载 `{expert_runtime_dir}/demand-letters/[slug]/intake.md`。如果缺失或战略块为空（对于重大催告），拒绝。
+2. 加载 `执业配置文件（请按当前系统指引创建）` → 催告函实践、内部风格、种子文档表。
 3. 遵循以下工作流和参考。
 4. 运行起草前门槛：特权过滤器、自认风险、和解清偿、和解通信保密姿态、放弃扫描、语气、事实准确性。在每个都被回应之前不要继续。
-5. 模板选择：如果在 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中提供了种子文档则使用；否则使用催告类型的软模板。
+5. 模板选择：如果在 `执业配置文件（请按当前系统指引创建）` 中提供了种子文档则使用；否则使用催告类型的软模板。
 6. 在聊天中起草供审查。迭代直到用户批准。
-7. 使用 docx skill 写入 `${WORKBUDDY_EXPERT_DATA}/demand-letters/[slug]/draft-v[N].docx`。
-8. 写入 `${WORKBUDDY_EXPERT_DATA}/demand-letters/[slug]/checklist.md`（发送后检查清单）。
+7. 使用 docx skill 写入 `{expert_runtime_dir}/demand-letters/[slug]/draft-v[N].docx`。
+8. 写入 `{expert_runtime_dir}/demand-letters/[slug]/checklist.md`（发送后检查清单）。
 9. 按启发式评估重大性；提议创建事项。如果是：交接给 `matter-intake` 附预填充字段。
 
 ---
@@ -82,9 +79,9 @@ category: 争议诉讼
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/demand-letters/[slug]/intake.md` — 必需；如缺失则拒绝继续
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 催告函实践（种子文档路径、保险提交时机、事项创建的重大性阈值）、内部风格。**语气、合规期限、签署人来自 `## 此事项的姿态`——它们是事项级的，不是执业级的。**
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` — 检查现有相关事项（同一对方）并提供交叉链接
+- `{expert_runtime_dir}/demand-letters/[slug]/intake.md` — 必需；如缺失则拒绝继续
+- `执业配置文件（请按当前系统指引创建）` → 催告函实践（种子文档路径、保险提交时机、事项创建的重大性阈值）、内部风格。**语气、合规期限、签署人来自 `## 此事项的姿态`——它们是事项级的，不是执业级的。**
+- `{expert_runtime_dir}/matters/_log.yaml` — 检查现有相关事项（同一对方）并提供交叉链接
 
 ## 起草前门槛
 
@@ -129,7 +126,7 @@ category: 争议诉讼
 
 ### 步骤 1：种子文档
 
-检查 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 催告函实践 → intake 催告类型的种子文档表。
+检查 `执业配置文件（请按当前系统指引创建）` → 催告函实践 → intake 催告类型的种子文档表。
 
 - **提供了种子文档：** 阅读它。匹配结构、语气、签名块、特权标记、典型章节排序。种子文档就是模板。
 - **无种子文档：** 使用下方催告类型的软模板。
@@ -206,11 +203,11 @@ category: 争议诉讼
    - 联系地址和电话
    - 日期
 
-7. **按内部风格的特权标记。** 精确应用 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 特权惯例。
+7. **按内部风格的特权标记。** 精确应用 `执业配置文件（请按当前系统指引创建）` 特权惯例。
 
 ## 输出
 
-### 主要：`${WORKBUDDY_EXPERT_DATA}/demand-letters/[slug]/draft-v[N].docx`
+### 主要：`{expert_runtime_dir}/demand-letters/[slug]/draft-v[N].docx`
 
 使用 `docx` skill 生成信函格式的 .docx：
 - 信头 / 发件方地址块（律师事务所信息）
@@ -240,7 +237,7 @@ category: 争议诉讼
 
 **没有静默补充。** 如果对配置的法律研究工具的研究查询为草稿需要的权威返回很少或没有结果，报告发现了什么并停止。
 
-### `${WORKBUDDY_EXPERT_DATA}/demand-letters/[slug]/checklist.md` — 发送后检查清单
+### `{expert_runtime_dir}/demand-letters/[slug]/checklist.md` — 发送后检查清单
 
 ```markdown
 [工作产品标题——根据插件配置 ## Outputs——因角色而异；见 `## 谁在使用这个`。此标题适用于内部检查清单文件；外发信函不携带它。]
@@ -262,7 +259,7 @@ category: 争议诉讼
 - [ ] 保险已投保（如按内部实践要求）
 - [ ] 冲突已确认（如尚未清除）
 
-**在信函发送之前（重大行为）：** 阅读 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中的 `## 谁在使用这个`。如果角色是非律师：
+**在信函发送之前（重大行为）：** 阅读 `执业配置文件（请按当前系统指引创建）` 中的 `## 谁在使用这个`。如果角色是非律师：
 
 > 发送此律师函/催告函有法律后果——它创建记录、可能中断诉讼时效（民法典第195条）、可能触发反诉。你是否与律师审查了此内容？如果是，继续。如果否，这是带给他们的简报：
 >
@@ -300,7 +297,7 @@ category: 争议诉讼
 
 - **以下任一情况默认为是：**
   - 催告类型为停止侵权、违约补救、雇佣离职或保全
-  - 期望结果金额 ≥ `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中等严重性区间
+  - 期望结果金额 ≥ `执业配置文件（请按当前系统指引创建）` 中等严重性区间
   - 对方是客户、竞争对手或根据业务格局的常见对手方
 - **否则默认为否**
 
@@ -317,6 +314,5 @@ category: 争议诉讼
 - **绕过起草前门槛。** 即使使用 `--skip-gate`，skill 在草稿文件中注明门槛被跳过以及原因。
 - **重写 intake。** 如果 intake 很薄，将用户送回 `demand-intake`。
 - **决定重大性。** 启发式提供默认值；用户的判断是记录。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

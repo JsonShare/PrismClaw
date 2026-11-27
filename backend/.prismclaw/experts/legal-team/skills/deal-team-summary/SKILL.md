@@ -9,30 +9,20 @@ category: 公司法务
 invocation_policy: user_only
 ---
 
-
-
-
 # 交易团队摘要
-
-## 事项上下文
-
-**事项上下文。** 检查执业级 PLUGIN.md 中的 `## 事项工作区`。如果 `已启用` 是 `✗`（内部用户的默认值），跳过本段其余部分——skills 使用执业级上下文，事项机制不可见。如果启用且没有活跃事项，询问："这是哪个事项的？运行 `skills/corporate-law-playbook/references/commands/matter-workspace.md switch <slug>` 或说 `practice-level`。"加载活跃事项的 `matter.md` 以获取事项特定上下文和覆盖。将输出写入事项文件夹 `${WORKBUDDY_EXPERT_DATA}/matters/<matter-slug>/`。除非 `跨事项上下文` 是 `on`，否则永远不要阅读另一个事项的文件。
-
----
-
 ## 目的
 
 交易主管不会阅读 200 个发现。他们阅读的是：什么是重要的，自上次简报以来有什么变化，什么需要决策。此 skill 将尽调输出压缩到适合读者的层级。
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 交易团队简报（节奏、格式、业务方阅读什么）
-- `${WORKBUDDY_EXPERT_DATA}/deals/[code]/deal-context.md` → 交易主管、时间线
+- `执业配置文件（请按当前系统指引创建）` → 交易团队简报（节奏、格式、业务方阅读什么）
+- `{expert_runtime_dir}/deals/[code]/deal-context.md` → 交易主管、时间线
 - diligence-issue-extraction 输出中的当前发现
 
 ## 受众层级
 
-根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`——业务方阅读什么 vs. 留档内容。默认层级：
+根据 `执业配置文件（请按当前系统指引创建）`——业务方阅读什么 vs. 留档内容。默认层级：
 
 | 受众 | 获得 | 不获得 |
 |---|---|---|
@@ -105,7 +95,7 @@ invocation_policy: user_only
 
 ## 增量
 
-如果这是定期简报（根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 节奏），以变化为首：
+如果这是定期简报（根据 `执业配置文件（请按当前系统指引创建）` 节奏），以变化为首：
 
 - 自上次简报以来的新发现
 - 严重性升级/降级的发现
@@ -121,13 +111,12 @@ invocation_policy: user_only
 
 ## 以下一步决策树结束
 
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
+技能自带下一步决策树，按分支自然结束根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，而非锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
 - 它不做重要性判断——它报告在提取时做出的判断。
 - 它不决定交易团队对发现做什么——它呈现决策。
 - 它不分发简报——它起草，人工发送。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

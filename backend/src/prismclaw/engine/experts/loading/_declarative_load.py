@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 SkillScanner = Callable[..., list[SkillManifest]]
 
 
-def _reject_marketplace_data_placeholder(install_path: Path) -> None:
+def _reject_legacy_data_placeholder(install_path: Path) -> None:
     placeholder = "${PRISMCLAW_MARKETPLACE_DATA}"
     for path in install_path.rglob("*"):
         if not path.is_file() or path.suffix.lower() not in {".json", ".md", ".yaml", ".yml"}:
@@ -211,6 +211,7 @@ def _build_manifest_and_capability(
     agent_loader: ExpertAgentLoader,
     data_base_dir: Path | None = None,
     skill_scanner: SkillScanner | None = None,
+    extra_skill_dirs: Sequence[Path] = (),
 ) -> tuple[
     ExpertManifest,
     list[SkillManifest],
@@ -220,7 +221,7 @@ def _build_manifest_and_capability(
 ]:
     """构建 manifest + 结构化能力字段 + 配套字段。
 
-    返回 (manifest, skills, agents, commands, output_styles)。
+    返回 (manifest, skills, inherited_skills, agents, commands, output_styles)。
 
     全程操作 pydantic ``ExpertManifest`` model 对象，不经过 raw dict。
     路径重映射仅使用当前包 ``plugin.json.porting.remap`` 声明。
@@ -235,7 +236,7 @@ def _build_manifest_and_capability(
             if not isinstance(dep, str) or not dep.strip():
                 raise ValueError(
                     f"专家包 {expert_namespace!r} 的依赖声明无效：{dep!r} "
-                    "（应为非空字符串，如 'name' 或 'name@marketplace'）"
+                    "（应为非空字符串，如 'name'）"
                 )
         logger.info(
             "expert %r declares dependencies: %s (resolution deferred to ExpertLoader)",
@@ -260,29 +261,42 @@ def _build_manifest_and_capability(
 
     expert_data_dir = get_expert_data_dir(data_base_dir, expert_namespace)
 
-    # Skills
-    skill_paths = [
+    # Skills — 本包自有技能与继承的全局基础技能分开收集。
+    # 自有目录先扫描，继承目录里与自有同名的技能随后被丢弃，
+    # 保证专家包自身技能优先覆盖全局。继承技能只进 inherited_skills：
+    # 它们是运行时共享能力，不属于本包，不应出现在包级技能清单或选择层 ID 中。
+    own_skill_paths: list[Path] = [
         install_path / "skills",
         *_resolve_relative_paths(install_path, manifest.skills),
     ]
     skills: list[SkillManifest] = []
+    inherited_skills: list[SkillManifest] = []
     seen_skill_dirs: set[Path] = set()
-    for skills_dir in skill_paths:
-        if not skills_dir.exists() or not skills_dir.is_dir():
-            continue
-        skills_dir = skills_dir.resolve()
-        if skills_dir in seen_skill_dirs:
-            continue
-        seen_skill_dirs.add(skills_dir)
-        if skill_scanner is not None:
-            skills.extend(
-                skill_scanner(
-                    skills_dir,
-                    max_file_bytes=256_000,
-                    max_candidates=500,
-                    max_skills_loaded=100,
+
+    def _scan_skills(paths: Sequence[Path], into: list[SkillManifest]) -> None:
+        for skills_dir in paths:
+            if not skills_dir.exists() or not skills_dir.is_dir():
+                continue
+            skills_dir = skills_dir.resolve()
+            if skills_dir in seen_skill_dirs:
+                continue
+            seen_skill_dirs.add(skills_dir)
+            if skill_scanner is not None:
+                into.extend(
+                    skill_scanner(
+                        skills_dir,
+                        max_file_bytes=256_000,
+                        max_candidates=500,
+                        max_skills_loaded=100,
+                    )
                 )
-            )
+
+    _scan_skills(own_skill_paths, skills)
+    _scan_skills(extra_skill_dirs, inherited_skills)
+
+    if skills and inherited_skills:
+        own_names = {skill.name for skill in skills}
+        inherited_skills = [s for s in inherited_skills if s.name not in own_names]
 
     # v5 渐进式披露：技能加载时只解析 frontmatter（body=""），
     # content pipeline 参数暂存到 pipeline_context，body 按需加载时
@@ -361,6 +375,7 @@ def _build_manifest_and_capability(
     return (
         manifest,
         skills,
+        inherited_skills,
         agents,
         _normalize_commands(commands),
         output_styles,
@@ -376,14 +391,16 @@ async def _load_declarative_expert(
     data_base_dir: Path | None,
     dialect: str,
     skill_scanner: SkillScanner | None = None,
+    extra_skill_dirs: Sequence[Path] = (),
 ) -> tuple[ExpertPackage | None, list[PackageError]]:
     """加载一个平铺声明式包，不继承任何外层套件配置。"""
     errors: list[PackageError] = []
     try:
-        await asyncio.to_thread(_reject_marketplace_data_placeholder, install_path)
+        await asyncio.to_thread(_reject_legacy_data_placeholder, install_path)
         (
             manifest,
             skills,
+            inherited_skills,
             agents,
             commands,
             output_styles,
@@ -394,6 +411,7 @@ async def _load_declarative_expert(
             agent_loader=agent_loader,
             data_base_dir=data_base_dir,
             skill_scanner=skill_scanner,
+            extra_skill_dirs=extra_skill_dirs,
         )
         version = manifest.version
         expert_namespace = manifest.name or expert_id.name
@@ -405,6 +423,7 @@ async def _load_declarative_expert(
             version=version,
             manifest=manifest,
             skills=skills,
+            inherited_skills=inherited_skills,
             agents=agents,
             commands=commands,
             output_styles=output_styles,

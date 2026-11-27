@@ -6,14 +6,11 @@ argument_hint: '[slug]'
 category: 争议诉讼
 ---
 
-
-
-
 # /matter-briefing
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 风险校准 + 相关利益相关者。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 风险校准 + 相关利益相关者。
 2. 遵循以下工作流和参考。
-3. 阅读 `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/matter.md` + `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md` + `_log.yaml` 中的日志行。
+3. 阅读 `{expert_runtime_dir}/matters/[slug]/matter.md` + `{expert_runtime_dir}/matters/[slug]/history.md` + `_log.yaml` 中的日志行。
 4. 生成简报：当前姿态、自上次更新以来的变化、下一个截止日期、未决问题、风险重新评估检查（"`risk:` 字段是否仍然反映现实？"）。
 5. 标记过期：如果 `last_updated` 超过 30 天，说明这一点。
 
@@ -27,14 +24,14 @@ category: 争议诉讼
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/matters/_log.yaml` — 结构化行
-- `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/matter.md` — 叙述性 intake
-- `${WORKBUDDY_EXPERT_DATA}/matters/[slug]/history.md` — 事件日志
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` — 风险校准（使 "risk: high" 具有特定含义，而非泛泛而谈）
+- `{expert_runtime_dir}/matters/_log.yaml` — 结构化行
+- `{expert_runtime_dir}/matters/[slug]/matter.md` — 叙述性 intake
+- `{expert_runtime_dir}/matters/[slug]/history.md` — 事件日志
+- `执业配置文件（请按当前系统指引创建）` — 风险校准（使 "risk: high" 具有特定含义，而非泛泛而谈）
 
 **冲突门槛——不可绕过。** 在简报之前，检查 `_log.yaml` 中的事项 slug。如果事项不在 `_log.yaml` 中，拒绝并路由：
 
-> "我在事项日志中看不到 [matter slug]。首先运行 `skills/litigation-law-playbook/references/commands/matter-intake.md`，以便冲突检查运行并设置事项工作区。我不会对未接收的事项构建简报——冲突检查是门槛。"
+> "我在事项日志中看不到 [matter slug]。首先运行 `skills/litigation-law-playbook/references/commands/matter-intake.md`，以便冲突检查运行并初始化事项目录。我不会对未接收的事项构建简报——冲突检查是门槛。"
 
 ## 输入
 
@@ -105,13 +102,12 @@ Slug（必需）。如果模糊或缺失，让用户从活跃事项列表中选�
 
 ## 以下一步决策树结束
 
-根据 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，不是锁定。树就是输出；律师选择。
+根据此 skill 刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他）是起点，不是锁定。树就是输出；律师选择。
 
 ## 此 skill 不做什么
 
 - 预测结果。风险评级是捕获的判断，不是预测。
 - 推荐策略。浮出问题；律师回答它们。
 - 重新分流。如果用户想重新分流，那是带字段变更的 `/matter-update`——此 skill 读取，不写入。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

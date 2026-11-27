@@ -83,9 +83,9 @@
         <text x="185" y="90" fill="white" font-size="11" font-weight="600" text-anchor="middle">AgentManifest</text>
         <text x="185" y="108" fill="#94a3b8" font-size="8" text-anchor="middle">name (kebab-case)</text>
         <text x="185" y="122" fill="#94a3b8" font-size="8" text-anchor="middle">context_mode: inherit|isolated</text>
-        <text x="185" y="136" fill="#94a3b8" font-size="8" text-anchor="middle">execution_mode: sync|parallel</text>
-        <text x="185" y="150" fill="#94a3b8" font-size="8" text-anchor="middle">allowed_tools, can_handoff_to</text>
-        <text x="185" y="164" fill="#94a3b8" font-size="8" text-anchor="middle">max_turns, timeout, preload_skills</text>
+        <text x="185" y="136" fill="#94a3b8" font-size="8" text-anchor="middle">max_inherit_messages (1-100)</text>
+        <text x="185" y="150" fill="#94a3b8" font-size="8" text-anchor="middle">model, max_turns (alias maxTurns)</text>
+        <text x="185" y="164" fill="#94a3b8" font-size="8" text-anchor="middle">timeout_seconds, preload_skills</text>
         <text x="185" y="184" fill="#34d399" font-size="7" text-anchor="middle">BaseModel with validators</text>
 
         <!-- Parser -->
@@ -98,10 +98,10 @@
         <text x="615" y="90" fill="white" font-size="11" font-weight="600" text-anchor="middle">SubAgentRegistry</text>
         <text x="615" y="110" fill="#94a3b8" font-size="8" text-anchor="middle">BFS scan .work/agents/</text>
         <text x="615" y="124" fill="#94a3b8" font-size="8" text-anchor="middle">_do_scan_layer() hard-stop</text>
-        <text x="615" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">diagnose() &mdash; 3 categories:</text>
-        <text x="615" y="156" fill="#fbbf24" font-size="8" text-anchor="middle">&#8226; name mismatches</text>
-        <text x="615" y="170" fill="#fbbf24" font-size="8" text-anchor="middle">&#8226; unknown handoff targets</text>
-        <text x="615" y="184" fill="#fbbf24" font-size="8" text-anchor="middle">&#8226; allowed_tools gaps</text>
+        <text x="615" y="142" fill="#94a3b8" font-size="8" text-anchor="middle">diagnose() &mdash; 4 categories:</text>
+        <text x="615" y="156" fill="#fbbf24" font-size="8" text-anchor="middle">&#8226; layers</text>
+        <text x="615" y="170" fill="#fbbf24" font-size="8" text-anchor="middle">&#8226; merged_names / name_mismatches</text>
+        <text x="615" y="184" fill="#fbbf24" font-size="8" text-anchor="middle">&#8226; registry_settings</text>
 
         <!-- Arrows: Parser -> Manifest, Parser -> Registry -->
         <line x1="315" y1="98" x2="287" y2="98" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
@@ -204,7 +204,7 @@
         <text x="510" y="657" fill="#94a3b8" font-size="8" text-anchor="middle">SessionFollowUpSnapshot</text>
         <text x="510" y="673" fill="#94a3b8" font-size="8" text-anchor="middle">session_follow_up_snapshot()</text>
         <text x="510" y="689" fill="#94a3b8" font-size="8" text-anchor="middle">render_follow_up_status()</text>
-        <text x="510" y="705" fill="#fbbf24" font-size="7" text-anchor="middle">Priority: handoff &gt; fork</text>
+        <text x="510" y="705" fill="#fbbf24" font-size="7" text-anchor="middle">Priority: parallel attention &gt; follow-up</text>
 
         <!-- Constants -->
         <rect x="675" y="615" width="345" height="100" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1" stroke-dasharray="4,4"/>
@@ -285,7 +285,7 @@
           <li>&#8226; inherit mode: Prompt Cache breakpoints</li>
           <li>&#8226; isolated mode: zero-context fresh agent</li>
           <li>&#8226; SubagentResultEnvelope: evidence/findings/decisions</li>
-          <li>&#8226; FollowUp priority: handoff &gt; fork tracking</li>
+          <li>&#8226; FollowUp: parallel attention &gt; follow-up tracking</li>
         </ul>
       </div>
     </div>

@@ -9,13 +9,10 @@ argument_hint: '[--build | --update | --status | --cram]'
 category: 法学学习
 ---
 
-
-
-
 # /study-plan
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 律师考试司法管辖区、考试格式、考试日期、薄弱学科、目标学习小时/天、预备课程。
-2. 加载 `${WORKBUDDY_EXPERT_DATA}/study-plan.yaml`（如果存在）。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 律师考试司法管辖区、考试格式、考试日期、薄弱学科、目标学习小时/天、预备课程。
+2. 加载 `{expert_runtime_dir}/study-plan.yaml`（如果存在）。
 3. 应用以下框架。
 4. 按标志路由：
    - `--build`（无计划存在时的默认值）：走一遍输入门控（考试、学科、小时/周、休息日、方法）。构建阶段结构 + 前两周的每日安排。写入 `study-plan.yaml`。
@@ -43,14 +40,14 @@ category: 法学学习
 
 ## 加载上下文
 
-`${WORKBUDDY_EXPERT_DATA}/PLUGIN.md`：
+`执业配置文件（请按当前系统指引创建）`：
 - 律师考试司法管辖区、考试格式、考试日期
 - 当前课程（用于非律师考试）
 - 薄弱学科（MBE、论文）
 - 预备课程
 - 目标学习小时/天
 
-`${WORKBUDDY_EXPERT_DATA}/study-plan.yaml`（如果存在）——扩展，不要覆盖。
+`{expert_runtime_dir}/study-plan.yaml`（如果存在）——扩展，不要覆盖。
 
 ## 工作流
 
@@ -91,7 +88,7 @@ category: 法学学习
 
 ### 步骤 2.5：补充 vs. 替代（预备课程用户）
 
-如果 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → `Prep course` 是 **Barbri**、**Themis**、**Kaplan** 或任何其他结构化预备课程（即不是 `self` 或 `N/A`），学生已经有预备课程日历。此 skill 的计划必须选择两个角色之一——它不能在预备课程旁边运行完整的平行课程而不让学生筋疲力尽。
+如果 `执业配置文件（请按当前系统指引创建）` → `Prep course` 是 **Barbri**、**Themis**、**Kaplan** 或任何其他结构化预备课程（即不是 `self` 或 `N/A`），学生已经有预备课程日历。此 skill 的计划必须选择两个角色之一——它不能在预备课程旁边运行完整的平行课程而不让学生筋疲力尽。
 
 询问，一个问题，等待：
 
@@ -130,7 +127,7 @@ category: 法学学习
 
 ### 步骤 4：写入
 
-写入 `${WORKBUDDY_EXPERT_DATA}/study-plan.yaml`：
+写入 `{expert_runtime_dir}/study-plan.yaml`：
 
 ```yaml
 plan_type: bar  # or law-school-exam or semester
@@ -250,6 +247,5 @@ session_history:
 - **预测考试。** 冲刺模式使用历史学科频率；高收益 ≠ 保证测试。
 - **替代你的预备课程安排。** 如果你在 Barbri/Themis/Kaplan，此计划可以补充——不要同时运行两个完整课程。使用一个作为主要。
 - **安排你的生活。** 可用小时是你告诉我的。如果你高估了，计划会在第 2 周断裂。诚实一点。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

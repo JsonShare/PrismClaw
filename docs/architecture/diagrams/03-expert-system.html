@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismClaw Expert System Architecture</title>
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: rgba(15, 23, 42, 0.5);
+      --panel-solid: #0f172a;
+      --border: #1e293b;
+      --grid: #1e293b;
+      --text: #e2e8f0;
+      --stroke: #64748b;
+      --muted: #94a3b8;
+      --faint: #475569;
+      --emerald: #34d399;
+      --cyan: #22d3ee;
+      --violet: #a78bfa;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+    }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      background: var(--bg);
+      min-height: 100vh;
+      padding: 2rem;
+      color: var(--text);
+    }
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+    }
+    .header {
+      margin-bottom: 2rem;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: var(--emerald);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+    .diagram-container {
+      background: var(--panel);
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    svg {
+      width: 100%;
+      min-width: 980px;
+      display: block;
+      font-family: inherit;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    .card {
+      background: var(--panel);
+      border-radius: 0.75rem;
+      border: 1px solid var(--border);
+      padding: 1.25rem;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .card-dot.emerald { background: var(--emerald); }
+    .card-dot.cyan { background: var(--cyan); }
+    .card-dot.violet { background: var(--violet); }
+    .card-dot.amber { background: var(--amber); }
+    .card-dot.rose { background: var(--rose); }
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    .card ul {
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.75rem;
+    }
+    .card li {
+      margin-bottom: 0.375rem;
+      line-height: 1.45;
+    }
+    .card li code {
+      color: var(--text);
+      font-size: 0.7rem;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: var(--faint);
+      font-size: 0.75rem;
+    }
+    @media print {
+      body { background: var(--bg); padding: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Expert System Architecture</h1>
+      </div>
+      <p class="subtitle">专家 / 专家团 / 技能 / MCP 连接器 &mdash; 会话意图 &rarr; 环境快照 &rarr; 作用域 &rarr; 人格注入与工具面裁剪 &rarr; 执行与治理</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1240 1480" role="img" aria-label="PrismClaw 专家体系分层架构图">
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <marker id="arrowCyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
+          </marker>
+          <marker id="arrowEmerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
+          </marker>
+          <marker id="arrowViolet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" />
+          </marker>
+          <marker id="arrowAmber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ========== 一级概念 ========== -->
+        <text x="50" y="14" fill="#94a3b8" font-size="9" font-weight="600">四个一级概念</text>
+
+        <rect x="50" y="22" width="272" height="50" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="186" y="43" fill="white" font-size="11" font-weight="600" text-anchor="middle">专家 Expert</text>
+        <text x="186" y="59" fill="#94a3b8" font-size="8" text-anchor="middle">会话内唯一的角色人格与工具面</text>
+
+        <rect x="338" y="22" width="272" height="50" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="474" y="43" fill="white" font-size="11" font-weight="600" text-anchor="middle">专家团 Team</text>
+        <text x="474" y="59" fill="#94a3b8" font-size="8" text-anchor="middle">lead + 成员，成员之间不可互连</text>
+
+        <rect x="626" y="22" width="272" height="50" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="762" y="43" fill="white" font-size="11" font-weight="600" text-anchor="middle">技能 Skill</text>
+        <text x="762" y="59" fill="#94a3b8" font-size="8" text-anchor="middle">canonical id &#123;expert&#125;:&#123;skill&#125;</text>
+
+        <rect x="914" y="22" width="272" height="50" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="1050" y="43" fill="white" font-size="11" font-weight="600" text-anchor="middle">MCP 连接器 Connector</text>
+        <text x="1050" y="59" fill="#94a3b8" font-size="8" text-anchor="middle">部署级注册表，只返回 enabled</text>
+
+        <line x1="620" y1="72" x2="620" y2="92" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+        <text x="632" y="86" fill="#475569" font-size="7">用户显式选择 / 会话建立</text>
+
+        <!-- ========== LAYER 1: 会话层 ========== -->
+        <rect x="40" y="96" width="1160" height="120" rx="12" fill="#0f172a" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="62" y="118" fill="#22d3ee" font-size="11" font-weight="600">1 会话层 Session &mdash; 意图事实源</text>
+
+        <rect x="66" y="128" width="430" height="76" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="80" y="148" fill="white" font-size="11" font-weight="600">SessionHeader.expert_id</text>
+        <text x="80" y="165" fill="#94a3b8" font-size="8">schema/agent/session.py &#183; 会话属性，单专家互斥</text>
+        <text x="80" y="181" fill="#94a3b8" font-size="8">expert_activation_source &#183; selected_skill_ids</text>
+        <text x="80" y="196" fill="#22d3ee" font-size="8">取消专家 = 清空 expert_id（不写入历史）</text>
+
+        <line x1="496" y1="166" x2="552" y2="166" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="556" y="128" width="580" height="76" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="570" y="148" fill="white" font-size="11" font-weight="600">会话属性约束</text>
+        <text x="570" y="165" fill="#94a3b8" font-size="8">expert_id 单值 &#183; 仅 user 显式选择可激活（_ACTIVATION_SOURCES）</text>
+        <text x="570" y="181" fill="#94a3b8" font-size="8">被管理员抑制时：只有 user 来源可以覆盖</text>
+        <text x="570" y="196" fill="#94a3b8" font-size="8">无 expert_id &#8594; 不注入人格，工具面不受限（restricted=False）</text>
+
+        <line x1="620" y1="216" x2="620" y2="244" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
+        <text x="632" y="236" fill="#475569" font-size="7">catalog.snapshot()</text>
+
+        <!-- ========== LAYER 2: 作用域层 ========== -->
+        <rect x="40" y="246" width="1160" height="150" rx="12" fill="rgba(6, 78, 59, 0.12)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="62" y="268" fill="#34d399" font-size="11" font-weight="600">2 作用域层 Scope &mdash; 一次 run 的唯一派生结果</text>
+
+        <rect x="66" y="276" width="430" height="104" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="80" y="297" fill="white" font-size="11" font-weight="600">EnvironmentCatalog.snapshot()</text>
+        <text x="80" y="314" fill="#94a3b8" font-size="8">infra/environment_catalog.py</text>
+        <text x="80" y="330" fill="#94a3b8" font-size="8">&#8594; EnvironmentCatalogSnapshot</text>
+        <text x="80" y="346" fill="#94a3b8" font-size="8">&#123; expert_registry, capability_policy &#125;</text>
+        <text x="80" y="366" fill="#34d399" font-size="8">只读快照 &#183; 不写状态、不落库</text>
+
+        <line x1="496" y1="328" x2="552" y2="328" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
+
+        <rect x="556" y="276" width="580" height="104" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="570" y="297" fill="white" font-size="11" font-weight="600">build_session_scope(header, catalog)</text>
+        <text x="570" y="314" fill="#94a3b8" font-size="8">engine/experts/scope.py &#183; 纯函数，每个 run 构建一次</text>
+        <text x="570" y="330" fill="#94a3b8" font-size="8">&#8594; Scope &#65306; NoExpertScope | ActiveScope | RejectedScope</text>
+        <text x="570" y="346" fill="#94a3b8" font-size="8">tool_owners 为包级口径：expert.name + 被勾选技能所属包</text>
+        <text x="570" y="366" fill="#34d399" font-size="8">for_member()：包集合不变，工具面收窄为成员面</text>
+
+        <line x1="620" y1="396" x2="620" y2="424" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
+        <text x="632" y="416" fill="#475569" font-size="7">registry + policy</text>
+
+        <!-- ========== LAYER 3: 目录层 ========== -->
+        <rect x="40" y="426" width="1160" height="200" rx="12" fill="#0f172a" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="62" y="448" fill="#34d399" font-size="11" font-weight="600">3 目录层 Catalog &mdash; 扫描、解析、注册、生命周期</text>
+
+        <rect x="66" y="456" width="250" height="152" rx="6" fill="rgba(6, 78, 59, 0.15)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="80" y="477" fill="white" font-size="11" font-weight="600">目录扫描 loading/</text>
+        <text x="80" y="494" fill="#94a3b8" font-size="8">engine/experts/loading/</text>
+        <text x="80" y="510" fill="#94a3b8" font-size="8">discovery_engine.py</text>
+        <text x="80" y="526" fill="#94a3b8" font-size="8">load_strategy.py</text>
+        <text x="80" y="542" fill="#94a3b8" font-size="8">data_dir.py</text>
+        <text x="80" y="558" fill="#34d399" font-size="8">发现专家包根目录</text>
+
+        <line x1="316" y1="532" x2="332" y2="532" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
+
+        <rect x="336" y="456" width="330" height="152" rx="6" fill="rgba(6, 78, 59, 0.15)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="350" y="477" fill="white" font-size="11" font-weight="600">清单 manifest/</text>
+        <text x="350" y="494" fill="#94a3b8" font-size="8">唯一清单 .plugin/plugin.json</text>
+        <text x="350" y="510" fill="#94a3b8" font-size="8">agents/*.md</text>
+        <text x="350" y="526" fill="#94a3b8" font-size="8">skills/*/SKILL.md</text>
+        <text x="350" y="542" fill="#94a3b8" font-size="8">PLUGIN.md（包简介，回退 README.md）</text>
+        <text x="350" y="566" fill="#34d399" font-size="8">engine/experts/manifest/ &#183; expert_schema.py</text>
+
+        <line x1="666" y1="532" x2="682" y2="532" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
+
+        <rect x="686" y="456" width="230" height="152" rx="6" fill="rgba(6, 78, 59, 0.15)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="700" y="477" fill="white" font-size="11" font-weight="600">注册表 registry/</text>
+        <text x="700" y="494" fill="#94a3b8" font-size="8">ExpertRegistry</text>
+        <text x="700" y="510" fill="#94a3b8" font-size="8">get / list_experts</text>
+        <text x="700" y="526" fill="#94a3b8" font-size="8">known_ids(kind)</text>
+        <text x="700" y="542" fill="#94a3b8" font-size="8">descriptors.py &#183; identity.py</text>
+        <text x="700" y="558" fill="#34d399" font-size="8">expert_id 的唯一索引</text>
+
+        <line x1="916" y1="532" x2="932" y2="532" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowEmerald)"/>
+
+        <rect x="936" y="456" width="200" height="152" rx="6" fill="rgba(6, 78, 59, 0.15)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="950" y="477" fill="white" font-size="11" font-weight="600">生命周期 lifecycle/</text>
+        <text x="950" y="494" fill="#94a3b8" font-size="8">engine/experts/lifecycle/</text>
+        <text x="950" y="510" fill="#94a3b8" font-size="8">uninstalled &#8594; installed</text>
+        <text x="950" y="526" fill="#94a3b8" font-size="8">&#8594; loaded &#8594; active</text>
+        <text x="950" y="542" fill="#94a3b8" font-size="8">&#8596; inactive &#8594; unload</text>
+        <text x="950" y="558" fill="#34d399" font-size="8">state.py 状态机</text>
+
+        <line x1="620" y1="626" x2="620" y2="654" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowViolet)"/>
+        <text x="632" y="646" fill="#475569" font-size="7">Scope 注入</text>
+
+        <!-- ========== LAYER 4: 执行层 ========== -->
+        <rect x="40" y="656" width="1160" height="250" rx="12" fill="rgba(46, 16, 101, 0.12)" stroke="#a78bfa" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="62" y="678" fill="#a78bfa" font-size="11" font-weight="600">4 执行层 Execution &mdash; 所有消费点共用同一份 Scope</text>
+
+        <rect x="66" y="686" width="260" height="204" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="80" y="707" fill="white" font-size="11" font-weight="600">人格注入</text>
+        <text x="80" y="724" fill="#94a3b8" font-size="8">engine/experts/prompt_slot.py</text>
+        <text x="80" y="740" fill="#94a3b8" font-size="8">ExpertPromptSlotCollector</text>
+        <text x="80" y="756" fill="#94a3b8" font-size="8">.collect(session)</text>
+        <text x="80" y="772" fill="#94a3b8" font-size="8">ROLE_OVERRIDE 优先级声明</text>
+        <text x="80" y="788" fill="#94a3b8" font-size="8">strip_expert_agent_frontmatter</text>
+        <text x="80" y="804" fill="#a78bfa" font-size="8">去掉 YAML frontmatter 后拼装</text>
+        <text x="80" y="820" fill="#94a3b8" font-size="8">正文为空 &#8594; 降级事件</text>
+        <text x="80" y="836" fill="#94a3b8" font-size="8">ExpertPromptDegraded</text>
+        <text x="80" y="866" fill="#a78bfa" font-size="7">persona_source = agents/&lt;agent&gt;.md</text>
+
+        <rect x="346" y="686" width="250" height="204" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <text x="360" y="707" fill="white" font-size="11" font-weight="600">技能执行</text>
+        <text x="360" y="724" fill="#94a3b8" font-size="8">engine/execution/skills/</text>
+        <text x="360" y="740" fill="#94a3b8" font-size="8">skill_dispatch.py &#183; runtime.py</text>
+        <text x="360" y="756" fill="#94a3b8" font-size="8">规范标识 &#123;expert&#125;:&#123;skill&#125;</text>
+        <text x="360" y="772" fill="#94a3b8" font-size="8">capabilities/catalog.py:</text>
+        <text x="360" y="788" fill="#94a3b8" font-size="8">canonical_ref 解析</text>
+        <text x="360" y="804" fill="#94a3b8" font-size="8">expert_prefer 消歧同名技能</text>
+        <text x="360" y="820" fill="#34d399" font-size="8">包级授权（tool_owners）</text>
+        <text x="360" y="866" fill="#34d399" font-size="7">skills/*/SKILL.md 为唯一来源</text>
+
+        <rect x="616" y="686" width="260" height="204" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="630" y="707" fill="white" font-size="11" font-weight="600">子代理与专家团</text>
+        <text x="630" y="724" fill="#94a3b8" font-size="8">engine/subagent/</text>
+        <text x="630" y="740" fill="#94a3b8" font-size="8">AgentManifest.preload_skills</text>
+        <text x="630" y="756" fill="#94a3b8" font-size="8">definition/manifest.py</text>
+        <text x="630" y="772" fill="#94a3b8" font-size="8">TeamCreateTool / TeamDeleteTool</text>
+        <text x="630" y="788" fill="#94a3b8" font-size="8">team_guard.guard_dispatch</text>
+        <text x="630" y="804" fill="#a78bfa" font-size="8">is_member 或 caller != lead</text>
+        <text x="630" y="820" fill="#a78bfa" font-size="8">&#8594; TEAM_SPAWN_BY_MEMBER</text>
+        <text x="630" y="836" fill="#94a3b8" font-size="8">成员只能被动派发，不可互连</text>
+        <text x="630" y="866" fill="#a78bfa" font-size="7">lead_agent = manifest.agentName</text>
+
+        <rect x="896" y="686" width="240" height="204" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="910" y="707" fill="white" font-size="11" font-weight="600">MCP 工具</text>
+        <text x="910" y="724" fill="#94a3b8" font-size="8">engine/mcp/connectors.py</text>
+        <text x="910" y="740" fill="#94a3b8" font-size="8">ConnectorRegistry.servers</text>
+        <text x="910" y="756" fill="#94a3b8" font-size="8">只返回 enabled=True</text>
+        <text x="910" y="772" fill="#94a3b8" font-size="8">backend/configs/mcp.json 唯一来源</text>
+        <text x="910" y="788" fill="#94a3b8" font-size="8">settings() &#8594; McpSettings</text>
+        <text x="910" y="804" fill="#22d3ee" font-size="8">MCP 不参与专家工具面</text>
+        <text x="910" y="820" fill="#94a3b8" font-size="8">按专家包作用域单独治理</text>
+        <text x="910" y="866" fill="#22d3ee" font-size="7">缺失/非法注册表 &#8594; ValueError</text>
+
+        <!-- 热更新回流：L5 -> L2 -->
+        <path d="M 1174 966 L 1174 410 L 846 410 L 846 384" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrowAmber)"/>
+        <text x="1186" y="700" fill="#fbbf24" font-size="7" text-anchor="middle" transform="rotate(-90, 1186, 700)">热更新 &#8594; 重建 EnvironmentCatalog &#8594; 下一次 run 生效</text>
+
+        <!-- ========== LAYER 5: 配置与发布 ========== -->
+        <rect x="40" y="936" width="1160" height="230" rx="12" fill="rgba(69, 26, 3, 0.12)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="62" y="958" fill="#fbbf24" font-size="11" font-weight="600">5 配置与发布 Config &amp; Release</text>
+
+        <rect x="66" y="966" width="340" height="184" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="80" y="987" fill="white" font-size="11" font-weight="600">backend/configs/capability_policy.yaml</text>
+        <text x="80" y="1004" fill="#94a3b8" font-size="8">优先级：overrides &gt; bulk &gt; defaults</text>
+        <text x="80" y="1020" fill="#94a3b8" font-size="8">strict: true &#8594; 未显式启用的一律禁用</text>
+        <text x="80" y="1036" fill="#94a3b8" font-size="8">kind &#8712; &#123; expert, team, skill &#125;</text>
+        <text x="80" y="1052" fill="#94a3b8" font-size="8">来源：override / bulk / default / strict</text>
+        <text x="80" y="1068" fill="#94a3b8" font-size="8">CapabilityPolicyRegistry.snapshot()</text>
+        <text x="80" y="1084" fill="#fbbf24" font-size="8">禁用模块 &#8594; RejectedScope</text>
+        <text x="80" y="1100" fill="#fbbf24" font-size="8">MODULE_DISABLED</text>
+        <text x="80" y="1128" fill="#94a3b8" font-size="7">infra/config/capability_policy.py</text>
+
+        <rect x="426" y="966" width="260" height="184" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="440" y="987" fill="white" font-size="11" font-weight="600">backend/configs/mcp.json</text>
+        <text x="440" y="1004" fill="#94a3b8" font-size="8">ConnectorRegistry</text>
+        <text x="440" y="1020" fill="#94a3b8" font-size="8">部署级连接器注册表</text>
+        <text x="440" y="1036" fill="#94a3b8" font-size="8">connectors.&lt;name&gt;</text>
+        <text x="440" y="1052" fill="#94a3b8" font-size="8">enabled / transport / command</text>
+        <text x="440" y="1068" fill="#94a3b8" font-size="8">唯一启用判定来源</text>
+        <text x="440" y="1084" fill="#fbbf24" font-size="8">只读视图，不做运行期改写</text>
+        <text x="440" y="1128" fill="#94a3b8" font-size="7">engine/mcp/connectors.py</text>
+
+        <rect x="706" y="966" width="430" height="184" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="720" y="987" fill="white" font-size="11" font-weight="600">infra/config/module_release.py</text>
+        <text x="720" y="1004" fill="#94a3b8" font-size="8">ReleaseDocument（版本化发布文档）</text>
+        <text x="720" y="1020" fill="#94a3b8" font-size="8">ModuleReleaseStore.publish / fetch_current</text>
+        <text x="720" y="1036" fill="#94a3b8" font-size="8">ModuleRuntimeCoordinator 热更新</text>
+        <text x="720" y="1052" fill="#94a3b8" font-size="8">assembly/experts/reload_service.py</text>
+        <text x="720" y="1068" fill="#94a3b8" font-size="8">&#8594; 重建 EnvironmentCatalog</text>
+        <text x="720" y="1084" fill="#94a3b8" font-size="8">（读侧快照指向新现实 expert_registry）</text>
+        <text x="720" y="1100" fill="#fbbf24" font-size="8">发布失败 &#8594; ReleaseValidationError</text>
+        <text x="720" y="1128" fill="#94a3b8" font-size="7">ModuleRuntimeCoordinator：assembly/runtime_coordinator.py</text>
+
+        <!-- ========== 数据流 ========== -->
+        <rect x="40" y="1200" width="1160" height="180" rx="12" fill="rgba(8, 51, 68, 0.18)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="62" y="1222" fill="#22d3ee" font-size="11" font-weight="600">数据流 Data Flow &mdash; 一次 run 的主链</text>
+
+        <rect x="50" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="124" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">用户选择专家</text>
+        <text x="124" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">显式 &#183; 唯一激活源</text>
+        <text x="124" y="1294" fill="#22d3ee" font-size="7" text-anchor="middle">settings/UI</text>
+
+        <line x1="198" y1="1273" x2="210" y2="1273" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="212" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="286" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">写 SessionHeader</text>
+        <text x="286" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">expert_id + source</text>
+        <text x="286" y="1294" fill="#22d3ee" font-size="7" text-anchor="middle">schema/agent/session.py</text>
+
+        <line x1="360" y1="1273" x2="372" y2="1273" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="374" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="448" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">EnvironmentCatalog</text>
+        <text x="448" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">snapshot() 只读快照</text>
+        <text x="448" y="1294" fill="#22d3ee" font-size="7" text-anchor="middle">infra/environment_catalog.py</text>
+
+        <line x1="522" y1="1273" x2="534" y2="1273" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="536" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="610" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">Scope（三态）</text>
+        <text x="610" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">tool_surface + owners</text>
+        <text x="610" y="1294" fill="#22d3ee" font-size="7" text-anchor="middle">engine/experts/scope.py</text>
+
+        <line x1="684" y1="1273" x2="696" y2="1273" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="698" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="772" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">人格注入</text>
+        <text x="772" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">工具面裁剪 ROLE_OVERRIDE</text>
+        <text x="772" y="1294" fill="#22d3ee" font-size="7" text-anchor="middle">engine/experts/prompt_slot.py</text>
+
+        <line x1="846" y1="1273" x2="858" y2="1273" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="860" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="934" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">模型调用</text>
+        <text x="934" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">Skill / Agent / MCP</text>
+        <text x="934" y="1294" fill="#22d3ee" font-size="6.5" text-anchor="middle">execution/skills &#183; subagent &#183; mcp</text>
+
+        <line x1="1008" y1="1273" x2="1020" y2="1273" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowCyan)"/>
+
+        <rect x="1022" y="1240" width="148" height="66" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <text x="1096" y="1262" fill="white" font-size="9" font-weight="600" text-anchor="middle">治理校验</text>
+        <text x="1096" y="1279" fill="#94a3b8" font-size="7.5" text-anchor="middle">tool_owners.allows_owner</text>
+        <text x="1096" y="1294" fill="#fb7185" font-size="7" text-anchor="middle">engine/experts/scope.py</text>
+
+        <text x="50" y="1336" fill="#475569" font-size="8">一条主链：选择 &#8594; 属性 &#8594; 快照 &#8594; 作用域 &#8594; 注入/裁剪 &#8594; 调用 &#8594; 治理；不存在隐式激活通道。</text>
+        <text x="50" y="1356" fill="#475569" font-size="8">运行期只读：EnvironmentCatalog 与 Scope 都是快照；写侧只经 capability_policy 与 ReleaseDocument。</text>
+
+        <!-- ========== 图例 ========== -->
+        <text x="50" y="1404" fill="white" font-size="9" font-weight="600">图例</text>
+        <rect x="50" y="1414" width="16" height="10" rx="2" fill="#0f172a" stroke="#34d399" stroke-width="1"/>
+        <text x="74" y="1423" fill="#94a3b8" font-size="8">专家体系模块</text>
+        <rect x="200" y="1414" width="16" height="10" rx="2" fill="#0f172a" stroke="#fbbf24" stroke-width="1"/>
+        <text x="224" y="1423" fill="#94a3b8" font-size="8">配置与发布</text>
+        <rect x="340" y="1414" width="16" height="10" rx="2" fill="#0f172a" stroke="#22d3ee" stroke-width="1"/>
+        <text x="364" y="1423" fill="#94a3b8" font-size="8">会话 / 数据流</text>
+        <rect x="490" y="1414" width="16" height="10" rx="2" fill="#0f172a" stroke="#fb7185" stroke-width="1"/>
+        <text x="514" y="1423" fill="#94a3b8" font-size="8">治理校验 / 边界约束</text>
+        <rect x="660" y="1414" width="16" height="10" rx="2" fill="#0f172a" stroke="#a78bfa" stroke-width="1"/>
+        <text x="684" y="1423" fill="#94a3b8" font-size="8">人格 / 团队 / 成员面</text>
+        <text x="50" y="1456" fill="#475569" font-size="8">路径前缀：backend/src/prismclaw/ &#183; 发布与热更新由 ModuleRuntimeCoordinator 统一编排</text>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>四个一级概念</h3>
+        </div>
+        <ul>
+          <li>&#8226; 专家 Expert：人格 + 工具面，一次会话内唯一</li>
+          <li>&#8226; 专家团 Team：lead + 成员，成员之间不可互连</li>
+          <li>&#8226; 技能 Skill：规范标识 <code>&#123;expert&#125;:&#123;skill&#125;</code></li>
+          <li>&#8226; MCP 连接器：部署级注册表，仅返回 enabled</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>关键不变量</h3>
+        </div>
+        <ul>
+          <li>&#8226; <code>SessionHeader.expert_id</code> 单值、互斥，取消即清空</li>
+          <li>&#8226; 只有 user 显式选择可以激活专家</li>
+          <li>&#8226; 一次 run 只构建一个三态 <code>Scope</code></li>
+          <li>&#8226; <code>tool_owners</code> 为包级口径，不做逐技能集合</li>
+          <li>&#8226; MCP 工具不参与专家工具面裁剪</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>生命周期与热更新</h3>
+        </div>
+        <ul>
+          <li>&#8226; uninstalled &#8594; installed &#8594; loaded &#8594; active</li>
+          <li>&#8226; active &#8596; inactive；unload 回到 installed</li>
+          <li>&#8226; ReleaseDocument 经 ModuleRuntimeCoordinator 热更新</li>
+          <li>&#8226; 重建 EnvironmentCatalog 后下一次 run 生效</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>边界约束 Constraints</h3>
+        </div>
+        <ul>
+          <li>&#8226; 专家是会话属性：同一会话至多一个，只有用户显式选择可激活</li>
+          <li>&#8226; 专家包禁止 hooks / MCP / commands / LSP 声明</li>
+          <li>&#8226; MCP 是部署级连接器，不参与专家工具面裁剪</li>
+          <li>&#8226; 启停只读 capability_policy，运行期不改包内容</li>
+          <li>&#8226; 子代理不换专家、不派发同级成员</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">
+      PrismClaw &#8226; Expert System &#8226; backend/src/prismclaw/engine/experts/
+    </p>
+  </div>
+</body>
+</html>

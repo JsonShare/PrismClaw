@@ -29,9 +29,7 @@ Agent 型（单个 AI 专家），expertType = agent。
 - `skills/corporate-law-playbook/`：执业资料与流程参考（原根级 references 已折叠至此）
 - `skills/`：7 个技能（`ai-tool-handoff`、`board-minutes`、`corporate-governance-workflow`、`corporate-law-playbook`、`corporate-ma-workflow`、`deal-team-summary`、`tabular-review`）
 - `skills/corporate-law-playbook/references/commands/`：原命令流程
-- `skills/corporate-law-playbook/references/practice-profile/`：执业档案模板
 - `skills/corporate-law-playbook/references/subagents/`：原始子代理
-- `skills/corporate-law-playbook/references/mcp/`：MCP 配置（仅供查阅）
 - `avatars/expert.png`：专家头像
 - `LICENSE`：源插件许可证
 
@@ -41,4 +39,4 @@ Agent 型（单个 AI 专家），expertType = agent。
 
 ## 命令说明
 
-原命令保存在 `skills/corporate-law-playbook/references/commands/`，仅作流程参考，不注册为 WorkBuddy 斜杠命令。
+原命令保存在 `skills/corporate-law-playbook/references/commands/`，仅作流程参考，不注册为 系统注册命令。

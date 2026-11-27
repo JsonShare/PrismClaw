@@ -8,18 +8,15 @@ argument_hint: '[class name, with past exams shared or paths to them]'
 category: 法学学习
 ---
 
-
-
-
 # /exam-forecast
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → class、professor、exam format、syllabus。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → class、professor、exam format、syllabus。
 2. 应用以下工作流。
 3. 接收过去考试（PDF、粘贴或路径）。确认样本量。
 4. 分析每次过去考试：格式、学科覆盖、问题风格、事实模式密度、反复出现的陷阱。
 5. 跨考试模式分析——什么是稳定的，什么是变化的。
 6. 结合当前教学大纲生成预测：学科权重、格式、爱好、学习重点。
-7. 编写 `${WORKBUDDY_EXPERT_DATA}/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。构建为加权启发式，而不是预测。
+7. 编写 `{expert_runtime_dir}/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。构建为加权启发式，而不是预测。
 
 ---
 
@@ -38,7 +35,7 @@ category: 法学学习
 
 ## Load context
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 当前课程、考试格式、教学大纲（如果捕获）
+- `执业配置文件（请按当前系统指引创建）` → 当前课程、考试格式、教学大纲（如果捕获）
 - 用户提供的过去考试（PDF、粘贴文本、路径）
 - Optional：当前课程的教学大纲（用于"迄今为止涵盖的内容"）
 
@@ -145,7 +142,7 @@ STUDY NOTES — NOT LEGAL ADVICE
 
 ### Step 5: Output location
 
-写入 `${WORKBUDDY_EXPERT_DATA}/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。版本控制——如果学生在学期中获得另一次过去考试，重新运行并附加。
+写入 `{expert_runtime_dir}/exam-forecasts/[class]/forecast-[YYYY-MM-DD].md`。版本控制——如果学生在学期中获得另一次过去考试，重新运行并附加。
 
 ## Integration
 
@@ -156,7 +153,7 @@ STUDY NOTES — NOT LEGAL ADVICE
 
 ## Close with the next-steps decision tree
 
-按照 PLUGIN.md `## Outputs` 以下一步决策树结束。根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
+根据此 skill 刚刚生成的内容自定义选项——五个默认分支（起草 X、升级、获取更多事实、观察等待、其他事情）是起点，而不是锁定。树就是输出；律师选择。
 
 ## What this skill does not do
 
@@ -165,6 +162,5 @@ STUDY NOTES — NOT LEGAL ADVICE
 - **Replace studying everything on the syllabus.** 预测是加权，而不是消除。因为主题历史上代表不足而跳过它是学生被烧伤的方式。
 - **Account for changes you don't know about.** 如果教授今年转移了重点（例如，在课堂讲座中强调新案例），skill 不会看到，除非你告诉它。
 - **Work reliably with 1-2 past exams.** 样本薄弱。标记为这样。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

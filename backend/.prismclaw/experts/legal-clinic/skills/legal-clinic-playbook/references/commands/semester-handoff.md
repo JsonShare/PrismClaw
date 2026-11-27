@@ -8,17 +8,14 @@ argument_hint: '[--semester=YYYY-term（默认：当前）] [--case=[case_id]（
 category: 法律诊所
 ---
 
-
-
-
 # /semester-handoff
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 诊所档案、学期日期、监督风格。
-2. 加载 `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml` 和每个案件的 `${WORKBUDDY_EXPERT_DATA}/client-comms/[case-id]/log.md`。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 诊所档案、学期日期、监督风格。
+2. 加载 `{expert_runtime_dir}/deadlines.yaml` 和每个案件的 `{expert_runtime_dir}/client-comms/[case-id]/log.md`。
 3. 使用以下工作流。
 4. 将活跃案件列表作为输入（如果诊所没有中央列表则询问）。映射离开 → 进入的所有者。
-5. 生成每个案件的交接备忘录 → `${WORKBUDDY_EXPERT_DATA}/handoffs/[semester]/[case_id].md`。
-6. 生成队列摘要 → `${WORKBUDDY_EXPERT_DATA}/handoffs/[semester]/_summary.md`。
+5. 生成每个案件的交接备忘录 → `{expert_runtime_dir}/handoffs/[semester]/[case_id].md`。
+6. 生成队列摘要 → `{expert_runtime_dir}/handoffs/[semester]/_summary.md`。
 7. 根据监督模型路由——正式队列 / 可配置标记 / 更轻触。
 
 ---
@@ -37,9 +34,9 @@ category: 法律诊所
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 诊所档案、学期、执业领域、监督风格
-- `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml` → 所有活跃截止期限，按案件分组
-- `${WORKBUDDY_EXPERT_DATA}/client-comms/[case-id]/log.md`（每个案件）→ 沟通历史
+- `执业配置文件（请按当前系统指引创建）` → 诊所档案、学期、执业领域、监督风格
+- `{expert_runtime_dir}/deadlines.yaml` → 所有活跃截止期限，按案件分组
+- `{expert_runtime_dir}/client-comms/[case-id]/log.md`（每个案件）→ 沟通历史
 - 诊所维护的案件文件 / 摘要摘要
 - 学生名册——进入交接时谁拥有什么
 
@@ -47,7 +44,7 @@ category: 法律诊所
 
 ### 步骤 1：识别案件和所有者
 
-- 拉取所有活跃案件（来自摄取记录 + `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml` case_ids + client-comms 文件夹）
+- 拉取所有活跃案件（来自摄取记录 + `{expert_runtime_dir}/deadlines.yaml` case_ids + client-comms 文件夹）
 - 对于每个案件：谁是当前的学生所有者？他们留下还是离开？
 - 映射：离开所有者 → 进入所有者（如果已知；否则标记"TBD——教授分配"）
 
@@ -75,7 +72,7 @@ category: 法律诊所
 
 ## 待处理的截止期限
 
-*从 `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml` 拉取。进入学生的第一个工作是确认这些是准确的并已拥有。*
+*从 `{expert_runtime_dir}/deadlines.yaml` 拉取。进入学生的第一个工作是确认这些是准确的并已拥有。*
 
 | 到期 | 类型 | 描述 | 备注 |
 |---|---|---|---|
@@ -106,7 +103,7 @@ category: 法律诊所
 
 ## 沟通历史摘要
 
-*来自 `${WORKBUDDY_EXPERT_DATA}/client-comms/[case-id]/log.md`。这里是三行摘要；进入学生阅读完整日志。*
+*来自 `{expert_runtime_dir}/client-comms/[case-id]/log.md`。这里是三行摘要；进入学生阅读完整日志。*
 
 [最近联系模式的简短摘要——例如，"自摄取以来 3 次电话，全部用西班牙语，客户更喜欢晚上。最后联系：2026-04-15，确认听证通知的地址。"]
 
@@ -131,7 +128,7 @@ category: 法律诊所
 
 ### 步骤 3：队列摘要
 
-在所有每个案件的备忘录之后，生成 `${WORKBUDDY_EXPERT_DATA}/handoffs/[semester]/_summary.md`：
+在所有每个案件的备忘录之后，生成 `{expert_runtime_dir}/handoffs/[semester]/_summary.md`：
 
 ```markdown
 # 队列交接摘要——[学期结束]
@@ -166,9 +163,9 @@ category: 法律诊所
 
 ### 步骤 4：教授审查（如果监督模型要求）
 
-关闭案件或将其过渡给新学生是一个有后果的行动。门槛是 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有设置的第 0 部分角色检查加强。案件关闭备忘录始终获得教授签字，然后案件在交接文档中标记为关闭，无论监督风格选择如何。
+关闭案件或将其过渡给新学生是一个有后果的行动。门槛是 `执业配置文件（请按当前系统指引创建）` 中 `## Supervision style` 中的监督工作流，由确认许可的主管律师拥有设置的第 0 部分角色检查加强。案件关闭备忘录始终获得教授签字，然后案件在交接文档中标记为关闭，无论监督风格选择如何。
 
-根据 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 监督风格：
+根据 `执业配置文件（请按当前系统指引创建）` 监督风格：
 
 - **正式审查队列：** 每个交接备忘录在发给进入学生之前进入审查队列。教授批准、编辑或返回。
 - **可配置标记：** 备忘录带有"CHECK WITH [教授] BEFORE RELYING"——教授非正式审查，学生负责检查。
@@ -176,11 +173,11 @@ category: 法律诊所
 
 ### 步骤 5：交接
 
-审查后，交接备忘录位于 `${WORKBUDDY_EXPERT_DATA}/handoffs/[semester]/[case_id].md`。进入学生在下学期开始 `/ramp` 运行时阅读它们——`/ramp` 应该为新学生分配的案件显示备忘录。
+审查后，交接备忘录位于 `{expert_runtime_dir}/handoffs/[semester]/[case_id].md`。进入学生在下学期开始 `/ramp` 运行时阅读它们——`/ramp` 应该为新学生分配的案件显示备忘录。
 
 ## 集成
 
-- **`/ramp`:** 在下学期开始时，读取 `${WORKBUDDY_EXPERT_DATA}/handoffs/[most-recent-semester]/` 并为每个新学生接手的案件显示每个案件的备忘录。
+- **`/ramp`:** 在下学期开始时，读取 `{expert_runtime_dir}/handoffs/[most-recent-semester]/` 并为每个新学生接手的案件显示每个案件的备忘录。
 - **`/deadlines`:** 为每个备忘录的待处理截止期限部分提供内容。
 - **`/client-comms-log`:** 为沟通历史摘要提供内容。
 - **`/supervisor-review-queue`（如果启用正式审查）：** 交接备忘录路由到这里供教授批准。
@@ -191,6 +188,5 @@ category: 法律诊所
 - **分配进入学生。** 教授分配。Skill 记录分配是什么；不选择。
 - **从零开始生成交接而没有诊所数据。** 需要活跃案件列表作为输入。如果诊所不维护一个，skill 会将差距显示为阻止器，而不是发明。
 - **替代对话。** 书面备忘录是记录。离开学生也应该在可行时与进入学生对话——备忘录捕获事实；对话捕获备忘录无法捕获的判断和关系背景。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

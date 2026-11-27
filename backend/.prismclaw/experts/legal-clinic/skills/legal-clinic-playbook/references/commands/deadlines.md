@@ -9,15 +9,12 @@ argument_hint: '[--add | --report（默认）| --update [id] | --complete [id] |
 category: 法律诊所
 ---
 
-
-
-
 # /deadlines
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 司法管辖区、执业领域、警告天数节奏。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 司法管辖区、执业领域、警告天数节奏。
 2. 使用以下工作流。
 3. 按标记路由：
-   - `--add`：捕获案件、类型、描述、到期日期、来源、负责人。写入 `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml`。先检查重复。
+   - `--add`：捕获案件、类型、描述、到期日期、来源、负责人。写入 `{expert_runtime_dir}/deadlines.yaml`。先检查重复。
    - `--report`（默认）：跨案件汇总——逾期、接下来 3 天、接下来 7 天、接下来 14 天；按负责人；按执业领域；未分配标记。
    - `--update [id]`：修改字段；附日期记录备注。
    - `--complete [id]`：标记完成；与学生确认工作实际已提交/归档。
@@ -36,10 +33,10 @@ category: 法律诊所
 
 ## 加载上下文
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 司法管辖区、执业领域、截止日期警告天数（默认 14/7/3/1）、督导律师
-- `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml` — 分类账
+- `执业配置文件（请按当前系统指引创建）` → 司法管辖区、执业领域、截止日期警告天数（默认 14/7/3/1）、督导律师
+- `{expert_runtime_dir}/deadlines.yaml` — 分类账
 
-**司法管辖区假设。** 截止日期计算和警告阈值假设 PLUGIN.md 中设置的司法管辖区。截止日期、 tolling 规则、时间计算规则和本地法院实践因司法管辖区和特定法院而有实质性差异。如果事项涉及不同的州、特定法院的本地规则，或联邦 vs. 州法院问题，在依赖截止日期之前根据适用规则与您的督导确认。
+**司法管辖区假设。** 截止日期计算和警告阈值假设 系统配置 中设置的司法管辖区。截止日期、 tolling 规则、时间计算规则和本地法院实践因司法管辖区和特定法院而有实质性差异。如果事项涉及不同的州、特定法院的本地规则，或联邦 vs. 州法院问题，在依赖截止日期之前根据适用规则与您的督导确认。
 
 ## 模式
 
@@ -64,7 +61,7 @@ skill 自动生成 `id` slug：`[case]-[short-desc]-[YYYY-MM]`。
 
 **合理性检查区间。** 学生输入到期日期后，不要计算或验证——但对提交类型的典型范围进行粗略合理性检查，如果日期远远超出范围则标记学生。这是捕获学生自己数学中严重错误的脚手架，不是根据规则计算的替代方案。
 
-**区间按司法管辖区索引。** 从 `references/plausibility-bands/{state}.md` 加载此诊所司法管辖区的区间文件，其中 `{state}` 是 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 诊所司法管辖区的两位字母代码。附带 `CN`（中国，已填充民事诉讼程序期限、涉外期限与常见实体时效）、`CA`（美国加州，已完全填充）、`IL`（美国伊利诺伊州，占位符结构）。
+**区间按司法管辖区索引。** 从 `references/plausibility-bands/{state}.md` 加载此诊所司法管辖区的区间文件，其中 `{state}` 是 `执业配置文件（请按当前系统指引创建）` → 诊所司法管辖区的两位字母代码。附带 `CN`（中国，已填充民事诉讼程序期限、涉外期限与常见实体时效）、`CA`（美国加州，已完全填充）、`IL`（美国伊利诺伊州，占位符结构）。
 
 中国辖区以**全国性程序法为基线**，无「联邦 + 州」两层结构；地方性规则与本地法院实务差异按需另建小节或补充文件，不得当作全国通用。
 
@@ -88,7 +85,7 @@ skill 自动生成 `id` slug：`[case]-[short-desc]-[YYYY-MM]`。
 
 ### `--report`（默认）— 跨案件汇总
 
-读取 `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml`。产生：
+读取 `{expert_runtime_dir}/deadlines.yaml`。产生：
 
 ```markdown
 # 截止日期报告 — [今天]
@@ -156,7 +153,7 @@ skill 自动生成 `id` slug：`[case]-[short-desc]-[YYYY-MM]`。
 
 ## 警告节奏
 
-按照 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` 截止日期警告天数。默认 14、7、3、1。
+按照 `执业配置文件（请按当前系统指引创建）` 截止日期警告天数。默认 14、7、3、1。
 
 警告不会自动展示——此插件没有计划/代理行为。但每当 `/deadlines` 被调用（或 `/status`，它会路由到此 skill 进行截止日期检查）时，报告会拉取触及警告阈值的任何内容。
 
@@ -166,7 +163,7 @@ skill 自动生成 `id` slug：`[case]-[short-desc]-[YYYY-MM]`。
 
 - **`/client-intake`：** 当接案发现时间线紧急性（驱逐通知日期、庇护申请截止日期、聆讯日期）时，提供带预填充字段的 `/deadlines --add`。
 - **`/draft`：** 当提交草案引用截止日期（答复到期、异议窗口）时，提供添加。
-- **`/status`：** status skill 读取 `${WORKBUDDY_EXPERT_DATA}/deadlines.yaml` 中相关案件的信息，并在输出中包含即将到来的截止日期。
+- **`/status`：** status skill 读取 `{expert_runtime_dir}/deadlines.yaml` 中相关案件的信息，并在输出中包含即将到来的截止日期。
 - **`/semester-handoff`：** 读取 deadlines.yaml 以识别离开学生案件中的所有活跃截止日期；每份交接备忘录将截止日期前向传递。
 - **`/supervisor-review-queue`（如果启用了正式审查）：** 接近截止的截止日期在审查队列中获得优先级。
 

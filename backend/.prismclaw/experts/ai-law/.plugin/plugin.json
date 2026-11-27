@@ -2,9 +2,6 @@
   "name": "ai-law",
   "version": "1.0.0",
   "description": "Classifies AI use cases, assesses policy impact, generates AIAs and reviews vendor AI clause gaps.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/ai-law.md"
   ],
@@ -23,16 +20,15 @@
     "en": "Algorithm Impact & AI Registry"
   },
   "displayDescription": {
-    "zh": "分类 AI 用例、评估制度影响、生成 AIA，并审查供应商条款差距。",
+    "zh": "分类 AI 用例、评估制度与政策影响、生成算法影响评估，并审查供应商条款差距与治理缺口。",
     "en": "Classifies AI use cases, assesses policy impact, generates AIAs and reviews vendor AI clause gaps."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "04-DataAI",
+  "categoryId": "compliance",
   "defaultInitPrompt": {
     "zh": "按我们的注册表对这些 AI 用例做分类与影响评估。",
     "en": "Classify these AI use cases against our registry and assess impact."
   },
-  "plugin": "ai-law",
   "tags": [
     {
       "zh": "AI 用例分类",
@@ -61,5 +57,6 @@
       "en": "Review this vendor AI clause for data training and liability gaps."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "合规监管"
 }

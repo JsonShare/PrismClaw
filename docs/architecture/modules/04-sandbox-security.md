@@ -23,7 +23,7 @@
 │  ┌──────┐  ┌──────┐  ┌──────┐                                    │
 │  │RuleGa│  │Consent│ │Hook  │                                     │
 │  │te    │  │Gate  │  │Dispatch│                                  │
-│  │L0    │  │PHI   │  │插件   │                                   │
+│  │L0    │  │PHI   │  │Hook   │                                   │
 │  │静态  │  │同意  │  │拦截   │                                   │
 │  └──────┘  └──────┘  └──────┘                                    │
 │     │          │          │                                       │
@@ -34,7 +34,7 @@
 │  │沙箱  │  │防泄漏│  │TTL   │  │熔断  │  │注册  │               │
 │  └──────┘  └──────┘  └──────┘  └──────┘  └──────┘              │
 │                                                                 │
-│  决策链: RuleGate(L0) → 任务级确认（awaiting_* / decision）       │
+│  决策链: RuleGate → 任务级确认（awaiting_* / decision）       │
 │          → BwrapPolicy / DLP / BreakGlass / MCP                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -122,10 +122,13 @@
 工具调用前的检查为：
 
 ```
-1. doom-loop 冻结签名检查（确定性决策）
-2. pre-tool hooks（插件）— deny 直接阻断
-3. RuleGate.check() — L0 静态规则（在 executor 中调用）
+1. 归属门控（工具分类阶段）：工具归属不在作用域 `tool_owners` 内 → allowed_tool_owners_denied:<owner>
+2. doom-loop 冻结签名检查（确定性决策）
+3. pre-tool hooks（通用 Hook 通道）— deny 直接阻断
+4. RuleGate.check() — L0 静态规则（在 executor 中调用）
 ```
+
+归属门控在会话作用域存在时生效：`NoExpertScope` 按「显式勾选技能所属包」放行专家归属工具，`ActiveScope` 按专家包 + 勾选包放行，`RejectedScope` 的集合为空即全拒。只有 `session_scope is None`（headless / 装配未就绪）才不做归属限制。语义见 [03-expert-system.md](03-expert-system.md) 的作用域一节。
 
 需要用户确认的场景由**任务级确认状态机**承担：`awaiting_risk_confirmation` /
 `awaiting_confirmation` + `confirmation_decision` 写入任务状态，前端确认条解析后继续执行。
@@ -361,7 +364,7 @@ tool_name + arguments + workspace_tag
     ↓
 doom-loop 冻结签名检查
     ↓ (未冻结)
-pre-tool hooks（插件）→ deny 直接阻断
+pre-tool hooks（通用 Hook 通道）→ deny 直接阻断
     ↓ (allowed)
 RuleGate.check() → 5 条静态规则
     ↓ (allowed)

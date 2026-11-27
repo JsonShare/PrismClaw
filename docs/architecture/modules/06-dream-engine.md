@@ -1,19 +1,17 @@
-# 06 — Dreaming 引擎
-
-> 最后修订：2026-11-03（对齐记忆体系重构 SDD v1.4 实施结果）
+# 06 — Dreaming 引擎 (Dream Engine)
 
 ## 职责概述
 
 Dreaming 引擎是 Agent 的离线记忆整理与知识沉淀系统。三阶段模型（Light Sleep → Deep Sleep → REM Sleep）在空闲时段对记忆进行去重、合并、降级与归档合成。核心能力：
 
 - **三阶段处理模型**：Light（L1→L2 提升与合并下架）/ Deep（去重+三层合并）/ REM（L4 归档合成+制品发布）
-- **Light 合并收敛**（D4）：被合并的原件必须 `archive_entry(reason="light_sleep_merged")` 下架，不得只删 L1 索引制造副本
+- **Light 合并收敛**：被合并的原件必须 `archive_entry(reason="light_sleep_merged")` 下架，不得只删 L1 索引制造副本
 - **Dream Compiler**：候选提取 → publish gate → merge judge（duplicate/refine/contradict/new）
 - **Dream Governance**：Shadow / Canary / Direct 三通道发布 + 审批/拒绝/回滚
 - **Dream Dispatch**：Redis Streams 队列 + **消费组自愈（NOGROUP 自动重建 + 30s 冷却防风暴 + 重建审计）** + stale reclaim + dead letter + 指数退避
 - **Dream Scheduler**：空闲循环 + 夜间窗口（时区感知）+ 多 worker leader-only 扫描
-- **Memory Value Scoring**（E3）：多因子价值评分驱动降级与保留决策
-- **SDD B3 三层合并**（`tiers_enabled` 缺省 False，生产走 legacy 路径）：Light（零 LLM 精确去重）/ Mid（验证回写+衰减+CONTEST 退出）/ Deep（证据门控语义合并+纠错学习）
+- **Memory Value Scoring**：多因子价值评分驱动降级与保留决策
+- **三层合并开关**（`tiers_enabled`，默认 False，关闭时走单层路径）：Light（零 LLM 精确去重）/ Mid（验证回写+衰减+CONTEST 退出）/ Deep（证据门控语义合并+纠错学习）
 
 ## 架构总览
 
@@ -56,7 +54,7 @@ Dreaming 引擎是 Agent 的离线记忆整理与知识沉淀系统。三阶段�
 三阶段 Dream 周期编排器。
 
 - **核心方法**：`trigger_dream_cycle()` / `run_light()` / `run_deep()` / `run_rem()` / `run_nightly()`
-- **Light Sleep（D4 修订）**：LLM 整合产出 `(orig_ids, context, fact, type)` → 合并件 `store()` → **原件经 `_cleanup_light_sleep_source_ids` → `archive_entry(reason="light_sleep_merged")` 下架**（fallback/recovered 路径同一语义）
+- **Light Sleep**：LLM 整合产出 `(orig_ids, context, fact, type)` → 合并件 `store()` → **原件经 `_cleanup_light_sleep_source_ids` → `archive_entry(reason="light_sleep_merged")` 下架**（fallback/recovered 路径同一语义）
 - **`_hydrate_fulltext()`**：候选全文必须从 L2 回读（`get_contents_by_ids`），不喂截断镜像给 LLM；无法解析的候选整体跳过
 - **关键常量**：`_DREAM_MAX_SCAN = 200`；`_REM_MAX_ITEMS = 12`；`_REM_FEEDBACK_LIMIT = 3`；`effective_threshold_s = max(light_sleep_threshold_s, 12h)`
 
@@ -76,19 +74,19 @@ Dreaming 引擎是 Agent 的离线记忆整理与知识沉淀系统。三阶段�
 
 ### Dream Tiers（`engine/dream/tiers.py`，`tiers_enabled=False` 时走 legacy）
 
-- Light：零 LLM 精确去重，≥3 次重复 → L3 过程建议；Mid：验证回写 + 衰减 + CONTEST 退出 + E3 降级 + E5 边去活；Deep：证据门控语义合并 + E4 纠错学习 + 死边清理
+- Light：零 LLM 精确去重，≥3 次重复 → L3 过程建议；Mid：验证回写 + 衰减 + CONTEST 退出 + 低价值降级 + 边去活；Deep：证据门控语义合并 + 纠错学习 + 死边清理
 - 常量：`_DEMOTE_FRACTION = 0.2`、`_CONFIDENCE_FLOOR = 0.05`、`_CONFIDENCE_CEIL = 0.95`
 
 ### Dream Publishing / Governance / Review（publishing.py / governance_runtime.py / review_service.py）
 
 - 三通道发布（shadow 不存储 / canary 灰度 / direct 直接）；hash-percent rollout
-- **Review 决策（T2-4 修订）**：`awaiting_archive_migration` 分支已随 `pc_memory_archives` 死表移除（backlog 恒 0 的迁移等待语义删除）
+- **Review 决策**：`awaiting_archive_migration` 分支已随 `pc_memory_archives` 死表移除（backlog 恒 0 的迁移等待语义删除）
 
 ### Dream Dispatch（`engine/dream/dispatch/dispatch.py`）
 
 Redis Streams 队列调度系统。
 
-- **消费组自愈（D1）**：`_read_group` 遇 NOGROUP → `_recover_group()`（复位 `_group_ready` + 重建 + 重试一次）；`_group_rebuild_cooldown_s = 30s` 防风暴；重建写审计 `event=group_rebuilt{stream_len}`
+- **消费组自愈**：`_read_group` 遇 NOGROUP → `_recover_group()`（复位 `_group_ready` + 重建 + 重试一次）；`_group_rebuild_cooldown_s = 30s` 防风暴；重建写审计 `event=group_rebuilt{stream_len}`
 - **ack/fail NOGROUP 容忍**：组在 claim 与 ack 之间丢失 → 降级审计（`ack_group_missing`/`fail_group_missing`），任务按 `"0-0"` 重投递幂等重跑（ack 已 xdel 已处理条目，stream 残留即未完成任务）
 - **类**：`RedisDreamDispatchQueue`（enqueue/read/ack/fail/reclaim_stale/replay_dead_letter/stats/metrics）、`DreamDispatchConsumer`
 - **构建函数**：`build_light_dispatch_job()` / `build_nightly_dispatch_job()`
@@ -116,8 +114,8 @@ DreamEngine.run_light()
 ### 2. Deep Sleep 流（去重 + 合并）
 
 ```
-run_deep() → run_mid_tier()（验证回写 + 衰减 + CONTEST 退出 + E3 降级）
-          → run_deep_tier()（证据门控合并 + E4 + 死边清理）
+run_deep() → run_mid_tier()（验证回写 + 衰减 + CONTEST 退出 + 低价值降级）
+          → run_deep_tier()（证据门控合并 + 纠错学习 + 死边清理）
 ```
 
 ### 3. REM Sleep 流（L4 归档合成）

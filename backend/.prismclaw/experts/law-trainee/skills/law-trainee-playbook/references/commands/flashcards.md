@@ -7,16 +7,13 @@ argument_hint: '[subject] [--generate | --drill | --review | --stats | --session
 category: 法学学习
 ---
 
-
-
-
 # /flashcards
 
-1. 加载 `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 当前课程、弱学科、大纲位置。
+1. 加载 `执业配置文件（请按当前系统指引创建）` → 当前课程、弱学科、大纲位置。
 2. 应用以下框架。
 3. 按标志路由：
    - `--generate`：按照卡片编写规则从来源（大纲路径、笔记、案例书）构建卡片。
-     写入 `${WORKBUDDY_EXPERT_DATA}/flashcards/[subject]/cards.md`。
+     写入 `{expert_runtime_dir}/flashcards/[subject]/cards.md`。
    - `--drill`（默认）：优先到期卡片 + 新卡片；显示 Q，等待答案，显示 A，
      接受自我评估，更新存储桶 + 下次审查。
    - `--review`：按存储桶浏览卡组。
@@ -59,8 +56,8 @@ category: 法学学习
 
 ## Load context
 
-- `${WORKBUDDY_EXPERT_DATA}/PLUGIN.md` → 当前课程、弱学科、现有大纲
-- `${WORKBUDDY_EXPERT_DATA}/flashcards/[subject]/cards.md`（如果存在）（增量构建）
+- `执业配置文件（请按当前系统指引创建）` → 当前课程、弱学科、现有大纲
+- `{expert_runtime_dir}/flashcards/[subject]/cards.md`（如果存在）（增量构建）
 - 用户提供的来源（大纲路径、笔记、案例书摘录）（如果给出）
 
 ## Modes
@@ -71,7 +68,7 @@ category: 法学学习
 
 当学生说"让我们做 5 张合同卡"或运行 `skills/law-trainee-playbook/references/commands/session.md Contracts 5 --flashcards` 时。
 
-- 如果存在 `${WORKBUDDY_EXPERT_DATA}/study-plan.yaml`，加载它并阅读此学科的 `session_history`。
+- 如果存在 `{expert_runtime_dir}/study-plan.yaml`，加载它并阅读此学科的 `session_history`。
 - 优先级：先前标记为错误的卡片 > 到期卡片 > 新卡片。
 - 按照 `--drill` 流程一次运行 N 张卡片。
 - 会话结束时，将结果附加到 `study-plan.yaml` → `session_history`：
@@ -88,13 +85,13 @@ session_history:
     stuck_topics: [parol-evidence-rule]
 ```
 
-- 如果没有 `study-plan.yaml`，改为写入 `${WORKBUDDY_EXPERT_DATA}/session-history.yaml`。
+- 如果没有 `study-plan.yaml`，改为写入 `{expert_runtime_dir}/session-history.yaml`。
 
 ### `--generate` — create cards
 
 **Inputs:**
 - Subject（课程名称或主题）
-- Source（大纲路径、笔记，或"use my existing outline from ${WORKBUDDY_EXPERT_DATA}/PLUGIN.md"）
+- Source（大纲路径、笔记，或"use my existing outline from 执业配置文件（请按当前系统指引创建）"）
 - Optional：card count target（默认每次会话 10-20）
 
 **Card structure:**
@@ -173,6 +170,5 @@ flashcards/
 - **Enforce study discipline.** 错过的审查天数会复合；skill 只显示到期的内容。你决定是否抽认。
 - **Teach you the rule.** 卡片用于抽认你已经学过的内容。如果卡片一直错误，问题在上游——
   使用 `skills/law-trainee-playbook/references/commands/socratic-drill.md` 或重新阅读来源。
-
 
 > 注意：本回复由 AI 辅助生成，仅提供一般性参考，不构成法律意见。具体法律问题，请咨询持有执业证的律师或律师事务所。

@@ -6,7 +6,6 @@
 公共 API（PEP 562 惰性导入 — 仅在首次访问时加载）：
 - MedicalBundle: 域 Bundle 入口（由 entry-point 加载）
 - MedicalStore / KbStore: 持久化存储
-- ensure_medical_schema: DDL 确保
 - VM 转换器 + 枚举 + Schema
 
 惰性导入的必要性：
@@ -22,7 +21,6 @@ __all__ = [
     # persistence
     "MedicalStore",
     "KbStore",
-    "ensure_medical_schema",
     "row_to_dict",
     "get_medical_store",
     "get_kb_store",
@@ -51,7 +49,6 @@ _LAZY_IMPORTS: dict[str, str] = {
     # persistence — 依赖 sqlalchemy（轻量，但统一惰性）
     "MedicalStore": ".persistence.medical_store",
     "KbStore": ".persistence.kb_store",
-    "ensure_medical_schema": ".persistence.schema",
     "row_to_dict": ".persistence.helpers",
     "get_medical_store": ".persistence.helpers",
     "get_kb_store": ".persistence.helpers",

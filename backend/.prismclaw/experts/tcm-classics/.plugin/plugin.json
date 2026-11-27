@@ -1,0 +1,65 @@
+{
+  "name": "tcm-classics",
+  "version": "1.0.0",
+  "description": "Retrieves and explains the five TCM classics from Ni Haixia's lecture corpus; study and reference only, never a prescription.",
+  "agents": [
+    "./agents/tcm-classics.md"
+  ],
+  "skills": [
+    "./skills/tcm-huangdi-neijing",
+    "./skills/tcm-shanghan-lun",
+    "./skills/tcm-jingui-yaolue",
+    "./skills/tcm-shennong-bencao",
+    "./skills/tcm-zhenjiu"
+  ],
+  "expertType": "agent",
+  "agentName": "tcm-classics",
+  "displayName": {
+    "en": "TCM Classics Expert",
+    "zh": "中医典籍专家"
+  },
+  "profession": {
+    "zh": "中医经典文献研读",
+    "en": "Traditional Chinese Medicine Classics"
+  },
+  "displayDescription": {
+    "zh": "检索《黄帝内经》《伤寒论》《金匮要略》《神农本草经》及针灸经络条文，仅供学习参考，不开方不下医嘱。",
+    "en": "Retrieves and explains the five TCM classics from Ni Haixia's lecture corpus; study and reference only, never a prescription."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "tcm-psych",
+  "defaultInitPrompt": {
+    "zh": "《伤寒论》里太阳病中风证的主治方是什么？讲一下桂枝汤的方义。",
+    "en": "What is the principal formula for taiyang wind-stroke in the Shanghan Lun?"
+  },
+  "tags": [
+    {
+      "zh": "经典条文",
+      "en": "Classical Texts"
+    },
+    {
+      "zh": "六经辨证",
+      "en": "Six-Channel Pattern"
+    },
+    {
+      "zh": "经方方证",
+      "en": "Formula Patterns"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "《伤寒论》里太阳病中风证的主治方是什么？讲一下桂枝汤的方义。",
+      "en": "What is the principal formula for taiyang wind-stroke in the Shanghan Lun?"
+    },
+    {
+      "zh": "《黄帝内经》里五味各入哪一脏、各走什么、五脏病各忌什么味？",
+      "en": "In the Huangdi Neijing, which organ does each of the five flavours enter, what does each course through, and what does each organ avoid?"
+    },
+    {
+      "zh": "《金匮要略》里胸痹的辨治思路是什么？",
+      "en": "How does the Jingui Yaolue approach chest impediment (xiongbi)?"
+    }
+  ],
+  "license": "Apache-2.0",
+  "categoryName": "中医与心理"
+}

@@ -1,5 +1,3 @@
-
-
 # 合理性区间 — 伊利诺伊州（占位结构）
 
 **此文件为起始结构。督导律师：在依赖 `skills/legal-clinic-playbook/references/commands/deadlines.md` 进行 IL 事项的合理性检查之前，请填入典型区间和引用。** 在填写之前，该 skill 接受的每个条目都带有 `warnings: no-plausibility-band`，检查实际上处于关闭状态。

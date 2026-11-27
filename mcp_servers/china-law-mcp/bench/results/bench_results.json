@@ -1,0 +1,966 @@
+{
+  "meta": {
+    "ts": "2026-11-27T18:55:20",
+    "server": "china-law-mcp via python -m china_law_mcp",
+    "jurisdiction": "china",
+    "per_call_timeout_s": 150.0
+  },
+  "cold": {
+    "connect_s": {
+      "n": 3,
+      "min_s": 4.746,
+      "mean_s": 4.872,
+      "p50_s": 4.822,
+      "p90_s": 5.002,
+      "p95_s": 5.024,
+      "max_s": 5.047
+    },
+    "first_list_jurisdictions_s": {
+      "n": 3,
+      "min_s": 22.678,
+      "mean_s": 23.718,
+      "p50_s": 23.583,
+      "p90_s": 24.631,
+      "p95_s": 24.762,
+      "max_s": 24.893
+    }
+  },
+  "latency": {
+    "list_jurisdictions": {
+      "tool": "list_jurisdictions",
+      "args": {},
+      "timings": {
+        "n": 2,
+        "min_s": 0.277,
+        "mean_s": 0.278,
+        "p50_s": 0.278,
+        "p90_s": 0.278,
+        "p95_s": 0.278,
+        "max_s": 0.278
+      },
+      "raw_s": [
+        0.277,
+        0.278
+      ],
+      "isError": false,
+      "summary": "1 body/bodies of law or case law served; 998 more in the tree are not served here. Lists cut to fit the answer: not_served (249 of 998 shown; narrow the question for the rest)."
+    },
+    "find_act_labor": {
+      "tool": "find_provision",
+      "args": {
+        "query": "劳动合同法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 3,
+        "min_s": 0.034,
+        "mean_s": 0.218,
+        "p50_s": 0.034,
+        "p90_s": 0.476,
+        "p95_s": 0.531,
+        "max_s": 0.586
+      },
+      "raw_s": [
+        0.586,
+        0.034,
+        0.034
+      ],
+      "isError": false,
+      "summary": "1 match(es) for '劳动合同法' in china; the first: china/national/acts/法律/劳动合同法."
+    },
+    "find_act_criminal": {
+      "tool": "find_provision",
+      "args": {
+        "query": "中华人民共和国刑法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 3,
+        "min_s": 0.033,
+        "mean_s": 0.034,
+        "p50_s": 0.034,
+        "p90_s": 0.034,
+        "p95_s": 0.034,
+        "max_s": 0.034
+      },
+      "raw_s": [
+        0.034,
+        0.033,
+        0.034
+      ],
+      "isError": false,
+      "summary": "1 match(es) for '中华人民共和国刑法' in china; the first: china/national/acts/法律/刑法."
+    },
+    "find_article_cnnum": {
+      "tool": "find_provision",
+      "args": {
+        "query": "劳动合同法 第六十六条",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 2,
+        "min_s": 0.033,
+        "mean_s": 0.038,
+        "p50_s": 0.038,
+        "p90_s": 0.042,
+        "p95_s": 0.042,
+        "max_s": 0.043
+      },
+      "raw_s": [
+        0.043,
+        0.033
+      ],
+      "isError": false,
+      "summary": "1 match(es) for '劳动合同法 第六十六条' in china; the first: china/national/acts/法律/劳动合同法."
+    },
+    "read_provision_66": {
+      "tool": "read_law",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md",
+        "date": "today"
+      },
+      "timings": {
+        "n": 3,
+        "min_s": 0.517,
+        "mean_s": 1.863,
+        "p50_s": 0.629,
+        "p90_s": 3.68,
+        "p95_s": 4.061,
+        "max_s": 4.442
+      },
+      "raw_s": [
+        4.442,
+        0.629,
+        0.517
+      ],
+      "isError": false,
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md as in force on 2026-11-27. Last changed by 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）, in force 2013-07-01. Still the wording at 2026-11-01; no later change in the"
+    },
+    "read_act_folder": {
+      "tool": "read_law",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法",
+        "date": "today"
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 117.191,
+        "mean_s": 117.191,
+        "p50_s": 117.191,
+        "p90_s": 117.191,
+        "p95_s": 117.191,
+        "max_s": 117.191
+      },
+      "raw_s": [
+        117.191
+      ],
+      "isError": false,
+      "summary": "99 provision(s) under china/national/acts/法律/劳动合同法 as in force on 2026-11-27."
+    },
+    "search_common": {
+      "tool": "search_law",
+      "args": {
+        "query": "劳务派遣",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 2,
+        "min_s": 18.898,
+        "mean_s": 19.105,
+        "p50_s": 19.105,
+        "p90_s": 19.271,
+        "p95_s": 19.292,
+        "max_s": 19.312
+      },
+      "raw_s": [
+        18.898,
+        19.312
+      ],
+      "isError": false,
+      "summary": "1184 provision(s) in force on 2026-11-27 contain '劳务派遣' in china, on 2154 line(s). Showing rows 1 to 5 of 2154; pass offset 5 for the next."
+    },
+    "search_mid": {
+      "tool": "search_law",
+      "args": {
+        "query": "故意杀人",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 2,
+        "min_s": 17.541,
+        "mean_s": 17.614,
+        "p50_s": 17.614,
+        "p90_s": 17.672,
+        "p95_s": 17.679,
+        "max_s": 17.686
+      },
+      "raw_s": [
+        17.541,
+        17.686
+      ],
+      "isError": false,
+      "summary": "95 provision(s) in force on 2026-11-27 contain '故意杀人' in china, on 231 line(s). Showing rows 1 to 5 of 231; pass offset 5 for the next."
+    },
+    "search_rare": {
+      "tool": "search_law",
+      "args": {
+        "query": "量子隧穿效应",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 20.917,
+        "mean_s": 20.917,
+        "p50_s": 20.917,
+        "p90_s": 20.917,
+        "p95_s": 20.917,
+        "max_s": 20.917
+      },
+      "raw_s": [
+        20.917
+      ],
+      "isError": false,
+      "summary": "0 provision(s) in force on 2026-11-27 contain '量子隧穿效应' in china, on 0 line(s)."
+    },
+    "list_provisions_act": {
+      "tool": "list_provisions",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 2.635,
+        "mean_s": 2.635,
+        "p50_s": 2.635,
+        "p90_s": 2.635,
+        "p95_s": 2.635,
+        "max_s": 2.635
+      },
+      "raw_s": [
+        2.635
+      ],
+      "isError": false,
+      "summary": "99 provision file(s) under china/national/acts/法律/劳动合同法 in force on 2026-11-27. Showing rows 1 to 5 of 99; pass offset 5 for the next."
+    },
+    "provision_history_66": {
+      "tool": "provision_history",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md"
+      },
+      "timings": {
+        "n": 2,
+        "min_s": 0.453,
+        "mean_s": 0.511,
+        "p50_s": 0.511,
+        "p90_s": 0.557,
+        "p95_s": 0.562,
+        "max_s": 0.568
+      },
+      "raw_s": [
+        0.568,
+        0.453
+      ],
+      "isError": false,
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md: 2 change(s), oldest first. Dates: in force, then enacted or made, then published."
+    },
+    "laws_between": {
+      "tool": "laws_between",
+      "args": {
+        "start": "2020-01-01",
+        "end": "2020-01-31",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 2,
+        "min_s": 0.092,
+        "mean_s": 0.152,
+        "p50_s": 0.152,
+        "p90_s": 0.2,
+        "p95_s": 0.206,
+        "max_s": 0.212
+      },
+      "raw_s": [
+        0.212,
+        0.092
+      ],
+      "isError": false,
+      "summary": "1110 law(s) took effect from 2020-01-01 to 2020-01-31, both days included, in china. Showing rows 1 to 5 of 1110; pass offset 5 for the next."
+    },
+    "search_changes": {
+      "tool": "search_changes",
+      "args": {
+        "query": "劳动合同",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 2,
+        "min_s": 3.868,
+        "mean_s": 3.879,
+        "p50_s": 3.879,
+        "p90_s": 3.888,
+        "p95_s": 3.889,
+        "max_s": 3.89
+      },
+      "raw_s": [
+        3.89,
+        3.868
+      ],
+      "isError": false,
+      "summary": "41 change(s) mention '劳动合同' in china. Showing rows 1 to 5 of 41; pass offset 5 for the next."
+    },
+    "compare_dates_66": {
+      "tool": "compare_dates",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md",
+        "date_a": "2008-06-01",
+        "date_b": "2013-07-01"
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 0.335,
+        "mean_s": 0.335,
+        "p50_s": 0.335,
+        "p90_s": 0.335,
+        "p95_s": 0.335,
+        "max_s": 0.335
+      },
+      "raw_s": [
+        0.335
+      ],
+      "isError": false,
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md: 1 change(s) took effect after 2008-06-01 and on or before 2013-07-01: 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (2013-07-01). No difference in the text."
+    },
+    "resolve_citations": {
+      "tool": "resolve_citations",
+      "args": {
+        "text": "根据《劳动合同法》第六十六条和《刑法》第二百三十二条的规定",
+        "date": "today"
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 0.08,
+        "mean_s": 0.08,
+        "p50_s": 0.08,
+        "p90_s": 0.08,
+        "p95_s": 0.08,
+        "max_s": 0.08
+      },
+      "raw_s": [
+        0.08
+      ],
+      "isError": false,
+      "summary": "No citation this tree can resolve was found."
+    },
+    "phrase_history": {
+      "tool": "phrase_history",
+      "args": {
+        "query": "劳务派遣",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 26.351,
+        "mean_s": 26.351,
+        "p50_s": 26.351,
+        "p90_s": 26.351,
+        "p95_s": 26.351,
+        "max_s": 26.351
+      },
+      "raw_s": [
+        26.351
+      ],
+      "isError": false,
+      "summary": "1266 change(s) added or removed text containing '劳务派遣' in china, oldest first. Showing rows 1 to 5 of 1266; pass offset 5 for the next."
+    },
+    "who_wrote_66": {
+      "tool": "who_wrote",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md",
+        "date": "today"
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 0.711,
+        "mean_s": 0.711,
+        "p50_s": 0.711,
+        "p90_s": 0.711,
+        "p95_s": 0.711,
+        "max_s": 0.711
+      },
+      "raw_s": [
+        0.711
+      ],
+      "isError": false,
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md on 2026-11-27, each run of words marked with the law that wrote it: 5 words by 2 law(s). Still the wording at 2026-11-01; no later change in the record."
+    },
+    "law_details_amendment": {
+      "tool": "law_details",
+      "args": {
+        "commit": "8be93dc787ec553e412167883048915d08b19f81",
+        "jurisdiction": "china"
+      },
+      "timings": {
+        "n": 1,
+        "min_s": 2.559,
+        "mean_s": 2.559,
+        "p50_s": 2.559,
+        "p90_s": 2.559,
+        "p95_s": 2.559,
+        "max_s": 2.559
+      },
+      "raw_s": [
+        2.559
+      ],
+      "isError": false,
+      "summary": "1 change(s) in the record by '8be93dc787ec553e412167883048915d08b19f81': 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (china/national/acts, commit 8be93dc787, in force 2013-07-01, 4 provisions)."
+    }
+  },
+  "accuracy": [
+    {
+      "id": "acc_find_labor",
+      "tool": "find_provision",
+      "args": {
+        "query": "劳动合同法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '劳动合同法'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/劳动合同法'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.043,
+      "text_len": 91,
+      "text_head": "china/national/acts/法律/劳动合同法  中华人民共和国劳动合同法  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '劳动合同法' in china; the first: china/national/acts/法律/劳动合同法.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_find_criminal",
+      "tool": "find_provision",
+      "args": {
+        "query": "中华人民共和国刑法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '刑法'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/刑法'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.042,
+      "text_len": 85,
+      "text_head": "china/national/acts/法律/刑法  中华人民共和国刑法  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '中华人民共和国刑法' in china; the first: china/national/acts/法律/刑法.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_find_civil",
+      "tool": "find_provision",
+      "args": {
+        "query": "中华人民共和国民法典",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '民法典'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/民法典'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.037,
+      "text_len": 87,
+      "text_head": "china/national/acts/法律/民法典  中华人民共和国民法典  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '中华人民共和国民法典' in china; the first: china/national/acts/法律/民法典.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_find_tax",
+      "tool": "find_provision",
+      "args": {
+        "query": "个人所得税法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '个人所得税法'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/个人所得税法'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.036,
+      "text_len": 86,
+      "text_head": "china/national/acts/法律/个人所得税法  个人所得税法  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '个人所得税法' in china; the first: china/national/acts/法律/个人所得税法.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_find_company",
+      "tool": "find_provision",
+      "args": {
+        "query": "公司法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '公司法'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/公司法'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.036,
+      "text_len": 87,
+      "text_head": "china/national/acts/法律/公司法  中华人民共和国公司法  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '公司法' in china; the first: china/national/acts/法律/公司法.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_find_counterespionage",
+      "tool": "find_provision",
+      "args": {
+        "query": "反间谍法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '反间谍法'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/反间谍法'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.034,
+      "text_len": 89,
+      "text_head": "china/national/acts/法律/反间谍法  中华人民共和国反间谍法  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '反间谍法' in china; the first: china/national/acts/法律/反间谍法.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_find_foreign_inv",
+      "tool": "find_provision",
+      "args": {
+        "query": "外商投资法",
+        "jurisdiction": "china",
+        "max_results": 5
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top1 path contains '外商投资法'",
+          "ok": true,
+          "detail": "top path='china/national/acts/法律/外商投资法'"
+        },
+        {
+          "name": "top kind == 'act'",
+          "ok": true,
+          "detail": "kind='act'"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.036,
+      "text_len": 91,
+      "text_head": "china/national/acts/法律/外商投资法  中华人民共和国外商投资法  (the act: list_provisions lists its provisions)",
+      "summary": "1 match(es) for '外商投资法' in china; the first: china/national/acts/法律/外商投资法.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_search_dispatch",
+      "tool": "search_law",
+      "args": {
+        "query": "劳务派遣",
+        "jurisdiction": "china",
+        "max_results": 10
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top-5 contains '劳动合同法'",
+          "ok": true,
+          "detail": "top5 rows=5"
+        },
+        {
+          "name": "text contains query '劳务派遣'",
+          "ok": true,
+          "detail": "text_len=4069"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 19.817,
+      "text_len": 4069,
+      "text_head": "1184 provision(s) in force on 2026-11-27 contain '劳务派遣' in china; showing 10 line(s).\nThe structured answer lists the first 40 of 1184 matching provisions; narrow the search with a jurisdiction or longer words.\nShowing lines 1 to 10 of 2154; pass offset 10 for the next.\nNote: china/national/acts: commit kind(s) not recognised, read as laws: decision, filing-review record (备案审查), gazette issue (ocr",
+      "summary": "1184 provision(s) in force on 2026-11-27 contain '劳务派遣' in china, on 2154 line(s). Showing rows 1 to 10 of 2154; pass offset 10 for the next.",
+      "n_rows": 10
+    },
+    {
+      "id": "acc_search_homicide",
+      "tool": "search_law",
+      "args": {
+        "query": "故意杀人",
+        "jurisdiction": "china",
+        "max_results": 10
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top-5 contains '刑法'",
+          "ok": true,
+          "detail": "top5 rows=5"
+        },
+        {
+          "name": "text contains query '故意杀人'",
+          "ok": true,
+          "detail": "text_len=3837"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 17.177,
+      "text_len": 3837,
+      "text_head": "95 provision(s) in force on 2026-11-27 contain '故意杀人' in china; showing 10 line(s).\nThe structured answer lists the first 40 of 95 matching provisions; narrow the search with a jurisdiction or longer words.\nShowing lines 1 to 10 of 231; pass offset 10 for the next.\nNote: china/national/acts: commit kind(s) not recognised, read as laws: decision, filing-review record (备案审查), gazette issue (ocr, not",
+      "summary": "95 provision(s) in force on 2026-11-27 contain '故意杀人' in china, on 231 line(s). Showing rows 1 to 10 of 231; pass offset 10 for the next.",
+      "n_rows": 10
+    },
+    {
+      "id": "acc_search_divorce",
+      "tool": "search_law",
+      "args": {
+        "query": "离婚冷静期",
+        "jurisdiction": "china",
+        "max_results": 10
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top-5 contains '民法典'",
+          "ok": true,
+          "detail": "top5 rows=5"
+        },
+        {
+          "name": "text contains query '离婚冷静期'",
+          "ok": true,
+          "detail": "text_len=5355"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 16.431,
+      "text_len": 5355,
+      "text_head": "25 provision(s) in force on 2026-11-27 contain '离婚冷静期' in china; showing 10 line(s).\nShowing lines 1 to 10 of 25; pass offset 10 for the next.\nNote: china/national/acts: commit kind(s) not recognised, read as laws: decision, filing-review record (备案审查), gazette issue (ocr, not split), gazette item, gazette item (政府公报), government rule (document), guiding case, guiding case withdrawn, judicial inte",
+      "summary": "25 provision(s) in force on 2026-11-27 contain '离婚冷静期' in china, on 25 line(s). Showing rows 1 to 10 of 25; pass offset 10 for the next.",
+      "n_rows": 10
+    },
+    {
+      "id": "acc_search_theft",
+      "tool": "search_law",
+      "args": {
+        "query": "盗窃罪",
+        "jurisdiction": "china",
+        "max_results": 10
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "top-5 contains '刑法'",
+          "ok": true,
+          "detail": "top5 rows=5"
+        },
+        {
+          "name": "text contains query '盗窃罪'",
+          "ok": true,
+          "detail": "text_len=4017"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 16.78,
+      "text_len": 4017,
+      "text_head": "72 provision(s) in force on 2026-11-27 contain '盗窃罪' in china; showing 10 line(s).\nThe structured answer lists the first 40 of 72 matching provisions; narrow the search with a jurisdiction or longer words.\nShowing lines 1 to 10 of 116; pass offset 10 for the next.\nNote: china/national/acts: commit kind(s) not recognised, read as laws: decision, filing-review record (备案审查), gazette issue (ocr, not ",
+      "summary": "72 provision(s) in force on 2026-11-27 contain '盗窃罪' in china, on 116 line(s). Showing rows 1 to 10 of 116; pass offset 10 for the next.",
+      "n_rows": 10
+    },
+    {
+      "id": "acc_search_negative",
+      "tool": "search_law",
+      "args": {
+        "query": "量子隧穿效应",
+        "jurisdiction": "china",
+        "max_results": 10
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "zero results",
+          "ok": true,
+          "detail": "rows=0 summary=\"0 provision(s) in force on 2026-11-27 contain '量子隧穿效应' in china, on 0 line(s).\""
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 19.453,
+      "text_len": 456,
+      "text_head": "0 provision(s) in force on 2026-11-27 contain '量子隧穿效应' in china.\nSearched 1 body of law or case law, which hold only what they describe: china/national/acts: from 1982-12-04. A law that is not held here cannot be found here (list_jurisdictions shows what is held); the law is searched in its own language.\nNor does any change note. Words that name a reform (a popular name) may not appear in the law;",
+      "summary": "0 provision(s) in force on 2026-11-27 contain '量子隧穿效应' in china, on 0 line(s).",
+      "n_rows": 0
+    },
+    {
+      "id": "acc_read_66_today",
+      "tool": "read_law",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md",
+        "date": "today"
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "no error",
+          "ok": true,
+          "detail": "isError=False"
+        },
+        {
+          "name": "text contains '第六十六'",
+          "ok": true,
+          "detail": "text_len=2960"
+        },
+        {
+          "name": "text contains '劳务派遣'",
+          "ok": true,
+          "detail": "text_len=2960"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.541,
+      "text_len": 2960,
+      "text_head": "china/national/acts/法律/劳动合同法/第066条.md as in force on 2026-11-27.\nOfficial text: http://www.npc.gov.cn/npc/c2/c12435/c12488/201905/t20190522_76069.html (the text the record read this version from (全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）)).\nCite as: 第六十六条, 中华人民共和国劳动合同法, as in force on 2026-11-27.\nLast changed by 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）, in force 2013-07-01.\nStill the wording at 2",
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md as in force on 2026-11-27. Last changed by 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）, in force 2013-07-01. Still the wording at 2026-11-01; no later change in the record.",
+      "n_rows": 0
+    },
+    {
+      "id": "acc_read_66_2008",
+      "tool": "read_law",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md",
+        "date": "2008-06-01"
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "no error",
+          "ok": true,
+          "detail": "isError=False"
+        },
+        {
+          "name": "text contains '第六十六'",
+          "ok": true,
+          "detail": "text_len=1720"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.667,
+      "text_len": 1720,
+      "text_head": "china/national/acts/法律/劳动合同法/第066条.md as in force on 2008-06-01.\nOfficial text: http://www.npc.gov.cn/npc/c2/c183/c198/201905/t20190522_26978.html (the text the record read this version from (中华人民共和国劳动合同法（2007年）)).\nCite as: 第六十六条, 中华人民共和国劳动合同法, as in force on 2008-06-01.\nLast changed by 中华人民共和国劳动合同法（2007年）, in force 2008-01-01.\nNext change in the record: 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）, ",
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md as in force on 2008-06-01. Last changed by 中华人民共和国劳动合同法（2007年）, in force 2008-01-01. Worded differently at 2026-11-01, after 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (2013-07-01); compare_dates shows t",
+      "n_rows": 0
+    },
+    {
+      "id": "acc_read_232",
+      "tool": "read_law",
+      "args": {
+        "path": "china/national/acts/法律/刑法/第232条.md",
+        "date": "today"
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "no error",
+          "ok": true,
+          "detail": "isError=False"
+        },
+        {
+          "name": "text contains '第二百三十二'",
+          "ok": true,
+          "detail": "text_len=2751"
+        },
+        {
+          "name": "text contains '故意杀人'",
+          "ok": true,
+          "detail": "text_len=2751"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 1.019,
+      "text_len": 2751,
+      "text_head": "china/national/acts/法律/刑法/第232条.md as in force on 2026-11-27.\nOfficial text: http://www.npc.gov.cn/npc/c1773/c1848/c21114/c25714/c25716/201905/t20190522_46193.html (the text the record read this version from (中华人民共和国刑法（1997年修订）)).\nCite as: 第二百三十二条, 中华人民共和国刑法, as in force on 2026-11-27.\nLast changed by 中华人民共和国刑法（1997年修订）, in force 1997-10-01.\nStill the wording at 2026-11-01; no later change in the ",
+      "summary": "china/national/acts/法律/刑法/第232条.md as in force on 2026-11-27. Last changed by 中华人民共和国刑法（1997年修订）, in force 1997-10-01. Still the wording at 2026-11-01; no later change in the record.",
+      "n_rows": 0
+    },
+    {
+      "id": "acc_history_66",
+      "tool": "provision_history",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md"
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": ">= 2 changes",
+          "ok": true,
+          "detail": "counted=2"
+        },
+        {
+          "name": "mentions in-force 2008-01-01",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "name": "mentions in-force 2013-07-01",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.437,
+      "text_len": 428,
+      "text_head": "china/national/acts/法律/劳动合同法/第066条.md: 2 change(s), oldest first. Dates: in force, then enacted or made, then published.\n2008-01-01  中华人民共和国劳动合同法（2007年）  enacted 2007-06-29  (commit 6a2cf7228f)  http://www.npc.gov.cn/npc/c2/c183/c198/201905/t20190522_26978.html\n2013-07-01  全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）  enacted 2012-12-28  (commit 8be93dc787)  http://www.npc.gov.cn/npc/c2/c12435/c12488",
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md: 2 change(s), oldest first. Dates: in force, then enacted or made, then published.",
+      "n_rows": 2
+    },
+    {
+      "id": "acc_compare_66",
+      "tool": "compare_dates",
+      "args": {
+        "path": "china/national/acts/法律/劳动合同法/第066条.md",
+        "date_a": "2008-06-01",
+        "date_b": "2013-07-01"
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "diff non-empty",
+          "ok": true,
+          "detail": "text_len=1324"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.357,
+      "text_len": 1324,
+      "text_head": "china/national/acts/法律/劳动合同法/第066条.md: 1 change(s) took effect after 2008-06-01 and on or before 2013-07-01: 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (2013-07-01).\nNote: china/national/acts: the text shown may not be the whole law that applied; this record does not hold changes to how a provision applies, commencement conditions or transitional rules.\nNote: china/national/acts: commit kind(s) not",
+      "summary": "china/national/acts/法律/劳动合同法/第066条.md: 1 change(s) took effect after 2008-06-01 and on or before 2013-07-01: 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (2013-07-01). No difference in the text.",
+      "n_rows": 1
+    },
+    {
+      "id": "acc_resolve",
+      "tool": "resolve_citations",
+      "args": {
+        "text": "根据《劳动合同法》第六十六条和《刑法》第二百三十二条的规定",
+        "date": "today"
+      },
+      "passed": false,
+      "checks": [
+        {
+          "name": ">= 1 resolved",
+          "ok": false,
+          "detail": "counted=0"
+        },
+        {
+          "name": "a resolved path contains '劳动合同法'",
+          "ok": false,
+          "detail": ""
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 0.073,
+      "text_len": 481,
+      "text_head": "No citation this tree can resolve was found. Forms read: \"11 U.S.C. § 1182(1)\", \"Art. 16a Abs. 1 GG\", \"s. 42 CFA 2014\", \"reg. 13 SEND Regulations 2014\", \"Art. 10a BV\", \"art. 1.357 din Codul civil\", \"art. 194 alin. (1) din Legea nr. 31/1990\", \"artículo 31.3 de la Ley Orgánica 4/2000\", \"artículo 1902 del Código Civil\", \"BOE-A-2000-544, art. 31\", \"artículo 48 de la LFT\".\nServed here: 1 of the 999 cor",
+      "summary": "No citation this tree can resolve was found.",
+      "n_rows": 0
+    },
+    {
+      "id": "acc_law_details",
+      "tool": "law_details",
+      "args": {
+        "commit": "8be93dc787ec553e412167883048915d08b19f81",
+        "jurisdiction": "china"
+      },
+      "passed": true,
+      "checks": [
+        {
+          "name": "text contains '劳动合同法'",
+          "ok": true,
+          "detail": "text_len=1968"
+        },
+        {
+          "name": "text contains '第六十六'",
+          "ok": true,
+          "detail": "text_len=1968"
+        }
+      ],
+      "isError": false,
+      "elapsed_s": 2.597,
+      "text_len": 1968,
+      "text_head": "=== 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (china/national/acts, commit 8be93dc787, 4 provisions)\n全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）：第五十七条、第六十三条、第六十六条、第九十二条\n\n全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年）, adopted on 2012-12-28, in force on 2013-07-01.\n4 files changed or added, 0 removed (article numbers are those of the new text; where the decision renumbers articles, git shows the moved tex",
+      "summary": "1 change(s) in the record by '8be93dc787ec553e412167883048915d08b19f81': 全国人民代表大会常务委员会关于修改《中华人民共和国劳动合同法》的决定（2012年） (china/national/acts, commit 8be93dc787, in force 2013-07-01, 4 provisions).",
+      "n_rows": 1
+    }
+  ],
+  "accuracy_summary": {
+    "total": 19,
+    "passed": 18,
+    "failed": 1,
+    "pass_rate": 0.947
+  }
+}

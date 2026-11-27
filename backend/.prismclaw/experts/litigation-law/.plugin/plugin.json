@@ -2,9 +2,6 @@
   "name": "litigation-law",
   "version": "1.0.0",
   "description": "Manages litigation portfolios and deadlines, builds claim charts and timelines, prepares depositions and drafts briefs.",
-  "author": {
-    "name": "WorkBuddy Expert Conversion"
-  },
   "agents": [
     "./agents/litigation-law.md"
   ],
@@ -27,16 +24,15 @@
     "en": "Litigation Strategy & Arbitration"
   },
   "displayDescription": {
-    "zh": "管理诉讼组合与期限，制作权利要求图表和时间线，准备质证并起草简报。",
+    "zh": "管理诉讼与仲裁组合及关键期限，制作争点图表与事件时间线，准备质证材料并起草庭审简报。",
     "en": "Manages litigation portfolios and deadlines, builds claim charts and timelines, prepares depositions and drafts briefs."
   },
   "avatar": "avatars/expert.png",
-  "categoryId": "11-SecurityCompliance",
+  "categoryId": "litigation",
   "defaultInitPrompt": {
     "zh": "为这个案件建时间线与权利要求图表。",
     "en": "Build a timeline and claim chart for this case."
   },
-  "plugin": "litigation-law",
   "tags": [
     {
       "zh": "诉讼管理",
@@ -65,5 +61,6 @@
       "en": "List litigation deadlines and actions in the next 30 days."
     }
   ],
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "categoryName": "诉讼仲裁"
 }

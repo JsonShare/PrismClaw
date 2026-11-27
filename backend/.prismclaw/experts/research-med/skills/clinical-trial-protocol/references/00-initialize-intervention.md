@@ -190,7 +190,6 @@ If `waypoints/intervention_metadata.json` already exists:
 2. Ask user: "Intervention metadata already exists. Do you want to: (a) Continue with existing intervention, (b) Create new intervention, (c) Update existing metadata?"
 3. Handle accordingly
 
-
 ## Notes for the assistant
 
 - Be friendly and conversational when collecting information
