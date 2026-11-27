@@ -137,26 +137,20 @@ class ExtensionManager:
         # 继承的全局基础技能：按裸名注册为全局能力（expert_name=None），
         # 不拼接专家前缀——它们不属于任何专家包。多个专家继承同一技能时
         # 只保留首次注册，避免 catalog 出现 N 份副本导致裸名调用歧义。
+        # 直接复用加载产物对象，不做 model_copy：inherited_skills 仅用于
+        # 展示与勾选校验，没有代码读取其 body，共享对象不会产生副作用。
         for skill in descriptor.inherited_skills:
             if not isinstance(skill, SkillManifest):
                 continue
             if skill.name in self._descriptor_registry.skills:
                 continue
-            copied_skill = skill.model_copy(
-                update={
-                    "source": SkillSource.BUNDLED,
-                    "loaded_from": skill.loaded_from or "inherited",
-                    "pipeline_context": dict(skill.pipeline_context),
-                }
-            )
             self._descriptor_registry.register_skill(
                 SkillDescriptor(
                     canonical_id=skill.name,
                     expert_name=None,
                     origin=SkillSource.BUNDLED.value,
-                    manifest=copied_skill,
+                    manifest=skill,
                     pipeline_context=dict(skill.pipeline_context),
-                    expert_description=None,
                 )
             )
 
