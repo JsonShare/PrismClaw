@@ -9,13 +9,22 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.query._static_context_types import (
+    ShellCacheKey,
     StaticTurnShellCache,
+    StaticTurnShellSnapshot,
     _shell_cache_key,
 )
+from prismclaw.schema.agent.types import RunRequest
 
 _VISIBLE = {"read", "tool_search"}
+
+
+def _snapshot() -> StaticTurnShellSnapshot:
+    return cast(StaticTurnShellSnapshot, object())
 
 
 def _request() -> SimpleNamespace:
@@ -24,7 +33,7 @@ def _request() -> SimpleNamespace:
 
 def _deps(generation: int = 0) -> SimpleNamespace:
     return SimpleNamespace(
-        plugin=SimpleNamespace(lifecycle_manager=SimpleNamespace(generation=generation))
+        expert=SimpleNamespace(lifecycle_manager=SimpleNamespace(generation=generation))
     )
 
 
@@ -34,22 +43,26 @@ def _key(
     discovered: set[str] | None = None,
     depth: int = 0,
     visible: set[str] | None = None,
-):
+    expert_id: str = "",
+    expert_persona_digest: str = "",
+) -> ShellCacheKey:
     return _shell_cache_key(
-        request=_request(),
+        request=cast(RunRequest, _request()),
         tool_workspace_path="/tmp/ws",
         effective_model="m",
-        deps=_deps(generation),
+        deps=cast(AgentRunnerDeps, _deps(generation)),
         skill_invocation=None,
         discovered_tools=discovered,
         subagent_depth=depth,
         visible_tool_names=set(_VISIBLE if visible is None else visible),
+        expert_id=expert_id,
+        expert_persona_digest=expert_persona_digest,
     )
 
 
-def test_cache_key_is_eleven_scalar_facts() -> None:
+def test_cache_key_is_thirteen_scalar_facts() -> None:
     key = _key()
-    assert len(key) == 11
+    assert len(key) == 13
     # 第 7 位是 (skill_name, *allowed_tools)，无技能激活时为单元素空串元组
     assert key[6] == ("",)
 
@@ -70,11 +83,17 @@ def test_cache_key_varies_with_visible_tools() -> None:
     assert _key(visible={"tool_search", "read"}) == base
 
 
+def test_cache_key_varies_with_expert_identity_and_persona() -> None:
+    base = _key()
+    assert _key(expert_id="writer") != base
+    assert _key(expert_persona_digest="new-persona") != base
+
+
 def test_lru_evicts_oldest_beyond_capacity() -> None:
     cache = StaticTurnShellCache(max_entries=3)
     keys = [_key(discovered={name}) for name in ("a", "b", "c", "d")]
     for key in keys:
-        cache.put(key, object())
+        cache.put(key, _snapshot())
 
     assert len(cache.entries) == 3
     assert keys[0] not in cache.entries
@@ -84,11 +103,11 @@ def test_lru_evicts_oldest_beyond_capacity() -> None:
 def test_lru_get_refreshes_recency() -> None:
     cache = StaticTurnShellCache(max_entries=2)
     k1, k2, k3 = (_key(discovered={name}) for name in ("a", "b", "c"))
-    cache.put(k1, object())
-    cache.put(k2, object())
+    cache.put(k1, _snapshot())
+    cache.put(k2, _snapshot())
 
     assert cache.get(k1) is not None  # k1 续期，k2 成为最旧
-    cache.put(k3, object())
+    cache.put(k3, _snapshot())
 
     assert k1 in cache.entries
     assert k2 not in cache.entries
@@ -98,6 +117,6 @@ def test_lru_get_refreshes_recency() -> None:
 def test_put_existing_key_does_not_grow() -> None:
     cache = StaticTurnShellCache(max_entries=2)
     k1 = _key(discovered={"a"})
-    cache.put(k1, object())
-    cache.put(k1, object())
+    cache.put(k1, _snapshot())
+    cache.put(k1, _snapshot())
     assert len(cache.entries) == 1

@@ -5,7 +5,7 @@
         dev-cloud build-cloud run-cloud stop-cloud \
         docker-build docker-run docker-stop docker-logs \
         mcp-dev mcp-test mcp-http \
-        test test-baseline test-pg
+        test
 
 help:
 	@echo "PrismClaw 部署管理命令:"
@@ -26,30 +26,14 @@ help:
 	@echo "    make mcp-http          以 streamable-http 模式本地启动 (:9002)"
 	@echo ""
 	@echo "  ================ 测试 ================"
-	@echo "    make test              全量单测(不含真实 PG 冒烟)"
-	@echo "    make test-baseline     重构基线测试(Phase 0 门禁)"
-	@echo "    make test-pg           真实 PG 冒烟(W2 回归: DDL+链路, 需 docker PG)"
+	@echo "    make test              全量单测"
 	@echo ""
 	@echo "  Nginx 由宿主机独立部署，参考配置见 deploy/nginx.conf"
 
 # ---------- 测试 ----------
 
 test:
-	cd backend && python -m pytest tests/ -q --ignore=tests/test_plugin_loading_run.py --ignore=tests/test_plugin_loading.py --ignore=tests/test_domains.py --ignore=tests/test_pg_smoke.py
-
-# Phase 0 门禁：重构基线测试，不修改生产代码。
-# 进入 Phase 1 前必须 green。
-test-baseline:
-	cd backend && python -m pytest tests/refactor/ -v --tb=short
-
-# W2 回归: 记忆表 DDL 对真实 PG 执行 + store/search/归因/仲裁一条链。
-# 依赖: docker compose 的 postgres 已运行; 自动创建/复用 prismclaw_test 库。
-test-pg:
-	@command -v docker >/dev/null 2>&1 || { echo "✗ 需要 docker (运行 prismclaw-postgres-1)"; exit 1; }
-	@docker exec prismclaw-postgres-1 psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname='prismclaw_test'" | grep -q 1 || \
-		docker exec prismclaw-postgres-1 psql -U postgres -c "CREATE DATABASE prismclaw_test"
-	PRISMCLAW_TEST_PG_DSN='postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/prismclaw_test' \
-		bash -c 'cd backend && python -m pytest tests/test_pg_smoke.py -v'
+	cd backend && python -m pytest tests/ -q
 
 # ---------- web-search-mcp (独立 MCP 服务) ----------
 

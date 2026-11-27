@@ -1,0 +1,66 @@
+{
+  "name": "privacy-law",
+  "version": "1.0.0",
+  "description": "Classifies processing activities, generates PIAs, reviews DPAs, drafts DSAR responses and monitors policy drift.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/privacy-law.md"
+  ],
+  "skills": [
+    "./skills/privacy-compliance-workflow",
+    "./skills/privacy-law-playbook",
+    "./skills/privacy-policy-workflow"
+  ],
+  "expertType": "agent",
+  "agentName": "privacy-law",
+  "displayName": {
+    "en": "Data Privacy Expert",
+    "zh": "数据隐私专家"
+  },
+  "profession": {
+    "zh": "个人信息处理与跨境传输",
+    "en": "Personal Data & Cross-Border Transfer"
+  },
+  "displayDescription": {
+    "zh": "分类处理活动、生成 PIA、审查 DPA、按时限起草 DSAR 响应并监控政策漂移。",
+    "en": "Classifies processing activities, generates PIAs, reviews DPAs, drafts DSAR responses and monitors policy drift."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "为这个新数据处理活动生成隐私影响评估草稿。",
+    "en": "Generate a PIA draft for this new data processing activity."
+  },
+  "plugin": "privacy-law",
+  "tags": [
+    {
+      "zh": "隐私影响评估",
+      "en": "PIA"
+    },
+    {
+      "zh": "DPA 审查",
+      "en": "DPA Review"
+    },
+    {
+      "zh": "DSAR 响应",
+      "en": "DSAR Response"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为这个新数据处理活动生成隐私影响评估草稿。",
+      "en": "Generate a PIA draft for this new data processing activity."
+    },
+    {
+      "zh": "从控制者视角审查这份 DPA 的条款缺口。",
+      "en": "Review this DPA from the controller perspective and list gaps."
+    },
+    {
+      "zh": "起草一份 DSAR 响应，并标出法定时限。",
+      "en": "Draft a DSAR response and flag the statutory deadline."
+    }
+  ],
+  "license": "Apache-2.0"
+}

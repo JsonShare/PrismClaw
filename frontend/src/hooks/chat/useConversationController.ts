@@ -1,5 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { useChatStore, useSessionStore } from '../../stores'
+import { DRAFT_SESSION_KEY, EMPTY_EXPERT_STATE } from '../../stores/session'
+import type { ExpertState } from '../../stores/session'
 import type { OutboxItem } from '../../stores/chat'
 import { apiUrl } from '../../lib/system-adapter'
 import { splitAttachmentContent } from '../../lib/chat/attachments'
@@ -133,6 +135,9 @@ export function useConversationController({
       const title = markersToReadable(text).trim()
       let convId = useSessionStore.getState().activeConvId
       if (!convId) {
+        const draftState = useSessionStore.getState().expertStates[DRAFT_SESSION_KEY] ?? EMPTY_EXPERT_STATE
+        let createdExpertState: ExpertState | undefined
+        let createdRemotely = false
         try {
           const res = await fetch(apiUrl('/api/sessions'), {
             method: 'POST',
@@ -142,16 +147,41 @@ export function useConversationController({
             },
             // 后端标题上限 200 字符（routes.py create_session 400）：超长任务文本
             // 必须截断，否则 POST 400 落入本地 fallback id，服务端永远查无此会话。
-            body: JSON.stringify({ workspace_id: backendWorkspaceId, title: title.slice(0, 200) }),
+            body: JSON.stringify({
+              workspace_id: backendWorkspaceId,
+              title: title.slice(0, 200),
+              ...(draftState.expert_id ? { expert_id: draftState.expert_id } : {}),
+            }),
           })
           if (res.ok) {
-            const data = await res.json()
+            const data = await res.json() as { session_id: string; expert_state?: ExpertState }
             convId = data.session_id
+            createdRemotely = Boolean(data.session_id)
+            createdExpertState = data.expert_state
           }
         } catch {}
         if (!convId) {
           convId = `conv_${Date.now()}`
         }
+        useSessionStore.getState().setExpertState(convId, createdExpertState ?? {
+          ...draftState,
+          selected_skill_ids: createdRemotely ? [] : draftState.selected_skill_ids,
+        })
+        // 首条消息发送前把 landing 草稿中的技能选择写入新会话。
+        if (createdRemotely && draftState.selected_skill_ids.length > 0) {
+          try {
+            const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(convId)}/skills`), {
+              method: 'PUT',
+              headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ selected_skill_ids: draftState.selected_skill_ids }),
+            })
+            if (res.ok) {
+              const data = await res.json() as { selected_skill_ids: string[] }
+              useSessionStore.getState().setSelectedSkillIds(convId, data.selected_skill_ids)
+            }
+          } catch {}
+        }
+        useSessionStore.getState().setExpertState(DRAFT_SESSION_KEY, EMPTY_EXPERT_STATE)
         useSessionStore.getState().setActiveConvId(convId)
         // 新会话立即出现在侧边栏，必须带上 workspaceId，否则分组函数
         // (groupedHistoryConversations) 读 c.workspaceId || 'default' 会

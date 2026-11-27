@@ -1,8 +1,7 @@
-"""Pydantic settings for the MCP integration.
+"""MCP 连接器配置类型与 ``{env:VAR}`` 占位符展开。
 
-Loaded as part of the top-level :class:`prismclaw.infra.settings.Settings`
-(under the ``mcp`` field). Defaults to disabled so existing deployments
-without MCP configured see no behavior change.
+配置来源是 ``backend/configs/mcp.json``（见 :mod:`prismclaw.engine.mcp.connectors`）；
+本模块只做类型再导出与运行期占位符解析，不持有任何 settings 字段。
 """
 
 from __future__ import annotations

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
@@ -20,13 +21,24 @@ from prismclaw.app.web.deps import get_web_deps, get_web_deps_from_app
 from prismclaw.app.web.routers._message_helpers import _build_display_messages
 from prismclaw.app.web.routers.config import config_router
 from prismclaw.app.web.routers.domains import router as domains_router
+from prismclaw.app.web.routers.experts import (
+    ExpertStateResponse,
+    experts_router,
+    get_expert_registries,
+    raise_expert_http_error,
+)
 from prismclaw.app.web.routers.files import files_router
 from prismclaw.app.web.routers.office import office_router
 from prismclaw.app.web.routers.settings import settings_router
-from prismclaw.app.web.routers.skills import skills_router
+from prismclaw.app.web.routers.skills import session_skills_router, skills_router
 from prismclaw.app.web.routers.speech import speech_router
 from prismclaw.app.web.routers.workspace import workspace_router
 from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+from prismclaw.engine.experts.codes import ExpertError
+from prismclaw.engine.experts.selection import (
+    get_session_expert_state,
+    select_session_expert,
+)
 from prismclaw.schema.services.skills import SkillManifest
 from prismclaw.schema.session.event_logger import SessionEventLogger
 
@@ -66,7 +78,9 @@ _event_logger = SessionEventLogger()
 web_router = APIRouter(prefix="/api", tags=["web"])
 
 web_router.include_router(files_router)
+web_router.include_router(experts_router)
 web_router.include_router(skills_router)
+web_router.include_router(session_skills_router)
 web_router.include_router(speech_router)
 web_router.include_router(settings_router)
 web_router.include_router(workspace_router)
@@ -150,11 +164,13 @@ class SessionListItem(BaseModel):
 
 class CreateSessionResponse(BaseModel):
     session_id: str
+    expert_state: ExpertStateResponse
 
 
 class CreateSessionRequest(BaseModel):
     workspace_id: str = "default"
     title: str | None = None
+    expert_id: str | None = None
 
 
 class ExtractResponse(BaseModel):
@@ -228,7 +244,7 @@ async def _list_runtime_skills(
     )
     if runner_deps is None:
         raise RuntimeError("workspace runner deps are required for skill listing")
-    raw_extension_manager = runner_deps.plugin.extension_manager
+    raw_extension_manager = runner_deps.expert.extension_manager
     extension_manager = (
         raw_extension_manager if isinstance(raw_extension_manager, ExtensionManager) else None
     )
@@ -240,7 +256,7 @@ async def _list_runtime_skills(
             "workspace runner deps must provide capability_catalog for skill listing"
         )
     return [
-        entry.manifest for entry in capability_catalog.list_skill_entries(workspace_root)
+        entry.manifest for entry in capability_catalog.list_skill_entries()
     ], extension_manager
 
 
@@ -648,13 +664,45 @@ async def create_session(
         if len(cleaned) > 200:
             raise HTTPException(status_code=400, detail="Title too long (max 200 chars)")
         title = cleaned or None
-    session_id, tree = await router.rotate(session_key, wid, title=title)
-    return CreateSessionResponse(session_id=session_id)
+    session_id, _tree = await router.rotate(session_key, wid, title=title)
+    # 不变量：会话一旦存在，其目录布局（inbox/outbox/context_blocks/...）就存在。
+    # 否则前端在首条消息前列 inbox/outbox 会拿到 404，而这不是错误状态。
+    from prismclaw.infra.workspace_paths import ensure_session_layout
+
+    ensure_session_layout(
+        _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid),
+        session_id,
+    )
+    store = _get_store()
+    builtin, states = get_expert_registries(request)
+    if body.expert_id is None:
+        state = await get_session_expert_state(
+            session_id,
+            session_store=store,
+            expert_registry=builtin,
+            capability_policy_registry=states,
+        )
+    else:
+        try:
+            state = await select_session_expert(
+                session_id,
+                body.expert_id,
+                session_store=store,
+                expert_registry=builtin,
+                capability_policy_registry=states,
+            )
+        except ExpertError as exc:
+            raise_expert_http_error(exc)
+    return CreateSessionResponse(
+        session_id=session_id,
+        expert_state=ExpertStateResponse.model_validate(state),
+    )
 
 
 @web_router.get("/sessions/{session_id}")
 async def get_session(
     session_id: str,
+    request: Request,
     user_id: str = Depends(get_current_user),
 ) -> dict[str, Any]:
     tree = await _load_and_verify(session_id, user_id)
@@ -662,6 +710,7 @@ async def get_session(
     # 与 /messages 的列表同源：正文为空但有时间线的回合也计入，否则分页
     # 取最后一页时会被裁掉。
     msg_count = len(_build_display_messages(tree, retain_ids=_timeline_retain_ids(tree)))
+    builtin, states = get_expert_registries(request)
     return {
         "id": h.id,
         "workspace_id": h.workspace_id,
@@ -669,6 +718,12 @@ async def get_session(
         "created_at": h.created_at,
         "last_interaction_at": h.last_interaction_at,
         "message_count": msg_count,
+        "expert_state": await get_session_expert_state(
+            session_id,
+            session_store=_get_store(),
+            expert_registry=builtin,
+            capability_policy_registry=states,
+        ),
     }
 
 
@@ -1248,6 +1303,9 @@ class UploadResponse(BaseModel):
     skipped: list[SkippedItem] = []
 
 
+_UPLOAD_LIST_MAX = 500
+
+
 @web_router.get("/uploads", response_model=UploadResponse)
 async def list_uploads(
     request: Request,
@@ -1257,44 +1315,57 @@ async def list_uploads(
 ) -> UploadResponse:
     """List uploaded files in a workspace.
 
-    只列 session 私有上传（sessions/<sid>/inbox/）；无 session_id 返回空。
+    - 传 ``session_id``：只列该会话的私有上传（sessions/<sid>/inbox/）。
+    - 不传：聚合当前工作区所有会话的 inbox —— 咨询框「引用文件」需要跨会话
+      选历史上传；只列当前会话会让旧文件在列表里"消失"。
     """
     wid = _clean_workspace_id(workspace_id)
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-
-    if not session_id:
-        return UploadResponse(files=[])
+    root_abs = root.expanduser().resolve()
 
     from prismclaw.infra.workspace_paths import resolve_session_inbox_dir
 
-    target = resolve_session_inbox_dir(user_id, wid, session_id)
-
-    if not target.is_dir():
-        return UploadResponse(files=[])
-    root_abs = root.expanduser().resolve()
-    items: list[tuple[float, UploadItem]] = []
-    for p in target.iterdir():
-        if not p.is_file():
-            continue
-        if p.name in (".git", ".DS_Store"):
-            continue
-        try:
-            st = p.stat()
-        except OSError:
-            continue
-        items.append(
-            (
-                st.st_mtime,
-                UploadItem(
-                    original_name=p.name,
-                    path=str(p.relative_to(root_abs)),
-                    size_bytes=int(st.st_size),
-                    mime_type=None,
-                ),
-            )
+    if session_id:
+        inbox_dirs = [resolve_session_inbox_dir(user_id, wid, session_id)]
+    else:
+        sessions_dir = root_abs / "sessions"
+        inbox_dirs = (
+            [p / "inbox" for p in sessions_dir.iterdir() if p.is_dir()]
+            if sessions_dir.is_dir()
+            else []
         )
+
+    items: list[tuple[float, UploadItem]] = []
+    for inbox in inbox_dirs:
+        if not inbox.is_dir():
+            continue
+        for p in inbox.iterdir():
+            if len(items) >= _UPLOAD_LIST_MAX:
+                break
+            if not p.is_file():
+                continue
+            if p.name in (".git", ".DS_Store"):
+                continue
+            try:
+                st = p.stat()
+                rel_path = str(p.relative_to(root_abs))
+            except (OSError, ValueError):
+                continue
+            items.append(
+                (
+                    st.st_mtime,
+                    UploadItem(
+                        original_name=p.name,
+                        path=rel_path,
+                        size_bytes=int(st.st_size),
+                        mime_type=mimetypes.guess_type(p.name)[0],
+                    ),
+                )
+            )
+        if len(items) >= _UPLOAD_LIST_MAX:
+            break
     items.sort(key=lambda t: t[0], reverse=True)
-    return UploadResponse(files=[i[1] for i in items])
+    return UploadResponse(files=[i[1] for i in items[:_UPLOAD_LIST_MAX]])
 
 
 @web_router.post("/extract", response_model=ExtractResponse)

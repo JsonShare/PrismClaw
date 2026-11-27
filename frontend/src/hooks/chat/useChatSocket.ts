@@ -406,6 +406,12 @@ export function useChatSocket(
         if (targetId && files.length > 0) {
           mergeOrBufferMetadata(convId!, targetId, { outputFiles: files })
         }
+        if (files.length > 0) {
+          // 通知咨询页右栏重新扫描 outbox（交付物目录可能已变化）
+          window.dispatchEvent(
+            new CustomEvent('prismclaw:outbox-updated', { detail: { convId } }),
+          )
+        }
         break
       }
 

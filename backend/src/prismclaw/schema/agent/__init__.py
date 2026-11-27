@@ -5,12 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from prismclaw.schema.agent.capability import (
-        CapabilityKind as CapabilityKind,
-    )
-    from prismclaw.schema.agent.capability import (
-        CapabilityStatus as CapabilityStatus,
-    )
     from prismclaw.schema.agent.context import (
         BootstrapContextProvider as BootstrapContextProvider,
     )
@@ -63,7 +57,7 @@ if TYPE_CHECKING:
         InvocationPolicy as InvocationPolicy,
     )
     from prismclaw.schema.agent.domains import (
-        PluginErrorType as PluginErrorType,
+        PackageErrorType as PackageErrorType,
     )
     from prismclaw.schema.agent.domains import (
         SkillSource as SkillSource,
@@ -209,13 +203,11 @@ def __getattr__(name: str) -> object:
         "ContentRef": ("prismclaw.schema.agent.review", "ContentRef"),
         "ContentStore": ("prismclaw.schema.agent.review", "ContentStore"),
         "ReviewServiceProtocol": ("prismclaw.schema.agent.review", "ReviewServiceProtocol"),
-        "CapabilityKind": ("prismclaw.schema.agent.capability", "CapabilityKind"),
-        "CapabilityStatus": ("prismclaw.schema.agent.capability", "CapabilityStatus"),
         "TaskRuntimeState": ("prismclaw.schema.agent.task_runtime", "TaskRuntimeState"),
         "TaskSpec": ("prismclaw.schema.agent.task_types", "TaskSpec"),
         "SkillSource": ("prismclaw.schema.agent.domains", "SkillSource"),
         "InvocationPolicy": ("prismclaw.schema.agent.domains", "InvocationPolicy"),
-        "PluginErrorType": ("prismclaw.schema.agent.domains", "PluginErrorType"),
+        "PackageErrorType": ("prismclaw.schema.agent.domains", "PackageErrorType"),
         "SessionContextItem": ("prismclaw.schema.agent.session", "SessionContextItem"),
         "SessionContextState": ("prismclaw.schema.agent.session", "SessionContextState"),
         "ReviewDecisionRecord": ("prismclaw.schema.agent.task_runtime", "ReviewDecisionRecord"),

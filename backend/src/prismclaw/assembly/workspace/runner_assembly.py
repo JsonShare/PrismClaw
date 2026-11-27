@@ -8,9 +8,9 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from prismclaw.assembly.plugins.runtime_assembly import (
-    PluginRuntimeAssembly,
-    build_plugin_runtime,
+from prismclaw.assembly.experts.runtime_assembly import (
+    ExpertRuntimeAssembly,
+    build_expert_runtime,
 )
 from prismclaw.engine.compression.context_engine import DefaultContextEngine
 from prismclaw.engine.compression.summary_engine import SummarizerCallable
@@ -18,8 +18,8 @@ from prismclaw.engine.execution.checkpoint import RunSnapshotStore
 from prismclaw.engine.execution.loop.deps import (
     AgentRunnerDeps,
     DreamBundle,
+    ExpertBundle,
     PersistenceBundle,
-    PluginBundle,
 )
 from prismclaw.engine.execution.skills.runtime import SkillRuntime
 from prismclaw.engine.hooks import HookRegistry
@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from prismclaw.app.gateway.worker_registry import WorkerRegistry
     from prismclaw.engine.dream.dispatch.dispatch import RedisDreamDispatchQueue
     from prismclaw.engine.mcp.client_manager import MCPClientManager
+    from prismclaw.infra.config.capability_policy import CapabilityCatalog
     from prismclaw.schema.agent.memory import MemoryGatewayProtocol
     from prismclaw.schema.trajectory.trajectory import TrajectoryPersistence
 
@@ -177,9 +178,9 @@ def _build_provider_specs(providers: dict[str, Any]) -> dict[str, dict[str, dict
 
 
 def _configure_token_counting(settings: Settings) -> None:
-    """按 ``token_counting`` 配置安装全局计数插件（默认 heuristic）。
+    """按 ``token_counting`` 配置安装全局计数专家包（默认 heuristic）。
 
-    计数插件必须在任何预算/压缩/埋点调用之前安装；配置错误时 fail-fast，
+    计数专家包必须在任何预算/压缩/埋点调用之前安装；配置错误时 fail-fast，
     避免静默退回默认系数导致预算口径与配置不一致。
     """
     from prismclaw.token_counting import build_token_counter, set_token_counter
@@ -319,10 +320,6 @@ def build_kernel_runtime(settings: Settings) -> KernelRuntimeBundle:
                 "default_max_turns": settings.subagent.default_max_turns,
                 "default_timeout_seconds": settings.subagent.default_timeout_seconds,
                 "max_parallel_per_turn": settings.subagent.max_parallel_per_turn,
-                "handoff_enabled": settings.subagent.handoff_enabled,
-                "max_handoff_chain_length": settings.subagent.max_handoff_chain_length,
-                "pending_handoff_ttl_turns": settings.subagent.pending_handoff_ttl_turns,
-                "handoff_reverse_lookup_enabled": settings.subagent.handoff_reverse_lookup_enabled,
             },
             "sandbox": {
                 "enforce": settings.sandbox.enforce,
@@ -693,7 +690,7 @@ def assemble_runner_deps(
     mcp_death_handler: Callable[[str], Awaitable[None]] | None,
     external_tool_registrar: Callable[[ToolRegistry], None] | None,
     kernel_runtime: KernelRuntimeBundle,
-    plugin_runtime: PluginRuntimeAssembly,
+    expert_runtime: ExpertRuntimeAssembly,
     memory_runtime: MemoryRuntimeBundle,
     dream_runtime: DreamRuntimeBundle,
     trajectory_persistence: TrajectoryPersistence | None = None,
@@ -703,52 +700,46 @@ def assemble_runner_deps(
     subagent_workspace_path = kernel_runtime.resolver.resolve("default")
     subagent_registry = None
     if settings.subagent.enabled:
-        # 必须复用 plugin_runtime 已构造的项目能力布局：settings.subagent.
+        # 必须复用 expert_runtime 已构造的项目能力布局：settings.subagent.
         # asset_subagents_dir 是绝对路径(~/.prismclaw/assets/agents)，不传
         # capability_layout 时 SubAgentRegistry 会把它拼到 workspace 默认目录
         # （~/.prismclaw/workspaces）下，该目录不存在 → 项目子代理扫描结果为 0，
-        # 模型可见清单里只剩插件 declarative agents。
+        # 模型可见清单里只剩专家包 declarative agents。
         subagent_registry = build_subagent_registry(
             settings,
             workspace_path=subagent_workspace_path,
-            capability_layout=plugin_runtime.capability_layout,
+            capability_layout=expert_runtime.capability_layout,
         )
     capability_catalog = build_capability_catalog(
         workspace_path=subagent_workspace_path,
         tool_registry=tools,
-        skill_provider=plugin_runtime.skill_provider,
-        extension_manager=plugin_runtime.extension_manager,
+        skill_provider=expert_runtime.skill_provider,
+        extension_manager=expert_runtime.extension_manager,
         subagent_registry=subagent_registry,
-        mcp_skill_manifests_builder=mcp_skill_manifests_builder(plugin_runtime.runtime_mcp_manager),
+        mcp_skill_manifests_builder=mcp_skill_manifests_builder(expert_runtime.runtime_mcp_manager),
     )
-    ext_mgr = plugin_runtime.extension_manager
+    ext_mgr = expert_runtime.extension_manager
     from prismclaw.runtime.skills.parser import parse_skill_file
 
     skill_runtime = SkillRuntime(
         capability_catalog=capability_catalog,
-        mcp_prompt_resolver=mcp_prompt_resolver(plugin_runtime.runtime_mcp_manager),
+        mcp_prompt_resolver=mcp_prompt_resolver(expert_runtime.runtime_mcp_manager),
         descriptor_registry=ext_mgr._descriptor_registry if ext_mgr else None,
         skill_parser=parse_skill_file,
     )
-    # 同步插件级指令（PLUGIN.md）到 SkillRuntime
-    if ext_mgr is not None and hasattr(ext_mgr, "iter_plugin_descriptors"):
-        for descriptor in ext_mgr.iter_plugin_descriptors():
-            instr = getattr(descriptor, "plugin_instructions", None)
-            pname = getattr(descriptor, "plugin_name", None)
-            if instr and pname:
-                skill_runtime.register_plugin_instructions(pname, instr)
     register_builtin_tools(
         tools,
         kernel_runtime.resolver,
         capability_catalog,
         skill_runtime,
+        expert_registry=expert_runtime.expert_registry,
     )
 
     register_tier2_builtin_tools(
         tools,
         kernel_runtime.resolver,
         settings.builtin_tools,
-        mcp_manager=plugin_runtime.runtime_mcp_manager,
+        mcp_manager=expert_runtime.runtime_mcp_manager,
     )
 
     if settings.scheduler.enabled and settings.scheduler.dialogue_creation_enabled:
@@ -792,12 +783,11 @@ def assemble_runner_deps(
 
     hooks.register(SteerHook())
 
-    if plugin_runtime.runtime_mcp_manager is not None:
-        plugin_runtime.runtime_mcp_manager.attach_and_register(tools)
+    if expert_runtime.runtime_mcp_manager is not None:
+        expert_runtime.runtime_mcp_manager.attach_and_register(tools)
     elif external_tool_registrar is not None:
         external_tool_registrar(tools)
 
-    handoff_supervisor: Any = None
     from prismclaw.engine.subagent.runtime.collaboration import (
         SubagentCollaborationService,
     )
@@ -818,21 +808,6 @@ def assemble_runner_deps(
             skill_runtime=skill_runtime,
             collaboration=subagent_collaboration,
         )
-    if settings.subagent.enabled and capability_catalog.count_agent_entries() > 0:
-        from prismclaw.engine.execution.handoff.store import PendingHandoffStore
-        from prismclaw.engine.execution.handoff.supervisor import HandoffSupervisor
-
-        if settings.subagent.handoff_enabled:
-            handoff_store = PendingHandoffStore(
-                redis_client=None,
-                ttl_seconds=(settings.subagent.pending_handoff_ttl_turns * 600),
-                reverse_lookup_enabled=(settings.subagent.handoff_reverse_lookup_enabled),
-            )
-            handoff_supervisor = HandoffSupervisor(
-                store=handoff_store,
-                max_handoff_chain_length=settings.subagent.max_handoff_chain_length,
-            )
-
     from prismclaw.engine.execution.loop.tree_writer import publish_compaction_node
     from prismclaw.schema.agent.callbacks import AgentCallbacks
 
@@ -848,24 +823,25 @@ def assemble_runner_deps(
         session_store=session_store,
         config=kernel_runtime.config,
         workspace_store=workspace_store,
-        skill_provider=plugin_runtime.skill_provider,
+        skill_provider=expert_runtime.skill_provider,
         skill_runtime=skill_runtime,
         capability_catalog=capability_catalog,
         task_manager=task_manager,
         lock_manager=lock_manager,
         subagent_collaboration=subagent_collaboration,
-        handoff_supervisor=handoff_supervisor,
         task_profile_service=kernel_runtime.task_profile_service,
         dream=DreamBundle(
             review_service=dream_runtime.dream_review_service,
             boundary=dream_runtime.dream_boundary,
             ops=dream_runtime.dream_ops,
         ),
-        hook_dispatcher=plugin_runtime.hook_dispatcher,
-        plugin=PluginBundle(
-            extension_manager=plugin_runtime.extension_manager,
-            runtime_mcp_manager=plugin_runtime.runtime_mcp_manager,
-            lifecycle_manager=plugin_runtime.plugin_lifecycle_manager,
+        expert=ExpertBundle(
+            extension_manager=expert_runtime.extension_manager,
+            runtime_mcp_manager=expert_runtime.runtime_mcp_manager,
+            lifecycle_manager=expert_runtime.expert_lifecycle_manager,
+            environment_catalog=expert_runtime.environment_catalog,
+            expert_registry=expert_runtime.expert_registry,
+            capability_policy_registry=expert_runtime.capability_policy_registry,
         ),
         persistence=PersistenceBundle(
             run_snapshot_store=run_snapshot_store,
@@ -896,6 +872,8 @@ async def create_agent_runner_deps(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     trajectory_persistence: TrajectoryPersistence | None = None,
     project_root: Path | str | None = None,
+    module_catalog: CapabilityCatalog | None = None,
+    capability_policy_path: Path | str | None = None,
     db_engine: AsyncEngine | None = None,
 ) -> AgentRunnerDeps:
     kernel_runtime = build_kernel_runtime(settings)
@@ -908,12 +886,14 @@ async def create_agent_runner_deps(
     workspace_default = getattr(getattr(settings, "workspaces", None), "default", None) or str(
         Path.home() / "prismclaw-workspace"
     )
-    plugin_runtime = await build_plugin_runtime(
+    expert_runtime = await build_expert_runtime(
         settings,
         workspace_default=workspace_default,
         project_root=project_root,
         task_manager=task_manager,
         base_mcp_manager=mcp_manager,
+        module_catalog=module_catalog,
+        capability_policy_path=capability_policy_path,
     )
     from prismclaw.engine.dream.runtime_client import NullDreamBoundary
 
@@ -975,7 +955,7 @@ async def create_agent_runner_deps(
         mcp_death_handler=mcp_death_handler,
         external_tool_registrar=external_tool_registrar,
         kernel_runtime=kernel_runtime,
-        plugin_runtime=plugin_runtime,
+        expert_runtime=expert_runtime,
         memory_runtime=memory_runtime,
         dream_runtime=dream_runtime,
         trajectory_persistence=trajectory_persistence,
@@ -990,8 +970,8 @@ async def create_agent_runner_deps(
         deps,
         settings=settings,
         workspace_path=kernel_runtime.resolver.resolve("default"),
-        extension_manager=plugin_runtime.extension_manager,
-        skill_provider=plugin_runtime.skill_provider,
-        capability_layout=plugin_runtime.capability_layout,
+        extension_manager=expert_runtime.extension_manager,
+        skill_provider=expert_runtime.skill_provider,
+        capability_layout=expert_runtime.capability_layout,
     )
     return deps

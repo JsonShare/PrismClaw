@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "yuandian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "yuandian-mcp-server"
+      ],
+      "env": {
+        "YUANDIAN_API_KEY": "<请在本地填入自己的元典 API Key>"
+      },
+      "title": "元典 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何元典 API 凭据。使用前请在本地环境变量或私有配置中填入自己的元典开放平台凭据；不要把真实 API key、token 或 secret 提交到仓库。"
+    }
+  },
+  "recommendedCategories": [
+    "corporate-cn",
+    "ma-diligence-cn",
+    "board-governance-cn",
+    "enterprise-verification",
+    "legal-research-cn",
+    "document-management"
+  ],
+  "_notes": "外部 MCP 已全部替换为元典（yuandian）。替代原版 Slack/Google Drive/Box/iManage/TopCounsel/Definely/Solve Intelligence。企业协作集成通过全局 Enterprise Collaboration MCP 接入，无需在此单独配置。数据室（坚果云/企业协作/国内VDR）通过本地文件路径访问，无 MCP 集成。主体核查功能直接通过元典企业工具（company_info_by_name/enterprise_executions/enterprise_writ_agg等）实现。"
+}

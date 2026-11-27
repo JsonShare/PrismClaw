@@ -565,25 +565,6 @@ def test_r19_delegation_section_contains_evidence_rules():
     assert "不重叠的修改范围" in result
 
 
-def test_r19_handoff_advisory_is_protocol_only():
-    """动态 handoff_advisory 只保留协议变体，不重复编排/证据规则。"""
-    from prismclaw.engine.execution.request._prompt_advisory import handoff_advisory_section
-    from prismclaw.engine.execution.request._prompt_types import PromptInputs
-
-    inputs = PromptInputs(
-        session_id="test-session",
-        workspace_id="test-ws",
-        agent_id="test-agent",
-        subagent_registry_size=2,
-        handoff_enabled=True,
-        max_handoff_chain_length=5,
-    )
-    result = handoff_advisory_section(inputs)
-    assert result is not None
-    assert "[HANDOFF_REQUEST]" in result
-    assert "置信度不得提升" not in result
-
-
 def test_r19_domain_advisory_renders_registered_rules():
     """领域规则（如医疗免责声明）由 domain_advisory 独立承载。"""
     from prismclaw.engine.execution.request._disclaimer_registry import (

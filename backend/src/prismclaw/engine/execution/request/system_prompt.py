@@ -9,7 +9,6 @@ from prismclaw.engine.compression.budget_orchestrator import BudgetOrchestrator
 from prismclaw.engine.compression.ports import ContextRuntimePorts
 from prismclaw.engine.execution.request._prompt_advisory import (
     domain_advisory_section,
-    handoff_advisory_section,
 )
 from prismclaw.engine.execution.request._prompt_budget import _block_from_text
 from prismclaw.engine.execution.request._prompt_types import (
@@ -23,6 +22,7 @@ from prismclaw.engine.execution.request._prompt_types import (
     SystemPromptResult as SystemPromptResult,
 )
 from prismclaw.engine.hooks import HookRegistry, PromptBuildContext
+from prismclaw.infra.workspace_paths import session_dir_in
 from prismclaw.schema.content.context import ContextPackLayout
 from prismclaw.schema.shared.utils import truncate_by_tokens
 
@@ -234,7 +234,7 @@ def tooling_section(inputs: PromptInputs) -> str | None:
     if "skill_search" in tool_name_set:
         routes.append("技能用 `skill_search`")
     if "subagent_search" in tool_name_set:
-        routes.append("插件子代理用 `subagent_search`")
+        routes.append("专家包子代理用 `subagent_search`")
     lines = ["- **schema**：工具 schema 由运行时提供；参数与返回说明见各工具描述。"]
     if "tool_search" in tool_name_set:
         lines.append(
@@ -287,9 +287,9 @@ _PACKAGE_DESC_TOKENS = 30
 
 
 def packages_section(inputs: PromptInputs) -> str | None:
-    """插件包索引——逐级披露的第一层：只披露包名、外层描述与能力计数。
+    """专家包索引——逐级披露的第一层：只披露包名、外层描述与能力计数。
 
-    子插件、技能名、子代理名一律不进入固定 prompt；包内能力由
+    子专家包、技能名、子代理名一律不进入固定 prompt；包内能力由
     ``skill_search`` / ``subagent_search`` 检索。技能计数来自
     ``marketplace_summaries``，子代理计数从全量子代理目录按包聚合。
     """
@@ -301,11 +301,11 @@ def packages_section(inputs: PromptInputs) -> str | None:
     agent_counts: dict[str, int] = {}
     agent_descriptions: dict[str, str] = {}
     for entry in inputs.available_subagents:
-        if not entry.marketplace_name:
+        if not entry.expert_name:
             continue
-        agent_counts[entry.marketplace_name] = agent_counts.get(entry.marketplace_name, 0) + 1
-        if entry.marketplace_description:
-            agent_descriptions.setdefault(entry.marketplace_name, entry.marketplace_description)
+        agent_counts[entry.expert_name] = agent_counts.get(entry.expert_name, 0) + 1
+        if entry.expert_description:
+            agent_descriptions.setdefault(entry.expert_name, entry.expert_description)
 
     package_names = sorted(set(summaries) | set(agent_counts))
     if not package_names:
@@ -348,9 +348,9 @@ def packages_section(inputs: PromptInputs) -> str | None:
 
 
 def skills_section(inputs: PromptInputs) -> str | None:
-    """项目技能名索引——插件技能不进固定 prompt。
+    """项目技能名索引——专家包技能不进固定 prompt。
 
-    项目技能是用户主动安装、数量有界的能力，逐个列名；插件技能由
+    项目技能是用户主动安装、数量有界的能力，逐个列名；专家包技能由
     ``skill_search`` 检索、``activate_skill`` 按名激活。输出必须跨轮字节
     稳定（frozen prefix），不渲染 active 等运行时状态。
     """
@@ -361,7 +361,7 @@ def skills_section(inputs: PromptInputs) -> str | None:
     if not names:
         return None
     content = "项目技能：" + ", ".join(f"`{name}`" for name in names)
-    footer = "用 `skill_search` 检索插件技能；用精确名称 `activate_skill` 激活；技能列出 ≠ 已激活。"
+    footer = "用 `skill_search` 检索专家包技能；用 `activate_skill` 激活；列出 ≠ 已激活。"
     return _wrap_xml("skills", f"{content}\n{footer}")
 
 
@@ -403,7 +403,7 @@ _SUBAGENT_RULES = """\
 def subagents_section(inputs: PromptInputs) -> str | None:
     """核心子代理索引；编排规则见 delegation_section。
 
-    插件子代理名称不进入固定 prompt：``<packages>`` 只给包与计数，
+    专家包子代理名称不进入固定 prompt：``<packages>`` 只给包与计数，
     具体子代理由 ``subagent_search`` 逐级披露。本段只放索引（semi_stable），
     规则放在 stable 的 delegation 段，避免注册表变化冲掉稳定规则。
     """
@@ -411,16 +411,16 @@ def subagents_section(inputs: PromptInputs) -> str | None:
     if "sub_agent" not in tool_name_set:
         return None
 
-    core = [e for e in inputs.available_subagents if e.plugin_name is None]
+    core = [e for e in inputs.available_subagents if e.expert_name is None]
     lines: list[str] = []
     if core:
         lines.append("核心子代理：")
         for entry in core:
             desc = f" — {entry.description}" if entry.description else ""
             lines.append(f"- `{entry.name}`{desc}")
-        lines.append("插件子代理用 `subagent_search` 按领域/任务检索；用精确名称调用 `sub_agent`。")
+        lines.append("专家包子代理用 `subagent_search` 检索；用精确名称调用 `sub_agent`。")
     else:
-        # 本段只负责索引；索引为空不等于工作区没有子代理（可能全部来自插件，
+        # 本段只负责索引；索引为空不等于工作区没有子代理（可能全部来自专家包，
         # 或注册表尚未加载）。断言"未定义"会阻止模型用 subagent_search 兜底（D8）。
         lines.append("未在索引中列出核心子代理；用 `subagent_search` 按领域/任务检索可用子代理。")
     lines.append("名称逐字复制自本段或 `subagent_search` 结果；不要构造名称。")
@@ -502,11 +502,11 @@ def build_frozen_prompt_sections(
     *,
     bootstrap: str | None = None,
 ) -> list[PromptSectionSpec]:
-    """声明式组装 frozen prompt，八段，顺序即语义层级。
+    """声明式组装 frozen prompt，十段，顺序即语义层级。
 
-    role（身份+表达）→ principles（裁决+铁律+循环）→ tools →
+    role（身份+表达）→ expert（专家人格）→ principles（裁决+铁律+循环）→ tools →
     delegation（子代理编排规则）→ workspace → data_safety →
-    catalogs（插件/技能/子代理索引）→ bootstrap。
+    catalogs（专家包/技能/子代理索引）→ bootstrap。
 
     合并原则：描述性内容合成一段；精确契约（路径前缀、工具路由、
     安全条件、索引格式）保持条款式，不散文化。
@@ -535,6 +535,13 @@ def build_frozen_prompt_sections(
         _section(
             "role",
             _wrap_xml("role", role_body) if role_body else None,
+            priority="critical",
+            truncatable=False,
+        ),
+        # L0.1 专家人格：独立且完整，不能与 identity/preferences 合并。
+        _section(
+            "expert",
+            inputs.expert_persona,
             priority="critical",
             truncatable=False,
         ),
@@ -679,19 +686,6 @@ async def build_per_turn_prompt_sections(
             )
         )
 
-    advisory_text = handoff_advisory_section(inputs)
-    if advisory_text:
-        sections.append(
-            PromptSectionSpec(
-                name="handoff_advisory",
-                text=advisory_text,
-                zone="dynamic",
-                truncatable=True,
-                cacheable=False,
-                priority="medium",
-            )
-        )
-
     domain_text = domain_advisory_section()
     if domain_text:
         sections.append(
@@ -785,16 +779,11 @@ def build_frozen_prefix(
     if budget is not None:
         # working_dir 必须是 session 根，不是 workspace 根 —— 否则 context_blocks
         # / tool_results 会被 mkdir 到 workspace 根，与重构后 session 级隔离冲突。
-        from pathlib import Path as _Path
-
         _ws = inputs.workspace_path
         _sid = inputs.session_id
-        _working_dir: str | None
-        if _ws and _sid:
-            _safe_sid = _sid.replace("#", "-").replace(":", "-")
-            _working_dir = str(_Path(_ws) / "sessions" / _safe_sid)
-        else:
-            _working_dir = _ws
+        _working_dir: str | None = (
+            str(session_dir_in(Path(_ws), _sid)) if _ws and _sid else _ws
+        )
         budgeted = BudgetOrchestrator(
             working_dir=_working_dir, ports=ports
         ).apply_context_layout_budgets(

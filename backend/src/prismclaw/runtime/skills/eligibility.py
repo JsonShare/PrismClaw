@@ -47,6 +47,16 @@ def is_eligible(skill: SkillManifest) -> bool:
     return not (reqs.env and not check_env(reqs.env))
 
 
+def is_user_visible(skill: SkillManifest) -> bool:
+    """用户侧（选择器 / 显式调用）可见：auto 与 user_only。"""
+    return skill.invocation_policy in (InvocationPolicy.AUTO, InvocationPolicy.USER_ONLY)
+
+
+def is_model_visible(skill: SkillManifest) -> bool:
+    """模型侧（检索 / 自主激活）可见：auto 与 model_only。"""
+    return skill.invocation_policy in (InvocationPolicy.AUTO, InvocationPolicy.MODEL_ONLY)
+
+
 def filter_eligible(skills: list[SkillManifest]) -> list[SkillManifest]:
-    # AUTO 才参与 LLM 自主调用；其它策略（USER_ONLY / DISABLED）由 CLI/用户触发
-    return [s for s in skills if is_eligible(s) and s.invocation_policy is InvocationPolicy.AUTO]
+    """只做环境可用性过滤；调用策略由各可见性入口分别判断。"""
+    return [s for s in skills if is_eligible(s)]

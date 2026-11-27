@@ -5,7 +5,10 @@ import type { ReactNode } from 'react'
 
 import type { Chip } from '../../lib/chat/markers'
 import { CHIP_ICONS, makeChip } from '../../lib/chat/markers'
-import { expertGroups, listSkills, skillLabel, standaloneSkills } from '../../services/skills'
+import { cancelExpert, listExperts, selectExpert } from '../../services/experts'
+import type { ExpertItem } from '../../services/experts'
+import { getSession } from '../../services/sessions'
+import { listSkills, skillLabel } from '../../services/skills'
 import type { SkillItem } from '../../services/skills'
 import { MAX_ATTACHMENTS, pickLocalFiles, pickPhotos } from '../../services/uploads'
 import type { LocalFile } from '../../services/uploads'
@@ -16,6 +19,7 @@ import { toast } from '../../utils/toast'
 import Icon from '../Icon'
 import AddSheet from './AddSheet'
 import type { AddAction } from './AddSheet'
+import ExpertSheet from './ExpertSheet'
 import LibrarySheet from './LibrarySheet'
 import type { LibraryItem } from './LibrarySheet'
 
@@ -28,6 +32,8 @@ export interface ComposerPayload {
 interface ComposerProps {
   /** 输入态归属：会话 id，首页传 'home' */
   composerKey: string
+  /** 会话 id：传入时启用会话级专家入口，首页无会话时省略 */
+  expertSessionId?: string
   placeholder: string
   /** 首页落地页的扁平卡片样式 */
   flat?: boolean
@@ -41,15 +47,6 @@ interface ComposerProps {
   onFocusChange?: (focused: boolean) => void
   onSend: (payload: ComposerPayload) => Promise<void> | void
   onAbort?: () => void
-}
-
-/** 插件 ID 转可读标题：medical-wellness → Medical Wellness（与 PC 端一致） */
-function pluginTitle(name: string): string {
-  return name
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
 }
 
 function fileExtension(name: string): string {
@@ -125,6 +122,7 @@ function AttachmentItem({ file, onRemove }: { file: LocalFile; onRemove: () => v
 
 export default function Composer({
   composerKey,
+  expertSessionId,
   placeholder,
   flat = false,
   expandedPlaceholder,
@@ -147,6 +145,12 @@ export default function Composer({
 
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
+  const [expertOpen, setExpertOpen] = useState(false)
+  const [expertId, setExpertId] = useState<string | null>(null)
+  const [expertLabel, setExpertLabel] = useState('')
+  const [experts, setExperts] = useState<ExpertItem[]>([])
+  const [expertsLoading, setExpertsLoading] = useState(false)
+  const [expertsError, setExpertsError] = useState('')
   const [sending, setSending] = useState(false)
   const [focused, setFocused] = useState(false)
   const [voiceState, setVoiceState] = useState<VoiceState | 'idle'>('idle')
@@ -199,28 +203,76 @@ export default function Composer({
     return skillsCache.current
   }, [])
 
+  // 读取当前会话已选专家，并顺带取到展示名；旧会话没有 expert_state 时保持无专家态
+  useEffect(() => {
+    if (!expertSessionId) {
+      setExpertId(null)
+      setExpertLabel('')
+      return
+    }
+    let alive = true
+    void (async () => {
+      try {
+        const detail = await getSession(expertSessionId)
+        if (!alive) return
+        const current = detail.expert_state?.expert_id ?? null
+        setExpertId(current)
+        if (!current) {
+          setExpertLabel('')
+          return
+        }
+        const list = await listExperts()
+        if (!alive) return
+        setExperts(list)
+        setExpertLabel(list.find((item) => item.id === current)?.label || current)
+      } catch {
+        // 会话头读取失败不影响输入，专家入口仍可手动打开
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [expertSessionId])
+
+  /** 展开专家面板时才加载目录，避免每次打开会话都多一次请求 */
+  const openExpert = () => {
+    if (!expertSessionId) return
+    if (!experts.length && !expertsLoading) {
+      setExpertsLoading(true)
+      setExpertsError('')
+      void listExperts()
+        .then((list) => setExperts(list))
+        .catch((error: Error) => setExpertsError(error.message || '加载失败'))
+        .finally(() => setExpertsLoading(false))
+    }
+    setExpertOpen(true)
+  }
+
+  /** 会话级单选：nextId 为空即取消专家 */
+  const handlePickExpert = async (nextId: string | null) => {
+    if (!expertSessionId) return
+    setExpertOpen(false)
+    if (nextId === expertId) return
+    try {
+      const state = nextId
+        ? await selectExpert(expertSessionId, nextId)
+        : await cancelExpert(expertSessionId)
+      setExpertId(state.expert_id)
+      setExpertLabel(
+        state.expert_id
+          ? experts.find((item) => item.id === state.expert_id)?.label || state.expert_id
+          : '',
+      )
+    } catch (error) {
+      toast((error as Error).message || (nextId ? '切换专家失败' : '取消专家失败'))
+    }
+  }
+
   const loadLibrary = useCallback(
     async (query: string): Promise<LibraryItem[]> => {
       const skills = await loadSkills()
       const q = query.toLowerCase()
-      const experts: LibraryItem[] = expertGroups(skills)
-        .filter(
-          (group) =>
-            !q ||
-            group.name.toLowerCase().includes(q) ||
-            pluginTitle(group.name).toLowerCase().includes(q) ||
-            group.description.toLowerCase().includes(q) ||
-            group.skills.some((skill) => skillLabel(skill).toLowerCase().includes(q)),
-        )
-        .map((group) => ({
-          id: group.name,
-          label: pluginTitle(group.name),
-          desc: group.description,
-          emoji: group.skills.find((skill) => skill.emoji)?.emoji,
-          section: '专家',
-          chipKind: 'plugin',
-        }))
-      const singles: LibraryItem[] = standaloneSkills(skills)
+      return skills
         .filter(
           (skill) =>
             !q ||
@@ -233,10 +285,7 @@ export default function Composer({
           label: skillLabel(skill),
           desc: skill.description,
           emoji: skill.emoji,
-          section: '技能',
-          chipKind: 'skill',
         }))
-      return [...experts, ...singles]
     },
     [loadSkills],
   )
@@ -264,17 +313,21 @@ export default function Composer({
     }
   }
 
-  /** 添加面板：前三个走系统选择器，最后一个进入技能面板 */
+  /** 添加面板：拍摄 / 相册 / 文件走系统选择器，技能与专家进入各自面板 */
   const handleAddPick = (action: AddAction) => {
     setAddOpen(false)
     if (action === 'library') {
       setLibraryOpen(true)
       return
     }
+    if (action === 'expert') {
+      openExpert()
+      return
+    }
     void runPick(action)
   }
 
-  /** ⊕ 打开「添加」面板：拍摄 / 相册 / 文件 + 添加技能或套件 */
+  /** ⊕ 打开「添加」面板：拍摄 / 相册 / 文件 + 添加技能、选择专家 */
   const openAdd = () => {
     cancelBlur()
     setFocused(true)
@@ -286,6 +339,7 @@ export default function Composer({
   const closeSheet = () => {
     setAddOpen(false)
     setLibraryOpen(false)
+    setExpertOpen(false)
     setFocused(false)
     onFocusChange?.(false)
   }
@@ -301,9 +355,9 @@ export default function Composer({
     if (voiceState === 'idle') setLevels(new Array(24).fill(0))
   }, [voiceState])
 
-  /** 技能/专家单选：选中即收起面板，保留已选 chips 不覆盖 */
+  /** 技能单选：选中即收起面板，保留已选 chips 不覆盖 */
   const handlePick = (item: LibraryItem) => {
-    const chip = makeChip(item.chipKind ?? 'skill', item.id, item.label)
+    const chip = makeChip('skill', item.id, item.label)
     if (!chips.some((current) => current.id === chip.id)) {
       addChip(composerKey, chip)
     }
@@ -551,6 +605,20 @@ export default function Composer({
   return (
     <>
       <View className={`composer-wrap${flat ? ' is-flat' : ''}`}>
+        {expertId ? (
+          <View className='composer-expert'>
+            <View className='composer-chip'>
+              <Icon name='user' size={14} color='#111316' />
+              <Text className='composer-chip-text'>{expertLabel || expertId}</Text>
+              <View
+                className='composer-chip-remove'
+                onClick={() => void handlePickExpert(null)}
+              >
+                <Icon name='x' size={11} color='#6B7280' />
+              </View>
+            </View>
+          </View>
+        ) : null}
         {attachmentsInside ? null : attachmentList}
 
         {!flat && chips.length ? <View className='composer-chips'>{chipNodes}</View> : null}
@@ -704,7 +772,22 @@ export default function Composer({
         ) : null}
       </View>
 
-      <AddSheet open={addOpen} onPick={handleAddPick} onClose={closeSheet} />
+      <AddSheet
+        open={addOpen}
+        expertEnabled={Boolean(expertSessionId)}
+        onPick={handleAddPick}
+        onClose={closeSheet}
+      />
+
+      <ExpertSheet
+        open={expertOpen}
+        experts={experts}
+        loading={expertsLoading}
+        error={expertsError}
+        selectedId={expertId}
+        onPick={(id) => void handlePickExpert(id)}
+        onClose={closeSheet}
+      />
 
       <LibrarySheet
         open={libraryOpen}

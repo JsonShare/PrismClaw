@@ -8,6 +8,8 @@ export interface ItemTooltipState {
   y: number
   /** 锚点上方展示（以 translateY(-100%) 顶边对齐锚点） */
   above?: boolean
+  /** 深色气泡（用于输入区胶囊的完整名称提示） */
+  tone?: 'default' | 'dark'
 }
 
 /**
@@ -21,7 +23,7 @@ export function useItemTooltip(maxLen = 24) {
   const [tip, setTip] = useState<ItemTooltipState | null>(null)
 
   const show = useCallback(
-    (e: MouseEvent<HTMLElement>, text: string, force = false, placement: 'above' | 'below' = 'below') => {
+    (e: MouseEvent<HTMLElement>, text: string, force = false, placement: 'above' | 'below' = 'below', tone: 'default' | 'dark' = 'default') => {
       const t = (text ?? '').trim()
       if (!t) return
       const host = e.currentTarget as HTMLElement
@@ -48,7 +50,7 @@ export function useItemTooltip(maxLen = 24) {
       } else if (y + estH > window.innerHeight) {
         y = Math.max(8, r.top - estH)
       }
-      setTip({ text: t, x, y, above })
+      setTip({ text: t, x, y, above, tone })
     },
     [maxLen],
   )
@@ -59,6 +61,8 @@ export function useItemTooltip(maxLen = 24) {
     ? createPortal(
         <div
           role="tooltip"
+          data-tone={tip.tone}
+          data-above={tip.above ? 'true' : undefined}
           className="tooltip-bubble fixed z-[60] max-w-[280px] rounded-[var(--radius-md)] px-2.5 py-2 text-[length:var(--fs-sm)] leading-relaxed text-[var(--c-text)]"
           style={{
             left: tip.x,

@@ -20,7 +20,6 @@ from prismclaw.app.web.chat._chat_helpers import (
     _load_tree_for_write,
     _persist_execution_timeline,
     _persist_run_projection,
-    _persist_streamed_assistant_message,
     _push_run_snapshot,
     _push_task_runtime_event,
     _push_timeline_event,
@@ -355,8 +354,8 @@ async def _run_chat(
             "web chat runtime requires sandbox_policy before constructing RunRequest"
         )
     # 输入框的内联卡片随正文以标记串发来，这里还原成模型可读文本并拆出结构化字段。
-    # 正文是唯一真相源：协议不再接受客户端单独下发技能/插件/文件数组。
-    user_text, mention_skills, mention_plugins, mention_files = extract_mentions(msg.content)
+    # 正文是唯一真相源：协议不再接受客户端单独下发技能/文件数组。
+    user_text, mention_skills, mention_files = extract_mentions(msg.content)
     request = RunRequest(
         session_id=session_id,
         workspace_id=effective_workspace_id,
@@ -373,7 +372,6 @@ async def _run_chat(
         sandbox_policy=sandbox_policy,
         trajectory_audit_header=msg.trajectory,
         designated_skills=mention_skills,
-        designated_plugins=mention_plugins,
         referenced_files=mention_files or [],
         conversation_id=msg.conversation_id,
     )
@@ -624,29 +622,23 @@ async def _run_chat(
         message: str,
         aborted: bool,
     ) -> None:
-        """异常终止的唯一收尾路径：锚点 → timeline → 交付物 → 终态帧。
+        """异常终止的唯一收尾路径：timeline → 交付物 → 终态帧。
 
-        锚点优先复用引擎本 run 已落的 assistant 消息（正常生成被截断时正文
-        已在树中）；只有引擎一条都没落（流式中被 abort）才用已流式推送的
-        转录补写一条。这样既不会丢正文，也不会产生与已有消息重复的副本。
+        正文不在这里补写：正文只来自引擎落库的终态轮（运行结束时仍在进行的
+        那一轮）。本 run 被预算/超时/abort 打断时不存在终态轮，也就没有正文；
+        Web 层不再把流式片段拼成第二条真相源。
 
         软着陆（超时 / 预算耗尽）不追加系统说明、不发 error 帧；仅在完全
         无内容时补发终止原因，避免前端表现为「任务直接断了」。
         """
         if terminal_done_sent:
             return
-        # 先把 redactor 滞留的尾巴推出并计入正文，保证落库与用户所见一致。
+        # 先把 redactor 滞留的尾巴推出：它属于当前轮已输出的文本，不推会让
+        # 用户所见与时间线不一致。
         try:
             await _emit_text(_drain_text())
         except Exception:
             logger.warning("web.chat.path_redactor.flush_failed", exc_info=True)
-        if _current_part[0]:
-            full_transcript_parts.append(_current_part[0])
-            _current_part[0] = ""
-        # TERMINATE 兜底：正文只取最后一条非空 TextChunk（可能是模型最后一次
-        # 输出的过语或半段答复），不拼所有迭代——迭代过语属于 timeline 灰框。
-        _ts_parts = [p for p in full_transcript_parts if p and p.strip()]
-        body = _ts_parts[-1] if _ts_parts else ""
 
         soft_landing = error_code in _SOFT_LANDING_CODES
         if not aborted and not soft_landing and message:
@@ -659,20 +651,6 @@ async def _run_chat(
 
         invalidate_tree_cache(session_id)
         anchor = await _last_assistant_message_id(deps, session_id)
-        # TERMINATE 兜底：中间轮 assistant entry content 已置空（轮次逻辑），
-        # 正文只能靠 complete_no_tool_turn 落的终态轮。若被预算耗尽等中断，
-        # 终态轮不存在 → 把 full_transcript_parts 里模型最后输出的 TextChunk
-        # 补写进 session tree，让正文蓝框至少有内容可见。
-        if body:
-            # 直接补写一条（不更新已有空 content 的 entry）——简洁可靠
-            anchor = (
-                await _persist_streamed_assistant_message(
-                    deps,
-                    session_id=session_id,
-                    text=body,
-                )
-                or anchor
-            )
         if anchor and projector.has_content():
             await _persist_execution_timeline(
                 deps,
@@ -685,7 +663,7 @@ async def _run_chat(
             reference_sources=_take_reference_sources() or None,
         )
 
-        if anchor is None and not body and not projector.has_content() and soft_landing:
+        if anchor is None and not projector.has_content() and soft_landing:
             await send_event(
                 state,
                 SERVER_ERROR,
@@ -693,7 +671,7 @@ async def _run_chat(
                 {"message": message or "任务已终止", "code": error_code},
             )
         await _emit_terminal_done(
-            final_message=body,
+            final_message="",
             usage={},
             aborted=aborted,
             message_id=anchor,
@@ -717,11 +695,6 @@ async def _run_chat(
 
     lifecycle_task: asyncio.Task[Any] | None = None
     run_projection_task: asyncio.Task[Any] | None = None
-    # 正文累积状态在 try 之前初始化：except 崩溃路径引用它们构建中断补写
-    # 消息（不变量 I3：final_message == 全量流式文本），必须保证
-    # rc.active=True 之后的任何异常入口触达时均已绑定。
-    full_transcript_parts: list[str] = []
-    _current_part: list[str] = [""]
     # 跨分片路径脱敏：按 token 切流的绝对路径可能被切断，逐片替换会把
     # `/tmp/g` 替成 [内部路径] 后让后缀 `z_pages/x.html` 漏出。这里滞留
     # 可能是路径中段的尾部，等下一片拼接后统一处理。
@@ -751,9 +724,8 @@ async def _run_chat(
     async def _emit_text(text: str) -> None:
         """推送并累积一段**已脱敏**正文。
 
-        正文有五个消费方必须完全同源，否则「用户看到的」与「落库/时间线里的」
-        会分叉：chat.delta 推送、_current_part 转录累积（最终落库）、projector
-        迭代文本、runtime projection 的 streaming_text、追问生成的 preview。
+        三个消费方同源，否则「用户看到的」与「时间线/预览里的」会分叉：
+        chat.delta 推送、projector 迭代文本、追问生成的 preview。
         新增消费方一律加在这里，不要在各分支就地追加。
         """
         nonlocal streamed_assistant_preview, refined_questions_task
@@ -765,11 +737,16 @@ async def _run_chat(
             msg.conversation_id,
             {"text": text, "segmentId": projector.current_segment},
         )
-        _current_part[0] = f"{_current_part[0]}{text}"
         projector.on_iteration_text(text)
-        session_queue.get_or_create_web_runtime_projection(
+        web_proj = session_queue.get_or_create_web_runtime_projection(
             msg.conversation_id
-        ).streaming_text += text
+        )
+        seg = projector.current_segment
+        if web_proj.streaming_segment != seg:
+            # 新迭代段：上一段已结束（过程过语），正文从当前段重新开始。
+            web_proj.streaming_segment = seg
+            web_proj.streaming_text = ""
+        web_proj.streaming_text += text
         if refined_questions_task is None:
             streamed_assistant_preview = f"{streamed_assistant_preview}{text}"
             if len(streamed_assistant_preview) >= 400:
@@ -811,12 +788,11 @@ async def _run_chat(
             conversation_id=msg.conversation_id,
             session_id=session_id,
         )
-        # 所有自然语言 TextChunk（中间草稿迭代与最终答案）都即时 send_event(
-        # SERVER_CHAT_DELTA) 推到正文 chat.delta，不做缓冲、不做打字机回放、不做延迟。
-        # 全量正文由 full_transcript_parts 累积（每助手轮一段），在 Done 以
-        # "\n\n".join 提交为 final_message（不变量 I3：final_message == 全量流式文本）。
-        # 跨迭代分段由 join 的分隔符保证，不再单独发分隔符 delta。
-        # ReasoningChunk 仍走 projector 思考区；ToolCall* 仍走 projector 时间线。
+        # 所有自然语言 TextChunk 都即时 send_event(SERVER_CHAT_DELTA) 推到正文，
+        # 不做缓冲、不做打字机回放。正文只显示「当前轮次」的文本；该轮一旦结束
+        # （下一轮开始）或出现工具调用，文本即归入 timeline，正文由前端
+        # selectAnswerText 的同一规则隐藏。ReasoningChunk 走 projector 思考区；
+        # ToolCall* 走 projector 时间线。
 
         chat_service = getattr(web_deps, "chat_service", None)
         if chat_service is None:
@@ -859,10 +835,9 @@ async def _run_chat(
                     await _emit_text(_drain_text())
                 projector.on_iteration_boundary(event)
                 if event.kind == "llm_start":
-                    # 新迭代开始：把上一轮累积的转录段落 flush 进 full_transcript_parts，
+                    # 新迭代开始：推一帧全量快照。上一轮此时已结束，其文本随
+                    # snapshot 进入 timeline（过程过语），正文从新一轮重新开始。
                     if event.iteration > 1:
-                        full_transcript_parts.append(_current_part[0])
-                        _current_part[0] = ""
                         await _push_timeline_event(
                             state,
                             conversation_id=msg.conversation_id,
@@ -880,10 +855,10 @@ async def _run_chat(
                     conversation_id=msg.conversation_id,
                     active=False,
                 )
-                # 单遍实时流式：即时推送自然语言正文到 chat.delta，并累积进转录段落。
-                # segmentId 随 payload 一起推 — 前端收到时如果 segmentId 变了（进入新
-                # 迭代轮次），才先清 streamingText 再追加，避免 IterationBoundary 提前
-                # 清空正文导致的"执行一段时间后正文消失"空白窗口。
+                # 单遍实时流式：即时推送自然语言正文到 chat.delta，并累积进
+                # 「当前轮次」缓冲。segmentId 随 payload 一起推——前端收到不同
+                # segmentId 时清空正文缓冲，该轮文本此刻已随切段 snapshot 进入
+                # timeline（过程过语），正文只显示当前未结束的轮次。
                 #
                 # 路径过滤：LLM 在工具执行过程中可能看到宿主真实路径（bash 输出、
                 # 工具结果里的物理落点），然后在回答里暴露出来。这些实现细节对用户
@@ -1046,23 +1021,13 @@ async def _run_chat(
                     conversation_id=msg.conversation_id,
                     active=False,
                 )
-                # flush 最后一段转录（最终答案轮无后续迭代触发 flush）。
-                # 先吐 redactor 滞留的尾巴：它属于正文结尾，不推等于正文缺字，
-                # 且落库与推送会不一致。
+                # 吐掉 redactor 滞留的尾巴：它属于正文结尾，不推等于正文缺字。
                 await _emit_text(_drain_text())
-                if _current_part[0]:
-                    full_transcript_parts.append(_current_part[0])
-                    _current_part[0] = ""
 
                 if event.usage:
                     set_usage = getattr(session_queue, "set_last_usage", None)
                     if callable(set_usage):
                         set_usage(msg.conversation_id, event.usage)
-
-                # final_message 只保留**最后一轮迭代**的文本，仅用于审计与非 Web
-                # 通道；Web 端的正文一律来自展示消息投影（_build_display_messages
-                # 的全轮拼接），二者不再共用同一个字段，避免"刷新前后两套正文"。
-                final_msg = full_transcript_parts[-1] if full_transcript_parts else ""
 
                 assistant_message_id = getattr(event, "assistant_message_id", None)
                 # 来源块已在 _drain_text 里流式吞掉（不会出现在正文）。没有标准块时
@@ -1095,7 +1060,7 @@ async def _run_chat(
                     reference_sources=reference_sources,
                 )
                 await _emit_terminal_done(
-                    final_message=final_msg,
+                    final_message=event.final_message,
                     usage=event.usage,
                     aborted=False,
                     message_id=assistant_message_id,

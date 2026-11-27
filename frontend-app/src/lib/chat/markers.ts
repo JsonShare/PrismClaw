@@ -1,18 +1,17 @@
 /**
  * 输入框内联卡片标记协议：`<|kind|percent-encoded-value|>`。
  *
- * 与后端 `chat_mentions.extract_mentions` 一一对应：技能/专家/引用文件
+ * 与后端 `chat_mentions.extract_mentions` 一一对应：技能/引用文件
  * 序列化进正文随 content 一起发送，正文是唯一真相源；后端拆出
- * designated_skills / designated_plugins / referenced_files 并把正文
+ * designated_skills / referenced_files 并把正文
  * 还原成模型可读的 `@标题`。展示历史消息时同样需要还原，否则会看到原始标记。
  */
 
-export type ChipKind = 'skill' | 'plugin' | 'file'
+export type ChipKind = 'skill' | 'file'
 
 /** 输入框 chip 与历史气泡 chip 共用同一套图标 */
 export const CHIP_ICONS: Record<ChipKind, string> = {
   skill: 'hammer',
-  plugin: 'blocks',
   file: 'at-sign',
 }
 
@@ -20,13 +19,13 @@ export interface Chip {
   /** `kind:value`，用于去重与列表 key */
   id: string
   kind: ChipKind
-  /** 技能/专家名或工作区相对路径 */
+  /** 技能名或工作区相对路径 */
   value: string
   /** 卡片上展示的短标题 */
   label: string
 }
 
-const MARKER_RE = /<\|(skill|plugin|file)\|([^|<>]*)\|>/g
+const MARKER_RE = /<\|(skill|file)\|([^|<>]*)\|>/g
 
 function safeDecode(raw: string): string {
   try {
@@ -70,11 +69,11 @@ export function markersToReadable(text: string): string {
   })
 }
 
-const LEADING_MARKER_RE = /^\s*<\|(skill|plugin|file)\|([^|<>]*)\|>/
+const LEADING_MARKER_RE = /^\s*<\|(skill|file)\|([^|<>]*)\|>/
 const LEADING_AT_RE = /^\s*@([^\s@]+)/
 
 /**
- * 拆出正文开头的技能/专家/文件卡片。
+ * 拆出正文开头的技能/文件卡片。
  *
  * 发送时卡片已序列化进正文；历史消息里可能是原始标记，也可能是后端还原的
  * `@标题`。两种形态都拆成 chip，气泡里按输入框的同款标签渲染。

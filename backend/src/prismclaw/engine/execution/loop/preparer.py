@@ -80,12 +80,13 @@ from prismclaw.engine.execution.state.task_persistence import (
     _persist_execution_evidence,
     _set_resume_boundary,
 )
+from prismclaw.engine.experts.scope import ActiveScope, RejectedScope
 from prismclaw.engine.foundation.telemetry import HotPathTelemetry, TurnProfiler
 from prismclaw.engine.hooks import (
     HookEvent,
     _log_hook_outcome,
 )
-from prismclaw.engine.plugins.hooks.schema import (
+from prismclaw.engine.hooks.schema import (
     HookDecision,
 )
 from prismclaw.engine.security.gate.governance import (
@@ -94,6 +95,8 @@ from prismclaw.engine.security.gate.governance import (
 )
 from prismclaw.engine.security.gate.probes import run_recovery_probe
 from prismclaw.engine.security.gate.types import ParallelTaskExtras
+from prismclaw.engine.subagent.team_registry import get_team_registry, load_team_manifest
+from prismclaw.engine.subagent.team_tools import TeamCreateTool
 from prismclaw.engine.toolkit.file.workspace import (
     WorkspaceBoundaryError,
     WorkspaceResolver,
@@ -147,7 +150,7 @@ class RunPreparer:
     3. 确认继续：existing_task_runtime.state == "awaiting_confirmation" + confirmation_decision
     4. 确认拒绝：同上但 decision=deny
     5. Hook 阻断：HookDecision.BLOCK → mark_task_blocked() → complete_no_tool_turn() → EarlyExit
-    6. 技能/插件激活：active_skill_invocation 非空
+    6. 技能/专家包激活：active_skill_invocation 非空
 
     全部分支在 prepare() 内闭合，不泄漏到外部。
     """
@@ -251,6 +254,24 @@ class RunPreparer:
             request.user_message = recovered_task_spec.source_message
             request.request_id = request.recovery_run_id
 
+        # ── 专家作用域：判定一次，run 内所有消费点复用 ──
+        # 必须在用户消息落库（:312）之前：被拒的专家不能留下半截消息；
+        # 也不能放到 :1020，那里已在 ownership/task_runtime 之后，异常会被
+        # chat_runner 统一转成 internal，前端看不到真实原因。
+        if deps.expert.environment_catalog is not None:
+            session_scope = deps.expert.build_session_scope(tree.header)
+            rt.session_scope = session_scope
+            if isinstance(session_scope, RejectedScope):
+                return EarlyExit(
+                    events=_single_event_iter(
+                        ErrorEvent(
+                            error_code=session_scope.code.value,
+                            message=session_scope.reason or "selected expert is unavailable",
+                        )
+                    ),
+                    runtime=rt,
+                )
+
         # ── Hook 收集 ──
         hook_context_injections: list[str] = []
 
@@ -328,7 +349,7 @@ class RunPreparer:
                     block_reason = (
                         hook_result.decision_reason
                         or hook_result.stop_reason
-                        or "提示构建被插件钩子阻断"
+                        or "提示构建被专家包钩子阻断"
                     )
                     await mark_task_blocked(rt, block_reason)
                     task_runtime = rt.task_runtime
@@ -338,7 +359,7 @@ class RunPreparer:
                         tree=tree,
                         session_messages=[{"role": "user", "content": request.user_message}],
                         append_entry=_append,
-                        response_text=f"[plugin hook] {block_reason}",
+                        response_text=f"[expert hook] {block_reason}",
                         usage_totals={},
                     )
                     rt.active_skill_invocation = active_skill_invocation
@@ -985,6 +1006,7 @@ class RunPreparer:
             workspace_path=resolved_ws_path,
             workspace_root=str(resolved_ws_path),
             session_id=request.session_id,
+            expert_id=tree.header.expert_id,
             sandbox_policy=request.sandbox_policy,
             abort=abort_event,
             user_id=request.user_id,
@@ -1004,7 +1026,7 @@ class RunPreparer:
             session_store=deps.session_store,
             session_tree=tree,
             mcp_death_handler=deps.callbacks.on_mcp_death if deps.callbacks is not None else None,
-            mcp_runtime_manager=deps.plugin.runtime_mcp_manager,
+            mcp_runtime_manager=deps.expert.runtime_mcp_manager,
             context_engine=deps.context_engine,
             channel=deps.channel,
             headless=deps.session_queue is None,
@@ -1012,6 +1034,35 @@ class RunPreparer:
             runtime=deps.runtime_client,
             workspace_tag=getattr(request, "workspace_tag", None),
         )
+        get_team_registry(tool_ctx, create=True)
+
+        session_scope = rt.session_scope
+        if session_scope is not None:
+            tool_ctx.session_scope = session_scope
+            if isinstance(session_scope, ActiveScope) and session_scope.is_team:
+                # rt.session_scope 只在 catalog 存在时构建（见 _prepare 起始处）。
+                assert deps.expert.environment_catalog is not None
+                catalog = deps.expert.environment_catalog.snapshot()
+                team_manifest = load_team_manifest(session_scope.expert)
+                team_info = team_manifest.team_info
+                if team_info is None:
+                    raise RuntimeError("active team expert has no teamInfo")
+                if deps.capability_catalog is None:
+                    raise RuntimeError("active team capability catalog is not configured")
+                registration = await TeamCreateTool(
+                    expert_registry=catalog.expert_registry,
+                    capability_catalog=deps.capability_catalog,
+                ).register(
+                    request_id,
+                    tool_ctx,
+                    team_name=team_manifest.name,
+                    lead=team_info.lead_agent,
+                    caller=team_info.lead_agent,
+                )
+                if registration.is_error:
+                    detail = registration.metadata or {}
+                    code = detail.get("code", "TEAM_PACKAGE_INVALID")
+                    raise RuntimeError(f"active team registration failed ({code}): {detail}")
 
         getter = getattr(deps.context_engine, "get_session_state", None)
         if callable(getter):
@@ -1035,7 +1086,7 @@ class RunPreparer:
             if hasattr(tool_ctx, key):
                 setattr(tool_ctx, key, value)
 
-        # ── Skill/plugin activation ──
+        # ── Skill/expert activation ──
         if active_skill_invocation is not None:
             project_active_skill_invocation(
                 request=request,
@@ -1049,7 +1100,7 @@ class RunPreparer:
         if _pending_cmd is not None and active_skill_invocation is None:
             _cmd_invocation = SkillInvocationState(
                 skill_name=_pending_cmd["skill_name"],
-                plugin_name=_pending_cmd.get("plugin_name"),
+                expert_name=_pending_cmd.get("expert_name"),
                 is_active=True,
                 clear_after_terminal_result=True,
                 invocation_context="command",
@@ -1062,8 +1113,8 @@ class RunPreparer:
             )
 
         # ── Designated skills activation ──
-        # 用户本轮显式选了卡片就激活，与既有 active invocation（如持久化插件）
-        # 合并在 _merge_invocations 里完成，避免「上轮插件把本轮技能挡住」。
+        # 用户本轮显式选了卡片就激活，与既有 active invocation（如持久化专家包）
+        # 合并在 _merge_invocations 里完成，避免「上轮专家包把本轮技能挡住」。
         if request.designated_skills and _pending_cmd is None:
             active_skill_invocation = await self._activate_designated_skills(
                 request,
@@ -1140,31 +1191,6 @@ class RunPreparer:
                         exc_info=True,
                     )
 
-        # ── 插件作用域 ──
-        # 无 chip 时沿用上一轮（粘性）；有 chip 时由 _activate_designated_plugins
-        # 按「真正激活成功」的插件集覆盖（替换语义）。
-        # 粘性载体是快照里持久化的 ``_plugin:<name>`` 记录，而不是
-        # active_invocation.plugin_name：后者在「用户只 @ 了某插件下的技能」时
-        # 也会被写成该插件名，用它做粘性会把整个插件解锁（越权）。
-        if not request.designated_plugins:
-            tool_ctx.tool_scope = frozenset(
-                rec.skill_name.removeprefix("_plugin:")
-                for rec in snapshot.invoked_skill_state.skills.values()
-                if rec.skill_name.startswith("_plugin:")
-            )
-
-        # ── Designated plugins activation ──
-        if request.designated_plugins:
-            active_skill_invocation = await self._activate_designated_plugins(
-                request,
-                deps,
-                snapshot,
-                tool_ctx,
-                active_skill_invocation,
-                _pending_cmd,
-                hook_context_injections,
-            )
-
         # ── Referenced files injection ──
         # 路径由前端给出（工作区根相对或工具虚拟前缀）。存在性判断必须走文件
         # 工具的同一个解析器，否则 `outbox/x`、`project/x` 这类前缀会被误判：
@@ -1223,7 +1249,7 @@ class RunPreparer:
         )
         return rt
 
-    # ── Private helpers for skill/plugin activation ──
+    # ── Private helpers for skill/expert activation ──
 
     @staticmethod
     def _merge_invocations(
@@ -1248,22 +1274,18 @@ class RunPreparer:
         if not ordered:
             return None
 
-        skill_names = [s.skill_name for s in ordered if not s.skill_name.startswith("_plugin:")]
-        plugin_names = [s.plugin_name for s in ordered if s.plugin_name]
+        skill_names = [s.skill_name for s in ordered]
+        expert_names = [s.expert_name for s in ordered if s.expert_name]
         overrides = [s.allowed_tools_override for s in ordered]
         if any(o is None for o in overrides):
             merged_tools = None
         else:
             merged_tools = list(dict.fromkeys(t for o in overrides for t in (o or [])))
 
-        # skill_name 只承载真实技能名。若本次只有插件（无真实技能），
-        # skill_names 为空——绝不能回退成 ordered[0].skill_name，
-        # 那会把 ``_plugin:<name>`` 这种内部伪技能名经 active_skill_name
-        # 渲染进 system prompt（R2 断言：prompt 不得出现 `_plugin:`）。
         return ordered[0].model_copy(
             update={
                 "skill_name": ", ".join(skill_names),
-                "plugin_name": plugin_names[0] if plugin_names else ordered[0].plugin_name,
+                "expert_name": expert_names[0] if expert_names else ordered[0].expert_name,
                 "allowed_tools_override": merged_tools,
                 "is_active": True,
                 # 任一技能按轮次清理 → 合成态也清理；专家记录本身是持久的，不受影响。
@@ -1339,145 +1361,6 @@ class RunPreparer:
                 )
 
         merged = self._merge_invocations(active_skill_invocation, states)
-        if merged is not None:
-            project_active_skill_invocation(
-                request=request,
-                snapshot=snapshot,
-                tool_ctx=tool_ctx,
-                skill_invocation=merged,
-            )
-        return merged
-
-    async def _activate_designated_plugins(
-        self,
-        request: RunRequest,
-        deps: AgentRunnerDeps,
-        snapshot: RunSnapshot,
-        tool_ctx: ToolContext,
-        active_skill_invocation: SkillInvocationState | None,
-        _pending_cmd: dict[str, Any] | None,
-        hook_context_injections: list[str],
-    ) -> SkillInvocationState | None:
-        """逐个激活 designated_plugins，返回与已有技能合并后的 invocation。"""
-        from prismclaw.engine.execution.checkpoint.models import InvokedSkillRecord
-
-        # 命令 dispatch 期间不叠加插件（命令的 active invocation 优先），
-        # 但作用域必须收敛为空集而非留 None——None 的语义是「无插件上下文、
-        # 不做限制」，会让插件工具被恒放行。
-        if _pending_cmd is not None:
-            tool_ctx.tool_scope = frozenset()
-            return active_skill_invocation
-        if (
-            active_skill_invocation is not None
-            and active_skill_invocation.invocation_context == "command"
-        ):
-            tool_ctx.tool_scope = frozenset()
-            return active_skill_invocation
-
-        _requested = list(dict.fromkeys(n for n in request.designated_plugins if n))
-
-        # 本轮显式 @ 了插件 → 替换语义。``_plugin:`` 记录只增不减，
-        # 不清理会让「@ 过的插件」永久保持解锁（先 @A 再 @B，
-        # 下一轮不 @ 时 A 仍被解锁）。因此先剔除不在本轮 chip 里的旧记录。
-        _requested_set = set(_requested)
-        for _key in [
-            k
-            for k in snapshot.invoked_skill_state.skills
-            if k.startswith("_plugin:") and k.removeprefix("_plugin:") not in _requested_set
-        ]:
-            del snapshot.invoked_skill_state.skills[_key]
-
-        states: list[SkillInvocationState] = []
-        # 多插件互斥（§3.9 架构降级）：chip 顺序即优先级，只取首个作为主专家。
-        # 其余插件仅解锁能力（由 tool_scope 承载），不注入 persona——
-        # 两份 persona 叠加会直接冲突（两套输出规范/安全红线互相打架）。
-        _primary = _requested[0] if _requested else None
-        if len(_requested) > 1:
-            logger.info(
-                "plugin_persona_degraded: primary=%s ignored=%s session=%s",
-                _primary,
-                _requested[1:],
-                request.session_id,
-            )
-        for plugin_name in _requested:
-            _is_primary = plugin_name == _primary
-            try:
-                _plugin_rt = getattr(deps, "skill_runtime", None)
-                if _plugin_rt is not None:
-                    # 始终读取 instructions 用于「插件是否存在」的判定；
-                    # 但只有主插件才注入 persona（§3.9 多插件互斥）。
-                    _declared = _plugin_rt.get_plugin_instructions(plugin_name)
-                    _plugin_instructions = _declared if _is_primary else None
-                    _catalog = getattr(_plugin_rt, "_capability_catalog", None)
-                    _plugin_has_skills = False
-                    if _catalog is not None:
-                        _plugin_skills = [
-                            e for e in _catalog.list_skill_entries() if e.plugin_name == plugin_name
-                        ]
-                        _plugin_has_skills = len(_plugin_skills) > 0
-                    if not _declared and not _plugin_has_skills:
-                        logger.warning(
-                            "designated_plugin_unknown: plugin=%s has no instructions "
-                            "and no skills in catalog, skipping activation session=%s",
-                            plugin_name,
-                            request.session_id,
-                        )
-                        continue
-
-                    if _plugin_instructions:
-                        hook_context_injections.append(_plugin_instructions)
-
-                    states.append(
-                        SkillInvocationState(
-                            skill_name=f"_plugin:{plugin_name}",
-                            is_active=True,
-                            clear_after_terminal_result=False,
-                            allowed_tools_override=None,
-                            plugin_name=plugin_name,
-                            invocation_context="skill",
-                        )
-                    )
-
-                    if _plugin_instructions:
-                        _skill_key = f"_plugin:{plugin_name}"
-                        snapshot.invoked_skill_state.skills[_skill_key] = InvokedSkillRecord(
-                            skill_name=_skill_key,
-                            rendered_prompt_fragment=_plugin_instructions,
-                            clear_after_terminal_result=False,
-                        )
-                else:
-                    logger.warning(
-                        "designated_plugin_fallback: skill_runtime unavailable, "
-                        "setting invocation state only for plugin=%s",
-                        plugin_name,
-                    )
-                    states.append(
-                        SkillInvocationState(
-                            skill_name=f"_plugin:{plugin_name}",
-                            is_active=True,
-                            clear_after_terminal_result=False,
-                            plugin_name=plugin_name,
-                            invocation_context="skill",
-                        )
-                    )
-            except Exception:
-                logger.warning(
-                    "designated_plugin_activation_failed: plugin=%s session=%s",
-                    plugin_name,
-                    request.session_id,
-                    exc_info=True,
-                )
-
-        merged = self._merge_invocations(active_skill_invocation, states)
-        if merged is not None and states:
-            # 本轮显式 @ 了插件 → 替换语义：合并态的插件身份取「首个激活成功的插件」
-            # （主插件未识别时会被 continue 跳过，此时即为下一个），
-            # 不能沿用 base 的旧插件（否则先 @A 再 @B 会残留 A）。
-            # skill_name 无需改：_merge_invocations 只承载真实技能名，不含 _plugin:。
-            merged = merged.model_copy(update={"plugin_name": states[0].plugin_name})
-        # scope 只含「真正激活成功」的插件：主插件未知时会被 continue 跳过，
-        # 此时不得解锁一个不存在的插件，也不得让下一轮粘性沿用幽灵身份。
-        tool_ctx.tool_scope = frozenset(s.plugin_name for s in states if s.plugin_name)
         if merged is not None:
             project_active_skill_invocation(
                 request=request,

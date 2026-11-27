@@ -114,7 +114,7 @@ def test_complexity_switch_is_simple_only() -> None:
         request=SimpleNamespace(complexity="simple"),
         deps=deps,
         turn_state=TurnState(),
-        tool_ctx=SimpleNamespace(subagent_depth=0, tool_scope=None, headless=False),
+        tool_ctx=SimpleNamespace(subagent_depth=0, session_scope=None, headless=False),
         skill_invocation=None,
     )
     assert simple.skip_history_compaction is True

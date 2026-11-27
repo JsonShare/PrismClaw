@@ -1,7 +1,0 @@
-.DS_Store
-*.skill
-/logs/
-/outbox/
-/.prismclaw/
-__pycache__/
-*.pyc

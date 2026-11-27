@@ -4,6 +4,11 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
+from prismclaw.schema.agent.bundles import (
+    ExpertLifecycleProtocol,
+    ExtensionManagerProtocol,
+    MCPManagerProtocol,
+)
 from prismclaw.schema.agent.task_runtime import (
     ConfirmationDecision,
     TaskComplexity,
@@ -14,7 +19,9 @@ from prismclaw.schema.services.env_types import ExecutionEnv
 from prismclaw.schema.storage.storage_types import SessionStore
 
 if TYPE_CHECKING:
+    from prismclaw.engine.experts.registry.expert_registry import ExpertRegistry
     from prismclaw.engine.subagent.runtime.parallel import ParallelTaskRuntimeRecord
+    from prismclaw.infra.config.capability_policy import CapabilityPolicyRegistry
     from prismclaw.schema.content.streaming import SubagentProgressBatch
 
 # ── RunRequest (moved from core/agent/ownership.py) ────────────────
@@ -51,8 +58,6 @@ class RunRequest:
     recovery_reason: str | None = None
     # 用户指定技能（可多个，首轮前逐个激活）
     designated_skills: list[str] = field(default_factory=list)
-    # 用户指定插件（可多个，逐个注入 profile + 偏向提示）
-    designated_plugins: list[str] = field(default_factory=list)
     # §4.10 动态层：任务级技能路由结果（top-3 候选，仅提示不激活）。
     # 仅 TaskSpec 新建回合（非确认回合）由 _apply_fresh_governance_fields 写入；
     # RunRequest 是 run 级生命周期，确认回合/延续轮不触发路由，天然无残留。
@@ -78,6 +83,14 @@ class RunRequest:
 # ── AgentDeps Protocol ─────────────────────────────────────────────
 
 
+class ExpertDeps(Protocol):
+    extension_manager: ExtensionManagerProtocol | None
+    runtime_mcp_manager: MCPManagerProtocol | None
+    lifecycle_manager: ExpertLifecycleProtocol | None
+    capability_policy_registry: CapabilityPolicyRegistry | None
+    expert_registry: ExpertRegistry | None
+
+
 class AgentDeps(Protocol):
     """Agent 运行时需要的依赖契约。
 
@@ -98,6 +111,9 @@ class AgentDeps(Protocol):
     @property
     def session_store(self) -> SessionStore | None: ...
 
+    @property
+    def expert(self) -> ExpertDeps: ...
+
     def with_request_context(
         self,
         *,
@@ -113,4 +129,4 @@ class AgentDeps(Protocol):
         ...
 
 
-__all__ = ["AgentDeps", "RunRequest"]
+__all__ = ["AgentDeps", "ExpertDeps", "RunRequest"]

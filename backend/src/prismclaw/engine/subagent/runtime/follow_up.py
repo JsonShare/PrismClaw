@@ -11,7 +11,6 @@ from prismclaw.engine.subagent.runtime.parallel import (
 )
 from prismclaw.schema.agent.session import MessageEntry
 from prismclaw.schema.session.types import (
-    HANDOFF_REQUEST_CUSTOM_TYPE,
     CustomEntry,
     SessionTree,
 )
@@ -19,15 +18,13 @@ from prismclaw.schema.session.types import (
 
 @dataclass(frozen=True)
 class SessionFollowUpSnapshot:
-    latest_handoff_request: dict[str, Any] | None = None
     parallel_task_summary: dict[str, Any] | None = None
     parallel_task_attention: dict[str, Any] | None = None
     follow_up_attention: dict[str, Any] | None = None
 
     def is_empty(self) -> bool:
         return (
-            self.latest_handoff_request is None
-            and self.parallel_task_summary is None
+            self.parallel_task_summary is None
             and self.parallel_task_attention is None
             and self.follow_up_attention is None
         )
@@ -36,16 +33,10 @@ class SessionFollowUpSnapshot:
 def session_follow_up_snapshot(session_tree: SessionTree) -> SessionFollowUpSnapshot:
     summary = _build_parallel_task_summary(session_tree)
     attention = _build_parallel_task_attention(session_tree)
-    latest_handoff_request = _read_tree_dict(session_tree, "get_latest_handoff_request")
     return SessionFollowUpSnapshot(
-        latest_handoff_request=latest_handoff_request,
         parallel_task_summary=summary,
         parallel_task_attention=attention,
-        follow_up_attention=_build_follow_up_attention(
-            session_tree,
-            latest_handoff_request=latest_handoff_request,
-            parallel_task_attention=attention,
-        ),
+        follow_up_attention=dict(attention) if attention is not None else None,
     )
 
 
@@ -99,42 +90,8 @@ def format_parallel_task_attention(attention: dict[str, Any]) -> str:
     return "并行任务待关注信息可用。"
 
 
-def format_handoff_request(request: dict[str, Any]) -> str:
-    parts: list[str] = []
-    target = request.get("target")
-    if isinstance(target, str) and target:
-        parts.append(f"target={target}")
-    source_subagent = request.get("source_subagent")
-    if isinstance(source_subagent, str) and source_subagent:
-        parts.append(f"source_subagent={source_subagent}")
-    source_skill_origin = request.get("source_skill_origin")
-    if isinstance(source_skill_origin, str) and source_skill_origin:
-        parts.append(f"source_skill_origin={source_skill_origin}")
-    task = request.get("task")
-    if isinstance(task, str) and task:
-        preview = task if len(task) <= 120 else task[:117] + "..."
-        parts.append(f"task={preview}")
-    if not parts:
-        return "已记录最近一次移交请求。"
-    return "最近一次移交请求：" + " | ".join(parts) + "。"
-
-
 def format_follow_up_attention(attention: dict[str, Any]) -> str:
     kind = attention.get("kind")
-    if kind == "handoff":
-        target = attention.get("recommended_target")
-        reason = attention.get("recommended_reason")
-        source_subagent = attention.get("source_subagent")
-        handoff_parts: list[str] = []
-        if isinstance(target, str) and target:
-            handoff_parts.append(f"target={target}")
-        if isinstance(source_subagent, str) and source_subagent:
-            handoff_parts.append(f"source_subagent={source_subagent}")
-        if isinstance(reason, str) and reason:
-            handoff_parts.append(f"reason={reason}")
-        if not handoff_parts:
-            return "建议的会话后续动作：查看最近一次移交请求。"
-        return "建议的会话后续动作：" + " | ".join(handoff_parts) + "。"
     if kind in {"fork", "subagent", "parallel"}:
         task_id = attention.get("recommended_task_id")
         reason = attention.get("recommended_reason")
@@ -158,9 +115,6 @@ def render_follow_up_status(
 
     lines = ["会话后续状态："]
     metadata: dict[str, Any] = {}
-    if snapshot.latest_handoff_request is not None:
-        lines.append(format_handoff_request(snapshot.latest_handoff_request))
-        metadata["latest_handoff_request"] = snapshot.latest_handoff_request
     if snapshot.parallel_task_summary is not None:
         lines.append(format_parallel_task_summary(snapshot.parallel_task_summary))
         metadata["parallel_task_summary"] = snapshot.parallel_task_summary
@@ -183,20 +137,6 @@ def build_session_follow_up_note(
         return []
 
     kind = attention.get("kind")
-    if kind == "handoff":
-        target = attention.get("recommended_target")
-        source_subagent = attention.get("source_subagent")
-        handoff_details: list[str] = ["kind=handoff"]
-        if isinstance(target, str) and target:
-            handoff_details.append(f"target={target}")
-        if isinstance(source_subagent, str) and source_subagent:
-            handoff_details.append(f"source_subagent={source_subagent}")
-        if attention.get("source_is_fork") is True:
-            handoff_details.append("source_is_fork=true")
-        details_text = f" ({', '.join(handoff_details)})" if handoff_details else ""
-        suffix = "在再次委派或重复工作前，请先查看最近一次移交请求。"
-        return [f"会话后续动作可用{details_text}。{suffix}"]
-
     summary = snapshot.parallel_task_summary
     if summary is None:
         return []
@@ -307,18 +247,6 @@ def _parallel_kind(records: list[ParallelTaskRuntimeRecord]) -> str:
     return "parallel"
 
 
-def _latest_custom_entry_index(
-    session_tree: SessionTree,
-    *,
-    custom_type: str,
-) -> int | None:
-    latest_index: int | None = None
-    for index, entry in enumerate(_branch_entries(session_tree)):
-        if isinstance(entry, CustomEntry) and entry.custom_type == custom_type:
-            latest_index = index
-    return latest_index
-
-
 def _has_record_after_last_assistant(session_tree: SessionTree) -> bool:
     """记录是否出现在最后一条 assistant 消息之后（含尚无 assistant 的情况）。"""
     for entry in reversed(_branch_entries(session_tree)):
@@ -332,64 +260,12 @@ def _has_record_after_last_assistant(session_tree: SessionTree) -> bool:
     return False
 
 
-def _build_follow_up_attention(
-    session_tree: SessionTree,
-    *,
-    latest_handoff_request: dict[str, Any] | None,
-    parallel_task_attention: dict[str, Any] | None,
-) -> dict[str, Any] | None:
-    if latest_handoff_request is None and parallel_task_attention is None:
-        return None
-
-    latest_handoff_index = _latest_custom_entry_index(
-        session_tree,
-        custom_type=HANDOFF_REQUEST_CUSTOM_TYPE,
-    )
-    latest_fork_index = _latest_custom_entry_index(
-        session_tree,
-        custom_type=PARALLEL_TASK_RUNTIME_CUSTOM_TYPE,
-    )
-
-    if latest_handoff_request is not None and (
-        parallel_task_attention is None
-        or latest_handoff_index is None
-        or latest_fork_index is None
-        or latest_handoff_index >= latest_fork_index
-    ):
-        attention = {"kind": "handoff", **latest_handoff_request}
-        target = latest_handoff_request.get("target")
-        if isinstance(target, str) and target:
-            attention["recommended_target"] = target
-        source_subagent = latest_handoff_request.get("source_subagent")
-        if isinstance(source_subagent, str) and source_subagent:
-            attention["source_subagent"] = source_subagent
-        if latest_handoff_request.get("source_is_fork") is True:
-            attention["source_is_fork"] = True
-        attention["recommended_reason"] = "latest_handoff"
-        return attention
-
-    if parallel_task_attention is None:
-        return None
-    return dict(parallel_task_attention)
-
-
-def _read_tree_dict(tree: SessionTree, method_name: str) -> dict[str, Any] | None:
-    if tree is None:
-        return None
-    getter = getattr(tree, method_name, None)
-    if not callable(getter):
-        return None
-    value = getter()
-    return dict(value) if isinstance(value, dict) else None
-
-
 __all__ = [
     "SessionFollowUpSnapshot",
     "build_session_follow_up_note",
     "format_parallel_task_attention",
     "format_parallel_task_summary",
     "format_follow_up_attention",
-    "format_handoff_request",
     "render_follow_up_status",
     "session_follow_up_snapshot",
 ]

@@ -26,18 +26,11 @@ from prismclaw.schema.session.types import SessionTree
 
 
 def _user_message_count(tree: SessionTree) -> int:
-    """1-based user-message counter over tree.order (turn 语义).
-
-    历史会话可能仍有 ``metadata.kind == "clarification_answer"`` 的 user
-    entry（旧版本落树方式）；新会话的 HITL 答案只存在于 ask 工具结果中，
-    不再产生此类 entry。读取时跳过旧 entry，避免历史 turn 计数漂移。
-    """
+    """1-based user-message counter over tree.order (turn 语义)."""
     count = 0
     for eid in tree.order:
         e = tree.entries.get(eid)
         if isinstance(e, MessageEntry) and e.role == "user":
-            if isinstance(e.metadata, dict) and e.metadata.get("kind") == "clarification_answer":
-                continue
             count += 1
     return count
 

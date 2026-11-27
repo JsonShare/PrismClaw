@@ -7,7 +7,6 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from prismclaw.engine.execution.dispatch.turn_utils import strip_noise
-from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
 from prismclaw.engine.subagent.core._instance_base import _InstanceBase
 from prismclaw.engine.subagent.core._result_types import (
     AgentRunResult,
@@ -27,8 +26,6 @@ from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.engine.toolkit.registry.tool_classification import is_search_intent_tool
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 from prismclaw.schema.content.content_types import (
-    HandoffRequestPayload,
-    PersistenceArtifact,
     SubagentEnvelopeArtifact,
     TextBlock,
     ToolResult,
@@ -205,15 +202,7 @@ class LifecycleMixin(_InstanceBase):
         else:
             max_turns = self._manifest.max_turns or self._settings.default_max_turns
         timeout_s = self._resolve_timeout()
-        allowed_tools = self._resolve_allowed_tools(
-            manifest=self._manifest,
-            preload_ctx=preload_ctx,
-            available=set(self._tools.names()),
-        )
-        settled_tool_surface = self._settle_tool_surface(
-            allowed_tools,
-            sub_ctx=sub_ctx,
-        )
+        settled_tool_surface = self._settle_tool_surface(sub_ctx=sub_ctx)
         tool_schemas = self._tools.list_for_llm(settled_tool_surface.visible_tool_names)
         memory_block = await self._collect_memory_injection(
             parent_ctx=self._parent_ctx,
@@ -265,11 +254,6 @@ class LifecycleMixin(_InstanceBase):
         # 子代理的最终文本会作为 tool_result 回给父级，并可能进入用户可见正文。
         # 与主循环出口同源清洗：<thinking> 草稿与原生工具调用标记都不能外泄。
         final_text = strip_noise(self._extract_last_assistant_text(messages) or "")
-        pending_handoff = (
-            normalize_handoff_request_payload(sub_ctx.pending_handoff)
-            if outcome == "success"
-            else None
-        )
         # 自动从 tool call 历史中提取 evidence（不论 success 与否，
         # 超时/错误退出时已执行的工具调用仍可能包含关键信息）
         auto_evidence = _collect_evidence_from_messages(messages)
@@ -327,15 +311,6 @@ class LifecycleMixin(_InstanceBase):
             content=[TextBlock(text=normalized_result_text)],
             # 非 success 但有内容交付时 envelope 存在 → is_error=False
             is_error=(outcome != "success") and (envelope is None),
-            persistence_artifact=(
-                None
-                if pending_handoff is None
-                else PersistenceArtifact(
-                    artifact_type="handoff_request",
-                    entry_type="handoff_request",
-                    handoff_request=HandoffRequestPayload.model_validate(pending_handoff),
-                )
-            ),
             subagent_envelope=SubagentEnvelopeArtifact(
                 agent_name=self._manifest.name,
                 agent_source=getattr(self._manifest, "source", None),
@@ -349,11 +324,6 @@ class LifecycleMixin(_InstanceBase):
                 final_text=final_text or None,
                 result_envelope=(
                     envelope if isinstance(envelope, SubagentResultEnvelope) else None
-                ),
-                handoff_request=(
-                    HandoffRequestPayload.model_validate(pending_handoff)
-                    if pending_handoff is not None
-                    else None
                 ),
             ),
         )

@@ -1,0 +1,59 @@
+# ======================================================================
+# 能力启停策略 — capability_policy.yaml
+# ----------------------------------------------------------------------
+# 部署级配置，声明哪些专家包 / 专家团 / 技能被允许启用。
+#
+# 首次部署：
+#   cp backend/configs/capability_policy.example.yaml \
+#      backend/configs/capability_policy.yaml
+#   然后按需填写。不存在 capability_policy.yaml 时，runtime 会
+#   自动回退到本 example 文件（含 strict: false 兜底）。
+#
+# 三层决策，优先级从高到低：
+#   ① overrides  — 单个模块级覆盖（支持通配符 "*:skill-name"）
+#   ② bulk       — 整个 capability kind 批量覆盖
+#   ③ defaults   — 全局默认
+#
+# strict 模式（生产推荐）：
+#   strict: true  → 未显式启用的模块默认禁用；defaults 被忽略，
+#                   bulk / overrides 仍然生效
+#   strict: false → defaults 生效（默认放行，开发体验友好）
+# ======================================================================
+
+version: 1
+
+# strict: true  # ← 生产环境建议打开；开启后 defaults 被忽略，
+                 # 未在 bulk/overrides 中显式启用的模块全部禁用
+
+defaults:
+  expert: true     # 所有专家包默认启用
+  team: true       # 所有专家团默认启用
+  skill: true      # 所有技能默认启用
+
+bulk:
+  # 某个 kind 的全部模块统一禁用/启用。例：
+  # expert: false   # 所有专家包禁用
+  # skill: true     # 所有技能启用
+  {}
+
+overrides:
+  # ---------- 专家包 ----------
+  expert:
+    # medical-clinical: true          # 显式启用（strict 模式下必须）
+    # privacy-legal:
+    #   enabled: false
+    #   reason: "compliance audit pending"
+    {}
+
+  # ---------- 专家团 ----------
+  team:
+    # multi-agent-team: false
+    {}
+
+  # ---------- 技能 ----------
+  skill:
+    # 通配符：禁用所有包里的同名技能
+    # "*:dangerous-shell": false
+    # 精确禁用某个专家包的某个技能
+    # "medical-clinical:read-dicom": false
+    {}

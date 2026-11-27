@@ -1,0 +1,69 @@
+{
+  "name": "litigation-law",
+  "version": "1.0.0",
+  "description": "Manages litigation portfolios and deadlines, builds claim charts and timelines, prepares depositions and drafts briefs.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/litigation-law.md"
+  ],
+  "skills": [
+    "./skills/litigation-demand-workflow",
+    "./skills/litigation-discovery-workflow",
+    "./skills/litigation-evidence-workflow",
+    "./skills/litigation-law-playbook",
+    "./skills/litigation-matter-workflow",
+    "./skills/litigation-trial-workflow"
+  ],
+  "expertType": "agent",
+  "agentName": "litigation-law",
+  "displayName": {
+    "en": "Litigation & Arbitration Expert",
+    "zh": "诉讼仲裁专家"
+  },
+  "profession": {
+    "zh": "诉讼策略与仲裁程序",
+    "en": "Litigation Strategy & Arbitration"
+  },
+  "displayDescription": {
+    "zh": "管理诉讼组合与期限，制作权利要求图表和时间线，准备质证并起草简报。",
+    "en": "Manages litigation portfolios and deadlines, builds claim charts and timelines, prepares depositions and drafts briefs."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "为这个案件建时间线与权利要求图表。",
+    "en": "Build a timeline and claim chart for this case."
+  },
+  "plugin": "litigation-law",
+  "tags": [
+    {
+      "zh": "诉讼管理",
+      "en": "Litigation Management"
+    },
+    {
+      "zh": "权利要求图表",
+      "en": "Claim Chart"
+    },
+    {
+      "zh": "证据准备",
+      "en": "Evidence Prep"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为这个案件建时间线与权利要求图表。",
+      "en": "Build a timeline and claim chart for this case."
+    },
+    {
+      "zh": "根据证据材料起草质证提纲并标出证据缺口。",
+      "en": "Draft a cross-examination outline and flag evidence gaps."
+    },
+    {
+      "zh": "列出未来 30 天诉讼期限与待办动作。",
+      "en": "List litigation deadlines and actions in the next 30 days."
+    }
+  ],
+  "license": "Apache-2.0"
+}

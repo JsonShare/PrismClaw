@@ -8,6 +8,7 @@ from prismclaw.engine.toolkit.registry.tool_runtime import (
     error_result,
     text_result,
 )
+from prismclaw.runtime.skills.eligibility import is_model_visible
 from prismclaw.schema.content.content_types import (
     RuntimeControlArtifact,
     ToolContextModifier,
@@ -22,7 +23,7 @@ from prismclaw.schema.services.skills import (
 )
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
     from prismclaw.engine.execution.skills.runtime import SkillRuntime
 
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ class ActivateSkillTool:
         self,
         *,
         skill_runtime: SkillRuntime,
-        capability_catalog: CapabilityCatalogService | None = None,
+        capability_catalog: RuntimeCatalog | None = None,
     ) -> None:
         self._skill_runtime = skill_runtime
         self._capability_catalog = capability_catalog
@@ -114,32 +115,42 @@ class ActivateSkillTool:
             source="model",
         )
 
-        # 插件作用域门控：未激活插件的技能不可加载。
+        # 专家包作用域门控：未启用的能力包下的技能不可加载。
         # 复用 catalog 的解析契约（与 build_skill_execution 同一解析路径），
         # 避免用技能名前缀去猜归属。解析不到就交给下游维持原有错误路径。
-        _scope = context.tool_scope
-        if _scope is not None and self._capability_catalog is not None:
-            _resolution = self._capability_catalog.resolve_skill_reference(
-                skill_name,
-                plugin_prefer=getattr(active_state, "plugin_name", None),
-            )
-            _owner = (
-                _resolution.entry.plugin_name
-                if _resolution.kind == "resolved" and _resolution.entry is not None
-                else None
-            )
-            if _owner is not None and _owner not in _scope:
+        _scope = context.session_scope
+        _allowed_tool_owners = _scope.tool_owners if _scope is not None else None
+        if self._capability_catalog is not None:
+            try:
+                _resolution = self._capability_catalog.resolve_skill_reference(
+                    skill_name,
+                    expert_prefer=getattr(active_state, "expert_name", None),
+                )
+            except LookupError as exc:
+                return error_result(call_id, str(exc))
+            _entry = _resolution.entry if _resolution.kind == "resolved" else None
+            if _entry is not None and not is_model_visible(_entry.manifest):
                 return error_result(
                     call_id,
-                    f"skill_scope_denied:{_owner}（该技能属于插件「{_owner}」，请先 @ 该插件）",
+                    f"skill_policy_denied:{skill_name}（该技能仅限用户手动调用或已禁用）",
+                )
+            _owner = _entry.expert_name if _entry is not None else None
+            if (
+                _allowed_tool_owners is not None
+                and _owner is not None
+                and _owner not in _allowed_tool_owners
+            ):
+                return error_result(
+                    call_id,
+                    f"skill_scope_denied:{_owner}（该技能属于未启用的能力包「{_owner}」）",
                 )
 
         try:
-            plan = self._skill_runtime.build_skill_execution(
-                invocation,
-                workspace_path=context.workspace_path,
-                parent_active_state=active_state,
-            )
+            build_kwargs: dict[str, Any] = {
+                "workspace_path": context.workspace_path,
+                "parent_active_state": active_state,
+            }
+            plan = self._skill_runtime.build_skill_execution(invocation, **build_kwargs)
         except LookupError as exc:
             return error_result(call_id, str(exc))
         except Exception:

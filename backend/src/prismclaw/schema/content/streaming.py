@@ -133,8 +133,6 @@ class SubagentProgressItem(BaseModel):
     active_skill_name: str | None = None
     invoked_skill_names: list[str] = Field(default_factory=list)
     duration_so_far: float = Field(ge=0.0)
-    handoff_chain_id: str | None = None
-    from_subagent: str | None = None
     # 当前工具的紧凑参数摘要（如 "file_path=src/app.ts"），由子代理循环在
     # tool_running 边界写入；仅用于展示，不参与任何运行态判断。
     current_tool_summary: str | None = None

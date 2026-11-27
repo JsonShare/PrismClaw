@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 _TURN_RUNTIME_METRICS_CUSTOM_TYPE = "turn_runtime_metrics"
 TURN_RUNTIME_METRICS_CUSTOM_TYPE = "turn_runtime_metrics"
 FORK_TASK_PROJECTION_CUSTOM_TYPE = "fork_task_projection"
-HANDOFF_REQUEST_CUSTOM_TYPE = "handoff_request"
 
 # Typed custom_type constants (replace string matching with these)
 SEARCH_EVIDENCE_CUSTOM_TYPE = "search_evidence"
@@ -101,11 +100,6 @@ class _CustomPayloadTaskMutation(BaseModel):
 
 class _CustomPayloadForkTask(BaseModel):
     custom_type: Literal["fork_task_projection"]
-    data: dict[str, Any]
-
-
-class _CustomPayloadHandoff(BaseModel):
-    custom_type: Literal["handoff_request"]
     data: dict[str, Any]
 
 
@@ -194,6 +188,9 @@ class RunProjectionPayload(BaseModel):
     conversation_id: str
     state: str = "active"
     streaming_text: str = ""
+    # streaming_text 所属轮次。前端 hydrate 时恢复实时正文归属，避免首个
+    # delta 被误判为「换段」而丢弃已水合的半段正文。
+    streaming_segment: int | None = None
     timeline_nodes: list[dict[str, Any]] = []
     task_runtime: dict[str, Any] = {}
     phase: str | None = None
@@ -260,7 +257,6 @@ CustomPayload = Annotated[
     | _CustomPayloadTaskMutation
     | _CustomPayloadForkTask
     | _CustomPayloadParallelTaskRuntime
-    | _CustomPayloadHandoff
     | _CustomPayloadSearch
     | _CustomPayloadExtract
     | _CustomPayloadSessionMemory
@@ -297,7 +293,6 @@ CustomType = Literal[
     "task_mutation",
     "fork_task_projection",
     "parallel_task_runtime",
-    "handoff_request",
     "search_evidence",
     "extract_evidence",
     "session_memory_snapshot",

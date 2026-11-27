@@ -20,9 +20,9 @@ def _wrap_xml(tag: str, content: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class MarketplaceSummary:
-    """插件包索引行（`<packages>` 的唯一数据源）。
+    """专家包索引行（`<packages>` 的唯一数据源）。
 
-    只承载"存在某个能力域"这一事实：包名、外层描述、技能计数。子插件、
+    只承载"存在某个能力域"这一事实：包名、外层描述、技能计数。子专家包、
     技能名、子代理名一律不进入固定 prompt，由 skill_search / subagent_search
     逐级披露。
     """
@@ -36,19 +36,18 @@ class MarketplaceSummary:
 class AvailableSubagentEntry:
     """子代理目录条目（固定 prompt 与包计数共用）。
 
-    Single catalog source: CapabilityCatalogService.list_agent_entries()，
+    Single catalog source: RuntimeCatalog.list_agent_entries()，
     与派发时使用同一注册表，prompt 名单与运行时校验不可能漂移。
 
-    ``plugin_name is None`` 表示工作区核心子代理（进入 ``<subagents>``）；
-    插件子代理只用于 ``<packages>`` 计数与 ``subagent_search`` 检索，其名称
+    ``expert_name is None`` 表示工作区核心子代理（进入 ``<subagents>``）；
+    专家包子代理只用于 ``<packages>`` 计数与 ``subagent_search`` 检索，其名称
     不进入固定 prompt。
     """
 
     name: str
     description: str  # already truncated to 100 chars for prompt compactness
-    plugin_name: str | None = None
-    marketplace_name: str | None = None
-    marketplace_description: str | None = None
+    expert_name: str | None = None
+    expert_description: str | None = None
 
 
 @dataclass
@@ -57,19 +56,17 @@ class PromptInputs:
     workspace_id: str
     agent_id: str
     tools: Sequence[tuple[str, str]] = ()
-    # 仅项目级技能名（用户主动安装、数量有界）；插件技能走 skill_search。
+    # 仅项目级技能名（用户主动安装、数量有界）；专家包技能走 skill_search。
     project_skill_names: tuple[str, ...] = ()
-    # 插件包索引：`<packages>` 的技能计数与描述来源
+    # 专家包索引：`<packages>` 的技能计数与描述来源
     marketplace_summaries: Sequence[MarketplaceSummary] = ()
     available_subagents: Sequence[AvailableSubagentEntry] = ()
     workspace_path: str | None = None
     now_iso: str | None = None
     identity: str | None = None  # 由 build_identity_text() 从 IDENTITY.md 读取；缺失时为空
     preferences: str | None = None  # 由 build_preferences_text() 显式传入；文件缺失时为空
+    expert_persona: str | None = None
     subagent_registry_size: int = 0
-    handoff_enabled: bool = False
-    any_manifest_has_can_handoff_to: bool = False
-    max_handoff_chain_length: int = 5
     runtime_strategy_notes: Sequence[str] = ()
     task_spec: TaskSpec | None = None
     active_skill_name: str | None = None

@@ -45,14 +45,14 @@ async def compact_with_safety_timeout[T](
 
 
 def estimate_tokens(text: str) -> int:
-    """Delegate to the token-counting plugin (historical import surface)."""
+    """Delegate to the token-counting expert (historical import surface)."""
     from prismclaw.token_counting import count_text
 
     return count_text(text)
 
 
 def estimate_message_tokens(msg: dict[str, Any]) -> int:
-    """Delegate message accounting to the token-counting plugin."""
+    """Delegate message accounting to the token-counting expert."""
     from prismclaw.token_counting import count_message
 
     return count_message(msg, image_tokens_each=_image_token_estimate())

@@ -70,6 +70,8 @@ dev = [
     "ruff>=0.15.14",
     "mypy>=2.1.0",
     "types-croniter>=6.0.0",
+    "types-PyYAML>=6.0.12.20250915",
+    "zstandard>=0.23.0",
 ]
 
 [build-system]
@@ -110,4 +112,24 @@ select = ["E", "F", "I", "N", "UP", "ANN", "ASYNC", "B", "SIM"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-mypy_path = "typings"
+
+# 这些第三方库不提供类型信息（或仅有少量内联注解），统一按 Any 处理；
+# 原先的本地 stub 已删除，避免在仓库里维护第三方 API 形状。
+[[tool.mypy.overrides]]
+module = [
+    "jieba",
+    "jieba.*",
+    "pypdfium2",
+    "pypdfium2.*",
+    "striprtf",
+    "striprtf.*",
+    "odf",
+    "odf.*",
+    "xlrd",
+    "xlrd.*",
+    "bcrypt",
+    "asn1crypto",
+    "asn1crypto.*",
+    "pkcs11",
+]
+ignore_missing_imports = true

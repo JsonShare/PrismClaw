@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from prismclaw.engine.execution.capabilities.catalog import (
-    CapabilityCatalogService,
+    RuntimeCatalog,
     SkillResolution,
 )
 from prismclaw.engine.execution.skills._preload import _build_preload_messages
@@ -18,10 +18,10 @@ from prismclaw.engine.execution.skills.agent_adapter import (
 )
 from prismclaw.engine.execution.skills.compliance import compute_workflow_compliance
 from prismclaw.engine.execution.skills.doc_inline import _inline_referenced_docs
-from prismclaw.engine.execution.skills.plugin_utils import _resolve_plugin_name
-from prismclaw.engine.execution.skills.profile_loader import _load_plugin_profile
+from prismclaw.engine.execution.skills.expert_utils import _resolve_expert_name
+from prismclaw.engine.execution.skills.profile_loader import _load_expert_profile
+from prismclaw.engine.experts.registry.registry import DescriptorRegistry
 from prismclaw.engine.foundation.metrics import emit as emit_metric
-from prismclaw.engine.plugins.registry.registry import DescriptorRegistry
 from prismclaw.schema.services.skills import (
     McpPromptResolver,
     SkillExecutionStrategy,
@@ -32,64 +32,6 @@ from prismclaw.schema.services.skills import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _extract_plugin_name(manifest: SkillManifest) -> str | None:
-    """从 SkillManifest 解析插件名，兼容 loaded_from 为路径或纯名称两种情况。
-
-    搜索策略：
-    1. 非 plugin source → 返回 None
-    2. loaded_from 不含路径分隔符 → 直接作为插件名
-    3. loaded_from 为路径 → 向上遍历目录层级，通过检测 PLUGIN.md 或 .plugin
-       子目录定位插件根目录，返回其名称。
-    """
-    if getattr(manifest, "source", None) != "plugin":
-        return None
-    raw = getattr(manifest, "loaded_from", None)
-    if not raw or not isinstance(raw, str):
-        return None
-
-    # Case: loaded_from 是纯名称（不含路径分隔符）
-    if "/" not in raw and "\\" not in raw:
-        if raw not in {".", "..", "plugin.json", ".plugin", ""}:
-            return raw
-        return None
-
-    # Case: loaded_from 是文件路径 → 向上搜索插件根目录
-    p = Path(raw)
-    excluded_dirs = {
-        ".",
-        "..",
-        ".plugin",
-        "skills",
-        "agents",
-        "commands",
-        "hooks",
-        "safety",
-        "tools",
-        "output-styles",
-        "scripts",
-        "config",
-        "managed-agent-cookbooks",
-    }
-    excluded_files = {"SKILL.md", "plugin.json", ".plugin", "PLUGIN.md"}
-
-    depth = 0
-    for parent in p.parents:
-        depth += 1
-        if depth > 8:
-            break
-        name = parent.name
-        if not name or name in excluded_dirs or name in excluded_files:
-            continue
-        if name.endswith(".md") or name.endswith(".yaml") or name.endswith(".yml"):
-            continue
-        # 检测该目录是否为插件根目录（包含 PLUGIN.md 或 .plugin 子目录）
-        has_prismclaw = (parent / "PLUGIN.md").is_file()
-        has_plugin_dir = (parent / ".plugin").is_dir()
-        if has_prismclaw or has_plugin_dir:
-            return name
-    return None
 
 
 def _coerce_allowed_tools(raw: object) -> list[str] | None:
@@ -151,7 +93,7 @@ class SkillRuntime:
     def __init__(
         self,
         *,
-        capability_catalog: CapabilityCatalogService | None = None,
+        capability_catalog: RuntimeCatalog | None = None,
         mcp_prompt_resolver: McpPromptResolver | None = None,
         descriptor_registry: DescriptorRegistry | None = None,
         skill_parser: Callable[[str], SkillManifest] | None = None,
@@ -160,37 +102,23 @@ class SkillRuntime:
         self._mcp_prompt_resolver = mcp_prompt_resolver
         self._descriptor_registry = descriptor_registry
         self._skill_parser = skill_parser
-        self._plugin_instructions_map: dict[str, str] = {}
-
-    def register_plugin_instructions(self, plugin_name: str, instructions: str | None) -> None:
-        """注册插件级指令（来自 PLUGIN.md）。
-
-        当该插件的技能被激活时，指令会被前置到技能指令文本中，
-        确保安全规则、输出规范等约束在 LLM 执行前生效。
-        """
-        if not plugin_name or not isinstance(plugin_name, str):
-            return
-        if instructions and isinstance(instructions, str):
-            self._plugin_instructions_map[plugin_name] = instructions
-
-    def get_plugin_instructions(self, plugin_name: str | None) -> str:
-        """获取指定插件的注册指令。"""
-        if not plugin_name:
-            return ""
-        return self._plugin_instructions_map.get(plugin_name, "")
 
     def resolve_skill(
-        self, skill_name: str, *, workspace_path: Path, plugin_prefer: str | None = None
+        self,
+        skill_name: str,
+        *,
+        workspace_path: Path,
+        expert_prefer: str | None = None,
     ) -> SkillManifest | None:
         _ = workspace_path
         if self._capability_catalog is None:
             return None
         manifest = self._capability_catalog.resolve_skill_manifest(
-            skill_name, plugin_prefer=plugin_prefer
+            skill_name, expert_prefer=expert_prefer
         )
         if manifest is None:
             return None
-        # frontmatter-only 扫描（项目级/插件级统一）下 body 为 None；
+        # frontmatter-only 扫描（项目级/专家包级统一）下 body 为 None；
         # resolve_skill 的调用语义就是"即将使用该技能"，因此在这里统一补载 body，
         # 避免 _build_preload_messages / subagent preload 等消费者拿到空 body 静默跳过。
         return self._ensure_body_loaded(manifest)
@@ -213,8 +141,8 @@ class SkillRuntime:
         skill_names = [e.name for e in entries]
         members: dict[str, set[str]] = {}
         for entry in entries:
-            if entry.marketplace_name:
-                members.setdefault(entry.marketplace_name, set()).add(entry.name)
+            if entry.expert_name:
+                members.setdefault(entry.expert_name, set()).add(entry.name)
         return skill_names, {name: tuple(sorted(m)) for name, m in members.items()}
 
     def _resolution_error_message(self, skill_name: str, resolution: SkillResolution | None) -> str:
@@ -230,7 +158,7 @@ class SkillRuntime:
                 else (f" …（共 {len(members)} 个，此处仅列前 {len(shown)} 个）")
             )
             return (
-                f"'{skill_name}' 是插件包名，不是技能名。"
+                f"'{skill_name}' 是专家包名，不是技能名。"
                 f"该包包含 {len(members)} 个技能：{', '.join(shown)}{more}。"
                 f"请用 skill_search 按主题检索，再用上述精确技能名重新调用 activate_skill。"
             )
@@ -243,7 +171,7 @@ class SkillRuntime:
             cand_parts: list[str] = []
             for cand in near:
                 if cand in mp_members:
-                    cand_parts.append(f"插件包 '{cand}'（技能：{', '.join(mp_members[cand])}）")
+                    cand_parts.append(f"专家包 '{cand}'（技能：{', '.join(mp_members[cand])}）")
                 else:
                     cand_parts.append(f"'{cand}'")
             if cand_parts:
@@ -324,10 +252,11 @@ class SkillRuntime:
 
     def _get_pipeline_context(self, manifest: SkillManifest) -> dict[str, Any]:
         """从 DescriptorRegistry 获取 manifest 对应的 pipeline_context。"""
-        if self._descriptor_registry is None:
-            return {}
-        descriptor = self._descriptor_registry.skills.get(manifest.name)
-        return descriptor.pipeline_context if descriptor else {}
+        if self._descriptor_registry is not None:
+            descriptor = self._descriptor_registry.skills.get(manifest.name)
+            if descriptor is not None:
+                return descriptor.pipeline_context
+        return dict(manifest.pipeline_context)
 
     def _apply_delayed_pipeline(self, manifest: SkillManifest, ctx: dict[str, Any]) -> str | None:
         """从 pipeline_context 重新执行 content pipeline。
@@ -339,8 +268,8 @@ class SkillRuntime:
             return None
 
         try:
-            from prismclaw.engine.plugins.ingest.path_remap import PathRemapRule
-            from prismclaw.engine.plugins.loading._declarative_load import _apply_content_pipeline
+            from prismclaw.engine.experts.ingest.path_remap import PathRemapRule
+            from prismclaw.engine.experts.loading._declarative_load import _apply_content_pipeline
         except ImportError:
             logger.warning("_apply_content_pipeline not importable, skipping delayed pipeline")
             return None
@@ -348,30 +277,25 @@ class SkillRuntime:
         # 从 pipeline_context 恢复参数
         skill_dir = Path(manifest.file_path).parent if manifest.file_path else None
         install_path = Path(ctx["install_path"]) if ctx.get("install_path") else None
-        plugin_data_dir = Path(ctx["plugin_data_dir"]) if ctx.get("plugin_data_dir") else None
-        marketplace_data_dir = (
-            Path(ctx["marketplace_data_dir"]) if ctx.get("marketplace_data_dir") else None
-        )
+        expert_data_dir = Path(ctx["expert_data_dir"]) if ctx.get("expert_data_dir") else None
         # 反序列化 remap_rules
         remap_rules = [
             PathRemapRule(source_prefix=r["source_prefix"], target_prefix=r["target_prefix"])
             for r in ctx.get("remap_rules", [])
         ]
-        resolved_user_config = ctx.get("resolved_user_config", {})
-        sensitive_keys = frozenset(ctx.get("sensitive_user_config_keys", []))
+
+        def _ensure_expert_data_dir() -> None:
+            if expert_data_dir is not None:
+                expert_data_dir.mkdir(parents=True, exist_ok=True)
 
         try:
             return _apply_content_pipeline(
                 manifest.body or "",
                 install_path=install_path or Path("."),
-                plugin_data_dir=plugin_data_dir or install_path or Path("."),
-                marketplace_data_dir=marketplace_data_dir,
+                expert_data_dir=expert_data_dir or install_path or Path("."),
                 skill_dir=skill_dir,
                 effective_remap_rules=remap_rules,
-                resolved_user_config=resolved_user_config,
-                sensitive_user_config_keys=sensitive_keys,
-                ensure_plugin_data_dir=lambda: None,
-                ensure_marketplace_data_dir=lambda: None,
+                ensure_expert_data_dir=_ensure_expert_data_dir,
             )
         except Exception as exc:
             logger.warning("delayed content pipeline failed for %s: %s", manifest.name, exc)
@@ -384,14 +308,14 @@ class SkillRuntime:
     ) -> str:
         """Resolve the instruction text injected into the model context.
 
-        Filesystem/plugin skills carry their instructions in ``body``. MCP
+        Filesystem/expert skills carry their instructions in ``body``. MCP
         skills carry only discovery metadata in ``body``; the real content is
         fetched from the server via ``prompts/get`` at invocation time so
         prompt-template arguments are honored. A failed fetch raises — there
         is deliberately no fallback to the metadata body, which would
         silently inject a hollow skill.
 
-        For filesystem/plugin skills, any ``references/*.md`` paths mentioned
+        For filesystem/expert skills, any ``references/*.md`` paths mentioned
         in ``body`` are auto-inlined as an appendix so the LLM does not need
         to call ``read`` (which would fail with 'path escapes workspace' —
         skill files live outside the user workspace).
@@ -420,15 +344,15 @@ class SkillRuntime:
         workspace_path: Path,
         parent_active_state: SkillInvocationState | None = None,
     ) -> SkillExecutionStrategy:
-        # 方案 C:若上层有 active 的 skill(通常是工作流),把它的 plugin_name 传下去,
-        # resolve 时优先选同 plugin 内重名的 command/skill,避免错命中其它 plugin 版本。
-        plugin_prefer: str | None = None
+        # 方案 C:若上层有 active 的 skill(通常是工作流),把它的 expert_name 传下去,
+        # resolve 时优先选同 expert 内重名的 command/skill,避免错命中其它 expert 版本。
+        expert_prefer: str | None = None
         if parent_active_state is not None:
-            plugin_prefer = getattr(parent_active_state, "plugin_name", None)
+            expert_prefer = getattr(parent_active_state, "expert_name", None)
         resolution: SkillResolution | None = None
         if self._capability_catalog is not None:
             resolution = self._capability_catalog.resolve_skill_reference(
-                invocation.skill_name, plugin_prefer=plugin_prefer
+                invocation.skill_name, expert_prefer=expert_prefer
             )
         if resolution is None or resolution.kind != "resolved" or resolution.entry is None:
             raise LookupError(self._resolution_error_message(invocation.skill_name, resolution))
@@ -441,23 +365,15 @@ class SkillRuntime:
         allowed_tools = _coerce_allowed_tools(manifest.allowed_tools)
         description = manifest.description or ""
         instructions = self._resolve_instructions(manifest, invocation)
-        # 注入插件级指令：前置 PLUGIN.md 定义的安全规则/输出规范
-        # loaded_from 可能是文件路径(如 ".../my-plugin/skills/...")
-        # 或直接是 plugin 名(如 "my-plugin")，需正确解析
-        plugin_name = _extract_plugin_name(manifest)
-        if plugin_name:
-            plugin_instructions = self.get_plugin_instructions(plugin_name)
-            if plugin_instructions:
-                instructions = f"{plugin_instructions}\n\n---\n\n{instructions}"
         summary = f"Activated skill '{invocation.skill_name}'."
-        if resolution.marketplace_name:
+        if resolution.expert_name:
             # 别名 pass 命中（模型用了包名）：显式揭示实际匹配路径，
             # 避免"猜包名也能过"的隐性激励，同时让观测链路可追溯。
-            summary += f" (matched via package '{resolution.marketplace_name}')"
+            summary += f" (matched via package '{resolution.expert_name}')"
             logger.info(
                 "skill resolution matched via package: skill=%s package=%s",
                 invocation.skill_name,
-                resolution.marketplace_name,
+                resolution.expert_name,
             )
         if description:
             summary += f" {description}"
@@ -489,14 +405,14 @@ class SkillRuntime:
                 parent_active_state.actual_invoke_sequence.append(invocation.skill_name)
         declared_ref = getattr(manifest, "declared_invoke_sequence", ())
         declared_list = list(declared_ref) if isinstance(declared_ref, (list, tuple)) else []
-        resolved_plugin_name = _resolve_plugin_name(manifest)
+        resolved_expert_name = resolution.entry.expert_name or _resolve_expert_name(manifest)
         invocation_state = SkillInvocationState(
             skill_name=invocation.skill_name,
             allowed_tools_override=allowed_tools,
             is_active=True,
             clear_after_terminal_result=True,
-            # 记录 plugin_name，供下层子 skill resolve 继承 plugin_prefer
-            plugin_name=resolved_plugin_name if resolved_plugin_name else None,
+            # 记录 expert_name，供下层子 skill resolve 继承 expert_prefer
+            expert_name=resolved_expert_name if resolved_expert_name else None,
             # 标准技能激活路径
             invocation_context="skill",
             # len(declared) > 0 表示这是编排类工作流技能
@@ -520,10 +436,9 @@ class SkillRuntime:
             workspace_path=workspace_path,
             token_limit=budget,
         )
-        resolved_plugin_name = _resolve_plugin_name(manifest)
-        # 执业档案按 project_root 解析（与 PluginSettings 一致）；
-        # workspace_path 拼不出插件配置目录，不能作为 hint。
-        profile_text = _load_plugin_profile(resolved_plugin_name)
+        # 执业档案按 project_root 解析（与专家包目录一致）；
+        # workspace_path 拼不出专家包配置目录，不能作为 hint。
+        profile_text = _load_expert_profile(resolved_expert_name)
         # 合并 preload + profile 为一条额外 user 消息,追加进 append_messages
         extras_segments: list[str] = []
         if preload_text:
@@ -532,7 +447,7 @@ class SkillRuntime:
             extras_segments.extend(
                 [
                     "\n---\n",
-                    f"## 插件运行配置：{resolved_plugin_name}",
+                    f"## 专家包运行配置：{resolved_expert_name}",
                     profile_text,
                 ]
             )
@@ -550,8 +465,8 @@ class SkillRuntime:
             append_messages=append_messages,
             summary=summary,
             invocation_state=invocation_state,
-            plugin_name=resolved_plugin_name,
-            plugin_profile_text=profile_text,
+            expert_name=resolved_expert_name,
+            expert_profile_text=profile_text,
             preload_budget_chars=budget,
         )
 

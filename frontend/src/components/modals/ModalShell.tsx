@@ -12,6 +12,8 @@ export interface ModalShellProps {
   showClose?: boolean
   /** 额外的 header 右侧内容 */
   headerRight?: ReactNode
+  /** 追加到面板上的 class（如需覆盖不透明背景） */
+  panelClassName?: string
 }
 
 /**
@@ -26,6 +28,7 @@ export function ModalShell({
   maxWidth = 'max-w-xl',
   showClose = true,
   headerRight,
+  panelClassName = '',
 }: ModalShellProps) {
   if (!open) return null
 
@@ -37,7 +40,7 @@ export function ModalShell({
       }}
     >
       <div
-        className={`overlay-panel w-full ${maxWidth} rounded-[var(--radius-card)] overflow-hidden`}
+        className={`overlay-panel w-full ${maxWidth} rounded-[var(--radius-card)] overflow-hidden ${panelClassName}`}
       >
         {(title || showClose || headerRight) && (
           <div className="px-5 py-4 flex items-center justify-between">

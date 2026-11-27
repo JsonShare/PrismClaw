@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.app.auth.profile import UserProfile
 from prismclaw.app.auth.profile_store import RedisJsonStore, UserProfileStore
+from prismclaw.schema.services.auth import UserProfile
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis

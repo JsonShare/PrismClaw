@@ -159,38 +159,8 @@ class McpServerConfig(BaseModel):
         return self
 
 
-class McpPluginOverride(BaseModel):
-    """插件 MCP server 的连接参数补丁。
-
-    插件自带的 ``mcp.json`` 位于仓库权威目录（容器内只读），OAuth token、
-    API key 这类凭据不能写在那里。运维在 ``mcp.plugin_overrides`` 下用
-    ``plugin.server`` 精确键或裸 ``server`` 共享键声明同一条目即可补上凭据。
-
-    刻意不含 ``url`` / ``command`` / ``transport``：连接目标由插件声明，
-    补丁层只补凭据与开关，避免两处各自维护 endpoint 造成漂移。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    headers: dict[str, str] = Field(
-        default_factory=dict,
-        description=(
-            "HTTP 头补丁，值支持 {env:VAR_NAME} 占位符（启动时解析）。"
-            "与插件声明同名时以插件为准，此处只补空缺键。"
-        ),
-    )
-    env: dict[str, str] = Field(
-        default_factory=dict,
-        description="stdio server 的环境变量补丁，合并规则同 headers。",
-    )
-    enabled: bool | None = Field(
-        default=None,
-        description="设为 False 可停用该插件的这个 MCP server；None 表示不干预。",
-    )
-
-
 class McpSettings(BaseModel):
-    """Top-level MCP settings, loaded as ``Settings.mcp``.
+    """Top-level MCP settings injected into ``MCPClientManager``.
 
     Validators reject server config keys containing ``:`` or ``__`` because
     those characters are reserved for the canonical ``{server}:{tool}``
@@ -206,10 +176,6 @@ class McpSettings(BaseModel):
         description="Master switch. When False, no MCP servers connect and no MCP code paths run.",
     )
     servers: dict[str, McpServerConfig] = Field(default_factory=dict)
-    plugin_overrides: dict[str, McpPluginOverride] = Field(
-        default_factory=dict,
-        description=("插件声明的 MCP server 的凭据/开关补丁，键为 'plugin.server' 或裸 'server'。"),
-    )
 
     @field_validator("servers")
     @classmethod

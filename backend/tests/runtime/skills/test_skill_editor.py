@@ -35,10 +35,10 @@ from prismclaw.schema.shared.exceptions import SkillParseError
 
 def _settings() -> SimpleNamespace:
     # classify_skill_origin reads settings.skills.asset_skills_dir and
-    # settings.plugins (None → no plugin roots).
+    # settings.experts (None → no expert roots).
     return SimpleNamespace(
         skills=SimpleNamespace(asset_skills_dir=".work/skills"),
-        plugins=None,
+        experts=None,
     )
 
 
@@ -348,7 +348,7 @@ def test_backups_dir_not_discovered(tmp_path):
 def _full_settings() -> SimpleNamespace:
     return SimpleNamespace(
         skills=SimpleNamespace(asset_skills_dir=".work/skills"),
-        plugins=SimpleNamespace(asset_plugins_dir=".work/plugins"),
+        experts=SimpleNamespace(asset_experts_dir=".work/experts"),
     )
 
 
@@ -382,27 +382,27 @@ def test_project_skill_editable_under_project_root(tmp_path):
     assert calls == ["invalidate"]
 
 
-def test_plugin_skill_editable_when_opted_in(tmp_path):
+def test_expert_skill_editable_when_opted_in(tmp_path):
     ws = tmp_path / "cloud_ws"
     ws.mkdir()
-    skill_dir = tmp_path / ".work" / "plugins" / "demo-plugin" / "skills" / "pdemo"
+    skill_dir = tmp_path / ".work" / "experts" / "demo-expert" / "skills" / "pdemo"
     md = _write_skill_at(skill_dir, "pdemo", editable=True)
     manifest = parse_skill_file(md)
     settings = _full_settings()
-    # the real classifier resolves this as PLUGIN (path under the plugin root)
-    assert classify_skill_origin(manifest, tmp_path, settings) is SkillSource.PLUGIN
+    # the real classifier resolves this as EXPERT (path under the expert root)
+    assert classify_skill_origin(manifest, tmp_path, settings) is SkillSource.EXPERT
     ed, _ = _make_editor(ws, settings=settings, project_root=tmp_path)
-    result = ed.edit(manifest, description="plugin edit")
+    result = ed.edit(manifest, description="expert edit")
     assert result.ok
-    assert "plugin edit" in md.read_text(encoding="utf-8")
-    # backups live inside the plugin skill dir, not the workspace
+    assert "expert edit" in md.read_text(encoding="utf-8")
+    # backups live inside the expert skill dir, not the workspace
     assert (skill_dir / ".backups" / "manifest.json").is_file()
 
 
-def test_plugin_skill_without_opt_in_still_locked(tmp_path):
+def test_expert_skill_without_opt_in_still_locked(tmp_path):
     ws = tmp_path / "cloud_ws"
     ws.mkdir()
-    skill_dir = tmp_path / ".work" / "plugins" / "demo-plugin" / "skills" / "pdemo"
+    skill_dir = tmp_path / ".work" / "experts" / "demo-expert" / "skills" / "pdemo"
     md = _write_skill_at(skill_dir, "pdemo", editable=None)
     manifest = parse_skill_file(md)
     ed, _ = _make_editor(ws, settings=_full_settings(), project_root=tmp_path)

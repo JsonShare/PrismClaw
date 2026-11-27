@@ -1,14 +1,14 @@
 """项目级路径解析与能力布局的单一入口。
 
 设计约束（批判性取舍）：
-  * SkillSettings / PluginSettings / SubAgentSettings 是路径契约的唯一权威源，
+  * SkillSettings / SubAgentSettings 是路径契约的唯一权威源，
     本模块绝不硬编码 ".prismclaw/skills" 等字符串——相对目录名由调用方从 settings
     字段传入 :func:`build_project_capability_layout`。
   * resolve_project_root() 的分层解析：环境变量 > 源码树标记 > hint 参数 > cwd，
     命中即返回，不做"多候选兼容列表"。
   * :func:`resolve_project_root_detailed` 额外返回根的定位来源与 ``confirmed`` 可信度，
     避免"env 显式锚定"与"cwd 兜底猜测"被一视同仁。
-  * :func:`build_project_capability_layout` 是 skills/plugins/agents 三类项目级能力
+  * :func:`build_project_capability_layout` 是 skills/experts/agents 三类项目级能力
     目录展开的 **唯一出口**：root 去重、相对目录拼接、exists 判定、布局诊断只在此
     发生一次；各发现器只消费 layout 给出的 location，不再各自拼 ``root / dir``。
   * 本模块只处理"项目级"路径。用户级 / 工作区级路径（workspaces.json、previews/、
@@ -117,20 +117,20 @@ def build_project_capability_layout(
     primary: Path | ResolvedRoot | None = None,
     additional: list[str | Path] | None = None,
     skills_dir: str = "",
-    plugins_dir: str = "",
+    experts_dir: str = "",
     agents_dir: str = "",
     extra_skills_dirs: Sequence[str] = (),
     hint: Path | None = None,
 ) -> ProjectCapabilityLayout:
-    """把项目根展开为 skills/plugins/agents 三类能力的唯一布局结果。
+    """把项目根展开为 skills/experts/agents 三类能力的唯一布局结果。
 
     参数:
         primary: 主项目根。``None`` 时现场调用 :func:`resolve_project_root_detailed`；
             传入 ``Path`` 视为调用方显式提供（confirmed，不产生未锚定告警）；
             传入 ``ResolvedRoot`` 则原样采用其来源。
         additional: 额外项目根（如 workspace_root），同样视为显式可信。
-        skills_dir / plugins_dir / agents_dir: 各自相对根的目录名（来自 settings
-            的 ``workspace_*_dir`` 字段）；空字符串表示该类未配置，不展开也不诊断。
+        skills_dir / experts_dir / agents_dir: 各自相对根的目录名（来自 settings
+            的 ``*_dir`` 字段）；空字符串表示该类未配置，不展开也不诊断。
         extra_skills_dirs: 追加的 skills 目录（如用户级 ``asset_skills_dir``
             绝对路径）。skills 是唯一有双来源的能力类：workspace 级
             ``.work/state/skills``（graduation / ClawHub 安装）与用户级
@@ -186,8 +186,8 @@ def build_project_capability_layout(
     if skills_dir and skills_dir.strip():
         extra = tuple(d.strip() for d in extra_skills_dirs if d and d.strip())
         kind_dirs[CapabilityKind.SKILLS] = (skills_dir.strip(), *extra)
-    if plugins_dir and plugins_dir.strip():
-        kind_dirs[CapabilityKind.PLUGINS] = (plugins_dir.strip(),)
+    if experts_dir and experts_dir.strip():
+        kind_dirs[CapabilityKind.EXPERTS] = (experts_dir.strip(),)
     if agents_dir and agents_dir.strip():
         kind_dirs[CapabilityKind.AGENTS] = (agents_dir.strip(),)
 
@@ -244,7 +244,7 @@ def build_project_capability_layout(
                 level=DiagnosticLevel.ERROR,
                 code="ALL_PROJECT_CAPABILITIES_EMPTY",
                 message=(
-                    "项目根已被显式锚定，但 skills/plugins/agents 三类能力目录全部不存在；"
+                    "项目根已被显式锚定，但 skills/experts/agents 三类能力目录全部不存在；"
                     "疑似项目根指向错误或部署内容缺失。"
                 ),
             )

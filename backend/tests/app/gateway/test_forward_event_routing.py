@@ -3,7 +3,7 @@
 钉住六条最容易被「顺手改回去」的契约：
 1. 转发线格式由 event_codec 单一真源约束，坏消息直接丢弃；
 2. factory 的本地派发直投 ws.send_json（不再经过 send_event，避免两节点乒乓）；
-3. web_deps 在插件重载后重建，派发必须按投递时刻解析 registry；
+3. web_deps 在专家包重载后重建，派发必须按投递时刻解析 registry；
 4. 本机有连接时绝不做 Redis 路由（WS 握手 SERVER_READY 不能被转走）；
 5. 本机无连接时只转发一次，且 D5 契约不变（sent 恒 True）；
 6. 原 socket 死亡后，新注册的 peer 下一帧立即收到投递——不存在任何
@@ -145,7 +145,7 @@ async def test_forwarded_malformed_payload_is_dropped() -> None:
 
 
 async def test_dispatcher_uses_registry_from_current_web_deps() -> None:
-    """插件重载会重建 web_deps；捕获启动时的 registry 会投递到废弃对象。"""
+    """专家包重载会重建 web_deps；捕获启动时的 registry 会投递到废弃对象。"""
     old_registry = ConnectionRegistry()
     old_peer = _Peer()
     old_registry.connect("u1", old_peer)

@@ -129,7 +129,7 @@ class FileWriteContentRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# NOTE: office review/apply no longer shell out to the deleted `.prismclaw/plugins/office`
+# NOTE: office review/apply no longer shell out to the deleted `.prismclaw/experts/office`
 # MCP server. Pure-Python implementations live in `prismclaw.channels.web.routers.office_review`.
 # ---------------------------------------------------------------------------
 

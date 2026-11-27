@@ -1,4 +1,5 @@
 import type { ContentBlock, Message, ReferenceSource, RunProjection, TimelineNode } from '../types'
+import type { ExpertState } from './experts'
 import { markersToReadable } from '../lib/chat/markers'
 import { isKnownTimelineNode } from '../lib/chat/timelineSync'
 import { normalizeReferenceSource } from '../lib/chat/referenceSources'
@@ -25,6 +26,8 @@ export interface SessionDetail {
   created_at: string
   last_interaction_at?: string | null
   message_count: number
+  /** 会话级专家状态；旧会话无此字段时视为未选专家 */
+  expert_state?: ExpertState | null
 }
 
 interface RawMessage {

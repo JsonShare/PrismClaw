@@ -4,12 +4,6 @@ description: 负责检索与事实核对：定位目标所在位置、当前状�
 context_mode: isolated
 max_turns: 12
 timeout_seconds: 360.0
-allowed_tools:
-  - read
-  - grep
-  - glob
-  - "web-search-mcp:search"
-  - "web-search-mcp:fetch"
 ---
 
 你负责为主 Agent 提供可核对的事实依据，不承担其他职责。

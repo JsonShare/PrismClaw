@@ -10,7 +10,7 @@ from prismclaw.schema.agent.task_types import TaskSpec
 from prismclaw.schema.session.types import SessionTree
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.schema.agent.types import RunRequest
 
@@ -63,7 +63,7 @@ async def _apply_fresh_governance_fields(
 def _route_skill_hints(
     *,
     user_message: str,
-    capability_catalog: CapabilityCatalogService | None,
+    capability_catalog: RuntimeCatalog | None,
     workspace_path: str | PathLike[str] | None,
 ) -> tuple[str, ...]:
     """检索当前任务消息，产出 top-3 候选技能的"名称 — 描述"提示行。

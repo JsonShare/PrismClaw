@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  RefreshCw, Search, ChevronLeft, ChevronRight, Check,
+  Search, ChevronLeft, ChevronRight, Check,
   Store, Headphones, Award, FileText,
   PenLine, Clapperboard, Rocket, Presentation, CalendarRange, Wallet, Film,
   Plane, GraduationCap, BarChart3, ShoppingBag, ShieldCheck, Target, BookOpen, Bot,
@@ -8,7 +8,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import SkillDetailModal from '../../../components/modals/SkillDetailModal'
-import { apiUrl } from '../../../lib/system-adapter'
+import { RefreshIcon } from '../../../components/icons/SystemIcons'
+import { apiUrl, authedUrl } from '../../../lib/system-adapter'
 import { useAuth } from '../../../context/AuthContext'
 import { useUiStore } from '../../../stores/ui'
 import type { Skill } from '../../../types/skill'
@@ -23,26 +24,31 @@ interface ServerSkillItem {
   group_path?: string[] | null
   group_label?: string | null
   category?: string | null
-  workspace_trusted?: boolean | null
   editable?: boolean | null
-  marketplace_name?: string | null
-  marketplace_description?: string | null
+  expert_name?: string | null
+  expert_description?: string | null
+  /** 所属专家包类型：agent=专家、team=专家团 */
+  expert_type?: string | null
 }
 
+/** 面板内使用的技能条目：额外携带所属专家包类型，用于「专家 / 专家团」分栏。 */
+type PanelSkill = Skill & { expertType: 'agent' | 'team' | null }
+
 /**
- * 推导技能所属插件名。
- * 后端对 plugin 来源技能的 group_path 恒为 [plugin_name]（origin.py classify_skill_group_path），
- * 技能 name 也是 `plugin:skill` 命名空间格式（extension_manager _namespaced_capability_name），
+ * 推导技能所属专家名。
+ * 后端对 expert 来源技能的 group_path 恒为 [expert_name]（origin.py classify_skill_group_path），
+ * 技能 name 也是 `expert:skill` 命名空间格式（extension_manager _namespaced_capability_name），
  * 故优先取 groupPath[0]，兜底取 id 冒号前缀。
  */
-function pluginNameOf(skill: Skill): string {
+function pluginNameOf(skill: Pick<Skill, 'id' | 'groupPath' | 'expert_name'>): string {
+  if (skill.expert_name?.trim()) return skill.expert_name.trim()
   const gp = skill.groupPath?.[0]
   if (gp && gp.trim()) return gp.trim()
   const idx = skill.id.indexOf(':')
   return idx > 0 ? skill.id.slice(0, idx) : skill.id
 }
 
-/** 去掉插件命名空间前缀，返回技能基础名（plugin:skill → skill）。 */
+/** 去掉专家命名空间前缀，返回技能基础名（expert:skill → skill）。 */
 function skillBaseName(skill: Skill): string {
   const idx = skill.id.indexOf(':')
   return idx > 0 ? skill.id.slice(idx + 1) : skill.id
@@ -119,30 +125,53 @@ function ExpertIconTile({ name, Icon, size = 36 }: { name: string; Icon: LucideI
   )
 }
 
-/** 插件包图标地址：图标随插件包分发（<plugin>/.plugin/icon.*），缺失时前端回落默认图标块。 */
-function marketplaceIconUrl(marketplace: string | null): string | null {
-  return marketplace
-    ? apiUrl(`/api/skills/marketplace/${encodeURIComponent(marketplace)}/icon`)
-    : null
+/**
+ * 专家包的领域分类：由包名与所含技能的分类/标题/描述派生，仅用于「专家 / 专家团」的二级筛选。
+ * 规则顺序即优先级（医疗合规归医疗，法务合规归法律）。
+ */
+const EXPERT_DOMAIN_RULES: Array<[RegExp, string]> = [
+  [/(医疗|临床|医学|诊疗|病历|用药|护理|medical|clinic|health)/i, '医疗'],
+  [/(法务|法律|合同|诉讼|合规|隐私|知识产权|监管|legal|law|compliance|privacy)/i, '法律'],
+  [/(科研|研究|文献|论文|实验|学术|research)/i, '科研'],
+  [/(办公|文档|表格|会议|演示|邮件|office|document|meeting)/i, '办公'],
+]
+const EXPERT_DOMAIN_ORDER = ['医疗', '法律', '科研', '办公', '其他']
+
+function expertDomainOf(name: string, skills: Skill[]): string {
+  const text = [name, ...skills.map((s) => `${s.title} ${s.category || ''} ${s.desc}`)]
+    .join(' ')
+    .toLowerCase()
+  for (const [re, domain] of EXPERT_DOMAIN_RULES) {
+    if (re.test(text)) return domain
+  }
+  return '其他'
 }
 
-/** 专家图标：优先用插件包自带图标，加载失败或缺失时回落默认图标块。 */
+/**
+ * 专家头像 URL：由 `/api/experts` 下发（`avatarUrl`），这里只按专家名索引。
+ * 不再由前端猜包内文件名（旧的 `.plugin/icon.*` 在全部专家包中都不存在）。
+ */
+type ExpertAvatarIndex = Map<string, string>
+
+/** 专家图标：优先用服务端下发的头像，加载失败或缺失时回落默认图标块。 */
 function ExpertAvatar({
   name,
   Icon,
   size = 36,
-  iconUrl,
+  avatarUrl,
+  token,
 }: {
   name: string
   Icon: LucideIcon
   size?: number
-  iconUrl?: string | null
+  avatarUrl?: string | null
+  token: string | null
 }) {
   const [failed, setFailed] = useState(false)
-  if (iconUrl && !failed) {
+  if (avatarUrl && !failed) {
     return (
       <img
-        src={iconUrl}
+        src={authedUrl(avatarUrl, token)}
         alt=""
         aria-hidden
         onError={() => setFailed(true)}
@@ -169,13 +198,13 @@ function expertCardMeta(skills: Skill[]): { description: string; tags: string[];
       : Array.from(new Set(skills.map((s) => skillBaseName(s))))
   ).slice(0, 4)
 
-  const marketplace = skills.find((s) => s.marketplace_name)?.marketplace_name || null
-  const marketplaceDesc = skills.find((s) => s.marketplace_description)?.marketplace_description || ''
+  const pluginName = skills.find((s) => s.expert_name)?.expert_name || (skills[0] ? pluginNameOf(skills[0]) : '')
+  const pluginDesc = skills.find((s) => s.expert_description)?.expert_description || ''
   const firstDesc = skills.find((s) => s.desc && s.desc.trim())?.desc.trim() || ''
   // SKILL.md 描述里常带「参考：」前缀（适配版标注），展示时去掉。
-  const description = firstDesc.replace(/^(参考|reference)：?\s*/i, '').trim() || marketplaceDesc || '暂无描述'
+  const description = pluginDesc || firstDesc.replace(/^(参考|reference)：?\s*/i, '').trim() || '暂无描述'
 
-  return { description, tags, publisher: marketplace || 'PrismClaw 官方' }
+  return { description, tags, publisher: pluginName || 'PrismWork 官方' }
 }
 
 /**
@@ -212,44 +241,9 @@ function skillVisualFor(skill: Skill): { Icon: LucideIcon } {
   return { Icon: FileText }
 }
 
-/** 这些目录名是通用的插件/技能根目录，而非具体的插件市场（外层分组）目录。 */
-const GENERIC_PLUGIN_ROOTS = new Set(['plugins', 'skills', '.prismclaw', '.claude-plugin'])
-
-/**
- * 从技能的 location（绝对路径，形如 .../{marketplace}/{plugin}/skills/{skill}/SKILL.md）
- * 推导其所属的插件市场目录（外层分组，如 "my-marketplace"）。
- *
- * 市场清单形式的插件目录结构为 `~/.prismclaw/assets/plugins/{marketplace}/{plugin}/skills/...`，
- * 故取「插件同名目录」上一级作为市场目录；若上一级是通用根目录（直接扫描安装的非市场插件），
- * 则返回 null（视为无外层分组）。
- */
-function marketplaceDirOf(skill: Skill): string | null {
-  const loc = (skill.location || '').trim()
-  if (!loc) return null
-  const plugin = pluginNameOf(skill)
-  if (!plugin) return null
-  const segs = loc.split(/[\\/]+/).filter(Boolean)
-  // 优先匹配 .../{marketplace}/{plugin}/skills/... 结构
-  for (let i = segs.length - 1; i >= 2; i--) {
-    if (segs[i] === plugin && segs[i + 1] === 'skills') {
-      const parent = segs[i - 1]
-      return GENERIC_PLUGIN_ROOTS.has(parent) ? null : parent
-    }
-  }
-  // 兜底：仅按插件同名目录的上一级判断
-  for (let i = segs.length - 1; i >= 1; i--) {
-    if (segs[i] === plugin) {
-      const parent = segs[i - 1]
-      return GENERIC_PLUGIN_ROOTS.has(parent) ? null : parent
-    }
-  }
-  return null
-}
-
 export default function SkillsPanel() {
   const [searchQuery, setSearchQuery] = useState('')
-  const [isSearchExpanded, setIsSearchExpanded] = useState(false)
-  const [activeTop, setActiveTop] = useState<'skills' | 'plugins'>('plugins')
+  const [activeTop, setActiveTop] = useState<'experts' | 'teams' | 'skills'>('experts')
   const [activeCategory, setActiveCategory] = useState<string>('all')
   /** 插件 tab 二级导航：当前选中的插件名；null = 停留在一级插件列表 */
   const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null)
@@ -260,12 +254,39 @@ export default function SkillsPanel() {
   })
   const { token } = useAuth()
   const activeWorkspaceId = useUiStore((s: ReturnType<typeof useUiStore.getState>) => s.activeWorkspaceId)
-  const [skills, setSkills] = useState<Skill[]>([])
+  const [skills, setSkills] = useState<PanelSkill[]>([])
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [, setSkillsLoaded] = useState(false)
   const [skillsError, setSkillsError] = useState<string | null>(null)
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null)
+  /** 专家名 → 头像 URL。图像来源唯一：`/api/experts` 的 avatarUrl。 */
+  const [avatarIndex, setAvatarIndex] = useState<ExpertAvatarIndex>(() => new Map())
   const fetchSeqRef = useRef(0)
+
+  const loadExpertAvatars = async (): Promise<void> => {
+    if (!token) return
+    try {
+      const res = await fetch(apiUrl('/api/experts'), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const rows = (await res.json()) as Array<{ id?: unknown; avatarUrl?: unknown }>
+      const next: ExpertAvatarIndex = new Map()
+      for (const row of Array.isArray(rows) ? rows : []) {
+        if (typeof row?.id === 'string' && typeof row?.avatarUrl === 'string' && row.avatarUrl) {
+          next.set(row.id, row.avatarUrl)
+        }
+      }
+      setAvatarIndex(next)
+    } catch {
+      // 头像缺失只影响观感：保留上次索引，卡片回落默认图标块。
+    }
+  }
+
+  useEffect(() => {
+    if (!token) return
+    void loadExpertAvatars()
+  }, [token])
 
   const loadSkills = async (): Promise<void> => {
     if (!token) return
@@ -276,21 +297,21 @@ export default function SkillsPanel() {
     try {
       const wsId = (activeWorkspaceId || '').trim() || 'default'
       const res = await fetch(
-        apiUrl(`/api/skills/list?workspace_id=${encodeURIComponent(wsId)}`),
+        apiUrl(`/api/skills/list?scope=all&workspace_id=${encodeURIComponent(wsId)}`),
         { headers: { Authorization: `Bearer ${token}` } },
       )
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = (await res.json()) as unknown
       if (seq !== fetchSeqRef.current) return
       const raw = Array.isArray(data) ? (data as ServerSkillItem[]) : []
-      const mapped: Skill[] = raw
+      const mapped: PanelSkill[] = raw
         .filter((s) => s && typeof s === 'object' && typeof (s as any).name === 'string')
         .map((s) => {
           const name = (s.name || '').trim()
           const desc = typeof s.description === 'string' ? s.description : ''
           const source = typeof s.source === 'string' ? s.source : ''
           const tags = source ? [source] : ['本地']
-          const VALID_ORIGINS = ['plaza', 'workspace', 'system', 'plugin', 'project', 'bundled', 'personal', 'managed', 'mcp', 'marketplace', 'builtin'] as const
+          const VALID_ORIGINS = ['plaza', 'workspace', 'system', 'expert', 'project', 'bundled', 'personal', 'managed', 'mcp', 'marketplace', 'builtin'] as const
           const rawOrigin = typeof s.origin === 'string' ? s.origin : ''
           const origin = (VALID_ORIGINS as readonly string[]).includes(rawOrigin) ? rawOrigin as Skill['origin'] : 'system' as Skill['origin']
           const groupPath = Array.isArray(s.group_path)
@@ -310,11 +331,18 @@ export default function SkillsPanel() {
             groupPath,
             groupLabel,
             category: typeof s.category === 'string' ? s.category : null,
-            trusted: typeof s.workspace_trusted === 'boolean' ? s.workspace_trusted : undefined,
             editable: typeof s.editable === 'boolean' ? s.editable : false,
-            marketplace_name: typeof s.marketplace_name === 'string' ? s.marketplace_name : null,
-            marketplace_description:
-              typeof s.marketplace_description === 'string' ? s.marketplace_description : null,
+            expert_name:
+              typeof s.expert_name === 'string'
+                ? s.expert_name
+                : pluginNameOf({ id: name, groupPath, expert_name: null }),
+            expert_description:
+              typeof s.expert_description === 'string' ? s.expert_description : null,
+            expertType: (s.expert_type === 'team'
+              ? 'team'
+              : s.expert_type === 'agent'
+                ? 'agent'
+                : null) as PanelSkill['expertType'],
           }
         })
         .filter((s) => s.id)
@@ -398,35 +426,65 @@ export default function SkillsPanel() {
     }
   }
 
-  // 一级 tab 作用域：技能 = 非插件来源；插件 = 插件来源
+  // 一级 tab 作用域：专家 = agent 类型的专家包；专家团 = team 类型的专家包；技能 = 非专家包来源
   const scopeSkills = useMemo(() => {
-    const pluginOrigins = new Set(['plugin', 'marketplace', 'builtin'])
-    if (activeTop === 'plugins') return skills.filter((s) => pluginOrigins.has(s.origin || ''))
-    return skills.filter((s) => !pluginOrigins.has(s.origin || ''))
-  }, [activeTop, skills])
-
-  // 二级 tab：当前作用域内的「全部」+ 各技能分组（category = 专属特点）
-  const level2Tabs = useMemo(() => {
-    const present = new Map<string, number>()
-    for (const s of scopeSkills) {
-      const cat = (s.category || '').trim()
-      const key = cat || '__uncategorized__'
-      present.set(key, (present.get(key) || 0) + 1)
+    const isExpertPackage = (s: PanelSkill) => (s.origin || '') === 'expert'
+    if (activeTop === 'skills') return skills.filter((s) => !isExpertPackage(s))
+    if (activeTop === 'teams') {
+      return skills.filter((s) => isExpertPackage(s) && s.expertType === 'team')
     }
-    const tabs: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部' }]
-    const cats = Array.from(present.keys())
-      .filter((k) => k !== '__uncategorized__')
-      .sort((a, b) => (present.get(b) || 0) - (present.get(a) || 0) || a.localeCompare(b))
-    for (const c of cats) tabs.push({ key: c, label: c })
-    if (present.has('__uncategorized__')) tabs.push({ key: '__uncategorized__', label: '未分类' })
-    return tabs
-  }, [scopeSkills])
+    return skills.filter((s) => isExpertPackage(s) && s.expertType !== 'team')
+  }, [activeTop, skills])
 
   // 一级 tab 切换时重置二级为「全部」，并清空插件二级导航选中态
   useEffect(() => {
     setActiveCategory('all')
     setSelectedPlugin(null)
   }, [activeTop])
+
+  // 专家 / 专家团：按插件包聚合，并标注领域分类（供二级 tab 与筛选使用）
+  const expertPackages = useMemo(() => {
+    if (activeTop === 'skills') return []
+    const map = new Map<string, PanelSkill[]>()
+    for (const s of scopeSkills) {
+      const name = pluginNameOf(s)
+      const arr = map.get(name)
+      if (arr) arr.push(s)
+      else map.set(name, [s])
+    }
+    return Array.from(map.entries())
+      .map(([name, list]) => ({
+        name,
+        skills: list,
+        domain: expertDomainOf(name, list),
+        ...expertCardMeta(list),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [activeTop, scopeSkills])
+
+  // 二级 tab：技能按 category 分组；专家 / 专家团按领域分组（仅保留实际存在的领域）
+  const level2Tabs = useMemo(() => {
+    const tabs: Array<{ key: string; label: string }> = [{ key: 'all', label: '全部' }]
+    if (activeTop !== 'skills') {
+      const present = new Set(expertPackages.map((p) => p.domain))
+      for (const domain of EXPERT_DOMAIN_ORDER) {
+        if (present.has(domain)) tabs.push({ key: domain, label: domain })
+      }
+      return tabs
+    }
+    const present = new Map<string, number>()
+    for (const s of scopeSkills) {
+      const cat = (s.category || '').trim()
+      const key = cat || '__uncategorized__'
+      present.set(key, (present.get(key) || 0) + 1)
+    }
+    const cats = Array.from(present.keys())
+      .filter((k) => k !== '__uncategorized__')
+      .sort((a, b) => (present.get(b) || 0) - (present.get(a) || 0) || a.localeCompare(b))
+    for (const c of cats) tabs.push({ key: c, label: c })
+    if (present.has('__uncategorized__')) tabs.push({ key: '__uncategorized__', label: '未分类' })
+    return tabs
+  }, [activeTop, expertPackages, scopeSkills])
 
   // 二级 tab 横向溢出检测（超出宽度时显示左右滑动箭头）
   const updateLevel2Overflow = () => {
@@ -487,47 +545,29 @@ export default function SkillsPanel() {
     return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label))
   }, [displayedSkills])
 
-  // ── 专家 tab：按插件聚合为单层卡片 ──
-  // 搜索命中插件名 / 所属套件名 / 能力标签；同套件卡片相邻，便于扫读。
+  // ── 专家 tab：按插件包聚合为单层卡片 ──
+  // 专家 / 专家团卡片：在聚合结果上套用二级领域筛选与搜索（命中包名 / 能力标签 / 描述）。
   const expertCards = useMemo(() => {
-    if (activeTop !== 'plugins') return []
-    const map = new Map<string, Skill[]>()
-    for (const s of scopeSkills) {
-      const name = pluginNameOf(s)
-      const arr = map.get(name)
-      if (arr) arr.push(s)
-      else map.set(name, [s])
-    }
+    if (activeTop === 'skills') return []
     const q = searchQuery.trim().toLowerCase()
-    return Array.from(map.entries())
-      .map(([name, skills]) => {
-        const marketplace = marketplaceDirOf(skills[0])
-        const meta = expertCardMeta(skills)
-        return { name, skills, marketplace, ...meta }
-      })
-      .filter(({ name, marketplace, tags, description }) => {
-        if (!q) return true
-        if (name.toLowerCase().includes(q)) return true
-        if (marketplace && marketplace.toLowerCase().includes(q)) return true
-        if (tags.some((t) => t.toLowerCase().includes(q))) return true
-        return description.toLowerCase().includes(q)
-      })
-      .sort(
-        (a, b) =>
-          (a.marketplace ?? '\uffff').localeCompare(b.marketplace ?? '\uffff') ||
-          a.name.localeCompare(b.name),
-      )
-  }, [activeTop, scopeSkills, searchQuery])
+    return expertPackages.filter((pg) => {
+      if (activeCategory !== 'all' && pg.domain !== activeCategory) return false
+      if (!q) return true
+      if (pg.name.toLowerCase().includes(q)) return true
+      if (pg.tags.some((t) => t.toLowerCase().includes(q))) return true
+      return pg.description.toLowerCase().includes(q)
+    })
+  }, [activeTop, expertPackages, activeCategory, searchQuery])
 
   // 二级：当前选中插件下的技能
   const selectedPluginSkills = useMemo(() => {
-    if (activeTop !== 'plugins' || !selectedPlugin) return []
+    if (activeTop === 'skills' || !selectedPlugin) return []
     return scopeSkills.filter((s) => pluginNameOf(s) === selectedPlugin)
   }, [activeTop, selectedPlugin, scopeSkills])
 
   // 二级：选中插件内按 category 分组（遵循搜索过滤；插件详情页不显示分类 tab，故不受 activeCategory 影响）
   const pluginDetailGroups = useMemo(() => {
-    if (activeTop !== 'plugins' || !selectedPlugin) return []
+    if (activeTop === 'skills' || !selectedPlugin) return []
     const q = searchQuery.trim().toLowerCase()
     const base = q
       ? selectedPluginSkills.filter(
@@ -568,7 +608,7 @@ export default function SkillsPanel() {
         data?.origin === 'plaza' ||
         data?.origin === 'workspace' ||
         data?.origin === 'system' ||
-        data?.origin === 'plugin'
+        data?.origin === 'expert'
           ? data.origin
           : undefined
       const location = typeof data?.location === 'string' ? data.location : undefined
@@ -602,49 +642,44 @@ export default function SkillsPanel() {
             void openSkillDetail(card)
           }
         }}
-        className="app-card relative px-4 pt-4 pb-4 flex flex-col gap-2.5 cursor-pointer transition-colors hover:border-[var(--c-border-strong)] hover:bg-[var(--c-surface-2)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/40 min-h-[124px]"
+        className="app-card relative px-[16px] pt-[16px] pb-[18px] flex flex-col gap-[12px] cursor-pointer transition-colors hover:border-[var(--c-border-strong)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/30"
       >
-        <div className="flex items-start gap-3 min-w-0">
+        <div className="flex items-start gap-[10px] min-w-0">
           <div
-            className="w-10 h-10 rounded-[var(--radius-md)] grid place-items-center shrink-0"
+            className="w-[36px] h-[36px] rounded-[10px] grid place-items-center shrink-0"
             style={toneStyle}
           >
-            <Icon size={20} strokeWidth={2} />
+            <Icon size={18} strokeWidth={2} />
           </div>
           <div className="flex items-center gap-1.5 min-w-0 flex-1 pt-0.5">
-            <div className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)] leading-snug line-clamp-1 truncate" title={card.title}>
+            <div className="text-[14px] leading-[21px] font-semibold text-[var(--c-text)] truncate" title={card.title}>
               {card.title}
             </div>
             {showCommunityBadge ? (
-              <span className="shrink-0 px-1.5 py-0.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] font-medium bg-[var(--c-tag-pink-bg)] text-[var(--c-tag-pink-fg)]">
+              <span className="shrink-0 inline-flex items-center h-[18px] px-[6px] rounded-[4px] text-[12px] font-medium bg-[var(--c-tag-pink-bg)] text-[var(--c-tag-pink-fg)]">
                 社区
               </span>
             ) : null}
           </div>
         </div>
 
-        <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed line-clamp-2 min-h-[2.6em]">
+        <div className="text-[14px] leading-[21px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))] line-clamp-2">
           {card.desc || '暂无描述'}
         </div>
       </div>
     )
   }
 
-  /** 分组区块（分组标题 + 数量角标 + 三列卡片网格）：「技能」tab 与插件二级详情页共用 */
+  /** 分组区块（分组标题 + 数量 + 三列卡片网格）：「技能」tab 与插件二级详情页共用 */
   const renderGroupedSections = (groups: Array<{ label: string; skills: Skill[] }>) => (
-    <div className="space-y-7">
+    <div className="space-y-[28px]">
       {groups.map((group) => (
-        <section key={group.label} className="space-y-3">
-          <div className="flex items-center gap-2">
-            <div className="text-[length:var(--fs-md)] font-semibold tracking-[0.08em] uppercase text-[var(--c-text-secondary)]">
-              {group.label}
-            </div>
-            <span className="shrink-0 px-2 py-0.5 rounded-[var(--radius-md)] text-[length:var(--fs-sm)] font-medium bg-[var(--c-surface-2)] text-[var(--c-text-secondary)]">
-              {group.skills.length}
-            </span>
+        <section key={group.label}>
+          <div className="mb-[18px] text-[14px] leading-[21px] font-semibold text-[var(--c-text)]">
+            {group.label} ({group.skills.length})
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[16px]">
             {group.skills.map((card) => renderSkillCard(card))}
           </div>
         </section>
@@ -659,7 +694,6 @@ export default function SkillsPanel() {
   const renderExpertCard = (pg: {
     name: string
     skills: Skill[]
-    marketplace: string | null
     description: string
     tags: string[]
     publisher: string
@@ -672,44 +706,49 @@ export default function SkillsPanel() {
         key={pg.name}
         type="button"
         onClick={() => setSelectedPlugin(pg.name)}
-        className="app-card group h-full w-full px-5 py-5 flex flex-col gap-3.5 text-left rounded-[var(--radius-card)] cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/40"
+        className="app-card group h-full w-full px-[16px] pt-[16px] pb-[18px] flex flex-col text-left rounded-[var(--radius-card)] cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/30"
       >
-        <span className="flex items-start gap-3.5 min-w-0">
-          <ExpertAvatar name={pg.name} Icon={Icon} iconUrl={marketplaceIconUrl(pg.marketplace)} />
+        <span className="flex items-start gap-[10px] min-w-0">
+          <ExpertAvatar
+            name={pg.name}
+            Icon={Icon}
+            avatarUrl={avatarIndex.get(pg.name) ?? null}
+            token={token}
+          />
 
           <span className="flex items-start gap-2 flex-1 min-w-0">
             <span className="block flex-1 min-w-0">
               <span
-                className="block text-[length:var(--fs-lg)] font-semibold leading-tight text-[var(--c-text)] truncate"
+                className="block text-[14px] leading-[21px] font-semibold text-[var(--c-text)] truncate"
                 title={displayName}
               >
                 {displayName}
               </span>
-              <span className="mt-1 block text-[length:var(--fs-sm)] leading-tight text-[var(--c-text-secondary)] truncate">
+              <span className="mt-[2px] block text-[14px] leading-[21px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))] truncate">
                 @{pg.publisher}
-                <span className="mx-1.5 text-[var(--c-text-tertiary)]">·</span>
+                <span className="mx-1.5">·</span>
                 {pg.skills.length} 项能力
               </span>
             </span>
             <span
-              className="shrink-0 mt-0.5 grid place-items-center w-5 h-5 text-[var(--c-text-secondary)]"
+              className="shrink-0 mt-[2px] grid place-items-center w-5 h-5 text-[var(--c-text-secondary)]"
               title="已安装"
               aria-label="已安装"
             >
-              <Check size={15} strokeWidth={2.4} />
+              <Check size={14} strokeWidth={2.4} />
             </span>
           </span>
         </span>
 
-        <span className="text-[length:var(--fs-sm)] leading-[1.7] text-[var(--c-text-secondary)] line-clamp-3">
+        <span className="mt-[12px] text-[14px] leading-[21px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))] line-clamp-3">
           {pg.description}
         </span>
 
         {pg.tags.length > 0 ? (
-          <span className="mt-auto flex flex-wrap items-center gap-y-1.5">
+          <span className="mt-auto pt-[18px] flex flex-wrap items-center gap-y-1.5">
             {pg.tags.map((tag, i) => (
               <span key={tag} className="inline-flex items-center">
-                <span className="px-2 py-[5px] rounded-[var(--radius-control)] bg-[var(--c-surface-2)] text-[length:var(--fs-xs)] leading-none text-[var(--c-text-secondary)]">
+                <span className="px-[8px] h-[22px] inline-flex items-center rounded-[4px] bg-[var(--c-surface-2)] text-[12px] leading-none text-[var(--c-text-secondary)]">
                   {tag}
                 </span>
                 {i < pg.tags.length - 1 ? (
@@ -727,120 +766,99 @@ export default function SkillsPanel() {
     )
   }
 
+  const searchPlaceholder =
+    activeTop === 'teams' ? '搜索专家团' : activeTop === 'experts' ? '搜索专家' : '搜索技能'
+
   return (
     <div className="flex-1 min-w-0 min-h-0 flex flex-col relative app-panel overflow-hidden">
     <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-      <div className="px-8 pt-7 pb-5 shrink-0">
+      <div className="px-6 md:px-[28px] pt-[56px] pb-[20px] shrink-0">
         <div className="max-w-[1200px] mx-auto w-full flex items-start justify-between gap-6">
-          <div className="min-w-0">
-            <div className="text-[length:var(--fs-xl)] font-semibold text-[var(--c-text)] tracking-tight">
-              专家·技能
-            </div>
-            <div className="mt-1 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-              提供可复用的最佳实践与工具。
-            </div>
+          <div className="flex items-center gap-[26px] min-w-0 pt-[2px]">
+            {([
+              ['experts', '专家'],
+              ['teams', '专家团'],
+              ['skills', '技能'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActiveTop(key)}
+                className={`text-[19px] leading-[26px] transition-colors cursor-pointer ${
+                  activeTop === key
+                    ? 'font-semibold text-[var(--c-text)]'
+                    : 'font-normal text-[color-mix(in_srgb,var(--c-text-secondary)_55%,var(--c-text-tertiary))] hover:text-[var(--c-text)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="shrink-0 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void loadSkills()}
-              className="h-10 w-10 rounded-[var(--radius-md)] hover:bg-[var(--c-surface-2)] transition-colors cursor-pointer grid place-items-center"
-              title="刷新"
-            >
-              <RefreshCw size={18} strokeWidth={2} className="text-[var(--c-text-secondary)]" />
-            </button>
 
-            <div className="relative flex items-center h-10">
+          <div className="shrink-0 flex items-center gap-[10px] mt-[2px]">
+            <div className="relative">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-[var(--c-text-tertiary)]"
+              />
               <input
                 type="text"
-                placeholder={isSearchExpanded || searchQuery ? '搜索技能' : ''}
-                aria-label="搜索技能"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setIsSearchExpanded(true)}
-                onBlur={(e) => {
-                  if (!e.target.value) {
-                    setIsSearchExpanded(false)
-                  }
-                }}
-                className={`h-10 pl-9 pr-3 rounded-[var(--radius-md)] bg-[var(--c-surface)]
-                           text-[length:var(--fs-md)] text-[var(--c-text)] placeholder:text-[var(--c-text-secondary)]/70
-                           border border-[var(--c-border)] focus:outline-none
-                           transition-all duration-300 ease-in-out cursor-pointer focus:cursor-text
-                           ${isSearchExpanded || searchQuery ? 'w-48' : 'w-10 !px-0'}`}
-              />
-              <Search 
-                size={18} 
-                strokeWidth={2}
-                className={`absolute text-[var(--c-text-secondary)] pointer-events-none transition-all duration-300
-                           ${isSearchExpanded || searchQuery ? 'left-3' : 'left-1/2 -translate-x-1/2'}`} 
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                className="h-[32px] w-[180px] pl-[32px] pr-[12px] rounded-[var(--radius-control)] border border-[var(--c-border)] bg-[var(--c-surface)]
+                 text-[14px] text-[var(--c-text)] placeholder:text-[var(--c-text-tertiary)]
+                 hover:border-[var(--c-border-strong)] focus:outline-none focus:border-[var(--c-accent)]
+                 focus:ring-1 focus:ring-[var(--c-accent)]/20 transition-colors"
               />
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                void loadSkills()
+                void loadExpertAvatars()
+              }}
+              className="btn btn-secondary h-[32px] w-[32px] !px-0 text-[var(--c-text-secondary)]"
+              title="刷新"
+              aria-label="刷新"
+            >
+              <RefreshIcon size={14} />
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="max-w-[1200px] mx-auto w-full pb-10">
-          <div className="flex items-center gap-8 mb-5 border-b border-[var(--c-border)]/50">
-            <button
-              type="button"
-              onClick={() => setActiveTop('plugins')}
-              className={`relative pl-3 pr-3 pb-2.5 text-[length:var(--fs-lg)] font-semibold transition-colors cursor-pointer ${
-                activeTop === 'plugins'
-                  ? 'text-[var(--c-text)]'
-                  : 'text-[var(--c-text-secondary)] hover:text-[var(--c-text)]'
-              }`}
-            >
-              专家
-              {activeTop === 'plugins' ? (
-                <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[var(--c-accent)]" />
-              ) : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTop('skills')}
-              className={`relative pl-3 pr-3 pb-2.5 text-[length:var(--fs-lg)] font-semibold transition-colors cursor-pointer ${
-                activeTop === 'skills'
-                  ? 'text-[var(--c-text)]'
-                  : 'text-[var(--c-text-secondary)] hover:text-[var(--c-text)]'
-              }`}
-            >
-              技能
-              {activeTop === 'skills' ? (
-                <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[var(--c-accent)]" />
-              ) : null}
-            </button>
-          </div>
-
-          {activeTop === 'skills' && (
-          <div className="relative mb-6">
+      <div className="flex-1 overflow-y-auto px-6 md:px-[28px] pb-10">
+        <div className="max-w-[1200px] mx-auto w-full">
+          {level2Tabs.length > 1 && (
+          <div className="relative mb-[16px]">
             {level2CanScroll.left ? (
               <button
                 type="button"
                 onClick={() => scrollLevel2(-1)}
-                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 h-7 w-7 grid place-items-center rounded-full bg-[var(--c-surface)] border border-[var(--c-border)]/60 text-[var(--c-text-secondary)] hover:text-[var(--c-text)] cursor-pointer shadow-sm"
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 h-[24px] w-[24px] grid place-items-center rounded-full bg-[var(--c-surface)] border border-[var(--c-border)]/60 text-[var(--c-text-secondary)] hover:text-[var(--c-text)] cursor-pointer shadow-sm"
                 aria-label="向左滑动"
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={13} />
               </button>
             ) : null}
             {level2CanScroll.right ? (
               <button
                 type="button"
                 onClick={() => scrollLevel2(1)}
-                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 h-7 w-7 grid place-items-center rounded-full bg-[var(--c-surface)] border border-[var(--c-border)]/60 text-[var(--c-text-secondary)] hover:text-[var(--c-text)] cursor-pointer shadow-sm"
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-10 h-[24px] w-[24px] grid place-items-center rounded-full bg-[var(--c-surface)] border border-[var(--c-border)]/60 text-[var(--c-text-secondary)] hover:text-[var(--c-text)] cursor-pointer shadow-sm"
                 aria-label="向右滑动"
               >
-                <ChevronRight size={14} />
+                <ChevronRight size={13} />
               </button>
             ) : null}
             <div
               ref={level2ScrollRef}
               onScroll={updateLevel2Overflow}
-              className={`flex items-center gap-2 overflow-x-auto whitespace-nowrap no-scrollbar py-1 ${
-                level2CanScroll.left ? 'pl-9' : ''
-              } ${level2CanScroll.right ? 'pr-9' : ''}`}
+              className={`flex items-center gap-[10px] overflow-x-auto whitespace-nowrap no-scrollbar ${
+                level2CanScroll.left ? 'pl-[28px]' : ''
+              } ${level2CanScroll.right ? 'pr-[28px]' : ''}`}
             >
               {level2Tabs.map((t) => {
                 const active = activeCategory === t.key
@@ -849,10 +867,10 @@ export default function SkillsPanel() {
                     key={t.key}
                     type="button"
                     onClick={() => setActiveCategory(t.key)}
-                    className={`shrink-0 px-3 py-1.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] font-medium transition-all cursor-pointer ${
+                    className={`shrink-0 h-[28px] px-[10px] rounded-[6px] text-[14px] transition-colors cursor-pointer ${
                       active
-                        ? 'bg-[var(--c-surface)] border border-[var(--c-border)] text-[var(--c-text)] shadow-sm'
-                        : 'text-[var(--c-text-secondary)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)]'
+                        ? 'bg-[var(--c-accent-soft)] text-[var(--c-accent)] font-semibold'
+                        : 'text-[var(--c-text-secondary)] font-medium hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
                     }`}
                   >
                     {t.label}
@@ -864,46 +882,48 @@ export default function SkillsPanel() {
           )}
 
       {skillsLoading ? (
-        <div className="py-20 text-center text-[var(--c-text-secondary)] text-[length:var(--fs-md)]">加载中…</div>
+        <div className="py-24 text-center text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">加载中…</div>
       ) : skillsError ? (
-        <div className="py-20 text-center text-[var(--c-text-secondary)] text-[length:var(--fs-md)]">加载失败：{skillsError}</div>
-      ) : activeTop === 'plugins' ? (
+        <div className="py-24 text-center text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">加载失败：{skillsError}</div>
+      ) : activeTop !== 'skills' ? (
         selectedPlugin === null ? (
           expertCards.length === 0 ? (
-            <div className="py-20 text-center text-[var(--c-text-secondary)] text-[length:var(--fs-md)]">暂无专家</div>
+            <div className="py-24 text-center text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
+              {activeTop === 'teams' ? '暂无专家团' : '暂无专家'}
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[16px]">
               {expertCards.map((pg) => renderExpertCard(pg))}
             </div>
           )
         ) : (
           <div>
-            <div className="flex items-center gap-2.5 mb-4">
+            <div className="flex items-center gap-2.5 mb-[20px]">
               <button
                 type="button"
                 onClick={() => setSelectedPlugin(null)}
-                className="inline-flex items-center gap-1 h-8 px-2.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)] transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 h-[28px] px-[10px] rounded-[6px] text-[14px] text-[var(--c-text-secondary)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-2)] transition-colors cursor-pointer"
               >
-                <ChevronLeft size={16} /> 返回
+                <ChevronLeft size={15} /> 返回
               </button>
             </div>
 
             {(() => {
               const detailMeta = expertCardMeta(selectedPluginSkills)
               const { Icon } = expertVisualFor(selectedPlugin ?? '', detailMeta.description)
-              const detailMarketplace = marketplaceDirOf(selectedPluginSkills[0])
               return (
-                <div className="mb-7 flex items-start gap-4">
+                <div className="mb-[28px] flex items-start gap-4">
                   <ExpertAvatar
                     name={selectedPlugin ?? ''}
                     Icon={Icon}
-                    size={60}
-                    iconUrl={marketplaceIconUrl(detailMarketplace)}
+                    size={56}
+                    avatarUrl={selectedPlugin ? (avatarIndex.get(selectedPlugin) ?? null) : null}
+                    token={token}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <h2
-                        className="text-[length:var(--fs-xl)] font-semibold leading-tight text-[var(--c-text)] truncate"
+                        className="text-[16px] leading-[24px] font-semibold text-[var(--c-text)] truncate"
                         title={selectedPlugin ?? undefined}
                       >
                         {selectedPlugin ? formatPluginName(selectedPlugin) : ''}
@@ -913,26 +933,26 @@ export default function SkillsPanel() {
                         title="已安装"
                         aria-label="已安装"
                       >
-                        <Check size={16} strokeWidth={2.4} />
+                        <Check size={15} strokeWidth={2.4} />
                       </span>
                     </div>
 
                     {/* 元信息：能力分类胶囊 */}
-                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <div className="mt-[10px] flex flex-wrap items-center gap-[8px]">
                       {detailMeta.tags.map((tag) => (
                         <span
                           key={tag}
-                          className="inline-flex items-center h-6 px-2.5 rounded-full bg-[var(--c-surface-2)] text-[length:var(--fs-xs)] leading-none text-[var(--c-text-secondary)]"
+                          className="inline-flex items-center h-[22px] px-[8px] rounded-[4px] bg-[var(--c-surface-2)] text-[12px] leading-none text-[var(--c-text-secondary)]"
                         >
                           {tag}
                         </span>
                       ))}
-                      <span className="text-[length:var(--fs-xs)] text-[var(--c-text-tertiary)]">
+                      <span className="text-[12px] text-[var(--c-text-tertiary)]">
                         {selectedPluginSkills.length} 项能力
                       </span>
                     </div>
 
-                    <p className="mt-3 max-w-[860px] text-[length:var(--fs-sm)] leading-[1.8] text-[var(--c-text-secondary)]">
+                    <p className="mt-[10px] max-w-[860px] text-[14px] leading-[21px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))]">
                       {detailMeta.description}
                     </p>
                   </div>
@@ -941,14 +961,14 @@ export default function SkillsPanel() {
             })()}
 
             {pluginDetailGroups.length === 0 ? (
-              <div className="py-20 text-center text-[var(--c-text-secondary)] text-[length:var(--fs-md)]">暂无内容</div>
+              <div className="py-24 text-center text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">暂无内容</div>
             ) : (
               renderGroupedSections(pluginDetailGroups)
             )}
           </div>
         )
       ) : displayedSkills.length === 0 ? (
-        <div className="py-20 text-center text-[var(--c-text-secondary)] text-[length:var(--fs-md)]">暂无内容</div>
+        <div className="py-24 text-center text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">暂无内容</div>
       ) : (
         renderGroupedSections(groupedSkills)
       )}

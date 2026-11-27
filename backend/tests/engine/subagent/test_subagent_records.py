@@ -474,27 +474,3 @@ async def test_inherited_context_drops_parent_tool_calls() -> None:
     assert inherited[0].content == "parent did work"
     assert inherited[0].tool_calls is None
     assert inherited[0].tool_call_id is None
-
-
-def test_allowed_tools_expand_server_prefix_wildcard():
-    """``server:*`` 展开为具体 MCP 工具名，其余条目原样保留。"""
-    from prismclaw.engine.subagent.prompting import expand_allowed_tool_names
-
-    available = {"read", "write", "yuandian:search", "yuandian:get", "Slack:post"}
-    assert expand_allowed_tool_names(["read", "yuandian:*"], available) == {
-        "read",
-        "yuandian:search",
-        "yuandian:get",
-    }
-    # 未匹配到任何工具的前缀不应退化成「全部工具」
-    assert expand_allowed_tool_names(["nope:*"], available) == set()
-    assert expand_allowed_tool_names(["read"], available) == {"read"}
-
-
-def test_allowed_tools_wildcard_keeps_unrestricted_semantics_separate():
-    """``None`` = 不限工具；``[]`` = 无工具。两者不能混为一谈。"""
-    from prismclaw.engine.subagent.prompting import expand_allowed_tool_names
-
-    available = {"read", "bash"}
-    assert expand_allowed_tool_names(None, available) is None
-    assert expand_allowed_tool_names([], available) == set()

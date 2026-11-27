@@ -18,8 +18,9 @@ from prismclaw.engine.compression.budget_orchestrator import (
     BudgetOrchestrator,
 )
 from prismclaw.engine.compression.compaction import estimate_messages_tokens
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 from prismclaw.engine.execution.checkpoint import SystemPromptSectionState
+from prismclaw.runtime.skills.eligibility import is_user_visible
 from prismclaw.schema.agent.session import AgentMessageDict, TurnRuntimeMetricsSnapshot
 from prismclaw.schema.content.content_types import RuntimeControlArtifact, ToolSkillInvocation
 from prismclaw.schema.content.context import ContextBlock, ContextPackLayout, TaskProfile
@@ -56,7 +57,7 @@ _USAGE_MISSING_STREAK = 0
 def _try_auto_activate_skill(
     *,
     user_message: str,
-    capability_catalog: CapabilityCatalogService | None,
+    capability_catalog: RuntimeCatalog | None,
     workspace_path: str | None,
 ) -> RuntimeControlArtifact | None:
     """Attempt automatic skill activation from the user message.
@@ -84,7 +85,11 @@ def _try_auto_activate_skill(
         try:
             from prismclaw.schema.services.skills import resolve_skill_name
 
-            entries = capability_catalog.list_skill_entries()
+            entries = [
+                entry
+                for entry in capability_catalog.list_skill_entries()
+                if is_user_visible(entry.manifest)
+            ]
             resolvable = [type("R", (), {"name": e.name})() for e in entries]
             resolved = resolve_skill_name(skill_ref, resolvable)
             if resolved is not None:
@@ -303,9 +308,9 @@ class TurnPreflightResult:
 # ---------------------------------------------------------------------------
 
 
-def _require_capability_catalog(deps: AgentRunnerDeps) -> CapabilityCatalogService:
+def _require_capability_catalog(deps: AgentRunnerDeps) -> RuntimeCatalog:
     catalog = getattr(deps, "capability_catalog", None)
-    if isinstance(catalog, CapabilityCatalogService):
+    if isinstance(catalog, RuntimeCatalog):
         return catalog
     raise RuntimeError("AgentRunnerDeps.capability_catalog is required for prompt planning")
 

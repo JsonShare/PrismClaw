@@ -1,9 +1,9 @@
-"""Skill origin classification — filesystem and plugin source resolution.
+"""Skill origin classification — filesystem and expert source resolution.
 
-This module determines where a skill comes from (bundled/project/plugin/mcp)
-based on its manifest path and plugin descriptor metadata. It defines its own
+This module determines where a skill comes from (bundled/project/expert/mcp)
+based on its manifest path and expert descriptor metadata. It defines its own
 Protocol for the descriptor interface so that the skills package does not
-depend on core.services.plugins.
+depend on core.services.experts.
 """
 
 from __future__ import annotations
@@ -20,13 +20,13 @@ from prismclaw.schema.services.skills import SkillManifest
 class SkillOriginDescriptor(Protocol):
     """Minimal interface that origin.py needs from a skill descriptor.
 
-    This Protocol decouples ``skills`` from ``core.services.plugins.descriptors``:
-    any object providing ``origin`` and ``plugin_name`` satisfies the contract.
+    This Protocol decouples ``skills`` from ``core.services.experts.descriptors``:
+    any object providing ``origin`` and ``expert_name`` satisfies the contract.
     The concrete ``SkillDescriptor`` in core already implements this.
     """
 
     origin: str | None
-    plugin_name: str | None
+    expert_name: str | None
 
 
 def _path_is_under(path: Path, root: Path) -> bool:
@@ -41,14 +41,14 @@ def _skill_settings(settings: object) -> object:
     return nested if nested is not None else settings
 
 
-def _plugin_settings(settings: object) -> object:
-    return getattr(settings, "plugins", None)
+def _expert_settings(settings: object) -> object:
+    return getattr(settings, "experts", None)
 
 
 def _capability_root(workspace_root: Path, raw: str) -> Path:
     """把 settings 里的能力目录解析成绝对路径。
 
-    ``~`` 前缀（``~/.prismclaw/assets/plugins``）直接 expanduser；相对目录才拼到
+    ``~`` 前缀（``~/.prismclaw/assets/experts``）直接 expanduser；相对目录才拼到
     workspace 根上。
     """
     expanded = Path(raw).expanduser()
@@ -57,13 +57,13 @@ def _capability_root(workspace_root: Path, raw: str) -> Path:
     return (workspace_root / expanded).resolve()
 
 
-def _iter_plugin_roots(workspace_root: Path, settings: object) -> list[Path]:
-    plugin_settings = _plugin_settings(settings)
-    if plugin_settings is None:
+def _iter_expert_roots(workspace_root: Path, settings: object) -> list[Path]:
+    expert_settings = _expert_settings(settings)
+    if expert_settings is None:
         return []
 
     roots: list[Path] = []
-    raw = getattr(plugin_settings, "asset_plugins_dir", None)
+    raw = getattr(expert_settings, "asset_experts_dir", None)
     if isinstance(raw, str) and raw.strip():
         with suppress(Exception):
             roots.append(_capability_root(workspace_root, raw))
@@ -138,8 +138,8 @@ def classify_skill_origin(
         if descriptor.origin is not None:
             # descriptor.origin 可能是原始字符串或枚举,统一走 SkillSource.coerce
             return SkillSource.coerce(descriptor.origin)
-        if descriptor.plugin_name:
-            return SkillSource.PLUGIN
+        if descriptor.expert_name:
+            return SkillSource.EXPERT
     try:
         mp = Path(manifest.file_path).expanduser().resolve()
     except Exception:
@@ -149,31 +149,31 @@ def classify_skill_origin(
         if _path_is_under(mp, root):
             return SkillSource.PROJECT
 
-    plugin_roots = _iter_plugin_roots(workspace_root, settings)
-    plugin_root_hit = any(_path_is_under(mp, root) for root in plugin_roots)
-    if plugin_root_hit and descriptor is None and _supports_skill_descriptor(extension_manager):
+    expert_roots = _iter_expert_roots(workspace_root, settings)
+    expert_root_hit = any(_path_is_under(mp, root) for root in expert_roots)
+    if expert_root_hit and descriptor is None and _supports_skill_descriptor(extension_manager):
         return None
-    if plugin_root_hit:
-        return SkillSource.PLUGIN
+    if expert_root_hit:
+        return SkillSource.EXPERT
 
-    # 后备：路径中包含 /assets/plugins/ 的技能视为插件来源。
-    # 插件只存在于用户级静态能力目录（~/.prismclaw/assets/plugins/）；
-    # workspace 级不存在插件安装落点。
+    # 后备：路径中包含 /assets/experts/ 的技能视为专家包来源。
+    # 专家包只存在于用户级静态能力目录（~/.prismclaw/assets/experts/）；
+    # workspace 级不存在专家包安装落点。
     try:
         parts = mp.parts
         for i, part in enumerate(parts):
             if i + 1 >= len(parts):
                 continue
             next_part = parts[i + 1]
-            if part == "assets" and next_part == "plugins":
-                return SkillSource.PLUGIN
+            if part == "assets" and next_part == "experts":
+                return SkillSource.EXPERT
     except Exception:
         pass
 
     return None
 
 
-def is_plugin_skill(
+def is_expert_skill(
     manifest: SkillManifest,
     workspace_root: Path,
     settings: object,
@@ -186,7 +186,7 @@ def is_plugin_skill(
             settings,
             extension_manager=extension_manager,
         )
-        is SkillSource.PLUGIN
+        is SkillSource.EXPERT
     )
 
 
@@ -197,21 +197,21 @@ def classify_skill_group_path(
     extension_manager: object | None = None,
 ) -> list[str]:
     descriptor = _resolve_skill_descriptor(manifest, extension_manager)
-    if descriptor is not None and descriptor.plugin_name:
-        return [descriptor.plugin_name]
+    if descriptor is not None and descriptor.expert_name:
+        return [descriptor.expert_name]
     try:
         mp = Path(manifest.file_path).expanduser().resolve()
     except Exception:
         return []
 
-    plugin_roots = _iter_plugin_roots(workspace_root, settings)
-    plugin_root = next((root for root in plugin_roots if _path_is_under(mp, root)), None)
-    if plugin_root is not None:
+    expert_roots = _iter_expert_roots(workspace_root, settings)
+    expert_root = next((root for root in expert_roots if _path_is_under(mp, root)), None)
+    if expert_root is not None:
         if descriptor is None and _supports_skill_descriptor(extension_manager):
             return []
         return _skill_group_parts_for_root(
             mp,
-            plugin_root,
+            expert_root,
         )
 
     for root in _iter_skill_roots(workspace_root, settings):

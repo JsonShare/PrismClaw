@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "yuandian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "yuandian-mcp-server"
+      ],
+      "env": {
+        "YUANDIAN_API_KEY": "<请在本地填入自己的元典 API Key>"
+      },
+      "title": "元典 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何元典 API 凭据。使用前请在本地环境变量或私有配置中填入自己的元典开放平台凭据；不要把真实 API key、token 或 secret 提交到仓库。"
+    }
+  },
+  "recommendedCategories": [
+    "legal-research",
+    "regulatory-intelligence",
+    "documents",
+    "chat"
+  ]
+}

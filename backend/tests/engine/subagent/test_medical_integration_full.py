@@ -224,7 +224,7 @@ class MockToolRegistry:
 
 
 # ═══════════════════════════════════════════════════════════════
-# MockCapabilityCatalogService
+# MockRuntimeCatalog
 # ═══════════════════════════════════════════════════════════════
 
 
@@ -232,9 +232,8 @@ class AgentCatalogEntry:
     def __init__(self, name: str, description: str, manifest: AgentManifest):
         self.name = name
         self.description = description
-        self.can_handoff_to = manifest.can_handoff_to
         self.manifest = manifest
-        self.plugin_name = None
+        self.expert_name = None
 
 
 class MockCapabilityCatalog:
@@ -405,7 +404,6 @@ async def test_integration_single_researcher_one_turn():
         name="researcher",
         description="检索医学文献的研究员",
         model="test-model",
-        allowed_tools=["read"],
         max_turns=5,
         timeout_seconds=30.0,
     )
@@ -532,7 +530,6 @@ async def test_integration_researcher_multi_tool_calls():
         name="researcher",
         description="检索医学文献",
         model="test-model",
-        allowed_tools=["read", "web_fetch"],
         max_turns=5,
         timeout_seconds=30.0,
     )
@@ -664,7 +661,6 @@ async def test_integration_parallel_researchers_with_architect():
             name="researcher",
             description="检索",
             model="test-model",
-            allowed_tools=["read", "web_fetch"],
             max_turns=5,
             timeout_seconds=30.0,
         ),
@@ -672,8 +668,7 @@ async def test_integration_parallel_researchers_with_architect():
             name="architect",
             description="推理",
             model="test-model",
-            allowed_tools=["read"],
-            max_turns=3,
+                max_turns=3,
             timeout_seconds=30.0,
         ),
     ]
@@ -791,7 +786,6 @@ async def test_integration_researcher_timeout():
         name="researcher",
         description="检索",
         model="test-model",
-        allowed_tools=["read"],
         max_turns=1,  # 只有 1 轮 → 第 2 轮工具调用触发 max_turns
         timeout_seconds=30.0,
     )
@@ -904,7 +898,6 @@ async def test_integration_three_round_consultation():
         name="researcher",
         description="检索",
         model="test-model",
-        allowed_tools=["read"],
         max_turns=5,
         timeout_seconds=30.0,
     )
@@ -1013,7 +1006,6 @@ async def test_integration_three_round_consultation():
         name="architect",
         description="推理",
         model="test-model",
-        allowed_tools=["read"],
         max_turns=3,
         timeout_seconds=30.0,
     )

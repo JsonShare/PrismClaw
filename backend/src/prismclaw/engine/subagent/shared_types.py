@@ -10,4 +10,3 @@ class PreloadedSkillContext:
     manifests: list[SkillManifest]
     catalog_block: str
     instructions_block: str
-    allowed_tools_limit: set[str] | None

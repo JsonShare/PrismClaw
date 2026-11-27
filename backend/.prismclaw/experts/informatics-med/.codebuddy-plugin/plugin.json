@@ -1,0 +1,67 @@
+{
+  "name": "informatics-med",
+  "version": "1.0.0",
+  "description": "Designs FHIR R4 resource mappings and EHR integration, extracts clinical data and troubleshoots data quality.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/informatics-med.md"
+  ],
+  "skills": [
+    "./skills/doc-extract",
+    "./skills/fhir",
+    "./skills/fhir-developer",
+    "./skills/informatics-med-playbook"
+  ],
+  "expertType": "agent",
+  "agentName": "informatics-med",
+  "displayName": {
+    "en": "Health Informatics Expert",
+    "zh": "医疗信息化专家"
+  },
+  "profession": {
+    "zh": "数据标准与系统集成",
+    "en": "Data Standards & Integration"
+  },
+  "displayDescription": {
+    "zh": "设计 FHIR R4 资源映射与 EHR 对接方案，提取临床数据并排查数据质量。",
+    "en": "Designs FHIR R4 resource mappings and EHR integration, extracts clinical data and troubleshoots data quality."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "02-Engineering",
+  "defaultInitPrompt": {
+    "zh": "为 Epic 的 SMART-on-FHIR 对接给出资源映射与实现步骤。",
+    "en": "Give resource mappings and implementation steps for Epic SMART-on-FHIR."
+  },
+  "plugin": "informatics-med",
+  "tags": [
+    {
+      "zh": "FHIR 集成",
+      "en": "FHIR Integration"
+    },
+    {
+      "zh": "EHR 对接",
+      "en": "EHR Integration"
+    },
+    {
+      "zh": "数据抽取",
+      "en": "Data Extraction"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为 Epic 的 SMART-on-FHIR 对接给出资源映射与实现步骤。",
+      "en": "Give resource mappings and implementation steps for Epic SMART-on-FHIR."
+    },
+    {
+      "zh": "从这批临床文本中抽取结构化字段并校验质量。",
+      "en": "Extract structured fields from these clinical texts and validate quality."
+    },
+    {
+      "zh": "排查这份 FHIR 资源映射中的常见错误。",
+      "en": "Troubleshoot common errors in this FHIR resource mapping."
+    }
+  ],
+  "license": "Apache-2.0"
+}

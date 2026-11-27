@@ -24,7 +24,7 @@ from prismclaw.engine.compression.budget_orchestrator import (
 from prismclaw.engine.compression.context_zones import resolve_runtime_zones
 from prismclaw.engine.context.projection_engine import ContextProjectionEngine
 from prismclaw.engine.context.projection_models import ProjectionMessageSet
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 from prismclaw.engine.execution.capabilities.delta_projection import build_capability_delta_blocks
 from prismclaw.engine.execution.query._turn_helpers import (
     DynamicContextResult,
@@ -45,6 +45,7 @@ from prismclaw.engine.execution.request.system_prompt import (
 )
 from prismclaw.engine.security.gate.governance import runtime_notes_for
 from prismclaw.engine.state.turn_state import TurnState
+from prismclaw.infra.workspace_paths import session_dir_in
 from prismclaw.schema.content.content_types import RuntimeControlArtifact
 from prismclaw.schema.content.context import ContextBlock
 from prismclaw.schema.content.replacement_state import ReplacementDecisionState
@@ -267,7 +268,7 @@ class QueryTurnPreparator:
             auto_activation = _try_auto_activate_skill(
                 user_message=request.user_message,
                 capability_catalog=capability_catalog
-                if isinstance(capability_catalog, CapabilityCatalogService)
+                if isinstance(capability_catalog, RuntimeCatalog)
                 else None,
                 workspace_path=prompt_inputs.workspace_path,
             )
@@ -347,11 +348,7 @@ class QueryTurnPreparator:
             # working_dir 必须是 session 根，不是 workspace 根 —— 否则 context_blocks
             # / tool_results 会被 mkdir 到 workspace 根，与重构后 session 级隔离冲突。
             working_dir=(
-                str(
-                    _Path(prompt_inputs.workspace_path)
-                    / "sessions"
-                    / prompt_inputs.session_id.replace("#", "-").replace(":", "-")
-                )
+                str(session_dir_in(_Path(prompt_inputs.workspace_path), prompt_inputs.session_id))
                 if prompt_inputs.workspace_path and prompt_inputs.session_id
                 else prompt_inputs.workspace_path
             ),

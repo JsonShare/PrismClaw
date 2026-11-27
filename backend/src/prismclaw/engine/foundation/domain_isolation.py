@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 from prismclaw.schema.content.content_types import TextBlock, ToolResult
 
 if TYPE_CHECKING:
-    from prismclaw.engine.plugins.hooks.schema import HookResult
+    from prismclaw.engine.hooks.schema import HookResult
     from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ class DomainIsolatedHook:
         HookHandler 是 ABC，通过 register() 可以将任意类注册为虚拟子类。
         """
         try:
-            from prismclaw.engine.plugins.hooks.handlers import HookHandler
+            from prismclaw.engine.hooks.handlers import HookHandler
 
             HookHandler.register(DomainIsolatedHook)
         except ImportError:
@@ -119,7 +119,7 @@ class DomainIsolatedHook:
 
     async def execute(self, context: object) -> HookResult:
         """HookHandler.execute() 实现 — 包裹异常隔离。"""
-        from prismclaw.engine.plugins.hooks.schema import HookOutcome, HookResult
+        from prismclaw.engine.hooks.schema import HookOutcome, HookResult
 
         handler = self._handler
         if not isinstance(handler, _ExecutableHook):

@@ -14,7 +14,7 @@ from unittest import mock
 
 from prismclaw.engine.execution.capabilities.catalog import (
     AgentCatalogEntry,
-    CapabilityCatalogService,
+    RuntimeCatalog,
     SkillCatalogEntry,
 )
 from prismclaw.engine.execution.query._static_context_types import StaticTurnShellCache
@@ -33,7 +33,7 @@ class _Tool:
         self.parameters = {"type": "object", "properties": {}}
         self.tool_class = "read"
         self.effect_class = "pure_read"
-        self.plugin_name = None
+        self.expert_name = None
 
 
 def _registry() -> ToolRegistry:
@@ -64,13 +64,12 @@ def _agent_entry(name: str) -> AgentCatalogEntry:
     return AgentCatalogEntry(
         name=name,
         description=f"{name} 子代理",
-        can_handoff_to=(),
         manifest={"name": name, "tools": ["read"]},
     )
 
 
-def _catalog() -> CapabilityCatalogService:
-    return CapabilityCatalogService(tool_registry=_registry())
+def _catalog() -> RuntimeCatalog:
+    return RuntimeCatalog(tool_registry=_registry())
 
 
 def _deps(*, bootstrap: str | None) -> SimpleNamespace:
@@ -85,10 +84,9 @@ def _deps(*, bootstrap: str | None) -> SimpleNamespace:
     )
     return SimpleNamespace(
         tools=_registry(),
-        handoff_supervisor=None,
         context_bootstrap_provider=SimpleNamespace(get_bootstrap=_get_bootstrap),
         static_shell_cache=StaticTurnShellCache(),
-        plugin=SimpleNamespace(lifecycle_manager=SimpleNamespace(generation=0)),
+        expert=SimpleNamespace(lifecycle_manager=SimpleNamespace(generation=0)),
         config=SimpleNamespace(
             context=SimpleNamespace(
                 budget=budget,
@@ -123,6 +121,7 @@ def _build(deps, *, complexity, visible=_VISIBLE):
             discovered_tools=None,
             subagent_depth=0,
             visible_tool_names=visible,
+            session_scope=None,
         )
     )
 
@@ -130,12 +129,12 @@ def _build(deps, *, complexity, visible=_VISIBLE):
 def _patch_catalog():
     return (
         mock.patch.object(
-            CapabilityCatalogService,
+            RuntimeCatalog,
             "list_skill_entries",
             return_value=[_skill_entry("code_review")],
         ),
         mock.patch.object(
-            CapabilityCatalogService,
+            RuntimeCatalog,
             "list_agent_entries",
             return_value=[_agent_entry("executor")],
         ),
@@ -191,7 +190,7 @@ def test_shell_rebuilt_when_visible_tools_change() -> None:
     因此收回 ``skill_search`` 必须改变壳字节，而不能命中旧条目。
     """
     visible_entries = mock.patch.object(
-        CapabilityCatalogService,
+        RuntimeCatalog,
         "list_visible_tool_entries",
         side_effect=lambda **kw: [
             SimpleNamespace(llm_name=name, description=f"{name} 描述")

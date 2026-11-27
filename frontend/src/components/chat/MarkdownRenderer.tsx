@@ -5,7 +5,8 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeRaw from 'rehype-raw';
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, FileText, Lightbulb, Maximize2, Minus, Plus, RotateCcw, Search, X, XCircle } from 'lucide-react';
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, FileText, Lightbulb, Maximize2, Minus, Plus, Search, X, XCircle } from 'lucide-react';
+import { RefreshIcon } from '../icons/SystemIcons'
 import { createHighlighterCore } from '@shikijs/core';
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript';
 import githubLight from '@shikijs/themes/github-light';
@@ -347,7 +348,7 @@ function MermaidBlock({ code }: { code: string }) {
     <Fullscreen open={fullscreen} title="Mermaid" onClose={() => setFullscreen(false)}><div className="rich-mermaid-fullscreen-view">
       <div className="rich-mermaid-fullscreen-tools" aria-label="流程图缩放">
         <IconButton label="缩小" onClick={() => setZoom((value) => Math.max(.6, Math.round((value - .2) * 10) / 10))}><Minus size={15} /></IconButton>
-        <IconButton label="重置缩放" onClick={() => setZoom(1)}><RotateCcw size={14} /></IconButton>
+        <IconButton label="重置缩放" onClick={() => setZoom(1)}><RefreshIcon size={14} /></IconButton>
         <IconButton label="放大" onClick={() => setZoom((value) => Math.min(2, Math.round((value + .2) * 10) / 10))}><Plus size={15} /></IconButton>
       </div>
       <MermaidCanvas svg={result.svg} zoom={zoom} />

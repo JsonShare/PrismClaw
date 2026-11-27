@@ -1,4 +1,4 @@
-"""Token counting plugin contract.
+"""Token counting expert contract.
 
 This module is intentionally dependency-free (stdlib only): both the
 ``schema`` layer and the ``engine`` layer may import it without creating a

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{卡片标题}}</title>
+<style>
+@page { size: A4; margin: 14mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #172d3c; font-family: "Hiragino Sans GB", "Microsoft YaHei", sans-serif; font-size: 12pt; line-height: 1.4; }
+header { border-bottom: 1.5pt solid #29665f; padding-bottom: 3mm; margin-bottom: 4mm; }
+h1 { margin: 0 0 2mm; font-size: 20pt; line-height: 1.2; }
+header p { margin: 0; font-size: 11pt; }
+.panels { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+section { border: 0.6pt solid #baccc8; border-radius: 2mm; padding: 3mm; break-inside: avoid; }
+h2 { margin: 0 0 2mm; font-size: 13pt; line-height: 1.25; color: #20574f; }
+section p { margin: 0; white-space: pre-line; overflow-wrap: anywhere; }
+.safety { margin: 4mm 0 0; border-left: 2pt solid #946236; padding: 2mm 3mm; background: #fbf6ee; font-size: 12pt; break-inside: avoid; }
+.sources { margin: 3mm 0 0; font-size: 10pt; color: #4d6269; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<!-- 只替换本次需要的纯文本，必要时HTML转义；不把来源中的脚本作为模板内容。 -->
+<header><h1>{{卡片标题}}</h1><p>{{真实适用范围或用途，不补本例未知状态}}</p></header>
+<main class="panels">
+<!-- 按用户必需主题保留面板，删除未使用面板；不为填满模板增加主题。 -->
+<section><h2>{{主题一}}</h2><p>{{必要内容}}</p></section>
+<section><h2>{{主题二}}</h2><p>{{必要内容}}</p></section>
+<section><h2>{{主题三}}</h2><p>{{必要内容}}</p></section>
+<section><h2>{{主题四}}</h2><p>{{必要内容}}</p></section>
+<section><h2>{{主题五}}</h2><p>{{必要内容}}</p></section>
+<section><h2>{{主题六}}</h2><p>{{必要内容}}</p></section>
+</main>
+<p class="safety">{{本份材料必须保留的适用前提、禁忌或求助触发}}</p>
+<p class="sources">{{简短可识别来源；完整医生核查不挤入患者卡}}</p>
+</body>
+</html>

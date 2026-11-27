@@ -51,7 +51,7 @@ export interface FilePreviewController {
   openFileFromOutputList: (path: string) => void
   /** 右侧栏以 file-viewer 展示一条 RAG / 后端结构化来源 */
   openSourceInPanel: (source: ReferenceSource) => void
-  downloadSingleFile: (path: string) => Promise<void>
+  downloadSingleFile: (path: string) => Promise<boolean>
   /** 重新拉取当前选中文件（加载失败后重试） */
   retrySelectedFile: () => void
   closePreviewModal: () => void
@@ -72,7 +72,7 @@ export function useFilePreviewController({
     activeConvId ? s.convStates[activeConvId]?.messages ?? EMPTY_MESSAGES : EMPTY_MESSAGES,
   )
 
-  const [taskFilesOpen, setTaskFilesOpen] = useState(true)
+  const [taskFilesOpen, setTaskFilesOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [, setSelectedFileLoading] = useState(false)
   const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
@@ -240,14 +240,14 @@ export function useFilePreviewController({
 
   const downloadSingleFile = useCallback(
     async (path: string) => {
-      if (!token) return
+      if (!token) return false
       try {
         const res = await fetch(rawFileUrl(path), {
           headers: { Authorization: `Bearer ${token}` },
         })
         if (!res.ok) {
           console.error('[downloadSingleFile] failed:', res.status)
-          return
+          return false
         }
         const blob = await res.blob()
         const blobUrl = URL.createObjectURL(blob)
@@ -260,8 +260,10 @@ export function useFilePreviewController({
         a.click()
         document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+        return true
       } catch (err) {
         console.error('[downloadSingleFile] error:', err)
+        return false
       }
     },
     [rawFileUrl, token],

@@ -1,7 +1,6 @@
 """Security helpers for environment variable allowlist validation.
 
-Moved from ``prismclaw.infra.security`` to the schema layer because these
-are pure functions and constants with no external dependencies.
+纯函数与常量，无外部依赖。
 """
 
 from __future__ import annotations

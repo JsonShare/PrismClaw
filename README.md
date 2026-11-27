@@ -114,7 +114,7 @@ Every toggle asks the user to make one more judgment. Model selection, context a
 ```bash
 # 1. Generate local configs
 cd backend/configs && for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done && cd ../..
-cp deploy/configs/mcp.prod.example.yaml deploy/configs/mcp.prod.yaml
+# Edit deploy/configs/mcp.prod.json if you need extra MCP connectors
 # Only models.yaml needs your endpoint and API key (an intranet OpenAI-compatible service works)
 
 # 2. Set deployment secrets and the admin password

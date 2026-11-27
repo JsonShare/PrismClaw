@@ -25,7 +25,7 @@ __all__ = ["redact_server_paths", "split_stream_safe", "StreamingPathRedactor"]
 #
 # 覆盖场景（来自实际用户可见回答的暴露点）：
 #   1. /tmp/xxx       — 临时文件（批处理、渲染中间件）
-#   2. ~/.prismclaw/xxx — PrismClaw 用户配置、插件、skills 目录
+#   2. ~/.prismclaw/xxx — PrismClaw 用户配置、专家包、skills 目录
 #   3. ~/.config/xxx    — 通用用户配置目录
 #   4. /Users/xxx/xxx   — macOS 宿主用户路径
 #   5. /home/xxx/xxx    — Linux 宿主用户路径

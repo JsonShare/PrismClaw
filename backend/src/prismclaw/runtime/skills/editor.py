@@ -23,15 +23,15 @@ Design invariants (verified against the real scanner):
 * ``name`` cannot be changed via edit (would re-key the catalog).
 * Writes are confined to the *managed capability roots*: the cloud workspace
   root plus the configured capability directories under both the workspace
-  root and the project root (``asset_skills_dir`` / ``asset_plugins_dir``)
+  root and the project root (``asset_skills_dir`` / ``asset_experts_dir``)
   — the same set the runtime skill discovery scans. A manifest pointing
   anywhere else is rejected, so a poisoned catalog entry cannot make the
   editor write outside managed directories.
 * Origin policy mirrors the delete guard for *system-provided* origins only
-  (bundled / workspace / builtin stay read-only). Plugin- and marketplace-
+  (bundled / workspace / builtin stay read-only). Expert- and marketplace-
   provided skills are editable **only** when they opt in via
   ``editable: true``; the fail-closed default still locks every other skill.
-  Caveat (surfaced to users): a plugin update/reinstall can overwrite an
+  Caveat (surfaced to users): a expert update/reinstall can overwrite an
   edited SKILL.md and silently drop both the edits and the opt-in flag.
 """
 
@@ -61,7 +61,7 @@ BACKUP_MANIFEST = "manifest.json"
 BACKUP_KEEP_LIMIT = 20
 
 # Origins that are system-provided and must never be hand-edited, mirroring the
-# delete_skill guard in the web router (bundled/workspace/builtin). PLUGIN and
+# delete_skill guard in the web router (bundled/workspace/builtin). EXPERT and
 # MARKETPLACE are deliberately NOT here: external-content skills become
 # hand-editable only through the explicit ``editable: true`` opt-in — the
 # fail-closed default still locks every skill that does not opt in.
@@ -75,15 +75,15 @@ _READONLY_ORIGINS: frozenset[SkillSource] = frozenset(
 
 
 def _relative_capability_dirs(settings: object) -> list[str]:
-    """Relative capability directory names from settings (skills + plugins).
+    """Relative capability directory names from settings (skills + experts).
 
     Tolerates partial settings objects (tests pass ``SimpleNamespace`` with
-    ``plugins=None``); missing sections simply contribute no roots.
+    ``experts=None``); missing sections simply contribute no roots.
     """
     dirs: list[str] = []
     for section, field in (
         ("skills", "asset_skills_dir"),
-        ("plugins", "asset_plugins_dir"),
+        ("experts", "asset_experts_dir"),
     ):
         obj = getattr(settings, section, None)
         raw = getattr(obj, field, None) if obj is not None else None
@@ -307,7 +307,7 @@ class SkillEditor:
         The cloud workspace root itself (which covers every workspace-scoped
         location, including the installed-skill root ``<workspace>/.work/state/skills``),
         plus the configured user-level capability directories
-        (``asset_skills_dir`` / ``asset_plugins_dir``). This mirrors what the
+        (``asset_skills_dir`` / ``asset_experts_dir``). This mirrors what the
         runtime skill discovery scans, so any manifest the capability catalog
         can produce is coverable.
         """

@@ -5,7 +5,7 @@
 2. ExecutionRuntimePorts 实例满足 isinstance(runtime, ContextRuntimePorts)
 3. HookInvocationResult 字段结构 + 字符串比较语义
 4. 静态守卫：compression 层无 runtime 反向 import 到
-   execution/hooks/security/task_profile/plugins（行首 `from` 锚定）
+   execution/hooks/security/task_profile/experts（行首 `from` 锚定）
 """
 
 from __future__ import annotations
@@ -133,7 +133,7 @@ def _compression_root() -> Path:
 
 
 _FORBIDDEN_PATTERN = re.compile(
-    r"^from prismclaw\.engine\.(execution|hooks|security|task_profile|plugins)"
+    r"^from prismclaw\.engine\.(execution|hooks|security|task_profile|experts)"
 )
 
 
@@ -158,7 +158,7 @@ def _scan_runtime_reverse_imports(root: Path) -> list[tuple[Path, int, str]]:
 
 
 def test_no_runtime_reverse_imports_in_compression():
-    """compression 层禁止 runtime 反向 import 到 execution/hooks/security/task_profile/plugins。
+    """compression 层禁止 runtime 反向 import 到 execution/hooks/security/task_profile/experts。
 
     依赖方向必须单向：schema ← state ← compression.ports ← compression.* ← execution。
     """

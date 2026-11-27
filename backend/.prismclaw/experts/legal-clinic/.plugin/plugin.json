@@ -1,0 +1,68 @@
+{
+  "name": "legal-clinic",
+  "version": "1.0.0",
+  "description": "Sets up legal clinics, onboards students, runs structured intake and deadline control, and manages semester handover.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/legal-clinic.md"
+  ],
+  "skills": [
+    "./skills/clinic-case-workflow",
+    "./skills/clinic-client-workflow",
+    "./skills/clinic-management-workflow",
+    "./skills/clinic-supervisor-workflow",
+    "./skills/legal-clinic-playbook"
+  ],
+  "expertType": "agent",
+  "agentName": "legal-clinic",
+  "displayName": {
+    "en": "Legal Aid Expert",
+    "zh": "法律援助专家"
+  },
+  "profession": {
+    "zh": "法律援助与咨询接待",
+    "en": "Legal Aid & Intake"
+  },
+  "displayDescription": {
+    "zh": "负责诊所搭建、学生入职、结构化案件登记与防失职期限管理，并组织学期交接。",
+    "en": "Sets up legal clinics, onboards students, runs structured intake and deadline control, and manages semester handover."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "09-OperationsHR",
+  "defaultInitPrompt": {
+    "zh": "为新学期搭建法律诊所的入职清单与督导流程。",
+    "en": "Build an onboarding checklist and supervision flow for the new semester."
+  },
+  "plugin": "legal-clinic",
+  "tags": [
+    {
+      "zh": "诊所搭建",
+      "en": "Clinic Setup"
+    },
+    {
+      "zh": "案件登记",
+      "en": "Client Intake"
+    },
+    {
+      "zh": "期限管理",
+      "en": "Deadline Control"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为新学期搭建法律诊所的入职清单与督导流程。",
+      "en": "Build an onboarding checklist and supervision flow for the new semester."
+    },
+    {
+      "zh": "对这个新案件做结构化 intake 与利益冲突检查。",
+      "en": "Run structured intake and conflict check for this new case."
+    },
+    {
+      "zh": "列出本周即将到期的案件期限与复核队列。",
+      "en": "List case deadlines and the review queue for this week."
+    }
+  ],
+  "license": "Apache-2.0"
+}

@@ -205,10 +205,6 @@ def __getattr__(name: str) -> object:
         "EvidenceStrategy": ("prismclaw.schema.content.evidence", "EvidenceStrategy"),
         "EvidenceTemporalMode": ("prismclaw.schema.content.evidence", "EvidenceTemporalMode"),
         "FileChangeEntry": ("prismclaw.schema.content.content_types", "FileChangeEntry"),
-        "HandoffRequestPayload": (
-            "prismclaw.schema.content.content_types",
-            "HandoffRequestPayload",
-        ),
         "HeartbeatDetail": ("prismclaw.schema.content.streaming", "HeartbeatDetail"),
         "HeartbeatEvent": ("prismclaw.schema.content.streaming", "HeartbeatEvent"),
         "IterationBoundary": ("prismclaw.schema.content.streaming", "IterationBoundary"),

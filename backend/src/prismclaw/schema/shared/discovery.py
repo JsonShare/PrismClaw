@@ -49,8 +49,8 @@ _BLOCKED_NAMES = frozenset(
 )
 
 # 目录扫描深度上限（单一来源）。PrismClaw 以 SKILL.md 叶子终止为发现主机制，
-# 深度上限只是防止病态树的安全网。原值 3 会漏掉深层嵌套插件
-# （如 marketplace/<plugin>/skills/<group>/<skill>/SKILL.md），放宽到 8。
+# 深度上限只是防止病态树的安全网。原值 3 会漏掉深层嵌套专家包
+# （如 marketplace/<expert>/skills/<group>/<skill>/SKILL.md），放宽到 8。
 # node_modules/.git 等仍由 _BLOCKED_NAMES 屏蔽，放宽深度不会扫入依赖/版本目录。
 SKILL_SCAN_MAX_DEPTH = 8
 

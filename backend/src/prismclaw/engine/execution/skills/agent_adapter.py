@@ -30,26 +30,14 @@ def build_agent_manifest_from_skill(skill: SkillManifest) -> AgentManifest:
         if agent and agent.description.strip()
         else skill.description or f"为技能 '{skill.name}' 自动生成的子代理。"
     )
-    allowed_tools = (
-        list(agent.allowed_tools)
-        if agent and agent.allowed_tools is not None
-        else list(skill.allowed_tools)
-        if skill.allowed_tools is not None
-        else None
-    )
-    can_handoff_to = list(agent.can_handoff_to) if agent and agent.can_handoff_to else None
-    if can_handoff_to and allowed_tools is not None and "request_handoff" not in allowed_tools:
-        allowed_tools = [*allowed_tools, "request_handoff"]
     execution_mode = "parallel" if skill.execution_mode == "fork" else "sync"
     return AgentManifest(
         name=agent_name,
         description=description,
         model=agent.model if agent else None,
         execution_mode=execution_mode,
-        allowed_tools=allowed_tools,
         max_turns=agent.max_turns if agent else None,
         timeout_seconds=agent.timeout_seconds if agent else None,
-        can_handoff_to=can_handoff_to,
         system_prompt=skill.body or "",
         preload_skills=list(skill.declared_invoke_sequence or ()),
     )

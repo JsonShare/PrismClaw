@@ -13,7 +13,8 @@ from __future__ import annotations
 from ._agent import AgentSettings, ServerSettings
 from ._database import DatabaseSettings
 from ._dream import DreamSettings, EvolutionSettings
-from ._helpers import config_file_owner, find_config_file, load_settings, persist_plugin_trust
+from ._experts import SchedulerSettings, SubAgentSettings
+from ._helpers import config_file_owner, find_config_file, load_settings
 from ._memory import CuratorSettings, MemorySettings
 from ._models import (
     EmbeddingSettings,
@@ -22,7 +23,6 @@ from ._models import (
     SpeechSettings,
     VisionSettings,
 )
-from ._plugins import PluginSettings, SchedulerSettings, SubAgentSettings
 from ._redis import RedisSettings
 from ._sandbox import (
     AffinitySettings,
@@ -40,7 +40,6 @@ __all__ = [
     "Settings",
     "load_settings",
     "find_config_file",
-    "persist_plugin_trust",
     "config_file_owner",
     # Infrastructure
     "RedisSettings",
@@ -75,8 +74,7 @@ __all__ = [
     "SandboxFilesystemConfig",
     "SandboxNetworkConfig",
     "SandboxSettings",
-    # Plugins & scheduling
-    "PluginSettings",
+    # Experts & scheduling
     "SubAgentSettings",
     "SchedulerSettings",
 ]

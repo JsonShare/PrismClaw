@@ -28,8 +28,8 @@ class TurnPlan:
       ——壳是 ``(workspace 事实, model)`` 的纯函数（R1）。
     - ``headless``：governance 输入，显式化以免日志口径与实参漂移。
 
-    ``tool_scope`` 不在此处：它是 ``(tool_ctx, 插件激活状态)`` 的事实输入，
-    不是决策输出，作为 ``TurnPlanner.plan()`` 的入参直传 governance。
+    ``allowed_tool_owners`` 不在此处：它是 ``(tool_ctx.session_scope, 专家包激活状态)``
+    的事实输入，不是决策输出，作为 ``TurnPlanner.plan()`` 的入参直传 governance。
     """
 
     complexity: TaskComplexity | None

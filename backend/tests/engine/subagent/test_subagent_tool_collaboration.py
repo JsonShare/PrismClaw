@@ -22,7 +22,7 @@ class _Catalog:
     def get_agent_entry(self, name: str):
         if name != self.manifest.name:
             return None
-        return SimpleNamespace(name=name, manifest=self.manifest, plugin_name=None)
+        return SimpleNamespace(name=name, manifest=self.manifest, expert_name=None)
 
     def list_agent_entries(self) -> list[Any]:
         return [self.get_agent_entry(self.manifest.name)]

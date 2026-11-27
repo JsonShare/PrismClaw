@@ -2,9 +2,6 @@ from prismclaw.engine.trajectory.timeline import (
     HeartbeatPayload as HeartbeatPayload,
 )
 from prismclaw.engine.trajectory.timeline import (
-    IterationBoundaryPatch as IterationBoundaryPatch,
-)
-from prismclaw.engine.trajectory.timeline import (
     SetPhasePatch as SetPhasePatch,
 )
 from prismclaw.engine.trajectory.timeline import (

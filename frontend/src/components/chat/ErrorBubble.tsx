@@ -1,4 +1,5 @@
-import { AlertCircle, RotateCcw } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
+import { RefreshIcon } from '../icons/SystemIcons'
 import type { ContentBlock, Message } from '../../types'
 
 interface Props {
@@ -30,7 +31,7 @@ export default function ErrorBubble({ message, onRetry }: Props) {
               onClick={onRetry}
               className="btn btn-sm btn-ghost mt-2 -ml-2"
             >
-              <RotateCcw size={12} />
+              <RefreshIcon size={12} />
               重试
             </button>
           )}

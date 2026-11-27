@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from prismclaw.app.auth.auth import get_current_user, verify_jwt
 from prismclaw.app.web._routes_helpers import (
@@ -26,7 +26,7 @@ from prismclaw.app.web._routes_helpers import (
     _content_disposition_inline,
     _csp_for_mime,
     _raw_text_media_type,
-    _resolve_within_root,
+    _resolve_workspace_path,
     _resolve_workspace_root,
 )
 from prismclaw.app.web.deps import get_web_deps
@@ -177,7 +177,7 @@ async def list_files(
         offset = 0
 
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    target = _resolve_within_root(workspace_root, rel)
+    target = _resolve_workspace_path(workspace_root, rel)
     if not target.exists():
         raise HTTPException(status_code=404, detail="Path not found")
     if not target.is_dir():
@@ -191,7 +191,7 @@ async def list_files(
     try:
         for p in target.iterdir():
             name = p.name
-            if name in (".git", ".DS_Store", ".work"):
+            if name in (".git", ".DS_Store", ".work", ".refs"):
                 continue
             if q and q not in name.lower():
                 continue
@@ -488,6 +488,139 @@ async def upload_to_directory(
     )
 
 
+_COPY_MAX_FILES = 50
+
+
+class CopyFilesRequest(BaseModel):
+    paths: list[str] = Field(default_factory=list, max_length=_COPY_MAX_FILES)
+
+
+class CopyFileItem(BaseModel):
+    source_path: str
+    path: str
+    name: str
+    size_bytes: int
+
+
+class CopyFilesResponse(BaseModel):
+    files: list[CopyFileItem]
+    skipped: list[SkippedItem] = []
+
+
+def _copy_into_dir(source: Path, dest_dir: Path) -> Path | None:
+    """复制进目标目录；同名同大小视为已复制（幂等），否则追加 ``-n`` 后缀。"""
+    for index in range(100):
+        name = source.name if index == 0 else f"{source.stem}-{index}{source.suffix}"
+        target = dest_dir / name
+        try:
+            if target.exists():
+                if target.stat().st_size == source.stat().st_size:
+                    return target
+                continue
+            shutil.copy2(source, target)
+            return target
+        except OSError:
+            return None
+    return None
+
+
+def _copy_files_to_refs(
+    root_abs: Path,
+    inbox_abs: Path | None,
+    dest_dir: Path,
+    paths: list[str],
+) -> tuple[list[CopyFileItem], list[SkippedItem]]:
+    """同步复制一批文件到 `.refs/`；可能很慢，由调用方放进线程执行。"""
+    files: list[CopyFileItem] = []
+    skipped: list[SkippedItem] = []
+    for rel in paths:
+        rel_clean = (rel or "").strip().lstrip("/")
+        if not rel_clean:
+            continue
+        try:
+            source = _resolve_workspace_path(root_abs, rel_clean)
+        except HTTPException:
+            skipped.append(SkippedItem(name=rel_clean, code="invalid_path"))
+            continue
+        if not source.is_file():
+            skipped.append(SkippedItem(name=rel_clean, code="invalid_path"))
+            continue
+        # 已经是本会话 inbox 内的文件：无需复制，直接沿用原路径
+        if inbox_abs is not None and (source.parent == inbox_abs or inbox_abs in source.parents):
+            try:
+                size_bytes = int(source.stat().st_size)
+            except OSError:
+                skipped.append(SkippedItem(name=source.name, code="transfer_failed"))
+                continue
+            files.append(
+                CopyFileItem(
+                    source_path=rel_clean,
+                    path=str(source.relative_to(root_abs)),
+                    name=source.name,
+                    size_bytes=size_bytes,
+                )
+            )
+            continue
+        target = _copy_into_dir(source, dest_dir)
+        if target is None:
+            skipped.append(SkippedItem(name=source.name, code="transfer_failed"))
+            continue
+        try:
+            size_bytes = int(target.stat().st_size)
+        except OSError:
+            skipped.append(SkippedItem(name=source.name, code="transfer_failed"))
+            continue
+        files.append(
+            CopyFileItem(
+                source_path=rel_clean,
+                path=str(target.relative_to(root_abs)),
+                name=source.name,
+                size_bytes=size_bytes,
+            )
+        )
+    return files, skipped
+
+
+@files_router.post("/copy", response_model=CopyFilesResponse)
+async def copy_files_into_session(
+    request: Request,
+    payload: CopyFilesRequest,
+    user_id: str = Depends(get_current_user),
+    workspace_id: str = "default",
+    session_id: str | None = Query(default=None),
+) -> CopyFilesResponse:
+    """把工作区内已有文件复制进会话的 `.refs/`（咨询框「引用文件」用）。
+
+    有 ``session_id`` → ``sessions/<sid>/inbox/.refs/``（随会话删除清理）；
+    无 ``session_id`` → 工作区根 ``.refs/``。副本不再挂在源会话目录下，
+    源会话删除不会带走被引用的文件。
+    """
+    from prismclaw.infra.workspace_paths import resolve_session_inbox_dir
+
+    wid = _clean_workspace_id(workspace_id)
+    root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
+    root_abs = root.expanduser().resolve()
+
+    # 引用的副本固定落 `.refs/`（点目录，list/search 都会跳过）：既不污染
+    # 「引用文件」列表，也不出现在文件浏览器里。
+    # 有会话 → 会话 inbox/.refs/（随会话删除一起清理）；
+    # 无会话（新任务还没建会话）→ 工作区根 .refs/，不建孤儿会话目录。
+    inbox_abs: Path | None = None
+    if session_id:
+        inbox_dir = resolve_session_inbox_dir(user_id, wid, session_id)
+        inbox_abs = inbox_dir.resolve()
+        dest_dir = inbox_dir / ".refs"
+    else:
+        dest_dir = root_abs / ".refs"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # 复制可能涉及大文件，放到线程里执行，避免阻塞事件循环
+    files, skipped = await asyncio.to_thread(
+        _copy_files_to_refs, root_abs, inbox_abs, dest_dir, payload.paths
+    )
+    return CopyFilesResponse(files=files, skipped=skipped)
+
+
 @files_router.post("/mkdir", response_model=SimpleOkResponse)
 async def mkdir(
     payload: MkdirRequest,
@@ -500,7 +633,7 @@ async def mkdir(
     if not rel:
         raise HTTPException(status_code=400, detail="path required")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    target = _resolve_within_root(root, rel)
+    target = _resolve_workspace_path(root, rel)
     try:
         target.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -520,7 +653,7 @@ async def write_text(
     if not rel:
         raise HTTPException(status_code=400, detail="path required")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    target = _resolve_within_root(root, rel)
+    target = _resolve_workspace_path(root, rel)
     if target.exists() and not payload.overwrite:
         raise HTTPException(status_code=409, detail="File exists")
     if target.exists() and target.is_dir():
@@ -545,7 +678,7 @@ async def delete_path(
     if not rel:
         raise HTTPException(status_code=400, detail="path required")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    target = _resolve_within_root(root, rel)
+    target = _resolve_workspace_path(root, rel)
     if not target.exists():
         raise HTTPException(status_code=404, detail="Path not found")
     try:
@@ -577,8 +710,8 @@ async def move_path(
     if not src or not dst:
         raise HTTPException(status_code=400, detail="src/dst required")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    src_p = _resolve_within_root(root, src)
-    dst_p = _resolve_within_root(root, dst)
+    src_p = _resolve_workspace_path(root, src)
+    dst_p = _resolve_workspace_path(root, dst)
     if not src_p.exists():
         raise HTTPException(status_code=404, detail="Source not found")
     if dst_p.exists() and not payload.overwrite:
@@ -617,7 +750,7 @@ async def search_files(
         limit = 2000
     rel = (path or "").lstrip("/")
     root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
-    start = _resolve_within_root(root, rel) if rel else root
+    start = _resolve_workspace_path(root, rel) if rel else root
     if not start.exists() or not start.is_dir():
         raise HTTPException(status_code=404, detail="Path not found")
     matches: list[SearchMatch] = []
@@ -629,7 +762,7 @@ async def search_files(
                 truncated = True
                 break
             name = p.name
-            if name in (".git", ".DS_Store", ".work"):
+            if name in (".git", ".DS_Store", ".work", ".refs"):
                 continue
             if ql not in name.lower():
                 continue
@@ -664,17 +797,15 @@ async def export_workspace_outbox(
 
     sessions_dir = root / "sessions"
     export_files: list[tuple[str, Path]] = []
-    root_resolved = root.resolve()
 
     if file_paths:
         for rel_path in file_paths:
             normalized = rel_path.strip().replace("\\", "/")
-            resolved = (root / normalized).resolve()
-            if (
-                resolved.exists()
-                and resolved.is_file()
-                and str(resolved).startswith(str(root_resolved))
-            ):
+            try:
+                resolved = _resolve_workspace_path(root, normalized)
+            except HTTPException:
+                continue
+            if resolved.is_file():
                 export_files.append((normalized, resolved))
     elif sessions_dir.is_dir():
         for session_dir in sessions_dir.iterdir():

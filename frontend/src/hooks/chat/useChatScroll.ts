@@ -74,6 +74,8 @@ export interface ChatScrollController {
   pinNewQuestion: (index: number) => void
   /** 一键回到底部：退出 pinned/reading 回 bottom 并贴底跟随（按钮唯一动作，不做向上定位） */
   scrollToBottom: () => void
+  /** 手动定位（轮次导航跳转）：脱离底部跟随与问题钉顶，停在目标位置、不自动回底 */
+  detachFollow: () => void
 }
 
 export function useChatScrollController(
@@ -384,6 +386,19 @@ export function useChatScrollController(
     scrollToEnd()
   }, [scrollToEnd])
 
+  /** 手动定位（轮次导航跳转）：脱离钉顶自愈循环与底部跟随，停在目标位置。
+   *  置 atBottom=false，避免流式 token 触发的底部跟随把用户拽回末尾。 */
+  const detachFollow = useCallback(() => {
+    anchorIndexRef.current = null
+    const el = scrollerRef.current
+    if (el) lastScrollTopRef.current = el.scrollTop
+    anchorScrollTopRef.current = 0
+    modeRef.current = 'bottom'
+    setAtBottom(false)
+    setSpacerHeight(0)
+    setMode('bottom')
+  }, [scrollerRef])
+
   return {
     mode,
     atBottom,
@@ -392,5 +407,6 @@ export function useChatScrollController(
     handleScroll,
     pinNewQuestion,
     scrollToBottom,
+    detachFollow,
   }
 }

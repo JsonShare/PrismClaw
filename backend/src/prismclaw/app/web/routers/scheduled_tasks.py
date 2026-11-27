@@ -33,6 +33,9 @@ class CreateTaskRequest(BaseModel):
     workspace_id: str | None = None  # None = 从 request query/header 取；再兜底 "default"
     missed_policy: str = "skip"
     max_age_days: int = Field(default=30, ge=0, le=365)
+    # 有效期区间（Unix 秒）。两者皆空 = 长期有效。
+    valid_from: float | None = None
+    valid_until: float | None = None
 
 
 class UpdateTaskRequest(BaseModel):
@@ -43,6 +46,8 @@ class UpdateTaskRequest(BaseModel):
     missed_policy: str | None = None
     max_age_days: int | None = Field(default=None, ge=0, le=365)
     workspace_id: str | None = None
+    valid_from: float | None = None
+    valid_until: float | None = None
 
 
 def _resolve_workspace_id(request: Request, body_wid: str | None) -> str:
@@ -75,6 +80,8 @@ class TaskResponse(BaseModel):
     conversation_id: str | None
     created_at: float
     max_age_days: int
+    valid_from: float | None
+    valid_until: float | None
     missed_policy: str
 
 
@@ -153,6 +160,8 @@ def _task_to_response(task: ScheduledTask, request: Request) -> dict[str, Any]:
         "conversation_id": task.conversation_id,
         "created_at": task.created_at,
         "max_age_days": task.max_age_days,
+        "valid_from": task.valid_from,
+        "valid_until": task.valid_until,
         "missed_policy": task.missed_policy,
     }
 
@@ -205,6 +214,13 @@ async def create_task(
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=422, detail=f"Invalid schedule: {e}") from e
 
+    if (
+        body.valid_from is not None
+        and body.valid_until is not None
+        and body.valid_until < body.valid_from
+    ):
+        raise HTTPException(status_code=422, detail="valid_until must be >= valid_from")
+
     task = ScheduledTask(
         user_id=user_id,
         workspace_id=_resolve_workspace_id(request, body.workspace_id),
@@ -214,6 +230,8 @@ async def create_task(
         schedule_spec=body.schedule,
         missed_policy=body.missed_policy,  # type: ignore[arg-type]
         max_age_days=body.max_age_days,
+        valid_from=body.valid_from,
+        valid_until=body.valid_until,
         created_at=time.time(),
     )
     await store.put_task(task)
@@ -254,6 +272,21 @@ async def update_task(
         task.missed_policy = body.missed_policy  # type: ignore[assignment]
     if body.max_age_days is not None:
         task.max_age_days = body.max_age_days
+    next_valid_from = body.valid_from if "valid_from" in body.model_fields_set else task.valid_from
+    next_valid_until = (
+        body.valid_until if "valid_until" in body.model_fields_set else task.valid_until
+    )
+    if (
+        next_valid_from is not None
+        and next_valid_until is not None
+        and next_valid_until < next_valid_from
+    ):
+        raise HTTPException(status_code=422, detail="valid_until must be >= valid_from")
+    # 用 model_fields_set 区分「未传」与「显式传 null（清除有效期）」
+    if "valid_from" in body.model_fields_set:
+        task.valid_from = body.valid_from
+    if "valid_until" in body.model_fields_set:
+        task.valid_until = body.valid_until
     if body.workspace_id is not None:
         task.workspace_id = body.workspace_id
 

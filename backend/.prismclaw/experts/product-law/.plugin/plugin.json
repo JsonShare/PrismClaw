@@ -1,0 +1,66 @@
+{
+  "name": "product-law",
+  "version": "1.0.0",
+  "description": "Reviews product launches against risk appetite, answers quick risk triage questions and verifies marketing claim evidence.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/product-law.md"
+  ],
+  "skills": [
+    "./skills/feature-risk-assessment",
+    "./skills/product-compliance-workflow",
+    "./skills/product-law-playbook"
+  ],
+  "expertType": "agent",
+  "agentName": "product-law",
+  "displayName": {
+    "en": "Product Compliance Expert",
+    "zh": "产品合规专家"
+  },
+  "profession": {
+    "zh": "发布审查与营销主张",
+    "en": "Launch Review & Claims"
+  },
+  "displayDescription": {
+    "zh": "按风险偏好审查功能上线，快速回答是否构成问题，并核验营销宣称证据。",
+    "en": "Reviews product launches against risk appetite, answers quick risk triage questions and verifies marketing claim evidence."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "这个新功能可以上线吗？给出放行条件。",
+    "en": "Can this feature ship? Give me the conditions for approval."
+  },
+  "plugin": "product-law",
+  "tags": [
+    {
+      "zh": "发布审查",
+      "en": "Launch Review"
+    },
+    {
+      "zh": "风险判断",
+      "en": "Risk Triage"
+    },
+    {
+      "zh": "营销宣称",
+      "en": "Marketing Claims"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "这个新功能可以上线吗？给出放行条件。",
+      "en": "Can this feature ship? Give me the conditions for approval."
+    },
+    {
+      "zh": "检查这段营销文案中哪些宣称需要证据支撑。",
+      "en": "Check which claims in this copy need supporting evidence."
+    },
+    {
+      "zh": "列出下个版本需要法务提前介入的事项。",
+      "en": "List items needing early legal review in the next release."
+    }
+  ],
+  "license": "Apache-2.0"
+}

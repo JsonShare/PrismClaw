@@ -4,7 +4,6 @@ import { useChatSocket } from '../../hooks/chat/useChatSocket'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { useSessionLoader } from '../../hooks/chat/useSessionLoader'
 import { useConversationController } from '../../hooks/chat/useConversationController'
-import { useTaskPanelData } from '../../hooks/chat/useTaskPanelData'
 import { useFilePreviewController } from '../../hooks/chat/useFilePreviewController'
 import { useDesktopNotifier } from '../../hooks/chat/useDesktopNotifier'
 import { useGlobalKeyboard, type ShortcutBinding } from '../../hooks/useGlobalKeyboard'
@@ -20,8 +19,12 @@ import ConfirmModal from '../../components/modals/ConfirmModal'
 import { TrajectoryPanel } from '../../components/trajectory/TrajectoryPanel'
 import { purgeConversation } from '../../stores'
 import { fuzzyFilter } from '../../lib/fuzzy'
-import { skipCodeToMessage, type SkippedFile } from '../../lib/chat/attachments'
-import { normalizeWorkspacePath } from '../../lib/chat/paths'
+import {
+  extractLegacyUploadedAttachmentText,
+  skipCodeToMessage,
+  splitAttachmentContent,
+  type SkippedFile,
+} from '../../lib/chat/attachments'
 import { normalizeReferenceUrl, referenceIsRag } from '../../lib/chat/referenceSources'
 import { apiUrl, openExternal } from '../../lib/system-adapter'
 import { SessionSearchModal } from '../../components/modals/SessionSearchModal'
@@ -47,6 +50,8 @@ const SIDEBAR_WIDTH = 240
 const RIGHT_RESIZER_WIDTH = 12
 /** 咨询栏最小可视宽度：低于它消息流与输入框会被挤变形 */
 const MAIN_COLUMN_MIN_WIDTH = 550
+/** 主栏 + 左栏 + 右栏 + 外边距：低于该视口宽度时右栏无法并排展示 */
+const RIGHT_PANEL_MIN_VIEWPORT_WIDTH = MAIN_COLUMN_MIN_WIDTH + 240 + 340 + 24
 /** 列表态（未选文件）与预览态的最小宽度 */
 const RIGHT_LIST_MIN_WIDTH = 300
 const RIGHT_PREVIEW_MIN_WIDTH = 460
@@ -152,11 +157,6 @@ export default function ChatPage() {
 
   const convStates = useChatStore((s) => s.convStates)
   const unreadConvIds = useChatStore((s) => s.unreadConvIds)
-  const activeConvState = activeConvId ? convStates[activeConvId] : null
-  const isStreaming = activeConvState?.isStreaming ?? false
-  const isQueued = activeConvState?.isQueued ?? false
-  const queuePosition = activeConvState?.queuePosition ?? 0
-  const liveTaskRuntime = activeConvState?.activeTaskRuntime ?? null
 
   // 审阅面板（右侧 aside）仅在 xl(≥1280px) 显示
   const isXl = useMediaQuery('(min-width: 1280px)')
@@ -232,7 +232,7 @@ export default function ChatPage() {
       // 定时执行产生的新会话：实时插入左侧列表，不必等刷新后 ready 帧重下发。
       prependConversation({
         id: sessionId,
-        title: task?.name ?? '自动化任务',
+        title: task?.name ?? '定时任务',
         updatedAt: Date.now(),
         active: false,
         type: 'scheduled',
@@ -312,7 +312,8 @@ export default function ChatPage() {
     return groups
   }, [sessionSearchBase, historyGroupBy, historySortBy, historyFilter, workspaces, schedulerTasks])
 
-  // 默认只展开最近更新的一次目录任务，其余折叠；切换分组方式时重置一次。
+  // 默认展开策略：优先展开「有任务在运行」的工作区（运行中或等待用户输入的 run），
+  // 没有运行中的任务时只展开最近更新的一组，其余折叠；切换分组方式时重置一次。
   const hasInitializedCollapsed = useRef(false)
   const prevGroupByRef = useRef(historyGroupBy)
   useEffect(() => {
@@ -322,18 +323,32 @@ export default function ChatPage() {
     hasInitializedCollapsed.current = true
     prevGroupByRef.current = historyGroupBy
 
+    // 用 getState 读取运行态：避免 streaming 心跳每帧都重跑本 effect
+    const convStatesNow = useChatStore.getState().convStates
+    const isActiveConv = (convId: string) => {
+      const st = convStatesNow[convId]
+      if (!st) return false
+      // 运行中，或停在中途等待用户澄清/确认——都属于「任务还在进行」
+      return st.isStreaming || st.runGate != null
+    }
+
     let mostRecentId: string | null = null
     let mostRecentTs = 0
+    const activeGroupIds = new Set<string>()
     for (const g of groupedHistoryConversations) {
       const ts = g.items[0]?.updatedAt || 0
       if (ts > mostRecentTs) {
         mostRecentTs = ts
         mostRecentId = g.id
       }
+      if (g.items.some((c) => isActiveConv(c.id))) activeGroupIds.add(g.id)
     }
+
+    // 没有正在运行的工作区时，回落为「最新的一组」
+    const keepExpandedIds = activeGroupIds.size > 0 ? activeGroupIds : new Set(mostRecentId ? [mostRecentId] : [])
     const next = new Set<string>()
     for (const g of groupedHistoryConversations) {
-      if (g.id !== mostRecentId) next.add(g.id)
+      if (!keepExpandedIds.has(g.id)) next.add(g.id)
     }
     setCollapsedWsGroups(next)
     // 切换分组方式时一并清空"查看更多"展开状态，避免旧分组的 id 残留误展开。
@@ -428,7 +443,7 @@ export default function ChatPage() {
       return { ok: false, message: `通知权限为 ${Notification.permission}，请先在浏览器中允许本站通知` }
     }
     try {
-      const n = new Notification('PrismClaw 通知测试', {
+      const n = new Notification('PrismWork 通知测试', {
         body: '通知已生效，任务完成时会收到提醒。',
         tag: 'prismclaw-test',
       })
@@ -486,6 +501,21 @@ export default function ChatPage() {
     const domainParam = params.get('domain')
     const activeDomain =
       domainParam && DOMAIN_NAV_MAP[domainParam] ? domainParam : null
+
+    // 刷新（F5 / ⌘R）一律回到「新任务」：域页面会把 ?domain=&page= 写回地址栏，
+    // 若按参数恢复，用户选过业务域菜单后刷新会一直停在域页面，而不是默认菜单。
+    // 首次进入（navigate）仍支持域深链，只拦截刷新。
+    const navEntry = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined
+    if (navEntry?.type === 'reload') {
+      if (params.get('domain') || params.get('page') || section || session) {
+        // 清掉域深链参数，避免之后再从侧栏进入域时被残留参数带回上次页面
+        history.replaceState({}, '', location.pathname)
+      }
+      setActiveSection('chat')
+      return
+    }
 
     if (!section || !session) {
       // 无 session 跳转：只做域深链校正，参数由域自身读写，不清参
@@ -759,6 +789,78 @@ export default function ChatPage() {
   const filePreview = useFilePreviewController({ token, backendWorkspaceId })
   // 解构给下方窗口缩放自折叠 effect 用（读取/回写面板开关）。
   const { taskFilesOpen, setTaskFilesOpen } = filePreview
+  // 右栏自动展开：本会话有交付物/上传时展开；用户手动收起后不再打扰。
+  // landing 阶段先上传文件、再发送首条消息时，文件落在后端临时 session 的
+  // inbox 里，会话建立后不会迁移。这里从首条用户消息的附件路径反推这些
+  // session，让右栏「我的上传」仍能看到它们。
+  // 只扫首条用户消息：临时 session 只可能出现在建会话之前的那一轮；
+  // 同时避免流式过程中反复解析全部历史消息。
+  const firstUserMessage = useMemo(() => {
+    const conv = activeConvId ? convStates[activeConvId] : null
+    return conv?.messages.find((message) => message.role === 'user') ?? null
+  }, [activeConvId, convStates])
+  const extraUploadSessionIdsKey = useMemo(() => {
+    if (!activeConvId || !firstUserMessage) return ''
+    const ids = new Set<string>()
+    const pattern = /^sessions\/([^/]+)\/inbox\//
+    const { text, attachments, files } = splitAttachmentContent(firstUserMessage.content)
+    const paths = [
+      ...files.map((file) => file.path),
+      ...attachments
+        .filter((item) => item.type === 'image')
+        .map((item) => item.source_path),
+      ...extractLegacyUploadedAttachmentText(text).attachments.map((item) => item.path),
+    ]
+    for (const path of paths) {
+      const match = typeof path === 'string' ? pattern.exec(path) : null
+      if (match) ids.add(match[1])
+    }
+    ids.delete(activeConvId)
+    return [...ids].sort().join('|')
+  }, [activeConvId, firstUserMessage])
+  const extraUploadSessionIds = useMemo(
+    () => (extraUploadSessionIdsKey ? extraUploadSessionIdsKey.split('|') : []),
+    [extraUploadSessionIdsKey],
+  )
+  const [rightPanelHasFiles, setRightPanelHasFiles] = useState(false)
+  const rightPanelUserCollapsedRef = useRef(false)
+  // 窗口变窄时下方 resize effect 会自动收起右栏；这里提前声明，避免
+  // “有文件自动展开” 与自动收起互相触发形成死循环。
+  const autoSidebarCollapsedRef = useRef(false)
+  const autoTaskFilesClosedRef = useRef(false)
+  const prevSidebarCollapsedRef = useRef(sidebarCollapsed)
+  const prevTaskFilesOpenRef = useRef(taskFilesOpen)
+  /**
+   * 右栏能否与中间栏并排：低于该宽度时 resize effect 会自动收起右栏，
+   * 所以此时不显示开关、也不自动展开，避免“点开→立刻被收起”的闪烁。
+   */
+  const rightPanelFits = useMediaQuery(`(min-width: ${RIGHT_PANEL_MIN_VIEWPORT_WIDTH}px)`)
+  useEffect(() => {
+    rightPanelUserCollapsedRef.current = false
+    setRightPanelHasFiles(false)
+  }, [activeConvId])
+  useEffect(() => {
+    if (showLandingHome || !rightPanelFits) return
+    if (rightPanelUserCollapsedRef.current || autoTaskFilesClosedRef.current) return
+    if (rightPanelHasFiles && !taskFilesOpen) setTaskFilesOpen(true)
+  }, [showLandingHome, rightPanelHasFiles, taskFilesOpen, rightPanelFits, setTaskFilesOpen])
+  useEffect(() => {
+    const onUploaded = () => {
+      if (showLandingHome || !rightPanelFits || autoTaskFilesClosedRef.current) return
+      rightPanelUserCollapsedRef.current = false
+      setTaskFilesOpen(true)
+    }
+    window.addEventListener('prismclaw:files-uploaded', onUploaded)
+    return () => window.removeEventListener('prismclaw:files-uploaded', onUploaded)
+  }, [showLandingHome, rightPanelFits, setTaskFilesOpen])
+  const handleToggleRightPanel = useCallback(() => {
+    if (!rightPanelFits) return
+    setTaskFilesOpen((prev) => {
+      const next = !prev
+      rightPanelUserCollapsedRef.current = !next
+      return next
+    })
+  }, [rightPanelFits, setTaskFilesOpen])
   // 网页来源交给系统浏览器新标签；RAG / 后端结构化来源走右栏 file-viewer。
   const handleOpenSource = useCallback((source: ReferenceSource) => {
     if (referenceIsRag(source)) {
@@ -829,14 +931,6 @@ export default function ChatPage() {
     window.localStorage.setItem(RIGHT_PREVIEW_WIDTH_KEY, String(rightPreviewWidth))
   }, [rightPreviewWidth])
 
-  const [rightProcessOpen, setRightProcessOpen] = useState(true)
-  const [rightFilesOpen, setRightFilesOpen] = useState(true)
-  const [rightCallsOpen, setRightCallsOpen] = useState(true)
-  const [rightTrajectoryOpen, setRightTrajectoryOpen] = useState(true)
-  const autoSidebarCollapsedRef = useRef(false)
-  const autoTaskFilesClosedRef = useRef(false)
-  const prevSidebarCollapsedRef = useRef(sidebarCollapsed)
-  const prevTaskFilesOpenRef = useRef(taskFilesOpen)
   useEffect(() => {
     if (!autoSidebarCollapsedRef.current) {
       prevSidebarCollapsedRef.current = sidebarCollapsed
@@ -1084,9 +1178,6 @@ export default function ChatPage() {
     setActiveWorkspaceId('default')
   }, [activeWorkspaceId, setActiveWorkspaceId, workspaces, workspacesLoading])
 
-  // 右侧面板派生数据：全部从 store 直订计算（useTaskPanelData），本组件不感知派生细节。
-  const panelData = useTaskPanelData()
-
   return (
     <div className="h-screen bg-[var(--c-canvas)] text-[var(--c-text)] p-3">
       <div className="h-full w-full rounded-[var(--radius-card)] overflow-hidden flex flex-col">
@@ -1155,9 +1246,10 @@ export default function ChatPage() {
               onNewSession={handleNewSession}
               title={conversations.find((c) => c.id === activeConvId)?.title ?? ''}
               isLanding={showLandingHome}
-              showPanelButton={!showLandingHome}
+              showPanelButton={!showLandingHome && rightPanelFits}
               taskFilesOpen={taskFilesOpen}
-              onTogglePanel={() => setTaskFilesOpen((v: boolean) => !v)}
+              onTogglePanel={handleToggleRightPanel}
+              onOpenTrajectory={() => setTrajectoryOpen(true)}
               token={token ?? ''}
               workspaceId={backendWorkspaceId}
               layout={showLandingHome ? 'landing' : 'default'}
@@ -1190,6 +1282,7 @@ export default function ChatPage() {
               showLandingHome={showLandingHome}
               taskFilesOpen={taskFilesOpen}
               width={rightPanelWidth}
+              workspaceId={backendWorkspaceId}
               selectedFile={filePreview.selectedFile}
               previewBlob={filePreview.previewBlob}
               reviewingChange={filePreview.reviewingChange}
@@ -1199,29 +1292,10 @@ export default function ChatPage() {
               selectedFileError={filePreview.selectedFileError}
               activeConvId={activeConvId}
               token={token}
-              rightProcessOpen={rightProcessOpen}
-              setRightProcessOpen={setRightProcessOpen}
-              rightFilesOpen={rightFilesOpen}
-              setRightFilesOpen={setRightFilesOpen}
-              rightCallsOpen={rightCallsOpen}
-              setRightCallsOpen={setRightCallsOpen}
-              rightTrajectoryOpen={rightTrajectoryOpen}
-              setRightTrajectoryOpen={setRightTrajectoryOpen}
-              subagentsForPanel={panelData.subagentsForPanel}
-              runningToolCallsForPanel={panelData.runningToolCallsForPanel}
-              isStreaming={isStreaming}
-              isQueued={isQueued}
-              liveTaskRuntime={liveTaskRuntime}
-              taskRuntimeSummary={panelData.taskRuntimeSummary}
-              queuePosition={queuePosition}
-              formatToolProgressText={panelData.formatToolProgressText}
-              panelTaskOutputFiles={panelData.panelTaskOutputFiles}
-              normalizeWorkspacePath={normalizeWorkspacePath}
+              extraUploadSessionIds={extraUploadSessionIds}
+              onFilesPresenceChange={setRightPanelHasFiles}
               openFileFromOutputList={filePreview.openFileFromOutputList}
               downloadSingleFile={filePreview.downloadSingleFile}
-              toolNamesForPanel={panelData.toolNamesForPanel}
-              skillsForPanel={panelData.skillsForPanel}
-              setTrajectoryOpen={setTrajectoryOpen}
               closePreviewModal={filePreview.closePreviewModal}
               retrySelectedFile={filePreview.retrySelectedFile}
               reviewHandlers={filePreview.reviewHandlers}

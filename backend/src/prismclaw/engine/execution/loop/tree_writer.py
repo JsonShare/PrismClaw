@@ -187,11 +187,10 @@ async def append_to_tree(
     if isinstance(entry, MessageEntry):
         events = _event_logger.message_entry(tree.header.id, entry, entry.id)
         tree.header.last_interaction_at = now_iso()
-        events.append(
-            _event_logger.request_header(
-                tree.header.id, {"last_interaction_at": tree.header.last_interaction_at}
-            )
-        )
+        header_update: dict[str, object] = {
+            "last_interaction_at": tree.header.last_interaction_at
+        }
+        events.append(_event_logger.request_header(tree.header.id, header_update))
         await deps.context_ingestor.ingest(tree.header.id, _entry_to_llm_dict(entry))
     else:
         events = [_event_logger.entry_updated(tree.header.id, entry, leaf_id=entry.id)]

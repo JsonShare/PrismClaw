@@ -237,7 +237,7 @@ export function SettingsPage({
                 <div className="min-w-0">
                   <div className="text-[length:var(--fs-md)] font-semibold text-[var(--c-text)]">桌面通知</div>
                   <div className="mt-1 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">
-                    当 PrismClaw 完成任务、需要您确认或执行出错时，显示系统通知
+                    当 PrismWork 完成任务、需要您确认或执行出错时，显示系统通知
                     {notificationPermission === 'denied' && (
                       <span className="ml-1 text-[var(--c-error)]">（浏览器权限已被拒绝，请在系统设置中开启）</span>
                     )}

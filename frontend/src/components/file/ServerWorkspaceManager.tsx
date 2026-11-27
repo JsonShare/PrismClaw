@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  FolderOpen,
-  Folder,
-  UploadCloud,
   Trash2,
   Plus,
   ChevronDown,
   LoaderCircle,
-  Upload,
   X,
   ShieldOff,
 } from 'lucide-react'
+import { FolderIcon, UploadIcon } from '../icons/SystemIcons'
 import { PrimaryButton } from '../ui/PrimaryButton'
 import { HairlineDivider } from '../ui/HairlineDivider'
 import type { Workspace } from '../../types'
@@ -130,7 +127,7 @@ function WorkspaceMenuItem({
             aria-label="上传文件或文件夹"
             className="btn btn-icon btn-ghost"
           >
-            <UploadCloud size={14} strokeWidth={1.8} />
+            <UploadIcon size={14} />
           </button>
         )}
         {showDelete && onDelete && (
@@ -284,7 +281,7 @@ export default function ServerWorkspaceManager({
                     hover:text-[var(--c-text)]
                     ${open ? 'text-[var(--c-text)]' : 'text-[var(--c-text-secondary)]'}`}
       >
-        <FolderOpen size={14} className="shrink-0" strokeWidth={1.5} />
+        <FolderIcon size={14} />
         <span className="text-[length:var(--fs-sm)] font-medium truncate max-w-[180px]">{displayName}</span>
         <ChevronDown size={14} className={`shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -303,7 +300,7 @@ export default function ServerWorkspaceManager({
                 {/* 默认工作区 */}
                 <WorkspaceMenuItem
                   name="默认工作区"
-                  icon={<Folder size={16} strokeWidth={1.8} className="text-[var(--c-text-secondary)]/70" />}
+                  icon={<FolderIcon size={16} className="text-[var(--c-text-secondary)]/70" />}
                   isActive={workspaceId === 'default'}
                   showSync={!!onUploadFiles}
                   onSelect={() => handleSelect('default')}
@@ -321,7 +318,7 @@ export default function ServerWorkspaceManager({
                           <ShieldOff size={14} className="text-[var(--c-error)] shrink-0" />
                         </span>
                       ) : (
-                        <Folder size={16} strokeWidth={1.8} className="text-[var(--c-text-secondary)]/70" />
+                        <FolderIcon size={16} className="text-[var(--c-text-secondary)]/70" />
                       )
                     }
                     isActive={w.id === workspaceId}
@@ -470,7 +467,7 @@ export default function ServerWorkspaceManager({
                   type="button"
                   onClick={() => folderInputRef.current?.click()}
                 >
-                  <FolderOpen size={15} className="text-[var(--c-btn-primary-fg)]" strokeWidth={1.5} />
+                  <UploadIcon size={15} className="text-[var(--c-btn-primary-fg)]" />
                   上传文件夹
                 </PrimaryButton>
 
@@ -478,7 +475,7 @@ export default function ServerWorkspaceManager({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Upload size={15} className="text-[var(--c-btn-primary-fg)]" strokeWidth={1.5} />
+                  <UploadIcon size={15} className="text-[var(--c-btn-primary-fg)]" />
                   上传文件
                 </PrimaryButton>
               </div>

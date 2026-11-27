@@ -57,6 +57,8 @@ scheduled_tasks = Table(
     Column("consecutive_failures", Integer, nullable=False, server_default=text("0")),
     Column("created_at", Double, nullable=False),
     Column("max_age_days", Integer, nullable=False, server_default=text("30")),
+    Column("valid_from", Double),
+    Column("valid_until", Double),
     Column(
         "missed_policy",
         String,
@@ -282,6 +284,8 @@ class PostgresSchedulerStore:
             "consecutive_failures": task.consecutive_failures,
             "created_at": task.created_at,
             "max_age_days": task.max_age_days,
+            "valid_from": task.valid_from,
+            "valid_until": task.valid_until,
             "missed_policy": task.missed_policy,
         }
 
@@ -302,6 +306,8 @@ class PostgresSchedulerStore:
             consecutive_failures=row["consecutive_failures"],
             created_at=row["created_at"],
             max_age_days=row["max_age_days"],
+            valid_from=row["valid_from"],
+            valid_until=row["valid_until"],
             missed_policy=row["missed_policy"],
         )
 

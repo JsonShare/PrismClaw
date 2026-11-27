@@ -300,7 +300,7 @@ def _register_msg_handlers(state: ConnectionState) -> None:
     ) -> None:
         conversation_id = msg.conversation_id
 
-        # 命令拦截: /command_name args → 插件命令 runtime
+        # 命令拦截: /command_name args → 专家包命令 runtime
         if msg.content and msg.content.startswith("/"):
             try:
                 from prismclaw.app.web.chat.command_adapter import (

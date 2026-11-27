@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 from prismclaw.engine.execution.query._catalog_builder import (
     _build_available_subagents_catalog,
 )
@@ -49,10 +52,8 @@ class _FakeEntry:
     def __init__(self, index: int) -> None:
         self.name = f"agent-{index}"
         self.description = "d" * 200
-        self.plugin_name = "p"
-        self.marketplace_name = "mp"
-        self.marketplace_description = "x" * 200
-        self.can_handoff_to = []
+        self.expert_name = "p"
+        self.expert_description = "x" * 200
 
 
 class _FakeCatalog:
@@ -66,17 +67,17 @@ class _FakeCatalog:
 def test_subagents_catalog_is_full_and_bounded() -> None:
     """目录全量返回（固定 prompt 只渲染核心子代理，体积由渲染侧裁剪）。"""
     entries = _build_available_subagents_catalog(
-        capability_catalog=_FakeCatalog(30),  # type: ignore[arg-type]
+        capability_catalog=cast(RuntimeCatalog, _FakeCatalog(30)),
         tool_summaries=[("sub_agent", "desc")],
     )
     assert len(entries) == 30
-    assert all(e.plugin_name == "p" for e in entries)
+    assert all(e.expert_name == "p" for e in entries)
     assert all(len(e.description) <= 101 for e in entries)  # 100 字 + 省略号
 
 
 def test_subagents_catalog_empty_when_tool_absent() -> None:
     entries = _build_available_subagents_catalog(
-        capability_catalog=_FakeCatalog(5),  # type: ignore[arg-type]
+        capability_catalog=cast(RuntimeCatalog, _FakeCatalog(5)),
         tool_summaries=[],
     )
     assert entries == ()

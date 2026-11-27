@@ -1,4 +1,4 @@
-"""项目级能力布局（skills / plugins / agents）的单一事实源。
+"""项目级能力布局（skills / experts / agents）的单一事实源。
 
 本模块是 L0 纯值对象：只依赖 pathlib / enum / dataclasses，不 import 任何
 业务层（infra / engine / assembly / runtime）。它回答三个问题：
@@ -8,7 +8,7 @@
 3. 布局展开过程中产生了哪些可观测信号（``LayoutDiagnostic``）。
 
 布局的"计算"（读 settings 契约 + 解析根 + 展开相对目录）发生在 ``infra/paths``，
-三个发现器（skills / plugins / agents）只消费本对象给出的 location，不再各自
+三个发现器（skills / experts / agents）只消费本对象给出的 location，不再各自
 拼接 ``root / 相对目录``，从而消除三处重复的 root 去重 / 拼接 / exists 判定。
 
 注意：本对象只表达 **project 级**能力。workspace 级（previews/edits/spills 等）
@@ -53,7 +53,7 @@ class CapabilityKind(StrEnum):
     """三类项目级能力。value 同时用于诊断与日志标识。"""
 
     SKILLS = "skills"
-    PLUGINS = "plugins"
+    EXPERTS = "experts"
     AGENTS = "agents"
 
 
@@ -141,7 +141,7 @@ class ProjectCapabilityLayout:
                 for root in self.roots
             ],
             "skills": kind_block(CapabilityKind.SKILLS),
-            "plugins": kind_block(CapabilityKind.PLUGINS),
+            "experts": kind_block(CapabilityKind.EXPERTS),
             "agents": kind_block(CapabilityKind.AGENTS),
             "diagnostics": [
                 {

@@ -30,7 +30,7 @@ class SkillOriginDescriptorProtocol(Protocol):
     def origin(self) -> str | None: ...
 
     @property
-    def plugin_name(self) -> str | None: ...
+    def expert_name(self) -> str | None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -50,15 +50,15 @@ class SkillInvocationState(BaseModel):
     allowed_tools_override: list[str] | None = None
     is_active: bool = False
     clear_after_terminal_result: bool = True
-    # ---- 方案 C:scope/plugin 一等支持 ----
-    # 当前 skill 属于哪个 plugin(若不是 plugin 技能则为 None),
-    # 用于在下一层技能 resolve 时优先命中同 plugin 内版本的 command/skill,
-    # 避免跨 plugin 重名(cold-start-interview/matter-workspace 等)导致的错 body 命中。
-    plugin_name: str | None = None
+    # ---- 方案 C:scope/expert 一等支持 ----
+    # 当前 skill 属于哪个 expert(若不是 expert 技能则为 None),
+    # 用于在下一层技能 resolve 时优先命中同 expert 内版本的 command/skill,
+    # 避免跨 expert 重名(cold-start-interview/matter-workspace 等)导致的错 body 命中。
+    expert_name: str | None = None
     # ---- command/skill 统一建模 ----
     # 区分当前调用来源于技能激活还是命令 dispatch:
     #   "skill" — 标准技能激活路径 (SkillRuntime.build_skill_execution)
-    #   "command" — 命令 dispatch 路径 (PluginCommandRuntime.dispatch)
+    #   "command" — 命令 dispatch 路径 (ExpertCommandRuntime.dispatch)
     # hook matcher 只看 skill_name，不受此字段影响;
     # governance 和 system_prompt 层据此区分行为(命令不触发 skill-gated 解锁等)。
     invocation_context: Literal["skill", "command"] = "skill"
@@ -84,12 +84,12 @@ class SkillExecutionStrategy(BaseModel):
     append_messages: list[dict[str, Any]] = Field(default_factory=list)
     summary: str = ""
     invocation_state: SkillInvocationState | None = None
-    # Step 1-9: 执业档案 / plugin 传播字段
-    # 本 skill 属于哪个 plugin(仅当 source=='plugin' 时非空,取自 loaded_from)
-    plugin_name: str | None = None
-    # 执业档案原始文本( <plugins>/<plugin>/PLUGIN.md ),
+    # Step 1-9: 执业档案 / expert 传播字段
+    # 本 skill 属于哪个 expert（仅当 source 为专家包来源时非空，取自 loaded_from）
+    expert_name: str | None = None
+    # 执业档案原始文本( <experts>/<expert>/PLUGIN.md ),
     # 读入后已存入 append_messages 的一条消息中,这里保留副本方便 audit/debug。
-    plugin_profile_text: str | None = None
+    expert_profile_text: str | None = None
     # preload body 注入使用的字符预算上限(默认 30K, 硬截断)
     preload_budget_chars: int = 30000
 
@@ -105,11 +105,9 @@ class SkillAgentConfig(BaseModel):
     name: str | None = None
     description: str = ""
     model: str | None = None
-    allowed_tools: list[str] | None = None
     max_turns: int | None = None
     timeout_seconds: float | None = None
     preload_skills: list[str] = Field(default_factory=list)
-    can_handoff_to: list[str] | None = None
 
 
 class SkillManifest(BaseModel):
@@ -143,7 +141,7 @@ class SkillManifest(BaseModel):
         ),
     )
     customizes: str | None = Field(
-        default=None, description="For customize commands: the sub-plugin this command customizes"
+        default=None, description="For customize commands: the sub-expert this command customizes"
     )
     # ---- 编排遵从度埋点:加载期预提取 ----
     # body 内显式声明的子技能调用名序列,按出现顺序
@@ -205,6 +203,12 @@ class SkillManifest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def qualified_skill_id(expert_name: str, skill_name: str) -> str:
+    """专家包技能的唯一 ID：``<expert>:<skill>``（幂等）。"""
+    prefix = f"{expert_name}:"
+    return skill_name if skill_name.startswith(prefix) else f"{prefix}{skill_name}"
+
+
 class ResolvableEntry(Protocol):
     """Minimal interface needed for resolution: a canonical ``name``."""
 
@@ -218,8 +222,8 @@ def normalize_skill_ref(name: str) -> str:
     Strips surrounding whitespace and any leading slashes so command-style
     references (``/xlsx``, ``//a:b``) compare equal to their canonical catalog
     names (``xlsx``, ``a:b``). Internal structure is preserved: a namespaced
-    ``plugin:skill`` keeps its colon, and only the *leading* slash that the
-    reference implementation uses as a command prefix is removed.
+    ``<namespace>:<skill>`` id keeps its colon, and only the *leading* slash used
+    as a command prefix is removed.
 
     A canonical reference is always a single space-free token, so anything past
     the first whitespace run is stray argument noise a model may have appended
@@ -227,10 +231,10 @@ def normalize_skill_ref(name: str) -> str:
     at the one designated rewrite gate rather than scattering it across callers.
 
     **Separator normalization**: the catalog's canonical namespaced form is
-    ``plugin:skill`` (colon) — see :func:`_plugin_capability_id`. Models and
-    users frequently type ``plugin.skill`` (dot, a natural namespace separator
+    ``<namespace>:<skill>`` (colon) — see :func:`_expert_capability_id`. Models and
+    users frequently type ``expert.skill`` (dot, a natural namespace separator
     in programming languages), so every ``.`` inside the token is folded to
-    ``:`` before the match pass. This is safe because no real skill or plugin
+    ``:`` before the match pass. This is safe because no real skill or expert
     name contains ``.`` (kebab-case everywhere).
 
     The operation is total and idempotent:
@@ -240,8 +244,8 @@ def normalize_skill_ref(name: str) -> str:
     if not stripped:
         return ""
     token = stripped.split(None, 1)[0]
-    # Fold dot → colon so ``plugin.skill`` resolves against the catalog's
-    # canonical ``plugin:skill`` naming. Idempotent (no double-colon risk).
+    # Fold dot → colon so ``expert.skill`` resolves against the catalog's
+    # canonical ``<namespace>:<skill>`` naming. Idempotent (no double-colon risk).
     return token.replace(".", ":")
 
 

@@ -1,9 +1,9 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-type PrimaryButtonSize = 'sm' | 'md' | 'lg'
+type PrimaryButtonSize = 'xs' | 'sm' | 'md' | 'lg'
 
 interface PrimaryButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  /** 尺寸档：sm 28 / md 36 / lg 40。默认 md（表单提交、对话框页脚）。 */
+  /** 尺寸档：xs 32 / sm 28 / md 36 / lg 40。默认 md（表单提交、对话框页脚）。 */
   size?: PrimaryButtonSize
 }
 

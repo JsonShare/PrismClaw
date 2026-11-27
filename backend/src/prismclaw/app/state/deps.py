@@ -52,13 +52,9 @@ def build_app_web_deps(
     from prismclaw.app.web.deps import WebDeps
     from prismclaw.app.web.websocket.domain_task_emitter import WsDomainTaskEmitter
     from prismclaw.app.web.websocket.websocket import ConnectionRegistry as ConnectionRegistry
-    from prismclaw.assembly.plugins.reload_service import apply_app_settings
+    from prismclaw.assembly.experts.reload_service import apply_app_settings
     from prismclaw.assembly.runtime_coordinator import get_app_workspace_runner_deps_async
     from prismclaw.runtime.facade.execution import cleanup_working_dir
-    from prismclaw.runtime.facade.plugins import (
-        is_source_trusted_for_load,
-        resolve_workspace_trusted,
-    )
     from prismclaw.runtime.facade.services import maybe_spawn_extraction
     from prismclaw.schema.dream import DreamAdminOps
 
@@ -126,7 +122,7 @@ def build_app_web_deps(
 
     # 跨 worker 运行态：owner 写 Redis 心跳，任意 worker 都能判活；
     # 中止请求经 Pub/Sub 转成本地 rc.stop()（非 owner 连接上没有 RunControl）。
-    # 插件热重载会重建 WebDeps：复用已有实例，只热更新回调，避免监听任务泄漏。
+    # 专家包热重载会重建 WebDeps：复用已有实例，只热更新回调，避免监听任务泄漏。
     from prismclaw.app.web.chat.run_presence import RunPresence
 
     def _abort_local_run(conversation_id: str) -> None:
@@ -190,10 +186,6 @@ def build_app_web_deps(
         apply_settings_fn=apply_app_settings,
         cleanup_working_dir_fn=cleanup_working_dir,
         workspace_runner_deps_fn=get_app_workspace_runner_deps_async,
-        plugin_trust_fns={
-            "is_source_trusted_for_load": is_source_trusted_for_load,
-            "resolve_workspace_trusted": resolve_workspace_trusted,
-        },
         dream_admin_ops=DreamAdminOps,
     )
 

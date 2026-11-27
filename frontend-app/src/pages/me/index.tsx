@@ -61,7 +61,7 @@ export default function Me() {
     openDialog({
       kind: 'alert',
       title: '隐私与权限',
-      desc: 'PrismClaw 仅在你的设备与所属服务器之间同步必要数据，用于完成你发起的任务；不会向第三方共享你的内容。',
+      desc: 'PrismWork 仅在你的设备与所属服务器之间同步必要数据，用于完成你发起的任务；不会向第三方共享你的内容。',
       confirmText: '我知道了'
     })
   }
@@ -69,8 +69,8 @@ export default function Me() {
   const showAbout = () => {
     openDialog({
       kind: 'alert',
-      title: '关于 PrismClaw',
-      desc: 'PrismClaw Mobile\n直连你的服务器，随时发起与继续任务。',
+      title: '关于 PrismWork',
+      desc: 'PrismWork Mobile\n直连你的服务器，随时发起与继续任务。',
       confirmText: '知道了'
     })
   }

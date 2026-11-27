@@ -51,7 +51,7 @@ def hash_password(password: str, *, scheme: str = "scrypt") -> str:
     if scheme == "bcrypt":
         import bcrypt
 
-        return "bcrypt:" + bcrypt.hashpw(pw, bcrypt.gensalt()).decode("ascii")
+        return f"bcrypt:{bcrypt.hashpw(pw, bcrypt.gensalt()).decode('ascii')}"
     raise ValueError(f"unknown password scheme: {scheme!r}")
 
 
@@ -78,7 +78,7 @@ def verify_password(password: str, stored: str | None) -> bool:
         if scheme == "bcrypt":
             import bcrypt
 
-            return bcrypt.checkpw(pw, payload.encode("ascii"))
+            return bool(bcrypt.checkpw(pw, payload.encode("ascii")))
     except Exception:
         # Any malformed stored hash / decode error → treat as mismatch.
         return False

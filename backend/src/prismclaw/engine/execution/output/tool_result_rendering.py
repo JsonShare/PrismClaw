@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 
-from prismclaw.engine.execution.handoff.contract import render_handoff_request_handover
 from prismclaw.engine.state.projection_rendering import (
     render_result_compaction_preview,
 )
@@ -73,13 +72,6 @@ def _render_subagent_envelope_handover(result: ToolResult) -> str:
     blocks: list[str] = []
     if envelope.result_envelope is not None:
         blocks.append(_render_subagent_result_handover(envelope.result_envelope))
-    handoff_request = envelope.handoff_request
-    if handoff_request is not None:
-        blocks.append(
-            render_handoff_request_handover(
-                handoff_request.model_dump(mode="python", exclude_none=True)
-            )
-        )
     return "\n\n".join(block for block in blocks if block).strip()
 
 

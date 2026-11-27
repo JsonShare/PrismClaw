@@ -1,0 +1,278 @@
+{
+  "name": "legal-team",
+  "version": "1.0.0",
+  "description": "Chinese enterprise legal team covering contracts, corporate, employment, privacy, product, regulatory, AI governance and IP.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "license": "Apache-2.0",
+  "expertType": "team",
+  "agentName": "legal-team-lead",
+  "teamInfo": {
+    "leadAgent": "legal-team-lead",
+    "memberAgents": [
+      "contract-counsel",
+      "ma-counsel",
+      "employment-counsel",
+      "privacy-counsel",
+      "product-counsel",
+      "regulatory-counsel",
+      "ai-counsel",
+      "ip-counsel"
+    ]
+  },
+  "agents": [
+    "./agents/legal-team-lead.md",
+    "./agents/contract-counsel.md",
+    "./agents/ma-counsel.md",
+    "./agents/employment-counsel.md",
+    "./agents/privacy-counsel.md",
+    "./agents/product-counsel.md",
+    "./agents/regulatory-counsel.md",
+    "./agents/ai-counsel.md",
+    "./agents/ip-counsel.md"
+  ],
+  "skills": [
+    "./skills/ai-law-playbook",
+    "./skills/ai-tool-handoff",
+    "./skills/aig-ai-governance-workflow",
+    "./skills/board-minutes",
+    "./skills/commercial-renewal-workflow",
+    "./skills/commercial-review-workflow",
+    "./skills/contract-law-playbook",
+    "./skills/corporate-governance-workflow",
+    "./skills/corporate-law-playbook",
+    "./skills/corporate-ma-workflow",
+    "./skills/deal-team-summary",
+    "./skills/employment-expansion-workflow",
+    "./skills/employment-hiring-workflow",
+    "./skills/employment-investigation-workflow",
+    "./skills/employment-law-playbook",
+    "./skills/employment-leave-workflow",
+    "./skills/employment-policy-workflow",
+    "./skills/feature-risk-assessment",
+    "./skills/gap-surfacer",
+    "./skills/handbook-updates",
+    "./skills/internal-investigation",
+    "./skills/ip-contract-workflow",
+    "./skills/ip-law-playbook",
+    "./skills/ip-patent-workflow",
+    "./skills/ip-portfolio-workflow",
+    "./skills/ip-trademark-workflow",
+    "./skills/legal-workflows",
+    "./skills/nda-review",
+    "./skills/privacy-compliance-workflow",
+    "./skills/privacy-law-playbook",
+    "./skills/privacy-policy-workflow",
+    "./skills/product-compliance-workflow",
+    "./skills/product-law-playbook",
+    "./skills/regulatory-law-playbook",
+    "./skills/regulatory-monitor-workflow",
+    "./skills/regulatory-policy-workflow",
+    "./skills/saas-msa-review",
+    "./skills/stakeholder-summary",
+    "./skills/tabular-review",
+    "./skills/vendor-agreement-review"
+  ],
+  "displayName": {
+    "en": "Corporate Legal Expert Team",
+    "zh": "企业法务专家团"
+  },
+  "profession": {
+    "en": "Corporate Legal Expert Team",
+    "zh": "企业法务专家团"
+  },
+  "displayDescription": {
+    "zh": "面向企业法务的多角色专家团，覆盖合同、交易、用工、隐私、产品、监管、AI治理与知识产权分诊。",
+    "en": "Chinese enterprise legal team covering contracts, corporate, employment, privacy, product, regulatory, AI governance and IP."
+  },
+  "avatar": "avatars/team.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "帮我分诊这个跨职能法律问题，并交给合适的法务专家分析",
+    "en": "Triage this cross-functional legal issue and route it to the right specialists."
+  },
+  "tags": [
+    {
+      "zh": "企业法务",
+      "en": "In-House Legal"
+    },
+    {
+      "zh": "跨域分诊",
+      "en": "Cross-Domain Triage"
+    },
+    {
+      "zh": "合规审查",
+      "en": "Compliance Review"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我分诊这个跨职能法律问题，并交给合适的法务专家分析",
+      "en": "Triage this cross-functional legal issue and route it to the right specialists."
+    },
+    {
+      "zh": "从合同、隐私、AI治理和知识产权角度审查这个 AI 供应商交易",
+      "en": "Review this AI vendor deal across contract, privacy, AI governance and IP risk."
+    },
+    {
+      "zh": "评估这个产品发布的法务、隐私、监管和营销声明风险",
+      "en": "Assess this product launch for legal, privacy, regulatory and marketing claims risk."
+    }
+  ],
+  "members": [
+    {
+      "id": "legal-team-lead",
+      "name": {
+        "en": "Legal Coordination Expert",
+        "zh": "法务统筹专家"
+      },
+      "profession": {
+        "zh": "跨域分诊与交付统筹",
+        "en": "Triage & Delivery Coordination"
+      },
+      "avatar": "avatars/legal-team-lead.png",
+      "role": "lead",
+      "displayName": {
+        "en": "Legal Coordination Expert",
+        "zh": "法务统筹专家"
+      }
+    },
+    {
+      "id": "contract-counsel",
+      "name": {
+        "en": "Commercial Contracts Expert",
+        "zh": "商事合同专家"
+      },
+      "profession": {
+        "zh": "合同审查与谈判要点",
+        "en": "Contract Review & Negotiation"
+      },
+      "avatar": "avatars/contract-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "Commercial Contracts Expert",
+        "zh": "商事合同专家"
+      }
+    },
+    {
+      "id": "ma-counsel",
+      "name": {
+        "en": "M&A Counsel Expert",
+        "zh": "并购法务专家"
+      },
+      "profession": {
+        "zh": "股权架构与并购尽调",
+        "en": "Equity Structure & M&A Diligence"
+      },
+      "avatar": "avatars/ma-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "M&A Counsel Expert",
+        "zh": "并购法务专家"
+      }
+    },
+    {
+      "id": "employment-counsel",
+      "name": {
+        "en": "Employment Law Expert",
+        "zh": "劳动用工专家"
+      },
+      "profession": {
+        "zh": "劳动合同与解除争议",
+        "en": "Labor Contracts & Termination"
+      },
+      "avatar": "avatars/employment-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "Employment Law Expert",
+        "zh": "劳动用工专家"
+      }
+    },
+    {
+      "id": "privacy-counsel",
+      "name": {
+        "en": "Data Privacy Expert",
+        "zh": "数据隐私专家"
+      },
+      "profession": {
+        "zh": "个人信息处理与跨境传输",
+        "en": "Personal Data & Cross-Border Transfer"
+      },
+      "avatar": "avatars/privacy-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "Data Privacy Expert",
+        "zh": "数据隐私专家"
+      }
+    },
+    {
+      "id": "product-counsel",
+      "name": {
+        "en": "Product Compliance Expert",
+        "zh": "产品合规专家"
+      },
+      "profession": {
+        "zh": "发布审查与营销主张",
+        "en": "Launch Review & Claims"
+      },
+      "avatar": "avatars/product-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "Product Compliance Expert",
+        "zh": "产品合规专家"
+      }
+    },
+    {
+      "id": "regulatory-counsel",
+      "name": {
+        "en": "Regulatory Policy Expert",
+        "zh": "监管政策专家"
+      },
+      "profession": {
+        "zh": "监管动态跟踪与内规差异",
+        "en": "Regulatory Tracking & Gap Analysis"
+      },
+      "avatar": "avatars/regulatory-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "Regulatory Policy Expert",
+        "zh": "监管政策专家"
+      }
+    },
+    {
+      "id": "ai-counsel",
+      "name": {
+        "en": "AI Governance Expert",
+        "zh": "AI 合规专家"
+      },
+      "profession": {
+        "zh": "算法影响评估与 AI 登记",
+        "en": "Algorithm Impact & AI Registry"
+      },
+      "avatar": "avatars/ai-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "AI Governance Expert",
+        "zh": "AI 合规专家"
+      }
+    },
+    {
+      "id": "ip-counsel",
+      "name": {
+        "en": "IP Expert",
+        "zh": "知识产权专家"
+      },
+      "profession": {
+        "zh": "商标专利与侵权比对",
+        "en": "Trademark, Patent & Infringement"
+      },
+      "avatar": "avatars/ip-counsel.png",
+      "role": "member",
+      "displayName": {
+        "en": "IP Expert",
+        "zh": "知识产权专家"
+      }
+    }
+  ]
+}

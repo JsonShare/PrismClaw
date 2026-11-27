@@ -303,7 +303,10 @@ class SchedulerEngine:
         # Use astimezone() to anchor croniter in the server's local TZ — same
         # convention as DreamSettings.nightly_timezone which defaults to "local".
         base_time = anchor or task.last_fired_at or task.created_at
-        next_ts = self._cron_fire_timestamp(task, anchor)
+        # 有效期开始前不执行：把锚点推到开始日前 1 秒，croniter 会给出 >= valid_from 的首个槽位
+        if task.valid_from is not None and task.valid_from > base_time:
+            base_time = task.valid_from - 1.0
+        next_ts = self._cron_fire_timestamp(task, base_time)
         if next_ts is None:
             return None
 
@@ -313,7 +316,11 @@ class SchedulerEngine:
         jitter = jitter_frac * self._settings.jitter_fraction * interval
         jitter = min(jitter, self._settings.jitter_cap_seconds)
 
-        return next_ts + jitter
+        scheduled = next_ts + jitter
+        # 下一次触发落在有效期之外：不再排期，交由 tick 的有效期过期分支停用
+        if task.valid_until is not None and scheduled > task.valid_until:
+            return None
+        return scheduled
 
     @staticmethod
     def _jitter_fraction(task_id: str) -> float:
@@ -325,6 +332,9 @@ class SchedulerEngine:
             return 0.5
 
     def _is_expired(self, task: ScheduledTask, now: float) -> bool:
+        # 有效期结束：硬过期，无论创建多久
+        if task.valid_until is not None and now > task.valid_until:
+            return True
         if task.max_age_days == 0:
             return False
         return now - task.created_at > task.max_age_days * 86400
@@ -338,6 +348,8 @@ class SchedulerEngine:
         recovered = 0
 
         for task in tasks:
+            if self._is_expired(task, now):
+                continue
             if task.missed_policy != "run_once":
                 continue
             if task.last_fired_at is None and task.created_at is None:
@@ -350,7 +362,11 @@ class SchedulerEngine:
             except (ValueError, KeyError):
                 continue
 
-            if next_dt.timestamp() < now:
+            next_ts = next_dt.timestamp()
+            # 漏掉的槽位落在有效期开始前：本来就不该执行
+            if task.valid_from is not None and next_ts < task.valid_from:
+                continue
+            if next_ts < now:
                 # Missed at least one fire — dispatch once
                 await self._dispatch(task, now, next_dt.timestamp())
                 recovered += 1

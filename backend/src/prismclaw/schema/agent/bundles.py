@@ -1,4 +1,4 @@
-"""Bundle protocols for Dream, Plugin, and Persistence components."""
+"""Bundle protocols for Dream, Expert, and Persistence components."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class DreamComponents(Protocol):
     ops: DreamAdminOpsProtocol
 
 
-# ── Plugin bundle ──
+# ── Expert bundle ──
 
 
 @runtime_checkable
@@ -50,16 +50,16 @@ class MCPManagerProtocol(Protocol):
 
 
 @runtime_checkable
-class PluginLifecycleProtocol(Protocol):
+class ExpertLifecycleProtocol(Protocol):
     def update_settings(self, settings: object, *, invalidate: bool = True) -> None: ...
     async def get_bundle(self) -> object: ...
 
 
 @runtime_checkable
-class PluginComponents(Protocol):
+class ExpertComponents(Protocol):
     extension_manager: ExtensionManagerProtocol
     runtime_mcp_manager: MCPManagerProtocol
-    lifecycle_manager: PluginLifecycleProtocol
+    lifecycle_manager: ExpertLifecycleProtocol
 
 
 # ── Persistence bundle ──

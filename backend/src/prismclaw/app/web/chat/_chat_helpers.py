@@ -28,7 +28,7 @@ from prismclaw.runtime.facade.trajectory import (
     TimelinePatch,
 )
 from prismclaw.schema.agent import DecisionLedgerEvent
-from prismclaw.schema.agent.session import MessageEntry, SessionEvent
+from prismclaw.schema.agent.session import SessionEvent
 from prismclaw.schema.agent.task_runtime import EvidenceRecord, ProbeSignal, RecoveryProbeResult
 from prismclaw.schema.agent.types import AgentDeps
 from prismclaw.schema.session.event_logger import SessionEventLogger
@@ -412,52 +412,6 @@ async def _persist_execution_timeline(
         logger.warning("web.timeline.persist.append_failed", exc_info=True)
 
 
-async def _persist_streamed_assistant_message(
-    deps: AgentDeps,
-    *,
-    session_id: str,
-    text: str,
-) -> str | None:
-    """把前端已流式推送、但引擎未落树的答复补写为一条 assistant 消息。
-
-    仅在「本 run 引擎没有落任何 assistant 消息」时调用（流式中被 abort：
-    LLM 响应未完成，骨架没有可落的消息对象），用于让正文与 timeline 有
-    合法的挂靠点。必须走消息事件（``message_entry``）而非 ``entry_updated``：
-    前者由投影追加进 ``order``，后者只写 ``entries``，会导致刷新后不可见。
-
-    返回新 entry id；树不可用或提交失败返回 None（调用方跳过 timeline）。
-    """
-    body = (text or "").strip()
-    if not body:
-        return None
-    store = deps.session_store
-    if store is None:
-        return None
-    try:
-        tree = await store.load(session_id)
-    except Exception:
-        logger.warning("web.streamed_message.persist.load_failed", exc_info=True)
-        return None
-    if tree is None:
-        return None
-    entry = MessageEntry(
-        id=generate_entry_id(tree.all_entry_ids()),
-        parent_id=tree.leaf_id,
-        timestamp=now_iso(),
-        role="assistant",
-        content=body,
-        metadata={"interrupted": True},
-    )
-    try:
-        events = _event_logger.message_entry(session_id, entry, entry.id)
-        await _commit_events(deps, events)
-        invalidate_tree_cache(session_id)
-        return entry.id
-    except Exception:
-        logger.warning("web.streamed_message.persist.append_failed", exc_info=True)
-        return None
-
-
 def _build_run_projection_payload(
     tree: SessionTree,
     session_queue: SessionQueue,
@@ -484,6 +438,7 @@ def _build_run_projection_payload(
         conversation_id=conversation_id,
         state="active",
         streaming_text=projection.streaming_text,
+        streaming_segment=projection.streaming_segment,
         timeline_nodes=timeline_nodes,
         task_runtime=task_runtime if task_runtime is not None else {},
         phase=phase,

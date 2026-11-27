@@ -59,6 +59,8 @@ __all__ = [
     "resolve_biz_domain_dir",
     "resolve_session_dir",
     "session_dir_in",
+    "session_dir_name",
+    "normalize_session_rel_path",
     "SESSION_SUBDIRS",
     "ensure_session_layout",
     "resolve_session_inbox_dir",
@@ -169,16 +171,43 @@ def resolve_session_dir(
     return session_dir_in(resolve_workspace_dir(user_id, workspace_id), session_id)
 
 
+def session_dir_name(session_id: str) -> str:
+    """会话 ID → 磁盘目录名的**唯一权威规则**。
+
+    session_id 是语义标识（形如 ``web:admin:default:s:abc123``，subagent 为
+    ``parent#sub:uuid``），其中 ``:``/``#`` 不是合法路径字符，统一折叠为 ``-``。
+
+    这是整个系统里唯一知道"语义 ID 如何落盘"的地方：``session_dir_in``、
+    ``ensure_session_layout`` 以及 Web 文件路由的入参归一化都经由它，
+    避免前端自行拼接导致两侧规则漂移（曾造成会话 inbox/outbox 恒 404）。
+    """
+    return _safe_segment(
+        session_id.replace("#", "-").replace(":", "-"), label="session_id"
+    )
+
+
+def normalize_session_rel_path(rel_path: str) -> str:
+    """把工作区相对路径中的 ``sessions/<原始 session_id>`` 段归一化为磁盘目录名。
+
+    入参来自 HTTP 层（前端传语义 session_id），出参是可直接落盘的相对路径。
+    幂等：已是目录名的路径原样返回。非 ``sessions/`` 开头的路径不受影响。
+
+    只重写第一段为 ``sessions`` 时的第二段；更深层结构（``.work``/``outbox``
+    等）保持不变，交给通用越界校验。
+    """
+    parts = rel_path.split("/")
+    if len(parts) < 2 or parts[0] != "sessions" or not parts[1]:
+        return rel_path
+    return "/".join([parts[0], session_dir_name(parts[1]), *parts[2:]])
+
+
 def session_dir_in(workspace_root: Path, session_id: str) -> Path:
-    """从已知工作区根推导会话目录：{ws}/sessions/<session_id>/。
+    """从已知工作区根推导会话目录：{ws}/sessions/<dir>/。
 
     引擎侧入口（ToolContext.workspace_path 已是工作区根，无需再经
-    user_id/workspace_id 解析）。与 ``resolve_session_dir`` 共用同一
-    sanitize 规则：subagent session_id 形如 ``parent#sub:uuid``，其中
-    ``#``/``:`` 不能出现在路径段里，统一替换为 ``-``。
+    user_id/workspace_id 解析）。目录名由 :func:`session_dir_name` 统一决定。
     """
-    safe_sid = session_id.replace("#", "-").replace(":", "-")
-    return workspace_root / "sessions" / _safe_segment(safe_sid, label="session_id")
+    return workspace_root / "sessions" / session_dir_name(session_id)
 
 
 #: 会话目录的完整子目录布局（与 workspace_paths 顶部文档一致）。

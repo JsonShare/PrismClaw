@@ -57,14 +57,11 @@ class _LayerScanDiagnostics:
 
 @dataclass(frozen=True, slots=True)
 class _FullDiagnostics:
-    """Complete diagnose snapshot covering all 5 discovery layers + 3 gap classes."""
+    """Complete diagnose snapshot covering the discovery layers."""
 
     layers: tuple[_LayerScanDiagnostics, ...]
     merged_names: tuple[str, ...]  # final merged manifest name list (sorted)
-    # 3类差异
     name_mismatches: tuple[dict[str, Any], ...]  # 类1: manifest.name 与文件 stem/namespace 不匹配
-    can_handoff_to_unknown: tuple[dict[str, Any], ...]  # 类2: can_handoff_to 指向未知目标
-    allowed_tools_gaps: tuple[dict[str, Any], ...]  # 类3: allowed_tools 白名单包含未注册工具名
     registry_settings: dict[str, Any]  # subagent settings snapshot for report context
 
 
@@ -117,25 +114,6 @@ class SubAgentRegistry:
             for manifest in self._scan_layer(directory, source="project"):
                 self._manifests[manifest.name] = manifest
 
-        self._warn_can_handoff_to_typos()
-
-    def _warn_can_handoff_to_typos(self) -> None:
-        registered_names = set(self._manifests.keys())
-        for manifest in self._manifests.values():
-            if manifest.can_handoff_to is None:
-                continue
-            for entry in manifest.can_handoff_to:
-                if entry in registered_names:
-                    continue
-                suggestion = _closest_match(entry, registered_names, max_dist=2)
-                hint = f" Did you mean '{suggestion}'?" if suggestion else ""
-                logger.warning(
-                    "subagent.can_handoff_to.unknown_target manifest=%s entry=%s%s",
-                    manifest.name,
-                    entry,
-                    hint,
-                )
-
     def register(
         self,
         name: str,
@@ -169,23 +147,17 @@ class SubAgentRegistry:
     # ------------------------------------------------------------------
     # Diagnostics (observability only; not on hot-path)
     # ------------------------------------------------------------------
-    def diagnose(self, registered_tool_names: set[str] | None = None) -> _FullDiagnostics:
+    def diagnose(self) -> _FullDiagnostics:
         """Build structured diagnose snapshot (default: JSON-encodable).
 
-        Covers all 5 discovery layers plus the 3-class gap analysis:
-          类1 - manifest.name vs file-stem/namespace mismatches
-          类2 - can_handoff_to references to unknown targets
-          类3 - allowed_tools whitelist entries not in parent tool registry
-
+        Covers all 5 discovery layers plus the name/stem mismatch analysis.
         File-level detail from the diagnostic pass is reused directly for
         类1 so the same md files are not parsed twice.
         """
-        tool_names = registered_tool_names or set()
         layers: list[_LayerScanDiagnostics] = []
         for directory in self._sources_in_order:
             layers.append(self._scan_layer_for_diagnose(directory, source="project"))
         merged_names = tuple(sorted(self._manifests.keys()))
-        registered = set(self._manifests.keys())
 
         # --- 类1: manifest.name vs 文件 stem 不匹配 ---
         # 直接复用 layers[*].per_file 中已经解析得到的 file_stem/manifest_name，
@@ -209,60 +181,15 @@ class SubAgentRegistry:
                     }
                 )
 
-        # --- 类2: can_handoff_to 未知目标 ---
-        can_handoff_unknown: list[dict[str, Any]] = []
-        for manifest in self._manifests.values():
-            targets = manifest.can_handoff_to or []
-            for target in targets:
-                if target in registered:
-                    continue
-                suggestion = _closest_match(target, registered, max_dist=2)
-                can_handoff_unknown.append(
-                    {
-                        "manifest": manifest.name,
-                        "unknown_target": target,
-                        "suggestion": suggestion,
-                    }
-                )
-
-        # --- 类3: allowed_tools 白名单缺口 ---
-        allowed_gaps: list[dict[str, Any]] = []
-        for manifest in self._manifests.values():
-            allowed = manifest.allowed_tools
-            if allowed is None:
-                continue  # None = inherit all parent tools, no gap possible
-            for tool_name in allowed:
-                if tool_name.endswith(":*"):
-                    continue  # 前缀通配：由注册表在运行时展开，无法静态校验
-                if tool_name in registered:
-                    continue  # 允许 allowed_tools 与子代理同名（非冲突场景），跳过
-                if registered_tool_names and tool_name in tool_names:
-                    continue
-                allowed_gaps.append(
-                    {
-                        "manifest": manifest.name,
-                        "unknown_tool": tool_name,
-                        "suggestion": (
-                            _closest_match(tool_name, tool_names, max_dist=2)
-                            if tool_names
-                            else None
-                        ),
-                    }
-                )
-
         settings_snapshot = {
             "enabled": getattr(self._settings, "enabled", None),
             "max_depth": getattr(self._settings, "max_depth", None),
-            "handoff_enabled": getattr(self._settings, "handoff_enabled", None),
-            "max_handoff_chain_length": getattr(self._settings, "max_handoff_chain_length", None),
         }
 
         return _FullDiagnostics(
             layers=tuple(layers),
             merged_names=merged_names,
             name_mismatches=tuple(name_mismatches),
-            can_handoff_to_unknown=tuple(can_handoff_unknown),
-            allowed_tools_gaps=tuple(allowed_gaps),
             registry_settings=settings_snapshot,
         )
 

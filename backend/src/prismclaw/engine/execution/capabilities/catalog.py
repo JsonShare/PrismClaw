@@ -1,18 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
 from prismclaw.engine.toolkit.registry.governance import resolve_registry_tool_governance
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.schema.agent.capability import (
-    CapabilityGraph,
-    RuntimeCapabilities,
-)
-from prismclaw.schema.agent.capability import (
-    CapabilityKind as CapabilityKind,
-)
 from prismclaw.schema.services.skills import (
     SkillInvocationState,
     normalize_skill_ref,
@@ -20,14 +12,9 @@ from prismclaw.schema.services.skills import (
 )
 
 if TYPE_CHECKING:
+    from prismclaw.engine.experts.scope import ToolSurface
     from prismclaw.engine.toolkit.registry.tool_runtime import Tool
     from prismclaw.schema.services.skills import SkillManifest
-
-
-def _meta_str(metadata: dict[str, Any], key: str) -> str | None:
-    """读取能力节点 metadata 中的字符串字段；非字符串一律视为缺失。"""
-    value = metadata.get(key)
-    return value if isinstance(value, str) else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,33 +24,27 @@ class SkillCatalogEntry:
     location: str
     instructions: str
     manifest: Any
-    plugin_name: str | None = None
+    expert_name: str | None = None
     origin: str | None = None
-    # v5 渐进式披露：所属 marketplace 名称（如 my-marketplace）
-    marketplace_name: str | None = None
-    # v5 渐进式披露：marketplace / 插件级描述（来自市场级 plugin.json 的 description）
-    marketplace_description: str | None = None
-    # 子插件级描述（来自子插件自身 manifest description）
-    plugin_description: str | None = None
+    expert_description: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class SkillResolution:
     """Result of resolving a skill reference against the catalog.
 
-    kind == "resolved": ``entry`` is set. ``marketplace_name`` is additionally
-        set when the match came from the marketplace-alias pass, so callers
-        can disclose "matched via package" instead of letting the alias hit
-        look like a plain skill-name hit.
-    kind == "ambiguous": the reference matched a marketplace package whose
-        skills are many; ``marketplace_name`` is that package and
-        ``member_names`` lists every skill under it.
-    kind == "not_found": no skill name or marketplace alias matched.
+    kind == "resolved": ``entry`` is set. ``expert_name`` is additionally
+        set when the match came from the package-alias pass, so callers can
+        disclose "matched via package" instead of letting the alias hit look
+        like a plain skill-name hit.
+    kind == "ambiguous": the reference matched a package whose skills are many;
+        ``expert_name`` is that package and ``member_names`` lists its skills.
+    kind == "not_found": no skill name or package alias matched.
     """
 
     kind: Literal["resolved", "ambiguous", "not_found"]
     entry: SkillCatalogEntry | None = None
-    marketplace_name: str | None = None
+    expert_name: str | None = None
     member_names: tuple[str, ...] = ()
 
 
@@ -82,111 +63,64 @@ class ToolCatalogEntry:
 class AgentCatalogEntry:
     name: str
     description: str
-    can_handoff_to: tuple[str, ...]
     manifest: Any
-    plugin_name: str | None = None
+    expert_name: str | None = None
     origin: str | None = None
-    marketplace_name: str | None = None
-    marketplace_description: str | None = None
+    expert_description: str | None = None
 
 
 @dataclass(slots=True)
-class CapabilityCatalogService:
+class RuntimeCatalog:
     """Unified runtime catalog.
 
     This is the listing-grade, runner-scoped fact source for skills, tools, and
-    agents. It is built once from runtime registries/providers, then passed
-    through the runner instead of re-querying discovery sources ad hoc.
+    agents. Skill/agent entries are assembled once from runtime registries and
+    providers, then passed through the runner instead of re-querying discovery
+    sources ad hoc.
     """
 
     tool_registry: ToolRegistry | None = None
-    capability_graph: CapabilityGraph | None = None
-    runtime_capabilities: RuntimeCapabilities | None = None
+    skill_entries: tuple[SkillCatalogEntry, ...] = field(default_factory=tuple)
+    agent_entries: tuple[AgentCatalogEntry, ...] = field(default_factory=tuple)
 
-    def list_skill_entries(
-        self, workspace_path: str | Path | None = None
-    ) -> list[SkillCatalogEntry]:
-        _ = workspace_path
-        graph = self.capability_graph
-        if graph is None:
-            return []
-        # 声明了 runtime_capabilities.skills 时仅作启用过滤器（同名 canonical_id
-        # 的各 plugin 版本整体启用），否则取 enabled_nodes() 中全部 SKILL 节点。
-        if self.runtime_capabilities is not None:
-            enabled_id_set = set(self.runtime_capabilities.skills)
-        else:
-            enabled_id_set = None
-        # 去重键 = (canonical_id, plugin_name),避免重复来源注册同一份
-        seen: set[tuple[str, str | None]] = set()
-        entries: list[SkillCatalogEntry] = []
-        from prismclaw.schema.services.skills import SkillManifest
-
-        for node in graph.enabled_nodes():
-            if node.kind != CapabilityKind.SKILL:
-                continue
-            if enabled_id_set is not None and node.canonical_id not in enabled_id_set:
-                continue
-            plugin_name = _meta_str(node.metadata, "plugin_name")
-            key = (node.canonical_id, plugin_name)
-            if key in seen:
-                continue
-            seen.add(key)
-            payload = node.metadata.get("manifest")
-            if not isinstance(payload, dict):
-                raise RuntimeError(
-                    f"CapabilityCatalogService: missing skill "
-                    f"manifest payload for {node.canonical_id!r}"
-                )
-            manifest = SkillManifest.model_validate(payload)
-            entries.append(
-                SkillCatalogEntry(
-                    name=node.canonical_id,
-                    description=manifest.description or "",
-                    location=manifest.file_path or "",
-                    instructions=manifest.body or "",
-                    manifest=manifest,
-                    plugin_name=plugin_name,
-                    origin=_meta_str(node.metadata, "origin"),
-                    marketplace_name=_meta_str(node.metadata, "marketplace_name"),
-                    marketplace_description=_meta_str(
-                        node.metadata, "marketplace_description"
-                    ),
-                    plugin_description=_meta_str(node.metadata, "plugin_description"),
-                )
-            )
-        entries.sort(key=lambda item: (item.name, item.plugin_name or ""))
+    def list_skill_entries(self) -> list[SkillCatalogEntry]:
+        entries = list(self.skill_entries)
+        entries.sort(key=lambda item: (item.name, item.expert_name or ""))
         return entries
 
     def resolve_skill_reference(
-        self, skill_name: str, *, plugin_prefer: str | None = None
+        self,
+        skill_name: str,
+        *,
+        expert_prefer: str | None = None,
     ) -> SkillResolution:
         """Resolve a skill reference through the single resolution contract.
 
-        Pass order is priority: a skill name always wins over a marketplace
-        alias, so a package name can never hijack a same-named skill.
+        Pass order is priority: a skill name always wins over a package alias,
+        so a package name can never hijack a same-named skill.
 
         Pass 1 (skill name): exact then case-folded match via ``resolve_skill_name``,
-        ``plugin_prefer`` picks the version among same-name candidates.
+        ``expert_prefer`` picks the version among same-name candidates.
         Pass 1.5 (short name): when the reference is an un-namespaced short token
         (e.g. ``xlsx``), a skill whose canonical name ends with ``-xlsx`` /
         ``:xlsx`` resolves too — but only if exactly one such skill exists.
         This absorbs the common model habit of calling by file type while keeping
         ambiguity an error.
-        Pass 2 (marketplace alias): the normalized reference is case-fold-compared
-        against each entry's ``marketplace_name``; a package holding exactly one
+        Pass 2 (package alias): the normalized reference is case-fold-compared
+        against each entry's ``expert_name``; a package holding exactly one
         distinct skill name resolves directly to it (carrying the package name for
         disclosure), otherwise the result is ambiguous with every member listed.
         """
         entries = self.list_skill_entries()
 
+        normalized = normalize_skill_ref(skill_name)
         resolved_name = resolve_skill_name(skill_name, entries)
         if resolved_name is not None:
             return SkillResolution(
                 kind="resolved",
-                entry=self._pick_entry(entries, resolved_name, plugin_prefer),
+                entry=self._pick_entry(entries, resolved_name, expert_prefer),
             )
 
-        normalized = normalize_skill_ref(skill_name)
         if normalized and ":" not in normalized and len(normalized) >= 2:
             folded = normalized.lower()
             suffix_hits = sorted(
@@ -199,7 +133,12 @@ class CapabilityCatalogService:
             if len(suffix_hits) == 1:
                 return SkillResolution(
                     kind="resolved",
-                    entry=self._pick_entry(entries, suffix_hits[0], plugin_prefer),
+                    entry=self._pick_entry(entries, suffix_hits[0], expert_prefer),
+                )
+            if len(suffix_hits) > 1:
+                return SkillResolution(
+                    kind="ambiguous",
+                    member_names=tuple(suffix_hits),
                 )
 
         if normalized:
@@ -207,19 +146,21 @@ class CapabilityCatalogService:
             alias_entries = [
                 entry
                 for entry in entries
-                if entry.marketplace_name and entry.marketplace_name.lower() == folded
+                if entry.expert_name and entry.expert_name.lower() == folded
             ]
             if alias_entries:
                 member_names = tuple(sorted({entry.name for entry in alias_entries}))
                 if len(member_names) == 1:
                     return SkillResolution(
                         kind="resolved",
-                        entry=self._pick_entry(entries, member_names[0], plugin_prefer),
-                        marketplace_name=alias_entries[0].marketplace_name,
+                        entry=self._pick_entry(
+                            alias_entries, member_names[0], alias_entries[0].expert_name
+                        ),
+                        expert_name=alias_entries[0].expert_name,
                     )
                 return SkillResolution(
                     kind="ambiguous",
-                    marketplace_name=alias_entries[0].marketplace_name,
+                    expert_name=alias_entries[0].expert_name,
                     member_names=member_names,
                 )
 
@@ -229,36 +170,56 @@ class CapabilityCatalogService:
     def _pick_entry(
         entries: list[SkillCatalogEntry],
         name: str,
-        plugin_prefer: str | None,
+        expert_prefer: str | None,
     ) -> SkillCatalogEntry:
-        """Pick the catalog entry for ``name``; ``plugin_prefer`` wins over version order.
+        """Pick one unambiguous catalog entry for ``name``.
 
-        Precondition: at least one entry in ``entries`` has this ``name`` (both
-        call sites guarantee it — the name comes from those same entries).
+        A preferred package must contain the named skill. Duplicate names never
+        fall back to catalog order: doing so can activate another package's body.
         """
         candidates = [entry for entry in entries if entry.name == name]
-        if plugin_prefer:
+        if not candidates:
+            raise LookupError(f"Skill {name!r} not found.")
+        if len(candidates) == 1:
+            return candidates[0]
+        if expert_prefer:
             for entry in candidates:
-                if entry.plugin_name == plugin_prefer:
+                if entry.expert_name == expert_prefer:
                     return entry
-        return candidates[0]
+            raise LookupError(
+                f"Skill {name!r} is not available in expert {expert_prefer!r}; "
+                "refusing to activate another package's version."
+            )
+        owners = sorted(entry.expert_name or "<project>" for entry in candidates)
+        raise LookupError(
+            f"Skill {name!r} is ambiguous across experts: {', '.join(owners)}; "
+            "expert_prefer is required."
+        )
 
     def get_skill_entry(
-        self, skill_name: str, *, plugin_prefer: str | None = None
+        self,
+        skill_name: str,
+        *,
+        expert_prefer: str | None = None,
     ) -> SkillCatalogEntry | None:
-        """按名字解析 skill；plugin_prefer 用于在同 canonical_id 多版本中
-        优先命中归属 plugin 的版本。
+        """按名字解析 skill；expert_prefer 用于在同 canonical_id 多版本中
+        优先命中归属 expert 的版本。
 
-        委托 resolve_skill_reference：技能名直取，marketplace 别名按其规则
+        委托 resolve_skill_reference：技能名直取，包别名按其规则
         （唯一成员直取 / 多成员视为未命中）解析，非 resolved 一律返回 None。
         """
-        resolution = self.resolve_skill_reference(skill_name, plugin_prefer=plugin_prefer)
+        resolution = self.resolve_skill_reference(
+            skill_name, expert_prefer=expert_prefer
+        )
         return resolution.entry if resolution.kind == "resolved" else None
 
     def resolve_skill_manifest(
-        self, skill_name: str, *, plugin_prefer: str | None = None
+        self,
+        skill_name: str,
+        *,
+        expert_prefer: str | None = None,
     ) -> SkillManifest | None:
-        entry = self.get_skill_entry(skill_name, plugin_prefer=plugin_prefer)
+        entry = self.get_skill_entry(skill_name, expert_prefer=expert_prefer)
         return entry.manifest if entry is not None else None
 
     def list_tool_entries(
@@ -284,7 +245,7 @@ class CapabilityCatalogService:
 
         ``visible_names`` 来自 ``TurnPlan.toolset.visible_tools_for_llm``——
         唯一治理点算出的结果。此处不再重跑 governance：那会是一次重复计算，
-        且历史实现漏传 ``tool_scope``，导致 ``<tools>`` 段列出模型实际
+        且历史实现漏传 ``allowed_tool_owners``，导致 ``<tools>`` 段列出模型实际
         调不到的工具（SDD D14）。
         """
         if self.tool_registry is None:
@@ -302,6 +263,7 @@ class CapabilityCatalogService:
         discovered_tools: set[str] | None = None,
         subagent_depth: int = 0,
         headless: bool = False,
+        tool_surface: ToolSurface | None = None,
     ) -> list[ToolCatalogEntry]:
         if self.tool_registry is None:
             return []
@@ -311,6 +273,7 @@ class CapabilityCatalogService:
             discovered_tools=discovered_tools,
             subagent_depth=subagent_depth,
             headless=headless,
+            tool_surface=tool_surface,
         )
         searchable_names = set(resolved_toolset.searchable_tools)
         tools = self.tool_registry.list_tools(
@@ -320,67 +283,18 @@ class CapabilityCatalogService:
         return [self._tool_entry_from_tool(tool, subagent_depth=subagent_depth) for tool in tools]
 
     def list_agent_entries(self) -> list[AgentCatalogEntry]:
-        graph = self.capability_graph
-        if graph is None:
-            return []
-        enabled_ids: tuple[str, ...] = ()
-        if self.runtime_capabilities is not None:
-            enabled_ids = self.runtime_capabilities.agents
-        else:
-            enabled_ids = tuple(
-                node.canonical_id
-                for node in graph.enabled_nodes()
-                if node.kind == CapabilityKind.AGENT
-            )
-        entries: list[AgentCatalogEntry] = []
-        from prismclaw.engine.subagent.definition.manifest import AgentManifest
-
-        for canonical_id in enabled_ids:
-            node = graph.get(canonical_id)
-            if node is None or node.kind != CapabilityKind.AGENT:
-                continue
-            payload = node.metadata.get("manifest")
-            if not isinstance(payload, dict):
-                raise RuntimeError(
-                    f"CapabilityCatalogService: missing agent manifest payload for {canonical_id!r}"
-                )
-            manifest = AgentManifest.model_validate(payload)
-            raw_plugin_name = node.metadata.get("plugin_name")
-            # 空字符串统一收敛为 None：核心/插件子代理的判定口径只认 None。
-            plugin_name = (
-                raw_plugin_name if isinstance(raw_plugin_name, str) and raw_plugin_name else None
-            )
-            entries.append(
-                AgentCatalogEntry(
-                    name=canonical_id,
-                    description=manifest.description or "",
-                    can_handoff_to=tuple(manifest.can_handoff_to or ()),
-                    manifest=manifest,
-                    plugin_name=plugin_name,
-                    origin=_meta_str(node.metadata, "origin"),
-                    marketplace_name=_meta_str(node.metadata, "marketplace_name"),
-                    marketplace_description=_meta_str(
-                        node.metadata, "marketplace_description"
-                    ),
-                )
-            )
+        entries = list(self.agent_entries)
         entries.sort(key=lambda item: item.name)
         return entries
 
     def get_agent_entry(self, agent_name: str) -> AgentCatalogEntry | None:
-        for entry in self.list_agent_entries():
+        for entry in self.agent_entries:
             if entry.name == agent_name:
                 return entry
         return None
 
     def count_agent_entries(self) -> int:
-        return len(self.list_agent_entries())
-
-    def group_agent_entries_by_plugin(self) -> dict[str, list[AgentCatalogEntry]]:
-        grouped: dict[str, list[AgentCatalogEntry]] = {}
-        for entry in self.list_agent_entries():
-            grouped.setdefault(entry.plugin_name or "unknown", []).append(entry)
-        return grouped
+        return len(self.agent_entries)
 
     def _tool_entry_from_tool(
         self,

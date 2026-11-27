@@ -124,6 +124,19 @@ def _resolve_workspace_root(
     return base.resolve()
 
 
+def _resolve_workspace_path(root: Path, raw_path: str) -> Path:
+    """工作区相对路径的**唯一解析入口**：先做会话段归一化，再做越界校验。
+
+    前端传的是语义路径（会话段用原始 session_id，含 ``:``），磁盘上用的是
+    归一化目录名（``:`` → ``-``）。归一化必须发生在解析之前，且只此一处，
+    否则每个路由都要各自记得转换（会话 inbox/outbox 曾因此恒 404）。
+    """
+    from prismclaw.infra.workspace_paths import normalize_session_rel_path
+
+    rel = (raw_path or "").lstrip("/")
+    return _resolve_within_root(root, normalize_session_rel_path(rel))
+
+
 def _resolve_within_root(root: Path, relative: str) -> Path:
     root_abs = root.expanduser().resolve()
     candidate = (root_abs / relative).expanduser()
@@ -311,7 +324,7 @@ def _candidate_file_targets(
             abs_resolved = Path(s).expanduser()
         try:
             return [
-                _resolve_within_root(
+                _resolve_workspace_path(
                     workspace_root_abs, str(abs_resolved.relative_to(workspace_root_abs))
                 )
             ]
@@ -322,6 +335,6 @@ def _candidate_file_targets(
     if not rel:
         return []
     try:
-        return [_resolve_within_root(workspace_root_abs, rel)]
+        return [_resolve_workspace_path(workspace_root_abs, rel)]
     except HTTPException:
         return []

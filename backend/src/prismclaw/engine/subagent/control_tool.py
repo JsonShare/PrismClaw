@@ -4,7 +4,8 @@ import copy
 import logging
 from typing import Any
 
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
+from prismclaw.engine.experts.scope import ToolSurface
 from prismclaw.engine.security.gate.types import ParallelTaskExtras
 from prismclaw.engine.subagent.core.executor import SubAgentExecutor
 from prismclaw.engine.subagent.runtime.collaboration import (
@@ -91,7 +92,7 @@ class SubagentControlTool:
         self,
         *,
         collaboration: SubagentCollaborationService,
-        capability_catalog: CapabilityCatalogService,
+        capability_catalog: RuntimeCatalog,
         executor: SubAgentExecutor,
     ) -> None:
         self._collaboration = collaboration
@@ -270,10 +271,26 @@ class SubagentControlTool:
         registry = self._capability_catalog.tool_registry
         if registry is None:
             raise SubagentCollaborationError("当前能力目录没有工具注册表")
+        parent_ctx = _control_child_context(context)
+        team_snapshot = agent.definition_snapshot.get("expert_team")
+        if team_snapshot is not None:
+            surface = team_snapshot["tool_surface"]
+            scope = parent_ctx.session_scope
+            # session_scope 为 None 表示无作用域上下文（headless/测试/装配未就绪），
+            # 保持 None 语义＝不限制，不凭空创建作用域。
+            if scope is not None:
+                restored_surface = ToolSurface(
+                    active=frozenset(surface["active"]),
+                    deferred=frozenset(surface["deferred"]),
+                    member=frozenset(surface["member"]),
+                    restricted=surface["restricted"],
+                )
+                parent_ctx.session_scope = scope.with_member(tool_surface=restored_surface)
+            parent_ctx.team_registry = None
         return SubagentRunLaunch(
             manifest=manifest,
             executor=self._executor,
-            parent_ctx=_control_child_context(context),
+            parent_ctx=parent_ctx,
             tool_registry=registry,
             call_id=call_id,
             agent_source=agent.agent_source,

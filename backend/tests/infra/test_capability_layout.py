@@ -30,7 +30,7 @@ from prismclaw.schema.shared import (
 )
 
 SKILLS = "backend/.prismclaw/skills"
-PLUGINS = "backend/.prismclaw/plugins"
+EXPERTS = "backend/.prismclaw/experts"
 AGENTS = "backend/.prismclaw/agents"
 
 
@@ -90,19 +90,19 @@ def test_root_source_cwd_fallback_is_unconfirmed(tmp_path: Path, monkeypatch: py
 
 def test_healthy_layout_has_no_diagnostics_and_locates_three_kinds(tmp_path: Path):
     root = _make_marker_tree(tmp_path / "repo")
-    for rel in (SKILLS, PLUGINS, AGENTS):
+    for rel in (SKILLS, EXPERTS, AGENTS):
         (root / rel).mkdir(parents=True, exist_ok=True)
 
     layout = build_project_capability_layout(
         primary=root,
         skills_dir=SKILLS,
-        plugins_dir=PLUGINS,
+        experts_dir=EXPERTS,
         agents_dir=AGENTS,
     )
 
     assert layout.roots[0].confirmed is True
     assert len(layout.existing_locations_of(CapabilityKind.SKILLS)) == 1
-    assert len(layout.existing_locations_of(CapabilityKind.PLUGINS)) == 1
+    assert len(layout.existing_locations_of(CapabilityKind.EXPERTS)) == 1
     assert len(layout.existing_locations_of(CapabilityKind.AGENTS)) == 1
     assert layout.diagnostics == ()
     assert layout.has_error is False
@@ -113,18 +113,18 @@ def test_healthy_layout_has_no_diagnostics_and_locates_three_kinds(tmp_path: Pat
 def test_single_missing_kind_warns_but_does_not_error(tmp_path: Path):
     root = _make_marker_tree(tmp_path / "repo")
     (root / SKILLS).mkdir(parents=True, exist_ok=True)
-    # plugins / agents 目录刻意不创建
+    # experts / agents 目录刻意不创建
 
     layout = build_project_capability_layout(
         primary=root,
         skills_dir=SKILLS,
-        plugins_dir=PLUGINS,
+        experts_dir=EXPERTS,
         agents_dir=AGENTS,
     )
 
     missing_codes = [d.code for d in layout.warnings]
     assert missing_codes.count("CAPABILITY_DIR_MISSING") == 2
-    assert len(layout.missing_locations_of(CapabilityKind.PLUGINS)) == 1
+    assert len(layout.missing_locations_of(CapabilityKind.EXPERTS)) == 1
     assert len(layout.missing_locations_of(CapabilityKind.AGENTS)) == 1
     assert layout.has_capability(CapabilityKind.SKILLS) is True
     assert layout.has_error is False  # 仍有 skills，不应升级为 ERROR
@@ -136,7 +136,7 @@ def test_confirmed_root_with_all_kinds_empty_is_error(tmp_path: Path):
     layout = build_project_capability_layout(
         primary=root,
         skills_dir=SKILLS,
-        plugins_dir=PLUGINS,
+        experts_dir=EXPERTS,
         agents_dir=AGENTS,
     )
 
@@ -147,13 +147,13 @@ def test_confirmed_root_with_all_kinds_empty_is_error(tmp_path: Path):
 
 
 def test_unconfigured_kinds_are_neither_expanded_nor_diagnosed(tmp_path: Path):
-    """空串=未配置：只配 skills 时不得为 plugins/agents 生成 location 或告警。"""
+    """空串=未配置：只配 skills 时不得为 experts/agents 生成 location 或告警。"""
     root = _make_marker_tree(tmp_path / "repo")
     (root / SKILLS).mkdir(parents=True, exist_ok=True)
 
     layout = build_project_capability_layout(primary=root, skills_dir=SKILLS)
 
-    assert layout.locations_of(CapabilityKind.PLUGINS) == ()
+    assert layout.locations_of(CapabilityKind.EXPERTS) == ()
     assert layout.locations_of(CapabilityKind.AGENTS) == ()
     assert layout.diagnostics == ()
 
@@ -166,7 +166,7 @@ def test_unconfirmed_root_all_empty_only_warns(tmp_path: Path, monkeypatch):
     layout = build_project_capability_layout(
         primary=None,
         skills_dir=SKILLS,
-        plugins_dir=PLUGINS,
+        experts_dir=EXPERTS,
         agents_dir=AGENTS,
     )
 

@@ -2,10 +2,10 @@ import { create } from 'zustand'
 import type { Theme, Workspace } from '../types'
 
 const THEME_KEY = 'prismclaw-theme'
-const SECTION_KEY = 'prismclaw-section'
 const WORKSPACES_LIST_KEY = 'prismclaw-workspaces-list'
 const CHAT_WIDTH_KEY = 'prismclaw-chat-width'
 const ACTIVE_WORKSPACE_KEY = 'prismclaw-active-workspace'
+const WORKBENCH_DOMAIN_KEY = 'prismclaw.workbench-domain'
 
 /** 对话内容区默认宽度（px）：600–1200，100 步长。
  *  仅作为新任务页面中间栏内容区的默认宽度，与右侧预览栏的拖拽宽度相互独立。 */
@@ -17,6 +17,31 @@ export const CHAT_WIDTH_DEFAULT = 1000
 
 /** 内置 section 或动态域 section（domain:xxx 格式） */
 export type AppSection = 'chat' | 'experts' | 'files' | 'outbox' | `domain:${string}`
+
+/**
+ * 侧栏顶部工作台切换器的选择结果 —— 域 key，null 表示未选择。
+ * 只改前端上下文，不影响侧栏菜单的展示（所有域的菜单始终都在）。
+ */
+export type WorkbenchDomain = string | null
+
+/** 选择结果只缓存在本机，服务端不参与存储；读不到/被清掉即回到未选择态 */
+function loadInitialDomain(): WorkbenchDomain {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(WORKBENCH_DOMAIN_KEY)
+    return raw && raw.trim() ? raw.trim() : null
+  } catch {
+    return null
+  }
+}
+
+function persistDomain(domain: WorkbenchDomain): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (domain) window.localStorage.setItem(WORKBENCH_DOMAIN_KEY, domain)
+    else window.localStorage.removeItem(WORKBENCH_DOMAIN_KEY)
+  } catch {}
+}
 
 function resolveSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light'
@@ -60,35 +85,14 @@ function persistChatWidth(w: ChatWidth): void {
   } catch {}
 }
 
-/** 有实际渲染分支的 section（'tasks'/'settings' 已删除，避免 localStorage 残留旧值导致空白） */
-const VALID_SECTIONS = new Set(['chat', 'experts', 'files', 'outbox'])
-
-function loadInitialSection(): AppSection {
-  if (typeof window === 'undefined') return 'chat'
-  try {
-    const stored = window.localStorage.getItem(SECTION_KEY)
-    if (!stored) return 'chat'
-    if (VALID_SECTIONS.has(stored)) return stored as AppSection
-    // 业务域页面不跨刷新恢复：域内页码只存在于内存总线，恢复 section 会让侧栏
-    // 默认高亮第一个域菜单。刷新统一回到「新任务」。
-    if (stored.startsWith('domain:')) {
-      window.localStorage.setItem(SECTION_KEY, 'chat')
-    }
-  } catch {}
-  return 'chat'
-}
-
-function persistSection(section: AppSection): void {
-  if (typeof window === 'undefined') return
-  try {
-    // 业务域页面不持久化：显式落为 chat，保证从域页面刷新后回到「新任务」，
-    // 而不是恢复 domain:* 后让侧栏默认高亮第一个域菜单。
-    window.localStorage.setItem(
-      SECTION_KEY,
-      section.startsWith('domain:') ? 'chat' : section,
-    )
-  } catch {}
-}
+/**
+ * 分区不持久化（2026-11 修复）：刷新页面必须回到「新任务」默认菜单。
+ * 旧实现把 chat/experts/files/outbox 写入 localStorage 并在启动时恢复，
+ * 结果选过「能力扩展 / 自动化 / 产出物」再刷新仍停在该菜单；业务域分区
+ * 虽然写回 chat，但域页面自身会把 ?domain=&page= 留在地址栏，刷新后
+ * 仍会被 ChatPage 按 URL 深链恢复。两处都改为不恢复，统一回 chat。
+ */
+const initialSection: AppSection = 'chat'
 
 function persistWorkspaces(list: Workspace[]): void {
   if (typeof window === 'undefined') return
@@ -194,6 +198,8 @@ interface UiState {
   activeSection: AppSection
   activeWorkspaceId: string
   workspaces: Workspace[]
+  /** 侧栏顶部选中的工作台（域 key）；null = 未选择，胶囊显示「工作台」 */
+  activeDomain: WorkbenchDomain
   /** 由其它页面（如自动化页「通过对话创建」）写入，用于跳转会话页后预填输入框。 */
   pendingComposerPrefill: { text: string; nonce: number } | null
 }
@@ -206,6 +212,7 @@ interface UiActions {
   toggleSidebar: () => void
   setActiveSection: (section: AppSection) => void
   setActiveWorkspaceId: (workspaceId: string) => void
+  setActiveDomain: (domain: WorkbenchDomain) => void
   setWorkspaces: (list: Workspace[]) => void
   upsertWorkspace: (workspace: Workspace) => void
   removeWorkspace: (id: string) => void
@@ -216,7 +223,6 @@ type UiStore = UiState & UiActions
 
 const initialTheme = loadInitialTheme()
 applyThemeToDOM(initialTheme)
-const initialSection = loadInitialSection()
 const initialWorkspaces = loadInitialWorkspaces()
 const initialChatWidth = loadInitialChatWidth()
 
@@ -227,6 +233,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   activeSection: initialSection,
   activeWorkspaceId: loadInitialActiveWorkspaceId(),
   workspaces: initialWorkspaces,
+  activeDomain: loadInitialDomain(),
   pendingComposerPrefill: null,
 
   setTheme: (theme: Theme) => {
@@ -251,15 +258,17 @@ export const useUiStore = create<UiStore>((set, get) => ({
 
   toggleSidebar: () => set((s: UiStore) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
 
-  setActiveSection: (section: AppSection) => {
-    persistSection(section)
-    set({ activeSection: section })
-  },
+  setActiveSection: (section: AppSection) => set({ activeSection: section }),
 
   setActiveWorkspaceId: (workspaceId: string) => {
     const next = (workspaceId || '').trim() || 'default'
     persistActiveWorkspaceId(next)
     set({ activeWorkspaceId: next })
+  },
+  setActiveDomain: (domain: WorkbenchDomain) => {
+    const next = (domain || '').trim() || null
+    persistDomain(next)
+    set({ activeDomain: next })
   },
   setWorkspaces: (list: Workspace[]) => {
     const normalized = normalizeWorkspaces(list)

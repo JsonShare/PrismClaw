@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react'
-import { ChevronDown, Search, Layers, HardDrive, Clock, FolderKanban, MoreHorizontal, Download, Trash2 } from 'lucide-react'
+import { ChevronDown, Search, Layers, HardDrive, Clock, MoreHorizontal, Download, Trash2 } from 'lucide-react'
+import { FolderIcon } from '../../../components/icons/SystemIcons'
 import FileIcon from '../../../components/file/FileIcon'
 import { FilePreviewWithReview } from '../../../components/file/FilePreviewWithReview'
 import {
@@ -32,7 +33,7 @@ function SortIcon({ type }: { type: 'time' | 'size' | 'session' | 'workspace' })
   if (type === 'time') return <Clock className={cls} />
   if (type === 'size') return <HardDrive className={cls} />
   if (type === 'session') return <Layers className={cls} />
-  return <FolderKanban className={cls} />
+  return <FolderIcon size={14} className="text-[var(--c-text-secondary)]" />
 }
 
 export default function OutboxPage({ token, onSelectSession: _onSelectSession }: OutboxPageProps) {

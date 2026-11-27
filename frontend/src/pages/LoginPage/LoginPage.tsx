@@ -187,9 +187,9 @@ export default function Login() {
         </div>
         <div className="login-left-inner">
           <div className="brand-row">
-            <img src={logoPng} alt="PrismClaw" className="brand-logo" />
+            <img src={logoPng} alt="PrismWork" className="brand-logo" />
             <div className="brand-text">
-              <span className="brand-name">PrismClaw</span>
+              <span className="brand-name">PrismWork</span>
               <span className="brand-tagline">一个7×24小时帮干活的全场景AI助手</span>
             </div>
           </div>

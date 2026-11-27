@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -13,8 +14,8 @@ logger = logging.getLogger(__name__)
 def build_health_endpoint(app: FastAPI) -> None:
     """Register the ``/api/health`` endpoint on *app*."""
 
-    @app.get("/api/health")
-    async def health(request: Request) -> dict[str, Any]:
+    @app.get("/api/health", response_model=None)
+    async def health(request: Request) -> dict[str, Any] | JSONResponse:
         from prismclaw.infra.redis import ping as redis_ping
         from prismclaw.runtime.facade.runtime_mode import build_runtime_mode_snapshot
 
@@ -24,6 +25,12 @@ def build_health_endpoint(app: FastAPI) -> None:
             "status": "ok",
             "storage": type(backend).__name__ if backend else "none",
         }
+        module_runtime = getattr(request.app.state, "module_runtime_coordinator", None)
+        if module_runtime is not None:
+            result["module_runtime"] = module_runtime.health
+            if not module_runtime.ready:
+                result["status"] = "not_ready"
+                return JSONResponse(status_code=503, content=result)
         if redis_client is not None:
             result["redis"] = "ok" if await redis_ping(redis_client) else "error"
 
@@ -39,7 +46,7 @@ def build_health_endpoint(app: FastAPI) -> None:
                 "total_tools": summary.total_tools,
             }
 
-        # 项目级能力布局（skills/plugins/agents 单一事实源）。ERROR（如锚定根但
+        # 项目级能力布局（skills/experts/agents 单一事实源）。ERROR（如锚定根但
         # 三类目录全空）降级；WARN（未锚定/个别目录缺失）仅上报不降级，避免误伤裸部署。
         capability_layout = getattr(request.app.state, "capability_layout", None)
         if capability_layout is not None:

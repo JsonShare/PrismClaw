@@ -32,7 +32,6 @@ DYNAMIC_TRUNCATION_PRIORITY = [
     "hooks_append",
     "memory_archives",
     "memory_procedures",
-    "handoff_advisory",
     "attachment_guidance",
     "memory_facts",
     "domain_advisory",

@@ -1,9 +1,9 @@
-"""技能 / 插件包 / 子代理目录契约单测。
+"""技能 / 专家包 / 子代理目录契约单测。
 
 覆盖对象:
-* ``skills_section()``：只列项目技能名（插件技能走 skill_search）
+* ``skills_section()``：只列项目技能名（专家包技能走 skill_search）
 * ``packages_section()``：包名 + 外层描述 + skills/subagents 计数，不列具体能力
-* ``subagents_section()``：只列核心子代理 + 编排规则（插件子代理走 subagent_search）
+* ``subagents_section()``：只列核心子代理 + 编排规则（专家包子代理走 subagent_search）
 * ``resolve_skill_reference()`` 解析契约（技能名优先 / 别名直取 / ambiguous）
 * ``build_skill_execution()`` 错误消息路由（名单回传，无自反文案）
 """
@@ -12,10 +12,20 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import cast
 from unittest import mock
 
 import pytest
+
+from prismclaw.engine.execution.capabilities.catalog import (
+    RuntimeCatalog,
+    SkillCatalogEntry,
+)
+from prismclaw.engine.execution.request._prompt_types import (
+    AvailableSubagentEntry,
+    MarketplaceSummary,
+    PromptInputs,
+)
 
 # ---------------------------------------------------------------------------
 # sys.path
@@ -33,9 +43,9 @@ def _make_prompt_inputs(
     *,
     skills: list[str] | None = None,
     tools: list[tuple[str, str]] | None = None,
-    summaries: list[Any] | None = None,
-    subagents: list[Any] | None = None,
-) -> Any:
+    summaries: list[MarketplaceSummary] | None = None,
+    subagents: list[AvailableSubagentEntry] | None = None,
+) -> PromptInputs:
     from prismclaw.engine.execution.request.system_prompt import PromptInputs
 
     return PromptInputs(
@@ -54,7 +64,9 @@ def _make_prompt_inputs(
     )
 
 
-def _make_summary(name: str, *, description: str = "", skill_count: int = 1) -> Any:
+def _make_summary(
+    name: str, *, description: str = "", skill_count: int = 1
+) -> MarketplaceSummary:
     from prismclaw.engine.execution.request._prompt_types import MarketplaceSummary
 
     return MarketplaceSummary(name=name, description=description, skill_count=skill_count)
@@ -64,27 +76,23 @@ def _make_subagent(
     name: str,
     *,
     description: str = "",
-    plugin_name: str | None = None,
-    marketplace_name: str | None = None,
-    marketplace_description: str | None = None,
-) -> Any:
+    expert_name: str | None = None,
+    expert_description: str | None = None,
+) -> AvailableSubagentEntry:
     from prismclaw.engine.execution.request._prompt_types import AvailableSubagentEntry
 
     return AvailableSubagentEntry(
         name=name,
         description=description,
-        plugin_name=plugin_name,
-        marketplace_name=marketplace_name,
-        marketplace_description=marketplace_description,
+        expert_name=expert_name,
+        expert_description=expert_description,
     )
 
 
 # ---------------------------------------------------------------------------
 # 辅助：构造 SkillCatalogEntry（resolve_skill_reference / build_skill_execution 用）
 # ---------------------------------------------------------------------------
-def _make_catalog_entry(
-    *, name: str, marketplace_name: str | None = None, plugin_name: str | None = None
-) -> Any:
+def _make_catalog_entry(*, name: str, expert_name: str | None = None) -> SkillCatalogEntry:
     from prismclaw.engine.execution.capabilities.catalog import SkillCatalogEntry
     from prismclaw.schema.services.skills import SkillManifest
 
@@ -101,8 +109,7 @@ def _make_catalog_entry(
         location="",
         instructions="",
         manifest=manifest,
-        plugin_name=plugin_name,
-        marketplace_name=marketplace_name,
+        expert_name=expert_name,
     )
 
 
@@ -110,12 +117,12 @@ def _make_catalog_entry(
 # 1. skills_section：只列项目技能
 # ==========================================================================
 class TestSkillsSectionRendering:
-    def test_no_skills_returns_none(self):
+    def test_no_skills_returns_none(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import skills_section
 
         assert skills_section(_make_prompt_inputs(skills=[])) is None
 
-    def test_no_skill_search_tool_returns_none(self):
+    def test_no_skill_search_tool_returns_none(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import skills_section
 
         inputs = _make_prompt_inputs(
@@ -124,7 +131,7 @@ class TestSkillsSectionRendering:
         )
         assert skills_section(inputs) is None
 
-    def test_project_skills_rendered_as_name_index(self):
+    def test_project_skills_rendered_as_name_index(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import skills_section
 
         result = skills_section(_make_prompt_inputs(skills=["code_review", "deep_research"]))
@@ -136,8 +143,8 @@ class TestSkillsSectionRendering:
         assert "`skill_search`" in result
         assert "`activate_skill`" in result
 
-    def test_plugin_skills_never_rendered(self):
-        """插件技能不进 <skills>；包索引由 <packages> 负责。"""
+    def test_expert_skills_never_rendered(self) -> None:
+        """专家包技能不进 <skills>；包索引由 <packages> 负责。"""
         from prismclaw.engine.execution.request.system_prompt import skills_section
 
         inputs = _make_prompt_inputs(
@@ -147,14 +154,14 @@ class TestSkillsSectionRendering:
         result = skills_section(inputs)
         assert result is not None
         assert "legal-advisor" not in result
-        assert "# 插件包" not in result
+        assert "# 专家包" not in result
 
 
 # ==========================================================================
 # 2. packages_section：包索引（不列具体能力）
 # ==========================================================================
 class TestPackagesSection:
-    def test_none_without_discovery_tools(self):
+    def test_none_without_discovery_tools(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
         inputs = _make_prompt_inputs(
@@ -163,22 +170,22 @@ class TestPackagesSection:
         )
         assert packages_section(inputs) is None
 
-    def test_none_without_packages(self):
+    def test_none_without_packages(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
         assert packages_section(_make_prompt_inputs()) is None
 
-    def test_counts_skills_and_subagents(self):
+    def test_counts_skills_and_subagents(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
         inputs = _make_prompt_inputs(
             summaries=[_make_summary("legal-chineselaw", skill_count=4)],
             subagents=[
                 _make_subagent(
-                    "docket-watcher", plugin_name="litigation", marketplace_name="legal-chineselaw"
+                    "docket-watcher", expert_name="legal-chineselaw"
                 ),
                 _make_subagent(
-                    "case-analyst", plugin_name="litigation", marketplace_name="legal-chineselaw"
+                    "case-analyst", expert_name="legal-chineselaw"
                 ),
             ],
         )
@@ -189,7 +196,7 @@ class TestPackagesSection:
         assert "4 skills" in result
         assert "2 subagents" in result
 
-    def test_package_from_agent_only_without_skills(self):
+    def test_package_from_agent_only_without_skills(self) -> None:
         """只有子代理、没有技能的包也必须被索引。"""
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
@@ -197,9 +204,8 @@ class TestPackagesSection:
             subagents=[
                 _make_subagent(
                     "x",
-                    plugin_name="p",
-                    marketplace_name="agent-only",
-                    marketplace_description="仅有子代理的能力包",
+                    expert_name="agent-only",
+                    expert_description="仅有子代理的能力包",
                 ),
             ],
         )
@@ -209,13 +215,13 @@ class TestPackagesSection:
         assert "1 subagent" in result
         assert "仅有子代理的能力包" in result
 
-    def test_capability_names_never_rendered(self):
+    def test_capability_names_never_rendered(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
         inputs = _make_prompt_inputs(
             summaries=[_make_summary("legal", skill_count=1)],
             subagents=[
-                _make_subagent("docket-watcher", plugin_name="litigation", marketplace_name="legal")
+                _make_subagent("docket-watcher", expert_name="legal")
             ],
         )
         result = packages_section(inputs)
@@ -223,7 +229,7 @@ class TestPackagesSection:
         assert "docket-watcher" not in result
         assert "litigation" not in result
 
-    def test_description_truncated(self):
+    def test_description_truncated(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
         inputs = _make_prompt_inputs(
@@ -233,7 +239,7 @@ class TestPackagesSection:
         assert result is not None
         assert "…" in result
 
-    def test_packages_sorted_and_capped(self):
+    def test_packages_sorted_and_capped(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import (
             _PACKAGE_LIST_LIMIT,
             packages_section,
@@ -256,20 +262,20 @@ class TestPackagesSection:
 # 3. subagents_section：核心子代理 + 规则
 # ==========================================================================
 class TestSubagentsSection:
-    def test_none_without_sub_agent_tool(self):
+    def test_none_without_sub_agent_tool(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import subagents_section
 
         inputs = _make_prompt_inputs(tools=[("skill_search", "d")])
         assert subagents_section(inputs) is None
 
-    def test_core_only_plugin_names_absent(self):
+    def test_core_only_expert_names_absent(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import subagents_section
 
         inputs = _make_prompt_inputs(
             subagents=[
                 _make_subagent("architect", description="架构规划"),
                 _make_subagent(
-                    "docket-watcher", plugin_name="litigation", marketplace_name="legal"
+                    "docket-watcher", expert_name="legal"
                 ),
             ]
         )
@@ -280,7 +286,7 @@ class TestSubagentsSection:
         assert "docket-watcher" not in result
         assert "`subagent_search`" in result
 
-    def test_rules_live_in_delegation_section(self):
+    def test_rules_live_in_delegation_section(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import (
             delegation_section,
             subagents_section,
@@ -301,110 +307,129 @@ class TestSubagentsSection:
 # 4. resolve_skill_reference 解析契约
 # ==========================================================================
 class TestResolveSkillReference:
-    def test_unique_member_package_alias_resolves_directly(self):
-        """唯一技能的包名 → resolved 直取，携带 marketplace_name 揭示。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    def test_unique_member_package_alias_resolves_directly(self) -> None:
+        """唯一技能的包名 → resolved 直取，携带 expert_name 揭示。"""
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
-        entries = [_make_catalog_entry(name="tech-mining", marketplace_name="research-kit")]
-        svc = CapabilityCatalogService()
+        entries = [_make_catalog_entry(name="tech-mining", expert_name="research-kit")]
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             r = svc.resolve_skill_reference("research-kit")
             assert r.kind == "resolved"
+            assert r.entry is not None
             assert r.entry.name == "tech-mining"
-            assert r.marketplace_name == "research-kit"
+            assert r.expert_name == "research-kit"
 
-    def test_unique_short_name_suffix_resolves(self):
+    def test_unique_short_name_suffix_resolves(self) -> None:
         """短名唯一命中后缀 → resolved（xlsx → officecli-xlsx）。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
         entries = [
             _make_catalog_entry(name="officecli-xlsx"),
             _make_catalog_entry(name="officecli-docx"),
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             r = svc.resolve_skill_reference("xlsx")
             assert r.kind == "resolved"
+            assert r.entry is not None
             assert r.entry.name == "officecli-xlsx"
-            assert r.marketplace_name is None
+            assert r.expert_name is None
 
-    def test_ambiguous_short_name_suffix_stays_not_found(self):
-        """短名命中多个后缀 → 不猜，保持 not_found。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    def test_ambiguous_short_name_suffix_stays_ambiguous(self) -> None:
+        """裸名命中多个后缀 → ambiguous，不猜任一候选。"""
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
         entries = [
             _make_catalog_entry(name="a-xlsx"),
             _make_catalog_entry(name="b-xlsx"),
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             r = svc.resolve_skill_reference("xlsx")
-            assert r.kind == "not_found"
+            assert r.kind == "ambiguous"
+            assert r.member_names == ("a-xlsx", "b-xlsx")
 
-    def test_multi_member_package_alias_is_ambiguous(self):
+    def test_expert_colon_skill_selects_the_explicit_owner(self) -> None:
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
+
+        expected = _make_catalog_entry(name="a:xlsx", expert_name="a")
+        entries = [expected, _make_catalog_entry(name="b:xlsx", expert_name="b")]
+        svc = RuntimeCatalog()
+        with mock.patch.object(
+            RuntimeCatalog, "list_skill_entries", return_value=entries
+        ):
+            resolution = svc.resolve_skill_reference("a:xlsx")
+
+        assert resolution.kind == "resolved"
+        assert resolution.entry is expected
+
+    def test_multi_member_package_alias_is_ambiguous(self) -> None:
         """多技能包名 → ambiguous 且 member_names 齐全。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
         entries = [
-            _make_catalog_entry(name="legal_a", marketplace_name="legal-advisor"),
-            _make_catalog_entry(name="legal_b", marketplace_name="legal-advisor"),
+            _make_catalog_entry(name="legal_a", expert_name="legal-advisor"),
+            _make_catalog_entry(name="legal_b", expert_name="legal-advisor"),
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             r = svc.resolve_skill_reference("legal-advisor")
             assert r.kind == "ambiguous"
-            assert r.marketplace_name == "legal-advisor"
+            assert r.expert_name == "legal-advisor"
             assert r.member_names == ("legal_a", "legal_b")
 
-    def test_skill_name_wins_over_same_named_package(self):
+    def test_skill_name_wins_over_same_named_package(self) -> None:
         """技能名与包名同名时技能名优先。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
         entries = [
             _make_catalog_entry(name="foo"),  # 技能 foo
-            _make_catalog_entry(name="bar", marketplace_name="foo"),  # 包 foo 含 bar
+            _make_catalog_entry(name="bar", expert_name="foo"),  # 包 foo 含 bar
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             r = svc.resolve_skill_reference("foo")
             assert r.kind == "resolved"
+            assert r.entry is not None
             assert r.entry.name == "foo"
-            assert r.marketplace_name is None  # 技能名 pass 命中，非别名
+            assert r.expert_name is None  # 技能名 pass 命中，非别名
 
-    def test_slash_prefix_normalized_in_alias_pass(self):
+    def test_slash_prefix_normalized_in_alias_pass(self) -> None:
         """/research-kit 前缀清洗后命中别名 pass。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
-        entries = [_make_catalog_entry(name="tech-mining", marketplace_name="research-kit")]
-        svc = CapabilityCatalogService()
+        entries = [_make_catalog_entry(name="tech-mining", expert_name="research-kit")]
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             r = svc.resolve_skill_reference("/research-kit")
             assert r.kind == "resolved"
+            assert r.entry is not None
             assert r.entry.name == "tech-mining"
 
-    def test_get_skill_entry_returns_none_on_ambiguous(self):
+    def test_get_skill_entry_returns_none_on_ambiguous(self) -> None:
         """get_skill_entry 委托：ambiguous → None（entry-or-None 语义不变）。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
         entries = [
-            _make_catalog_entry(name="legal_a", marketplace_name="legal-advisor"),
-            _make_catalog_entry(name="legal_b", marketplace_name="legal-advisor"),
+            _make_catalog_entry(name="legal_a", expert_name="legal-advisor"),
+            _make_catalog_entry(name="legal_b", expert_name="legal-advisor"),
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             assert svc.get_skill_entry("legal-advisor") is None
             assert svc.get_skill_entry("legal_a") is not None
@@ -414,46 +439,46 @@ class TestResolveSkillReference:
 # 5. build_skill_execution 错误消息路由
 # ==========================================================================
 class TestBuildSkillExecutionErrors:
-    def test_ambiguous_error_lists_all_members(self):
+    def test_ambiguous_error_lists_all_members(self) -> None:
         """ambiguous → LookupError 列出全部成员技能名。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
         from prismclaw.engine.execution.skills.runtime import SkillRuntime
         from prismclaw.schema.services.skills import SkillInvocation
 
         entries = [
-            _make_catalog_entry(name="legal_a", marketplace_name="legal-advisor"),
-            _make_catalog_entry(name="legal_b", marketplace_name="legal-advisor"),
+            _make_catalog_entry(name="legal_a", expert_name="legal-advisor"),
+            _make_catalog_entry(name="legal_b", expert_name="legal-advisor"),
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         rt = SkillRuntime(capability_catalog=svc)
         invocation = SkillInvocation(skill_name="legal-advisor", task_context="", source="model")
         with (
-            mock.patch.object(CapabilityCatalogService, "list_skill_entries", return_value=entries),
+            mock.patch.object(RuntimeCatalog, "list_skill_entries", return_value=entries),
             pytest.raises(LookupError) as exc_info,
         ):
             rt.build_skill_execution(invocation, workspace_path=Path("/tmp"))
         msg = str(exc_info.value)
         assert "legal_a" in msg
         assert "legal_b" in msg
-        assert "插件包名" in msg
+        assert "专家包名" in msg
 
-    def test_ambiguous_error_truncates_large_package(self):
-        """大插件包（60 个技能）只列前 12 个，并指向 skill_search。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    def test_ambiguous_error_truncates_large_package(self) -> None:
+        """大专家包（60 个技能）只列前 12 个，并指向 skill_search。"""
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
         from prismclaw.engine.execution.skills.runtime import SkillRuntime
         from prismclaw.schema.services.skills import SkillInvocation
 
         entries = [
-            _make_catalog_entry(name=f"skill-{i:02d}", marketplace_name="medical-healthcare")
+            _make_catalog_entry(name=f"skill-{i:02d}", expert_name="medical-healthcare")
             for i in range(60)
         ]
-        svc = CapabilityCatalogService()
+        svc = RuntimeCatalog()
         rt = SkillRuntime(capability_catalog=svc)
         invocation = SkillInvocation(
             skill_name="medical-healthcare", task_context="", source="model"
         )
         with (
-            mock.patch.object(CapabilityCatalogService, "list_skill_entries", return_value=entries),
+            mock.patch.object(RuntimeCatalog, "list_skill_entries", return_value=entries),
             pytest.raises(LookupError) as exc_info,
         ):
             rt.build_skill_execution(invocation, workspace_path=Path("/tmp"))
@@ -464,20 +489,20 @@ class TestBuildSkillExecutionErrors:
         assert "skill_search" in msg
         assert len(msg) < 600
 
-    def test_not_found_error_has_no_reflexive_text(self):
+    def test_not_found_error_has_no_reflexive_text(self) -> None:
         """not_found → 近邻指引 + skill_search 提示，无自反文案。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
         from prismclaw.engine.execution.skills.runtime import SkillRuntime
         from prismclaw.schema.services.skills import SkillInvocation
 
-        entries = [_make_catalog_entry(name="tech-mining", marketplace_name="research-kit")]
-        svc = CapabilityCatalogService()
+        entries = [_make_catalog_entry(name="tech-mining", expert_name="research-kit")]
+        svc = RuntimeCatalog()
         rt = SkillRuntime(capability_catalog=svc)
         invocation = SkillInvocation(
             skill_name="totally-unrelated", task_context="", source="model"
         )
         with (
-            mock.patch.object(CapabilityCatalogService, "list_skill_entries", return_value=entries),
+            mock.patch.object(RuntimeCatalog, "list_skill_entries", return_value=entries),
             pytest.raises(LookupError) as exc_info,
         ):
             rt.build_skill_execution(invocation, workspace_path=Path("/tmp"))
@@ -485,18 +510,18 @@ class TestBuildSkillExecutionErrors:
         assert "available_skills" not in msg  # 防自反回归守卫
         assert "skill_search" in msg
 
-    def test_alias_activation_summary_discloses_package(self):
+    def test_alias_activation_summary_discloses_package(self) -> None:
         """别名激活 summary 揭示匹配路径，state 保持请求名。"""
-        from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+        from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
         from prismclaw.engine.execution.skills.runtime import SkillRuntime
         from prismclaw.schema.services.skills import SkillInvocation
 
-        entries = [_make_catalog_entry(name="tech-mining", marketplace_name="research-kit")]
-        svc = CapabilityCatalogService()
+        entries = [_make_catalog_entry(name="tech-mining", expert_name="research-kit")]
+        svc = RuntimeCatalog()
         rt = SkillRuntime(capability_catalog=svc)
         invocation = SkillInvocation(skill_name="research-kit", task_context="", source="model")
         with mock.patch.object(
-            CapabilityCatalogService, "list_skill_entries", return_value=entries
+            RuntimeCatalog, "list_skill_entries", return_value=entries
         ):
             plan = rt.build_skill_execution(invocation, workspace_path=Path("/tmp"))
         assert "(matched via package 'research-kit')" in plan.summary
@@ -507,16 +532,16 @@ class TestBuildSkillExecutionErrors:
 # 6. 字节稳定性（frozen prefix 缓存约束）
 # ==========================================================================
 class TestByteStability:
-    def test_skills_render_identically(self):
+    def test_skills_render_identically(self) -> None:
         inputs = _make_prompt_inputs(skills=["a", "b"])
         from prismclaw.engine.execution.request.system_prompt import skills_section
 
         assert skills_section(inputs) == skills_section(inputs)
 
-    def test_packages_render_identically(self):
+    def test_packages_render_identically(self) -> None:
         inputs = _make_prompt_inputs(
             summaries=[_make_summary("mp", description="包描述", skill_count=2)],
-            subagents=[_make_subagent("x", plugin_name="p", marketplace_name="mp")],
+            subagents=[_make_subagent("x", expert_name="mp")],
         )
         from prismclaw.engine.execution.request.system_prompt import packages_section
 
@@ -524,10 +549,10 @@ class TestByteStability:
 
 
 # ==========================================================================
-# 7. marketplace_name 全链路传播验证
+# 7. expert_name 全链路传播验证
 # ==========================================================================
 class TestMarketplaceNamePropagation:
-    def test_skill_catalog_entry_has_marketplace_name(self):
+    def test_skill_catalog_entry_has_expert_name(self) -> None:
         from prismclaw.engine.execution.capabilities.catalog import SkillCatalogEntry
 
         entry = SkillCatalogEntry(
@@ -536,18 +561,17 @@ class TestMarketplaceNamePropagation:
             location="/path",
             instructions="",
             manifest=None,
-            plugin_name="plugin1",
+            expert_name="legal-advisor",
             origin="plugin",
-            marketplace_name="legal-advisor",
         )
-        assert entry.marketplace_name == "legal-advisor"
+        assert entry.expert_name == "legal-advisor"
 
 
 # ==========================================================================
 # 8. workspace 段会话交付目录声明（交付物唯一有效落点）
 # ==========================================================================
 class TestWorkspaceSectionSessionOutbox:
-    def test_renders_session_outbox_dir(self):
+    def test_renders_session_outbox_dir(self) -> None:
         """有 workspace_path + session_id 时渲染虚拟路径词汇表和会话交付目录契约。"""
         from prismclaw.engine.execution.request.system_prompt import workspace_section
 
@@ -559,7 +583,7 @@ class TestWorkspaceSectionSessionOutbox:
         assert "虚拟路径前缀契约" in section
         assert "PRISMCLAW_OUTBOX_DIR" in section
 
-    def test_no_session_id_no_outbox_line(self):
+    def test_no_session_id_no_outbox_line(self) -> None:
         from prismclaw.engine.execution.request.system_prompt import workspace_section
 
         inputs = _make_prompt_inputs()
@@ -574,7 +598,7 @@ class TestWorkspaceSectionSessionOutbox:
 # 9. 任务级技能路由（§4.10 动态层：_route_skill_hints 三分支）
 # ==========================================================================
 class _FakeMatch:
-    def __init__(self, name: str, description: str = ""):
+    def __init__(self, name: str, description: str = "") -> None:
         self.name = name
         self.description = description
 
@@ -582,17 +606,21 @@ class _FakeMatch:
 class _FakeDiscovery:
     """SkillDiscoveryRuntime 替身：search 返回预置结果或抛错。"""
 
-    def __init__(self, matches=None, error=None):
+    def __init__(
+        self, matches: list[_FakeMatch] | None = None, error: Exception | None = None
+    ) -> None:
         self._matches = matches or []
         self._error = error
 
-    def search(self, query, *, workspace_path, limit):
+    def search(
+        self, query: str, *, workspace_path: Path, limit: int
+    ) -> list[_FakeMatch]:
         if self._error is not None:
             raise self._error
         return self._matches[:limit]
 
 
-def _patch_discovery(monkeypatch, fake):
+def _patch_discovery(monkeypatch: pytest.MonkeyPatch, fake: _FakeDiscovery) -> None:
     monkeypatch.setattr(
         "prismclaw.engine.execution.capabilities.discovery_runtime.SkillDiscoveryRuntime",
         lambda capability_catalog=None: fake,
@@ -600,7 +628,9 @@ def _patch_discovery(monkeypatch, fake):
 
 
 class TestRouteSkillHints:
-    def test_multi_match_produces_hints(self, monkeypatch, tmp_path):
+    def test_multi_match_produces_hints(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         from prismclaw.engine.execution.state.streaming import _route_skill_hints
 
         _patch_discovery(
@@ -614,7 +644,8 @@ class TestRouteSkillHints:
         )
         hints = _route_skill_hints(
             user_message="研发高强度瓷绝缘子配方",
-            capability_catalog=object(),  # 非 None 即可（runtime 被替换）
+            # 非 None 即可（runtime 被替换）
+            capability_catalog=cast(RuntimeCatalog, object()),
             workspace_path=str(tmp_path),
         )
         assert hints == (
@@ -622,30 +653,34 @@ class TestRouteSkillHints:
             "feature-risk-assessment — 功能风险评估",
         )
 
-    def test_single_match_yields_nothing(self, monkeypatch, tmp_path):
+    def test_single_match_yields_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """唯一命中交给 _try_auto_activate_skill 自动激活，路由不重复提示。"""
         from prismclaw.engine.execution.state.streaming import _route_skill_hints
 
         _patch_discovery(monkeypatch, _FakeDiscovery(matches=[_FakeMatch("tech-mining")]))
         hints = _route_skill_hints(
             user_message="瓷绝缘子 配方改进",
-            capability_catalog=object(),
+            capability_catalog=cast(RuntimeCatalog, object()),
             workspace_path=str(tmp_path),
         )
         assert hints == ()
 
-    def test_zero_match_yields_nothing(self, monkeypatch, tmp_path):
+    def test_zero_match_yields_nothing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         from prismclaw.engine.execution.state.streaming import _route_skill_hints
 
         _patch_discovery(monkeypatch, _FakeDiscovery(matches=[]))
         hints = _route_skill_hints(
             user_message="继续",
-            capability_catalog=object(),
+            capability_catalog=cast(RuntimeCatalog, object()),
             workspace_path=str(tmp_path),
         )
         assert hints == ()
 
-    def test_no_catalog_or_workspace_yields_nothing(self):
+    def test_no_catalog_or_workspace_yields_nothing(self) -> None:
         from prismclaw.engine.execution.state.streaming import _route_skill_hints
 
         assert (
@@ -653,29 +688,39 @@ class TestRouteSkillHints:
             == ()
         )
         assert (
-            _route_skill_hints(user_message="x", capability_catalog=object(), workspace_path=None)
+            _route_skill_hints(
+                user_message="x",
+                capability_catalog=cast(RuntimeCatalog, object()),
+                workspace_path=None,
+            )
             == ()
         )
         assert (
             _route_skill_hints(
-                user_message="  ", capability_catalog=object(), workspace_path="/tmp"
+                user_message="  ",
+                capability_catalog=cast(RuntimeCatalog, object()),
+                workspace_path="/tmp",
             )
             == ()
         )
 
-    def test_search_error_is_best_effort(self, monkeypatch, tmp_path):
+    def test_search_error_is_best_effort(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         """检索异常返回空——路由是引导，不阻塞回合。"""
         from prismclaw.engine.execution.state.streaming import _route_skill_hints
 
         _patch_discovery(monkeypatch, _FakeDiscovery(error=RuntimeError("boom")))
         hints = _route_skill_hints(
             user_message="x",
-            capability_catalog=object(),
+            capability_catalog=cast(RuntimeCatalog, object()),
             workspace_path=str(tmp_path),
         )
         assert hints == ()
 
-    def test_hints_capped_at_three(self, monkeypatch, tmp_path):
+    def test_hints_capped_at_three(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
         from prismclaw.engine.execution.state.streaming import _route_skill_hints
 
         _patch_discovery(
@@ -683,7 +728,7 @@ class TestRouteSkillHints:
         )
         hints = _route_skill_hints(
             user_message="x",
-            capability_catalog=object(),
+            capability_catalog=cast(RuntimeCatalog, object()),
             workspace_path=str(tmp_path),
         )
         assert len(hints) == 3

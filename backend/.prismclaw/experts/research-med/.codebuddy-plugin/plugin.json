@@ -1,0 +1,74 @@
+{
+  "name": "research-med",
+  "version": "1.0.0",
+  "description": "Builds search strategies and review outlines, designs study protocols and statistics plans, runs statistics and figures, drafts manuscripts and grant outlines, translates medical text, and lists ethics tasks.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/research-med.md"
+  ],
+  "skills": [
+    "./skills/clinical-trial-protocol",
+    "./skills/clinical-trial-workflow",
+    "./skills/literature-review-workflow",
+    "./skills/research-med-playbook",
+    "./skills/research-evidence",
+    "./skills/biomedical-statistics",
+    "./skills/medical-grant-outline",
+    "./skills/medical-manuscript-writing",
+    "./skills/medical-ppt",
+    "./skills/medical-scientific-figures",
+    "./skills/medical-translation"
+  ],
+  "expertType": "agent",
+  "agentName": "research-med",
+  "displayName": {
+    "en": "Clinical Research Expert",
+    "zh": "医学科研专家"
+  },
+  "profession": {
+    "zh": "文献综述与试验设计",
+    "en": "Literature Review & Trial Design"
+  },
+  "displayDescription": {
+    "zh": "制定检索策略与综述大纲，设计研究方案与统计计划，并列出伦理注册待办。",
+    "en": "Builds search strategies and review outlines, designs study protocols and statistics plans, and lists ethics tasks."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "12-IndustryConsultant",
+  "defaultInitPrompt": {
+    "zh": "为【研究课题】做文献综述大纲与检索式。",
+    "en": "Build a literature review outline and search strategy for [topic]."
+  },
+  "plugin": "research-med",
+  "tags": [
+    {
+      "zh": "文献综述",
+      "en": "Literature Review"
+    },
+    {
+      "zh": "研究设计",
+      "en": "Study Design"
+    },
+    {
+      "zh": "统计方案",
+      "en": "Statistics Plan"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "为【研究课题】做文献综述大纲与检索式。",
+      "en": "Build a literature review outline and search strategy for [topic]."
+    },
+    {
+      "zh": "设计一项随机对照试验的方案框架。",
+      "en": "Design a protocol framework for a randomized controlled trial."
+    },
+    {
+      "zh": "为这个真实世界数据研究选择统计方法并列出偏倚控制。",
+      "en": "Choose statistical methods for this RWD study and list bias controls."
+    }
+  ],
+  "license": "Apache-2.0"
+}

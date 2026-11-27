@@ -1,0 +1,70 @@
+{
+  "name": "corporate-law",
+  "version": "1.0.0",
+  "description": "Runs due diligence, tabular review and disclosure schedules, drafts board documents and tracks entity compliance.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/corporate-law.md"
+  ],
+  "skills": [
+    "./skills/ai-tool-handoff",
+    "./skills/board-minutes",
+    "./skills/corporate-governance-workflow",
+    "./skills/corporate-law-playbook",
+    "./skills/corporate-ma-workflow",
+    "./skills/deal-team-summary",
+    "./skills/tabular-review"
+  ],
+  "expertType": "agent",
+  "agentName": "corporate-law",
+  "displayName": {
+    "en": "Corporate & M&A Expert",
+    "zh": "公司与并购专家"
+  },
+  "profession": {
+    "zh": "股权架构与并购尽调",
+    "en": "Equity Structure & M&A Diligence"
+  },
+  "displayDescription": {
+    "zh": "运行尽调、表格审查与披露时间表，起草董事会文件并跟踪实体合规。",
+    "en": "Runs due diligence, tabular review and disclosure schedules, drafts board documents and tracks entity compliance."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "对【目标公司】做交割前法律尽调，输出问题清单与披露时间表。",
+    "en": "Run pre-closing diligence on [target] and produce an issue list with a disclosure schedule."
+  },
+  "plugin": "corporate-law",
+  "tags": [
+    {
+      "zh": "并购尽调",
+      "en": "M&A Diligence"
+    },
+    {
+      "zh": "公司治理",
+      "en": "Corporate Governance"
+    },
+    {
+      "zh": "披露时间表",
+      "en": "Disclosure Schedule"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "对【目标公司】做交割前法律尽调，输出问题清单与披露时间表。",
+      "en": "Run pre-closing diligence on [target] and produce an issue list with a disclosure schedule."
+    },
+    {
+      "zh": "按内部格式起草这份董事会同意与会议纪要。",
+      "en": "Draft board consents and minutes in our internal format."
+    },
+    {
+      "zh": "列出各实体今年到期的合规申报与截止日。",
+      "en": "List entity compliance filings and deadlines this year."
+    }
+  ],
+  "license": "Apache-2.0"
+}

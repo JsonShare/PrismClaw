@@ -15,7 +15,7 @@ class WsDomainTaskEmitter:
 
     帧信封由 broadcast_to_user 统一构造：{type, conversation_id: null, seq: 0, ts, data}。
     无状态：每次广播时从 app.state.web_deps 现取 connection_registry，
-    因此 web_deps 重建（插件热重载）不影响已接线的 emitter 实例。
+    因此 web_deps 重建（专家包热重载）不影响已接线的 emitter 实例。
     """
 
     def __init__(self, app: FastAPI) -> None:

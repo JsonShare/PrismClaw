@@ -27,11 +27,12 @@ export interface ConvState {
   settledSeq: number
   lastAccessAt: number
   // 流式状态（运行时，服务端确认 idle 后由 clearLive 清空）
+  // streamingText：当前未结束轮次已流出的自然语言文本（正文候选）。
+  // 该轮一旦结束（下一轮开始）或有工具调用，文本即归入 ExecutionTimeline，
+  // 正文是否呈现由 selectAnswerText 按「本段是否已在 timeline」判定。
   streamingText: string
-  // 当前 streamingText 属于哪个迭代段（segmentId）。chat.delta payload 带 segmentId —
-  // 当收到的 segmentId 变了（进入新迭代轮次），先清 streamingText 再追加，让正文区
-  // 只显示当前轮次吐字（上一轮已进 ExecutionTimeline）。这比 IterationBoundary 提前
-  // 清空更准确 — 后者会在新轮次 TextChunk 到达前制造空白窗口。
+  // 当前 streamingText 所属轮次（segmentId）。chat.delta payload 带 segmentId，
+  // 变化即代表上一轮已结束、新一轮开始，正文清空重计。
   currentStreamingSegmentId: number
   // P2.4：执行心跳阶段（camelCase HeartbeatPayload），由 set_phase timeline patch 驱动。
   // 承载 executing / generating / waiting_llm 等进度语义。runGate 取代其 awaiting_* 语义。
@@ -614,6 +615,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ...base,
             isStreaming: true,
             streamingText: run.streaming_text ?? '',
+            // 恢复实时正文归属：否则首个 delta 会被误判为「换段」而丢弃半段正文。
+            currentStreamingSegmentId: run.streaming_segment ?? 0,
             timeline: (run.timeline_nodes ?? []) as TimelineNode[],
             // 后端无有效 runtime 投影时返回空对象 {}，此处归一为 null 以信守
             // `TaskRuntimeProjection | null` 契约（消费方虽多为可选链，不因 {} 崩溃）。
@@ -659,13 +662,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     }),
 
-  // chat.start：无条件清掉上一轮残留的执行过程状态（timeline / runtime / phase），
-  // 并 set isStreaming=true 记下游式纪元。后端保证 chat.start 在所有 task.timeline /
-  // task.runtime / chat.delta 之前发出。
+  // chat.start：无条件清掉上一轮残留的执行过程状态（timeline / runtime / phase /
+  // 正文缓冲），并 set isStreaming=true 记下游式纪元。后端保证 chat.start 在所有
+  // task.timeline / task.runtime / chat.delta 之前发出。
   //
   // 与 initStreaming 的关系：
-  //   - chat.start（本方法）只清执行过程字段，不清 streamingText——因为新任务还没开始
-  //     输出正文；清了也无妨，但保留历史文本对 UI 无影响。
+  //   - chat.start（本方法）清空正文缓冲：新任务从 segment 1 重新开始，若保留上一
+  //     run 的 streamingText/currentStreamingSegmentId，首段文本会被误判为「同段续写」
+  //     而拼在旧内容后面。
   //   - initStreaming（chat.delta 触发）只在 isStreaming=false 时重置，保留 timeline
   //     等字段——怕清掉 chat.start 之后、chat.delta 之前已到达的 task.timeline 帧。
   //     chat.start 先于 task.timeline 到达，保证旧残留已被彻底清掉。
@@ -679,6 +683,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ...conv,
             // 清执行过程残留
             timeline: [],
+            streamingText: '',
+            currentStreamingSegmentId: 0,
             activeTaskRuntime: null,
             activeTaskRuntimeEventSeq: 0,
             activeTaskRuntimeIdempotencyKey: null,
@@ -705,9 +711,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set((state) => {
       const conv = state.convStates[convId]
       if (!conv) return state
-      // segmentId 变了 → 进入新迭代轮次：上一轮正文已累积进 ExecutionTimeline，
-      // 正文区清空让当前轮次吐字重新开始。这比 IterationBoundary 提前清空更准确 —
-      // 后者会在新轮次 TextChunk 到达前制造空白窗口。
+      // segmentId 变了 → 进入新迭代轮次：上一轮已结束，其文本随下一次 timeline
+      // snapshot 进入 ExecutionTimeline（过程过语），正文区清空让新一轮重新开始。
       const segChanged = segmentId !== undefined && segmentId !== conv.currentStreamingSegmentId
       return {
         convStates: {
@@ -824,8 +829,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const next = nextTimelineState({ nodes: conv.timeline }, frame)
       // 从 patch 流中抽取 set_phase 写入 conv.phase（单真相源）；
       // phaseAt 记录 patch 到达时刻，供 usePhaseClock 推进秒表。
-      // IterationBoundary patch 不再触发 streamingText 清空 — 清空时机已迁移到
-      // chat.delta 的 segmentId 切换（TextChunk 到达时），避免提前清空造成的空白窗口。
+      // 正文的显示/隐藏不在这里处理：统一由 selectAnswerText 按
+      // 「当前段是否已进入 timeline」判定。
       let nextPhase = conv.phase
       let nextPhaseAt = conv.phaseAt
       if (frame.patch) {
@@ -901,3 +906,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return { unreadConvIds }
     }),
 }))
+
+/** 正文 = 当前未结束轮次的文本；一旦该轮已进入 timeline，它就是过程过语，正文隐藏。
+ *
+ *  「已进入 timeline」涵盖两种结束方式：
+ *  - 本段有工具调用：tool call 一发生，后端 snapshot 即带出该段 iteration；
+ *  - 本段已被下一段取代：切段时后端推的 snapshot 会带上已结束段的文本。
+ *
+ *  终态轮（运行结束时仍是当前段、且不在 timeline）因此自然只出现在正文。
+ */
+export function selectAnswerText(conv: ConvState): string {
+  if (!conv.isStreaming) return ''
+  const seg = conv.currentStreamingSegmentId
+  const segInTimeline = conv.timeline.some((n) =>
+    n.type === 'reasoning'
+      ? false
+      : n.iterations.some((it) => it.segmentId === seg),
+  )
+  return segInTimeline ? '' : conv.streamingText
+}

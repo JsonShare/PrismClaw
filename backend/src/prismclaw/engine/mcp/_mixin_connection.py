@@ -173,12 +173,12 @@ class ConnectionMixin(_MCPBackendBase):
         async with self._get_lock(name):
             self._stderr_buffers.setdefault(name, deque(maxlen=_STDERR_BUFFER_LINES))
 
-            # SDD context-governance W7-4: marketplace plugins ship env
+            # SDD context-governance W7-4: marketplace experts ship env
             # template placeholders like "<在本地填入 EHR FHIR 基础 URL>".
             # Spawning those processes just produces "Connection closed"
             # warnings every startup (13× on this install). Detect the
             # placeholder BEFORE spawning and mark the server disabled —
-            # a clean, expected state, not a failure. Deleting the plugin
+            # a clean, expected state, not a failure. Deleting the expert
             # config would be wrong (breaks users who fill the values).
             for key, raw_value in config.env.items():
                 if _is_unfilled_placeholder(raw_value):
@@ -186,7 +186,7 @@ class ConnectionMixin(_MCPBackendBase):
                         name=name,
                         status="disabled",
                         reason=(
-                            f"环境变量 {key!r} 仍是未填写的占位符——请在插件配置中填写后再启用该服务"
+                            f"环境变量 {key!r} 仍为未填写占位符——请在专家包配置中填写后再启用"
                         ),
                     )
                     logger.info(
@@ -494,9 +494,16 @@ class ConnectionMixin(_MCPBackendBase):
         resolved_headers: dict[str, str],
         resolved_args: list[str],
     ) -> StdioServerParameters | SseServerParameters | StreamableHttpParameters | None:
+        def _resolved(raw: str) -> str:
+            # 部署配置里 url/command 也可写 {env:VAR}：与 headers/env/args 同一展开口径。
+            if not raw:
+                return raw
+            resolved, _status = _substitute_env_placeholder(raw)
+            return resolved or ""
+
         if config.transport == "stdio":
             return StdioServerParameters(
-                command=config.command or "",
+                command=_resolved(config.command or ""),
                 args=resolved_args,
                 env=resolved_env or None,
                 # 配置里的相对路径（如 `--directory mcp_servers/x`）以项目根为基准。
@@ -506,14 +513,14 @@ class ConnectionMixin(_MCPBackendBase):
             )
         if config.transport == "sse":
             return SseServerParameters(
-                url=config.url or "",
+                url=_resolved(config.url or ""),
                 headers=resolved_headers or None,
                 timeout=config.connect_timeout_seconds,
                 sse_read_timeout=config.call_timeout_seconds,
             )
         if config.transport in {"streamable-http", "http"}:
             return StreamableHttpParameters(
-                url=config.url or "",
+                url=_resolved(config.url or ""),
                 headers=resolved_headers or None,
                 timeout=config.connect_timeout_seconds,
                 sse_read_timeout=config.call_timeout_seconds,

@@ -150,6 +150,7 @@ def _record_invoked_skill_from_runtime_control(
     request: RunRequest,
     snapshot: RunSnapshot,
     runtime_control: RuntimeControlArtifact | None,
+    expert_prefer: str | None = None,
 ) -> None:
     if runtime_control is None:
         return
@@ -162,7 +163,11 @@ def _record_invoked_skill_from_runtime_control(
     else:
         return
     catalog = deps.capability_catalog
-    catalog_entry = catalog.get_skill_entry(skill_name) if catalog is not None else None
+    catalog_entry = (
+        catalog.get_skill_entry(skill_name, expert_prefer=expert_prefer)
+        if catalog is not None
+        else None
+    )
     instructions = catalog_entry.instructions if catalog_entry is not None else ""
     snapshot.invoked_skill_state.skills[skill_name] = InvokedSkillRecord(
         skill_name=skill_name,
@@ -326,11 +331,13 @@ def _apply_context_modifiers_from_results(
     injections: list[ContextInjection] = []
     for result in results:
         runtime_control = result.runtime_control
+        expert_prefer = resolved_state.expert_name if resolved_state is not None else None
         _record_invoked_skill_from_runtime_control(
             deps=deps,
             request=request,
             snapshot=snapshot,
             runtime_control=runtime_control,
+            expert_prefer=expert_prefer,
         )
         modifier = runtime_control.context_modifier if runtime_control is not None else None
         if modifier is None:
@@ -351,12 +358,14 @@ def _apply_context_modifiers_from_results(
             }
             updated_messages = _append_control_message_override(updated_messages, switch_msg)
         catalog_entry = (
-            deps.capability_catalog.get_skill_entry(modifier.active_skill_name)
+            deps.capability_catalog.get_skill_entry(
+                modifier.active_skill_name, expert_prefer=expert_prefer
+            )
             if deps.capability_catalog is not None
             else None
         )
-        plugin_name = (
-            getattr(catalog_entry, "plugin_name", None) if catalog_entry is not None else None
+        expert_name = (
+            getattr(catalog_entry, "expert_name", None) if catalog_entry is not None else None
         )
         resolved_state = SkillInvocationState(
             skill_name=modifier.active_skill_name,
@@ -365,7 +374,7 @@ def _apply_context_modifiers_from_results(
             ),
             is_active=True,
             clear_after_terminal_result=modifier.clear_after_terminal_result,
-            plugin_name=plugin_name,
+            expert_name=expert_name,
             invocation_context=modifier.invocation_context,
         )
         injected_texts: list[str] = []

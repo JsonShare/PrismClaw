@@ -144,8 +144,9 @@ export function buildStepRows(nodes: TimelineNode[]): StepRow[] {
     }
     for (const it of n.iterations) {
       // 把该轮的 reasoning + text（自然语言输出）合并进同一张展开卡：
-      // reasoning 在上，text 在下，用分隔线隔开。只有 text（无 reasoning）
-      // 时也 push 一行但 label 改成「迭代过语」——每轮都必有一条思考/过语行。
+      // reasoning 在上，text 在下，用分隔线隔开。能进入 timeline 的 text
+      // 只可能是过程过语（已结束轮次 / 有工具调用的轮次）——终态轮的文本
+      // 属于正文，后端不会放进 nodes。
       const reasonTxt = (it.reasoning ?? '').trim()
       const iterTxt = (it.text ?? '').trim()
       if (reasonTxt || iterTxt) {

@@ -149,7 +149,7 @@ PC 工作台与移动端 H5 保持一致的信息层级与操作逻辑，亮色 
 ```bash
 # 1. 生成本地配置
 cd backend/configs && for f in *.example.yaml; do cp "$f" "${f%.example.yaml}.yaml"; done && cd ../..
-cp deploy/configs/mcp.prod.example.yaml deploy/configs/mcp.prod.yaml
+# 如需额外 MCP 连接器，编辑 deploy/configs/mcp.prod.json
 # 只需改 models.yaml 的模型端点与 API Key（可填内网 OpenAI 兼容服务）
 
 # 2. 填写部署密钥与管理员密码

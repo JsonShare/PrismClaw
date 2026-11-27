@@ -37,9 +37,6 @@ class DecisionState:
     # ── 溢出恢复使用标记 ──
     overflow_recovery_used: bool = False
 
-    # ── 待处理移交 ──
-    pending_handoffs: list[str] = field(default_factory=list)
-
     # ── 延迟动作 ──
     deferred_actions: list[str] = field(default_factory=list)
 
@@ -64,10 +61,6 @@ class DecisionState:
     def mark_overflow_recovery_used(self) -> None:
         """标记溢出恢复已使用。不可逆。"""
         self.overflow_recovery_used = True
-
-    def add_pending_handoff(self, agent_name: str) -> None:
-        """添加待处理移交。"""
-        self.pending_handoffs.append(agent_name)
 
     def clear_loops(self) -> None:
         """清除循环计数器。仅在特定恢复路径调用。"""

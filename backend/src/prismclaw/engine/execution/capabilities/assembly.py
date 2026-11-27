@@ -5,19 +5,13 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
-from prismclaw.engine.execution.capabilities.graph_assembler import CapabilityAssembler
-from prismclaw.engine.toolkit.registry.registry import ToolRegistry
-from prismclaw.schema.agent.capability import (
-    CapabilityGraph,
-    CapabilityKind,
-    CapabilityNode,
-    PluginSourceRef,
-    RuntimeCapabilities,
-    ScopeKind,
-    SourceKind,
-    TrustLevel,
+from prismclaw.engine.execution.capabilities.catalog import (
+    AgentCatalogEntry,
+    RuntimeCatalog,
+    SkillCatalogEntry,
 )
+from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+from prismclaw.schema.agent.capability import ExpertCommandCapability
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +20,6 @@ if TYPE_CHECKING:
     from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
     from prismclaw.engine.hooks import SkillProvider
     from prismclaw.engine.subagent.definition.registry import SubAgentRegistry
-    from prismclaw.engine.toolkit.registry.tool_runtime import Tool
-    from prismclaw.schema.agent.capability import PluginCommandCapability
     from prismclaw.schema.services.skills import SkillManifest
 
 
@@ -39,20 +31,23 @@ def assemble_capability_catalog(
     subagent_registry: SubAgentRegistry | None = None,
     tool_registry: ToolRegistry | None = None,
     mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None = None,
-) -> CapabilityCatalogService:
-    capability_graph, runtime_capabilities = _assemble_catalog_snapshot(
+) -> RuntimeCatalog:
+    return RuntimeCatalog(
         tool_registry=tool_registry,
-        workspace_path=workspace_path,
-        extension_manager=extension_manager,
-        skill_provider=skill_provider,
-        subagent_registry=subagent_registry,
-        mcp_skill_manifests_builder=mcp_skill_manifests_builder,
-    )
-
-    return CapabilityCatalogService(
-        tool_registry=tool_registry,
-        capability_graph=capability_graph,
-        runtime_capabilities=runtime_capabilities,
+        skill_entries=tuple(
+            _build_skill_entries(
+                workspace_path=workspace_path,
+                skill_provider=skill_provider,
+                extension_manager=extension_manager,
+                mcp_skill_manifests_builder=mcp_skill_manifests_builder,
+            )
+        ),
+        agent_entries=tuple(
+            _build_agent_entries(
+                subagent_registry=subagent_registry,
+                extension_manager=extension_manager,
+            )
+        ),
     )
 
 
@@ -102,352 +97,129 @@ def _dedupe_by_name(items: Iterable[Any]) -> list[Any]:
     return deduped
 
 
-def _safe_resolve_path(raw: str | Path | None) -> Path | None:
-    if raw is None:
-        return None
-    try:
-        return Path(raw).expanduser().resolve()
-    except Exception:
-        return None
-
-
-def _generic_source_ref(
+def _skill_entry(
+    manifest: object,
     *,
-    source_id: str,
-    source_kind: SourceKind,
-    trust_level: TrustLevel,
-    origin_path: str | None = None,
-) -> PluginSourceRef:
-    return PluginSourceRef(
-        source_id=source_id,
-        source_kind=source_kind,
-        trust_level=trust_level,
-        scope_kind=ScopeKind.WORKSPACE,
-        scope_id=origin_path,
-        origin_path=origin_path,
+    name: str | None = None,
+    expert_name: str | None = None,
+    origin: str | None = None,
+    expert_description: str | None = None,
+) -> SkillCatalogEntry:
+    return SkillCatalogEntry(
+        name=name or getattr(manifest, "name", "") or "",
+        description=getattr(manifest, "description", "") or "",
+        location=getattr(manifest, "file_path", "") or "",
+        instructions=getattr(manifest, "body", "") or "",
+        manifest=manifest,
+        expert_name=expert_name,
+        origin=origin,
+        expert_description=expert_description,
     )
 
 
-def _source_ref_for_workspace_manifest(
+def _pseudo_skill_manifest_for_command(
+    command: ExpertCommandCapability,
     *,
-    canonical_id: str,
-    location: str,
+    expert_name: str | None,
+) -> SkillManifest:
+    """把 ExpertCommandCapability 包装为伪 SkillManifest。
+
+    commands 是原子技能（Phase 3 迁移产物），不编排子技能，
+    因此 declared_invoke_sequence / preload_skills 为空是语义正确的。
+    frontmatter 字段从 capability.metadata（command dict 完整拷贝）提取。
+    """
+    from prismclaw.schema.agent.domains import (
+        SkillSource,
+        resolve_invocation_policy,
+    )
+    from prismclaw.schema.services.skills import SkillManifest
+
+    meta = command.metadata or {}
+    allowed_tools = meta.get("allowed_tools")
+    if not isinstance(allowed_tools, list):
+        allowed_tools = None
+    invocation_policy = resolve_invocation_policy(meta)
+    category = meta.get("category")
+    if not isinstance(category, str):
+        category = None
+    return SkillManifest(
+        name=command.name,
+        description=command.description,
+        body=command.body,
+        source=SkillSource.EXPERT,
+        loaded_from=expert_name or "",
+        preload_skills=[],
+        declared_invoke_sequence=[],
+        invocation_policy=invocation_policy,
+        allowed_tools=allowed_tools,
+        category=category,
+    )
+
+
+def _build_skill_entries(
+    *,
     workspace_path: str | Path | None,
-) -> PluginSourceRef:
-    resolved_location = _safe_resolve_path(location)
-    resolved_workspace = _safe_resolve_path(workspace_path)
-    origin_path = str(resolved_location) if resolved_location is not None else (location or None)
-    if (
-        resolved_location is not None
-        and resolved_workspace is not None
-        and (
-            resolved_location == resolved_workspace
-            or resolved_workspace in resolved_location.parents
-        )
-    ):
-        return _generic_source_ref(
-            source_id=f"workspace:{canonical_id}",
-            source_kind=SourceKind.WORKSPACE,
-            trust_level=TrustLevel.MEDIUM,
-            origin_path=origin_path,
-        )
-    return _generic_source_ref(
-        source_id=f"builtin:{canonical_id}",
-        source_kind=SourceKind.BUILTIN,
-        trust_level=TrustLevel.HIGH,
-        origin_path=origin_path,
-    )
-
-
-def _source_ref_for_tool(tool: Tool) -> PluginSourceRef:
-    tool_name = getattr(tool, "name", None)
-    canonical_id = tool_name if isinstance(tool_name, str) and tool_name else "unknown-tool"
-    server_name = getattr(tool, "server_name", None)
-    if isinstance(server_name, str) and server_name:
-        return _generic_source_ref(
-            source_id=f"mcp:{server_name}",
-            source_kind=SourceKind.MCP,
-            trust_level=TrustLevel.LOW,
-            origin_path=None,
-        )
-    return _generic_source_ref(
-        source_id=f"builtin-tool:{canonical_id}",
-        source_kind=SourceKind.BUILTIN,
-        trust_level=TrustLevel.HIGH,
-        origin_path=None,
-    )
-
-
-def _source_ref_for_mcp_skill(server_name: str) -> PluginSourceRef:
-    if not server_name:
-        server_name = "unknown"
-    return _generic_source_ref(
-        source_id=f"mcp:{server_name}",
-        source_kind=SourceKind.MCP,
-        trust_level=TrustLevel.LOW,
-        origin_path=None,
-    )
-
-
-def _dedupe_capability_nodes(nodes: Iterable[CapabilityNode]) -> list[CapabilityNode]:
-    deduped: list[CapabilityNode] = []
-    seen: set[tuple[CapabilityKind, str]] = set()
-    for node in nodes:
-        key = (node.kind, node.canonical_id)
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(node)
-    return deduped
-
-
-def _assemble_catalog_snapshot(
-    *,
-    tool_registry: ToolRegistry | None,
-    workspace_path: str | Path | None,
-    extension_manager: ExtensionManager | None,
     skill_provider: SkillProvider | None,
-    subagent_registry: SubAgentRegistry | None,
-    mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None = None,
-) -> tuple[CapabilityGraph, RuntimeCapabilities]:
-    assembler = CapabilityAssembler()
-    nodes: list[CapabilityNode] = []
+    extension_manager: ExtensionManager | None,
+    mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None,
+) -> list[SkillCatalogEntry]:
+    entries: list[SkillCatalogEntry] = []
+    seen_names: set[str] = set()
 
-    def _dump_manifest_payload(manifest: object) -> dict[str, Any]:
-        model_dump = getattr(manifest, "model_dump", None)
-        if callable(model_dump):
-            payload = model_dump(mode="json", exclude_none=True)
-            if isinstance(payload, dict):
-                return payload
-        raise TypeError(
-            f"capability catalog snapshot requires pydantic-style model_dump() manifest "
-            f"(got {type(manifest)!r})"
-        )
-
-    def _source_ref_for_plugin_name(plugin_name: str | None) -> PluginSourceRef:
-        if not plugin_name:
-            return _generic_source_ref(
-                source_id="plugin:unknown",
-                source_kind=SourceKind.LOCAL_PLUGIN,
-                trust_level=TrustLevel.MEDIUM,
-                origin_path=None,
-            )
-        namespace = ""
-        origin_path: str | None = None
-        if extension_manager is not None and hasattr(extension_manager, "get_plugin_descriptor"):
-            descriptor = extension_manager.get_plugin_descriptor(plugin_name)
-            if descriptor is not None:
-                namespace = getattr(descriptor, "namespace", "") or ""
-                root_path = getattr(descriptor, "root_path", None)
-                if root_path is not None:
-                    origin_path = str(root_path)
-        source_kind = SourceKind.LOCAL_PLUGIN
-        managed_ref: str | None = None
-        if isinstance(namespace, str) and namespace.startswith("session:"):
-            source_kind = SourceKind.SESSION_PLUGIN
-        elif isinstance(namespace, str) and namespace.startswith("managed:"):
-            source_kind = SourceKind.MANAGED_PLUGIN
-            managed_ref = namespace
-        return PluginSourceRef(
-            source_id=f"plugin:{plugin_name}",
-            source_kind=source_kind,
-            trust_level=TrustLevel.MEDIUM,
-            scope_kind=ScopeKind.WORKSPACE,
-            scope_id=origin_path,
-            origin_path=origin_path,
-            managed_ref=managed_ref,
-        )
-
-    plugin_graphs_by_name: dict[str, CapabilityGraph] = {}
-    if extension_manager is not None and hasattr(
-        extension_manager, "iter_plugin_capability_graphs"
-    ):
-        for view in extension_manager.iter_plugin_capability_graphs():
-            graph = getattr(view, "graph", None)
-            if not isinstance(graph, CapabilityGraph):
-                continue
-            run_id = getattr(graph, "run_id", "")
-            if isinstance(run_id, str) and run_id.startswith("plugin:"):
-                plugin_graphs_by_name[run_id.split(":", 1)[1]] = graph
-
-    def _source_ref_for_plugin_capability(
-        *,
-        plugin_name: str | None,
-        canonical_id: str,
-    ) -> PluginSourceRef:
-        if isinstance(plugin_name, str) and plugin_name in plugin_graphs_by_name:
-            graph = plugin_graphs_by_name[plugin_name]
-            node = graph.get(canonical_id)
-            if node is not None:
-                return node.source_ref
-        return _source_ref_for_plugin_name(plugin_name)
-
-    skill_manifests = _dedupe_by_name(
-        _load_provider_skill_manifests(
-            skill_provider,
-            workspace_path=workspace_path,
-        )
+    provider_manifests = _dedupe_by_name(
+        _load_provider_skill_manifests(skill_provider, workspace_path=workspace_path)
     )
     logger.info(
         "capability catalog: %d provider skills, extension_manager=%s, workspace_path=%s",
-        len(skill_manifests),
+        len(provider_manifests),
         type(extension_manager).__name__ if extension_manager is not None else "None",
         workspace_path,
     )
-    seen_skills = {
-        getattr(m, "name", None)
-        for m in skill_manifests
-        if isinstance(getattr(m, "name", None), str)
-    }
-    extension_skill_fingerprints: list[str] = []
-
-    for manifest in skill_manifests:
+    for manifest in provider_manifests:
         name = getattr(manifest, "name", None)
         if not isinstance(name, str) or not name:
             continue
-        location = getattr(manifest, "file_path", "") or ""
-        nodes.append(
-            assembler.make_enabled_node(
-                canonical_id=name,
-                kind=CapabilityKind.SKILL,
-                display_name=name,
-                source_ref=_source_ref_for_workspace_manifest(
-                    canonical_id=name,
-                    location=location,
-                    workspace_path=workspace_path,
-                ),
-                metadata={
-                    "plugin_name": None,
-                    "origin": None,
-                    "manifest": _dump_manifest_payload(manifest),
-                },
-                projection_targets=("skills",),
-            )
-        )
+        seen_names.add(name)
+        entries.append(_skill_entry(manifest))
 
-    if extension_manager is not None and hasattr(extension_manager, "iter_skill_descriptors"):
+    if extension_manager is not None:
         for descriptor in extension_manager.iter_skill_descriptors():
-            manifest = getattr(descriptor, "manifest", None)
+            manifest = descriptor.manifest
             name = getattr(manifest, "name", None)
-            if not isinstance(name, str) or not name or name in seen_skills:
+            if not isinstance(name, str) or not name or name in seen_names:
                 continue
-            plugin_name = getattr(descriptor, "plugin_name", None)
-            extension_skill_fingerprints.append(
-                f"plugin-skill:{plugin_name or ''}:{name}:"
-                f"{getattr(manifest, 'file_path', '') or ''}"
-            )
-            nodes.append(
-                assembler.make_enabled_node(
-                    canonical_id=name,
-                    kind=CapabilityKind.SKILL,
-                    display_name=name,
-                    source_ref=_source_ref_for_plugin_capability(
-                        plugin_name=plugin_name,
-                        canonical_id=name,
-                    ),
-                    metadata={
-                        "plugin_name": plugin_name,
-                        "origin": getattr(descriptor, "origin", None),
-                        "manifest": _dump_manifest_payload(manifest),
-                        # marketplace_name 用于系统提示词按包名聚合
-                        "marketplace_name": getattr(descriptor, "marketplace_name", None),
-                        # 市场级 plugin.json 的描述，用于提示词按包聚合
-                        "marketplace_description": getattr(
-                            descriptor, "marketplace_description", None
-                        ),
-                        "plugin_description": getattr(descriptor, "plugin_description", None),
-                    },
-                    projection_targets=("skills",),
+            seen_names.add(name)
+            entries.append(
+                _skill_entry(
+                    manifest,
+                    expert_name=descriptor.expert_name,
+                    origin=descriptor.origin,
+                    expert_description=descriptor.expert_description,
                 )
             )
 
-    extension_command_fingerprints: list[str] = []
-    # 跨 plugin 重名 commands(Cold-start-interview/matter-workspace 等)允许分别注册,
-    # seen_plugin_cmds 仅防止同一 plugin 下重名(正常不该发生)。
-    seen_plugin_cmds: set[tuple[str | None, str]] = set()
-
-    def _pseudo_skill_manifest_for_command(
-        command: PluginCommandCapability,
-        *,
-        plugin_name: str | None,
-    ) -> SkillManifest:
-        """把 PluginCommandCapability 包装为伪 SkillManifest。
-
-        commands 是原子技能（Phase 3 迁移产物），不编排子技能，
-        因此 declared_invoke_sequence / preload_skills 为空是语义正确的。
-        frontmatter 字段从 capability.metadata（command dict 完整拷贝）提取。
-        """
-        from prismclaw.schema.agent.domains import SkillSource
-        from prismclaw.schema.services.skills import SkillManifest
-
-        meta = command.metadata or {}
-        allowed_tools = meta.get("allowed_tools")
-        if not isinstance(allowed_tools, list):
-            allowed_tools = None
-        invocation_policy = meta.get("invocation_policy", "auto")
-        if invocation_policy not in ("auto", "user_only", "disabled"):
-            invocation_policy = "auto"
-        category = meta.get("category")
-        if not isinstance(category, str):
-            category = None
-        return SkillManifest(
-            name=command.name,
-            description=command.description,
-            body=command.body,
-            source=SkillSource.PLUGIN,
-            loaded_from=plugin_name or "",
-            preload_skills=[],
-            declared_invoke_sequence=[],
-            invocation_policy=invocation_policy,
-            allowed_tools=allowed_tools,
-            category=category,
-        )
-
-    if extension_manager is not None and hasattr(
-        extension_manager, "iter_plugin_command_descriptors"
-    ):
-        for cmd_descriptor in extension_manager.iter_plugin_command_descriptors():
-            capability = getattr(cmd_descriptor, "capability", None)
-            if capability is None:
+        # 跨 expert 重名 commands(Cold-start-interview/matter-workspace 等)允许分别注册,
+        # seen_expert_cmds 仅防止同一 expert 下重名(正常不该发生)。
+        seen_expert_cmds: set[tuple[str | None, str]] = set()
+        for cmd_descriptor in extension_manager.iter_expert_command_descriptors():
+            capability = cmd_descriptor.capability
+            if capability is None or not isinstance(capability.name, str) or not capability.name:
                 continue
-            cmd_name = getattr(capability, "name", None)
-            if not isinstance(cmd_name, str) or not cmd_name:
+            expert_name = cmd_descriptor.expert_name
+            dedup_key = (expert_name, capability.name)
+            if dedup_key in seen_expert_cmds:
                 continue
-            plugin_name = getattr(cmd_descriptor, "plugin_name", None)
-            dedup_key = (plugin_name, cmd_name)
-            if dedup_key in seen_plugin_cmds:
-                continue
-            seen_plugin_cmds.add(dedup_key)
-            extension_command_fingerprints.append(f"plugin-command:{plugin_name or ''}:{cmd_name}")
-            pseudo_manifest = _pseudo_skill_manifest_for_command(
-                capability,
-                plugin_name=plugin_name,
-            )
-            nodes.append(
-                assembler.make_enabled_node(
-                    canonical_id=cmd_name,
-                    kind=CapabilityKind.SKILL,
-                    display_name=cmd_name,
-                    source_ref=_source_ref_for_plugin_capability(
-                        plugin_name=plugin_name,
-                        canonical_id=cmd_name,
-                    ),
-                    metadata={
-                        "plugin_name": plugin_name,
-                        "origin": "plugin_command",
-                        "manifest": _dump_manifest_payload(pseudo_manifest),
-                        # v5 渐进式披露：command 伪 skill 也需要 marketplace 元数据
-                        "marketplace_name": getattr(cmd_descriptor, "marketplace_name", None),
-                        "marketplace_description": getattr(
-                            cmd_descriptor, "marketplace_description", None
-                        ),
-                        "plugin_description": getattr(cmd_descriptor, "plugin_description", None),
-                    },
-                    projection_targets=("skills",),
+            seen_expert_cmds.add(dedup_key)
+            entries.append(
+                _skill_entry(
+                    _pseudo_skill_manifest_for_command(capability, expert_name=expert_name),
+                    name=capability.name,
+                    expert_name=expert_name,
+                    origin="expert_command",
+                    expert_description=cmd_descriptor.expert_description,
                 )
             )
 
-    mcp_skill_fingerprints: list[str] = []
     if mcp_skill_manifests_builder is not None:
         try:
             mcp_manifests = list(mcp_skill_manifests_builder())
@@ -455,141 +227,61 @@ def _assemble_catalog_snapshot(
             mcp_manifests = []
         for manifest in mcp_manifests:
             name = getattr(manifest, "name", None)
-            if not isinstance(name, str) or not name or name in seen_skills:
+            if not isinstance(name, str) or not name or name in seen_names:
                 continue
-            seen_skills.add(name)
-            server_name = getattr(manifest, "loaded_from", "") or ""
-            mcp_skill_fingerprints.append(f"mcp-skill:{server_name}:{name}")
-            nodes.append(
-                assembler.make_enabled_node(
-                    canonical_id=name,
-                    kind=CapabilityKind.SKILL,
-                    display_name=name,
-                    source_ref=_source_ref_for_mcp_skill(server_name),
-                    metadata={
-                        "plugin_name": None,
-                        "origin": "mcp",
-                        "manifest": _dump_manifest_payload(manifest),
-                    },
-                    projection_targets=("skills",),
+            seen_names.add(name)
+            entries.append(
+                _skill_entry(
+                    manifest,
+                    origin="mcp",
                 )
             )
+
+    entries.sort(key=lambda item: (item.name, item.expert_name or ""))
+    return entries
+
+
+def _build_agent_entries(
+    *,
+    subagent_registry: SubAgentRegistry | None,
+    extension_manager: ExtensionManager | None,
+) -> list[AgentCatalogEntry]:
+    entries: list[AgentCatalogEntry] = []
+    seen_names: set[str] = set()
 
     manifests: list[Any] = []
     if subagent_registry is not None and hasattr(subagent_registry, "list_all"):
         manifests = list(subagent_registry.list_all())
-    agent_manifests = _dedupe_by_name(manifests)
-    seen_agents = {
-        getattr(m, "name", None)
-        for m in agent_manifests
-        if isinstance(getattr(m, "name", None), str)
-    }
-    extension_agent_fingerprints: list[str] = []
-
-    for manifest in agent_manifests:
+    for manifest in _dedupe_by_name(manifests):
         name = getattr(manifest, "name", None)
         if not isinstance(name, str) or not name:
             continue
-        nodes.append(
-            assembler.make_enabled_node(
-                canonical_id=name,
-                kind=CapabilityKind.AGENT,
-                display_name=name,
-                source_ref=_generic_source_ref(
-                    source_id=f"workspace-agent:{name}",
-                    source_kind=SourceKind.WORKSPACE,
-                    trust_level=TrustLevel.MEDIUM,
-                    origin_path=None,
-                ),
-                metadata={
-                    "plugin_name": None,
-                    "origin": None,
-                    "manifest": _dump_manifest_payload(manifest),
-                },
-                projection_targets=("agents",),
+        seen_names.add(name)
+        entries.append(
+            AgentCatalogEntry(
+                name=name,
+                description=getattr(manifest, "description", "") or "",
+                manifest=manifest,
             )
         )
 
-    if extension_manager is not None and hasattr(extension_manager, "iter_agent_descriptors"):
-        for agent_descriptor in extension_manager.iter_agent_descriptors():
-            manifest = getattr(agent_descriptor, "manifest", None)
-            capability_name = getattr(agent_descriptor, "canonical_id", None)
-            if (
-                not isinstance(capability_name, str)
-                or not capability_name
-                or capability_name in seen_agents
-            ):
+    if extension_manager is not None:
+        for descriptor in extension_manager.iter_agent_descriptors():
+            name = descriptor.canonical_id
+            if not isinstance(name, str) or not name or name in seen_names:
                 continue
-            plugin_name = getattr(agent_descriptor, "plugin_name", None)
-            extension_agent_fingerprints.append(
-                f"plugin-agent:{plugin_name or ''}:{capability_name}:"
-                f"{getattr(manifest, 'source', '') or ''}"
-            )
-            nodes.append(
-                assembler.make_enabled_node(
-                    canonical_id=capability_name,
-                    kind=CapabilityKind.AGENT,
-                    display_name=capability_name,
-                    source_ref=_source_ref_for_plugin_capability(
-                        plugin_name=plugin_name,
-                        canonical_id=capability_name,
-                    ),
-                    metadata={
-                        "plugin_name": plugin_name,
-                        "origin": getattr(agent_descriptor, "origin", None),
-                        "manifest": _dump_manifest_payload(manifest),
-                        # v5 渐进式披露：agent 也需要 marketplace 元数据
-                        "marketplace_name": getattr(agent_descriptor, "marketplace_name", None),
-                        "marketplace_description": getattr(
-                            agent_descriptor, "marketplace_description", None
-                        ),
-                        "plugin_description": getattr(agent_descriptor, "plugin_description", None),
-                    },
-                    projection_targets=("agents",),
+            seen_names.add(name)
+            manifest = descriptor.manifest
+            entries.append(
+                AgentCatalogEntry(
+                    name=name,
+                    description=getattr(manifest, "description", "") or "",
+                    manifest=manifest,
+                    expert_name=descriptor.expert_name,
+                    origin=descriptor.origin,
+                    expert_description=descriptor.expert_description,
                 )
             )
 
-    if tool_registry is not None:
-        for tool in tool_registry.list_tools():
-            nodes.append(
-                assembler.make_enabled_node(
-                    canonical_id=tool.name,
-                    kind=CapabilityKind.TOOL,
-                    display_name=tool.name,
-                    source_ref=_source_ref_for_tool(tool),
-                    metadata={
-                        "tool_class": getattr(tool, "tool_class", None),
-                        "effect_class": str(getattr(tool, "effect_class", "unknown_effect")),
-                    },
-                    projection_targets=("tools",),
-                )
-            )
-
-    nodes = _dedupe_capability_nodes(nodes)
-    source_fingerprint = assembler.fingerprint(
-        [
-            str(workspace_path or ""),
-            *(
-                f"skill:{getattr(manifest, 'name', '')}:{getattr(manifest, 'file_path', '')}"
-                for manifest in skill_manifests
-            ),
-            *extension_skill_fingerprints,
-            *extension_command_fingerprints,
-            *mcp_skill_fingerprints,
-            *(
-                f"agent:{getattr(manifest, 'name', '')}:{getattr(manifest, 'source', '')}"
-                for manifest in agent_manifests
-            ),
-            *extension_agent_fingerprints,
-            *(
-                f"tool:{tool.name}:{getattr(tool, 'server_name', '')}"
-                for tool in (tool_registry.list_tools() if tool_registry is not None else [])
-            ),
-        ]
-    )
-    assembled = assembler.build(
-        run_id=f"catalog:{source_fingerprint[:12]}",
-        source_fingerprint=source_fingerprint,
-        nodes=nodes,
-    )
-    return assembled.graph, assembled.runtime
+    entries.sort(key=lambda item: item.name)
+    return entries

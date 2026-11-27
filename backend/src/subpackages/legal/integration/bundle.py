@@ -13,8 +13,8 @@ import logging
 from typing import Any
 
 from prismclaw.engine.hooks import HookEvent
-from prismclaw.engine.plugins.hooks.handlers import HookHandler
-from prismclaw.engine.plugins.hooks.schema import HookContext, HookResult
+from prismclaw.engine.hooks.handlers import HookHandler
+from prismclaw.engine.hooks.schema import HookContext, HookResult
 from prismclaw.schema.services.domain import (
     DomainInfrastructureContext,
     DomainLifecycleContext,

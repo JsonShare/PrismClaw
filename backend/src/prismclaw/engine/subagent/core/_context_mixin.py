@@ -12,11 +12,7 @@ from prismclaw.engine.subagent.core.contract import (
     coerce_context_snapshot,
     render_task_envelope,
 )
-from prismclaw.engine.subagent.prompting import (
-    coerce_allowed_tool_names,
-    expand_allowed_tool_names,
-    resolve_preloaded_skill_context,
-)
+from prismclaw.engine.subagent.prompting import resolve_preloaded_skill_context
 from prismclaw.engine.subagent.shared_types import PreloadedSkillContext
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.content.subagent import SubagentContextSnapshot
@@ -398,25 +394,6 @@ class ContextMixin(_InstanceBase):
             return 0.0
         configured = self._manifest.timeout_seconds or self._settings.default_timeout_seconds
         return min(configured, TIMEOUT_HARD_CEILING_S)
-
-    def _resolve_allowed_tools(
-        self,
-        *,
-        manifest: AgentManifest,
-        preload_ctx: PreloadedSkillContext,
-        available: set[str] | None = None,
-    ) -> set[str] | None:
-        manifest_allowed = (
-            expand_allowed_tool_names(manifest.allowed_tools, available)
-            if available is not None
-            else coerce_allowed_tool_names(manifest.allowed_tools)
-        )
-        preload_allowed = preload_ctx.allowed_tools_limit
-        if manifest_allowed is None:
-            return set(preload_allowed) if preload_allowed is not None else None
-        if preload_allowed is None:
-            return manifest_allowed
-        return manifest_allowed & preload_allowed
 
     async def _collect_memory_injection(
         self,

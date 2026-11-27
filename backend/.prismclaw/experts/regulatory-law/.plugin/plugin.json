@@ -1,0 +1,67 @@
+{
+  "name": "regulatory-law",
+  "version": "1.0.0",
+  "description": "Monitors regulatory sources, diffs policy libraries, tracks comment deadlines and gaps, and writes weekly briefs.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/regulatory-law.md"
+  ],
+  "skills": [
+    "./skills/gap-surfacer",
+    "./skills/regulatory-law-playbook",
+    "./skills/regulatory-monitor-workflow",
+    "./skills/regulatory-policy-workflow"
+  ],
+  "expertType": "agent",
+  "agentName": "regulatory-law",
+  "displayName": {
+    "en": "Regulatory Policy Expert",
+    "zh": "监管政策专家"
+  },
+  "profession": {
+    "zh": "监管动态跟踪与内规差异",
+    "en": "Regulatory Tracking & Gap Analysis"
+  },
+  "displayDescription": {
+    "zh": "监视权威监管源、比对政策库、跟踪意见期限与差距，并编写团队周报摘要。",
+    "en": "Monitors regulatory sources, diffs policy libraries, tracks comment deadlines and gaps, and writes weekly briefs."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "汇总本周与我们业务相关的新规与征求意见稿。",
+    "en": "Summarize this week’s new rules and consultations relevant to our business."
+  },
+  "plugin": "regulatory-law",
+  "tags": [
+    {
+      "zh": "监管监测",
+      "en": "Regulatory Monitoring"
+    },
+    {
+      "zh": "政策差异",
+      "en": "Policy Diff"
+    },
+    {
+      "zh": "合规周报",
+      "en": "Compliance Brief"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "汇总本周与我们业务相关的新规与征求意见稿。",
+      "en": "Summarize this week’s new rules and consultations relevant to our business."
+    },
+    {
+      "zh": "把这份新规与我们的政策库逐条比对，列出差异。",
+      "en": "Diff this new rule against our policy library and list gaps."
+    },
+    {
+      "zh": "写一份团队周一可读的监管动态摘要。",
+      "en": "Write a Monday-ready regulatory brief for the team."
+    }
+  ],
+  "license": "Apache-2.0"
+}

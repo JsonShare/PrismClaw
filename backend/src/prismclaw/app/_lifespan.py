@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -70,14 +71,14 @@ async def _sweep_ephemeral(workspace_base: Path) -> None:
 
 
 def _publish_capability_layout(app: FastAPI, runner_deps: AgentRunnerDeps) -> None:
-    """从冷启动 plugin lifecycle 取出唯一能力布局：挂到 app.state 并聚合记录日志。
+    """从冷启动 expert lifecycle 取出唯一能力布局：挂到 app.state 并聚合记录日志。
 
-    布局是驱动冷启动 skills/plugins/agents 发现的同一份对象；health 端点直接
+    布局是驱动冷启动 skills/experts/agents 发现的同一份对象；health 端点直接
     读取它，启动日志只在此处汇总一次（诊断在 layout builder 唯一点产生）。
     """
     from prismclaw.schema.shared import DiagnosticLevel
 
-    lifecycle = getattr(getattr(runner_deps, "plugin", None), "lifecycle_manager", None)
+    lifecycle = getattr(getattr(runner_deps, "expert", None), "lifecycle_manager", None)
     layout = getattr(lifecycle, "capability_layout", None)
     app.state.capability_layout = layout
     if layout is None:
@@ -85,10 +86,10 @@ def _publish_capability_layout(app: FastAPI, runner_deps: AgentRunnerDeps) -> No
 
     summary = layout.summary_dict()
     logger.info(
-        "capability layout: roots=%s | existing skills=%d plugins=%d agents=%d | diagnostics=%d",
+        "capability layout: roots=%s | existing skills=%d experts=%d agents=%d | diagnostics=%d",
         [f"{root['source']}:{root['path']}" for root in summary["roots"]],
         len(summary["skills"]["existing"]),
-        len(summary["plugins"]["existing"]),
+        len(summary["experts"]["existing"]),
         len(summary["agents"]["existing"]),
         len(summary["diagnostics"]),
     )
@@ -324,8 +325,8 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # ── 启动同步：backend/.prismclaw → ~/.prismclaw/assets ──────────────
     # SKILL.md / PLUGIN.md 全写 ~/.prismclaw 路径，repo 里权威源在
-    # backend/.prismclaw/；启动时把静态能力目录（skills/plugins/agents）
-    # 同步到 assets/。源缺失必须中止启动：建空 assets 会让技能/插件
+    # backend/.prismclaw/；启动时把静态能力目录（skills/experts/agents）
+    # 同步到 assets/。源缺失必须中止启动：建空 assets 会让技能/专家包
     # 全部为零却仍显示服务正常。
     from prismclaw.infra.prismclaw_home import sync_prismclaw_home
 
@@ -335,23 +336,24 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             f"启动资产同步失败：failed={sync_result.failed} drifted={sync_result.drifted[:10]}"
         )
 
-    # ── 容器模式自检：assets / runtime 卷 ────────────────────────────────
-    # 宿主机开发直接跳过；容器内缺失即中止，避免"服务正常但能力全空"。
-    from prismclaw.infra.deployment_checks import validate_container_layout
+    # ── 启动自检：静态能力目录（任何环境）+ runtime 卷（仅容器）─────────
+    # assets 为空 = 同步链路坏了，宿主机也中止：否则服务"正常"但能力全空，
+    # 故障只在用户点开具体功能时才暴露。
+    from prismclaw.infra.deployment_checks import (
+        is_container,
+        validate_assets,
+        validate_runtime_volume,
+    )
     from prismclaw.infra.runtime_root import resolve_runtime_root
 
-    validate_container_layout(
-        assets_root=Path.home() / ".prismclaw" / "assets",
-        runtime_root=resolve_runtime_root(),
-    )
+    validate_assets(sync_result.target)
+    validate_runtime_volume(resolve_runtime_root())
 
     # ── review blob 回收：只在容器内跑 ──────────────────────────────────
     # .work/audit/edits/blobs 由两个 ledger 引用，未被引用的旧 blob（含写入
     # 中断留下的 .tmp 残片）没有任何入口清理，会随编辑次数单调增长。这里在
     # 后台扫一遍，30 天窗口 + 仅删无引用者；宿主机开发与测试不执行，避免在
     # 每次起服务时对本地工作区做 IO。
-    from prismclaw.infra.deployment_checks import is_container
-
     if is_container():
         # expanduser 只做 ~ 字符串替换，无 IO。
         container_base = Path(settings.workspaces.default).expanduser()  # noqa: ASYNC240
@@ -421,8 +423,11 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     create_memory_store_fn = create_memory_store
 
+    from prismclaw.engine.mcp.connectors import ConnectorRegistry
+
+    mcp_registry = ConnectorRegistry()
     mcp_manager_factory = None
-    if settings.mcp.enabled:
+    if mcp_registry.has_enabled:
         from prismclaw.runtime.facade.integrations import MCPClientManager
 
         mcp_manager_factory = MCPClientManager
@@ -444,6 +449,7 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             create_memory_store_fn=create_memory_store_fn,
             dream_dispatch_queue_factory=RedisDreamDispatchQueue,
             mcp_manager_factory=mcp_manager_factory,
+            mcp_settings=mcp_registry.settings(),
             run_ownership_factory=build_run_ownership_store,
         )
     except Exception:
@@ -541,6 +547,29 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # 发布唯一项目能力布局：聚合启动日志 + 供 /api/health 读取（含降级诊断）。
         _publish_capability_layout(app, runner_deps)
+
+        app.state.module_runtime_coordinator = None
+        if os.getenv("PRISMCLAW_MODULE_RELEASE_COORDINATED", "").lower() in {"1", "true"}:
+            from prismclaw.assembly.runtime_coordinator import (
+                ModuleRuntimeCoordinator,
+                collect_local_package_roots,
+            )
+            from prismclaw.infra.config.module_release import ModuleReleaseStore
+
+            module_store = ModuleReleaseStore(
+                redis_client,
+                key_prefix=os.getenv("PRISMCLAW_MODULE_RELEASE_KEY_PREFIX", "prismclaw:modules"),
+            )
+            coordinator = ModuleRuntimeCoordinator(
+                store=module_store,
+                worker_registry=app.state.worker_registry,
+                runner_deps=runner_deps,
+                package_roots=collect_local_package_roots(
+                    runner_deps.expert.environment_catalog.snapshot().expert_registry
+                ),
+            )
+            app.state.module_runtime_coordinator = coordinator
+            await coordinator.start()
 
         # ── Domain Bundle: runtime phase ────────────────────────────────
         if domain_registry is not None and domain_bundles is not None:
@@ -811,6 +840,11 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         yield
     finally:
+        # 模块订阅/轮询必须先于 worker 注销、任务排水和共享 Redis 关闭停止。
+        _module_runtime = getattr(app.state, "module_runtime_coordinator", None)
+        if _module_runtime is not None:
+            await _module_runtime.stop()
+
         # Ensure MCP supervisor tasks and other async resources are always
         # cleaned up, even if startup failed before yield.
         _mcp_manager = getattr(app.state, "mcp_manager", None)

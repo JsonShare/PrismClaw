@@ -1,7 +1,7 @@
 /**
  * 工作区路径归一化（纯函数）。
  * 云端模式铁律：只接受工作区相对路径，一律拒绝绝对路径 / URL / 域名形文本。
- * 消费方：ChatPage 文件预览链、useTaskPanelData 交付物列表。
+ * 消费方：ChatPage 文件预览链、右侧栏交付物/上传列表。
  */
 export function normalizeWorkspacePath(raw: string): string | null {
   const text = (raw || '').trim()

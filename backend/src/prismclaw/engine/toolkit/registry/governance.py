@@ -7,6 +7,8 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
+from prismclaw.engine.experts.codes import ExpertError, ExpertErrorCode
+from prismclaw.engine.experts.scope import ToolSurface
 from prismclaw.engine.security.gate.types import (
     ActorIdentity,
     AllowedToolsPolicy,
@@ -30,7 +32,7 @@ logger = logging.getLogger(__name__)
 #     任何产出文件的 skill 都应能调用它，但不能调用不该导致任务无法完成。
 #   - ask_user_question：人机澄清，skill 经常需要向用户确认。
 #   - tool_search / skill_search / subagent_search / activate_skill：能力发现
-#     与激活，是插件生态的入口，被白名单屏蔽会导致无法切换/发现能力。
+#     与激活，是专家包生态的入口，被白名单屏蔽会导致无法切换/发现能力。
 #   - todo_write：多步任务的可选清单通道；系统提示不再强制建清单
 #     （强制清单曾把轮次放大到 2N+1），但白名单不能隐藏它。
 _UNIVERSAL_TOOLS = frozenset(
@@ -109,6 +111,7 @@ class GovernanceInput:
     discovered_tools: frozenset[str] = frozenset()
     mcp_available_servers: frozenset[str] = frozenset()
     skill_allowed_tools: frozenset[str] = frozenset()
+    tool_surface: ToolSurface | None = None
 
 
 @dataclass(frozen=True)
@@ -392,6 +395,80 @@ class SkillGatedReducer:
         return next_draft
 
 
+class ExpertToolSurfaceReducer:
+    """按当前会话的专家工具面收窄内置工具，不干预 MCP 工具。"""
+
+    name = "ExpertToolSurfaceReducer"
+
+    def apply(
+        self,
+        input_data: GovernanceInput,
+        draft: ResolvedToolSetDraft,
+    ) -> ResolvedToolSetDraft:
+        surface = input_data.tool_surface
+        if surface is None or not surface.restricted:
+            return draft
+
+        is_member = input_data.actor_identity == "subagent"
+        allowed = surface.member if is_member else surface.active
+        whitelist = surface.member if is_member else surface.deferred
+        registered_builtin = {name for name in draft.tools if ":" not in name}
+        empty_surface = not (whitelist & registered_builtin)
+        if empty_surface:
+            raise ExpertError(
+                ExpertErrorCode.EXPERT_TOOL_SURFACE_EMPTY,
+                "Expert tool whitelist has no registered builtin tools.",
+                {
+                    "actor_identity": input_data.actor_identity,
+                    "registered_builtin": sorted(registered_builtin),
+                },
+            )
+
+        next_draft = draft
+        for tool_name, record in draft.tools.items():
+            if ":" in tool_name:
+                next_draft = next_draft.append_trace(
+                    DecisionTraceEntry(
+                        tool_name=tool_name,
+                        reducer=self.name,
+                        action="skip",
+                        reason="mcp_tool_skipped",
+                    )
+                )
+                continue
+            if tool_name in allowed:
+                continue
+            if not is_member and tool_name in surface.deferred:
+                if tool_name in input_data.discovered_tools:
+                    continue
+                if record.visible_to_llm or record.callable:
+                    updated = record.model_copy(
+                        update={"visible_to_llm": False, "callable": False}
+                    )
+                    next_draft = next_draft.with_tool(tool_name, updated).append_trace(
+                        DecisionTraceEntry(
+                            tool_name=tool_name,
+                            reducer=self.name,
+                            action="hide",
+                            reason="expert_tool_requires_discovery",
+                        )
+                    )
+                continue
+            updated = record.model_copy(
+                update={"visible_to_llm": False, "callable": False, "searchable": False}
+            )
+            next_draft = next_draft.with_tool(tool_name, updated).append_trace(
+                DecisionTraceEntry(
+                    tool_name=tool_name,
+                    reducer=self.name,
+                    action="deny",
+                    reason="tool_not_in_expert_surface",
+                    details={"actor_identity": input_data.actor_identity},
+                )
+            )
+        return next_draft
+
+
 class ToolGovernance:
     def __init__(
         self,
@@ -407,12 +484,13 @@ class ToolGovernance:
                 HeadlessModeReducer(),
                 DeferredToolReducer(),
                 SkillGatedReducer(),
+                ExpertToolSurfaceReducer(),
                 DiscoveryReducer(),
             )
         )
 
     def add_reducers(self, reducers: Sequence[ToolGovernanceReducer]) -> None:
-        """追加 Reducer（不替代默认 7 个）"""
+        """追加 Reducer（不替代默认治理链）"""
         self._reducers = tuple(list(self._reducers) + list(reducers))
 
     def resolve(self, input_data: GovernanceInput) -> ResolvedToolSet:
@@ -454,21 +532,22 @@ def resolve_registry_tool_governance(
     subagent_depth: int = 0,
     headless: bool = False,
     governance: ToolGovernance | None = None,
-    tool_scope: frozenset[str] | set[str] | None = None,
+    allowed_tool_owners: frozenset[str] | set[str] | None = None,
+    tool_surface: ToolSurface | None = None,
 ) -> ResolvedToolSet:
     normalized_discovered = normalize_registry_tool_names(
         registry,
         discovered_tools or (),
-        tool_scope=tool_scope,
+        allowed_tool_owners=allowed_tool_owners,
     )
-    # 技能声明的 allowed_tools 必须同时受本插件作用域约束：未激活插件的
-    # 工具不得被技能解锁。此归一化结果同时喂给 policy 与
+    # 技能声明的 allowed_tools 必须同时受本专家包作用域约束：未激活专家包（或未启用的
+    # 连接器/专家包）的工具不得被技能解锁。此归一化结果同时喂给 policy 与
     # ``skill_allowed_tools``，保证「能看见」与「能解锁」口径一致。
     normalized_skill_tools = (
         normalize_registry_tool_names(
             registry,
             skill_invocation.allowed_tools_override,
-            tool_scope=tool_scope,
+            allowed_tool_owners=allowed_tool_owners,
         )
         if skill_invocation is not None and skill_invocation.allowed_tools_override
         else None
@@ -492,6 +571,7 @@ def resolve_registry_tool_governance(
             ),
             discovered_tools=frozenset(normalized_discovered),
             skill_allowed_tools=frozenset(normalized_skill_tools or ()),
+            tool_surface=tool_surface,
         )
     )
 
@@ -547,7 +627,7 @@ def normalize_registry_tool_names(
     registry: ToolRegistry,
     raw_names: set[str] | tuple[str, ...] | list[str],
     *,
-    tool_scope: frozenset[str] | set[str] | None = None,
+    allowed_tool_owners: frozenset[str] | set[str] | None = None,
 ) -> set[str]:
     registered = registry.names()
     lower_map: dict[str, str] = {n.lower(): n for n in registered}
@@ -557,15 +637,15 @@ def normalize_registry_tool_names(
     out_of_scope: list[str] = []
 
     def _in_scope(tool: Tool) -> bool:
-        if tool_scope is None:
+        if allowed_tool_owners is None:
             return True
-        owner = getattr(tool, "plugin_name", None)
-        return owner is None or owner in tool_scope
+        owner = getattr(tool, "expert_name", None)
+        return owner is None or owner in allowed_tool_owners
 
     for raw_name in raw_names:
         tool = registry.get(raw_name)
         if tool is not None:
-            # 技能不得解锁未激活插件的工具（越权提升）
+            # 技能不得解锁未激活专家包的工具（越权提升）
             if not _in_scope(tool):
                 out_of_scope.append(tool.name)
                 continue
@@ -594,7 +674,7 @@ def normalize_registry_tool_names(
         )
     if out_of_scope:
         logger.warning(
-            "normalize_registry_tool_names: dropped tools of inactive plugins: %s",
+            "normalize_registry_tool_names: dropped tools of inactive experts: %s",
             ", ".join(out_of_scope),
         )
     return normalized

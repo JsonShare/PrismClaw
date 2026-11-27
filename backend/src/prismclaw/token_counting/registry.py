@@ -41,7 +41,7 @@ def reset_token_counter() -> None:
 
 
 def register_token_provider(name: str, factory: TokenCounterFactory) -> None:
-    """Register an alternative provider by name (plugin extension point)."""
+    """Register an alternative provider by name (expert extension point)."""
     _PROVIDERS[name] = factory
 
 

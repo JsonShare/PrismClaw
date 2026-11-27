@@ -161,7 +161,7 @@ def estimate_message_tokens(messages: list[dict[str, Any]]) -> int:
     """Estimate token count for a message list.
 
     Fallback for when API usage data is not available. Delegates to the
-    token-counting plugin so telemetry shares the single accounting
+    token-counting expert so telemetry shares the single accounting
     authority with compaction.
     """
     from prismclaw.token_counting import count_messages

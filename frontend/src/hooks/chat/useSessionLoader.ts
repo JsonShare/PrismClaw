@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSessionStore } from '../../stores/session'
+import type { ExpertState } from '../../stores/session'
 import { useChatStore } from '../../stores/chat'
 import { apiUrl } from '../../lib/system-adapter'
 import { isKnownTimelineNode } from '../../lib/chat/timelineSync'
@@ -366,6 +367,8 @@ export function useSessionLoader(token: string | null, wsState: WSState, workspa
               if (typeof mc === 'number' && Number.isFinite(mc) && mc > 0) {
                 offset = Math.max(0, Math.floor(mc) - 100)
               }
+              const expertState = (meta as { expert_state?: ExpertState }).expert_state
+              if (expertState) useSessionStore.getState().setExpertState(convId, expertState)
             }
           }
         } catch {}

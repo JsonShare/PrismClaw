@@ -9,8 +9,6 @@ import {
   GitCompare,
   Loader2,
   Pencil,
-  RotateCcw,
-  RotateCw,
   X,
 } from 'lucide-react'
 import type { FileChange, ReferenceSource } from '../../types'
@@ -24,6 +22,7 @@ import { OfficeReviewEditor } from './officeReview/OfficeReviewEditor'
 import { Surface } from '../ui/Surface'
 import { saveDocxNativeReviewed } from '../../lib/file/fileReview'
 import { openExternal } from '../../lib/system-adapter'
+import { RefreshIcon } from '../icons/SystemIcons'
 import {
   buildReferenceMarkdown,
   normalizeReferenceUrl,
@@ -507,18 +506,18 @@ export function FilePreviewWithReview({
             <div className="flex w-full max-w-[280px] flex-col items-center text-center">
               <StatusGlyph status={loadState.status} />
               <div className="mt-5 text-[length:var(--fs-md)] font-semibold text-[var(--c-text)]">
-                {loadState.status === 'loading' ? '正在打开文件' : '无法打开这个文件'}
+                {loadState.status === 'loading' ? '正在打开文件' : '文件已删除或移动'}
               </div>
               <p className="mt-1.5 text-[length:var(--fs-sm)] leading-6 text-[var(--c-text-secondary)]">
                 {loadState.status === 'loading'
                   ? '马上就好，请稍等片刻。'
-                  : '文件可能已被移动、删除，或服务暂时不可用。'}
+                  : '当前路径下已找不到这个文件。如果文件仍然存在，可以刷新后重试。'}
               </p>
               {loadState.status === 'error' ? (
                 <div className="mt-5 flex items-center gap-2">
                   {onRetry ? (
                     <button type="button" onClick={onRetry} className="btn btn-sm btn-primary">
-                      <RotateCw size={13} />
+                      <RefreshIcon size={13} />
                       重试
                     </button>
                   ) : null}
@@ -727,7 +726,7 @@ export function FilePreviewWithReview({
                         className="btn btn-sm btn-secondary"
                         title="回滚到修改前的版本"
                       >
-                        {editRollbackBusy ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
+                        {editRollbackBusy ? <Loader2 size={13} className="animate-spin" /> : <RefreshIcon size={13} />}
                         {editRollbackBusy ? '回滚中…' : '回滚'}
                       </button>
                     )}

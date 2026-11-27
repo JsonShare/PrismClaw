@@ -30,7 +30,7 @@ def test_verify_detects_missing_file(tmp_path: Path) -> None:
 
 
 def test_verify_ignores_unmanaged_files(tmp_path: Path) -> None:
-    """目标里多出的文件是用户/插件数据，不属于漂移。"""
+    """目标里多出的文件是用户/专家包数据，不属于漂移。"""
     src = tmp_path / "src"
     dst = tmp_path / "dst"
     (src / "agents").mkdir(parents=True)
@@ -99,10 +99,10 @@ def test_sync_refreshes_stale_target(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_sync_preserves_user_data_in_assets(tmp_path: Path, monkeypatch) -> None:
-    """插件若仍把数据写进 assets/，重启不得把它删掉。
+    """专家包若仍把数据写进 assets/，重启不得把它删掉。
 
-    历史故障：sync 每次 ``rmtree`` 整棵 plugins/ 再重拷，legal 插件的
-    用户事项（写在插件安装目录里）第一次重启就全丢。
+    历史故障：sync 每次 ``rmtree`` 整棵 experts/ 再重拷，legal 专家包的
+    用户事项（写在专家包安装目录里）第一次重启就全丢。
     """
     home = tmp_path / "home"
     home.mkdir()
@@ -110,8 +110,8 @@ def test_sync_preserves_user_data_in_assets(tmp_path: Path, monkeypatch) -> None
 
     project = tmp_path / "proj"
     source = _make_source(project)
-    (source / "plugins" / "pkg" / "sub" / "matters").mkdir(parents=True)
-    (source / "plugins" / "pkg" / "sub" / "matters" / "_README.md").write_text(
+    (source / "experts" / "pkg" / "sub" / "matters").mkdir(parents=True)
+    (source / "experts" / "pkg" / "sub" / "matters" / "_README.md").write_text(
         "模板", encoding="utf-8"
     )
 
@@ -119,7 +119,7 @@ def test_sync_preserves_user_data_in_assets(tmp_path: Path, monkeypatch) -> None
         home
         / ".prismclaw"
         / "assets"
-        / "plugins"
+        / "experts"
         / "pkg"
         / "sub"
         / "matters"
@@ -167,7 +167,7 @@ def test_missing_source_raises(tmp_path: Path, monkeypatch) -> None:
     """源目录缺失必须抛错，不能建空 assets 静默启动。
 
     历史故障：镜像漏打 backend/.prismclaw 时，sync 建了空 assets/
-    后正常返回，技能/插件/子代理全部为零但服务显示健康。
+    后正常返回，技能/专家包/子代理全部为零但服务显示健康。
     """
     home = tmp_path / "home"
     home.mkdir()

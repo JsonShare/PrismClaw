@@ -3,7 +3,7 @@
 锁定目标 G2 / G4：
 - 同一输入产出同一 plan（纯函数语义，无可变状态）；
 - governance 在本轮决策中只被调用一次；
-- ``tool_scope`` 作为 plan 入参直传 governance（D14 的前提）；
+- ``allowed_tool_owners`` 作为 plan 入参直传 governance（D14 的前提）；
 - 熔断工具同时从可见集与可调集消失。
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from prismclaw.engine.experts.scope import UNRESTRICTED_SURFACE, NoExpertScope, Scope
 from prismclaw.engine.execution.query import turn_planner as turn_planner_module
 from prismclaw.engine.execution.query.pre_request_pipeline import format_turn_plan_log
 from prismclaw.engine.execution.query.turn_plan import TurnPlan
@@ -42,10 +43,27 @@ def _deps(registry: ToolRegistry, queue: object | None = object()) -> SimpleName
     return SimpleNamespace(tools=registry, session_queue=queue)
 
 
+def _session_scope(owners: frozenset[str] | None) -> Scope | None:
+    if owners is None:
+        return None
+    return NoExpertScope(
+        tool_surface=UNRESTRICTED_SURFACE,
+        tool_owners=owners,
+        member=False,
+    )
+
+
 def _tool_ctx(
-    *, subagent_depth: int = 0, tool_scope: frozenset[str] | None = None, headless: bool = False
+    *,
+    subagent_depth: int = 0,
+    tool_owners: frozenset[str] | None = None,
+    headless: bool = False,
 ) -> SimpleNamespace:
-    return SimpleNamespace(subagent_depth=subagent_depth, tool_scope=tool_scope, headless=headless)
+    return SimpleNamespace(
+        subagent_depth=subagent_depth,
+        session_scope=_session_scope(tool_owners),
+        headless=headless,
+    )
 
 
 def _request(complexity: str | None = None) -> SimpleNamespace:
@@ -112,7 +130,7 @@ def test_headless_read_from_tool_context_only() -> None:
         request=_request(),
         deps=_deps(_registry("ask_user_question"), queue=None),
         turn_state=TurnState(),
-        tool_ctx=SimpleNamespace(subagent_depth=0, tool_scope=None, headless=False),
+        tool_ctx=SimpleNamespace(subagent_depth=0, session_scope=None, headless=False),
         skill_invocation=None,
     )
     assert interactive.headless is False
@@ -121,13 +139,13 @@ def test_headless_read_from_tool_context_only() -> None:
         request=_request(),
         deps=_deps(_registry("ask_user_question"), queue=object()),
         turn_state=TurnState(),
-        tool_ctx=SimpleNamespace(subagent_depth=0, tool_scope=None, headless=True),
+        tool_ctx=SimpleNamespace(subagent_depth=0, session_scope=None, headless=True),
         skill_invocation=None,
     )
     assert headless.headless is True
 
 
-def test_tool_scope_is_forwarded_to_governance(monkeypatch) -> None:
+def test_allowed_tool_owners_is_forwarded_to_governance(monkeypatch) -> None:
     seen: dict = {}
     real = turn_planner_module.resolve_registry_tool_governance
 
@@ -142,11 +160,11 @@ def test_tool_scope_is_forwarded_to_governance(monkeypatch) -> None:
         request=_request(),
         deps=_deps(_registry("read", "write", "bash")),
         turn_state=TurnState(),
-        tool_ctx=_tool_ctx(tool_scope=scope),
+        tool_ctx=_tool_ctx(tool_owners=scope),
         skill_invocation=None,
     )
 
-    assert seen["tool_scope"] == scope
+    assert seen["allowed_tool_owners"] == scope
 
 
 def test_frozen_tools_removed_from_plan_toolset() -> None:

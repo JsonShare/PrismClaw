@@ -79,8 +79,23 @@ export function outputDownloadUrl(workspaceId: string, relPath: string): string 
   return `${apiUrl('/api/files/download')}?workspace_id=${encodeURIComponent(workspaceId)}&path=${encodeURIComponent(relPath)}`
 }
 
-export async function fetchOutputs(workspaceId: string, token: string | null): Promise<OutputFile[]> {
-  const url = `${apiUrl('/api/workspaces/outbox')}?workspace_id=${encodeURIComponent(workspaceId || 'all')}`
+export interface OutputsResult {
+  items: OutputFile[]
+  /** 后端扫描到上限后截断（超出部分不在 items 里） */
+  truncated: boolean
+}
+
+/**
+ * 拉取产出物列表，保留后端 ``truncated`` 标记。
+ * ``workspaceId`` 为空时不再回退 ``all`` —— 聚合结果的 rel_path 相对各自工作区，
+ * 无法用于发送/预览，直接返回空更安全。
+ */
+export async function fetchOutputsResult(
+  workspaceId: string,
+  token: string | null,
+): Promise<OutputsResult> {
+  if (!workspaceId) return { items: [], truncated: false }
+  const url = `${apiUrl('/api/workspaces/outbox')}?workspace_id=${encodeURIComponent(workspaceId)}`
   const headers: Record<string, string> = {}
   if (token) {
     headers.Authorization = `Bearer ${token}`
@@ -89,6 +104,10 @@ export async function fetchOutputs(workspaceId: string, token: string | null): P
   if (!res.ok) {
     throw new Error(`加载产出物失败：${res.status}`)
   }
-  const data = (await res.json()) as { items: OutputFile[]; truncated: boolean }
-  return data.items || []
+  const data = (await res.json()) as { items: OutputFile[]; truncated?: boolean }
+  return { items: data.items || [], truncated: Boolean(data.truncated) }
+}
+
+export async function fetchOutputs(workspaceId: string, token: string | null): Promise<OutputFile[]> {
+  return (await fetchOutputsResult(workspaceId, token)).items
 }

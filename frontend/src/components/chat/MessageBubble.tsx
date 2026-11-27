@@ -807,8 +807,9 @@ export default function MessageBubble({
   }, [attachments, fileAttachments, isUser, uploadAttachments])
 
   // assistant 消息结构（F7 后）：
-  // - content（displayText）：流式期间来自 streamingText；回合结束后由 sync 返回的
-  //   权威消息提供（chat.done 不再合成正文）；reload 时由后端 _build_display_messages 累积全迭代文本。
+  // - content（displayText）：流式期间来自 selectAnswerText（当前未结束轮次，
+  //   即终态候选）；回合结束后由 sync 返回的权威消息提供（chat.done 不再合成正文）；
+  //   reload 时由后端 _build_display_messages 取最后一条非空 assistant（引擎终态轮）。
   //   不再读 final_message.content。
   // - timeline：承载执行过程（步骤 + 工具调用），toolCalls/subagents/fileChanges
   //   统一归于此，不再单独展示。渲染权重按 isReadOnlyTimeline 自适应（见渲染处）。
@@ -1029,7 +1030,7 @@ export default function MessageBubble({
             <div
               className={
                 isUser
-                  ? 'rounded-[var(--radius-card)] rounded-tr-sm px-4.5 py-3 bg-[var(--c-accent)]/10'
+                  ? 'rounded-[var(--radius-card)] rounded-tr-sm px-4.5 py-3 bg-[var(--c-select-bg)]'
                   : 'w-full'
               }
             >
@@ -1052,12 +1053,10 @@ export default function MessageBubble({
                       组件对调会替换 DOM 根节点、重播入场动画，正是「页面突然切换」
                       的根因。 */}
                   {/* isNarrating = 正文已吐字 且 当前无工具在执行。
-                      中途草稿文本（单遍流式）也会进 streamingText——若只看
-                      displayText.length>0，工具执行阶段（phase='executing'，
-                      可能持续数分钟）会误显「正在组织回答...」，让用户以为任务
-                      快结束。后端在工具执行期间发 HeartbeatEvent(phase=
-                      'executing')（agent_loop.py），以此为准降级回
-                      「任务正在执行」。phase 未到时（null）维持原行为。 */}
+                      正文只承载当前未结束轮次的文本：该轮一旦有工具调用或已被
+                      下一轮取代，文本即进入 timeline、displayText 归零，因此工具
+                      执行阶段本就不会误显「正在组织回答...」。phase='executing'
+                      心跳仍是兜底判据（phase 未到时维持原行为）。 */}
                   {message.timeline && message.timeline.length > 0 && (
                     <ExecutionTimeline
                       nodes={message.timeline}
@@ -1087,9 +1086,12 @@ export default function MessageBubble({
                   ) : null}
 
                 {!isStreaming && (renderedAttachments.length > 0 || displayOutputFiles.length > 0) ? (
-                  <div className="mt-6 px-3">
+                  // 左右内边距必须与正文（下方 RichMarkdown 容器的 px-1）一致：
+                  // 之前是 px-3（12px），标题、交付物卡片左缘都比正文内缩 8px，
+                  // 右侧「下载全部」也比正文右缘内缩 8px，看起来整块错位。
+                  <div className="mt-6 px-1">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text-secondary)]/70">产物输出</span>
+                      <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text-secondary)]/70">交付物</span>
                       {/* 仅在有交付文件时提供下载入口：只有内联附件时无可下载内容 */}
                       {workspaceId && token && displayOutputFiles.length > 0 && (
                         <div className="flex flex-col items-end gap-1">
@@ -1097,9 +1099,11 @@ export default function MessageBubble({
                             type="button"
                             onClick={handleDownloadAll}
                             disabled={isDownloadingAll}
-                            className="btn btn-sm btn-ghost" data-state="accent"
-                            title="下载全部输出文件"
-                            aria-label="下载全部输出文件"
+                            // -mr-[11px] 抵消 .btn-sm 的左/右内边距 10px + 1px 透明描边：
+                            // 否则按钮盒右缘贴正文右缘时，「下载全部」文字仍内缩 11px。
+                            className="btn btn-sm btn-ghost -mr-[11px]" data-state="accent"
+                            title="下载全部交付物"
+                            aria-label="下载全部交付物"
                           >
                             <Download size={12} />
                             <span>{isDownloadingAll ? '下载中...' : '下载全部'}</span>
@@ -1315,7 +1319,7 @@ export default function MessageBubble({
                 ) : null}
 
                 {!isStreaming && showSupplementalSections && (followupQuestions?.length ?? 0) > 0 ? (
-                  <div className="mt-4 rounded-[var(--radius-card)] bg-[var(--c-accent)]/5 px-4 py-3.5">
+                  <div className="mt-4 rounded-[var(--radius-card)] bg-[var(--c-hover-bg)] px-4 py-3.5">
                     <div className="flex items-center gap-2 text-[length:var(--fs-sm)] font-medium text-[var(--c-text-secondary)]">
                       <CornerDownRight size={14} className="text-[var(--c-accent)]" />
                       <span>继续问</span>

@@ -28,7 +28,7 @@ def build_gateway_components(
     """Build (gateway_router, forward_consumer) for session affinity.
 
     ``app`` is only held as a lazy reference: ``web_deps`` (and therefore the
-    ``ConnectionRegistry``) is rebuilt on plugin reload, so the local
+    ``ConnectionRegistry``) is rebuilt on expert reload, so the local
     dispatcher must resolve it at delivery time rather than capture the
     registry object that exists during startup.
     """

@@ -6,18 +6,17 @@ import { fileIconSrc } from '../../components/file/FileIcon'
 //
 // 卡片是正文的一部分：DOM 里是 contenteditable=false 的原子节点，序列化后
 // 变成 `<|kind|percent-encoded|>`。标记随正文一起发送，后端解析出
-// designated_skills / designated_plugins / referenced_files；前端不再单发这几个
-// 字段，正文是唯一真相源。
+// designated_skills / referenced_files；前端不再单发这几个字段，正文是唯一真相源。
 //
 // 值用 encodeURIComponent 编码（`|`、`<`、`>` 都会被转义），因此标记内部
 // 不会出现分隔符，正则只需匹配非 `|<>` 字符。
 // ---------------------------------------------------------------------------
 
-export type ChipKind = 'skill' | 'plugin' | 'file'
+export type ChipKind = 'skill' | 'file'
 
 export interface ChipRef {
   kind: ChipKind
-  /** 技能/专家名，或工作区根相对的文件路径 */
+  /** 技能名或工作区根相对的文件路径 */
   value: string
 }
 
@@ -26,24 +25,21 @@ export type InputSegment =
   | { type: 'text'; text: string }
   | { type: 'chip'; chip: ChipRef }
 
-const MARKER_RE = /<\|(skill|plugin|file)\|([^|<>]*)\|>/g
+const MARKER_RE = /<\|(skill|file)\|([^|<>]*)\|>/g
 
-/** 技能 / 专家卡片图标的内联路径（lucide hammer / blocks），文件卡片走扩展名图标 */
-export const CHIP_ICON_MARKUP: Record<'skill' | 'plugin', string> = {
+/** 技能卡片图标的内联路径（lucide hammer），文件卡片走扩展名图标 */
+export const CHIP_ICON_MARKUP: Record<'skill', string> = {
   skill:
     '<path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9"/>'
     + '<path d="m18 15 4-4"/>'
     + '<path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/>',
-  plugin:
-    '<rect width="7" height="7" x="14" y="3" rx="1"/>'
-    + '<path d="M10 21V8a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5a1 1 0 0 0-1-1H3"/>',
 }
 
 const CHIP_SVG_ATTRS =
   'viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" '
   + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"'
 
-/** 卡片图标 DOM 片段：技能用锤子、专家用积木、文件用扩展名图标（三者不共用） */
+/** 卡片图标 DOM 片段：技能用锤子、文件用扩展名图标（两者不共用） */
 export function chipIconHtml(chip: ChipRef): string {
   if (chip.kind === 'file') {
     return `<img class="chip-icon-img" src="${fileIconSrc(chip.value)}" alt="" width="14" height="14" draggable="false" />`
@@ -59,9 +55,10 @@ function safeDecode(raw: string): string {
   }
 }
 
-/** 卡片在界面上的标题：文件取可读文件名，能力取名称本身 */
+/** 卡片在界面上的标题：文件取可读文件名，技能显示真实 ID 的末段。 */
 export function chipLabel(chip: ChipRef): string {
-  return chip.kind === 'file' ? displayTitle({ path: chip.value }) : chip.value
+  if (chip.kind === 'file') return displayTitle({ path: chip.value })
+  return chip.value.split('/').filter(Boolean).pop() || chip.value
 }
 
 export function encodeChip(chip: ChipRef): string {
@@ -114,13 +111,4 @@ export function collectChips(text: string): ChipRef[] {
     chips.push(seg.chip)
   }
   return chips
-}
-
-/** 当前正文里已激活的技能 / 专家（均可多个，按出现顺序去重） */
-export function designationOf(text: string): { skills: string[]; plugins: string[] } {
-  const chips = collectChips(text)
-  return {
-    skills: chips.filter((c) => c.kind === 'skill').map((c) => c.value),
-    plugins: chips.filter((c) => c.kind === 'plugin').map((c) => c.value),
-  }
 }

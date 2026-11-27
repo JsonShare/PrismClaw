@@ -17,7 +17,10 @@
   --c-surface-3: #EAEEF5;               /* 04 悬停 / inset */
   --c-exec-block: #F1F1F2;              /* 执行过程展开卡：中性浅灰（去蓝调，降视觉重心） */
   --c-exec-block-inset: #EAEAEC;        /* 展开卡内嵌子块（检索结果）：略深中性灰 */
-  --c-select-bg: #CEDBF5;               /* 03 选中行底（列表选中） */
+  /* 03 选中行底 / 05 悬浮底：雾蓝（低饱和冷调），比纯灰有质感又不抢正文；
+     选中底取到与侧栏 #EBEEF2 有明显色差，菜单选中项、侧栏当前会话都能一眼分辨 */
+  --c-select-bg: #DDE6F3;
+  --c-hover-bg: #EEF2F8;
   --c-sidebar: #EBEEF2;                 /* 侧栏：与全局背景同色（左右+页面三合一） */
   --c-canvas: #EBEEF2;                  /* 主界面画布：与全局背景同色，中间栏暖乳白浮其上 */
 
@@ -25,7 +28,7 @@
   --c-divider: #E2E6EE;                 /* 06 分隔线 */
   --c-border: #D7DDE6;                  /* 07 边框：输入框、次级按钮 */
   --c-border-strong: #CBD1DB;           /* 08 强边：focus-visible 外环 */
-  --c-ring: rgba(44, 89, 188, 0.32);    /* 聚焦外环（键盘） */
+  --c-ring: rgba(35, 24, 204, 0.32);    /* 聚焦外环（键盘） */
 
   /* ── 字（中性阶 10–12，染 2–3% 靛蓝）─────────────── */
   --c-text: #1F232B;                    /* 12 主字：对底 15.3:1 */
@@ -57,10 +60,10 @@
   --c-hair-line-hover:      rgba(31, 35, 40, 0.16);
 
   /* ── 动作与品牌 ──────────────────────────────────── */
-  --c-accent: #2C59BC;                  /* 09 动作：链接、选中图标、光标 */
+  --c-accent: #2318CC;                  /* 与主按钮色保持一致：选中字体、开关、链接、动作态 */
   --c-brand: #002FA7;                   /* 10 颜料：仅大面积品牌场，不做按钮常态 */
-  --c-btn-primary-bg: #2C59BC;
-  --c-btn-primary-hover: #002FA7;
+  --c-btn-primary-bg: #2318CC;         /* 主按钮：设计稿主按钮色 */
+  --c-btn-primary-hover: #1A12A6;      /* 悬停加深一档，白字对比仍 ≥ 7:1 */
   --c-btn-primary-fg: #FFFFFF;
 
   /* ── 语义 ────────────────────────────────────────── */
@@ -72,7 +75,7 @@
   --c-success-soft: rgba(26, 127, 55, 0.10);
   --c-warning-soft: rgba(154, 103, 0, 0.10);
   --c-info-soft: rgba(26, 111, 212, 0.10);
-  --c-accent-soft: rgba(44, 89, 188, 0.10);
+  --c-accent-soft: rgba(35, 24, 204, 0.10);
   --c-info: #1A6FD4;                    /* 提示类表情图标 */
   --c-violet: #7A4DD6;                  /* 文件类表情图标 */
 
@@ -165,6 +168,13 @@
   box-shadow: var(--shadow-lg);
 }
 
+/* 文件选择弹框：不透明白底，不用玻璃质感 */
+[data-theme="light"] .overlay-panel.modal-opaque {
+  background: #FFFFFF;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* 模态遮罩：只给颜色，结构（fixed / inset / 居中）在 index.css */
 [data-theme="light"] .overlay-scrim {
   background: var(--overlay-scrim);
@@ -172,7 +182,7 @@
 
 /* 侧栏选中/悬停：底色分档，不做反色 */
 [data-theme="light"] .sidebar-nav-row:hover {
-  background: var(--c-surface-3);
+  background: var(--c-hover-bg);
 }
 [data-theme="light"] .sidebar-nav-row.is-active {
   background: var(--c-select-bg);

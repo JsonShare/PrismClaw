@@ -13,6 +13,7 @@ interface ChatSectionProps {
   showPanelButton: boolean
   taskFilesOpen: boolean
   onTogglePanel: () => void
+  onOpenTrajectory?: () => void
   token: string
   workspaceId: string
   layout: 'landing' | 'default'
@@ -44,6 +45,7 @@ export function ChatSection(props: ChatSectionProps) {
         showPanelButton={props.showPanelButton}
         taskFilesOpen={props.taskFilesOpen}
         onTogglePanel={props.onTogglePanel}
+        onOpenTrajectory={props.onOpenTrajectory}
       />
 
       <ErrorBoundary>

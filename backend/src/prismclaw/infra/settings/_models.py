@@ -86,7 +86,7 @@ class TokenCountingHeuristicSettings(BaseSettings):
 
 
 class TokenCountingSettings(BaseSettings):
-    """Token 计数插件配置（token_counting 块，models.yaml）。
+    """Token 计数专家包配置（token_counting 块，models.yaml）。
 
     ``provider`` 选择算法实现：默认 ``heuristic``（本地启发式，无网络依赖）。
     其他实现可通过 ``token_counting.register_token_provider()`` 注册后在此启用。

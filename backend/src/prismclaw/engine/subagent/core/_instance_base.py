@@ -79,15 +79,6 @@ class _InstanceBase:
     def _resolve_timeout(self) -> float:
         raise NotImplementedError
 
-    def _resolve_allowed_tools(
-        self,
-        *,
-        manifest: AgentManifest,
-        preload_ctx: PreloadedSkillContext,
-        available: set[str] | None = None,
-    ) -> set[str] | None:
-        raise NotImplementedError
-
     async def _collect_memory_injection(
         self,
         *,
@@ -108,7 +99,6 @@ class _InstanceBase:
     # Defined in LoopMixin — declared here for cross-mixin type resolution
     def _settle_tool_surface(
         self,
-        allowed_tools: set[str] | None,
         *,
         sub_ctx: ToolContext,
     ) -> SettledSubagentToolSurface:

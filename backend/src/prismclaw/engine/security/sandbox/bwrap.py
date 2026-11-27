@@ -103,7 +103,7 @@ class BwrapPolicy:
                 "'yum install bubblewrap' (RHEL/CentOS)"
             )
         self._binary_path = path
-        # 运行时只读根：项目内 agent 系统必需的源码/配置/插件目录。
+        # 运行时只读根：项目内 agent 系统必需的源码/配置/专家包目录。
         # 这些目录在 runtime path validation 中放行读取（写操作仍需 workspace_root）。
         self._runtime_readonly_roots = self._compute_runtime_readonly_roots()
 
@@ -178,7 +178,7 @@ class BwrapPolicy:
             )
         return params
 
-    # ── 运行时只读根（agent 系统必需的源码/插件/配置目录） ─────────────────
+    # ── 运行时只读根（agent 系统必需的源码/专家包/配置目录） ─────────────────
 
     @staticmethod
     def _compute_runtime_readonly_roots() -> tuple[Path, ...]:
@@ -189,7 +189,7 @@ class BwrapPolicy:
         与引擎源码（agent 自省需要）。
 
         **不放行整个 ``~/.prismclaw``**：同层还有 ``workspaces/``（其它用户数据）
-        与 ``data/`` / ``plugins-data/``（凭据与插件持久数据）。
+        与 ``data/`` / ``experts-data/``（凭据与专家包持久数据）。
         """
         roots: list[Path] = list(runtime_readonly_roots())
         try:
@@ -267,7 +267,7 @@ class BwrapPolicy:
             pass  # 路径解析失败时不阻塞，由 bwrap 自身报错
 
         # 运行时卷与静态能力的只读挂载点。二者都不在 /usr 体系内：
-        # 技能安装的包在 runtime 卷，skills/plugins/agents 在 assets 下。
+        # 技能安装的包在 runtime 卷，skills/experts/agents 在 assets 下。
         runtime_root = _resolve_runtime_root()
         runtime_binds: list[str] = []
         if runtime_root is not None:

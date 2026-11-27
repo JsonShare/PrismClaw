@@ -383,13 +383,13 @@ _FS_ROOT_SEGMENTS = frozenset(
 
 # ── 能力目录别名纠正 ────────────────────────────────────────────────────────
 #
-# T0 目录迁移后，静态能力目录收在 ``~/.prismclaw/assets/{plugins,skills,agents}``。
-# 模型读到这些路径后倾向于复述成省略内部段的 ``~/.prismclaw/plugins/...``，
+# 静态能力目录收在 ``~/.prismclaw/assets/{experts,skills,agents}``。
+# 模型读到这些路径后倾向于复述成省略内部段的 ``~/.prismclaw/experts/...``，
 # 该路径已不存在，ls/read 只会得到 not found。这里把省略 ``assets`` 的能力
 # 目录收敛回真实位置——只对读路径生效，且仅当原路径不存在时才改写，不覆盖
 # 用户真实创建的目录。
 _PRISMCLAW_HOME_DIRNAME = ".prismclaw"
-_CAPABILITY_SEGMENTS = frozenset({"plugins", "skills", "agents"})
+_CAPABILITY_SEGMENTS = frozenset({"experts", "skills", "agents"})
 
 
 def _assets_root() -> Path:
@@ -421,7 +421,7 @@ def is_remote_url(raw: str) -> bool:
 
 
 def canonicalize_fs_path(path: Path) -> Path:
-    """把 ``~/.prismclaw/{plugins,skills,agents}/...`` 纠正为 ``.../assets/...``。
+    """把 ``~/.prismclaw/{experts,skills,agents}/...`` 纠正为 ``.../assets/...``。
 
     路径已存在、不属于该前缀、或已带 ``assets`` 段时原样返回。
     """
@@ -438,17 +438,17 @@ def canonicalize_fs_path(path: Path) -> Path:
 
 
 def resolve_capability_command(path: Path) -> Path | None:
-    """``<plugin>/skills/<name>/SKILL.md`` 不存在时，回退到 ``<plugin>/commands/<name>.md``。
+    """``<expert>/skills/<name>/SKILL.md`` 不存在时，回退到 ``<expert>/commands/<name>.md``。
 
-    插件正文常用 ``/plugin:cmd`` 引用命令，模型据此误以为每项能力都是技能目录
-    （``skills/<cmd>/SKILL.md``）。command 与 skills 在插件根下同级，正文落在
+    专家包正文常用 ``/<namespace>:<cmd>`` 引用命令，模型据此误以为每项能力都是技能目录
+    （``skills/<cmd>/SKILL.md``）。command 与 skills 在专家包根下同级，正文落在
     ``commands/<cmd>.md``，没有 ``SKILL.md``。仅在 SKILL.md 形状的路径上生效，
     其余路径原样返回 None。
     """
     parts = path.parts
     if len(parts) < 3 or parts[-1] != "SKILL.md" or parts[-3] != "skills":
         return None
-    # 只在能力目录内回退，避免把用户工作区里同形的 skills/ 误判成插件技能
+    # 只在能力目录内回退，避免把用户工作区里同形的 skills/ 误判成专家包技能
     try:
         path.relative_to(Path.home() / _PRISMCLAW_HOME_DIRNAME)
     except ValueError:

@@ -9,16 +9,16 @@
 
 同步策略（谨慎）：
 
-只同步 **静态能力目录** —— skills / plugins / agents / IDENTITY / PREFERENCES
+只同步 **静态能力目录** —— skills / experts / agents / IDENTITY / PREFERENCES
 这些由 repo 管控、没有运行时写入的内容。运行时数据（workspaces / runtime /
-memory / cache / plugins-data / data / server.yaml / .work/ 等）留在 home 根，
+memory / cache / experts-data / data / server.yaml / .work/ 等）留在 home 根，
 sync 绝不触碰。
 
-目标树里若出现 repo 之外的文件（用户或插件写进去的数据），sync **保留它们**，
+目标树里若出现 repo 之外的文件（用户或专家包写进去的数据），sync **保留它们**，
 只收敛受管文件。整棵 rmtree 重拷会静默删掉这些数据。
 
 旧位置清理（零存量兼容）：首次启动迁 assets/ 前，rmentree home 根裸的 skills/
-plugins/agents/IDENTITY.md/PREFERENCES.md/.gitignore（项目未上线，全部可牺牲）。
+experts/agents/IDENTITY.md/PREFERENCES.md/.gitignore（项目未上线，全部可牺牲）。
 
 幂等：多次启动 sync 结果相同。旧位置清理只跑一次（清理 marker 存在则跳过）。
 """
@@ -35,11 +35,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # 静态能力目录名 —— backend/.prismclaw 下的 repo 管控内容
-# 运行时数据目录（workspaces / runtime / memory / cache / plugins-data / data / .work/）
+# 运行时数据目录（workspaces / runtime / memory / cache / experts-data / data / .work/）
 # 永远不在这里，也不应该在 backend/.prismclaw 里出现。
 _STATIC_TOP_LEVEL: tuple[str, ...] = (
     "skills",
-    "plugins",
+    "experts",
     "agents",
     "IDENTITY.md",
     "PREFERENCES.md",
@@ -102,7 +102,7 @@ def _list_files(root: Path) -> dict[str, float]:
 def _verify_synced(source: Path, target: Path, names: tuple[str, ...]) -> list[str]:
     """比对源与目标的**受管文件**集合与 mtime，返回漂移项。
 
-    只在「源里有的文件」范围内比对：目标里多出来的文件是用户/插件数据，
+    只在「源里有的文件」范围内比对：目标里多出来的文件是用户/专家包数据，
     由 :func:`_prune_managed` 有意保留，不属于漂移。
     """
     drifted: list[str] = []
@@ -129,8 +129,8 @@ def _unmanaged_files(src: Path, dst: Path) -> list[str]:
     """目标树中存在、但源树中不存在的相对路径。
 
     这些是用户/运行时在只读能力目录里留下的文件 —— 覆盖前必须显式拦住，
-    否则 ``rmtree`` 会把它们静默删掉。插件数据本应写在 ``plugins-data/``，
-    这条检查是第二道防线：即使某个插件仍按旧习惯写进 ``assets/``，
+    否则 ``rmtree`` 会把它们静默删掉。专家包数据本应写在 ``experts-data/``，
+    这条检查是第二道防线：即使某个专家包仍按旧习惯写进 ``assets/``，
     也不会在下次启动时无声丢失。
     """
     if not dst.is_dir():
@@ -173,7 +173,7 @@ def _prune_managed(src: Path, dst: Path, previous: set[str], prefix: str) -> set
 
     删除依据是**上次同步的清单**而非「源里没有」：
       * 上次在清单里、这次不在源里 → repo 已移除 → 删除；
-      * 从未出现在清单里 → 用户/插件写入的数据 → 原地保留。
+      * 从未出现在清单里 → 用户/专家包写入的数据 → 原地保留。
 
     没有清单时（首次同步）不做任何删除，宁可留下旧文件也不误删用户数据。
     """
@@ -208,7 +208,7 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
 
     每启动调用一次。语义是「收敛」而非「重拷」：repo 管控的文件以源为准
     （同名覆盖、源已删除的旧文件清掉），**非 repo 管控的文件原地保留**。
-    后者是用户/插件数据，整棵删除会让它们静默丢失。
+    后者是用户/专家包数据，整棵删除会让它们静默丢失。
 
     返回 :class:`SyncResult`：``failed`` 记录同步失败项，``drifted`` 记录
     副本后仍与源不一致的受管文件。两者任一非空即说明**运行时不使用 repo
@@ -221,12 +221,12 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
     target = home / "assets"
 
     if not source.is_dir():
-        # 源缺失时**不能**建空 assets 继续跑：技能/插件/子代理会全部为零，
+        # 源缺失时**不能**建空 assets 继续跑：技能/专家包/子代理会全部为零，
         # 但启动成功、UI 无报错，故障只在用户点开具体功能时才暴露。
         raise RuntimeError(
             f"静态能力源目录不存在：{source}。"
             f"镜像必须包含 backend/.prismclaw（见 deploy/Dockerfile），"
-            f"否则技能/插件/子代理全部不可用。"
+            f"否则技能/专家包/子代理全部不可用。"
         )
 
     target.mkdir(parents=True, exist_ok=True)
@@ -242,7 +242,7 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
         dst_entry = target / name
 
         if src_entry.is_dir():
-            # 目录：只收敛 repo 管控的文件，未受管文件（用户/插件数据）原地保留。
+            # 目录：只收敛 repo 管控的文件，未受管文件（用户/专家包数据）原地保留。
             if dst_entry.exists() and not dst_entry.is_dir():
                 # 目标被同名文件占位 → 视为冲突，记录失败，不擅自删除
                 logger.error("sync: 目标 %s 是文件而非目录", dst_entry)
@@ -251,7 +251,7 @@ def sync_prismclaw_home(project_root: Path) -> SyncResult:
             unmanaged = _unmanaged_files(src_entry, dst_entry)
             if unmanaged:
                 logger.warning(
-                    "sync: %s 下有 %d 个非 repo 管控文件（用户/插件数据），将保留不删：%s",
+                    "sync: %s 下有 %d 个非 repo 管控文件（用户/专家包数据），将保留不删：%s",
                     name,
                     len(unmanaged),
                     unmanaged[:5],

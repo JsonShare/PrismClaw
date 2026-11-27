@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from prismclaw.engine.execution.capabilities.catalog import (
-    CapabilityCatalogService,
+    RuntimeCatalog,
 )
 from prismclaw.engine.execution.request._prompt_types import (
     AvailableSubagentEntry,
@@ -14,13 +14,14 @@ from prismclaw.engine.execution.request._prompt_types import (
 from prismclaw.engine.execution.request.system_prompt import (
     _subagent_compact_description,
 )
+from prismclaw.runtime.skills.eligibility import is_model_visible
 
 logger = logging.getLogger(__name__)
 
 
 def _tool_prompt_summaries(
     *,
-    capability_catalog: CapabilityCatalogService,
+    capability_catalog: RuntimeCatalog,
     visible_names: set[str],
     subagent_depth: int = 0,
 ) -> list[tuple[str, str]]:
@@ -38,23 +39,22 @@ def _tool_prompt_summaries(
     ]
 
 
-def _subagent_catalog_state(catalog: CapabilityCatalogService | None) -> tuple[int, bool]:
+def _subagent_catalog_state(catalog: RuntimeCatalog | None) -> int:
     if catalog is None:
-        return 0, False
-    entries = catalog.list_agent_entries()
-    return len(entries), any(entry.can_handoff_to for entry in entries)
+        return 0
+    return len(catalog.list_agent_entries())
 
 
 def _build_available_skills_catalog(
     *,
-    capability_catalog: CapabilityCatalogService | None,
+    capability_catalog: RuntimeCatalog | None,
     workspace_path: str | None,
     tool_summaries: Sequence[tuple[str, str]],
 ) -> tuple[tuple[str, ...], tuple[MarketplaceSummary, ...]]:
-    """项目技能名 + 插件包索引（三层披露的第一层）。
+    """项目技能名 + 专家包索引（三层披露的第一层）。
 
     - 项目技能：逐个列名。用户主动安装、数量有界，全量保留。
-    - 插件包：只聚合包名 / 外层描述 / 技能计数；子插件与具体技能不进入
+    - 专家包：只聚合包名 / 外层描述 / 技能计数；子专家包与具体技能不进入
       prompt，由 ``skill_search`` 检索、``activate_skill`` 按名激活。
     - user_only / disabled 技能对模型不可见，两个集合都排除。
 
@@ -66,25 +66,18 @@ def _build_available_skills_catalog(
     if "skill_search" not in tool_names:
         return (), ()
     try:
-        entries = capability_catalog.list_skill_entries(str(workspace_path))
+        entries = capability_catalog.list_skill_entries()
     except Exception:
         logger.warning("available_skills_catalog.list_skills_failed", exc_info=True)
         return (), ()
 
     project_names: list[str] = []
-    by_marketplace: dict[str, list[Any]] = {}
+    by_expert: dict[str, list[Any]] = {}
     for entry in entries:
-        manifest = entry.manifest
-        # invocation_policy 过滤：
-        # - AUTO / MODEL_ONLY → 模型可见
-        # - USER_ONLY → 仅用户指定可见，不出现在模型列表
-        # - DISABLED → 完全禁用，不出现在任何列表
-        policy = getattr(manifest, "invocation_policy", None)
-        policy_str = str(policy.value) if policy is not None else "auto"
-        if policy_str in ("user_only", "disabled"):
+        if not is_model_visible(entry.manifest):
             continue
-        if entry.marketplace_name:
-            by_marketplace.setdefault(entry.marketplace_name, []).append(entry)
+        if entry.expert_name:
+            by_expert.setdefault(entry.expert_name, []).append(entry)
         else:
             project_names.append(entry.name)
 
@@ -92,26 +85,26 @@ def _build_available_skills_catalog(
         MarketplaceSummary(
             name=name,
             description=next(
-                (e.marketplace_description for e in group if e.marketplace_description),
+                (e.expert_description for e in group if e.expert_description),
                 "",
             )
             or "",
             skill_count=len(group),
         )
-        for name, group in sorted(by_marketplace.items())
+        for name, group in sorted(by_expert.items())
     )
     return tuple(sorted(project_names)), summaries
 
 
 def _build_available_subagents_catalog(
     *,
-    capability_catalog: CapabilityCatalogService | None,
+    capability_catalog: RuntimeCatalog | None,
     tool_summaries: Sequence[tuple[str, str]],
 ) -> tuple[AvailableSubagentEntry, ...]:
     """子代理目录（全量，不截断）。
 
-    单一数据源：``CapabilityCatalogService.list_agent_entries()``，与派发时
-    校验使用同一注册表。插件子代理保留在目录里供 ``subagent_search`` 检索
+    单一数据源：``RuntimeCatalog.list_agent_entries()``，与派发时
+    校验使用同一注册表。专家包子代理保留在目录里供 ``subagent_search`` 检索
     与 ``<packages>`` 计数，但名称不进入固定 prompt。
     """
     if capability_catalog is None:
@@ -128,9 +121,8 @@ def _build_available_subagents_catalog(
         AvailableSubagentEntry(
             name=entry.name,
             description=_subagent_compact_description(entry.description),
-            plugin_name=entry.plugin_name,
-            marketplace_name=entry.marketplace_name,
-            marketplace_description=entry.marketplace_description,
+            expert_name=entry.expert_name,
+            expert_description=entry.expert_description,
         )
         for entry in sorted(catalog_entries, key=lambda e: e.name)
     )

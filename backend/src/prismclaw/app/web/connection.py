@@ -96,7 +96,7 @@ class GatewayRouterLike(Protocol):
 def _resolve_gateway_router(state: ConnectionState) -> GatewayRouterLike | None:
     """Best-effort lookup of this node's gateway router.
 
-    ``web_deps`` is rebuilt on plugin reload, so the router is read at send
+    ``web_deps`` is rebuilt on expert reload, so the router is read at send
     time rather than captured when the connection was created.
     """
     try:

@@ -14,32 +14,6 @@ from prismclaw.schema.services.skills import SkillManifest
 logger = logging.getLogger(__name__)
 
 
-def coerce_allowed_tool_names(raw: object) -> set[str] | None:
-    if not isinstance(raw, list):
-        return None
-    names = {item.strip() for item in raw if isinstance(item, str) and item.strip()}
-    return names or set()
-
-
-def expand_allowed_tool_names(raw: object, available: set[str]) -> set[str] | None:
-    """把 ``<prefix>:*`` 展开成注册表中匹配的具体工具名。
-
-    MCP 工具注册名为 ``{server_name}:{tool_name}``，插件清单无法预先枚举远端工具，
-    因此允许按 server 前缀声明。无通配符时原样返回。
-    """
-    names = coerce_allowed_tool_names(raw)
-    if not names:
-        return names
-    wildcards = {name for name in names if name.endswith(":*")}
-    if not wildcards:
-        return names
-    expanded = names - wildcards
-    for wildcard in wildcards:
-        prefix = wildcard[:-1]
-        expanded.update(name for name in available if name.startswith(prefix))
-    return expanded
-
-
 def coerce_preloaded_skill_manifest(raw: object, *, skill_name: str) -> SkillManifest:
     if isinstance(raw, SkillManifest):
         return raw
@@ -90,26 +64,6 @@ def render_preloaded_skill_instructions(skills: list[SkillManifest]) -> str:
     return "\n".join(rendered).strip()
 
 
-def resolve_preloaded_allowed_tools_limit(
-    skills: list[SkillManifest],
-) -> set[str] | None:
-    limited: set[str] | None = None
-    union: set[str] | None = None
-    for skill in skills:
-        allowed = coerce_allowed_tool_names(skill.allowed_tools)
-        if allowed is None:
-            continue
-        union = set(allowed) if union is None else union | allowed
-        limited = set(allowed) if limited is None else limited & allowed
-    if limited is not None and not limited and union is not None:
-        logger.warning(
-            "preloaded_skill_empty_intersection union_fallback=%s",
-            sorted(union),
-        )
-        limited = union
-    return limited
-
-
 def compose_subagent_system_prompt(
     *,
     system_prompt: str,
@@ -147,7 +101,6 @@ def resolve_preloaded_skill_context(
             manifests=[],
             catalog_block="",
             instructions_block="",
-            allowed_tools_limit=None,
         )
     if skill_runtime is None:
         raise RuntimeError("skill_runtime is required when preload_skills requests preloads")
@@ -155,9 +108,19 @@ def resolve_preloaded_skill_context(
     if not callable(resolve_skill):
         raise RuntimeError("skill_runtime does not expose resolve_skill() for preload_skills")
     workspace_path = Path(parent_ctx.workspace_path)
+    scope = getattr(parent_ctx, "session_scope", None)
+    active_expert = getattr(scope, "team_name", None) if scope is not None else None
     resolved_manifests: list[SkillManifest] = []
     for skill_name in names:
-        resolved = resolve_skill(skill_name, workspace_path=workspace_path)
+        resolved = None
+        if active_expert:
+            # 专家包声明的预加载技能优先取本包版本：裸名同时命中通用技能时，
+            # 不能让通用技能顶替包内同名技能（同名解析必须确定）。
+            resolved = resolve_skill(
+                f"{active_expert}:{skill_name}", workspace_path=workspace_path
+            )
+        if resolved is None:
+            resolved = resolve_skill(skill_name, workspace_path=workspace_path)
         if resolved is None:
             raise LookupError(f"Skill '{skill_name}' not found.")
         skill = coerce_preloaded_skill_manifest(resolved, skill_name=skill_name)
@@ -177,5 +140,4 @@ def resolve_preloaded_skill_context(
         manifests=resolved_manifests,
         catalog_block=render_preloaded_skill_catalog(resolved_manifests),
         instructions_block=render_preloaded_skill_instructions(resolved_manifests),
-        allowed_tools_limit=resolve_preloaded_allowed_tools_limit(resolved_manifests),
     )

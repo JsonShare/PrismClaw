@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from prismclaw.engine.execution.capabilities.catalog import (
-    CapabilityCatalogService,
+    RuntimeCatalog,
 )
 from prismclaw.engine.state import ToolDiscoveryLedger
 from prismclaw.engine.utils.xml import xml_escape
@@ -14,7 +14,7 @@ from prismclaw.schema.content.context import ContextBlock
 
 def build_capability_delta_blocks(
     *,
-    capability_catalog: CapabilityCatalogService | None,
+    capability_catalog: RuntimeCatalog | None,
     discovered_tool_ledger: ToolDiscoveryLedger | None,
 ) -> list[ContextBlock]:
     """Build the per-turn capability delta blocks.
@@ -42,7 +42,7 @@ def build_capability_delta_blocks(
 
 def _build_tool_listing_delta_block(
     *,
-    capability_catalog: CapabilityCatalogService,
+    capability_catalog: RuntimeCatalog,
     discovered_tool_ledger: ToolDiscoveryLedger | None,
 ) -> ContextBlock | None:
     if discovered_tool_ledger is None or not discovered_tool_ledger.records:

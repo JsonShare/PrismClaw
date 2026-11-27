@@ -1144,8 +1144,10 @@ def _table_block(page: int, index: int, rows: Sequence[Sequence[str]]) -> Block:
 def _parse_rtf(raw: bytes, **_unused: object) -> list[list[Block]]:
     from striprtf.striprtf import rtf_to_text
 
+    # striprtf 自带 py.typed 但该函数无注解，显式声明签名后再调用
+    convert: Callable[[str], str] = rtf_to_text
     # RTF 本身是 7-bit ASCII 转义，非 ASCII 由 \\uN 承载；latin-1 解码不破坏控制字。
-    text = rtf_to_text(raw.decode("latin-1", errors="replace"))
+    text = convert(raw.decode("latin-1", errors="replace"))
     return [_text_blocks(text.split("\n\n"))]
 
 

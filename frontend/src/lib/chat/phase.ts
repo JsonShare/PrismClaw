@@ -6,7 +6,7 @@ import type { HeartbeatPayload } from '../../types'
  * 由 set_phase timeline patch 驱动，单一真相源。
  * 秒数来自 usePhaseClock（前端秒表）：后端心跳帧只在相位切换发帧，
  * payload.elapsedS 是帧到达时的基线，不是持续时钟。
- * 消费方：useTaskPanelData（右侧面板副标题）、ChatArea（pinned 胶囊文案）。
+ * 消费方：ChatArea（pinned 胶囊文案）、运行轨迹面板。
  */
 export function buildPhaseSubtitle(phase: HeartbeatPayload, elapsedS: number): string {
   const elapsed = Math.floor(elapsedS)

@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # 仅类型检查期导入，运行时仍走 __getattr__ 惰性加载（见下方 _LAZY_IMPORTS）。
-    from prismclaw.engine.plugins.hooks.handlers import HookHandler
-    from prismclaw.engine.plugins.hooks.schema import HookContext, HookOutcome, HookResult
+    from prismclaw.engine.hooks.handlers import HookHandler
+    from prismclaw.engine.hooks.schema import HookContext, HookOutcome, HookResult
     from prismclaw.engine.toolkit.registry.tool_runtime import (
         ToolContext,
         error_result,
@@ -50,10 +50,10 @@ _LAZY_IMPORTS: dict[str, str] = {
     "text_result": "prismclaw.engine.toolkit.registry.tool_runtime",
     "error_result": "prismclaw.engine.toolkit.registry.tool_runtime",
     # Hook protocol — domain/hooks/phi_redact.py
-    "HookHandler": "prismclaw.engine.plugins.hooks.handlers",
-    "HookContext": "prismclaw.engine.plugins.hooks.schema",
-    "HookResult": "prismclaw.engine.plugins.hooks.schema",
-    "HookOutcome": "prismclaw.engine.plugins.hooks.schema",
+    "HookHandler": "prismclaw.engine.hooks.handlers",
+    "HookContext": "prismclaw.engine.hooks.schema",
+    "HookResult": "prismclaw.engine.hooks.schema",
+    "HookOutcome": "prismclaw.engine.hooks.schema",
     # PHI pattern protocol — domain/governance/phi_patterns.py
     "PhiPatternEntry": "prismclaw.schema.shared._phi_pattern_registry",
     # Agent protocol — services/agent_service.py

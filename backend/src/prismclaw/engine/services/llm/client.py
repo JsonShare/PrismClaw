@@ -79,7 +79,7 @@ def _should_disable_thinking(
 
 # llm_request_start 的输入规模估算：中英混合文本约 1 token / 3 字节
 # （工具 schema 亦计入——tools 是每轮固定开销的大头，需要可见）。
-# 字节→token 的系数由 token_counting 插件统一提供，调用方不再持有魔法数。
+# 字节→token 的系数由 token_counting 专家包统一提供，调用方不再持有魔法数。
 def _estimate_input_tokens(messages: list[Any], tools: list[Any]) -> int:
     from prismclaw.token_counting import count_bytes
 

@@ -1,6 +1,6 @@
 """SDD context-governance W7-4 回归: MCP 占位符 env 检测。
 
-背景: 市场插件 env 携带 "<在本地填入...>" 模板占位符(无真实凭证), 旧逻辑
+背景: 市场专家包 env 携带 "<在本地填入...>" 模板占位符(无真实凭证), 旧逻辑
 照样 spawn 进程 → 每次启动 13 条 "Connection closed" WARNING。修复: 连接
 前识别占位符 → status=disabled + INFO 一次, 不 spawn。
 """

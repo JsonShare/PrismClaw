@@ -14,6 +14,7 @@ from prismclaw.engine.execution.dispatch.streaming_executor import (
     _resolve_is_concurrency_safe,
 )
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+from prismclaw.engine.toolkit.registry.tool_classification import denied_owner_reason
 from prismclaw.engine.toolkit.registry.tool_runtime import Tool, ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
 from prismclaw.schema.content.content_types import ToolResult
@@ -67,97 +68,6 @@ def log_tool_call(
     logger.info(" ".join(parts))
 
 
-def _result_text(result: ToolResult) -> str:
-    """提取 ToolResult 的文本内容（POST_TOOL hook 载荷）。"""
-    parts: list[str] = []
-    for block in result.content:
-        text = getattr(block, "text", None)
-        if text:
-            parts.append(text)
-    return "\n".join(parts)
-
-
-async def _apply_post_tool_hooks(
-    context: ToolContext,
-    tool_calls: list[dict[str, Any]],
-    results: list[ToolResult],
-) -> None:
-    """逐调用分发 POST_TOOL hooks，消费 ``updated_mcp_tool_output`` 改写结果。
-
-    派发点在 ``execute_tool_calls`` 末尾（主循环与子代理循环的公共汇聚层）：
-    插件 hooks.json 的 PostToolUse matcher 才能命中子代理内部执行的 MCP 工具
-    （主循环 after_tool_call 是批次级且 tool_name 恒 None，触不到子代理链路）。
-
-    语义：
-    - hook 返回的 ``updated_mcp_tool_output`` 为字符串时改写对应 ToolResult 的
-      文本内容（保留原 call_id/错误位/artifact）；非字符串（dict 等）以 JSON
-      序列化为文本；
-    - hook 失败/超时只记日志不改写（non_blocking 语义）；
-    - 无 hook_dispatcher 或无已注册 POST_TOOL handler 时零开销通过。
-    """
-    dispatcher = getattr(context, "hook_dispatcher", None)
-    if dispatcher is None:
-        return
-    from prismclaw.engine.hooks import HookEvent, _log_hook_outcome
-    from prismclaw.engine.plugins.hooks.schema import HookContext
-
-    if not getattr(dispatcher, "_hooks", {}).get(HookEvent.POST_TOOL):
-        return
-
-    for idx, (call, result) in enumerate(zip(tool_calls, results, strict=True)):
-        name = _function_name(call)
-        if not name or getattr(result, "is_error", False):
-            continue
-        hook_context = HookContext(
-            event=HookEvent.POST_TOOL.value,
-            session_id=context.session_id,
-            cwd=str(context.workspace_path),
-            tool_name=name,
-            tool_input=_function_args(call),
-            tool_output=_result_text(result),
-        )
-        try:
-            hook_result = await dispatcher.dispatch(
-                HookEvent.POST_TOOL, hook_context, active_plugins=context.tool_scope
-            )
-        except Exception:
-            logger.warning(
-                "post_tool_hook.dispatch_failed tool=%s",
-                name,
-                exc_info=True,
-            )
-            continue
-        _log_hook_outcome(HookEvent.POST_TOOL, hook_result)
-        rewritten = getattr(hook_result, "updated_mcp_tool_output", None)
-        if rewritten is None:
-            continue
-        if isinstance(rewritten, str):
-            new_text = rewritten
-        else:
-            try:
-                new_text = json.dumps(rewritten, ensure_ascii=False)
-            except (TypeError, ValueError):
-                logger.warning(
-                    "post_tool_hook.rewrite_not_serializable tool=%s",
-                    name,
-                )
-                continue
-        if new_text == _result_text(result):
-            continue
-        results[idx] = ToolResult(
-            tool_call_id=result.tool_call_id,
-            content=[TextBlock(text=new_text)],
-            is_error=result.is_error,
-            ui_artifact=result.ui_artifact,
-            persistence_artifact=result.persistence_artifact,
-            state_delta=result.state_delta,
-            runtime_control=result.runtime_control,
-            subagent_envelope=result.subagent_envelope,
-            reference_artifact=result.reference_artifact,
-            metadata=result.metadata,
-        )
-
-
 def _run_tool_validate(tool: Tool, args: dict[str, Any], context: ToolContext) -> str | None:
     """Call a tool's validate() hook if it exists.
 
@@ -183,7 +93,6 @@ class SubagentParallelDispatchPlan:
     rejected: list[tuple[int, dict[str, Any]]]
     max_parallel_per_turn: int
     batch_id: str | None
-    handoff_extras_by_call_id: dict[str, dict[str, Any]]
 
 
 @dataclass
@@ -292,9 +201,6 @@ async def execute_tool_calls(
         assert r is not None
         final.append(r)
 
-    # POST_TOOL hooks：逐调用派发（主循环与子代理循环的公共汇聚点），
-    # 消费插件 PostToolUse 钩子返回的 updated_mcp_tool_output 改写结果。
-    await _apply_post_tool_hooks(context, tool_calls, final)
     return final
 
 
@@ -313,22 +219,23 @@ async def execute_preflighted_tool_calls(
     _denied_call_ids = dict(denied_call_ids or {})
     _approved_calls = approved_calls or tool_calls
 
-    # 插件作用域门控：子代理循环无 before_tool_call 门控（见
+    # 工具归属门控：子代理循环无 before_tool_call 门控（见
     # _subagent_loop_runner.execute_tools），此处是本路径唯一的归属校验点。
     # 主循环另有 gate_tool_call 闸门，故不会重复拦截。
-    _scope = context.tool_scope
-    if _scope is not None:
+    _allowed_tool_owners = (
+        context.session_scope.tool_owners if context.session_scope is not None else None
+    )
+    if _allowed_tool_owners is not None:
         for call in tool_calls:
             call_id = call.get("id", "")
             if not call_id or call_id in _denied_call_ids:
                 continue
             _name = _function_name(call)
-            _tool = registry.get(_name) if _name else None
-            _owner = getattr(_tool, "plugin_name", None) if _tool is not None else None
-            if _owner is not None and _owner not in _scope:
-                _denied_call_ids[call_id] = (
-                    f"tool_scope_denied:{_owner}（该工具属于插件「{_owner}」，请先 @ 该插件）"
-                )
+            _reason = denied_owner_reason(
+                registry.get(_name) if _name else None, _allowed_tool_owners
+            )
+            if _reason is not None:
+                _denied_call_ids[call_id] = _reason
 
     for idx, call in enumerate(tool_calls):
         call_id = call.get("id", "")
@@ -425,12 +332,8 @@ def plan_subagent_parallel_dispatch(
     requested_n = len(subagent_parallel)
     accepted = subagent_parallel[:max_parallel_per_turn]
     rejected = subagent_parallel[max_parallel_per_turn:]
-    handoff_extras_by_call_id = parent_context.pending_handoff_dispatch_extras or {}
-    has_accepted_chain_dispatch = any(
-        call.get("id") in handoff_extras_by_call_id for _, call in accepted
-    )
     batch_id: str | None = None
-    if len(accepted) >= 2 or has_accepted_chain_dispatch:
+    if len(accepted) >= 2:
         batch_id = _uuid.uuid4().hex
     return SubagentParallelDispatchPlan(
         requested_n=requested_n,
@@ -438,7 +341,6 @@ def plan_subagent_parallel_dispatch(
         rejected=rejected,
         max_parallel_per_turn=max_parallel_per_turn,
         batch_id=batch_id,
-        handoff_extras_by_call_id=handoff_extras_by_call_id,
     )
 
 
@@ -456,7 +358,6 @@ def prepare_subagent_parallel_runtime(
                 parent_context=parent_context,
                 call=call,
                 batch_id=subagent_plan.batch_id,
-                handoff_extras_by_call_id=subagent_plan.handoff_extras_by_call_id,
                 progress_emitter=progress_emitter,
             ),
         )
@@ -511,18 +412,15 @@ def _build_subagent_call_context(
     parent_context: ToolContext,
     call: dict[str, Any],
     batch_id: str | None,
-    handoff_extras_by_call_id: dict[str, dict[str, Any]],
     progress_emitter: SubagentProgressEmitter | None,
 ) -> ToolContext:
     from dataclasses import replace as _replace
 
-    if batch_id is None and not handoff_extras_by_call_id:
+    if batch_id is None:
         return parent_context
-    updates: dict[str, Any] = {}
-    if batch_id is not None:
-        updates["progress_batch_id"] = batch_id
-        if progress_emitter is not None:
-            updates["subagent_progress_emitter"] = progress_emitter
+    updates: dict[str, Any] = {"progress_batch_id": batch_id}
+    if progress_emitter is not None:
+        updates["subagent_progress_emitter"] = progress_emitter
     return _replace(parent_context, **updates)
 
 

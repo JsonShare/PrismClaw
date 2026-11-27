@@ -1,0 +1,42 @@
+{
+  "mcpServers": {
+    "Solve Intelligence": {
+      "type": "http",
+      "url": "https://api.solveintelligence.com/mcp/",
+      "title": "Solve Intelligence",
+      "description": "专利工作流——搜索专利和非专利文献、法律文本、SEP 技术标准、现有技术、权利要求分析。"
+    },
+    "CourtListener": {
+      "type": "http",
+      "url": "https://mcp.courtlistener.com/",
+      "title": "CourtListener",
+      "description": "Free Law Project 的法律研究平台——数百万美国法院意见、PACER 案件记录、法官简介、口头辩论和引用验证。"
+    },
+    "Descrybe": {
+      "type": "http",
+      "url": "https://mcp.descrybe.com/mcp",
+      "title": "Descrybe",
+      "description": "实体法研究——按概念或措辞搜索案例、从引用中查找案例、提取权威、检查处理、验证引用语言。"
+    },
+    "Slack": {
+      "type": "http",
+      "url": "https://mcp.slack.com/mcp",
+      "title": "Slack",
+      "description": "在你的工作区中搜索消息、阅读频道、查找讨论。"
+    },
+    "Google Drive": {
+      "type": "http",
+      "url": "https://drivemcp.googleapis.com/mcp/v1",
+      "title": "Google Drive",
+      "description": "从 Google Drive 搜索、阅读和获取文档。"
+    }
+  },
+  "recommendedCategories": [
+    "ip-management",
+    "legal-research",
+    "case-law",
+    "documents",
+    "chat",
+    "email"
+  ]
+}

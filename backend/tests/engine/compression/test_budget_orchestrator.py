@@ -221,7 +221,7 @@ def test_history_compaction_assessment_overrides_propagated():
     assert assessment.keep_recent_tokens_override == 5000
 
 
-# ──────────────── 5. 冻结区裁剪：发现面必须存活（插件不可见的根因回归） ────────────────
+# ──────────────── 5. 冻结区裁剪：发现面必须存活（专家包不可见的根因回归） ────────────────
 
 
 class _FakePorts:
@@ -283,7 +283,7 @@ def test_system_zone_over_budget_keeps_discovery_surface():
     """冻结区超预算：先撤可重建的 bootstrap，tools/catalogs 发现面必须保留。
 
     回归背景（同源事故）：<memory_index> 曾占满冻结区导致发现面被裁、
-    插件生态对模型不可见。SDD D3 后记忆索引移入动态区；本测试锁定
+    专家包生态对模型不可见。SDD D3 后记忆索引移入动态区；本测试锁定
     "发现面永远最后撤"的不变量。
     """
     orchestrator = BudgetOrchestrator(working_dir="/tmp/unused", ports=_FakePorts())

@@ -1,6 +1,6 @@
 """Pure-Python office review synthesis + subset apply.
 
-Replaces the deleted ``.prismclaw/plugins/office`` MCP-server shell-outs. Produces
+Replaces the deleted ``.prismclaw/experts/office`` MCP-server shell-outs. Produces
 TipTap-compatible JSON documents (insertion/deletion marks, ``changeId`` === detail
 index) for the frontend tiptap-track-changes review editor, and re-materializes
 office files from the original backup blob given an accepted-operations subset.

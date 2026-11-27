@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from prismclaw.engine.execution.query.turn_plan import TurnPlan as TurnPlan
+from prismclaw.engine.experts.scope import tool_surface_of
 from prismclaw.engine.state.turn_state import TurnState
 from prismclaw.engine.toolkit.registry.governance import (
     ResolvedToolSet,
@@ -67,15 +68,17 @@ class TurnPlanner:
         headless = bool(getattr(tool_ctx, "headless", False))
         subagent_depth = getattr(tool_ctx, "subagent_depth", 0) or 0
 
+        scope = tool_ctx.session_scope
         toolset = resolve_registry_tool_governance(
             deps.tools,
             skill_invocation=skill_invocation,
             discovered_tools=turn_state.discovered_tool_names(),
             subagent_depth=subagent_depth,
             headless=headless,
-            # 插件作用域事实直传：壳与主链必须同源，否则 <tools> 段会宣传
+            # 作用域事实直传：壳与主链必须同源，否则 <tools> 段会宣传
             # 模型实际调不到的工具（SDD D14）。
-            tool_scope=getattr(tool_ctx, "tool_scope", None),
+            allowed_tool_owners=scope.tool_owners if scope is not None else None,
+            tool_surface=tool_surface_of(scope),
         )
         if frozen_tools:
             toolset = _with_frozen_excluded(toolset, frozen_tools)

@@ -2,7 +2,6 @@ import { Fragment, useSyncExternalStore } from 'react'
 import {
   getDomainEntry,
   getDomainNavItems,
-  getDomainOrder,
   getRegistryVersion,
   subscribeRegistryVersion,
   type DomainNavItem,
@@ -12,10 +11,10 @@ import {
   requestDomainPage,
   subscribeDomainActive,
 } from '../../domains/nav-bus'
-import type { AppSection } from '../../stores/ui'
+import { useUiStore, type AppSection } from '../../stores/ui'
 import { HairlineDivider } from '../ui/HairlineDivider'
 import iconNew from '../../images/other_icon/new.png'
-import iconSkill from '../../images/other_icon/skill.png'
+import iconWork from '../../images/other_icon/work.png'
 import iconClock from '../../images/other_icon/clock.png'
 import iconFolder from '../../images/other_icon/folder.png'
 
@@ -27,10 +26,10 @@ interface SidebarNavProps {
 }
 
 const MAIN_MENU_ITEMS = [
-  { key: 'chat' as const, label: '新任务', img: iconNew },
-  { key: 'experts' as const, label: '能力扩展', img: iconSkill },
-  { key: 'files' as const, label: '自动化', img: iconClock },
-  { key: 'outbox' as const, label: '产出物', img: iconFolder },
+  { key: 'chat' as const, label: '新建对话', img: iconNew },
+  { key: 'experts' as const, label: '专家·技能', img: iconWork },
+  { key: 'files' as const, label: '定时任务', img: iconClock },
+  { key: 'outbox' as const, label: '文件库', img: iconFolder },
 ]
 
 /** 侧栏平铺后的一组：分组标签 + 该组内的域菜单项 */
@@ -41,31 +40,27 @@ interface NavGroup {
 }
 
 /**
- * 把所有业务域的菜单项按 group 拍平成一维分组列表。
- * 顺序由 domains.yaml 的声明顺序决定（各域声明的菜单分组顺序），
- * 每个分组在侧栏里都是一个平级块，块与块之间用发丝线分割。
+ * 按当前业务域拍平菜单：只输出「切换胶囊」里选中的那个域，
+ * 未选择（activeDomain 为 null）时返回空数组 —— 侧栏不显示任何业务域菜单。
+ * 域名的顺序与分组顺序仍由 domains.yaml 的声明顺序决定（不能用
+ * getRegisteredDomains()：那是后端 bundle 注册顺序，不稳定）。
  */
-function buildNavGroups(): NavGroup[] {
+function buildNavGroups(activeDomain: string | null): NavGroup[] {
+  if (!activeDomain) return []
+  const entry = getDomainEntry(activeDomain)
+  if (!entry) return [] // 缓存里的域已被裁剪/停用
+  const items = getDomainNavItems(activeDomain)
+  // 单页域：整域就是一个块，标签用域名
+  if (items.length < 2) return [{ label: entry.manifest.label, domainKey: activeDomain, items: [] }]
+
   const groups: NavGroup[] = []
-  // 顺序取构建期生成表的键序（= domains.yaml 声明顺序）。
-  // 不能用 getRegisteredDomains() 的顺序：那是后端 bundle 注册顺序，不稳定。
-  for (const domainKey of getDomainOrder()) {
-    const entry = getDomainEntry(domainKey)
-    if (!entry) continue // 后端未启用或前端未编译该域
-    const items = getDomainNavItems(domainKey)
-    // 单页域：整域就是一个块，标签用域名
-    if (items.length < 2) {
-      groups.push({ label: entry.manifest.label, domainKey, items: [] })
-      continue
+  for (const item of items) {
+    let group = groups.find((g) => g.label === item.group)
+    if (!group) {
+      group = { label: item.group, domainKey: activeDomain, items: [] }
+      groups.push(group)
     }
-    for (const item of items) {
-      let group = groups.find((g) => g.label === item.group && g.domainKey === domainKey)
-      if (!group) {
-        group = { label: item.group, domainKey, items: [] }
-        groups.push(group)
-      }
-      group.items.push(item)
-    }
+    group.items.push(item)
   }
   return groups
 }
@@ -75,8 +70,10 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
   // 必须订阅版本号，否则首次渲染拿到的空注册表不会随注册完成而刷新。
   useSyncExternalStore(subscribeRegistryVersion, getRegistryVersion)
   const navActive = useSyncExternalStore(subscribeDomainActive, getDomainActive)
+  // 业务域菜单跟随切换胶囊：未选择时不显示任何域菜单
+  const activeDomain = useUiStore((s) => s.activeDomain)
 
-  const navGroups = buildNavGroups()
+  const navGroups = buildNavGroups(activeDomain)
   const hasDomainNav = navGroups.length > 0
 
   const handleMainItemClick = (key: typeof MAIN_MENU_ITEMS[number]['key']) => {
@@ -110,7 +107,7 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
               // 图标列用 1.25rem 而非 20px：根字号是 14px（--fs-md），
               // 1.25rem = 17.5px，与业务域菜单的图标列同宽、始终同轴；
               // 图标本身固定 16px（不随根字号缩放），与业务域菜单的 16px 图标一致。
-              className={`sidebar-nav-row grid grid-cols-[1.25rem_1fr] items-center gap-2 px-3 py-2.5 text-[length:var(--fs-sm)] font-medium text-left transition-colors duration-150 cursor-pointer mx-3 w-[calc(100%-1.5rem)] rounded-[var(--radius-control)] ${
+              className={`sidebar-nav-row grid grid-cols-[1.25rem_1fr] items-center gap-2 px-3 py-2.5 text-[length:var(--fs-md)] font-medium text-left transition-colors duration-150 cursor-pointer mx-3 w-[calc(100%-1.5rem)] rounded-[var(--radius-control)] ${
                 active
                   ? 'is-active'
                   : 'text-[var(--c-text)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)]'
@@ -150,7 +147,7 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
                     <button
                       type="button"
                       onClick={() => onNavigate(`domain:${group.domainKey}` as AppSection)}
-                      className={`sidebar-nav-row w-[calc(100%-1.5rem)] mx-3 flex items-center rounded-[var(--radius-control)] px-3 py-2.5 text-[length:var(--fs-sm)] font-semibold text-left transition-colors duration-150 cursor-pointer ${
+                      className={`sidebar-nav-row w-[calc(100%-1.5rem)] mx-3 flex items-center rounded-[var(--radius-control)] px-3 py-2.5 text-[length:var(--fs-md)] font-semibold text-left transition-colors duration-150 cursor-pointer ${
                         activeSection === `domain:${group.domainKey}`
                           ? 'is-active'
                           : 'text-[var(--c-text-secondary)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)] hover:text-[var(--c-text)]'
@@ -171,7 +168,7 @@ export function SidebarNav({ activeSection, activeConvId, onNavigate, onNewSessi
                           // 与主菜单完全同构：同样的 mx-3 + px-3 + 1.25rem 图标列 + gap-2 + py-2.5，
                           // 因此图标落在 22.5px、文字落在 48.75px、行高与行距都与主菜单一致。
                           // 字号同主菜单、字重 600；层级只靠灰字色与主菜单区分。
-                          className={`sidebar-nav-row grid w-[calc(100%-1.5rem)] mx-3 grid-cols-[1.25rem_1fr] items-center gap-2 rounded-[var(--radius-control)] px-3 py-2.5 text-[length:var(--fs-sm)] font-semibold text-left transition-colors duration-150 cursor-pointer ${
+                          className={`sidebar-nav-row grid w-[calc(100%-1.5rem)] mx-3 grid-cols-[1.25rem_1fr] items-center gap-2 rounded-[var(--radius-control)] px-3 py-2.5 text-[length:var(--fs-md)] font-semibold text-left transition-colors duration-150 cursor-pointer ${
                             active
                               ? 'is-active'
                               : 'text-[var(--c-text-secondary)] hover:bg-[color-mix(in_srgb,var(--c-text)_6%,transparent)] hover:text-[var(--c-text)]'

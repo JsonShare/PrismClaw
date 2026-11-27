@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 from prismclaw.engine.execution.capabilities.discovery_runtime import (
     SkillDiscoveryRuntime,
     SubagentDiscoveryEntry,
     SubagentDiscoveryRuntime,
     ToolDiscoveryRuntime,
 )
+from prismclaw.engine.experts.scope import tool_surface_of
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result, text_result
 from prismclaw.schema.content.content_types import StateDeltaArtifact, ToolResult
 from prismclaw.schema.services.skills import SkillInvocationState
@@ -117,9 +118,9 @@ def _render_skill_fallback(query: str, all_skills: list[Any]) -> str:
     ]
     for match in all_skills:
         lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
-        if match.marketplace_name:
-            desc = f" — {match.marketplace_description}" if match.marketplace_description else ""
-            lines.append(f"  插件：{match.marketplace_name}{desc}")
+        if match.expert_name:
+            desc = f" — {match.expert_description}" if match.expert_description else ""
+            lines.append(f"  专家包：{match.expert_name}{desc}")
     lines.append(
         "\n---\n"
         "若上方有技能符合你的任务，请立即用其精确名称调用 `activate_skill`。"
@@ -148,9 +149,9 @@ def _render_skill_matches(query: str, matches: list[Any]) -> str:
     ]
     for match in matches:
         lines.append(f"- `{match.name}`：{match.description or '未提供描述。'}")
-        if match.marketplace_name:
-            desc = f" — {match.marketplace_description}" if match.marketplace_description else ""
-            lines.append(f"  插件：{match.marketplace_name}{desc}")
+        if match.expert_name:
+            desc = f" — {match.expert_description}" if match.expert_description else ""
+            lines.append(f"  专家包：{match.expert_name}{desc}")
     lines.append(
         "\n---\n"
         "请立即用最匹配技能的精确名称调用 `activate_skill`，然后遵循注入的指令。"
@@ -161,17 +162,15 @@ def _render_skill_matches(query: str, matches: list[Any]) -> str:
 
 
 def _subagent_origin(match: SubagentDiscoveryEntry) -> str:
-    parts = []
-    if match.package:
-        parts.append(f"包 {match.package}")
-    if match.sub_plugin:
-        parts.append(f"子插件 {match.sub_plugin}")
-    return " / ".join(parts)
+    if not match.expert_name:
+        return ""
+    desc = f" — {match.expert_description}" if match.expert_description else ""
+    return f"专家包 {match.expert_name}{desc}"
 
 
 def _render_subagent_matches(query: str, matches: list[Any]) -> str:
     core = [m for m in matches if getattr(m, "is_core", False)]
-    plugin = [m for m in matches if not getattr(m, "is_core", False)]
+    expert = [m for m in matches if not getattr(m, "is_core", False)]
     lines = [
         f"根据“{query}”找到 {len(matches)} 个子代理。",
         "",
@@ -179,7 +178,7 @@ def _render_subagent_matches(query: str, matches: list[Any]) -> str:
         "逐字符复制，不要缩写或改变大小写。**",
         "",
     ]
-    for title, group in (("### 核心子代理：", core), ("### 插件子代理：", plugin)):
+    for title, group in (("### 核心子代理：", core), ("### 专家包子代理：", expert)):
         if not group:
             continue
         lines.append(title)
@@ -212,7 +211,7 @@ def _render_subagent_fallback(query: str, all_agents: list[Any]) -> str:
         "",
     ]
     for match in all_agents:
-        tag = "核心" if getattr(match, "is_core", False) else "插件"
+        tag = "核心" if getattr(match, "is_core", False) else "专家包"
         lines.append(f"- `{match.name}`（{tag}）：{match.description or '未提供描述。'}")
         origin = _subagent_origin(match)
         if origin:
@@ -244,7 +243,7 @@ class ToolSearchTool:
     side_effect = False
     effect_class = "pure_read"
 
-    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
+    def __init__(self, *, capability_catalog: RuntimeCatalog) -> None:
         registry = capability_catalog.tool_registry
         if registry is None:
             raise RuntimeError("ToolSearchTool requires capability_catalog.tool_registry")
@@ -259,11 +258,13 @@ class ToolSearchTool:
 
         skill_invocation = _coerce_skill_invocation(context)
         discovered_tools = _coerce_discovered_tools(context)
+        scope = context.session_scope
         all_surface = self._runtime.visible_surface(
             skill_invocation=skill_invocation,
             discovered_tools=discovered_tools,
             subagent_depth=context.subagent_depth,
             headless=_coerce_headless(context),
+            tool_surface=tool_surface_of(scope),
         )
         matches = self._runtime.search_visible_surface(
             query,
@@ -330,7 +331,7 @@ class SkillSearchTool:
     side_effect = False
     effect_class = "pure_read"
 
-    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
+    def __init__(self, *, capability_catalog: RuntimeCatalog) -> None:
         self._runtime = SkillDiscoveryRuntime(
             capability_catalog=capability_catalog,
         )
@@ -340,7 +341,9 @@ class SkillSearchTool:
         query = args.get("query", "")
         if not isinstance(query, str) or not query.strip():
             return error_result(call_id, "缺少必填参数 'query'")
-        matches = self._runtime.search(query, workspace_path=context.workspace_path, limit=5)
+        matches = self._runtime.search(
+            query, workspace_path=context.workspace_path, limit=5
+        )
         if not matches:
             # 0 结果兜底：列出全部技能，避免模型盲目重试同一 query 触发 doom-loop
             all_skills = self._runtime.list_all(workspace_path=context.workspace_path)
@@ -350,7 +353,7 @@ class SkillSearchTool:
 
 class SubagentSearchTool:
     name = "subagent_search"
-    description = "按领域、职责或任务检索子代理（核心与插件）。仅用于发现；调用仍用 `sub_agent`。"
+    description = "按领域、职责或任务检索子代理（核心与专家包）。仅用于发现；调用仍用 `sub_agent`。"
     tool_class = "read"
     parameters = {
         "type": "object",
@@ -361,7 +364,7 @@ class SubagentSearchTool:
             },
             "package": {
                 "type": "string",
-                "description": "可选：限定插件包名或子插件名。",
+                "description": "可选：限定专家包名。",
             },
             "limit": {
                 "type": "integer",
@@ -374,7 +377,7 @@ class SubagentSearchTool:
     side_effect = False
     effect_class = "pure_read"
 
-    def __init__(self, *, capability_catalog: CapabilityCatalogService) -> None:
+    def __init__(self, *, capability_catalog: RuntimeCatalog) -> None:
         self._runtime = SubagentDiscoveryRuntime(capability_catalog=capability_catalog)
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
@@ -388,20 +391,23 @@ class SubagentSearchTool:
         )
         raw_limit = args.get("limit", 10)
         limit = raw_limit if isinstance(raw_limit, int) and not isinstance(raw_limit, bool) else 10
+        _active_owners = (
+            context.session_scope.tool_owners if context.session_scope is not None else None
+        )
         matches = self._runtime.search(
             query,
             package=package,
             limit=limit,
-            active_plugins=context.tool_scope,
+            active_experts=_active_owners,
         )
         if not matches:
-            # 0 结果兜底：列出范围内插件子代理，避免模型盲目重试同一 query
+            # 0 结果兜底：列出范围内专家包子代理，避免模型盲目重试同一 query
             return text_result(
                 call_id,
                 _render_subagent_fallback(
                     query,
                     self._runtime.list_agents(
-                        limit=20, package=package, active_plugins=context.tool_scope
+                        limit=20, package=package, active_experts=_active_owners
                     ),
                 ),
             )

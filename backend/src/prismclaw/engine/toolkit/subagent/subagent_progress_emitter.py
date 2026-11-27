@@ -20,12 +20,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
 
 from prismclaw.schema.content.streaming import SubagentProgressBatch, SubagentProgressItem
-
-if TYPE_CHECKING:
-    from prismclaw.engine.execution.handoff.supervisor import CapExceededInfo
 
 logger = logging.getLogger(__name__)
 
@@ -109,44 +105,3 @@ class SubagentProgressEmitter:
 
 
 __all__ = ["SubagentProgressEmitter", "SubagentProgressSink"]
-
-
-async def _emit_cap_exceeded_synthetic_progress(
-    *,
-    sink: SubagentProgressSink | None,
-    cap_info_by_call: dict[str, CapExceededInfo],
-) -> None:
-    import uuid as _uuid
-
-    # 本地的包级重导入已删除：SubagentProgressBatch / SubagentProgressItem 均在
-    # 模块顶部从 prismclaw.schema.content.streaming 导入，而 schema.agent 的惰性
-    # 门面表只收录 SubagentProgressBatch、没有 SubagentProgressItem，此处的包级
-    # 导入会直接 ImportError（覆盖掉顶部正确的绑定）。
-
-    if sink is None:
-        return
-
-    items: list[SubagentProgressItem] = []
-    for call_id, cap_info in cap_info_by_call.items():
-        synthetic_name = f"$synthetic:chain_cap_exceeded:{cap_info.requested_target}"
-        items.append(
-            SubagentProgressItem(
-                sub_session_id=f"$synthetic#{call_id}",
-                subagent_name=synthetic_name,
-                turn=0,
-                max_turns=1,
-                partial_status="failed",
-                current_tool=None,
-                duration_so_far=0.0,
-                handoff_chain_id=cap_info.handoff_chain_id,
-                from_subagent=cap_info.source_subagent,
-            )
-        )
-    if not items:
-        return
-    batch = SubagentProgressBatch(
-        progress_batch_id=f"$synthetic-cap-{_uuid.uuid4().hex[:12]}",
-        batch_seq=1,
-        items=items,
-    )
-    await sink(batch)

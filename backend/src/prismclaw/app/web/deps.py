@@ -57,7 +57,7 @@ class WebDeps:
     # auth 相关
     user_repository: Any = None
     apply_settings_fn: Any = (
-        None  # apply_app_settings(app, settings, *, invalidate_plugin_runtime=True)
+        None  # apply_app_settings(app, settings, *, invalidate_expert_runtime=True)
     )
     cleanup_working_dir_fn: Any = None  # async cleanup_working_dir(working_dir)
     workspace_runner_deps_fn: (
@@ -66,7 +66,6 @@ class WebDeps:
     workspace_runner_deps_state_fn: Any = (
         None  # get_app_workspace_runner_deps_state(app, user_id, workspace_root)
     )
-    plugin_trust_fns: Any = None  # 插件信任判定函数，来自 engine.services.plugins.trust
     dream_admin_ops: Any = None  # DreamAdminOps class from engine.dream.governance.ops
     trajectory_persistence: Any = None  # TrajectoryPersistence implementation
     prompt_optimizer_factory: Callable[[Any], PromptOptimizer] | None = None
@@ -75,7 +74,7 @@ class WebDeps:
     review_registry_fn: Any = (
         None  # get_review_registry(workspace_root) from engine.services.review_service
     )
-    reload_plugin_fn: Any = None  # reload_app_plugin_runtime from app.plugins.reload_service
+    reload_expert_fn: Any = None  # reload_app_expert_runtime from app.experts.reload_service
     takeover_fns: Any = None  # dict of takeover functions from app.gateway.takeover
     upload_fns: Any = None  # 上传链路实现，来自 engine.services.upload_service
     review_utils: Any = None  # 审阅工具集，来自 engine.services.review_service

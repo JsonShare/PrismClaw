@@ -112,7 +112,7 @@ export const DocxReviewHost = forwardRef<DocxReviewHostRef, DocxReviewHostProps>
         <DocxEditor
           ref={editorRef}
           documentBuffer={buffer}
-          author="PrismClaw User"
+          author="PrismWork User"
           readOnly
           mode="suggesting"
           showToolbar={false}

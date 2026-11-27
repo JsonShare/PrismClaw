@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, ChevronDown, Clock, MessageSquare, MoreHorizontal, Play, RefreshCw, Trash2, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import {
+  AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock,
+  MessageSquare, Mic, MoreHorizontal, Pencil, Play, Plus, Search, SquarePen, Trash2, X,
+} from 'lucide-react'
+import { FolderIcon, RefreshIcon } from '../../../components/icons/SystemIcons'
 import { apiUrl } from '../../../lib/system-adapter'
 import { useSessionStore, useUiStore } from '../../../stores'
 import { PrimaryButton } from '../../../components/ui/PrimaryButton'
-import { HairlineDivider } from '../../../components/ui/HairlineDivider'
 import { useToast } from '../../../lib/toast'
+import templatesData from '../../../data/scheduledTaskTemplates.json'
 
 type ScheduleType = 'minute' | 'hour' | 'day' | 'week' | 'month'
 type ScheduleWeekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
@@ -24,6 +29,31 @@ type ScheduledJob = {
   lastStatus: string
   workspaceId: string
   createdAt: number
+  validFrom: number | null
+  validUntil: number | null
+}
+
+/** 后端 /api/scheduled-tasks 返回的任务结构（snake_case） */
+type ApiScheduledJob = {
+  id: string
+  name: string
+  instruction: string
+  schedule: ScheduleSpec
+  enabled: boolean
+  last_status?: string
+  workspace_id?: string
+  created_at?: number
+  valid_from?: number | null
+  valid_until?: number | null
+}
+
+/** WS 事件 prismclaw:scheduler-event 的 data 字段 */
+type SchedulerEventPayload = {
+  task_id?: string
+  run_id?: string
+  status?: string
+  error?: unknown
+  reason?: unknown
 }
 
 type RunRecord = {
@@ -55,6 +85,111 @@ const WEEKDAY_LABEL: Record<ScheduleWeekday, string> = {
 // 「执行历史」分页：每轮每个任务拉取的运行条数（后端 /runs 支持 limit/offset，上限 100）
 const HISTORY_PAGE_SIZE = 20
 
+// 周期选择器的候选项（时 / 分 / 日）
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+const MINUTE_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'))
+const MONTH_DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1))
+
+/** 周期文案：每 30 分钟 / 每小时 00 分 / 每天 09:00 / 每周一 20:00 / 每月 1 日 09:00 */
+function scheduleLabel(spec: ScheduleSpec): string {
+  const pad2 = (v: string | number) => String(v).padStart(2, '0')
+  if (spec.type === 'minute') return `每 ${spec.everyMinutes} 分钟`
+  if (spec.type === 'hour') return `每小时 ${pad2(spec.minute)} 分`
+  if (spec.type === 'day') return `每天 ${pad2(spec.hour)}:${pad2(spec.minute)}`
+  if (spec.type === 'week') return `每周${WEEKDAY_LABEL[spec.weekday]} ${pad2(spec.hour)}:${pad2(spec.minute)}`
+  return `每月 ${spec.day} 日 ${pad2(spec.hour)}:${pad2(spec.minute)}`
+}
+
+type TaskTemplate = {
+  key: string
+  name: string
+  description: string
+  schedule: ScheduleSpec
+  scheduleLabel: string
+  instruction: string
+}
+
+// 推荐任务模板：文案与指令维护在 src/data/scheduledTaskTemplates.json
+const TEMPLATES = (templatesData as unknown as { templates: TaskTemplate[] }).templates
+
+/** JS getDay() 的星期索引：0=周日 */
+const WEEKDAY_INDEX: Record<ScheduleWeekday, number> = {
+  mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 0,
+}
+
+/** 按周期规则推算下一次执行时间，返回 MM-DD HH:mm（本地时区）；超出有效期返回 null。 */
+function nextRunLabel(
+  spec: ScheduleSpec,
+  now = new Date(),
+  validFrom: number | null = null,
+  validUntil: number | null = null,
+): string | null {
+  // 有效期开始前不执行：把推算锚点挪到开始日前 1 秒
+  const start = validFrom != null && validFrom * 1000 > now.getTime()
+    ? new Date(validFrom * 1000 - 1000)
+    : now
+  const pad = (n: number) => String(n).padStart(2, '0')
+  let t: Date
+  if (spec.type === 'minute') {
+    t = new Date(start.getTime() + spec.everyMinutes * 60_000)
+  } else if (spec.type === 'hour') {
+    t = new Date(start)
+    t.setMinutes(Number(spec.minute), 0, 0)
+    if (t.getTime() <= start.getTime()) t.setHours(t.getHours() + 1)
+  } else if (spec.type === 'day') {
+    t = new Date(start)
+    t.setHours(Number(spec.hour), Number(spec.minute), 0, 0)
+    if (t.getTime() <= start.getTime()) t.setDate(t.getDate() + 1)
+  } else if (spec.type === 'week') {
+    t = new Date(start)
+    t.setHours(Number(spec.hour), Number(spec.minute), 0, 0)
+    let diff = (WEEKDAY_INDEX[spec.weekday] - t.getDay() + 7) % 7
+    if (diff === 0 && t.getTime() <= start.getTime()) diff = 7
+    t.setDate(t.getDate() + diff)
+  } else {
+    const at = (monthOffset: number) =>
+      new Date(start.getFullYear(), start.getMonth() + monthOffset, Number(spec.day), Number(spec.hour), Number(spec.minute), 0, 0)
+    t = at(0)
+    if (t.getTime() <= start.getTime()) t = at(1)
+  }
+  if (validUntil != null && t.getTime() / 1000 > validUntil) return null
+  return `${pad(t.getMonth() + 1)}-${pad(t.getDate())} ${pad(t.getHours())}:${pad(t.getMinutes())}`
+}
+
+/** 本地日期键（YYYY-MM-DD）↔ epoch 秒：开始日 00:00:00 / 结束日 23:59:59 */
+function dateKeyFromTs(ts: number): string {
+  const d = new Date(ts * 1000)
+  const pad = (v: number) => String(v).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function startOfDaySec(key: string): number {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d, 0, 0, 0, 0).getTime() / 1000
+}
+
+function endOfDaySec(key: string): number {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Date(y, m - 1, d, 23, 59, 59, 0).getTime() / 1000
+}
+
+function todayKey(): string {
+  return dateKeyFromTs(Date.now() / 1000)
+}
+
+/** 卡片有效期文案（MM-DD 紧凑展示） */
+function validityLabel(from: number | null, until: number | null): string {
+  const short = (ts: number) => dateKeyFromTs(ts).slice(5)
+  if (from != null && until != null) return `${short(from)} ~ ${short(until)}`
+  if (from != null) return `${short(from)} 起`
+  return `至 ${short(until as number)}`
+}
+
+/** 有效期已结束（用于停用横幅区分「到期」与「连续失败」） */
+function isValidityExpired(validUntil: number | null): boolean {
+  return validUntil != null && Date.now() / 1000 > validUntil
+}
+
 interface Props {
   token: string | null
   onSelectSession: (convId: string) => Promise<void>
@@ -73,7 +208,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
   // 执行状态由 WS 事件驱动；终态与运行历史统一由 /runs 恢复，不用定时器伪造。
   const [liveRuns, setLiveRuns] = useState<Record<string, LiveRun>>({})
   const [runsByJob, setRunsByJob] = useState<Record<string, RunRecord[]>>({})
-  // 页面级视图切换：任务列表 / 执行历史（执行历史从卡片内嵌改为独立 tab 单独展示）
+  // 页面级视图：定时任务 / 执行记录
   const [view, setView] = useState<'tasks' | 'history'>('tasks')
   // 事件回调只需要读任务名。放进依赖数组会让每次 fetchTasks() 都注销/重注册
   // 监听，连续帧（熔断先发 disabled 再发 completed）存在丢失窗口，故用 ref。
@@ -97,7 +232,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
       })
       if (res.status === 401) { onLogout(); return [] }
       if (!res.ok) return []
-      const data: any[] = await res.json()
+      const data: ApiScheduledJob[] = await res.json()
       const jobs: ScheduledJob[] = data.map((t) => ({
         id: t.id,
         name: t.name,
@@ -107,6 +242,8 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
         lastStatus: t.last_status ?? 'idle',
         workspaceId: t.workspace_id ?? 'default',
         createdAt: typeof t.created_at === 'number' ? t.created_at : 0,
+        validFrom: typeof t.valid_from === 'number' ? t.valid_from : null,
+        validUntil: typeof t.valid_until === 'number' ? t.valid_until : null,
       }))
       setScheduledJobs(jobs)
       return jobs.map((j) => j.id)
@@ -135,6 +272,22 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
       } catch {
         setScheduledJobs((prev) => prev.map((t) => (t.id === job.id ? { ...t, enabled: job.enabled } : t)))
       }
+    },
+    [token, onLogout, fetchTasks],
+  )
+
+  const deleteJob = useCallback(
+    async (job: ScheduledJob) => {
+      if (!token) return
+      if (!confirm(`确认删除任务「${job.name}」？此操作不可撤销。`)) return
+      try {
+        const res = await fetch(apiUrl(`/api/scheduled-tasks/${encodeURIComponent(job.id)}`), {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.status === 401) { onLogout(); return }
+        await fetchTasks()
+      } catch {}
     },
     [token, onLogout, fetchTasks],
   )
@@ -191,11 +344,11 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
   // 真实执行状态：started / completed 驱动，终态与历史交给 /runs。
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { type?: string; data?: any } | undefined
+      const detail = (e as CustomEvent).detail as { type?: string; data?: SchedulerEventPayload } | undefined
       const type = detail?.type
       const data = detail?.data
       const taskId = typeof data?.task_id === 'string' ? data.task_id : null
-      const name = scheduledJobsRef.current.find((j) => j.id === taskId)?.name ?? '自动化任务'
+      const name = scheduledJobsRef.current.find((j) => j.id === taskId)?.name ?? '定时任务'
 
       if (type === 'scheduled_task.started' && taskId) {
         setLiveRuns((prev) => ({
@@ -220,7 +373,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
         }
       } else if (type === 'scheduled_task.disabled') {
         toast(
-          `「${name}」因连续执行失败已被自动停用${data?.reason ? `（${data.reason}）` : ''}，可在自动化页重新启用。`,
+          `「${name}」因连续执行失败已被自动停用${data?.reason ? `（${data.reason}）` : ''}，可在定时任务页重新启用。`,
           'info',
         )
       }
@@ -242,7 +395,13 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
   const [scheduleDraftWeekday, setScheduleDraftWeekday] = useState<ScheduleWeekday>('mon')
   const [scheduleDraftMonthDay, setScheduleDraftMonthDay] = useState('1')
   const [scheduleDraftWorkspaceId, setScheduleDraftWorkspaceId] = useState(activeWorkspaceId || 'default')
+  // 有效期：'' = 未设置（长期有效）。区间为本地自然日，提交时转 epoch 秒。
+  const [scheduleDraftValidFrom, setScheduleDraftValidFrom] = useState('')
+  const [scheduleDraftValidUntil, setScheduleDraftValidUntil] = useState('')
   const [scheduledMenuJobId, setScheduledMenuJobId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [newTaskMenuOpen, setNewTaskMenuOpen] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'paused'>('all')
 
   const isEditingJob = scheduleEditingJobId !== null
 
@@ -268,19 +427,45 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
     }
   }, [scheduledMenuJobId])
 
-  const scheduleLabel = useCallback((spec: ScheduleSpec): string => {
-    const pad2 = (v: string | number) => String(v).padStart(2, '0')
-    if (spec.type === 'minute') return `每 ${spec.everyMinutes} 分钟`
-    if (spec.type === 'hour') return `每小时 ${pad2(spec.minute)} 分`
-    if (spec.type === 'day') return `每天 ${pad2(spec.hour)}:${pad2(spec.minute)}`
-    if (spec.type === 'week') return `每周${WEEKDAY_LABEL[spec.weekday]} ${pad2(spec.hour)}:${pad2(spec.minute)}`
-    return `每月 ${spec.day} 日 ${pad2(spec.hour)}:${pad2(spec.minute)}`
-  }, [])
+  useEffect(() => {
+    if (!newTaskMenuOpen) return
+    function onDoc(event: MouseEvent) {
+      const target = event.target
+      if (!(target instanceof Element)) return
+      if (target.closest('[data-new-task-menu-root]')) return
+      setNewTaskMenuOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setNewTaskMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [newTaskMenuOpen])
 
   const displayedJobs = useMemo(() => {
     // 按创建时间展示（最新创建的在前），不再按 enabled/name 排序
     return [...scheduledJobs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
   }, [scheduledJobs])
+
+  const enabledCount = useMemo(() => displayedJobs.filter((j) => j.enabled).length, [displayedJobs])
+
+  // 搜索 + 状态筛选：任务名 / 指令文本忽略大小写
+  const filteredJobs = useMemo(() => {
+    const keyword = query.trim().toLowerCase()
+    return displayedJobs.filter((job) => {
+      if (statusFilter === 'enabled' && !job.enabled) return false
+      if (statusFilter === 'paused' && job.enabled) return false
+      if (!keyword) return true
+      return (
+        job.name.toLowerCase().includes(keyword) ||
+        job.instruction.toLowerCase().includes(keyword)
+      )
+    })
+  }, [displayedJobs, query, statusFilter])
 
   // 执行历史：聚合所有任务的运行记录，按触发时间倒序（最新在前），供独立「执行历史」tab 展示。
   const historyRecords = useMemo<HistoryRecord[]>(() => {
@@ -302,7 +487,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
   )
 
   const createTitledSession = useCallback(
-    async (title: string, type: 'normal' | 'scheduled' = 'normal'): Promise<string> => {
+    async (title: string): Promise<string> => {
       let convId: string | null = null
       if (token) {
         try {
@@ -326,15 +511,15 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
         convId = `conv_${Date.now()}`
       }
 
-      const safeTitle = (title || '').trim() || '新任务'
+      const safeTitle = title.trim() || '新任务'
       // 与 useConversationController.sendMessage 保持一致：必须带 workspaceId，
-      // 否则 groupedHistoryConversations 会把它错放到"默认"分组。
+      // 否则 groupedHistoryConversations 会把它错放到「默认」分组。
       prependConversation({
         id: convId,
         title: safeTitle,
         updatedAt: Date.now(),
         active: false,
-        type,
+        type: 'normal',
         workspaceId: activeWorkspaceId || 'default',
       })
 
@@ -348,7 +533,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
             },
             body: JSON.stringify({ title: safeTitle }),
           })
-          if (!res.ok && res.status === 401) onLogout()
+          if (res.status === 401) onLogout()
         } catch {}
       }
 
@@ -404,12 +589,10 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
     [fetchTasks, onLogout, toast, token],
   )
 
-  /** Re-populate schedule-spec derived drafts from a ScheduleSpec. Does not
-   * touch name/instruction — those are caller-owned (openCreate clears them;
-   * openEdit seeds them from the existing job first). */
+  /** 按 ScheduleSpec 回填周期相关的 draft；名称 / 指令由调用方自行设置。 */
   const resetDraftFromSpec = useCallback((spec: ScheduleSpec | null) => {
     if (spec === null) {
-      // 新建：用 openCreate 的静态默认值（每分钟 + 30 分钟执行）
+      // 新建：默认每 30 分钟
       setScheduleDraftType('minute')
       setScheduleDraftEveryMinutes('30')
       setScheduleDraftHourMinute('00')
@@ -444,6 +627,8 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
     setScheduleDraftName('')
     setScheduleDraftInstruction('')
     setScheduleDraftWorkspaceId(activeWorkspaceId || 'default')
+    setScheduleDraftValidFrom('')
+    setScheduleDraftValidUntil('')
     resetDraftFromSpec(null)
     setScheduleModalOpen(true)
   }, [resetDraftFromSpec, activeWorkspaceId])
@@ -455,14 +640,62 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
     setScheduleDraftName(job.name)
     setScheduleDraftInstruction(job.instruction)
     setScheduleDraftWorkspaceId(job.workspaceId || activeWorkspaceId || 'default')
+    setScheduleDraftValidFrom(job.validFrom != null ? dateKeyFromTs(job.validFrom) : '')
+    setScheduleDraftValidUntil(job.validUntil != null ? dateKeyFromTs(job.validUntil) : '')
     resetDraftFromSpec(job.schedule)
     setScheduleModalOpen(true)
   }, [resetDraftFromSpec, activeWorkspaceId])
+
+  /** 从推荐模板进入创建弹窗：名称 / 指令 / 周期预填，用户确认后才真正创建。 */
+  const openCreateFromTemplate = useCallback((tpl: TaskTemplate) => {
+    setScheduleEditingJobId(null)
+    setScheduleDraftName(tpl.name)
+    setScheduleDraftInstruction(tpl.instruction)
+    setScheduleDraftWorkspaceId(activeWorkspaceId || 'default')
+    setScheduleDraftValidFrom('')
+    setScheduleDraftValidUntil('')
+    resetDraftFromSpec(tpl.schedule)
+    setScheduleModalOpen(true)
+  }, [resetDraftFromSpec, activeWorkspaceId])
+
+  /** 通过对话创建：新开会话并预填创建任务的指令。 */
+  const createViaConversation = useCallback(async () => {
+    setNewTaskMenuOpen(false)
+    const convId = await createTitledSession('通过对话创建自动化')
+    setPendingComposerPrefill({
+      text: '我想创建一个自动化任务「每日AI新闻整理」，需要「搜索过去24小时内的AI相关新闻，完成分类与重要性评级后，在界面以结构化方式输出结果」，「每天上午10点」执行，创建后立即启用。',
+      nonce: Date.now(),
+    })
+    setActiveSection('chat')
+    await onSelectSession(convId)
+  }, [createTitledSession, onSelectSession, setActiveSection, setPendingComposerPrefill])
 
   const closeScheduleModal = useCallback(() => {
     setScheduleModalOpen(false)
     setScheduleEditingJobId(null)
   }, [])
+
+  /** 预览执行：不落库，直接把当前执行内容带到新会话里试跑。 */
+  const previewModalTask = useCallback(async () => {
+    const instruction = scheduleDraftInstruction.trim()
+    if (!instruction) return
+    const name = scheduleDraftName.trim()
+    const convId = await createTitledSession(name ? `预览：${name}` : '任务预览')
+    setPendingComposerPrefill({ text: instruction, nonce: Date.now() })
+    closeScheduleModal()
+    setActiveSection('chat')
+    toast('已在新会话中预填执行内容，确认后发送即可预览', 'info')
+    await onSelectSession(convId)
+  }, [
+    closeScheduleModal,
+    createTitledSession,
+    onSelectSession,
+    scheduleDraftInstruction,
+    scheduleDraftName,
+    setActiveSection,
+    setPendingComposerPrefill,
+    toast,
+  ])
 
   const selectedScheduleSpec = useMemo<ScheduleSpec>(() => {
     return scheduleDraftType === 'minute'
@@ -490,6 +723,14 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
     if (!name || !instruction || !token) return
     const schedule = selectedScheduleSpec
     const isEdit = scheduleEditingJobId !== null
+    // 有效期：只选开始日期时视为单日区间；两者皆空 = 长期有效。
+    // 同时传 max_age_days=0，避免后端 30 天默认值把长期任务静默过期。
+    const validFromTs = scheduleDraftValidFrom ? startOfDaySec(scheduleDraftValidFrom) : null
+    const validUntilTs = scheduleDraftValidUntil
+      ? endOfDaySec(scheduleDraftValidUntil)
+      : scheduleDraftValidFrom
+        ? endOfDaySec(scheduleDraftValidFrom)
+        : null
 
     try {
       const url = isEdit
@@ -498,7 +739,15 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, instruction, schedule, workspace_id: scheduleDraftWorkspaceId }),
+        body: JSON.stringify({
+          name,
+          instruction,
+          schedule,
+          workspace_id: scheduleDraftWorkspaceId,
+          valid_from: validFromTs,
+          valid_until: validUntilTs,
+          max_age_days: 0,
+        }),
       })
       if (res.status === 401) { onLogout(); return }
       if (!res.ok) return
@@ -514,6 +763,8 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
     onLogout,
     scheduleDraftInstruction,
     scheduleDraftName,
+    scheduleDraftValidFrom,
+    scheduleDraftValidUntil,
     scheduleDraftWorkspaceId,
     scheduleEditingJobId,
     selectedScheduleSpec,
@@ -522,217 +773,320 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
 
   return (
     <div className="flex-1 min-w-0 min-h-0 flex flex-col relative app-panel overflow-hidden">
-    <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-      <div className="px-8 pt-7 pb-5 shrink-0">
+      {/* 页头：定时任务 / 执行记录 切换 + 搜索 + 新建任务（对话创建 / 自定义创建） */}
+      <div className="px-6 md:px-[28px] pt-[56px] pb-[20px] shrink-0">
         <div className="max-w-[1200px] mx-auto w-full flex items-start justify-between gap-6">
-          <div className="min-w-0">
-            <div className="text-[length:var(--fs-xl)] font-semibold text-[var(--c-text)] tracking-tight">自动化</div>
-            <div className="mt-1 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-              设置定时任务，让助手按时自动执行，或通过对话快速创建
-            </div>
+          <div className="flex items-center gap-[26px] min-w-0 pt-[2px]">
+            {([
+              ['tasks', '定时任务'],
+              ['history', '执行记录'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setView(key)}
+                className={`text-[19px] leading-[26px] transition-colors cursor-pointer ${
+                  view === key
+                    ? 'font-semibold text-[var(--c-text)]'
+                    : 'font-normal text-[color-mix(in_srgb,var(--c-text-secondary)_55%,var(--c-text-tertiary))] hover:text-[var(--c-text)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="shrink-0 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void fetchTasks()}
-              className="h-10 w-10 rounded-[var(--radius-card)] hover:bg-[var(--c-surface-2)] transition-colors cursor-pointer grid place-items-center"
-              title="刷新"
-            >
-              <RefreshCw size={18} strokeWidth={2} className="text-[var(--c-text-secondary)]" />
-            </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                void (async () => {
-                  const convId = await createTitledSession('通过对话创建自动化')
-                  // 跳转会话页后预填创建自动化任务的指令，用户可直接发送或微调。
-                  setPendingComposerPrefill({
-                    text: '我想创建一个自动化任务「每日AI新闻整理」，需要「搜索过去24小时内的AI相关新闻，完成分类与重要性评级后，在界面以结构化方式输出结果」，「每天上午10点」执行，创建后立即启用。',
-                    nonce: Date.now(),
-                  })
-                  setActiveSection('chat')
-                  await onSelectSession(convId)
-                })()
-              }}
-              className="btn btn-lg btn-secondary"
-            >
-              <MessageSquare size={15} strokeWidth={2} />
-              通过对话创建
-            </button>
+          <div className="shrink-0 flex items-center gap-[10px] mt-[2px]">
+            {view === 'tasks' ? (
+              <div className="relative">
+                <Search
+                  size={14}
+                  className="pointer-events-none absolute left-[12px] top-1/2 -translate-y-1/2 text-[var(--c-text-tertiary)]"
+                />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="搜索定时任务"
+                  className="h-[32px] w-[180px] pl-[32px] pr-[12px] rounded-[var(--radius-control)] border border-[var(--c-border)] bg-[var(--c-surface)]
+                   text-[14px] text-[var(--c-text)] placeholder:text-[var(--c-text-tertiary)]
+                   hover:border-[var(--c-border-strong)] focus:outline-none focus:border-[var(--c-accent)]
+                   focus:ring-1 focus:ring-[var(--c-accent)]/20 transition-colors"
+                />
+              </div>
+            ) : null}
 
-            <PrimaryButton
-              type="button"
-              onClick={openCreateModal}
-              size="lg"
-            >
-              + 创建新任务
-            </PrimaryButton>
+            <div className="relative" data-new-task-menu-root>
+              <PrimaryButton
+                type="button"
+                size="xs"
+                className="!px-[16px] !text-[14px]"
+                onClick={() => setNewTaskMenuOpen((v) => !v)}
+              >
+                <span className="inline-flex items-center gap-[6px]">
+                  <Plus size={14} strokeWidth={2.2} className="shrink-0" />
+                  新建任务
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${newTaskMenuOpen ? 'rotate-180' : ''}`}
+                  />
+                </span>
+              </PrimaryButton>
+
+              {newTaskMenuOpen ? (
+                <div className="absolute right-0 top-full mt-1.5 z-50">
+                  <div className="overlay-panel w-[184px] p-1.5 rounded-[var(--radius-card)] animate-in">
+                    <button
+                      type="button"
+                      onClick={() => void createViaConversation()}
+                      className="w-full h-9 flex items-center gap-2.5 px-2.5 rounded-[var(--radius-md)] text-left
+                       text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]
+                       hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      <MessageSquare size={15} className="shrink-0 text-[var(--c-text-secondary)]" />
+                      通过对话创建
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewTaskMenuOpen(false)
+                        openCreateModal()
+                      }}
+                      className="w-full h-9 flex items-center gap-2.5 px-2.5 rounded-[var(--radius-md)] text-left
+                       text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]
+                       hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      <SquarePen size={15} className="shrink-0 text-[var(--c-text-secondary)]" />
+                      自定义创建
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="max-w-[1200px] mx-auto w-full pb-10">
-          <div className="flex items-center gap-8 mb-5 border-b border-[var(--c-border)]/50">
-            <button
-              type="button"
-              onClick={() => setView('tasks')}
-              className={`relative pl-3 pr-3 pb-2.5 text-[length:var(--fs-lg)] font-semibold transition-colors cursor-pointer ${
-                view === 'tasks'
-                  ? 'text-[var(--c-text)]'
-                  : 'text-[var(--c-text-secondary)] hover:text-[var(--c-text)]'
-              }`}
-            >
-              任务列表
-              {view === 'tasks' ? (
-                <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[var(--c-accent)]" />
-              ) : null}
-            </button>
-            <button
-              type="button"
-              onClick={() => setView('history')}
-              className={`relative pl-3 pr-3 pb-2.5 text-[length:var(--fs-lg)] font-semibold transition-colors cursor-pointer ${
-                view === 'history'
-                  ? 'text-[var(--c-text)]'
-                  : 'text-[var(--c-text-secondary)] hover:text-[var(--c-text)]'
-              }`}
-            >
-              执行历史
-              {view === 'history' ? (
-                <span className="absolute left-3 right-3 -bottom-px h-0.5 rounded-full bg-[var(--c-accent)]" />
-              ) : null}
-            </button>
-          </div>
-
+      <div className="flex-1 overflow-y-auto px-6 md:px-[28px] pb-10">
+        <div className="max-w-[1200px] mx-auto w-full">
           {view === 'tasks' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayedJobs.map((job) => (
-              <div
-                key={job.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openEditModal(job)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    openEditModal(job)
-                  }
-                }}
-                className="app-card flex flex-col h-full px-5 pt-5 pb-4 cursor-pointer transition-all hover:border-[var(--c-border-strong)] hover:bg-[var(--c-surface)]/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/30"
-              >
-                <div className="flex items-start justify-between">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void setEnabled(job, !job.enabled)
-                    }}
-                    className={`h-6 w-11 rounded-full border transition-colors cursor-pointer flex items-center shrink-0 ${
-                      job.enabled
-                        ? 'bg-[var(--c-accent)] border-[var(--c-accent)]'
-                        : 'bg-[var(--c-border)] border-[var(--c-border)]'
-                    }`}
-                    title={job.enabled ? '已开启' : '已关闭'}
-                    aria-label={job.enabled ? '已开启' : '已关闭'}
-                  >
-                    <span
-                      className={`h-5 w-5 rounded-full bg-white transition-transform ${
-                        job.enabled ? 'translate-x-5' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
+            <>
+              {displayedJobs.length === 0 ? (
+                <EmptyScheduledTasks />
+              ) : (
+                <>
+                  {/* 状态筛选 */}
+                  <div className="mb-[16px] flex items-center gap-[10px]">
+                    {([
+                      ['all', '全部', displayedJobs.length],
+                      ['enabled', '已启用', enabledCount],
+                      ['paused', '已暂停', displayedJobs.length - enabledCount],
+                    ] as const).map(([key, label, count]) => {
+                      const active = statusFilter === key
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => setStatusFilter(key)}
+                          className={`h-[28px] px-[10px] rounded-[6px] text-[14px] transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-[var(--c-accent-soft)] text-[var(--c-accent)] font-semibold'
+                              : 'text-[var(--c-text-secondary)] font-medium hover:bg-[var(--c-surface-2)] hover:text-[var(--c-text)]'
+                          }`}
+                        >
+                          {label} ({count})
+                        </button>
+                      )
+                    })}
+                  </div>
 
-                  <div className="relative" data-scheduled-menu-root>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setScheduledMenuJobId((v) => (v === job.id ? null : job.id))
-                      }}
-                      data-scheduled-menu-button
-                      className="h-8 w-8 rounded-[var(--radius-control)] hover:bg-[var(--c-surface-2)]/50 transition-colors cursor-pointer grid place-items-center"
-                      aria-label="更多"
-                      title="更多"
-                    >
-                      <MoreHorizontal size={16} className="text-[var(--c-text-secondary)]" />
-                    </button>
+                  {filteredJobs.length === 0 ? (
+                    <div className="py-16 text-center text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
+                      当前筛选下暂无任务
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[16px]">
+                      {filteredJobs.map((job) => (
+                        <div
+                          key={job.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openEditModal(job)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              openEditModal(job)
+                            }
+                          }}
+                          className="app-card group flex flex-col h-full px-[16px] pt-[16px] pb-[18px] cursor-pointer transition-colors hover:border-[var(--c-border-strong)] focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/30"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="min-w-0 text-[14px] leading-[21px] font-semibold text-[var(--c-text)] truncate" title={job.name}>
+                              {job.name}
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void setEnabled(job, !job.enabled)
+                              }}
+                              className={`h-[20px] w-[36px] p-[2px] rounded-full transition-colors cursor-pointer flex items-center shrink-0 ${
+                                job.enabled
+                                  ? 'bg-[var(--c-accent)]'
+                                  : 'bg-[var(--c-border)]'
+                              }`}
+                              title={job.enabled ? '已开启' : '已关闭'}
+                              aria-label={job.enabled ? '已开启' : '已关闭'}
+                            >
+                              <span
+                                className={`h-[16px] w-[16px] rounded-full bg-white shadow-[0_1px_2px_rgba(15,20,32,0.18)] transition-transform ${
+                                  job.enabled ? 'translate-x-[16px]' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
 
-                    {scheduledMenuJobId === job.id ? (
-                      <div className="absolute right-0 top-full mt-1 z-50">
-                        <div className="overlay-panel min-w-[148px] py-1 rounded-[var(--radius-card)] overflow-hidden animate-in">
-                          <button
-                            type="button"
-                            disabled={Boolean(liveRuns[job.id])}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setScheduledMenuJobId(null)
-                              void triggerScheduledRun(job.id)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] text-left text-[length:var(--fs-sm)] font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {liveRuns[job.id] ? (
-                              <span className="h-3.5 w-3.5 rounded-full border-2 border-[var(--c-text-secondary)] border-t-transparent animate-spin shrink-0" />
+                          {!job.enabled && job.lastStatus === 'disabled' ? (
+                            isValidityExpired(job.validUntil) ? (
+                              <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--c-warning-soft)] px-3 py-2 text-[length:var(--fs-sm)] text-[var(--c-warning)]">
+                                <Calendar size={14} className="shrink-0" />
+                                <span className="flex-1 leading-snug">有效期已结束，任务已自动停用</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); openEditModal(job) }}
+                                  className="shrink-0 font-medium underline underline-offset-2 hover:opacity-80 cursor-pointer"
+                                >
+                                  编辑有效期
+                                </button>
+                              </div>
                             ) : (
-                              <Play size={14} className="shrink-0" />
-                            )}
-                            {liveRuns[job.id]?.status === 'pending' ? '排队中…' : liveRuns[job.id] ? '执行中…' : '立即执行'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              if (!token) return
-                              if (!confirm(`确认删除任务「${job.name}」？此操作不可撤销。`)) return
-                              fetch(apiUrl(`/api/scheduled-tasks/${encodeURIComponent(job.id)}`), {
-                                method: 'DELETE',
-                                headers: { Authorization: `Bearer ${token}` },
-                              }).then((res) => { if (res.status === 401) onLogout(); void fetchTasks() }).catch(() => {})
-                              setScheduledMenuJobId(null)
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] text-left text-[length:var(--fs-sm)] font-medium text-[var(--c-error)] hover:bg-[var(--c-error)]/10 transition-colors cursor-pointer whitespace-nowrap"
-                          >
-                            <Trash2 size={14} className="shrink-0" />
-                            删除任务
-                          </button>
+                              <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--c-danger)]/10 px-3 py-2 text-[length:var(--fs-sm)] text-[var(--c-danger)]">
+                                <AlertTriangle size={14} className="shrink-0" />
+                                <span className="flex-1 leading-snug">因连续执行失败已被自动停用</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); void setEnabled(job, true) }}
+                                  className="shrink-0 font-medium underline underline-offset-2 hover:opacity-80 cursor-pointer"
+                                >
+                                  重新启用
+                                </button>
+                              </div>
+                            )
+                          ) : null}
+
+                          <p className="mt-[10px] text-[14px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))] leading-[21px] line-clamp-2">
+                            {job.instruction}
+                          </p>
+
+                          <div className="relative mt-auto pt-[18px]">
+                            <div className="flex items-center gap-[8px] text-[14px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))]">
+                              <Clock size={14} className="shrink-0" />
+                              <span className="tabular-nums">{scheduleLabel(job.schedule)}</span>
+                              <RunStatusBadge run={liveRuns[job.id]} latest={runsByJob[job.id]?.[0]} />
+                            </div>
+                            <div className="mt-[10px] flex items-center gap-[8px] pr-[76px] text-[14px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))]">
+                              <RefreshIcon size={14} className="shrink-0" />
+                              {job.enabled ? (
+                                <>
+                                  <span>下次执行</span>
+                                  <span className="tabular-nums">{nextRunLabel(job.schedule, new Date(), job.validFrom, job.validUntil) ?? '-'}</span>
+                                </>
+                              ) : (
+                                <span>-</span>
+                              )}
+                            </div>
+                            {job.validFrom != null || job.validUntil != null ? (
+                              <div className="mt-[10px] flex items-center gap-[8px] pr-[76px] text-[14px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))]">
+                                <Calendar size={14} className="shrink-0" />
+                                <span className="tabular-nums whitespace-nowrap">有效期 {validityLabel(job.validFrom, job.validUntil)}</span>
+                              </div>
+                            ) : null}
+
+                            {/* 悬停操作：立即执行 / 编辑 / 更多 */}
+                            <div
+                              className="absolute right-0 bottom-0 flex items-center gap-[2px] pointer-events-none opacity-0 transition-opacity
+                               group-hover:pointer-events-auto group-hover:opacity-100
+                               group-focus-within:pointer-events-auto group-focus-within:opacity-100"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                disabled={Boolean(liveRuns[job.id])}
+                                onClick={() => void triggerScheduledRun(job.id)}
+                                className="h-[24px] w-[24px] grid place-items-center rounded-[var(--radius-control)] text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] hover:text-[var(--c-text)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                title={liveRuns[job.id] ? '执行中…' : '立即执行'}
+                                aria-label="立即执行"
+                              >
+                                {liveRuns[job.id] ? (
+                                  <span className="h-3.5 w-3.5 rounded-full border-2 border-[var(--c-text-secondary)] border-t-transparent animate-spin" />
+                                ) : (
+                                  <Play size={15} />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(job)}
+                                className="h-[24px] w-[24px] grid place-items-center rounded-[var(--radius-control)] text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] hover:text-[var(--c-text)] transition-colors cursor-pointer"
+                                title="编辑"
+                                aria-label="编辑"
+                              >
+                                <Pencil size={14} />
+                              </button>
+
+                              <div className="relative" data-scheduled-menu-root>
+                                <button
+                                  type="button"
+                                  onClick={() => setScheduledMenuJobId((v) => (v === job.id ? null : job.id))}
+                                  data-scheduled-menu-button
+                                  className="h-[24px] w-[24px] grid place-items-center rounded-[var(--radius-control)] text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] hover:text-[var(--c-text)] transition-colors cursor-pointer"
+                                  aria-label="更多"
+                                  title="更多"
+                                >
+                                  <MoreHorizontal size={16} />
+                                </button>
+
+                                {scheduledMenuJobId === job.id ? (
+                                  <div className="absolute right-0 bottom-full mb-1 z-50">
+                                    <div className="overlay-panel min-w-[148px] py-1 rounded-[var(--radius-card)] overflow-hidden animate-in">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setScheduledMenuJobId(null)
+                                          openEditModal(job)
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] text-left text-[length:var(--fs-sm)] font-medium text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer whitespace-nowrap"
+                                      >
+                                        <Pencil size={14} className="shrink-0" />
+                                        编辑任务
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setScheduledMenuJobId(null)
+                                          void deleteJob(job)
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] text-left text-[length:var(--fs-sm)] font-medium text-[var(--c-error)] hover:bg-[var(--c-error)]/10 transition-colors cursor-pointer whitespace-nowrap"
+                                      >
+                                        <Trash2 size={14} className="shrink-0" />
+                                        删除任务
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
 
-                {!job.enabled && job.lastStatus === 'disabled' ? (
-                  <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--c-danger)]/10 px-3 py-2 text-[length:var(--fs-sm)] text-[var(--c-danger)]">
-                    <AlertTriangle size={14} className="shrink-0" />
-                    <span className="flex-1 leading-snug">因连续执行失败已被自动停用</span>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); void setEnabled(job, true) }}
-                      className="shrink-0 font-medium underline underline-offset-2 hover:opacity-80 cursor-pointer"
-                    >
-                      重新启用
-                    </button>
-                  </div>
-                ) : null}
-
-                <h3 className="mt-4 text-[length:var(--fs-md)] font-semibold text-[var(--c-text)] tracking-tight truncate" title={job.name}>{job.name}</h3>
-
-                <p className="mt-2 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed line-clamp-2 min-h-[3.25em]">
-                  {job.instruction}
-                </p>
-
-                <HairlineDivider className="mt-5 mb-5" />
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--c-surface-2)] text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">
-                    <Clock size={13} className="shrink-0" />
-                    <span className="tabular-nums">{scheduleLabel(job.schedule)}</span>
-                  </div>
-                  <RunStatusBadge run={liveRuns[job.id]} latest={runsByJob[job.id]?.[0]} />
-                </div>
-              </div>
-            ))}
-          </div>
+              {/* 推荐任务：未搜索时始终展示（空状态也显示），点击卡片打开创建弹窗并预填模板 */}
+              {!query.trim() ? (
+                <RecommendedTasks onPick={openCreateFromTemplate} />
+              ) : null}
+            </>
           ) : (
             <>
               <ExecutionHistoryList records={historyRecords} onSelectSession={onSelectSession} />
@@ -750,7 +1104,6 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
               ) : null}
             </>
           )}
-
         </div>
       </div>
 
@@ -762,7 +1115,7 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
           }}
         >
           <div
-            className="overlay-panel w-full max-w-[760px] rounded-[var(--radius-card)] overflow-hidden flex flex-col max-h-[min(720px,calc(100vh-64px))]"
+            className="overlay-panel w-full max-w-[704px] rounded-[var(--radius-card)] overflow-hidden flex flex-col max-h-[min(720px,calc(100vh-64px))]"
             style={{
               background: 'var(--c-surface)',
               border: '1px solid var(--c-border)',
@@ -770,16 +1123,9 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
               WebkitBackdropFilter: 'none',
             }}
           >
-            <div className="px-8 pt-6 pb-5 flex items-start justify-between border-b border-[var(--c-border)]/60">
-              <div className="space-y-1">
-                <div className="text-[length:var(--fs-xl)] font-semibold text-[var(--c-text)] tracking-tight">
-                  {isEditingJob ? '编辑任务' : '创建新任务'}
-                </div>
-                <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">
-                  {isEditingJob
-                    ? `正在修改「${scheduleDraftName || '未命名任务'}」的指令与执行周期`
-                    : '填写基本信息、选择工作区，再设定执行周期'}
-                </div>
+            <div className="px-[20px] pt-[20px] flex items-start justify-between">
+              <div className="text-[16px] leading-[24px] font-semibold text-[var(--c-text)]">
+                {isEditingJob ? '编辑定时任务' : '新建定时任务'}
               </div>
               <button
                 type="button"
@@ -791,287 +1137,193 @@ export default function ScheduledTasksPage({ token, onSelectSession, onLogout }:
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)]">
-                    任务名称 <span className="text-[var(--c-error)]">*</span>
-                  </div>
-                  <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">{scheduleDraftName.length}/50</div>
+            <div className="flex-1 overflow-y-auto px-[20px] pt-[16px] pb-[8px] space-y-[18px]">
+              <div>
+                <div className="mb-[6px] text-[14px] leading-[21px] text-[var(--c-text-secondary)]">
+                  任务名称
                 </div>
                 <input
                   value={scheduleDraftName}
                   onChange={(e) => setScheduleDraftName(e.target.value)}
                   placeholder="请输入"
                   maxLength={50}
-                  className="w-full h-11 px-4 rounded-[var(--radius-md)] bg-[var(--c-surface-2)] border border-[var(--c-border)]
-                             text-[length:var(--fs-md)] text-[var(--c-text)] placeholder:text-[var(--c-text-secondary)]/70
-                             hover:border-[var(--c-border-strong)] focus:outline-none focus:ring-1 focus:ring-[var(--c-accent)]/20 focus:border-[var(--c-accent)] focus:bg-[var(--c-surface)] transition-colors"
+                  className="w-full h-[38px] px-[12px] rounded-[6px] bg-[var(--c-surface)] border border-[var(--c-border)]
+                             text-[14px] text-[var(--c-text)] placeholder:text-[var(--c-text-tertiary)]
+                             hover:border-[var(--c-border-strong)] focus:outline-none focus:border-[var(--c-accent)] transition-colors"
                 />
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)]">
-                    任务指令 <span className="text-[var(--c-error)]">*</span>
+              <div>
+                <div className="mb-[6px] text-[14px] leading-[21px] text-[var(--c-text-secondary)]">
+                  执行内容
+                </div>
+
+                {/* 执行内容输入器：正文 + 底部工具行 + 内嵌工作区选择（对齐设计稿） */}
+                <div className="rounded-[14px] border border-[var(--c-border)] bg-[var(--c-surface)] overflow-hidden shadow-[0_1px_2px_rgba(31,35,43,0.04)]">
+                  <textarea
+                    value={scheduleDraftInstruction}
+                    onChange={(e) => setScheduleDraftInstruction(e.target.value)}
+                    placeholder="请输入"
+                    maxLength={3000}
+                    rows={5}
+                    className="block w-full px-[20px] pt-[16px] pb-[6px] bg-transparent resize-none border-0
+                               text-[14px] leading-[24px] text-[var(--c-text)] placeholder:text-[var(--c-text-tertiary)]
+                               focus:outline-none"
+                  />
+                  <div className="flex items-center justify-between px-[16px] pb-[12px]">
+                    <span className="h-[28px] w-[28px] grid place-items-center rounded-full border border-[var(--c-border)] text-[var(--c-text-secondary)]">
+                      <Plus size={15} />
+                    </span>
+                    <Mic size={17} className="text-[var(--c-text-secondary)]" />
                   </div>
-                  <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)]">
-                    {scheduleDraftInstruction.length}/3000
+                  <div className="relative bg-[var(--c-surface-2)] border-t border-[var(--c-border)]/60">
+                    <FolderIcon
+                      size={16}
+                      className="pointer-events-none absolute left-[20px] top-1/2 -translate-y-1/2 text-[var(--c-text)]"
+                    />
+                    <select
+                      value={scheduleDraftWorkspaceId}
+                      onChange={(e) => setScheduleDraftWorkspaceId(e.target.value)}
+                      className="appearance-none w-full h-[40px] pl-[46px] pr-[36px] bg-transparent cursor-pointer
+                                 text-[14px] text-[var(--c-text)] focus:outline-none"
+                    >
+                      {workspaces.map((ws) => (
+                        <option key={ws.id} value={ws.id}>{ws.name}</option>
+                      ))}
+                    </select>
+                    <ChevronDown
+                      size={14}
+                      className="pointer-events-none absolute right-[16px] top-1/2 -translate-y-1/2 text-[var(--c-text-secondary)]"
+                    />
                   </div>
                 </div>
-                <textarea
-                  value={scheduleDraftInstruction}
-                  onChange={(e) => setScheduleDraftInstruction(e.target.value)}
-                  placeholder="请输入"
-                  maxLength={3000}
-                  rows={5}
-                  className="w-full px-4 py-3 rounded-[var(--radius-md)] bg-[var(--c-surface-2)] border border-[var(--c-border)]
-                             text-[length:var(--fs-md)] text-[var(--c-text)] placeholder:text-[var(--c-text-secondary)]/70 resize-none
-                             hover:border-[var(--c-border-strong)] focus:outline-none focus:ring-1 focus:ring-[var(--c-accent)]/20 focus:border-[var(--c-accent)] focus:bg-[var(--c-surface)] transition-colors"
-                />
               </div>
 
-              <div className="space-y-2">
-                <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)]">
-                  执行工作区
+              <div>
+                <div className="mb-[6px] text-[14px] leading-[21px] text-[var(--c-text-secondary)]">
+                  计划时间 <span className="text-[var(--c-error)]">*</span>
                 </div>
-                <SelectField
-                  value={scheduleDraftWorkspaceId}
-                  onChange={(v) => setScheduleDraftWorkspaceId(v)}
-                >
-                  {workspaces.map((ws) => (
-                    <option key={ws.id} value={ws.id}>{ws.name}</option>
-                  ))}
-                </SelectField>
-                <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] leading-relaxed">
-                  任务将在所选工作区中独立执行，不设定则使用默认工作区
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-[length:var(--fs-md)] font-medium text-[var(--c-text)]">
-                  执行周期 <span className="text-[var(--c-error)]">*</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-3">
-                  <SelectField
+                <div className="flex flex-wrap items-center gap-[10px]">
+                  <PillSelect
                     value={scheduleDraftType}
                     onChange={(v) => setScheduleDraftType(v as ScheduleType)}
-                    inline
-                    className="min-w-[140px]"
+                    className="w-[88px]"
                   >
-                    <option value="minute">每分钟执行</option>
-                    <option value="hour">每小时执行</option>
-                    <option value="day">每天执行</option>
-                    <option value="week">每周执行</option>
-                    <option value="month">每月执行</option>
-                  </SelectField>
+                    <option value="minute">每分钟</option>
+                    <option value="hour">每小时</option>
+                    <option value="day">每天</option>
+                    <option value="week">每周</option>
+                    <option value="month">每月</option>
+                  </PillSelect>
+
+                  {scheduleDraftType === 'month' ? (
+                    <PillSelect
+                      value={scheduleDraftMonthDay}
+                      onChange={(v) => setScheduleDraftMonthDay(v)}
+                      icon={<Calendar size={14} />}
+                      className="w-[86px]"
+                    >
+                      {MONTH_DAY_OPTIONS.map((day) => (
+                        <option key={day} value={day}>{day} 日</option>
+                      ))}
+                    </PillSelect>
+                  ) : null}
 
                   {scheduleDraftType === 'minute' ? (
-                    <div className="flex flex-nowrap items-center gap-2 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-                      <span className="whitespace-nowrap">每</span>
+                    <div className="inline-flex h-[34px] items-center gap-[6px] rounded-[6px] border border-[var(--c-border)] bg-[var(--c-surface)] pl-[12px] pr-[12px] text-[14px] text-[var(--c-text)]">
+                      <span>每</span>
                       <input
                         value={scheduleDraftEveryMinutes}
                         onChange={(e) =>
                           setScheduleDraftEveryMinutes(e.target.value.replace(/[^\d]/g, '').slice(0, 4))
                         }
                         inputMode="numeric"
-                        className="flex-shrink-0 w-20 h-11 px-4 rounded-[var(--radius-md)] bg-[var(--c-surface-2)] border border-[var(--c-border)]
-                                   text-[length:var(--fs-md)] text-[var(--c-text)] hover:border-[var(--c-border-strong)]
-                                   focus:outline-none focus:ring-1 focus:ring-[var(--c-accent)]/20 focus:border-[var(--c-accent)] focus:bg-[var(--c-surface)] transition-colors"
+                        className="w-[30px] bg-transparent text-center tabular-nums focus:outline-none"
                       />
-                      <span className="whitespace-nowrap">分钟执行</span>
+                      <span>分钟</span>
                     </div>
                   ) : scheduleDraftType === 'hour' ? (
-                    <div className="flex flex-nowrap items-center gap-2 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-                      <span className="whitespace-nowrap">每小时第</span>
-                      <SelectField
-                        value={scheduleDraftHourMinute}
-                        onChange={(v) => setScheduleDraftHourMinute(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 60 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 分
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <span className="whitespace-nowrap">执行</span>
-                    </div>
-                  ) : scheduleDraftType === 'day' ? (
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-                      <span className="whitespace-nowrap">每天</span>
-                      <SelectField
-                        value={scheduleDraftDayHour}
-                        onChange={(v) => setScheduleDraftDayHour(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 24 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 时
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <SelectField
-                        value={scheduleDraftDayMinute}
-                        onChange={(v) => setScheduleDraftDayMinute(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 60 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 分
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <span className="whitespace-nowrap">执行</span>
-                    </div>
-                  ) : scheduleDraftType === 'week' ? (
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-                      <span className="whitespace-nowrap">每周</span>
-                      <SelectField
-                        value={scheduleDraftWeekday}
-                        onChange={(v) => setScheduleDraftWeekday(v as ScheduleWeekday)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {(
-                          [
-                            ['mon', '周一'],
-                            ['tue', '周二'],
-                            ['wed', '周三'],
-                            ['thu', '周四'],
-                            ['fri', '周五'],
-                            ['sat', '周六'],
-                            ['sun', '周日'],
-                          ] as const
-                        ).map(([v, label]) => (
-                          <option key={v} value={v}>
-                            {label}
-                          </option>
-                        ))}
-                      </SelectField>
-                      <SelectField
-                        value={scheduleDraftDayHour}
-                        onChange={(v) => setScheduleDraftDayHour(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 24 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 时
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <SelectField
-                        value={scheduleDraftDayMinute}
-                        onChange={(v) => setScheduleDraftDayMinute(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 60 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 分
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <span className="whitespace-nowrap">执行</span>
-                    </div>
+                    <PillSelect
+                      value={scheduleDraftHourMinute}
+                      onChange={(v) => setScheduleDraftHourMinute(v)}
+                      icon={<Clock size={14} />}
+                      className="w-[120px]"
+                    >
+                      {MINUTE_OPTIONS.map((v) => (
+                        <option key={v} value={v}>第 {v} 分</option>
+                      ))}
+                    </PillSelect>
                   ) : (
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-[length:var(--fs-md)] text-[var(--c-text-secondary)]">
-                      <span className="whitespace-nowrap">每月</span>
-                      <SelectField
-                        value={scheduleDraftMonthDay}
-                        onChange={(v) => setScheduleDraftMonthDay(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 31 }).map((_, i) => {
-                          const day = String(i + 1)
-                          return (
-                            <option key={day} value={day}>
-                              {day} 日
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <SelectField
-                        value={scheduleDraftDayHour}
-                        onChange={(v) => setScheduleDraftDayHour(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 24 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 时
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <SelectField
-                        value={scheduleDraftDayMinute}
-                        onChange={(v) => setScheduleDraftDayMinute(v)}
-                        inline
-                        className="min-w-[120px]"
-                      >
-                        {Array.from({ length: 60 }).map((_, i) => {
-                          const v = String(i).padStart(2, '0')
-                          return (
-                            <option key={v} value={v}>
-                              {v} 分
-                            </option>
-                          )
-                        })}
-                      </SelectField>
-                      <span className="whitespace-nowrap">执行</span>
-                    </div>
+                    <TimePill
+                      hour={scheduleDraftDayHour}
+                      minute={scheduleDraftDayMinute}
+                      onHour={(v) => setScheduleDraftDayHour(v)}
+                      onMinute={(v) => setScheduleDraftDayMinute(v)}
+                    />
                   )}
+
+                  <ValidityPicker
+                    from={scheduleDraftValidFrom}
+                    until={scheduleDraftValidUntil}
+                    onChange={(from, until) => {
+                      setScheduleDraftValidFrom(from)
+                      setScheduleDraftValidUntil(until)
+                    }}
+                    className="flex-1 min-w-[220px]"
+                  />
                 </div>
+
+                {scheduleDraftType === 'week' ? (
+                  <div className="mt-[8px] flex flex-wrap items-center gap-[6px]">
+                    {(Object.entries(WEEKDAY_LABEL) as [ScheduleWeekday, string][]).map(([value, label]) => {
+                      const selected = scheduleDraftWeekday === value
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setScheduleDraftWeekday(value)}
+                          className={`h-[34px] w-[54px] rounded-[6px] border text-[14px] transition-colors cursor-pointer ${
+                            selected
+                              ? 'border-[var(--c-accent)] bg-[var(--c-accent-soft)] text-[var(--c-accent)] font-medium'
+                              : 'border-[var(--c-border)] bg-[var(--c-surface)] text-[var(--c-text)] hover:border-[var(--c-border-strong)]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
               </div>
             </div>
-            <div className="px-8 py-3.5 border-t border-[var(--c-border)]/70 flex items-center justify-between gap-3">
-              <span className="text-[length:var(--fs-xs)] text-[var(--c-text-tertiary)] truncate">
-                {isEditingJob ? '保存后按新的周期执行' : '创建后按设定的周期自动执行'}
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={closeScheduleModal}
-                  className="btn btn-md btn-ghost"
-                >
-                  取消
-                </button>
-                <PrimaryButton
-                  type="button"
-                  onClick={submitModal}
-                  disabled={!canConfirm}
-                >
-                  {isEditingJob ? '保存' : '确认'}
-                </PrimaryButton>
-              </div>
+            <div className="px-[20px] pt-[24px] pb-[20px] flex items-center justify-end gap-[9px]">
+              <button
+                type="button"
+                onClick={() => void previewModalTask()}
+                disabled={!scheduleDraftInstruction.trim()}
+                className="btn btn-secondary h-[32px] px-[16px] text-[14px]"
+              >
+                预览执行
+              </button>
+              <button
+                type="button"
+                onClick={closeScheduleModal}
+                className="btn btn-secondary h-[32px] px-[16px] text-[14px]"
+              >
+                取消
+              </button>
+              <PrimaryButton
+                type="button"
+                onClick={submitModal}
+                disabled={!canConfirm}
+                className="!h-[32px] !px-[16px] !text-[14px]"
+              >
+                保存
+              </PrimaryButton>
             </div>
           </div>
         </div>
       )}
-    </div>
     </div>
   )
 }
@@ -1080,6 +1332,49 @@ function formatRunTime(ts: number): string {
   const d = new Date(ts * 1000)
   const pad = (v: number) => String(v).padStart(2, '0')
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function EmptyScheduledTasks() {
+  return (
+    <div className="flex flex-col items-center justify-center text-center pt-[88px] pb-[72px]">
+      <Clock size={30} strokeWidth={1.5} className="text-[var(--c-text-tertiary)]" />
+      <div className="mt-[26px] text-[length:var(--fs-md)] font-semibold text-[var(--c-text)]">还没有定时任务</div>
+      <div className="mt-2 text-[length:var(--fs-md)] text-[var(--c-text-tertiary)]">
+        新建一个任务，或从模板开始。
+      </div>
+    </div>
+  )
+}
+
+function RecommendedTasks({ onPick }: { onPick: (tpl: TaskTemplate) => void }) {
+  return (
+    <section className="mt-[32px]">
+      <div className="mb-[18px] text-[14px] leading-[21px] font-semibold text-[var(--c-text)]">推荐任务</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[16px]">
+        {TEMPLATES.map((tpl) => (
+          <button
+            key={tpl.key}
+            type="button"
+            onClick={() => onPick(tpl)}
+            className="app-card app-card--passive flex flex-col h-full px-[16px] pt-[16px] pb-[18px] text-left cursor-pointer
+             hover:border-[var(--c-border-strong)] transition-colors
+             focus:outline-none focus-visible:ring-1 focus-visible:ring-[var(--c-accent)]/30"
+          >
+            <h3 className="text-[14px] leading-[21px] font-semibold text-[var(--c-text)] truncate">
+              {tpl.name}
+            </h3>
+            <p className="mt-[12px] text-[14px] leading-[21px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))] line-clamp-2">
+              {tpl.description}
+            </p>
+            <div className="mt-auto pt-[18px] flex items-center gap-[8px] text-[14px] text-[color-mix(in_srgb,var(--c-text-secondary)_60%,var(--c-text-tertiary))]">
+              <Clock size={14} className="shrink-0" />
+              <span className="tabular-nums">{tpl.scheduleLabel}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function RunStatusBadge({ run, latest }: { run?: LiveRun; latest?: RunRecord }) {
@@ -1193,38 +1488,355 @@ function ExecutionHistoryList({
   )
 }
 
-// Browser-native <select> ships with an inline chevron whose border radius does
-// not track the wrapper's rounded-[var(--radius-md)], so the chevron's squared corner visibly
-// abuts the wrapper edge ("the corner sits on the border"). Suppress the native
-// chrome via appearance-none and overlay our own absolute-positioned ChevronDown
-// — radius, color, and spacing are then fully controlled.
-type SelectFieldProps = {
+// 原生 <select> 自带的箭头无法跟随容器圆角，统一 appearance-none 隐藏后自绘 ChevronDown。
+type PillSelectProps = {
   value: string
   onChange: (next: string) => void
+  icon?: React.ReactNode
   className?: string
-  /** 横向流（多控件同行）时设为 true；wrapper 改为 inline-flex 自适应内容宽度，
-   *  否则默认 w-full 占满父级宽度（适合独立字段独占一行的纵向布局）。 */
-  inline?: boolean
   children: React.ReactNode
 }
 
-function SelectField({ value, onChange, className, inline = false, children }: SelectFieldProps) {
+function PillSelect({ value, onChange, icon, className, children }: PillSelectProps) {
   return (
-    <div className={`relative ${inline ? 'inline-flex w-auto' : 'w-full'}`}>
+    <div
+      className={`relative inline-flex h-[34px] items-center rounded-[6px] border border-[var(--c-border)] bg-[var(--c-surface)]
+       text-[14px] text-[var(--c-text)] hover:border-[var(--c-border-strong)] focus-within:border-[var(--c-accent)] transition-colors
+       ${className ?? ''}`}
+    >
+      {icon ? (
+        <span className="pointer-events-none absolute left-[12px] flex items-center text-[var(--c-text-secondary)]">
+          {icon}
+        </span>
+      ) : null}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={
-          'appearance-none w-full h-11 pl-4 pr-10 rounded-[var(--radius-md)] border border-[var(--c-border)] bg-[var(--c-surface-2)] text-[length:var(--fs-md)] text-[var(--c-text)] cursor-pointer hover:border-[var(--c-border-strong)] focus:outline-none focus:ring-1 focus:ring-[var(--c-accent)]/20 focus:border-[var(--c-accent)] focus:bg-[var(--c-surface)] transition-colors ' +
-          (className ?? '')
-        }
+        className={`appearance-none w-full h-full bg-transparent rounded-[6px] cursor-pointer focus:outline-none ${
+          icon ? 'pl-[34px]' : 'pl-[14px]'
+        } pr-[30px]`}
       >
         {children}
       </select>
       <ChevronDown
-        size={15}
-        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[var(--c-text-secondary)]"
+        size={14}
+        className="pointer-events-none absolute right-[10px] text-[var(--c-text-secondary)]"
       />
+    </div>
+  )
+}
+
+type TimePillProps = {
+  hour: string
+  minute: string
+  onHour: (next: string) => void
+  onMinute: (next: string) => void
+}
+
+/** 时间pill：一个边框内并排小时/分钟两个原生下拉，外观与设计稿的「20:00」一致。 */
+function TimePill({ hour, minute, onHour, onMinute }: TimePillProps) {
+  return (
+    <div className="relative inline-flex h-[34px] w-[113px] items-center rounded-[6px] border border-[var(--c-border)] bg-[var(--c-surface)]
+     pl-[12px] pr-[28px] text-[14px] text-[var(--c-text)] hover:border-[var(--c-border-strong)] focus-within:border-[var(--c-accent)] transition-colors">
+      <Clock size={14} className="shrink-0 text-[var(--c-text-secondary)]" />
+      <select
+        value={hour}
+        onChange={(e) => onHour(e.target.value)}
+        className="ml-[6px] w-[22px] appearance-none bg-transparent text-center tabular-nums cursor-pointer focus:outline-none"
+      >
+        {HOUR_OPTIONS.map((v) => (
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </select>
+      <span className="text-[var(--c-text-secondary)]">:</span>
+      <select
+        value={minute}
+        onChange={(e) => onMinute(e.target.value)}
+        className="w-[22px] appearance-none bg-transparent text-center tabular-nums cursor-pointer focus:outline-none"
+      >
+        {MINUTE_OPTIONS.map((v) => (
+          <option key={v} value={v}>{v}</option>
+        ))}
+      </select>
+      <ChevronDown
+        size={14}
+        className="pointer-events-none absolute right-[10px] text-[var(--c-text-secondary)]"
+      />
+    </div>
+  )
+}
+
+// ── 有效期区间选择 ────────────────────────────────────────────────────
+
+/** 某月按周一起始排布的日期键（YYYY-MM-DD），前置空格用 null 占位。 */
+function monthCellKeys(year: number, month: number): (string | null)[] {
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7
+  const total = new Date(year, month + 1, 0).getDate()
+  const cells: (string | null)[] = Array<null>(offset).fill(null)
+  for (let day = 1; day <= total; day += 1) {
+    cells.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+  }
+  return cells
+}
+
+const CALENDAR_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
+
+type MonthCalendarProps = {
+  year: number
+  month: number
+  from: string
+  until: string
+  side: 'left' | 'right'
+  onShift: (months: number) => void
+  onPick: (key: string) => void
+}
+
+/** 单月日历：左月显示 « ‹，右月显示 › »，标题居中。 */
+function MonthCalendar({ year, month, from, until, side, onShift, onPick }: MonthCalendarProps) {
+  const navButton = (label: string, months: number, children: React.ReactNode) => (
+    <button
+      type="button"
+      onClick={() => onShift(months)}
+      aria-label={label}
+      title={label}
+      className="h-[24px] w-[24px] grid place-items-center rounded-[4px] text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] hover:text-[var(--c-text)] transition-colors cursor-pointer"
+    >
+      {children}
+    </button>
+  )
+
+  return (
+    <div>
+      <div className="grid grid-cols-[56px_1fr_56px] items-center px-[12px] pt-[14px] pb-[6px]">
+        <div className="flex items-center gap-[2px]">
+          {side === 'left' ? (
+            <>
+              {navButton('上一年', -12, <ChevronsLeft size={16} />)}
+              {navButton('上个月', -1, <ChevronLeft size={16} />)}
+            </>
+          ) : null}
+        </div>
+        <div className="text-center text-[15px] leading-[22px] font-semibold text-[var(--c-text)] tabular-nums">
+          {year} 年 {month + 1} 月
+        </div>
+        <div className="flex items-center justify-end gap-[2px]">
+          {side === 'right' ? (
+            <>
+              {navButton('下个月', 1, <ChevronRight size={16} />)}
+              {navButton('下一年', 12, <ChevronsRight size={16} />)}
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 px-[10px] text-center text-[13px] text-[var(--c-text-tertiary)]">
+        {CALENDAR_WEEKDAYS.map((w) => (
+          <div key={w} className="h-[26px] leading-[26px]">
+            {w}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-7 gap-y-[2px] px-[10px] pb-[12px]">
+        {monthCellKeys(year, month).map((key, index) => {
+          if (key === null) return <div key={`blank-${index}`} />
+          const selected = key === from || key === until
+          const inRange = Boolean(from && until && key > from && key < until)
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => onPick(key)}
+              className={`mx-auto h-[34px] w-full max-w-[36px] rounded-[6px] text-[14px] tabular-nums transition-colors cursor-pointer ${
+                selected
+                  ? 'bg-[var(--c-accent-soft)] font-semibold text-[var(--c-accent)]'
+                  : inRange
+                    ? 'bg-[color-mix(in_srgb,var(--c-accent)_6%,transparent)] text-[var(--c-text)]'
+                    : key === todayKey()
+                      ? 'font-medium text-[var(--c-accent)] hover:bg-[var(--c-surface-3)]'
+                      : 'text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] hover:text-[var(--c-text)]'
+              }`}
+            >
+              {Number(key.slice(-2))}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+type ValidityPickerProps = {
+  from: string
+  until: string
+  onChange: (from: string, until: string) => void
+  className?: string
+}
+
+/**
+ * 有效期区间选择器：触发器内联在计划时间行，日历浮层走 portal + fixed 定位，
+ * 避免被弹窗的 overflow-y-auto 容器裁剪。两值皆空即「长期有效」。
+ */
+function ValidityPicker({ from, until, onChange, className }: ValidityPickerProps) {
+  const [open, setOpen] = useState(false)
+  const [viewMonth, setViewMonth] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const width = Math.min(640, window.innerWidth - 24)
+    const height = panelRef.current?.offsetHeight ?? 400
+    const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12))
+    let top = rect.bottom + 8
+    if (top + height > window.innerHeight - 12) top = Math.max(12, rect.top - height - 8)
+    setPosition({ left, top })
+  }, [])
+
+  useEffect(() => {
+    if (!open) {
+      setPosition(null)
+      return
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    // capture：弹窗体滚动也要跟随触发器
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open, updatePosition])
+
+  useEffect(() => {
+    if (!open) return
+    function onDoc(event: MouseEvent) {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return
+      setOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  const openCalendar = () => {
+    const base = from || until
+    if (base) {
+      const [y, m] = base.split('-').map(Number)
+      setViewMonth(new Date(y, m - 1, 1))
+    } else {
+      const now = new Date()
+      setViewMonth(new Date(now.getFullYear(), now.getMonth(), 1))
+    }
+    setOpen(true)
+  }
+
+  const shift = (months: number) =>
+    setViewMonth((cur) => new Date(cur.getFullYear(), cur.getMonth() + months, 1))
+
+  const pick = (key: string) => {
+    // 未选 / 已完成一段区间 → 重新开始；只选了开始日 → 补齐结束日并自动纠正顺序
+    if (!from || (from && until)) {
+      onChange(key, '')
+      return
+    }
+    if (key < from) onChange(key, from)
+    else onChange(from, key)
+  }
+
+  const label = from
+    ? until
+      ? `${from} ~ ${until}`
+      : from
+    : '有效期：长期有效'
+  const hint = !from ? '先选开始日期' : !until ? '请选择结束日期' : `已选择 ${from} ~ ${until}`
+  const rightMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1)
+
+  return (
+    <div className={`relative ${className ?? ''}`}>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? setOpen(false) : openCalendar())}
+        aria-expanded={open}
+        className={`flex h-[34px] w-full items-center gap-[8px] rounded-[6px] border px-[12px] text-[14px] transition-colors cursor-pointer ${
+          open
+            ? 'border-[var(--c-accent)] bg-[var(--c-accent-soft)] text-[var(--c-text)]'
+            : 'border-[color-mix(in_srgb,var(--c-accent)_18%,var(--c-border))] bg-[var(--c-accent-soft)] text-[var(--c-text)] hover:border-[color-mix(in_srgb,var(--c-accent)_38%,var(--c-border))]'
+        }`}
+      >
+        <Calendar size={14} className="shrink-0 text-[var(--c-text-secondary)]" />
+        <span className="min-w-0 flex-1 truncate text-left tabular-nums">{label}</span>
+        <ChevronDown
+          size={14}
+          className={`shrink-0 text-[var(--c-text-tertiary)] transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open
+        ? createPortal(
+            <div
+              ref={panelRef}
+              className="fixed z-[70] overflow-hidden rounded-[14px] border border-[var(--c-border)] bg-[var(--c-surface)] shadow-[var(--shadow-lg)] animate-in"
+              style={{
+                left: position?.left ?? 0,
+                top: position?.top ?? 0,
+                width: Math.min(640, window.innerWidth - 24),
+                visibility: position ? 'visible' : 'hidden',
+              }}
+            >
+              <div className="grid grid-cols-2">
+                <MonthCalendar
+                  year={viewMonth.getFullYear()}
+                  month={viewMonth.getMonth()}
+                  from={from}
+                  until={until}
+                  side="left"
+                  onShift={shift}
+                  onPick={pick}
+                />
+                <div className="border-l border-[var(--c-border)]">
+                  <MonthCalendar
+                    year={rightMonth.getFullYear()}
+                    month={rightMonth.getMonth()}
+                    from={from}
+                    until={until}
+                    side="right"
+                    onShift={shift}
+                    onPick={pick}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-[var(--c-border)] px-[16px] py-[10px]">
+                <span className="text-[13px] leading-[20px] text-[var(--c-text-tertiary)]">{hint}</span>
+                {from || until ? (
+                  <button
+                    type="button"
+                    onClick={() => onChange('', '')}
+                    className="shrink-0 text-[13px] font-medium text-[var(--c-accent)] hover:opacity-80 cursor-pointer"
+                  >
+                    设为长期有效
+                  </button>
+                ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }

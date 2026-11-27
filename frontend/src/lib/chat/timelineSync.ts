@@ -50,9 +50,9 @@ export interface TimelineFrame {
 
 /**
  * 在给定 nodes 上应用一组 patch，返回新数组（不可变）。
- * 扁平结构下只有 upsert_node / set_phase / iteration_boundary 三种：
+ * 扁平结构下只有 upsert_node / set_phase 两种：
  * - upsert_node：按 nodeKey 定位目标节点，iterations 按 segmentId + callId 合并
- * - set_phase / iteration_boundary：timelineSync 层不处理（store 层已消费）
+ * - set_phase：timelineSync 层不处理（store 层已消费）
  */
 export function applyTimelinePatches(nodes: TimelineNode[], patches: TimelinePatch[]): TimelineNode[] {
   let result = nodes
@@ -133,10 +133,6 @@ function applyOnePatch(nodes: TimelineNode[], patch: TimelinePatch): TimelineNod
       return upsertNode(nodes, patch.node)
     case 'set_phase':
       // phase 由 store 层消费（applyTimelineFrame 里单独处理），nodes 不受影响。
-      return nodes
-    case 'iteration_boundary':
-      // 后端 IterationBoundary(llm_start) 时发：store 层清空 streamingText，
-      // nodes 不受影响。
       return nodes
   }
 }

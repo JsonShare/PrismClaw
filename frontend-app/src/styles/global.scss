@@ -295,6 +295,14 @@ textarea {
   white-space: nowrap;
   max-width: 64px;
 }
+/* 会话已选专家：与技能 chips 同款胶囊，名称允许更长 */
+.composer-expert {
+  display: flex;
+  padding: 0 0 8px;
+}
+.composer-expert .composer-chip-text {
+  max-width: 140px;
+}
 
 /* 待选附件：图片缩略图与文件信息卡，横向滑动，右上角删除 */
 .composer-attachments {

@@ -9,12 +9,13 @@ if TYPE_CHECKING:
 
     from prismclaw.engine.compression.orchestrator import CompressionOrchestrator
     from prismclaw.engine.compression.ports import HookInvocationResult
-    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
     from prismclaw.engine.execution.checkpoint import RunSnapshot
-    from prismclaw.engine.execution.handoff.supervisor import HandoffSupervisor
     from prismclaw.engine.execution.output.output_compressor import CompressionStats
     from prismclaw.engine.execution.query._static_context_types import StaticTurnShellCache
     from prismclaw.engine.execution.skills.runtime import SkillRuntime
+    from prismclaw.engine.experts.registry.expert_registry import ExpertRegistry
+    from prismclaw.engine.experts.scope import Scope
     from prismclaw.engine.hooks import (
         CompactionContext,
         HookRegistry,
@@ -31,6 +32,8 @@ if TYPE_CHECKING:
     )
     from prismclaw.engine.toolkit.registry.governance import ToolGovernance
     from prismclaw.engine.toolkit.registry.registry import ToolRegistry
+    from prismclaw.infra.config.capability_policy import CapabilityPolicyRegistry
+    from prismclaw.infra.environment_catalog import EnvironmentCatalog
     from prismclaw.schema.agent.context import (
         BootstrapContextProvider,
         ContextAssembler,
@@ -42,6 +45,7 @@ if TYPE_CHECKING:
         MemoryContextProvider,
     )
     from prismclaw.schema.agent.data_types import ContentBlock
+    from prismclaw.schema.agent.session import SessionHeader
     from prismclaw.schema.content.compaction import CompactResult
     from prismclaw.schema.content.content_types import ToolResult
     from prismclaw.schema.content.streaming import SubagentProgressBatch
@@ -54,9 +58,9 @@ from prismclaw.schema.agent.bundles import (
     DreamAdminOpsProtocol,
     DreamBoundaryProtocol,
     DreamReviewServiceProtocol,
+    ExpertLifecycleProtocol,
     ExtensionManagerProtocol,
     MCPManagerProtocol,
-    PluginLifecycleProtocol,
     RunOwnershipStoreProtocol,
 )
 from prismclaw.schema.agent.callbacks import AgentCallbacks
@@ -121,7 +125,7 @@ class ExecutionRuntimePorts:
         self._hook_dispatcher = hook_dispatcher
         self._task_profile_service = task_profile_service
         # 进程内 AgentHook registry（engine.hooks.HookRegistry），
-        # 与插件 hook_dispatcher 是两条独立 hook 通道。
+        # 与专家包 hook_dispatcher 是两条独立 hook 通道。
         self._hook_registry = hook_registry
 
     # ── execution.request.model_fallback ──
@@ -247,7 +251,7 @@ class ExecutionRuntimePorts:
             return None
         from prismclaw.engine.compression.ports import HookInvocationResult
         from prismclaw.engine.hooks import HookEvent
-        from prismclaw.engine.plugins.hooks.schema import HookOutcome
+        from prismclaw.engine.hooks.schema import HookOutcome
 
         event_map = {
             "PRE_COMPACT": HookEvent.PRE_COMPACT,
@@ -312,16 +316,30 @@ class DreamBundle:
 
 
 @dataclass
-class PluginBundle:
-    """插件/MCP 运行时组件——从 AgentRunnerDeps 中提取的子容器。
+class ExpertBundle:
+    """专家包/MCP 运行时组件——从 AgentRunnerDeps 中提取的子容器。
 
-    extension_manager / runtime_mcp_manager / plugin_lifecycle_manager
+    extension_manager / runtime_mcp_manager / expert_lifecycle_manager
     三者生命周期绑定（同时初始化、同时热重载），适合归入同一子容器。
     """
 
     extension_manager: ExtensionManagerProtocol | None = None
     runtime_mcp_manager: MCPManagerProtocol | None = None
-    lifecycle_manager: PluginLifecycleProtocol | None = None
+    lifecycle_manager: ExpertLifecycleProtocol | None = None
+    environment_catalog: EnvironmentCatalog | None = None
+    # 目录与策略注册表：HTTP 路由查询、发布候选构建等显式读写场景使用。
+    expert_registry: ExpertRegistry | None = None
+    capability_policy_registry: CapabilityPolicyRegistry | None = None
+
+    def build_session_scope(self, header: SessionHeader) -> Scope:
+        from prismclaw.engine.experts.scope import build_session_scope
+
+        if self.environment_catalog is None:
+            raise RuntimeError("environment catalog is not configured")
+        return build_session_scope(
+            header,
+            self.environment_catalog.snapshot(),
+        )
 
 
 @dataclass
@@ -350,15 +368,14 @@ class AgentRunnerDeps:
     workspace_store: WorkspaceStore | None = field(default=None)
     skill_provider: SkillProvider | None = field(default=None)
     skill_runtime: SkillRuntime | None = field(default=None)
-    capability_catalog: CapabilityCatalogService | None = field(default=None)
+    capability_catalog: RuntimeCatalog | None = field(default=None)
     task_manager: TaskManagerProtocol | None = field(default=None)
     lock_manager: LockManagerProtocol | None = field(default=None)
-    handoff_supervisor: HandoffSupervisor | None = field(default=None)
     dream: DreamBundle = field(default_factory=DreamBundle)
     task_profile_service: TaskProfileService = field(default_factory=TaskProfileService)
     channel: str = "web"
     hook_dispatcher: HookDispatcher | None = field(default=None)
-    plugin: PluginBundle = field(default_factory=PluginBundle)
+    expert: ExpertBundle = field(default_factory=ExpertBundle)
     static_shell_cache: StaticTurnShellCache = field(default_factory=_lazy_static_shell)
     parallel_task_store: SessionParallelTaskStore | None = field(default=None)
     subagent_collaboration: SubagentCollaborationService | None = field(default=None)

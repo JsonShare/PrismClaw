@@ -33,7 +33,7 @@ def apply_app_runtime_state(
         if llm_client is not None:
             llm_client.default_model = settings.models.default_model
 
-    runtime_mcp_manager = runner_deps.plugin.runtime_mcp_manager
+    runtime_mcp_manager = runner_deps.expert.runtime_mcp_manager
     if runtime_mcp_manager is not None or not hasattr(state, "mcp_manager"):
         state.mcp_manager = runtime_mcp_manager
 

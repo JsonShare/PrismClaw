@@ -241,8 +241,11 @@ class ConversationWebRuntimeProjection:
     # 前端重建提问卡片并作答。
     # 形态：{approval_id, tool_call_id, tool_name, questions:[...], created_at_ms}
     pending_clarification: dict[str, Any] | None = None
-    # 后端累积的助理正文；GET /run 内存直读与 run.snapshot 推送的实时来源。
+    # 当前轮次已流出的自然语言文本（正文候选）；GET /run 内存直读与
+    # run.snapshot 推送的实时来源。轮次切换时清空重计。
     streaming_text: str = ""
+    # streaming_text 所属轮次（segmentId）。
+    streaming_segment: int | None = None
     # 上次落盘 payload 的 sha1 签名，用于去重写优化（内存态，不持久化、不进 payload）。
     _run_projection_sig: str = ""
 

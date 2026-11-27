@@ -330,7 +330,7 @@ export default function ConversationPane({
             {showEmpty ? (
               <EmptyState
                 title='开始新的对话'
-                desc={'描述你的任务，PrismClaw 会直接连接服务器执行\n并实时返回结果'}
+                desc={'描述你的任务，PrismWork 会直接连接服务器执行\n并实时返回结果'}
               >
                 <View className='hero-chips'>
                   <View className='chip' onClick={() => setComposerDraft(sessionId, '帮我整理这份数据')}>
@@ -420,6 +420,7 @@ export default function ConversationPane({
       <View className='chat-dock'>
         <Composer
           composerKey={sessionId}
+          expertSessionId={sessionId}
           placeholder={placeholder}
           flat
           streaming={conv.isStreaming}

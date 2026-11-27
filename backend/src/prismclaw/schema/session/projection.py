@@ -4,7 +4,6 @@ Each projector encapsulates a specific read-path concern:
 - MessageProjector: build LLM-visible messages from entries
 - TaskProjection: task runtime/spec/review queries
 - ForkTaskProjector: fork/parallel task queries
-- HandoffProjector: handoff request queries
 - CacheProjector: cache strategy snapshot queries
 - SearchProjector: search/extract evidence queries
 - ReplacementProjector: replacement decision queries
@@ -41,7 +40,6 @@ from prismclaw.schema.session.types import (
     EVIDENCE_LEDGER_CUSTOM_TYPE,
     EXTRACT_EVIDENCE_CUSTOM_TYPE,
     FORK_TASK_PROJECTION_CUSTOM_TYPE,
-    HANDOFF_REQUEST_CUSTOM_TYPE,
     REVIEW_DECISION_CUSTOM_TYPE,
     SEARCH_EVIDENCE_CUSTOM_TYPE,
     SESSION_MEMORY_CUSTOM_TYPE,
@@ -210,63 +208,6 @@ class ForkTaskProjector:
         return _build_fork_task_attention(entries=entries, effective_entries=effective)
 
 
-class HandoffProjector:
-    def __init__(self, tree: SessionTree) -> None:
-        self._tree = tree
-
-    def get_entries(self) -> list[dict[str, Any]]:
-        entries: list[dict[str, Any]] = []
-        for entry in self._tree.get_branch():
-            if not isinstance(entry, CustomEntry):
-                continue
-            if entry.custom_type != HANDOFF_REQUEST_CUSTOM_TYPE:
-                continue
-            if isinstance(entry.data, dict):
-                entries.append(dict(entry.data))
-        return entries
-
-    def get_latest(self) -> dict[str, Any] | None:
-        entries = self.get_entries()
-        return entries[-1] if entries else None
-
-    def get_follow_up_attention(self) -> dict[str, Any] | None:
-        latest_handoff = self.get_latest()
-        fork_attention = ForkTaskProjector(self._tree).get_attention()
-        if latest_handoff is None and fork_attention is None:
-            return None
-        latest_handoff_index = _latest_custom_entry_index(
-            self._tree, custom_type=HANDOFF_REQUEST_CUSTOM_TYPE
-        )
-        latest_fork_index = _latest_custom_entry_index(
-            self._tree, custom_type=FORK_TASK_PROJECTION_CUSTOM_TYPE
-        )
-        if latest_handoff is not None and (
-            fork_attention is None
-            or latest_handoff_index is None
-            or latest_fork_index is None
-            or latest_handoff_index >= latest_fork_index
-        ):
-            attention: dict[str, Any] = {"kind": "handoff", "recommended_reason": "handoff_request"}
-            target = latest_handoff.get("target")
-            if isinstance(target, str) and target:
-                attention["recommended_target"] = target
-            task = latest_handoff.get("task")
-            if isinstance(task, str) and task:
-                attention["recommended_task"] = task
-            source_subagent = latest_handoff.get("source_subagent")
-            if isinstance(source_subagent, str) and source_subagent:
-                attention["source_subagent"] = source_subagent
-            source_skill_origin = latest_handoff.get("source_skill_origin")
-            if isinstance(source_skill_origin, str) and source_skill_origin:
-                attention["source_skill_origin"] = source_skill_origin
-            if latest_handoff.get("source_is_fork") is True:
-                attention["source_is_fork"] = True
-            return attention
-        if fork_attention is None:
-            return None
-        return {"kind": "fork", **dict(fork_attention)}
-
-
 class CacheProjector:
     def __init__(self, tree: SessionTree) -> None:
         self._tree = tree
@@ -407,7 +348,6 @@ class SessionProjectionEngine:
         self.messages = MessageProjector(tree)
         self.task = TaskProjection(tree)
         self.fork = ForkTaskProjector(tree)
-        self.handoff = HandoffProjector(tree)
         self.cache = CacheProjector(tree)
         self.search = SearchProjector(tree)
         self.replacement = ReplacementProjector(tree)
@@ -500,19 +440,6 @@ def _effective_fork_task_projection_entries(
         effective_reversed.append(dict(entry))
     effective_reversed.reverse()
     return effective_reversed
-
-
-def _latest_custom_entry_index(
-    tree: SessionTree,
-    *,
-    custom_type: str,
-) -> int | None:
-    branch = tree.get_branch()
-    for index in range(len(branch) - 1, -1, -1):
-        entry = branch[index]
-        if isinstance(entry, CustomEntry) and entry.custom_type == custom_type:
-            return index
-    return None
 
 
 def _message_entry_to_dict(

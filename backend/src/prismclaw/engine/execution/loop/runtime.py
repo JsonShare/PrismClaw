@@ -51,6 +51,9 @@ class LoopRuntime:
     tree: Any = None
     traj_scope: Any = None
     attachment_guidance: str | None = None
+    # 专家作用域：prepare 判定一次，run 内（工具面 / 归属门控 / 人格 / 团队校验）全部复用。
+    # 无 environment catalog 的 headless 路径不构建，保持 None。
+    session_scope: Any = None
 
     # run 级状态（prepare 填充，stage 在 run 内读写）
     hotpath: Any = None

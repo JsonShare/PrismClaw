@@ -29,9 +29,12 @@ CRITICAL RULE FOR SUBSCRIBERS:
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from prismclaw.engine.execution.control.kernel import TerminalReason
+from prismclaw.engine.experts.codes import ExpertErrorCode
 
 # ----------------------------------------------------------------------------
 # Turn / Iteration lifecycle events
@@ -330,6 +333,60 @@ class LLMRequestFailed(BaseModel):
         return v[:256]
 
 
+class ExpertPromptDegraded(BaseModel):
+    """专家人格读取或上下文预算降级；只记录事实，不改变会话状态。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    code: ExpertErrorCode
+    session_id: str
+    expert_id: str
+    detail: str = ""
+    estimated_tokens: int | None = None
+    context_window: int | None = None
+    threshold: float | None = None
+
+
+ExpertEventSource = Literal["user", "model", "scene", "template", "deeplink"]
+
+
+class ExpertStateChanged(BaseModel):
+    """专家状态权威快照；审计字段为 session_id/expert_id/source/reason/turn。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    session_id: str
+    revision: int
+    state: Literal["active", "none"]
+    expert_id: str | None
+    expert_type: Literal["agent", "team"] | None
+    source: ExpertEventSource
+    updated_at: str
+    reason: str = ""
+    turn: int | None = None
+
+
+class ExpertUnavailable(BaseModel):
+    """专家装配失败；保留专家身份并携带稳定错误码。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    session_id: str
+    expert_id: str
+    code: ExpertErrorCode
+    source: ExpertEventSource | None = None
+    reason: str = ""
+    turn: int | None = None
+
+
+class ExpertCancelled(BaseModel):
+    """用户取消专家；保留被取消的专家身份供审计与界面同步。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    session_id: str
+    expert_id: str
+    source: ExpertEventSource
+    reason: str = ""
+    turn: int | None = None
+
+
 # ----------------------------------------------------------------------------
 # Conversation-tree node events ( — per-conversation-event cells)
 #
@@ -433,6 +490,10 @@ ALL_EVENTS: tuple[type[BaseModel], ...] = (
     # TrajectoryAuditService.handle_event needs them registered here.
     LLMResponseReceived,
     LLMRequestFailed,
+    # Expert lifecycle events share the blanket subscriber path.
+    ExpertStateChanged,
+    ExpertUnavailable,
+    ExpertCancelled,
     # conversation-tree node events (per-cell trajectory source).
     # Consumed by the cell-projector, NOT the iteration-projector.
     ConversationNodeAdded,

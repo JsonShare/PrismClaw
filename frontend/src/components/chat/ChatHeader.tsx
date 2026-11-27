@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import iconMenuFold from '../../images/other_icon/menu_fold.png'
+import { Gauge } from 'lucide-react'
+import iconLeftFold from '../../images/other_icon/left_fold.png'
 import iconNew from '../../images/other_icon/new.png'
-import iconBarExpand from '../../images/other_icon/bar_expand.png'
-import iconBarFold from '../../images/other_icon/bar_fold.png'
+import iconRightFold from '../../images/other_icon/right_fold.png'
 
 export interface ChatHeaderProps {
   /** 侧边栏状态 */
@@ -22,6 +22,9 @@ export interface ChatHeaderProps {
   showPanelButton: boolean
   taskFilesOpen: boolean
   onTogglePanel: () => void
+
+  /** 打开运行轨迹面板（仅会话页展示仪表入口） */
+  onOpenTrajectory?: () => void
 
   /** 额外的左侧/右侧按钮 */
   headerLeft?: ReactNode
@@ -45,6 +48,7 @@ export function ChatHeader({
   showPanelButton,
   taskFilesOpen,
   onTogglePanel,
+  onOpenTrajectory,
   headerLeft,
   headerRight,
 }: ChatHeaderProps) {
@@ -82,16 +86,16 @@ export function ChatHeader({
           className="btn btn-icon btn-ghost"
           title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
         >
-          <img src={iconMenuFold} alt={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'} className="w-5 h-5 app-icon" />
+          <img src={iconLeftFold} alt={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'} className="w-5 h-5 app-icon" />
         </button>
         {sidebarCollapsed && (
           <button
             type="button"
             onClick={onNewSession}
             className="btn btn-icon btn-ghost"
-            title="新任务"
+            title="新建对话"
           >
-            <img src={iconNew} alt="新任务" className="w-5 h-5 app-icon" />
+            <img src={iconNew} alt="新建对话" className="w-5 h-5 app-icon" />
           </button>
         )}
         {headerLeft}
@@ -109,6 +113,18 @@ export function ChatHeader({
 
       {/* 右侧按钮 */}
       <div className="shrink-0 flex items-center gap-2">
+        {/* 运行轨迹与右栏开关相互独立：窄屏放不下右栏时，轨迹入口仍需保留 */}
+        {!isLanding && onOpenTrajectory && (
+          <button
+            type="button"
+            onClick={onOpenTrajectory}
+            className="btn btn-icon btn-ghost"
+            title="运行轨迹"
+            aria-label="运行轨迹"
+          >
+            <Gauge size={18} className="text-[var(--c-text)]" />
+          </button>
+        )}
         {showPanelButton && (
           <button
             type="button"
@@ -117,11 +133,11 @@ export function ChatHeader({
             title={taskFilesOpen ? '收起右侧面板' : '展开右侧面板'}
             aria-label={taskFilesOpen ? '收起右侧面板' : '展开右侧面板'}
           >
-            {taskFilesOpen ? (
-              <img src={iconBarFold} alt="收起右侧面板" className="w-5 h-5 app-icon" />
-            ) : (
-              <img src={iconBarExpand} alt="展开右侧面板" className="w-5 h-5 app-icon" />
-            )}
+            <img
+              src={iconRightFold}
+              alt={taskFilesOpen ? '收起右侧面板' : '展开右侧面板'}
+              className="w-5 h-5 app-icon"
+            />
           </button>
         )}
         {headerRight}

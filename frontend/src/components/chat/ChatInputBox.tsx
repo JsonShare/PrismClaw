@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Square, ArrowUp, Plus, X, LoaderCircle, Sparkles, Mic, Pause,
+  Square, Plus, X, LoaderCircle, Sparkles, Mic, Pause,
 } from 'lucide-react'
 import type { PendingAttachment, PendingUpload } from '../../lib/chat/attachments'
 import { imageBlockToDataUrl } from '../../lib/file/image'
@@ -8,19 +8,37 @@ import FileIcon from '../file/FileIcon'
 import PlusMenu from './PlusMenu'
 import type { PlusMenuAction } from './PlusMenu'
 import SkillSelector from './SkillSelector'
-import PluginSelector from './PluginSelector'
+import type { SkillCatalogItem } from './SkillSelector'
+import PluginSelector, { expertLocalizedText } from './PluginSelector'
+import type { ExpertCatalogItem } from './PluginSelector'
 import AbilityMenu from './AbilityMenu'
 import type { AbilityMenuHandle, AbilityPick } from './AbilityMenu'
 import ContextPicker from './ContextPicker'
 import type { ContextPickerHandle } from './ContextPicker'
 import { useItemTooltip } from './useItemTooltip'
-import { useSkillList } from '../../hooks/chat/useSkillList'
+import { monogram } from './monogram'
 import type { ContextRef } from '../../lib/chat/contextRefs'
 import type { Message } from '../../types/chat'
 import RichInput from './RichInput'
 import type { RichInputHandle } from './RichInput'
-import { collectChips, designationOf, hasPlainText } from '../../lib/chat/inputMarkers'
+import { collectChips, hasPlainText } from '../../lib/chat/inputMarkers'
+import type { ChipRef } from '../../lib/chat/inputMarkers'
 import { parseTrigger } from '../../lib/chat/inputTrigger'
+import { apiUrl, authedUrl } from '../../lib/system-adapter'
+import { formatBytes } from '../../lib/file/outputFiles'
+import { useToast } from '../../lib/toast'
+import FileLibraryModal from './FileLibraryModal'
+import { DRAFT_SESSION_KEY, EMPTY_EXPERT_STATE, useSessionStore } from '../../stores/session'
+import type { ExpertState } from '../../stores/session'
+import iconSend from '../../images/other_icon/send.png'
+
+/** 专家不可用原因码 → 用户可读文案（码与后端 ExpertErrorCode 一致）。 */
+const EXPERT_UNAVAILABLE_TEXT: Record<string, string> = {
+  EXPERT_UNAVAILABLE: '该专家已不可用：未部署或已被移除',
+  MODULE_DISABLED: '该专家已被管理员禁用',
+  EXPERT_ID_AMBIGUOUS: '该专家名称存在歧义，请重新选择',
+  EXPERT_PROMPT_MISSING: '该专家的人格文件缺失',
+}
 
 function formatAttachmentMeta(file: File): string {
   const rawName = file?.name || ''
@@ -135,6 +153,10 @@ export interface ChatInputBoxProps {
   onRemoveAttachment: (index: number) => void
   /** 点击已选附件：已上传则打开右侧预览，未完成时由宿主提示 */
   onPreviewAttachment: (att: PendingAttachment) => void
+  /** 文件库多选结果 → 待定区引用卡片（abilitiesEnabled=false 的宿主可不提供） */
+  onAddRefs?: (refs: { path: string; name: string; sizeBytes?: number }[]) => void
+  /** 单条消息附件上限，用于限制引用文件弹框的勾选数量 */
+  maxRefFiles?: number
   variant: ChatInputBoxVariant; placeholder: string
   conversationMessages: Message[]
   workspaceId: string; token: string | null
@@ -154,7 +176,7 @@ export default function ChatInputBox({
   isClarifying, isDragging, pendingAttachments,
   editorRef, fileInputRef, onInputChange, onSubmit, onFilePicked, onPasteFiles,
   onDragEnter, onDragLeave, onDragOver, onDrop, onOptimizePrompt, onToggleVoice,
-  onAbort, onRemoveAttachment, onPreviewAttachment, variant, placeholder,
+  onAbort, onRemoveAttachment, onPreviewAttachment, onAddRefs, maxRefFiles, variant, placeholder,
   conversationMessages, workspaceId, token,
   abilitiesEnabled = true, children,
 }: ChatInputBoxProps) {
@@ -163,15 +185,80 @@ export default function ChatInputBox({
   const [skillPanelOpen, setSkillPanelOpen] = useState(false)
   const [pluginPanelOpen, setPluginPanelOpen] = useState(false)
   const [contextFlyoutOpen, setContextFlyoutOpen] = useState(false)
+  const [fileLibraryOpen, setFileLibraryOpen] = useState(false)
+  const { toast } = useToast()
   const toolbarRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   // 悬浮离开工具栏后延迟收起子面板的定时器（hover-intent，避免「粘滞」）
   const collapseTimer = useRef<number | null>(null)
   const abilityRef = useRef<AbilityMenuHandle>(null)
   const contextRefRef = useRef<ContextPickerHandle>(null)
+  const sessionMutationQueues = useRef(new Map<string, Promise<void>>())
 
-  // 技能与专家同源：整页只取一次，`/` 面板、技能面板、专家面板共用
-  const { skills, loading: skillsLoading } = useSkillList()
+  const activeConvId = useSessionStore((s) => s.activeConvId)
+  const sessionKey = activeConvId ?? DRAFT_SESSION_KEY
+  const expertState = useSessionStore((s) => s.expertStates[sessionKey] ?? EMPTY_EXPERT_STATE)
+  const selectedSkillIds = expertState.selected_skill_ids
+  const [experts, setExperts] = useState<ExpertCatalogItem[]>([])
+  const [skills, setSkills] = useState<SkillCatalogItem[]>([])
+  const [expertsLoading, setExpertsLoading] = useState(false)
+  const [skillsLoading, setSkillsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!abilitiesEnabled || !token) return
+    let cancelled = false
+    setExpertsLoading(true)
+    void (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/experts'), { headers: { Authorization: `Bearer ${token}` } })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json() as ExpertCatalogItem[]
+        if (!cancelled) setExperts(Array.isArray(data) ? data : [])
+      } catch {
+        if (!cancelled) setExperts([])
+      } finally {
+        if (!cancelled) setExpertsLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [abilitiesEnabled, token])
+
+  useEffect(() => {
+    if (!abilitiesEnabled || !token) return
+    let cancelled = false
+    setSkillsLoading(true)
+    void (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/skills'), { headers: { Authorization: `Bearer ${token}` } })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const packages = await res.json() as Array<{
+          expert_name: string
+          expert_type?: string | null
+          skills: Array<{ id: string; name: string; name_zh?: string | null; description?: string }>
+        }>
+        if (!cancelled) {
+          setSkills(packages.flatMap((pkg) => pkg.skills.map((skill) => ({
+            id: skill.id,
+            name: skill.name,
+            nameZh: skill.name_zh ?? null,
+            description: skill.description ?? '',
+            pluginName: pkg.expert_name,
+            expertType: pkg.expert_type ?? null,
+          }))))
+        }
+      } catch {
+        if (!cancelled) setSkills([])
+      } finally {
+        if (!cancelled) setSkillsLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [abilitiesEnabled, token])
+
+  const selectedExpert = experts.find((expert) => expert.id === expertState.expert_id)
+  const expertName = expertState.expert_id
+    ? (selectedExpert ? expertLocalizedText(selectedExpert.displayName) : '') || expertState.expert_id
+    : ''
 
   // ── 触发解析：唯一输入源是编辑器「光标前文本」 ──
   const [caretText, setCaretText] = useState('')
@@ -188,10 +275,23 @@ export default function ChatInputBox({
     setCaretText(text)
   }, [])
 
-  // ── 正文里的卡片是技能/专家/引用文件的唯一真相源 ──
   const chips = collectChips(input)
-  const designation = designationOf(input)
   const fileChips = chips.filter((c) => c.kind === 'file')
+
+  // 会话选择状态是技能 chip 的唯一真相源；发送清空正文后仍保留已选技能。
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const rendered = collectChips(editor.getValue())
+      .filter((chip) => chip.kind === 'skill')
+      .map((chip) => chip.value)
+    for (const skillId of rendered) {
+      if (!selectedSkillIds.includes(skillId)) editor.removeChip('skill', skillId)
+    }
+    for (const skillId of selectedSkillIds) {
+      if (!rendered.includes(skillId)) editor.insertChip({ kind: 'skill', value: skillId })
+    }
+  }, [editorRef, input, sessionKey, selectedSkillIds])
 
   // 内容区左右边缘与底部按钮对齐：左=➕图标视觉位置（按钮圆心偏左），右=发送组右缘
   const contentPadLeft = isLanding ? 'pl-[24px]' : 'pl-[20px]'
@@ -204,6 +304,12 @@ export default function ChatInputBox({
   // 只有卡片、没有正文时不视为可发送（卡片是提问的修饰，不是提问本身；
   // markersToReadable 会把卡片转成 `@名称`，不能用来判空）
   const canSend = hasPlainText(input) || pendingAttachments.length > 0
+  // 后端判定该会话的专家已不可用：run 会在落库前被拒，前端不再放行发送。
+  const expertUnavailableText = expertState.unavailable_reason
+    ? EXPERT_UNAVAILABLE_TEXT[expertState.unavailable_reason] ?? '该专家当前不可用'
+    : null
+  // 发送键的可用态：与 disabled 条件同源，避免「看着能点、实际被拦」的两套判断
+  const canSubmit = canSend && !isUploading && !isClarifying && expertUnavailableText === null
 
   const handlePlusAction = useCallback((action: PlusMenuAction) => {
     // 打开一个子面板时关闭其他子面板（不关闭主菜单，改用右侧飞出）
@@ -212,12 +318,27 @@ export default function ChatInputBox({
     setPluginPanelOpen(false)
     setContextFlyoutOpen(false)
     switch (action) {
-      case 'add_file': fileInputRef.current?.click(); break
+      case 'upload':
+        setPlusMenuOpen(false)
+        fileInputRef.current?.click()
+        break
+      case 'quote':
+        setPlusMenuOpen(false)
+        // 宿主未提供引用能力时不要把用户带进弹框（否则会白复制一份副本）
+        if (!onAddRefs) {
+          toast('当前场景不支持引用文件', 'info')
+          break
+        }
+        setFileLibraryOpen(true)
+        break
+      case 'expert': setPluginPanelOpen(true); break
       case 'skill': setSkillPanelOpen(true); break
-      case 'plugin': setPluginPanelOpen(true); break
-      case 'context': setContextFlyoutOpen(true); break
+      case 'connector':
+        setPlusMenuOpen(false)
+        toast('连接器即将支持', 'info')
+        break
     }
-  }, [fileInputRef, dismissTrigger])
+  }, [dismissTrigger, fileInputRef, toast, onAddRefs])
 
   // 单文件策略：选一个就关，和 ContextPicker 的"选完即走"一致。
   // 需要多个再点一次「添加文件」——多选文件通过拖拽或 /file 面板支持。
@@ -295,38 +416,154 @@ export default function ChatInputBox({
     editorRef.current?.deleteBeforeCaret(trigger.length)
   }, [trigger, editorRef])
 
-  // 技能与专家可以同时选多个（后端逐个激活），选中是叠加而不是替换。
+  const recoverExpertState = useCallback(async (convId: string, previous: ExpertState) => {
+    let recovered = previous
+    try {
+      const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(convId)}`), {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json() as { expert_state?: ExpertState }
+        if (data.expert_state) recovered = data.expert_state
+      }
+    } catch {}
+    useSessionStore.getState().setExpertState(convId, recovered)
+  }, [token])
+
+  const queueSessionMutation = useCallback((conversationId: string, mutation: () => Promise<void>) => {
+    const previous = sessionMutationQueues.current.get(conversationId) ?? Promise.resolve()
+    const next = previous.then(mutation).catch(() => {})
+    sessionMutationQueues.current.set(conversationId, next)
+    void next.then(() => {
+      if (sessionMutationQueues.current.get(conversationId) === next) {
+        sessionMutationQueues.current.delete(conversationId)
+      }
+    })
+  }, [])
+
+  const handleExpertPanelPick = useCallback((expertId: string) => {
+    if (!activeConvId) {
+      const current = useSessionStore.getState().expertStates[DRAFT_SESSION_KEY] ?? EMPTY_EXPERT_STATE
+      useSessionStore.getState().setExpertState(DRAFT_SESSION_KEY, {
+        ...current,
+        expert_id: expertId,
+        source: 'user',
+      })
+      return
+    }
+    const conversationId = activeConvId
+    queueSessionMutation(conversationId, async () => {
+      const previous = useSessionStore.getState().expertStates[conversationId] ?? EMPTY_EXPERT_STATE
+      try {
+        const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(conversationId)}/expert`), {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expert_id: expertId }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const next = await res.json() as ExpertState
+        useSessionStore.getState().setExpertState(conversationId, next)
+      } catch {
+        await recoverExpertState(conversationId, previous)
+      }
+    })
+  }, [activeConvId, queueSessionMutation, recoverExpertState, token])
+
+  const handleExpertCancel = useCallback(() => {
+    if (!activeConvId) {
+      const current = useSessionStore.getState().expertStates[DRAFT_SESSION_KEY] ?? EMPTY_EXPERT_STATE
+      useSessionStore.getState().setExpertState(DRAFT_SESSION_KEY, {
+        ...current,
+        expert_id: null,
+        source: null,
+      })
+      return
+    }
+    const conversationId = activeConvId
+    queueSessionMutation(conversationId, async () => {
+      const previous = useSessionStore.getState().expertStates[conversationId] ?? EMPTY_EXPERT_STATE
+      try {
+        const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(conversationId)}/expert`), {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const next = await res.json() as ExpertState
+        useSessionStore.getState().setExpertState(conversationId, next)
+      } catch {
+        await recoverExpertState(conversationId, previous)
+      }
+    })
+  }, [activeConvId, queueSessionMutation, recoverExpertState, token])
+
+  const handleSkillToggle = useCallback((skillId: string) => {
+    if (!activeConvId) {
+      const current = useSessionStore.getState().expertStates[DRAFT_SESSION_KEY] ?? EMPTY_EXPERT_STATE
+      const nextIds = current.selected_skill_ids.includes(skillId)
+        ? current.selected_skill_ids.filter((id) => id !== skillId)
+        : [...current.selected_skill_ids, skillId]
+      useSessionStore.getState().setSelectedSkillIds(DRAFT_SESSION_KEY, nextIds)
+      return
+    }
+    const conversationId = activeConvId
+    queueSessionMutation(conversationId, async () => {
+      const current = useSessionStore.getState().expertStates[conversationId] ?? EMPTY_EXPERT_STATE
+      const nextIds = current.selected_skill_ids.includes(skillId)
+        ? current.selected_skill_ids.filter((id) => id !== skillId)
+        : [...current.selected_skill_ids, skillId]
+      const res = await fetch(apiUrl(`/api/sessions/${encodeURIComponent(conversationId)}/skills`), {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selected_skill_ids: nextIds }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as { selected_skill_ids: string[] }
+      useSessionStore.getState().setSelectedSkillIds(conversationId, data.selected_skill_ids)
+    })
+  }, [activeConvId, queueSessionMutation, token])
+
+  const handleChipRemove = useCallback((chip: ChipRef) => {
+    if (chip.kind !== 'skill') return
+    if (!activeConvId) {
+      const current = useSessionStore.getState().expertStates[DRAFT_SESSION_KEY] ?? EMPTY_EXPERT_STATE
+      useSessionStore.getState().setSelectedSkillIds(
+        DRAFT_SESSION_KEY,
+        current.selected_skill_ids.filter((id) => id !== chip.value),
+      )
+      return
+    }
+    const conversationId = activeConvId
+    queueSessionMutation(conversationId, async () => {
+      const skillPath = chip.value.split('/').map((part) => encodeURIComponent(part)).join('/')
+      const res = await fetch(
+        apiUrl(`/api/sessions/${encodeURIComponent(conversationId)}/skills/${skillPath}`),
+        { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+      )
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json() as { selected_skill_ids: string[] }
+      useSessionStore.getState().setSelectedSkillIds(conversationId, data.selected_skill_ids)
+    })
+  }, [activeConvId, queueSessionMutation, token])
+
   const handleAbilityPick = useCallback((pick: AbilityPick) => {
-    const current = pick.kind === 'skill' ? designation.skills : designation.plugins
     consumeTrigger()
-    if (current.includes(pick.name)) {
-      editorRef.current?.removeChip(pick.kind, pick.name)
-      return
-    }
-    editorRef.current?.insertChip({ kind: pick.kind, value: pick.name })
+    void handleSkillToggle(pick.name)
     editorRef.current?.focus()
-  }, [designation.skills, designation.plugins, consumeTrigger, editorRef])
+  }, [consumeTrigger, editorRef, handleSkillToggle])
 
-  // 面板是单选：点一项就插入并关闭，靠再次打开面板累积多张卡片；
-  // 点已选中的项视为取消该卡片。
-  const handleSkillPanelPick = useCallback((name: string) => {
-    if (designation.skills.includes(name)) {
-      editorRef.current?.removeChip('skill', name)
-      return
-    }
-    editorRef.current?.insertChip({ kind: 'skill', value: name })
+  // 技能面板保持展开以便多选；仅在服务端确认后更新 chip。
+  // 技能弹窗只列「技能」本体：专家、专家团自带的技能不在这里出现。
+  // 判定用包级语义标记 expert_type（agent/team），纯技能包为 null。
+  // 旧后端不返回该字段时（undefined → null）不做过滤，避免整表被清空。
+  const pickerSkills = useMemo(
+    () => skills.filter((skill) => !skill.expertType),
+    [skills],
+  )
+
+  const handleSkillPanelPick = useCallback((skillId: string) => {
     setPlusMenuOpen(false)
-  }, [designation.skills, editorRef])
-
-  const handlePluginPanelPick = useCallback((name: string) => {
-    if (designation.plugins.includes(name)) {
-      editorRef.current?.removeChip('plugin', name)
-      return
-    }
-    editorRef.current?.insertChip({ kind: 'plugin', value: name })
-    setPlusMenuOpen(false)
-  }, [designation.plugins, editorRef])
-
+    void handleSkillToggle(skillId)
+  }, [handleSkillToggle])
   const handleContextToggle = useCallback((ref: ContextRef) => {
     const editor = editorRef.current
     if (!editor) return
@@ -384,16 +621,61 @@ export default function ChatInputBox({
           {pendingAttachments.length > 0 && (
             <div className={`flex flex-wrap gap-2 shrink-0 ${attachmentPadding}`}>
               {pendingAttachments.map((att, i) => (
-                <AttachmentCard
-                  key={att.id}
-                  file={att.file}
-                  imageSrc={att.kind === 'image' ? imageBlockToDataUrl(att.block) : undefined}
-                  upload={att.upload}
-                  onPreview={() => onPreviewAttachment(att)}
-                  onRemove={() => { hideTip(); onRemoveAttachment(i) }}
-                  onTitleEnter={(e) => showTip(e, att.file.name, true, 'above')}
-                  onTitleLeave={hideTip}
-                />
+                att.kind === 'ref' ? (
+                  <div key={att.id} className="relative group h-16 w-[200px] max-w-full shrink-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onPreviewAttachment(att)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onPreviewAttachment(att)
+                        }
+                      }}
+                      className="flex h-full w-full cursor-pointer items-center gap-2.5 overflow-hidden
+                       rounded-[var(--radius-md)] border border-[var(--c-border)] bg-[var(--c-surface-2)]/40
+                       pl-2.5 pr-4 transition-colors hover:border-[var(--c-accent)]/60"
+                    >
+                      <FileIcon filename={att.name} size={24} className="shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <div
+                          onMouseEnter={(e) => showTip(e, att.name, true, 'above')}
+                          onMouseLeave={hideTip}
+                          className="truncate text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]"
+                        >
+                          {att.name}
+                        </div>
+                        <div className="truncate text-[length:var(--fs-xs)] text-[var(--c-text-secondary)]/80">
+                          {(att.name.split('.').pop() || 'FILE').toUpperCase()}·{formatBytes(att.sizeBytes ?? 0)}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="移除附件"
+                      onClick={() => { hideTip(); onRemoveAttachment(i) }}
+                      className="absolute z-10 -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full
+                       bg-[#5b6673] text-white opacity-0 shadow-[0_1px_3px_rgba(0,0,0,0.28)] transition-all
+                       hover:bg-[#49525e] cursor-pointer scale-90 pointer-events-none group-hover:scale-100
+                       group-hover:opacity-100 group-hover:pointer-events-auto focus-visible:scale-100
+                       focus-visible:opacity-100 focus-visible:pointer-events-auto"
+                    >
+                      <X size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                ) : (
+                  <AttachmentCard
+                    key={att.id}
+                    file={att.file}
+                    imageSrc={att.kind === 'image' ? imageBlockToDataUrl(att.block) : undefined}
+                    upload={att.upload}
+                    onPreview={() => onPreviewAttachment(att)}
+                    onRemove={() => { hideTip(); onRemoveAttachment(i) }}
+                    onTitleEnter={(e) => showTip(e, att.file.name, true, 'above')}
+                    onTitleLeave={hideTip}
+                  />
+                )
               ))}
             </div>
           )}
@@ -408,6 +690,7 @@ export default function ChatInputBox({
             onCaretChange={handleCaretChange}
             onKeyDown={handleKeyDown}
             onPasteFiles={onPasteFiles}
+            onChipRemove={(chip) => { void handleChipRemove(chip) }}
             placeholder={placeholder}
             className={`block w-full ${editorPadding} bg-transparent text-[var(--c-text)] text-[length:var(--fs-md)] resize-none outline-none ${textareaFocusClass} leading-relaxed`}
           />
@@ -421,9 +704,66 @@ export default function ChatInputBox({
               className="btn btn-circle btn-ghost"
               data-state={anySubPanelOpen ? 'accent' : undefined}
               aria-label="添加" onMouseEnter={(e) => showTip(e, '添加', true)} onMouseLeave={hideTip}><Plus size={18} strokeWidth={2} /></button>
-            <PlusMenu open={plusMenuOpen} onOpenChange={setPlusMenuOpen} onAction={handlePlusAction} />
-            <SkillSelector open={skillPanelOpen} onClose={() => setSkillPanelOpen(false)} selected={designation.skills} onChange={handleSkillPanelPick} skills={skills} loading={skillsLoading} />
-            <PluginSelector open={pluginPanelOpen} onClose={() => setPluginPanelOpen(false)} selected={designation.plugins} onChange={handlePluginPanelPick} skills={skills} loading={skillsLoading} />
+            {expertState.expert_id && (
+              <div
+                data-expert-pill
+                className={`group ml-1 flex max-w-[220px] min-w-0 items-center rounded-full py-1 pl-1 pr-2.5
+                 text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] transition-colors
+                 hover:bg-[var(--c-surface-2)]${expertUnavailableText ? ' opacity-50' : ''}`}
+                onMouseEnter={(e) => showTip(e, expertUnavailableText ?? expertName, true, 'above', 'dark')}
+                onMouseLeave={hideTip}
+                data-unavailable={expertUnavailableText ? '' : undefined}
+              >
+                <span className="relative grid h-5 w-5 shrink-0 place-items-center">
+                  <span className="grid h-full w-full place-items-center overflow-hidden rounded-full
+                   bg-[var(--c-accent)] text-[length:var(--fs-xs)] font-semibold text-[var(--c-btn-primary-fg)]
+                   transition-opacity group-hover:opacity-0">
+                    {selectedExpert?.avatarUrl
+                      ? <img src={authedUrl(selectedExpert.avatarUrl, token)} alt="" className="h-full w-full object-cover" />
+                      : monogram(expertName)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`取消专家 ${expertName}`}
+                    onClick={() => { void handleExpertCancel() }}
+                    className="absolute inset-0 grid place-items-center rounded-full opacity-0
+                     transition-opacity hover:bg-[var(--c-surface-3)] hover:text-[var(--c-text)]
+                     focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <X size={12} strokeWidth={2} />
+                  </button>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setPlusMenuOpen(true); handlePlusAction('expert') }}
+                  className="ml-1.5 min-w-0 truncate text-left text-[var(--c-text)]"
+                >
+                  {expertName}
+                </button>
+              </div>
+            )}
+            <PlusMenu
+              open={plusMenuOpen}
+              onAction={handlePlusAction}
+              onClose={() => setPlusMenuOpen(false)}
+              // 悬浮到别的项时立即收起已展开的飞出面板，避免「鼠标已经移到引用文件、专家面板还挂着」
+              onHoverItem={(action) => {
+                if (action !== 'expert') setPluginPanelOpen(false)
+                if (action !== 'skill') setSkillPanelOpen(false)
+                setContextFlyoutOpen(false)
+              }}
+            />
+            <FileLibraryModal
+              open={fileLibraryOpen}
+              onClose={() => setFileLibraryOpen(false)}
+              workspaceId={workspaceId}
+              token={token}
+              sessionId={activeConvId}
+              maxSelect={maxRefFiles}
+              onConfirm={(items) => onAddRefs?.(items)}
+            />
+            <SkillSelector open={skillPanelOpen} onClose={() => setSkillPanelOpen(false)} selected={selectedSkillIds} onChange={handleSkillPanelPick} skills={pickerSkills} loading={skillsLoading} />
+            <PluginSelector open={pluginPanelOpen} onClose={() => setPluginPanelOpen(false)} selected={expertState.expert_id} onChange={handleExpertPanelPick} experts={experts} loading={expertsLoading} token={token} />
             <ContextPicker
               open={contextFlyoutOpen}
               onClose={() => setContextFlyoutOpen(false)}
@@ -439,10 +779,7 @@ export default function ChatInputBox({
               <AbilityMenu
                 ref={abilityRef}
                 query={trigger.query}
-                selected={[
-                  ...designation.skills.map((name) => ({ kind: 'skill' as const, name })),
-                  ...designation.plugins.map((name) => ({ kind: 'plugin' as const, name })),
-                ]}
+                selected={selectedSkillIds.map((name) => ({ kind: 'skill' as const, name }))}
                 skills={skills}
                 loading={skillsLoading}
                 onPick={handleAbilityPick}
@@ -484,9 +821,25 @@ export default function ChatInputBox({
               className="btn btn-circle btn-stop"
               aria-label="停止" onMouseEnter={(e) => showTip(e, '停止', true)} onMouseLeave={hideTip}><Square size={14} fill="currentColor" /></button>
           )}
-          <button type="button" onClick={() => { if (isUploading) return; handleSubmit() }} disabled={isUploading || isClarifying || !canSend}
-            className="btn btn-circle btn-inverse"
-            aria-label="发送" onMouseEnter={(e) => showTip(e, '发送', true)} onMouseLeave={hideTip}><ArrowUp size={16} strokeWidth={2.5} /></button>
+          <button type="button" onClick={() => { if (isUploading) return; handleSubmit() }} disabled={!canSubmit}
+            // 发送键：无内容时灰色（disabled 自带 40% 透明），有内容时主色实心 + 白色图标
+            className={`btn btn-circle ${canSubmit ? 'btn-primary' : 'bg-transparent text-[var(--c-text-secondary)]'}`}
+            aria-label="发送" onMouseEnter={(e) => showTip(e, '发送', true)} onMouseLeave={hideTip}>
+            <span
+              aria-hidden="true"
+              className="w-[18px] h-[18px] bg-current"
+              style={{
+                WebkitMaskImage: `url("${iconSend}")`,
+                maskImage: `url("${iconSend}")`,
+                WebkitMaskRepeat: 'no-repeat',
+                maskRepeat: 'no-repeat',
+                WebkitMaskPosition: 'center',
+                maskPosition: 'center',
+                WebkitMaskSize: 'contain',
+                maskSize: 'contain',
+              }}
+            />
+          </button>
         </div>
       </div>
         </>

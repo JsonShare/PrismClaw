@@ -35,6 +35,15 @@ export interface PendingUpload {
 export type PendingAttachment =
   | { kind: 'image'; id: string; file: File; block: ImageBlock; upload?: PendingUpload }
   | { kind: 'file'; id: string; file: File; upload?: PendingUpload }
+  /** 从文件库引用的工作区文件：已存在，无需上传 */
+  | {
+    kind: 'ref'
+    id: string
+    path: string
+    name: string
+    sizeBytes?: number
+    mimeType?: string | null
+  }
 
 /**
  * A file the upload pipeline rejected. Mirrors the backend ``SkippedItem``
@@ -159,6 +168,16 @@ export function buildOutgoingAttachments(
 ): AttachmentBlock[] {
   const nextAttachments: AttachmentBlock[] = []
   for (const source of pendingAttachments) {
+    if (source.kind === 'ref') {
+      nextAttachments.push({
+        type: 'file',
+        path: source.path,
+        name: source.name,
+        mime_type: source.mimeType ?? undefined,
+        size_bytes: source.sizeBytes ?? 0,
+      })
+      continue
+    }
     const upload = source.upload
     if (!upload || upload.status !== 'done' || !upload.path) continue
     if (source.kind === 'file') {

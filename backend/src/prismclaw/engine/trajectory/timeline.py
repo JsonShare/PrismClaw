@@ -72,7 +72,8 @@ class IterationUnit(BaseModel):
     segment_id: int = Field(alias="segmentId")
     reasoning: str = Field(default="", alias="reasoning")
     # 该轮自然语言输出（TextChunk 累积，不含工具参数/结果）。
-    # 执行过程区域展示的"让我先分析一下..."等迭代过话语，正文区不再重复。
+    # 已结束轮次（被后续轮次取代）的文本是过程过语，只在这里展示；
+    # 当前未结束且无工具调用的轮次文本属于正文，不进入 timeline。
     text: str = Field(default="", alias="text")
     # 扁平 OperationDetail 列表，按 startedAt 升序。
     # 不再按 (step_id, segment_id, kind, target) 折叠为 OperationGroup —
@@ -159,22 +160,7 @@ class SetPhasePatch(BaseModel):
     phase: HeartbeatPayload = Field(alias="phase")
 
 
-class IterationBoundaryPatch(BaseModel):
-    """迭代边界 flush：告诉前端「上一轮迭代已完整推完，清空正文流式缓存」。
-
-    后端 IterationBoundary(llm_start) 时发，携带上一轮的 segmentId。
-    前端收到后把 streamingText 清空（上一轮自然语言输出已累积进 projector，
-    会随下一次 timeline snapshot 一起推到 ExecutionTimeline），正文区只显示
-    当前迭代吐字。Done 落库时 final_message 只保留最后一轮最终答案。
-    """
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    op: Literal["iteration_boundary"] = Field(default="iteration_boundary", alias="op")
-    segment_id: int = Field(alias="segmentId")
-
-
-TimelinePatch = UpsertNodePatch | SetPhasePatch | IterationBoundaryPatch
+TimelinePatch = UpsertNodePatch | SetPhasePatch
 
 
 # --------------------------------------------------------------------------- #
@@ -335,19 +321,29 @@ class TaskExecutionProjector:
     def current_segment(self) -> int:
         """公开访问当前迭代段（segment_id）。
 
-        用于 chat_runner 在推 SERVER_CHAT_DELTA 时把 segment_id 塞进 payload，
-        让前端能在 segment 切换时（下一轮迭代的第一个 TextChunk 到达）
-        才清空 streamingText — 避免 IterationBoundary 提前清空导致的空白窗口。
+        chat_runner 用它给 SERVER_CHAT_DELTA 标段，并维护 runtime projection 的
+        streaming_text：该字段只承载「当前未结束轮次」的正文候选，切段即清空。
         """
         return self._current_segment
 
     # -- 公共查询 ----------------------------------------------------------- #
 
     def has_content(self) -> bool:
-        """门控：本次执行是否有 reasoning / text 段 / ≥1 operation。"""
-        has_segment = any(seg.strip() for seg in self._segment_reasonings.values())
-        has_text = any(txt.strip() for txt in self._segment_texts.values())
-        return has_segment or has_text or bool(self._operations)
+        """门控：本次执行是否有可在 timeline 渲染的内容。
+
+        来源：reasoning 段、已结束轮次的文本（过程过语）、≥1 operation。
+        终态轮的文本不算——它是正文，由引擎落库承载。
+        """
+        has_reasoning = any(seg.strip() for seg in self._segment_reasonings.values())
+        return has_reasoning or bool(self._operations) or self._has_completed_text()
+
+    def _has_completed_text(self) -> bool:
+        """是否存在已结束（被后续轮次取代）轮次的自然语言文本。"""
+        return any(
+            txt.strip()
+            for sid, txt in self._segment_texts.items()
+            if sid < self._current_segment
+        )
 
     def set_message_id(self, message_id: str | None) -> None:
         self._message_id = message_id
@@ -371,11 +367,9 @@ class TaskExecutionProjector:
     def on_iteration_text(self, text: str) -> None:
         """把 TextChunk 累积进当前 segment 的自然语言输出。
 
-        runner 在每个 TextChunk 事件里调这个方法，把每轮迭代的自然语言输出
-        （包括中间草稿、迭代过渡语、最终答案）都收集到 _segment_texts[seg]。
-        最终 build_snapshot_dict / build_step_node 产出的 IterationUnit.text
-        字段承载这段内容，ExecutionTimeline 展示时按 segmentId 逐轮渲染。
-        这样完整的迭代过程就进了执行时间线，正文区只落库最后一轮最终答案。
+        文本归属由「轮次是否已结束」唯一决定：运行结束时仍未结束的轮次是终态轮，
+        其文本是正文（不进入 timeline）；已结束轮次的文本是过程过语，随
+        ``IterationUnit.text`` 进入执行时间线。
         """
         if not text:
             return
@@ -553,9 +547,9 @@ class TaskExecutionProjector:
     ) -> list[IterationUnit]:
         """按 step/orphan 过滤的扁平 OperationDetail 列表，按 segmentId 聚合。
 
-        segmentId 取 seg_store、过滤后的 operations、_segment_texts 三者并集，升序输出。
-        同一个 segmentId 内的 OperationDetail 按 startedAt 升序（单一排序基准，不再有
-        OperationGroup 折叠/展开往返造成的"乱窜"）。
+        segmentId 取 seg_store 与该节点过滤后 operations 的并集；orphan 桶额外承载
+        「已结束且全局没有工具调用」的文本轮（它们没有 step 可归属）。
+        同一 segmentId 内的 OperationDetail 按 startedAt 升序（单一排序基准）。
         """
         filtered_ops = [
             op
@@ -567,9 +561,18 @@ class TaskExecutionProjector:
         segment_ids: set[int] = set(seg_store.keys())
         for op in filtered_ops:
             segment_ids.add(op.segment_id)
-        # 只有 text 的 segment 也保留（纯自然语言过语）
-        for sid in self._segment_texts:
-            segment_ids.add(sid)
+        # 已结束（被后续轮次取代）且全局没有工具调用的文本轮：没有 step 可归属，
+        # 统一落到 orphan 桶。前端 nodeKey 对 orphan 是常量，必须保证唯一一个
+        # orphan 节点，因此不能拆成多个节点。
+        if step_id_filter is None:
+            segments_with_ops = {op.segment_id for op in self._operations}
+            segment_ids.update(
+                sid
+                for sid, txt in self._segment_texts.items()
+                if sid < self._current_segment
+                and txt.strip()
+                and sid not in segments_with_ops
+            )
 
         # 按 segmentId 聚合 + startedAt 排序（扁平，不再有 group 层）
         by_seg: dict[int, list[OperationDetail]] = {}
@@ -630,7 +633,7 @@ class TaskExecutionProjector:
         orphan_nodes: list[TimelineNode] = []
         has_orphan_ops = bool(self._step_ops.get(None))
         has_orphan_reasoning = bool(self._node_reasoning_segments.get(None))
-        if has_orphan_ops or has_orphan_reasoning:
+        if has_orphan_ops or has_orphan_reasoning or self._has_completed_text():
             orphan_nodes = [self._build_orphan_node()]
         # 兜底：没关联到任何工具的 reasoning 段作为独立节点（纯分析/最终总结）。
         attached: set[int] = set()
@@ -659,27 +662,6 @@ class TaskExecutionProjector:
             return (min(segs) if segs else 0, 1)
 
         all_nodes = step_nodes + orphan_nodes + reasoning_nodes
-
-        # ── 最终答案切割：timeline 不承载最终答复的正文 ──
-        # 正文（full_transcript_parts 拼接的最终 MessageEntry content）是
-        # 正文区的唯一真相；此处若保留最后一轮 text，会把完整病历/答复同时
-        # 塞进 timeline 灰框 → 双显。只清 text，保留 reasoning（思考过程）
-        # 和 operations（工具调用）。若该轮只有 text（纯最终答案无思考无工具），
-        # 清掉后前端不会生成冗余的「迭代过语」行。
-        last_seg = max(
-            (
-                it.segment_id
-                for n in step_nodes + orphan_nodes
-                for it in n.iterations
-            ),
-            default=None,
-        )
-        if last_seg is not None:
-            for n in step_nodes + orphan_nodes:
-                for it in n.iterations:
-                    if it.segment_id == last_seg:
-                        it.text = ""
-
         all_nodes.sort(key=time_key)
         return all_nodes
 

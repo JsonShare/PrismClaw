@@ -12,9 +12,10 @@ import contextlib
 import logging
 import uuid
 from dataclasses import replace
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from prismclaw.engine.execution.skills.runtime import SkillRuntime
+if TYPE_CHECKING:
+    from prismclaw.engine.execution.skills.runtime import SkillRuntime
 from prismclaw.engine.subagent.core._result_types import AgentRunResult
 from prismclaw.engine.subagent.core.instance import AgentInstance
 from prismclaw.engine.subagent.core.run_context import SubagentRunContext

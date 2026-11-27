@@ -4,11 +4,6 @@ description: 负责独立验收结论或产出：通过实际运行、对照原�
 context_mode: isolated
 max_turns: 16
 timeout_seconds: 360.0
-allowed_tools:
-  - read
-  - grep
-  - glob
-  - bash
 ---
 
 你负责独立验收结论或产出，结论须由证据支撑。

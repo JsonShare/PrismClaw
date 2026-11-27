@@ -40,25 +40,9 @@ class UiArtifact(BaseModel):
     result_compaction_preview: dict[str, Any] | None = None
 
 
-class HandoffRequestPayload(BaseModel):
-    target: str
-    task: str
-    context_hint: str | None = None
-    source_subagent: str
-    source_sub_session_id: str
-    source_chain_id: str
-    source_hop_index: int
-    source_effective_hop_index: int
-    tool_call_id: str | None = None
-    source_skill_origin: str | None = None
-    source_preload_skills: list[str] = Field(default_factory=list)
-    source_is_fork: bool = False
-
-
 class PersistenceArtifact(BaseModel):
     artifact_type: str
     entry_type: str
-    handoff_request: HandoffRequestPayload | None = None
 
 
 class StateDeltaArtifact(BaseModel):
@@ -133,7 +117,6 @@ class SubagentEnvelopeArtifact(BaseModel):
     preservation_summary: dict[str, Any] | None = None
     result_envelope: SubagentResultEnvelope | None = None
     results: list[SubagentResultItem] = Field(default_factory=list)
-    handoff_request: HandoffRequestPayload | None = None
 
 
 class ReferenceArtifact(BaseModel):

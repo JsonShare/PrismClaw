@@ -37,7 +37,6 @@ agent:
       subcaps:
         runtime_status: 500
         l1_snapshot: 500
-        skill_attachment: 6000
         doc_inline_min_chars: 2500
         doc_inline_max_chars: 7500
         max_constraints: 4

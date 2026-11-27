@@ -4,12 +4,14 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+    from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
     from prismclaw.engine.execution.skills.runtime import SkillRuntime
+    from prismclaw.engine.experts.registry.expert_registry import ExpertRegistry
     from prismclaw.engine.mcp.client_manager import MCPClientManager
     from prismclaw.engine.toolkit.registry.registry import ToolRegistry
     from prismclaw.infra.settings import BuiltinToolSettings
 
+from prismclaw.engine.subagent.team_tools import TeamCreateTool, TeamDeleteTool
 from prismclaw.engine.toolkit.builtin.bash import BashTool
 from prismclaw.engine.toolkit.builtin.file_tools import (
     EditTool,
@@ -34,8 +36,10 @@ logger = logging.getLogger(__name__)
 def register_builtin_tools(
     registry: ToolRegistry,
     resolver: WorkspaceResolver,
-    capability_catalog: CapabilityCatalogService | None = None,
+    capability_catalog: RuntimeCatalog | None = None,
     skill_runtime: SkillRuntime | None = None,
+    *,
+    expert_registry: ExpertRegistry | None = None,
 ) -> None:
     registry.register(BashTool())
     registry.register(ListDirectoryTool(resolver))
@@ -47,6 +51,14 @@ def register_builtin_tools(
     registry.register(PresentFilesTool(resolver))
     registry.register(TodoWriteTool())
     registry.register(GoalTool())
+    if expert_registry is not None and capability_catalog is not None:
+        registry.register(
+            TeamCreateTool(
+                expert_registry=expert_registry,
+                capability_catalog=capability_catalog,
+            )
+        )
+        registry.register(TeamDeleteTool())
 
     if capability_catalog is not None:
         registry.register(ToolSearchTool(capability_catalog=capability_catalog))

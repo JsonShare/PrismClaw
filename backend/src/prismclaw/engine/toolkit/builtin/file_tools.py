@@ -247,8 +247,8 @@ class ReadTool:
         except WorkspaceBoundaryError as exc:
             return error_result(call_id, str(exc))
 
-        # 模型常把 /plugin:cmd 引用当成技能目录（skills/<cmd>/SKILL.md）。命令与
-        # 技能在插件根下同级，正文实际在 commands/<cmd>.md。命中后必须同步
+        # 模型常把 `/<namespace>:<cmd>` 引用当成技能目录（skills/<cmd>/SKILL.md）。命令与
+        # 技能在专家包根下同级，正文实际在 commands/<cmd>.md。命中后必须同步
         # raw_path：下游 document 分支会基于 raw_path 再解析一次。
         if not full_path.exists():
             _alt = resolve_capability_command(full_path)
@@ -607,7 +607,7 @@ class EditTool:
 
         # edit 走读链（SDD §3.1 L127）：裸路径读兜底定位 → 应用补丁 → 写回，
         # 静态能力目录只读：旧前缀会被解析器纠正进 assets/，写操作必须在此拒绝，
-        # 否则 edit 会把「~/.prismclaw/plugins/x」的误写搬进只读的 assets。
+        # 否则 edit 会把「~/.prismclaw/experts/x」的误写搬进只读的 assets。
         _probe = Path(raw_path).expanduser()  # noqa: ASYNC240 - 纯字符串
         if _probe.is_absolute() and canonicalize_fs_path(_probe) != _probe:
             return error_result(call_id, "edit：~/.prismclaw 下的静态能力目录只读，不能编辑。")

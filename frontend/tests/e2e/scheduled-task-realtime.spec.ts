@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 // Real-time scheduled-task status regression.
 //
@@ -67,7 +67,6 @@ test.describe('自动化任务实时状态', () => {
         'prismclaw.auth.v1',
         JSON.stringify({ token: 'e2e-token', userId: 'e2e-user', nickname: '测试用户' }),
       )
-      localStorage.setItem('prismclaw-section', 'files')
     })
 
     await page.routeWebSocket('**/api/ws', (ws) => {
@@ -107,9 +106,15 @@ test.describe('自动化任务实时状态', () => {
     })
   })
 
-  test('立即执行后由 WS 事件驱动卡片状态，并在完成时实时插入左侧会话', async ({ page }) => {
+  // 分区不再持久化（刷新统一回到「新任务」），进入自动化必须点侧栏菜单
+  const gotoAutomation = async (page: Page) => {
     await page.goto('/')
-    await expect(page.getByText('任务列表', { exact: true })).toBeVisible()
+    await page.locator('.sidebar-nav-row').filter({ hasText: '自动化' }).first().click()
+    await expect(page.getByText('定时任务', { exact: true })).toBeVisible()
+  }
+
+  test('立即执行后由 WS 事件驱动卡片状态，并在完成时实时插入左侧会话', async ({ page }) => {
+    await gotoAutomation(page)
     await expect.poll(() => socket !== null).toBe(true)
 
     // 手动触发：乐观排队态来自 trigger 响应，而不是 5 秒假定时器。
@@ -146,8 +151,7 @@ test.describe('自动化任务实时状态', () => {
 
   test('重进页面由 /runs 恢复终态，不依赖任何 WS 事件', async ({ page }) => {
     runs = [successRun]
-    await page.goto('/')
-    await expect(page.getByText('任务列表', { exact: true })).toBeVisible()
+    await gotoAutomation(page)
     await expect(page.getByText(/上次成功/)).toBeVisible()
     await expect(page.getByText('查看会话')).toBeVisible()
   })
@@ -155,8 +159,7 @@ test.describe('自动化任务实时状态', () => {
   test('崩溃残留的 running 行显示未完成，不误报为上次失败', async ({ page }) => {
     // at-most-once 语义下进程崩溃会让 run 永久停在 running。
     runs = [runningRun]
-    await page.goto('/')
-    await expect(page.getByText('任务列表', { exact: true })).toBeVisible()
+    await gotoAutomation(page)
     await expect(page.getByText('上次执行未完成')).toBeVisible()
     await expect(page.getByText('上次失败')).toHaveCount(0)
   })

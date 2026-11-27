@@ -9,6 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from prismclaw.engine.experts.scope import RejectedScope
 from prismclaw.engine.subagent.core._result_types import AgentRunResult
 from prismclaw.engine.subagent.core.contract import (
     coerce_context_snapshot,
@@ -17,7 +18,6 @@ from prismclaw.engine.subagent.core.contract import (
 from prismclaw.engine.subagent.core.persistence import SubagentPersistence
 from prismclaw.engine.subagent.core.run_context import SubagentRunContext
 from prismclaw.engine.subagent.definition.manifest import AgentManifest
-from prismclaw.engine.subagent.prompting import expand_allowed_tool_names
 from prismclaw.engine.subagent.runtime.lease import (
     LocalSubagentLeaseStore,
     RedisSubagentLeaseStore,
@@ -145,6 +145,7 @@ class SubagentCollaborationService:
         request_id: str,
         background: bool = False,
     ) -> SubagentSpawnOutcome:
+        _ensure_parent_scope_usable(launch)
         owner_session_id = launch.parent_ctx.session_id
         agent_id = _deterministic_agent_id(
             owner_session_id,
@@ -441,6 +442,8 @@ class SubagentCollaborationService:
         agent_id: str,
         launch: SubagentRunLaunch | None = None,
     ) -> AgentSessionRecord:
+        if launch is not None:
+            _ensure_parent_scope_usable(launch)
         async with self._lock_for(agent_id):
             agent = await self._owned_agent(session_id, agent_id)
             return await self._reconcile_locked(agent, launch=launch)
@@ -945,32 +948,55 @@ class SubagentCollaborationService:
 
 
 def build_definition_snapshot(launch: SubagentRunLaunch) -> dict[str, Any]:
+    from prismclaw.engine.subagent.tool_surface import SUBAGENT_TOOL_SURFACE
+
     manifest = launch.manifest.model_dump(
         mode="json",
         by_alias=True,
         exclude_none=True,
     )
-    if launch.manifest.allowed_tools is None:
-        allowed_tools = sorted(launch.tool_registry.names())
-    else:
-        allowed_tools = sorted(
-            expand_allowed_tool_names(
-                launch.manifest.allowed_tools,
-                launch.tool_registry.names(),
-            )
-            or ()
-        )
-    schemas = launch.tool_registry.list_for_llm(allowed_tools)
+    scope = launch.parent_ctx.session_scope
+    surface = SUBAGENT_TOOL_SURFACE
+    schemas = launch.tool_registry.list_for_llm(sorted(surface.deferred))
     model = launch.manifest.model or getattr(launch.executor, "_default_model", None) or ""
-    return _json_safe(
-        {
-            "manifest": manifest,
-            "model": model,
-            "allowed_tools": allowed_tools,
-            "tool_schemas": schemas,
-            "overrides": launch.overrides,
+    snapshot = {
+        "manifest": manifest,
+        "model": model,
+        "tool_surface": {
+            "active": sorted(surface.active),
+            "deferred": sorted(surface.deferred),
+            "member": sorted(surface.member),
+            "restricted": surface.restricted,
+        },
+        "tool_schemas": schemas,
+        "overrides": launch.overrides,
+    }
+    if scope is not None and scope.member:
+        snapshot["expert_team"] = {
+            "team_name": scope.team_name,
+            "lead_agent": scope.lead_agent,
+            "tool_surface": {
+                "active": sorted(surface.active),
+                "deferred": sorted(surface.deferred),
+                "member": sorted(surface.member),
+                "restricted": surface.restricted,
+            },
         }
-    )
+    return _json_safe(snapshot)
+
+
+def _ensure_parent_scope_usable(launch: SubagentRunLaunch) -> None:
+    """父会话专家被拒时拒绝启动子代理 run。
+
+    P0-2 已挡住新 run；这里覆盖「运行中途被禁用」：父 run 仍存活，但它派生的
+    子代理不能继续拿到工具面（子代理有独立的 run_loop 入口）。
+    """
+    scope = launch.parent_ctx.session_scope
+    if isinstance(scope, RejectedScope):
+        raise SubagentCollaborationError(
+            f"parent session expert is unavailable ({scope.code.value});"
+            " refusing to start subagent run"
+        )
 
 
 def _fingerprint(snapshot: dict[str, Any]) -> str:

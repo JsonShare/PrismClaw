@@ -1,13 +1,13 @@
-"""Services sub-contracts: hooks, plugins, skills, upload, env types."""
+"""Services sub-contracts: hooks, experts, skills, upload, env types."""
 
 from prismclaw.schema.services.auth import UserProfile, UserProfileStore
 from prismclaw.schema.services.env_types import CommandResult, ExecutionEnv, FileResult
+from prismclaw.schema.services.experts import ExpertLoadProtocol
 from prismclaw.schema.services.hooks import (
     HookContextProtocol,
     HookHandlerProtocol,
     HookResultProtocol,
 )
-from prismclaw.schema.services.plugins import PluginLoadProtocol, PluginTrustProtocol
 from prismclaw.schema.services.skills import (
     MCP_SKILL_NAME_SEPARATOR,
     McpPromptResolver,
@@ -32,8 +32,7 @@ __all__ = [
     "HookContextProtocol",
     "HookHandlerProtocol",
     "HookResultProtocol",
-    "PluginLoadProtocol",
-    "PluginTrustProtocol",
+    "ExpertLoadProtocol",
     "MCP_SKILL_NAME_SEPARATOR",
     "McpPromptResolver",
     "ResolvableEntry",

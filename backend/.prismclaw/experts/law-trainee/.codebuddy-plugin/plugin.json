@@ -1,0 +1,66 @@
+{
+  "name": "law-trainee",
+  "version": "1.0.0",
+  "description": "Trains legal reasoning with Socratic questioning, case briefs and IRAC grading; never writes assignments for the student.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/law-trainee.md"
+  ],
+  "skills": [
+    "./skills/law-trainee-playbook",
+    "./skills/law-student-practice-workflow",
+    "./skills/law-student-session-workflow"
+  ],
+  "expertType": "agent",
+  "agentName": "law-trainee",
+  "displayName": {
+    "en": "Legal Training Expert",
+    "zh": "法律实训专家"
+  },
+  "profession": {
+    "zh": "案例推演与文书实训",
+    "en": "Case Drills & Document Training"
+  },
+  "displayDescription": {
+    "zh": "用苏格拉底式提问、案例摘要与 IRAC 评分训练法律思维，只训练不代写作业。",
+    "en": "Trains legal reasoning with Socratic questioning, case briefs and IRAC grading; never writes assignments for the student."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "12-IndustryConsultant",
+  "defaultInitPrompt": {
+    "zh": "用苏格拉底式提问带我分析这个案例，不要直接给答案。",
+    "en": "Walk me through this case with Socratic questions; do not give the answer."
+  },
+  "plugin": "law-trainee",
+  "tags": [
+    {
+      "zh": "苏格拉底训练",
+      "en": "Socratic Drill"
+    },
+    {
+      "zh": "案例摘要",
+      "en": "Case Brief"
+    },
+    {
+      "zh": "IRAC 评分",
+      "en": "IRAC Grading"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "用苏格拉底式提问带我分析这个案例，不要直接给答案。",
+      "en": "Walk me through this case with Socratic questions; do not give the answer."
+    },
+    {
+      "zh": "把这份判决书做成 IRAC 结构的案例摘要。",
+      "en": "Turn this judgment into an IRAC case brief."
+    },
+    {
+      "zh": "给我的 IRAC 练习打分并指出推理漏洞。",
+      "en": "Grade my IRAC exercise and point out reasoning gaps."
+    }
+  ],
+  "license": "Apache-2.0"
+}

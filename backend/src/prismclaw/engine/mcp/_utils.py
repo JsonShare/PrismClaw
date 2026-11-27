@@ -18,7 +18,7 @@ def _redact_config_value(text: str, raw_value: str) -> str:
     return text
 
 
-# SDD context-governance W7-4: marketplace plugin configs ship template
+# SDD context-governance W7-4: marketplace expert configs ship template
 # placeholders like "<在本地填入 EHR FHIR R4 基础 URL>" (angle-bracketed
 # prose, distinct from ${VAR} env references). Values of this shape can
 # never be valid credentials/URLs — detect and skip before spawning.

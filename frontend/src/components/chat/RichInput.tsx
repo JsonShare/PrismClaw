@@ -53,6 +53,8 @@ export interface RichInputProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => boolean
   /** 剪贴板里的文件交给宿主上传 */
   onPasteFiles: (files: File[]) => void
+  /** 技能卡片的鼠标 / 键盘删除统一交给宿主写入会话状态 */
+  onChipRemove?: (chip: ChipRef) => void
 }
 
 function createChipEl(chip: ChipRef): HTMLSpanElement {
@@ -69,6 +71,15 @@ function createChipEl(chip: ChipRef): HTMLSpanElement {
   el.innerHTML = '<span class="input-chip-label"></span>' + chipIconHtml(chip)
   const label = el.querySelector('.input-chip-label')
   if (label) label.textContent = chipLabel(chip)
+  if (chip.kind === 'skill') {
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.className = 'input-chip-remove'
+    remove.dataset.chipRemove = ''
+    remove.setAttribute('aria-label', `移除技能 ${chipLabel(chip)}`)
+    remove.textContent = '×'
+    el.appendChild(remove)
+  }
   return el
 }
 
@@ -162,7 +173,7 @@ function textLengthBeforePoint(root: HTMLElement, node: Node, offset: number): n
 }
 
 const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput(
-  { value, placeholder, disabled = false, className, onChange, onSubmit, onCaretChange, onKeyDown, onPasteFiles },
+  { value, placeholder, disabled = false, className, onChange, onSubmit, onCaretChange, onKeyDown, onPasteFiles, onChipRemove },
   ref,
 ) {
   const editorRef = useRef<HTMLDivElement>(null)
@@ -175,11 +186,13 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
   const onCaretChangeRef = useRef(onCaretChange)
   const onKeyDownRef = useRef(onKeyDown)
   const onPasteFilesRef = useRef(onPasteFiles)
+  const onChipRemoveRef = useRef(onChipRemove)
   onChangeRef.current = onChange
   onSubmitRef.current = onSubmit
   onCaretChangeRef.current = onCaretChange
   onKeyDownRef.current = onKeyDown
   onPasteFilesRef.current = onPasteFiles
+  onChipRemoveRef.current = onChipRemove
 
   const resize = useCallback(() => {
     const el = editorRef.current
@@ -443,6 +456,10 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
     if (!neighbor || neighbor.nodeType !== Node.ELEMENT_NODE) return false
     const chipEl = neighbor as HTMLElement
     if (!chipEl.hasAttribute('data-chip')) return false
+    if (chipEl.dataset.kind === 'skill' && onChipRemoveRef.current) {
+      onChipRemoveRef.current({ kind: 'skill', value: chipEl.dataset.value ?? '' })
+      return true
+    }
     const parent = chipEl.parentNode
     if (!parent) return false
     const index = Array.prototype.indexOf.call(parent.childNodes, chipEl)
@@ -571,6 +588,16 @@ const RichInput = forwardRef<RichInputHandle, RichInputProps>(function RichInput
       data-placeholder={placeholder}
       data-empty={value.trim() ? 'false' : 'true'}
       onInput={handleInput}
+      onMouseDown={(e) => {
+        if ((e.target as HTMLElement).closest('[data-chip-remove]')) e.stopPropagation()
+      }}
+      onClick={(e) => {
+        const remove = (e.target as HTMLElement).closest('[data-chip-remove]')
+        const chipEl = remove?.closest('[data-chip]') as HTMLElement | null
+        if (!chipEl || chipEl.dataset.kind !== 'skill') return
+        e.preventDefault()
+        onChipRemoveRef.current?.({ kind: 'skill', value: chipEl.dataset.value ?? '' })
+      }}
       onKeyDown={handleKeyDown}
       onPaste={handlePaste}
       // 拖入的文本/HTML 不允许浏览器直接插入（会污染正文结构）；

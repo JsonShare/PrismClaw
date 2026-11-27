@@ -176,7 +176,7 @@ class SessionBus:
         return removed
 
     def unsubscribe_all(self) -> None:
-        """Clear all handlers and reducers (lifecycle shutdown / plugin unload)."""
+        """Clear all handlers and reducers (lifecycle shutdown / expert unload)."""
         self._sync_handlers.clear()
         self._async_handlers.clear()
         self._reducers.clear()

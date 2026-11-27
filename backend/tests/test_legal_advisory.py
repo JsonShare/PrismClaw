@@ -11,7 +11,7 @@ import asyncio
 import pytest
 
 from prismclaw.engine.hooks import _coerce_context
-from prismclaw.engine.plugins.hooks.schema import HookContext
+from prismclaw.engine.hooks.schema import HookContext
 from subpackages.legal.integration.bundle import LegalAdvisoryHook, is_legal_task
 
 

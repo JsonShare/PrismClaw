@@ -3,7 +3,7 @@
 Pure-asyncio scope: manages ``asyncio.Task`` objects spawned from the main
 event loop only.  Thread-based background work (e.g. background channel workers
 forced into a ``threading.Thread``) is explicitly
-excluded and managed by its owning plugin's ``start()``/``stop()`` contract.
+excluded and managed by its owning expert's ``start()``/``stop()`` contract.
 
 Precondition: ``spawn()`` MUST be called from within the running event loop.
 Calling from a non-event-loop thread is undefined and may raise

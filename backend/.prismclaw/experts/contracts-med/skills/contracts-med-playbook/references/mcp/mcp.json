@@ -1,0 +1,8 @@
+{
+  "recommendedCategories": [
+    "contract-analysis",
+    "contract-reasoning",
+    "procurement-review"
+  ],
+  "_notes": "合同分析不依赖外部 MCP 服务，由会话内的只读检索与引用核验脚本完成。"
+}

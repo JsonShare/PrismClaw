@@ -1,7 +1,7 @@
 """配置体系 YAML 一致性测试。
 
 覆盖三件事：
-1. 8 个 YAML 合并后可被 Settings 完整校验，且关键键不被静默丢弃；
+1. 7 个 YAML 合并后可被 Settings 完整校验，且关键键不被静默丢弃；
 2. CONFIG_KEY_OWNERS（顶层键 → 归属文件）与真实 YAML 顶层键 1:1；
 3. dump_document 写回后可重新加载且数据不变（ruamel 环境下同时验证注释保留）。
 """
@@ -18,8 +18,7 @@ _MODULE_FILES = (
     "infra.yaml",
     "models.yaml",
     "agent.yaml",
-    "mcp.yaml",
-    "capabilities.yaml",
+    "assets.yaml",
     "memory.yaml",
     "security.yaml",
 )

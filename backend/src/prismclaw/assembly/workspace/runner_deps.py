@@ -3,8 +3,8 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
-from prismclaw.assembly.plugins.plugin_lifecycle import PluginLifecycleManager
-from prismclaw.engine.execution.loop.deps import AgentRunnerDeps, PluginBundle
+from prismclaw.assembly.experts.expert_lifecycle import ExpertLifecycleManager
+from prismclaw.engine.execution.loop.deps import AgentRunnerDeps, ExpertBundle
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
 from prismclaw.infra.paths import build_project_capability_layout
 from prismclaw.infra.settings import Settings
@@ -40,12 +40,8 @@ async def build_workspace_scoped_runner_deps(
             "build_workspace_scoped_runner_deps requires AgentRunnerDeps; "
             "workspace-scoped runtime assembly cannot rebind arbitrary objects"
         )
-    plugins_settings = getattr(settings, "plugins", None)
-    plugin_configs = getattr(plugins_settings, "plugin_configs", None)
-    if not isinstance(plugin_configs, dict):
-        return base_deps
     base_project_root = getattr(
-        base_deps.plugin.lifecycle_manager,
+        base_deps.expert.lifecycle_manager,
         "_project_root",
         None,
     )
@@ -56,18 +52,18 @@ async def build_workspace_scoped_runner_deps(
         else None
     )
 
-    # deps 边界：项目能力布局只构造这一次，下发给插件 manager / 技能 provider /
+    # deps 边界：项目能力布局只构造这一次，下发给专家包 manager / 技能 provider /
     # subagent registry，并随 bundle 携带诊断，杜绝三处各自手拼 root / 目录。
     capability_layout = build_project_capability_layout(
         primary=scoped_project_root,
         additional=additional_project_roots,
         skills_dir=settings.skills.workspace_skills_dir,
         extra_skills_dirs=(settings.skills.asset_skills_dir,),
-        plugins_dir=settings.plugins.asset_plugins_dir,
+        experts_dir=settings.experts.asset_experts_dir,
         agents_dir=settings.subagent.asset_subagents_dir,
     )
 
-    plugin_lifecycle_manager = PluginLifecycleManager(
+    expert_lifecycle_manager = ExpertLifecycleManager(
         settings,
         workspace_default=workspace_root,
         project_root=scoped_project_root,
@@ -76,27 +72,29 @@ async def build_workspace_scoped_runner_deps(
         base_mcp_manager=None,
         capability_layout=capability_layout,
     )
-    plugin_runtime = await plugin_lifecycle_manager.get_bundle()
+    expert_runtime = await expert_lifecycle_manager.get_bundle()
     registry = getattr(base_deps, "tools", None)
     if not isinstance(registry, ToolRegistry):
         raise TypeError("AgentRunnerDeps.tools must be ToolRegistry for workspace scoping")
     scoped_deps = dataclasses.replace(
         base_deps,
         tools=_copy_tool_registry(registry),
-        skill_provider=plugin_runtime.skill_provider,
-        hook_dispatcher=plugin_runtime.hook_dispatcher,
-        plugin=PluginBundle(
-            extension_manager=plugin_runtime.extension_manager,
-            lifecycle_manager=plugin_lifecycle_manager,
-            runtime_mcp_manager=base_deps.plugin.runtime_mcp_manager,
+        skill_provider=expert_runtime.skill_provider,
+        expert=ExpertBundle(
+            extension_manager=expert_runtime.extension_manager,
+            lifecycle_manager=expert_lifecycle_manager,
+            runtime_mcp_manager=base_deps.expert.runtime_mcp_manager,
+            environment_catalog=base_deps.expert.environment_catalog,
+            expert_registry=base_deps.expert.expert_registry,
+            capability_policy_registry=base_deps.expert.capability_policy_registry,
         ),
     )
     refresh_runner_capabilities(
         scoped_deps,
         settings=settings,
         workspace_path=workspace_root,
-        extension_manager=plugin_runtime.extension_manager,
-        skill_provider=plugin_runtime.skill_provider,
+        extension_manager=expert_runtime.extension_manager,
+        skill_provider=expert_runtime.skill_provider,
         project_root=scoped_project_root,
         capability_layout=capability_layout,
     )
@@ -106,8 +104,8 @@ async def build_workspace_scoped_runner_deps(
         scoped_deps,
         settings=settings,
         workspace_path=workspace_root,
-        extension_manager=plugin_runtime.extension_manager,
-        skill_provider=plugin_runtime.skill_provider,
+        extension_manager=expert_runtime.extension_manager,
+        skill_provider=expert_runtime.skill_provider,
         project_root=Path(scoped_project_root) if scoped_project_root else None,
         capability_layout=capability_layout,
     )

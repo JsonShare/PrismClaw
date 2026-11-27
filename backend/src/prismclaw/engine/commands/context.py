@@ -44,9 +44,9 @@ class CommandContext:
 
     # Injected callbacks — wiring layer provides implementations so engine
     # does not need to import app/wiring (P2/P9: engine→app decoupling).
-    plugin_reloader: Callable[..., Awaitable[Any]] | None = None
+    reload_fn: Callable[..., Awaitable[Any]] | None = None
     capability_refresher: Callable[..., Any] | None = None
     # 命令身份投影回调: dispatch 前将命令名设为 active_skill_invocation,
     # 使 hook matcher 可见。wiring 层实现调用 project_active_skill_invocation()。
-    # 签名: (skill_name: str, plugin_name: str | None) -> None
+    # 签名: (skill_name: str, expert_name: str | None) -> None
     project_command_identity: Callable[..., Any] | None = None

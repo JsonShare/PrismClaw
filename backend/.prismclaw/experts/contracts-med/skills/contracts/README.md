@@ -1,0 +1,37 @@
+# Contract Reasoning
+
+> See **Security** below before running on real contracts.
+
+Answers questions across a corpus of contract documents with verified citations. You ask in plain English — "which of these contracts let the buyer terminate for convenience, and on what notice?" — and the session reads every contract in parallel using **Read**, **Grep**, and **SearchCodebase**, then composes the answer in chat with source references. Every claim carries a quote traced back to the source document.
+
+**No external services, no databases, no server dependencies.** The skill is fully self-contained and reads contract files directly from the local filesystem with the session's built-in read and search tools.
+
+## Quick start
+
+Put your contracts in one folder, then ask and name that folder:
+
+```
+帮我看看这个文件夹里的合同：哪些有自动续约条款？
+```
+
+The skill reads your contracts and shows you a plan — how it read the question, what it will read — and waits for your go. After you confirm, the reading happens and the answer arrives in chat: every claim backed by a quote from the source document.
+
+## What's local
+
+This is **single-user, local-only**:
+
+- Contracts must be on the **local filesystem** — the same machine as this session.
+- No database, no MCP server, no network calls. All analysis is done in-context with the session's built-in tools.
+
+## Security
+
+Contract text is untrusted input. The design keeps the blast radius structural, not behavioral:
+
+- **The skill only uses Read, Grep, and SearchCodebase** — read-only tools that cannot modify files or make network requests.
+- **Citations are checked deterministically** — before the answer is written, `scripts/verify_citations.py` requires every quote to be a verbatim substring of the source file (normalizing only whitespace, quotes, and dashes). Quotes that fail are blocked from the answer rather than softened into paraphrase.
+- **Don't run this on a corpus you don't trust.**
+
+## How it's built
+
+- `SKILL.md` — the whole flow in one file: bootstrap, plan (with the one confirmation pause), scope, read, and the chat answer. **This is the file to read or edit to understand or change run behavior.**
+- `scripts/verify_citations.py` — stdlib-only citation checker: `python scripts/verify_citations.py --quotes quotes.json --docs-dir <contracts folder>`. Statuses are `exact` / `missing` / `unverifiable`; exit code 1 when any quote is missing. PDF/Word corpora: extract text first and point `--docs-dir` at the extracted folder (matching falls back to the filename stem).

@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from prismclaw.infra.config_io import dump_document, load_document
+from prismclaw.infra.config_io import load_document
 
 from ._settings import Settings
 
@@ -32,8 +32,7 @@ _MODULE_CONFIG_FILES = (
     "infra.yaml",
     "models.yaml",
     "agent.yaml",
-    "mcp.yaml",
-    "capabilities.yaml",
+    "assets.yaml",
     "memory.yaml",
     "security.yaml",
 )
@@ -55,13 +54,12 @@ CONFIG_KEY_OWNERS = {
     "vision": "models.yaml",
     "speech": "models.yaml",
     "agent": "agent.yaml",
-    "skills": "capabilities.yaml",
-    "subagent": "capabilities.yaml",
-    "plugins": "capabilities.yaml",
-    "builtin_tools": "capabilities.yaml",
+    "skills": "assets.yaml",
+    "subagent": "assets.yaml",
+    "experts": "assets.yaml",
+    "builtin_tools": "assets.yaml",
     "memory": "memory.yaml",
     "evolution": "memory.yaml",
-    "mcp": "mcp.yaml",
 }
 
 
@@ -76,25 +74,13 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
-def _load_module_config(name: str, path: Path) -> dict[str, Any] | None:
-    """读取单个模块配置文件并做格式规整；解析失败返回 None（跳过不致命）。"""
+def _load_module_config(path: Path) -> dict[str, Any] | None:
+    """读取单个模块配置文件；解析失败返回 None（跳过不致命）。"""
     logger = logging.getLogger("prismclaw.settings")
     data = load_document(path)
     if data is None:
         logger.warning("module config %s failed to parse; skipping", path)
         return None
-    # mcp 文件兼容 Claude Desktop 风格 {"mcpServers": {...}}：
-    # 归一化为 {"mcp": {"servers": {...}}}（McpSettings 为 extra="forbid"）。
-    if Path(name).stem == "mcp":
-        mcp_servers = data.get("mcpServers")
-        if mcp_servers is not None:
-            raw_mcp = data.get("mcp")
-            mcp: dict[str, Any] = dict(raw_mcp) if isinstance(raw_mcp, dict) else {}
-            if isinstance(mcp_servers, dict):
-                servers = dict(mcp.get("servers") or {})
-                servers.update(mcp_servers)
-                mcp["servers"] = servers
-            data = {"mcp": mcp}
     return data
 
 
@@ -193,7 +179,7 @@ def load_settings(force_reload: bool = False) -> Settings:
         module_path = module_dir / module_name
         if not module_path.is_file():
             continue
-        module_data = _load_module_config(module_name, module_path)
+        module_data = _load_module_config(module_path)
         if module_data is not None:
             data = _deep_merge(data, module_data)
             logger.info("merged module config: %s", str(module_path))
@@ -203,7 +189,7 @@ def load_settings(force_reload: bool = False) -> Settings:
     except Exception:
         if _cached_settings is not None:
             # 配置校验失败时保留上一份有效配置并告警，不崩回默认——运行时写回
-            # （models 管理 / plugins trust）触发 force_reload 会经过这里，
+            # （models 管理 / experts trust）触发 force_reload 会经过这里，
             # 一次坏写回不应击穿整个 settings。
             logger.exception(
                 "config validation failed for %s; serving previous valid settings",
@@ -213,29 +199,3 @@ def load_settings(force_reload: bool = False) -> Settings:
         raise
     _cached_settings = settings
     return _cached_settings
-
-
-def persist_plugin_trust(trusted_plugin_ids: list[str]) -> bool:
-    """把受信任插件 ID 列表写入配置文件（``plugins.trusted_plugins``）并重载缓存。
-
-    P3-T3：``/plugins trust <id>`` 的持久化落点。键名与
-    ``PluginSettings.trusted_plugins`` 一致。写入位置由
-    ``config_file_owner("plugins")`` 决定（当前为 capabilities.yaml）。
-    YAML 写回走 ruamel round-trip，文件内注释与键顺序会被保留。
-    返回是否成功持久化；失败仅记日志、不抛（调用方已先行内存生效）。
-    """
-    logger = logging.getLogger("prismclaw.settings")
-    config_file = config_file_owner("plugins")
-    try:
-        data = load_document(config_file) or {}
-        plugins_obj = data.get("plugins")
-        if not isinstance(plugins_obj, dict):
-            plugins_obj = {}
-        plugins_obj["trusted_plugins"] = list(trusted_plugin_ids)
-        data["plugins"] = plugins_obj
-        dump_document(config_file, data)
-    except Exception:
-        logger.warning("persist_plugin_trust: failed to write %s", config_file, exc_info=True)
-        return False
-    load_settings(force_reload=True)
-    return True

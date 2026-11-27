@@ -158,7 +158,7 @@ def _workspace_family_key(
 
 
 def _workspace_generation(base_deps: AgentRunnerDeps) -> int:
-    raw_generation: object = getattr(base_deps.plugin.lifecycle_manager, "generation", 0)
+    raw_generation: object = getattr(base_deps.expert.lifecycle_manager, "generation", 0)
     return raw_generation if isinstance(raw_generation, int) else 0
 
 
@@ -280,7 +280,7 @@ async def get_app_workspace_extension_manager_async(
     )
     if runner_deps is None:
         return None
-    extension_manager = runner_deps.plugin.extension_manager
+    extension_manager = runner_deps.expert.extension_manager
     if not isinstance(extension_manager, ExtensionManager):
         return None
     return extension_manager
@@ -299,7 +299,7 @@ def get_app_workspace_extension_manager(
     )
     if runner_deps is None:
         return None
-    extension_manager = runner_deps.plugin.extension_manager
+    extension_manager = runner_deps.expert.extension_manager
     if not isinstance(extension_manager, ExtensionManager):
         return None
     return extension_manager

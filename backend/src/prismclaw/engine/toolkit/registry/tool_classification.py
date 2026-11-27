@@ -11,7 +11,7 @@ Two layers live here:
    parallel classifier.
 
 Web search/fetch is provided by a standalone MCP service wired through
-``backend/configs/mcp.yaml`` — the service (and therefore the tool name) is a
+``backend/configs/mcp.json`` — the service (and therefore the tool name) is a
 deployment decision, not a code constant. Engine code must never hard-code
 that name; instead it asks this module semantic questions:
 
@@ -62,6 +62,27 @@ def is_search_intent_tool(tool_name: str, *, config: RunLoopTuningConfig | None 
 def is_network_read_tool(tool_name: str, *, config: RunLoopTuningConfig | None = None) -> bool:
     """True for public-network read-only tools (search intent)."""
     return is_search_intent_tool(tool_name, config=config)
+
+
+def denied_owner_reason(
+    tool: object | None,
+    allowed_owners: frozenset[str] | None,
+) -> str | None:
+    """工具归属判定唯一实现：``None`` 放行，否则返回拒绝原因。
+
+    ``allowed_owners`` 为 None 表示无作用域上下文（headless / 装配未就绪），
+    不做归属限制。主循环 ``before_tool_call`` 与子代理 dispatch **都必须**
+    走这里——两处一旦各自实现，就会出现「主循环拦住、子代理放行」。
+    """
+    if allowed_owners is None or tool is None:
+        return None
+    owner = getattr(tool, "expert_name", None)
+    if owner is None or owner in allowed_owners:
+        return None
+    return (
+        f"allowed_tool_owners_denied:{owner}"
+        f"（该工具属于未启用的连接器或专家包「{owner}」）"
+    )
 
 
 # ---------------------------------------------------------------------------

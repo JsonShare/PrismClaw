@@ -17,7 +17,7 @@ class WorkspaceSettings(BaseSettings):
 class SkillSettings(BaseSettings):
     # —— 静态发现链：repo 管控、sync 到 assets/，绝对 home 路径。
     # origin.py / provider.py / management.py / profile_loader.py /
-    # editor.py / discovery.py / plugin_lifecycle.py / runner_deps.py 读这里。
+    # editor.py / discovery.py / expert_lifecycle.py / runner_deps.py 读这里。
     asset_skills_dir: str = Field("~/.prismclaw/assets/skills")
 
     # —— 运行时安装链：graduation / ClawHub 安装到 workspace 内，相对路径拼到 workspace_root。

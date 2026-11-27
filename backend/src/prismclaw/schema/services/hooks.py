@@ -1,7 +1,7 @@
 """Hook subsystem contracts.
 
 Protocols for hook execution and decision handling.
-Duck-typing compatible with engine.services.plugins.handlers.HookHandler.
+Duck-typing compatible with engine.services.experts.handlers.HookHandler.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Global runtime root resolution.
 
-所有技能/插件共享的运行时根 —— 重资产（node_modules、fonts、pip --target 包）
+所有技能/专家包共享的运行时根 —— 重资产（node_modules、fonts、pip --target 包）
 装在这里，一次安装全 workspace 生效。
 
 布局::
@@ -9,7 +9,7 @@
     /runtime/                              # 容器内（prismclaw-runtime 卷挂载）
     ├── skills/<skill_name>/node_modules/
     ├── skills/<skill_name>/site-packages/
-    ├── plugins/<plugin_name>/...
+    ├── experts/<expert_name>/...
     ├── fonts/
     └── tmp/
 

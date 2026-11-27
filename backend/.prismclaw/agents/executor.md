@@ -4,15 +4,6 @@ description: 负责在指定范围内完成修改或生成内容，并验证结�
 context_mode: isolated
 max_turns: 30
 timeout_seconds: 600.0
-allowed_tools:
-  - read
-  - grep
-  - glob
-  - write
-  - edit
-  - bash
-  - "web-search-mcp:search"
-  - "web-search-mcp:fetch"
 ---
 
 你负责在授权范围内完成改动，并确认结果按预期生效。

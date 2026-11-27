@@ -11,10 +11,9 @@ import tempfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from prismclaw.app.auth.auth import get_current_user
@@ -23,7 +22,15 @@ from prismclaw.app.web._routes_helpers import (
     _resolve_workspace_root,
 )
 from prismclaw.app.web.deps import get_web_deps, get_web_deps_from_app
+from prismclaw.app.web.routers.experts import (
+    get_expert_registries,
+    raise_expert_http_error,
+    verify_session_owner,
+)
 from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
+from prismclaw.engine.execution.skills.selection import replace_session_skill_selection
+from prismclaw.engine.experts.codes import ExpertError
+from prismclaw.engine.experts.selection import get_session_expert_state
 from prismclaw.runtime.skills.editor import (
     EditFailedError,
     EditForbiddenError,
@@ -31,8 +38,13 @@ from prismclaw.runtime.skills.editor import (
     SkillEditor,
     SkillNotFoundError,
 )
+from prismclaw.runtime.skills.eligibility import is_user_visible
 from prismclaw.schema.agent.domains import SkillSource
-from prismclaw.schema.services.skills import SkillManifest, normalize_skill_ref
+from prismclaw.schema.services.skills import (
+    SkillManifest,
+    normalize_skill_ref,
+    qualified_skill_id,
+)
 
 if TYPE_CHECKING:
     from prismclaw.app.web.deps import WebDeps
@@ -42,15 +54,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _get_plugin_trust_fns(web_deps: WebDeps) -> tuple[Any, Any]:
-    """R1: resolve plugin trust functions from WebDeps."""
-    fns = web_deps.plugin_trust_fns
-    if fns is None:
-        return None, None
-    return fns.get("is_source_trusted_for_load"), fns.get("resolve_workspace_trusted")
-
-
 skills_router = APIRouter(prefix="/skills", tags=["skills"])
+session_skills_router = APIRouter(
+    prefix="/sessions/{session_id}/skills", tags=["skills"]
+)
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -65,17 +72,40 @@ class SkillListItem(BaseModel):
     emoji: str | None = None
     source: str | None = None
     origin: str | None = None
-    enabled: bool = True
     location: str | None = None
     group_path: list[str] = []
     group_label: str | None = None
     category: str | None = None
-    workspace_trusted: bool | None = None
-    marketplace_name: str | None = None
-    marketplace_description: str | None = None
-    plugin_description: str | None = None
-    invocation_policy: str = "auto"
+    expert_name: str | None = None
+    expert_description: str | None = None
+    # 所属专家包类型：agent=专家、team=专家团；非专家包来源为 None
+    expert_type: str | None = None
     editable: bool = False
+
+
+class CatalogSkillResponse(BaseModel):
+    id: str
+    name: str
+    name_zh: str | None = None
+    description: str = ""
+
+
+class SkillPackageResponse(BaseModel):
+    expert_name: str
+    expert_description: str | None = None
+    # 包来源：agent=专家、team=专家团；非专家来源的内置技能包为 None。
+    # 前端据此把「专家自带的技能」从技能选择器里剔除。
+    expert_type: str | None = None
+    skills: list[CatalogSkillResponse]
+
+
+class ReplaceSessionSkillsRequest(BaseModel):
+    selected_skill_ids: list[str]
+
+
+class SessionSkillSelectionResponse(BaseModel):
+    session_id: str
+    selected_skill_ids: list[str]
 
 
 class InstallSkillRequest(BaseModel):
@@ -122,8 +152,8 @@ def _skill_source(
         extension_manager=extension_manager,
         web_deps=web_deps,
     )
-    if origin is SkillSource.PLUGIN:
-        return "插件提供"
+    if origin is SkillSource.EXPERT:
+        return "专家包提供"
     if origin is SkillSource.MCP:
         return "MCP 提供"
     if origin is SkillSource.PERSONAL:
@@ -179,7 +209,7 @@ async def _list_runtime_skills(
     )
     if runner_deps is None:
         raise RuntimeError("workspace runner deps are required for skill listing")
-    raw_extension_manager = runner_deps.plugin.extension_manager
+    raw_extension_manager = runner_deps.expert.extension_manager
     extension_manager = (
         raw_extension_manager if isinstance(raw_extension_manager, ExtensionManager) else None
     )
@@ -190,12 +220,12 @@ async def _list_runtime_skills(
         raise RuntimeError(
             "workspace runner deps must provide capability_catalog for skill listing"
         )
-    return capability_catalog.list_skill_entries(workspace_root), extension_manager
+    return capability_catalog.list_skill_entries(), extension_manager
 
 
-def _invalidate_plugin_runtime_state(app: FastAPI, settings: Settings) -> None:
+def _invalidate_expert_runtime_state(app: FastAPI, settings: Settings) -> None:
     web_deps = app.state.web_deps
-    web_deps.apply_settings_fn(app, settings, invalidate_plugin_runtime=True)
+    web_deps.apply_settings_fn(app, settings, invalidate_expert_runtime=True)
 
 
 def _normalize_skill_dir_name(raw: str) -> str:
@@ -244,6 +274,14 @@ def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
     zf.extractall(dest)
 
 
+def _is_asset_skill(manifest: SkillManifest, asset_root: Path) -> bool:
+    """技能文件是否位于用户级 asset 技能目录下。"""
+    if not manifest.file_path:
+        return False
+    resolved = Path(manifest.file_path).expanduser().resolve()
+    return resolved == asset_root or asset_root in resolved.parents
+
+
 def _ensure_json_path(obj: dict[str, Any], *keys: str) -> dict[str, Any]:
     cur: dict[str, Any] = obj
     for k in keys:
@@ -260,54 +298,153 @@ def _ensure_json_path(obj: dict[str, Any], *keys: str) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+@skills_router.get("", response_model=list[SkillPackageResponse])
+async def list_deployed_skills(
+    request: Request,
+    user_id: str = Depends(get_current_user),
+) -> list[SkillPackageResponse]:
+    _ = user_id
+    builtin, states = get_expert_registries(request)
+    experts = sorted(builtin.list_experts(), key=lambda expert: expert.name)
+    groups: list[SkillPackageResponse] = []
+    for expert in experts:
+        kind: str | None = None
+        if expert.source == "experts":
+            manifest = expert.manifest
+            kind = "team" if manifest is not None and manifest.expert_type == "team" else "expert"
+            if not states.is_enabled(kind, expert.name):
+                continue
+        skills = []
+        for skill in expert.skills:
+            if not is_user_visible(skill):
+                continue
+            skill_id = qualified_skill_id(expert.name, skill.name)
+            if not states.is_enabled("skill", skill_id):
+                continue
+            skills.append(
+                CatalogSkillResponse(
+                    id=skill_id,
+                    name=skill.name,
+                    name_zh=skill.name_zh,
+                    description=skill.description,
+                )
+            )
+        if skills:
+            groups.append(
+                SkillPackageResponse(
+                    expert_name=expert.name,
+                    expert_description=(
+                        expert.manifest.description if expert.manifest is not None else None
+                    ),
+                    expert_type=kind,
+                    skills=skills,
+                )
+            )
+    return groups
+
+
+@session_skills_router.put("", response_model=SessionSkillSelectionResponse)
+async def replace_session_skills(
+    session_id: str,
+    payload: ReplaceSessionSkillsRequest,
+    request: Request,
+    user_id: str = Depends(get_current_user),
+) -> SessionSkillSelectionResponse:
+    deps = get_web_deps(request)
+    await verify_session_owner(deps.session_store, session_id, user_id)
+    builtin, states = get_expert_registries(request)
+    try:
+        header = await replace_session_skill_selection(
+            session_id,
+            payload.selected_skill_ids,
+            session_store=deps.session_store,
+            expert_registry=builtin,
+            capability_policy_registry=states,
+        )
+    except ExpertError as exc:
+        raise_expert_http_error(exc)
+    return SessionSkillSelectionResponse(
+        session_id=session_id, selected_skill_ids=header.selected_skill_ids
+    )
+
+
+@session_skills_router.delete(
+    "/{skill_id:path}", response_model=SessionSkillSelectionResponse
+)
+async def remove_session_skill(
+    session_id: str,
+    skill_id: str,
+    request: Request,
+    user_id: str = Depends(get_current_user),
+) -> SessionSkillSelectionResponse:
+    deps = get_web_deps(request)
+    await verify_session_owner(deps.session_store, session_id, user_id)
+    builtin, states = get_expert_registries(request)
+    state = await get_session_expert_state(
+        session_id,
+        session_store=deps.session_store,
+        expert_registry=builtin,
+        capability_policy_registry=states,
+    )
+    selected = [item for item in state["selected_skill_ids"] if item != skill_id]
+    try:
+        header = await replace_session_skill_selection(
+            session_id,
+            selected,
+            session_store=deps.session_store,
+            expert_registry=builtin,
+            capability_policy_registry=states,
+        )
+    except ExpertError as exc:
+        raise_expert_http_error(exc)
+    return SessionSkillSelectionResponse(
+        session_id=session_id, selected_skill_ids=header.selected_skill_ids
+    )
+
+
 @skills_router.get("/list", response_model=list[SkillListItem])
 async def list_skills(
     request: Request,
     user_id: str = Depends(get_current_user),
     workspace_id: str = "default",
+    scope: Literal["assets", "all"] = "assets",
 ) -> list[SkillListItem]:
     wid = _clean_workspace_id(workspace_id)
     workspace_root = _resolve_workspace_root(request=request, user_id=user_id, workspace_id=wid)
     web_deps = get_web_deps(request)
     settings_full = web_deps.settings_full
+    asset_root = (
+        Path(settings_full.skills.asset_skills_dir).expanduser().resolve()  # noqa: ASYNC240
+    )
     entries, extension_manager = await _list_runtime_skills(
         request,
         user_id=user_id,
         workspace_root=workspace_root,
         settings_full=settings_full,
     )
+    # 专家包类型用于前端区分「专家 / 专家团」两个 tab；注册表缺失时降级为 None。
+    try:
+        expert_registry, _states = get_expert_registries(request)
+    except RuntimeError:
+        expert_registry = None
 
-    # Resolve workspace trust state for filtering and display
-    workspace_path = getattr(settings_full, "workspaces", None)
-    workspace_default = (
-        getattr(workspace_path, "default", "~/.prismclaw/workspaces")
-        if workspace_path
-        else "~/.prismclaw/workspaces"
-    )
-    _is_source_trusted_for_load, _resolve_workspace_trusted = _get_plugin_trust_fns(web_deps)
-    workspace_trusted = (
-        _resolve_workspace_trusted(workspace_default, settings_full)
-        if _resolve_workspace_trusted
-        else True
-    )
-
-    # 技能来源 → 插件信任域映射：builtin / local / marketplace。
-    # SkillSource.* 是 str 子类，可直接作为 key。
-    _ORIGIN_TO_PLUGIN_SOURCE: dict[str, str] = {  # noqa: N806 - 常量映射表
-        SkillSource.BUNDLED: "builtin",
-        SkillSource.WORKSPACE: "builtin",
-        SkillSource.BUILTIN: "builtin",
-        SkillSource.PERSONAL: "local",
-        SkillSource.MANAGED: "local",
-        SkillSource.PROJECT: "local",
-        SkillSource.PLUGIN: "marketplace",
-        SkillSource.MARKETPLACE: "marketplace",
-        SkillSource.MCP: "local",
-    }
+    def _expert_type_of(name: str | None) -> str | None:
+        if not name or expert_registry is None:
+            return None
+        try:
+            package = expert_registry.get(name)
+        except ExpertError:
+            return None
+        manifest = package.manifest if package is not None else None
+        return manifest.expert_type if manifest is not None else None
 
     out: list[SkillListItem] = []
     for entry in entries:
         m = entry.manifest
+        if not is_user_visible(m):
+            continue
+        if scope == "assets" and not _is_asset_skill(m, asset_root):
+            continue
         origin = _skill_origin(
             m,
             workspace_root,
@@ -315,20 +452,6 @@ async def list_skills(
             extension_manager=extension_manager,
             web_deps=web_deps,
         )
-
-        # Check if this skill's origin requires trust
-        plugin_source = (
-            _ORIGIN_TO_PLUGIN_SOURCE.get(origin, "local") if origin is not None else "local"
-        )
-        is_trusted_for_load = (
-            _is_source_trusted_for_load(plugin_source, workspace_trusted=workspace_trusted)
-            if _is_source_trusted_for_load
-            else True
-        )
-
-        # Filter out skills from untrusted sources in untrusted workspaces
-        if not is_trusted_for_load:
-            continue
 
         origin_fns = web_deps.skill_origin_fns
         out.append(
@@ -345,7 +468,6 @@ async def list_skills(
                     web_deps=web_deps,
                 ),
                 origin=origin,
-                enabled=True,
                 location=m.file_path or None,
                 group_path=origin_fns["classify_skill_group_path"](
                     m,
@@ -360,47 +482,13 @@ async def list_skills(
                     extension_manager=extension_manager,
                 ),
                 category=m.category,
-                workspace_trusted=workspace_trusted,
-                marketplace_name=entry.marketplace_name,
-                marketplace_description=entry.marketplace_description,
-                plugin_description=entry.plugin_description,
-                invocation_policy=str(m.invocation_policy.value)
-                if m.invocation_policy is not None
-                else "auto",
+                expert_name=entry.expert_name,
+                expert_description=entry.expert_description,
+                expert_type=_expert_type_of(entry.expert_name),
                 editable=bool(m.editable),
             )
         )
     return out
-
-
-@skills_router.get("/marketplace/{plugin_name}/icon")
-async def get_marketplace_icon(
-    plugin_name: str,
-    request: Request,
-    user_id: str = Depends(get_current_user),
-) -> FileResponse:
-    """返回插件自带的图标：``<asset_plugins_dir>/<plugin_name>/.plugin/icon.*``。
-
-    图标随插件包分发，核心不内置任何插件名或图片；缺失时 404，由前端回落默认图标。
-    """
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", plugin_name):
-        raise HTTPException(status_code=404, detail="icon not found")
-
-    settings_full = get_web_deps(request).settings_full
-    # expanduser/resolve 只做路径规范化，不读盘。
-    base = Path(settings_full.plugins.asset_plugins_dir).expanduser().resolve()  # noqa: ASYNC240
-    root = (base / plugin_name).resolve()
-    if root.parent != base:
-        raise HTTPException(status_code=404, detail="icon not found")
-
-    for ext in ("png", "svg", "jpg", "jpeg", "webp"):
-        icon = root / ".plugin" / f"icon.{ext}"
-        if icon.is_file():
-            return FileResponse(
-                icon,
-                headers={"Cache-Control": "public, max-age=3600"},
-            )
-    raise HTTPException(status_code=404, detail="icon not found")
 
 
 @skills_router.get("/{skill_name}")
@@ -432,7 +520,7 @@ async def get_skill(
         extension_manager=extension_manager,
         web_deps=web_deps,
     )
-    # v5 渐进式披露：插件技能加载时仅读 frontmatter（body=None），
+    # v5 渐进式披露：专家包技能加载时仅读 frontmatter（body=None），
     # 此处按需从 file_path 重新读取完整 SKILL.md 内容。API 层不持有
     # SkillRuntime/DescriptorRegistry，无法复用执行层 _ensure_body_loaded
     # 的注册表回写——只读端点读完即弃，直接 parse 即可。
@@ -457,7 +545,6 @@ async def get_skill(
             web_deps=web_deps,
         ),
         "origin": origin,
-        "enabled": True,
         "location": target.file_path or None,
         "body": body,
         "editable": bool(target.editable),
@@ -526,7 +613,7 @@ async def install_skill_from_url(
 
     # Invalidate the cached runner deps so the next request rebuilds the
     # capability catalog with the newly installed skill visible.
-    _invalidate_plugin_runtime_state(request.app, web_deps.settings_full)
+    _invalidate_expert_runtime_state(request.app, web_deps.settings_full)
 
     return {"ok": True, "name": slug, "dest": str(dest)}
 
@@ -563,7 +650,7 @@ async def upload_skill(
         except Exception as exc:
             shutil.rmtree(dest, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Invalid SKILL.md: {exc}") from exc
-        _invalidate_plugin_runtime_state(request.app, web_deps.settings_full)
+        _invalidate_expert_runtime_state(request.app, web_deps.settings_full)
         return {"ok": True, "name": manifest.name, "dest": str(dest)}
 
     if lower_name.endswith(".zip"):
@@ -587,7 +674,7 @@ async def upload_skill(
         except Exception as exc:
             shutil.rmtree(dest, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Invalid SKILL.md: {exc}") from exc
-        _invalidate_plugin_runtime_state(request.app, web_deps.settings_full)
+        _invalidate_expert_runtime_state(request.app, web_deps.settings_full)
         return {"ok": True, "name": manifest.name, "dest": str(dest)}
 
     raise HTTPException(status_code=400, detail="Only .zip or .md is supported")
@@ -628,8 +715,8 @@ async def delete_skill(
         or origin is SkillSource.BUILTIN
     ):
         raise HTTPException(status_code=403, detail="Cannot delete bundled skills")
-    if origin is SkillSource.PLUGIN:
-        raise HTTPException(status_code=403, detail="Cannot delete plugin-provided skills")
+    if origin is SkillSource.EXPERT:
+        raise HTTPException(status_code=403, detail="Cannot delete expert-provided skills")
     try:
         mp = Path(target.file_path).expanduser().resolve()  # noqa: ASYNC240 - 纯路径规范化
     except Exception:
@@ -644,7 +731,7 @@ async def delete_skill(
         shutil.rmtree(skill_dir)
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to delete skill") from None
-    _invalidate_plugin_runtime_state(request.app, settings_full)
+    _invalidate_expert_runtime_state(request.app, settings_full)
     return SimpleOkResponse()
 
 
@@ -658,10 +745,10 @@ def _build_skill_editor(
     origin_fns = web_deps.skill_origin_fns or {}
 
     def _invalidate() -> None:
-        _invalidate_plugin_runtime_state(request.app, settings_full)
+        _invalidate_expert_runtime_state(request.app, settings_full)
 
     # Project root is the authoritative anchor set at lifespan startup
-    # (app.state.project_root); project- and plugin-provided skills live under
+    # (app.state.project_root); project- and expert-provided skills live under
     # it, not under the per-user cloud workspace root.
     project_root = getattr(request.app.state, "project_root", None)
     if project_root is None:

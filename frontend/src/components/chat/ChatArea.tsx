@@ -15,6 +15,7 @@ import type { RichInputHandle } from './RichInput'
 import { collectChips, hasPlainText, markersToReadable } from '../../lib/chat/inputMarkers'
 import ClarifyCard from './ClarifyCard'
 import QueueBar from './QueueBar'
+import TurnNavigator, { type TurnNavItem } from './TurnNavigator'
 import { MessageSkeleton } from '../ui/Skeleton'
 import ServerWorkspaceManager from '../file/ServerWorkspaceManager'
 import { UploadQueueModal, UploadTicker, type UploadTask } from '../file/UploadQueue'
@@ -37,7 +38,7 @@ import {
 import { apiUrl } from '../../lib/system-adapter'
 import { useToast } from '../../lib/toast'
 import { useChatStore, useSessionStore } from '../../stores'
-import type { OutboxItem } from '../../stores/chat'
+import { selectAnswerText, type OutboxItem } from '../../stores/chat'
 import { useChatScrollController } from '../../hooks/chat/useChatScroll'
 import { useClarifyFlow } from '../../hooks/chat/useClarifyFlow'
 import { usePhaseClock } from '../../hooks/chat/usePhaseClock'
@@ -75,6 +76,8 @@ const EMPTY_OUTBOX: OutboxItem[] = []
 const MAX_FILES_PER_MESSAGE = 10
 const WELCOME_CHOICE_CARD =
   '我们接下来做点什么？'
+/** 轮次导航判定「顶部正在阅读的提问」的视口偏移（px） */
+const ACTIVE_TURN_TOP_PX = 96
 
 export default function ChatArea({
   token,
@@ -127,7 +130,10 @@ export default function ChatArea({
 
   // ── 会话级状态：直接订阅 store（单真相源），不再经 props 透传 ──
   const messages = useChatStore((s) => s.convStates[conversationId]?.messages ?? EMPTY_MESSAGES)
-  const streamingText = useChatStore((s) => s.convStates[conversationId]?.streamingText ?? '')
+  const answerText = useChatStore((s) => {
+    const conv = s.convStates[conversationId]
+    return conv ? selectAnswerText(conv) : ''
+  })
   const isStreaming = useChatStore((s) => s.convStates[conversationId]?.isStreaming ?? false)
   const isQueued = useChatStore((s) => s.convStates[conversationId]?.isQueued ?? false)
   const queuePosition = useChatStore((s) => s.convStates[conversationId]?.queuePosition ?? 0)
@@ -317,6 +323,10 @@ export default function ChatArea({
       if (!activeConvId && !uploadSessionIdRef.current && data.session_id) {
         uploadSessionIdRef.current = data.session_id
       }
+      if ((data.files?.length ?? 0) > 0) {
+        // 通知咨询页右栏：有新上传，刷新「我的上传」并按需展开。
+        window.dispatchEvent(new CustomEvent('prismclaw:files-uploaded'))
+      }
       return { uploaded: data.files ?? [], skipped: data.skipped ?? [] }
     },
     [activeConvId, token, workspaceId],
@@ -329,6 +339,15 @@ export default function ChatArea({
   const prefetchPromiseRef = useRef<Map<string, Promise<PendingUpload>>>(new Map())
 
   const startPrefetch = useCallback((att: PendingAttachment): Promise<PendingUpload> => {
+    if (att.kind === 'ref') {
+      return Promise.resolve({
+        status: 'done',
+        path: att.path,
+        name: att.name,
+        mimeType: att.mimeType,
+        sizeBytes: att.sizeBytes,
+      })
+    }
     const running = prefetchPromiseRef.current.get(att.id)
     if (running) return running
 
@@ -489,6 +508,46 @@ export default function ChatArea({
     [attachmentId, pendingAttachments, startPrefetch, toast],
   )
 
+  /** 文件库引用：直接进入待定区，随消息以 file block 发送，无需上传 */
+  const addRefAttachments = useCallback((refs: { path: string; name: string; sizeBytes?: number }[]) => {
+    if (refs.length === 0) return
+    const next = [...pendingAttachments]
+    let overflowed = false
+    for (const ref of refs) {
+      // 同一文件已上传或已引用时不再重复加入（发送会生成两条同 path 的 file block）
+      const duplicated = next.some((a) => (a.kind === 'ref' ? a.path === ref.path : a.upload?.path === ref.path))
+      if (duplicated) continue
+      if (next.length >= MAX_FILES_PER_MESSAGE) {
+        overflowed = true
+        break
+      }
+      next.push({
+        kind: 'ref',
+        id: `ref:${ref.path}`,
+        path: ref.path,
+        name: ref.name,
+        sizeBytes: ref.sizeBytes,
+      })
+    }
+    // toast 放在 state updater 之外：StrictMode 下 updater 会双调用，放里面会重复提示
+    if (overflowed) toast(`每条消息最多 ${MAX_FILES_PER_MESSAGE} 个文件，超出部分已忽略。`, 'error')
+    if (next.length !== pendingAttachments.length) setPendingAttachments(next)
+  }, [pendingAttachments, toast])
+
+  // 切换工作区：待定区的上传文件 / 引用文件 / 图片，其 path 都相对旧工作区，
+  // 在新工作区不存在。整体清空（正文文字保留），并中止进行中的预上传 ——
+  // 否则旧工作区的上传会在后台完成后回写附件状态。
+  const prevWorkspaceIdRef = useRef(workspaceId)
+  useEffect(() => {
+    if (prevWorkspaceIdRef.current === workspaceId) return
+    prevWorkspaceIdRef.current = workspaceId
+    prefetchAbortRef.current.forEach((controller) => controller.abort())
+    prefetchAbortRef.current.clear()
+    prefetchPromiseRef.current.clear()
+    setPendingAttachments([])
+    setUploadTasks([])
+  }, [workspaceId])
+
   const removeAttachment = useCallback((index: number) => {
     setPendingAttachments((prev) => {
       const att = prev[index]
@@ -538,8 +597,17 @@ export default function ChatArea({
     requestAnimationFrame(() => editorRef.current?.focusEnd())
   }, [])
 
-  // 首次挂载 + 切换会话时自动聚焦输入框——用户直接敲字即可，无需先点击
+  // 发送首条消息会新建会话（conversationId: null → 新 id），这类变化不应把焦点
+  // 抢回输入框：任务已经在执行，光标留在咨询框会让视觉重心错误地停在输入区。
+  // 该标记由 handleSubmit 在发送前点亮，下面的自动聚焦 effect 遇到时跳过一次。
+  const suppressComposerFocusRef = useRef(false)
+
+  // 首次挂载 + 用户手动切换会话时自动聚焦输入框——用户直接敲字即可，无需先点击
   useEffect(() => {
+    if (suppressComposerFocusRef.current) {
+      suppressComposerFocusRef.current = false
+      return
+    }
     focusInputAtEnd()
   }, [focusInputAtEnd, conversationId])
 
@@ -666,17 +734,17 @@ export default function ChatArea({
           ]
         : messages
 
-    if (!isStreaming && !streamingText) return base
+    if (!isStreaming && !answerText) return base
     const streaming: Message = {
       id: STREAMING_ID,
       role: 'assistant',
-      content: streamingText,
+      content: answerText,
       timestamp: Date.now(),
       toolCalls: liveToolCalls.length > 0 ? liveToolCalls : undefined,
       timeline: liveTimeline.length > 0 ? liveTimeline : undefined,
     }
     return [...base, streaming]
-  }, [isLoadingHistory, isStreaming, layout, liveSubagentItems, liveToolCalls, liveTimeline, messages, streamingText])
+  }, [answerText, isLoadingHistory, isStreaming, layout, liveSubagentItems, liveToolCalls, liveTimeline, messages])
 
   const waitingUserMessages = useMemo(() => {
     return (queuedUserMessages ?? []).filter((m) => (m.text || '').trim().length > 0)
@@ -709,7 +777,7 @@ export default function ChatArea({
 
   // 滚动状态机（三态）：bottom 跟随底部 / pinned 问题钉顶 / reading 用户滚离阅读。
   // 发问即钉顶、生成期间不自动滚底（用户先看前面的内容）；按钮只做「回到底部」。
-  const scrollActivityKey = `${items.length}|${streamingText.length}|${liveToolCalls.length}|${liveSubagentItems.length}|${liveTimeline.length}`
+  const scrollActivityKey = `${items.length}|${answerText.length}|${liveToolCalls.length}|${liveSubagentItems.length}|${liveTimeline.length}`
   const scroll = useChatScrollController({
     scrollerRef,
     isStreaming,
@@ -718,6 +786,112 @@ export default function ChatArea({
     resetKey: conversationId,
   })
   const { pinNewQuestion } = scroll
+
+  /* ── 轮次快速定位 ────────────────────────────────────────────────
+   * 只在「轮次多于 2 条」且「中间栏宽于内容区默认宽度」时出现：
+   * 中间栏装不下内容列时右侧没有余量，导航会压住正文。
+   * 当前轮次取视口顶部第一条已读到的用户提问（含 overscan 内的行）。 */
+  const areaRef = useRef<HTMLDivElement>(null)
+  const [chatAreaWidth, setChatAreaWidth] = useState(0)
+  useEffect(() => {
+    const el = areaRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const next = entries[0]?.contentRect.width
+      if (typeof next === 'number' && next > 0) setChatAreaWidth(next)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [layout])
+
+  const turnNavItems = useMemo<TurnNavItem[]>(() => {
+    const list: TurnNavItem[] = []
+    messages.forEach((message, index) => {
+      if (message.role !== 'user') return
+      // items 仅在历史为空时插入欢迎卡、末尾追加流式占位，
+      // 用户消息下标与 messages 一致，可直接用于跳转。
+      list.push({
+        key: message.id,
+        index,
+        label: extractQuestionPlainText(message.content) || '附件消息',
+      })
+    })
+    return list
+  }, [messages])
+
+  const [activeTurnIndex, setActiveTurnIndex] = useState<number | null>(null)
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    let raf = 0
+    const measure = () => {
+      raf = 0
+      const list = itemsRef.current
+      const scrollerTop = scroller.getBoundingClientRect().top
+      let active: number | null = null
+      let firstRendered = Number.POSITIVE_INFINITY
+      for (const node of scroller.querySelectorAll<HTMLElement>('[data-index]')) {
+        const index = Number(node.dataset.index)
+        if (!Number.isFinite(index)) continue
+        if (index < firstRendered) firstRendered = index
+        if (list[index]?.role !== 'user') continue
+        const top = node.getBoundingClientRect().top - scrollerTop
+        if (top <= ACTIVE_TURN_TOP_PX) active = index
+        else break
+      }
+      // 视口顶部附近的行都被虚拟器卸载（快速滚动/长回答）：退回最近一条已渲染行之前的提问。
+      if (active === null && Number.isFinite(firstRendered)) {
+        for (let i = Math.min(firstRendered, list.length - 1); i >= 0; i -= 1) {
+          if (list[i]?.role === 'user') {
+            active = i
+            break
+          }
+        }
+      }
+      setActiveTurnIndex((prev) => (prev === active ? prev : active))
+    }
+    const schedule = () => {
+      if (raf) return
+      raf = requestAnimationFrame(measure)
+    }
+    schedule()
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      scroller.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      if (raf) cancelAnimationFrame(raf)
+    }
+  }, [conversationId, items.length, layout, scrollerRef])
+
+  /** 跳到指定轮次：先脱离跟随/钉顶，再按真实行位置对齐（虚拟器估算高度不准，需收敛重试）。 */
+  const jumpToTurn = useCallback(
+    (index: number) => {
+      scroll.detachFollow()
+      let attempts = 0
+      const align = () => {
+        const scroller = scrollerRef.current
+        if (!scroller) return
+        const row = scroller.querySelector<HTMLElement>(`[data-index="${index}"]`)
+        if (row) {
+          const delta = row.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16
+          if (Math.abs(delta) > 1) scroller.scrollTop = Math.max(0, scroller.scrollTop + delta)
+          attempts += 1
+          // 重测上方行高会让位置漂移，多对齐两帧收敛
+          if (attempts < 3) requestAnimationFrame(align)
+          return
+        }
+        virtualizer.scrollToIndex(index, { align: 'start' })
+        attempts += 1
+        if (attempts < 6) requestAnimationFrame(() => requestAnimationFrame(align))
+      }
+      align()
+    },
+    [scroll, scrollerRef, virtualizer],
+  )
 
   // 置顶的唯一触发点：消费 store 里的 pinRequest（发问指令）。发送动作在
   // appendMessage 时显式记录「这条 user 消息是我刚发的」，与发问入口无关
@@ -765,12 +939,13 @@ export default function ChatArea({
           // 不再重复上传，也保证失败项不会混进消息。
           const settled = await Promise.all(
             pendingAttachments.map(async (att) => {
+              if (att.kind === 'ref') return att
               if (att.upload?.status === 'done') return att
               const promise = prefetchPromiseRef.current.get(att.id) ?? startPrefetch(att)
               return { ...att, upload: await promise } as PendingAttachment
             }),
           )
-          const failed = settled.filter((a) => a.upload?.status !== 'done')
+          const failed = settled.filter((a) => a.kind !== 'ref' && a.upload?.status !== 'done')
           if (failed.length > 0) {
             toast(`有 ${failed.length} 个附件上传失败，已从本次发送中移除。`, 'error')
           }
@@ -783,6 +958,9 @@ export default function ChatArea({
       }
 
       // 技能/专家/引用文件都在正文标记串里，随 content 一并发送，不再单发字段
+      // 落地页首条消息会创建会话，随之而来的 conversationId 变化会触发上面的
+      // 自动聚焦 effect；先点亮抑制标记，保证发送后光标不会被抢回咨询框。
+      if (!conversationId) suppressComposerFocusRef.current = true
       void controller.sendMessage(finalText, outgoingAttachments)
       setInput('')
       setPendingAttachments([])
@@ -826,8 +1004,7 @@ export default function ChatArea({
 
   // 胶囊文案（2026-09-02 用户反馈）：生成期统一显示「AI 正在处理」loading 态，
   // 不再区分 analyzing / executing / waiting_llm / compacting 等子相位——用户感知
-  // 到「LLM 还在跑」就行，工具细节归右侧任务面板（ExecutionTimeline / useTaskPanelData
-  // 保留 phase 文案分发的细粒度状态，那里是给操作者看的「执行细节」层）。
+  // 到「LLM 还在跑」就行，工具细节由消息时间线（ExecutionTimeline）呈现。
   const streamingLabel = 'AI 正在处理'
 
   // landing 与 normal 两处输入框共享同一组 props（此前是两份逐属性拷贝，
@@ -863,7 +1040,18 @@ export default function ChatArea({
     onToggleVoice: () => void toggleVoiceInput(),
     onAbort: controller.abort,
     onRemoveAttachment: removeAttachment,
+    onAddRefs: addRefAttachments,
     onPreviewAttachment: (att) => {
+      if (att.kind === 'ref') {
+        // 新任务页不渲染右侧栏，打开预览不会有任何可见变化 —— 直接说明而不是静默无响应
+        if (layout === 'landing') {
+          toast('当前页面暂不支持预览，发送后可在右侧栏打开', 'info')
+          return
+        }
+        if (onOpenFilePreview) onOpenFilePreview(att.path)
+        else toast('当前页面不支持文件预览', 'info')
+        return
+      }
       const upload = att.upload
       if (upload?.status === 'done' && upload.path) {
         if (onOpenFilePreview) onOpenFilePreview(upload.path)
@@ -879,6 +1067,7 @@ export default function ChatArea({
     conversationMessages: messages,
     workspaceId,
     token,
+    maxRefFiles: MAX_FILES_PER_MESSAGE,
   }
 
   if (showLanding) {
@@ -896,13 +1085,13 @@ export default function ChatArea({
                     {/* 仅展示 logo 图片，去掉渠道色块容器；尺寸放大到 96px */}
                     <img
                       src={landingLogo}
-                      alt="PrismClaw"
+                      alt="PrismWork"
                       className="w-36 h-36 object-contain relative z-10"
                       draggable={false}
                     />
                     <div className="text-left">
                       <div className="text-6xl md:text-7xl font-display font-bold tracking-tight leading-none text-[var(--c-text)]">
-                        Prism<span className="text-[var(--c-accent)]">Claw</span>
+                        Prism<span className="text-[var(--c-accent)]">Work</span>
                       </div>
                       <div className="mt-4 text-[length:var(--fs-lg)] md:text-[length:var(--fs-xl)] font-medium text-[var(--c-text-secondary)]">
                         随时随地，帮您高效干活
@@ -917,7 +1106,7 @@ export default function ChatArea({
               <ChatInputBox
                 variant="landing"
                 {...chatInputBoxProps}
-                placeholder="发消息、发图片、发文件、创建自动化任务、/快捷调用、@添加上下文"
+                placeholder="发消息、发图片、发文件、创建定时任务、/快捷调用、@添加上下文"
               />
 
             <div className="mt-2 flex items-center">
@@ -946,7 +1135,11 @@ export default function ChatArea({
   }
 
   return (
-    <div className="chat-area flex flex-col flex-1 min-w-0 min-h-0 relative">
+    <div
+      ref={areaRef}
+      className="chat-area flex flex-col flex-1 min-w-0 min-h-0 relative"
+      style={{ '--chat-content-w': `${chatWidth}px` } as React.CSSProperties}
+    >
       <div
         ref={scrollerRef}
         onScroll={scroll.handleScroll}
@@ -1078,7 +1271,7 @@ export default function ChatArea({
           <ChatInputBox
             variant="normal"
             {...chatInputBoxProps}
-            placeholder="发消息、发图片、发文件、创建自动化任务、/快捷调用、@添加上下文"
+            placeholder="发消息、发图片、发文件、创建定时任务、/快捷调用、@添加上下文"
           >
               <ClarifyCard flow={clarifyFlow} />
 
@@ -1129,6 +1322,15 @@ export default function ChatArea({
         open={uploadQueueOpen}
         onClose={() => setUploadQueueOpen(false)}
       />
+
+      {/* 轮次快速定位：轮次 > 2 且中间栏宽于内容区默认宽度时才出现 */}
+      {turnNavItems.length > 2 && chatAreaWidth > chatWidth && (
+        <TurnNavigator
+          turns={turnNavItems}
+          activeIndex={activeTurnIndex}
+          onJump={jumpToTurn}
+        />
+      )}
     </div>
   )
 }

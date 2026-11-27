@@ -11,7 +11,6 @@ from prismclaw.engine.compression.result_compaction import (
     compact_tool_results_for_turn_async,
 )
 from prismclaw.engine.execution.dispatch.execution_entry import execute_tool_calls
-from prismclaw.engine.execution.handoff.contract import normalize_handoff_request_payload
 from prismclaw.engine.execution.output.tool_result_rendering import tool_result_to_llm_content
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext
 from prismclaw.schema.agent.data_types import TextBlock
@@ -24,7 +23,6 @@ from prismclaw.schema.session import REPLACEMENT_DECISION_CUSTOM_TYPE
 from prismclaw.schema.session.projection import SessionProjectionEngine
 from prismclaw.schema.session.types import (
     EXTRACT_EVIDENCE_CUSTOM_TYPE,
-    HANDOFF_REQUEST_CUSTOM_TYPE,
     RESULT_COMPACTION_REFERENCE_CUSTOM_TYPE,
     SEARCH_EVIDENCE_CUSTOM_TYPE,
     CustomEntry,
@@ -34,12 +32,7 @@ from prismclaw.schema.session.types import (
 )
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.handoff.supervisor import (
-        CapExceededInfo,
-        HandoffDispatchExtras,
-    )
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
-    from prismclaw.engine.security.gate.types import SubagentProgressSink
     from prismclaw.schema.agent.types import RunRequest
 
 logger = logging.getLogger(__name__)
@@ -49,15 +42,11 @@ def _session_working_dir(tool_ctx: ToolContext) -> str | None:
     """tool_ctx 是 ToolContext（有 workspace_path + session_id）。
 
     context_blocks / tool_results 持久化路径：
-    有 session_id → <ws>/sessions/<safe_sid>/  （session 私有，不污染 workspace 根）
-    无 session_id → workspace_path              （降级兼容）
+    有 session_id → <ws>/sessions/<dir>/  （session 私有，不污染 workspace 根）
+    无 session_id → workspace_path        （降级兼容）
 
-    ⚠️ subagent session_id 格式是 ``parent#sub:uuid`` — 有 ``#`` 和 ``:``，
-    这两个字符不能出现在文件路径段里。这里做一次 safe sanitize：
-    ``#`` 和 ``:`` 替换成 ``-``，让 subagent 也能落盘。
-
-    目录不存在时自动 mkdir(parents=True) —— 先上传文件再咨询的场景下
-    session 目录可能还没被 chat_runner 创建，这里兜底确保存在。
+    目录名与 mkdir 全部交给 :func:`ensure_session_layout` —— 语义 session_id
+    （含 ``:``/``#``）如何落盘只由 ``workspace_paths`` 决定，这里不复制规则。
     """
     ws = getattr(tool_ctx, "workspace_path", None)
     sid = getattr(tool_ctx, "session_id", "")
@@ -66,15 +55,6 @@ def _session_working_dir(tool_ctx: ToolContext) -> str | None:
     from prismclaw.infra.workspace_paths import ensure_session_layout
 
     return str(ensure_session_layout(Path(ws), sid))
-
-
-def _handoff_request_projection(result: ToolResult) -> dict[str, Any] | None:
-    artifact = result.persistence_artifact
-    if artifact is None or artifact.handoff_request is None:
-        return None
-    return normalize_handoff_request_payload(
-        artifact.handoff_request.model_dump(mode="python", exclude_none=True)
-    )
 
 
 def _tool_result_compaction_artifact(result: ToolResult) -> CompactionArtifact | None:
@@ -91,14 +71,6 @@ def _tool_result_compaction_artifact(result: ToolResult) -> CompactionArtifact |
 
 
 @dataclass
-class HandoffDispatchPlan:
-    tool_calls: list[dict[str, Any]]
-    resolved_dispatch_extras_by_call_id: dict[str, HandoffDispatchExtras]
-    cap_exceeded_call_ids: dict[str, str]
-    cap_exceeded_info_by_call: dict[str, CapExceededInfo]
-
-
-@dataclass
 class ToolExecutionArtifacts:
     tool_calls: list[dict[str, Any]]
     results: list[ToolResult]
@@ -111,107 +83,12 @@ class ToolResultPersistenceProjection:
     events: list[ToolCallEnd]
 
 
-async def plan_handoff_dispatch(
-    *,
-    deps: AgentRunnerDeps,
-    request: RunRequest,
-    tool_calls: list[dict[str, Any]],
-) -> HandoffDispatchPlan:
-    resolved_dispatch_extras_by_call_id: dict[str, HandoffDispatchExtras] = {}
-    cap_exceeded_call_ids: dict[str, str] = {}
-    cap_exceeded_info_by_call: dict[str, CapExceededInfo] = {}
-
-    if deps.handoff_supervisor is not None:
-        deps.handoff_supervisor.increment_turn(request.session_id)
-        sub_agent_calls = [
-            tool_call
-            for tool_call in tool_calls
-            if (((tool_call or {}).get("function") or {}).get("name") or "") == "sub_agent"
-        ]
-        if sub_agent_calls:
-            resolved, cap_exceeded = await deps.handoff_supervisor.resolve_dispatch_extras(
-                session_id=request.session_id,
-                sub_agent_calls=sub_agent_calls,
-            )
-            resolved_dispatch_extras_by_call_id = dict(resolved)
-            for call_id, cap_info in cap_exceeded.items():
-                terminated_at_hop = (
-                    cap_info.effective_hop_count if cap_info.effective_hop_count > 0 else 1
-                )
-                cap_exceeded_call_ids[call_id] = (
-                    deps.handoff_supervisor.build_cap_exceeded_error_text(
-                        cap_info,
-                        terminated_at_hop=terminated_at_hop,
-                    )
-                )
-                cap_exceeded_info_by_call[call_id] = cap_info
-
-    remaining_tool_calls = [
-        tool_call
-        for tool_call in tool_calls
-        if tool_call.get("id", "") not in cap_exceeded_call_ids
-    ]
-    return HandoffDispatchPlan(
-        tool_calls=remaining_tool_calls,
-        resolved_dispatch_extras_by_call_id=resolved_dispatch_extras_by_call_id,
-        cap_exceeded_call_ids=cap_exceeded_call_ids,
-        cap_exceeded_info_by_call=cap_exceeded_info_by_call,
-    )
-
-
-def _dispatch_extras_transport_dict(dispatch_extras: HandoffDispatchExtras) -> dict[str, Any]:
-    per_call: dict[str, Any] = {
-        "handoff_chain_id": dispatch_extras.handoff_chain_id,
-        "handoff_hop_index": dispatch_extras.handoff_hop_index,
-        "effective_hop_index": dispatch_extras.effective_hop_index,
-    }
-    from_subagent = getattr(dispatch_extras, "from_subagent", None)
-    if from_subagent is not None:
-        per_call["pending_handoff_source_subagent"] = from_subagent
-    source_skill_origin = getattr(dispatch_extras, "source_skill_origin", None)
-    if source_skill_origin is not None:
-        per_call["pending_handoff_source_skill_origin"] = source_skill_origin
-    source_preload_skills = getattr(dispatch_extras, "source_preload_skills", None)
-    if source_preload_skills:
-        per_call["pending_handoff_source_preload_skills"] = list(source_preload_skills)
-    if getattr(dispatch_extras, "source_is_fork", False):
-        per_call["pending_handoff_source_is_fork"] = True
-    merged_from_chains = getattr(dispatch_extras, "merged_from_chains", None)
-    if merged_from_chains is not None:
-        per_call["merged_from_chains"] = merged_from_chains
-    return per_call
-
-
-async def apply_handoff_dispatch_plan(
-    *,
-    tool_ctx: ToolContext,
-    handoff_plan: HandoffDispatchPlan,
-    subagent_progress_sink: SubagentProgressSink | None,
-    emit_cap_exceeded_progress: Callable[..., Awaitable[None]],
-) -> None:
-    if handoff_plan.resolved_dispatch_extras_by_call_id:
-        tool_ctx.pending_handoff_dispatch_extras = {
-            call_id: _dispatch_extras_transport_dict(dispatch_extras)
-            for call_id, dispatch_extras in handoff_plan.resolved_dispatch_extras_by_call_id.items()
-        }
-
-    if handoff_plan.cap_exceeded_info_by_call and subagent_progress_sink is not None:
-        try:
-            await emit_cap_exceeded_progress(
-                sink=subagent_progress_sink,
-                cap_info_by_call=handoff_plan.cap_exceeded_info_by_call,
-            )
-        except Exception:
-            logger.warning("handoff.cap_exceeded.synthetic_emit_failed", exc_info=True)
-
-
-async def execute_tool_calls_with_handoff(
+async def execute_tool_calls_for_turn(
     *,
     deps: AgentRunnerDeps,
     request: RunRequest,
     tool_calls: list[dict[str, Any]],
     tool_ctx: ToolContext,
-    cap_exceeded_call_ids: dict[str, str],
     finish_reason: str | None = None,
 ) -> ToolExecutionArtifacts:
     # 截断保护（对齐 Pi P5 防御性编程）
@@ -229,42 +106,9 @@ async def execute_tool_calls_with_handoff(
         tool_ctx,
         default_tool_timeout_s=deps.config.timeouts.tool_seconds,
     )
-    effective_tool_calls = list(tool_calls)
-
-    if cap_exceeded_call_ids:
-        synthetic_results = [
-            ToolResult(
-                tool_call_id=cid,
-                content=[TextBlock(text=msg)],
-                is_error=True,
-            )
-            for cid, msg in cap_exceeded_call_ids.items()
-        ]
-        results = synthetic_results + results
-        effective_tool_calls = [
-            {
-                "id": cid,
-                "type": "function",
-                "function": {"name": "sub_agent", "arguments": "{}"},
-            }
-            for cid in cap_exceeded_call_ids
-        ] + effective_tool_calls
-    if deps.handoff_supervisor is not None:
-        try:
-            await deps.handoff_supervisor.insert_from_tool_results(
-                session_id=request.session_id,
-                results=results,
-            )
-        except Exception:
-            logger.warning(
-                "handoff_supervisor.insert_failed session_id=%s",
-                request.session_id,
-                exc_info=True,
-            )
-    tool_ctx.pending_handoff_dispatch_extras = {}
 
     return ToolExecutionArtifacts(
-        tool_calls=effective_tool_calls,
+        tool_calls=list(tool_calls),
         results=results,
         compaction_turn=None,
     )
@@ -334,19 +178,6 @@ def project_tool_result_entries(
         entry_ids.add(tool_entry.id)
         entries.append(tool_entry)
         parent_id = tool_entry.id
-        handoff_projection = _handoff_request_projection(result)
-        if handoff_projection is not None:
-            handoff_projection["tool_call_id"] = result.tool_call_id
-            handoff_entry = CustomEntry(
-                id=generate_entry_id(entry_ids),
-                parent_id=tool_entry.id,
-                timestamp=now_iso(),
-                custom_type=HANDOFF_REQUEST_CUSTOM_TYPE,
-                data=handoff_projection,
-            )
-            entry_ids.add(handoff_entry.id)
-            entries.append(handoff_entry)
-            parent_id = handoff_entry.id
         reference_artifact = result.reference_artifact
         search_evidence = (
             reference_artifact.search_evidence if reference_artifact is not None else None

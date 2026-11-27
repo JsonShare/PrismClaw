@@ -15,7 +15,9 @@
   --c-surface-3: #22262D;
   --c-exec-block: #212429;              /* 执行过程展开卡：中性浅灰（去蓝调，降视觉重心） */
   --c-exec-block-inset: #2A2D33;        /* 展开卡内嵌子块（检索结果）：略深中性灰 */
-  --c-select-bg: #283243;
+  /* 选中/悬浮底：深色下用低饱和的蓝灰，既脱离纯黑又保留冷调层次 */
+  --c-select-bg: #27303C;
+  --c-hover-bg: #1E242C;
   --c-sidebar: #161B22;                 /* 侧栏：与全局背景同色（左右+页面三合一） */
   --c-canvas: #161B22;                  /* 主界面画布：与全局背景同色，中间栏纯黑浮其上 */
 
@@ -55,10 +57,10 @@
   --c-hair-line-hover:      rgba(240, 246, 252, 0.16);
 
   /* ── 动作与品牌 ──────────────────────────────────── */
-  --c-accent: #3167DC;
+  --c-accent: #3B2ED8;                  /* 与主按钮色保持一致：选中字体、开关、链接、动作态 */
   --c-brand: #1E57D9;
-  --c-btn-primary-bg: #3167DC;
-  --c-btn-primary-hover: #3D70DE;
+  --c-btn-primary-bg: #3B2ED8;         /* 主按钮：设计稿主按钮色的深色适配 */
+  --c-btn-primary-hover: #4E42E8;
   --c-btn-primary-fg: #FFFFFF;
 
   /* ── 语义 ────────────────────────────────────────── */
@@ -70,7 +72,7 @@
   --c-success-soft: rgba(63, 185, 80, 0.12);
   --c-warning-soft: rgba(210, 153, 34, 0.14);
   --c-info-soft: rgba(91, 155, 255, 0.14);
-  --c-accent-soft: rgba(49, 103, 220, 0.14);
+  --c-accent-soft: rgba(59, 46, 216, 0.14);
   --c-info: #5B9BFF;                    /* 提示类表情图标 */
   --c-violet: #A78BFA;                  /* 文件类表情图标 */
 
@@ -150,7 +152,7 @@
 }
 [data-theme="dark"] .input-surface.is-dragging {
   border-color: var(--c-accent);
-  box-shadow: 0 0 0 1px rgba(49, 103, 220, 0.34);
+  box-shadow: 0 0 0 1px rgba(59, 46, 216, 0.34);
   animation: none;
 }
 
@@ -163,6 +165,13 @@
   box-shadow: var(--shadow-lg);
 }
 
+/* 文件选择弹框：不透明纯黑底，不用玻璃质感 */
+[data-theme="dark"] .overlay-panel.modal-opaque {
+  background: #000000;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* 模态遮罩：暗色下需要更实的遮罩，40% 黑在近黑画布上等于没有 */
 [data-theme="dark"] .overlay-scrim {
   background: var(--overlay-scrim);
@@ -170,7 +179,7 @@
 
 /* 侧栏选中/悬停：底色分档，不做反色 */
 [data-theme="dark"] .sidebar-nav-row:hover {
-  background: var(--c-surface-3);
+  background: var(--c-hover-bg);
 }
 [data-theme="dark"] .sidebar-nav-row.is-active {
   background: var(--c-select-bg);

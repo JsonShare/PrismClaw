@@ -1,9 +1,8 @@
 """核心领域枚举与语义化常量集合。
 
 本模块集中保存原先以裸字符串散落在生产代码各处的领域词汇：
-* Skill source / invocation policy / execution mode / plugin error type
+* Skill source / invocation policy / execution mode / expert error type
 * SKILL.md frontmatter 字段名（含 metadata.prismclaw 嵌套字段）
-* capability graph 节点 metadata 的字典键
 * namespace / run_id / session_id 的前缀集合
 
 统一使用 ``(str, Enum)`` 继承：
@@ -14,7 +13,11 @@
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from enum import StrEnum
+
+logger = logging.getLogger(__name__)
 
 
 # ==========================================================================
@@ -24,14 +27,14 @@ class SkillSource(StrEnum):
     """SkillManifest.source 与 origin 字段共用词汇。
 
     历史命名混乱说明：
-    * source 是 SkillManifest 存储字段：bundled/mcp/plugin
+    * source 是 SkillManifest 存储字段：bundled/mcp/expert
     * origin 是 Web 层 / classify_skill_origin 对外分组字段：
-      bundled/personal/managed/project/mcp/plugin
+      bundled/personal/managed/project/mcp/expert
     合并为一个 Enum：新增时补全即可，避免两套映射。
     """
 
     BUNDLED = "bundled"
-    PLUGIN = "plugin"
+    EXPERT = "expert"
     MCP = "mcp"
     PROJECT = "project"
     PERSONAL = "personal"
@@ -88,13 +91,34 @@ class InvocationPolicy(StrEnum):
                 return member
         return None
 
-    @classmethod
-    def coerce(cls, raw: object) -> InvocationPolicy:
-        """parser 入口：任何异常或 None → AUTO。"""
-        if isinstance(raw, cls):
+
+def resolve_invocation_policy(frontmatter: Mapping[str, object]) -> InvocationPolicy:
+    """解析 SKILL.md 调用策略：显式字段优先，其次 WorkBuddy 布尔字段。"""
+    raw = frontmatter.get(FM.INVOCATION_POLICY)
+    if raw is not None:
+        if isinstance(raw, InvocationPolicy):
             return raw
-        member = cls._missing_(raw)
-        return member if member is not None else cls.AUTO
+        if isinstance(raw, str):
+            member = InvocationPolicy._missing_(raw)
+            if member is not None:
+                return member
+        logger.warning("Unknown invocation_policy %r; disabling skill", raw)
+        return InvocationPolicy.DISABLED
+
+    def _flag(name: FM, default: bool) -> bool:
+        value = frontmatter.get(name)
+        return value if isinstance(value, bool) else default
+
+    disable = _flag(FM.DISABLE, False)
+    user_invocable = _flag(FM.USER_INVOCABLE, True)
+    disable_model = _flag(FM.DISABLE_MODEL_INVOCATION, False)
+    if disable or (not user_invocable and disable_model):
+        return InvocationPolicy.DISABLED
+    if not user_invocable:
+        return InvocationPolicy.MODEL_ONLY
+    if disable_model:
+        return InvocationPolicy.USER_ONLY
+    return InvocationPolicy.AUTO
 
 
 # ==========================================================================
@@ -166,10 +190,10 @@ def exe_mode_valid_values() -> tuple[str, ...]:
 
 
 # ==========================================================================
-# 4. Plugin error type：兼容 v3 常量与 v4 多子类规范值
+# 4. Expert error type：兼容 v3 常量与 v4 多子类规范值
 # ==========================================================================
-class PluginErrorType(StrEnum):
-    """PluginError.type 全量规范值。
+class PackageErrorType(StrEnum):
+    """PackageError.type 全量规范值。
 
     消费端分支时用语义化 helper（is_manifest / is_dependency）即可。
     """
@@ -185,9 +209,9 @@ class PluginErrorType(StrEnum):
     MANIFEST_PARSE_ERROR = "manifest_parse_error"
     HOOK_LOAD_FAILED = "hook_load_failed"
     MCP_CONFIG_INVALID = "mcp_config_invalid"
-    PLUGIN_NOT_FOUND = "plugin_not_found"
+    EXPERT_NOT_FOUND = "expert_not_found"
     MARKETPLACE_BLOCKED_BY_POLICY = "marketplace_blocked_by_policy"
-    PLUGIN_CACHE_MISS = "plugin_cache_miss"
+    EXPERT_CACHE_MISS = "expert_cache_miss"
     PATH_NOT_FOUND = "path_not_found"
     DEPENDENCY_MISSING = "dependency_missing"
     CIRCULAR_DEPENDENCY = "circular_dependency"
@@ -225,6 +249,9 @@ class FM(StrEnum):
     PATHS = "paths"
     EXECUTION_MODE = "execution_mode"
     INVOCATION_POLICY = "invocation_policy"
+    DISABLE = "disable"
+    DISABLE_MODEL_INVOCATION = "disable-model-invocation"
+    USER_INVOCABLE = "user-invocable"
     EDITABLE = "editable"
     ALLOWED_TOOLS = "allowed_tools"
     AGENT = "agent"
@@ -232,8 +259,6 @@ class FM(StrEnum):
     A__NAME = "name"
     A__DESCRIPTION = "description"
     A__MODEL = "model"
-    A__ALLOWED_TOOLS = "allowed_tools"
-    A__CAN_HANDOFF_TO = "can_handoff_to"
     A__MAX_TURNS = "max_turns"
     A__TIMEOUT_SECONDS = "timeout_seconds"
     META = "metadata"
@@ -256,59 +281,10 @@ class FM(StrEnum):
 
 
 # ==========================================================================
-# 6. namespace / run_id / session_id 前缀
-# ==========================================================================
-class NP(StrEnum):
-    """各类 id/命名空间前缀。
-
-    用例：NP.SESSION.matches(x) 代替 x.startswith("session:")
-    """
-
-    SESSION = "session:"
-    MANAGED = "managed:"
-    PLUGIN = "plugin:"
-    WEB = "web:"
-    TAKEOVER = "takeover:"
-
-    def matches(self, s: object) -> bool:
-        return bool(s and isinstance(s, str) and s.startswith(self.value))
-
-    @classmethod
-    def classify(cls, s: object) -> NP | None:
-        """返回前缀匹配的第一个 NP 成员;若都不匹配返回 None."""
-        if not isinstance(s, str) or not s:
-            return None
-        for member in cls:
-            if s.startswith(member.value):
-                return member
-        return None
-
-
-# ==========================================================================
-# 7. CapabilityNode.metadata 字典键
-# ==========================================================================
-class MK(StrEnum):
-    """CapabilityNode.metadata 语义化键。"""
-
-    PLUGIN_NAME = "plugin_name"
-    PLUGIN_ID = "plugin_id"
-    PLUGIN_SOURCE = "plugin_source"
-    PLUGIN_VERSION = "plugin_version"
-    ORIGIN = "origin"
-    MANIFEST = "manifest"
-    INVOCATION_POLICY = "invocation_policy"
-    SOURCE_FILE = "source_file"
-    SKILL_FILE_PATH = "skill_file_path"
-    SKILL_GROUP_PATH = "skill_group_path"
-    RUN_ONCE_KEY = "run_once_key"
-    CAPABILITY = "capability"
-
-
-# ==========================================================================
-# 8. Plugin discovery 源
+# 6. Expert discovery 源
 # ==========================================================================
 class PDS(StrEnum):
-    """Plugin discovery source（discovery_engine 入口分类。"""
+    """Expert discovery source（discovery_engine 入口分类。"""
 
     BUILTIN = "builtin"
     MARKETPLACE = "marketplace"
@@ -337,10 +313,8 @@ __all__ = [
     "EXECUTION_MODE_SYNONYMS",
     "_exe_mode_normalize",
     "exe_mode_valid_values",
-    "PluginErrorType",
+    "PackageErrorType",
     "FM",
-    "NP",
-    "MK",
     "PDS",
     "normalize_key",
     "SS",

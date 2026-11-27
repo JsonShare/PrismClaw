@@ -487,7 +487,6 @@ class SubcapsSettings(BaseModel):
 
     runtime_status: int = Field(500, ge=1)
     l1_snapshot: int = Field(500, ge=1)
-    skill_attachment: int = Field(6000, ge=1)
     doc_inline_min_chars: int = Field(2500, ge=1)
     doc_inline_max_chars: int = Field(7500, ge=1)
     max_constraints: int = Field(4, ge=0)
@@ -495,8 +494,6 @@ class SubcapsSettings(BaseModel):
     reinject_file_tokens: int = Field(3200, ge=0)
     # 技能 preload 注入 token 上限
     skill_preload: int = Field(7500, ge=0)
-    # 单次插件激活注入 PLUGIN.md 的 token 上限（超限按优先级章节裁剪）
-    plugin_persona: int = Field(2000, ge=1)
 
 
 class ContextBudgetConfig(BaseModel):
@@ -723,10 +720,6 @@ class SubAgentConfig(BaseModel):
     default_max_turns: int = 30
     default_timeout_seconds: float = 300.0
     max_parallel_per_turn: int = Field(5, ge=1, le=20)
-    handoff_enabled: bool = True
-    max_handoff_chain_length: int = Field(5, ge=1, le=20)
-    pending_handoff_ttl_turns: int = Field(3, ge=1, le=10)
-    handoff_reverse_lookup_enabled: bool = True
 
 
 class SandboxFilesystemRule(BaseModel):

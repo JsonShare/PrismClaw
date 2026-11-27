@@ -6,8 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
-from prismclaw.engine.execution.capabilities.runtime_bundle import RuntimeCapabilityBundle
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
 from prismclaw.engine.execution.skills.runtime import SkillRuntime
 from prismclaw.engine.toolkit.registry.registry import ToolRegistry
@@ -66,7 +65,7 @@ def build_capability_catalog(
     extension_manager: ExtensionManager,
     subagent_registry: SubAgentRegistry | None = None,
     mcp_skill_manifests_builder: Callable[[], list[SkillManifest]] | None = None,
-) -> CapabilityCatalogService:
+) -> RuntimeCatalog:
     from prismclaw.engine.execution.capabilities.assembly import assemble_capability_catalog
 
     return assemble_capability_catalog(
@@ -89,7 +88,7 @@ def register_subagent_tools(
     registry: ToolRegistry,
     *,
     settings: Settings,
-    capability_catalog: CapabilityCatalogService,
+    capability_catalog: RuntimeCatalog,
     subagent_registry: SubAgentRegistry,
     llm_client: LLMClient,
     memory_store: MemoryStore | None,
@@ -97,7 +96,7 @@ def register_subagent_tools(
     channel: str | None = None,
     collaboration: SubagentCollaborationService | None = None,
 ) -> SubAgentConfig:
-    """Register the sub-agent tools (sub_agent / reduce / handoff / search / task 查询).
+    """Register the sub-agent tools (sub_agent / reduce / search / task 查询).
 
     单点装配，供启动装配（runner_assembly）与运行时能力刷新
     （refresh_runner_capabilities）共用，避免 SubAgentExecutor 的构造在两条路径
@@ -112,10 +111,8 @@ def register_subagent_tools(
     overrides it from ``parent_ctx.channel`` (_lifecycle_mixin). Startup has
     no runner channel yet, hence optional.
 
-    Returns the validated SubAgentConfig (the startup handoff supervisor
-    reuses it).
+    Returns the validated SubAgentConfig.
     """
-    from prismclaw.engine.execution.handoff.request_handoff import RequestHandoffTool
     from prismclaw.engine.subagent import SubAgentExecutor, SubAgentTool
     from prismclaw.engine.toolkit.registry.discovery import SubagentSearchTool
     from prismclaw.schema.config.config import SubAgentConfig
@@ -124,7 +121,6 @@ def register_subagent_tools(
 
     for name in (
         "sub_agent",
-        "request_handoff",
         "subagent_search",
         "subagent_control",
     ):
@@ -172,7 +168,6 @@ def register_subagent_tools(
                 executor=executor,
             )
         )
-    registry.register(RequestHandoffTool())
     registry.register(SubagentSearchTool(capability_catalog=capability_catalog))
     return subagent_config
 
@@ -196,7 +191,7 @@ def schedule_mcp_capability_refresh(
     (no polling). Managers without ``wait_ready`` (or absent managers) yield
     ``None`` — there is nothing to wait for.
     """
-    manager = getattr(deps.plugin, "runtime_mcp_manager", None)
+    manager = getattr(deps.expert, "runtime_mcp_manager", None)
     waiter = getattr(manager, "wait_ready", None)
     if not callable(waiter):
         return None
@@ -236,7 +231,7 @@ def refresh_runner_capabilities(
     subagent_registry_override: SubAgentRegistry | None = None,
     refresh_mcp_tools: bool = False,
     capability_layout: ProjectCapabilityLayout | None = None,
-) -> RuntimeCapabilityBundle:
+) -> None:
     from prismclaw.engine.toolkit.builtin.skill_activate import ActivateSkillTool
     from prismclaw.engine.toolkit.mcp.fetch_mcp_resource import FetchMcpResourceTool
     from prismclaw.engine.toolkit.registry.discovery import SkillSearchTool, ToolSearchTool
@@ -265,7 +260,7 @@ def refresh_runner_capabilities(
             capability_layout=capability_layout,
         )
 
-    runtime_mcp_manager = getattr(deps.plugin, "runtime_mcp_manager", None)
+    runtime_mcp_manager = getattr(deps.expert, "runtime_mcp_manager", None)
     mcp_builder = mcp_skill_manifests_builder(runtime_mcp_manager)
 
     capability_catalog = build_capability_catalog(
@@ -286,13 +281,6 @@ def refresh_runner_capabilities(
         skill_parser=parse_skill_file,
     )
 
-    # 同步插件级指令（PLUGIN.md）到 SkillRuntime
-    if extension_manager is not None and hasattr(extension_manager, "iter_plugin_descriptors"):
-        for descriptor in extension_manager.iter_plugin_descriptors():
-            instr = getattr(descriptor, "plugin_instructions", None)
-            pname = getattr(descriptor, "plugin_name", None)
-            if instr and pname:
-                skill_runtime.register_plugin_instructions(pname, instr)
 
     deps.capability_catalog = capability_catalog
     deps.skill_runtime = skill_runtime
@@ -318,7 +306,7 @@ def refresh_runner_capabilities(
 
     if "fetch_mcp_resource" in current_names:
         registry.unregister("fetch_mcp_resource")
-        runtime_mcp_manager = getattr(deps.plugin, "runtime_mcp_manager", None)
+        runtime_mcp_manager = getattr(deps.expert, "runtime_mcp_manager", None)
         if runtime_mcp_manager is not None:
             registry.register(FetchMcpResourceTool(runtime_mcp_manager))
 
@@ -327,7 +315,7 @@ def refresh_runner_capabilities(
             tool = registry.get(name)
             if getattr(tool, "server_config", None) is not None:
                 registry.unregister(name)
-        runtime_mcp_manager = getattr(deps.plugin, "runtime_mcp_manager", None)
+        runtime_mcp_manager = getattr(deps.expert, "runtime_mcp_manager", None)
         if runtime_mcp_manager is not None:
             runtime_mcp_manager.attach_and_register(registry)
 
@@ -343,14 +331,3 @@ def refresh_runner_capabilities(
             channel=deps.channel,
             collaboration=deps.subagent_collaboration,
         )
-
-    return RuntimeCapabilityBundle(
-        workspace_path=workspace_path,
-        tool_registry=registry,
-        capability_catalog=capability_catalog,
-        skill_runtime=skill_runtime,
-        subagent_registry=subagent_registry,
-        extension_manager=extension_manager,
-        skill_provider=skill_provider,
-        project_root=project_root,
-    )

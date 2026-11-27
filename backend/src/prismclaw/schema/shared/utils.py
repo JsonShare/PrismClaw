@@ -26,7 +26,7 @@ FILE_PLACEHOLDER = "[附件]"
 # 输入框内联卡片标记：<|kind|percent-encoded-value|>。这是编辑器与后端之间的
 # 传输编码，落树的 display 正文里会原样保留（前端据此渲染卡片）；任何面向
 # 文本的消费方（记忆归档、摘要、SOP 抽取等）都必须看到可读的 @名称。
-_INLINE_MARKER_RE = re.compile(r"<\|(skill|plugin|file)\|([^|<>]*)\|>")
+_INLINE_MARKER_RE = re.compile(r"<\|(skill|file)\|([^|<>]*)\|>")
 
 
 def decode_inline_markers(text: str) -> str:
@@ -51,12 +51,12 @@ def decode_inline_markers(text: str) -> str:
 # ══════════════════════════════════════════════════════════════════
 # Token estimation (SDD docs/context-governance-sdd.md W1 / S0-S1)
 # ══════════════════════════════════════════════════════════════════
-# 权威实现已抽离到独立插件包 ``prismclaw.token_counting``（可替换 provider、
+# 权威实现已抽离到独立专家包 ``prismclaw.token_counting``（可替换 provider、
 # 系数集中配置）。本模块保留历史 import 面，仅做委托。
 
 
 def estimate_tokens(text: str, *, image_tokens_each: int = 0) -> int:
-    """Estimate LLM tokens for a text (delegates to the token-counting plugin).
+    """Estimate LLM tokens for a text (delegates to the token-counting expert).
 
     ``image_tokens_each``（默认 0）使图片占位符（``IMAGE_PLACEHOLDER``）
     按每张图固定 token 计而不做占位符文本零化；0 保持旧行为。

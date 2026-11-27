@@ -53,6 +53,18 @@ class RedisSessionStore:
         self._ttl = ttl_seconds
         self._prefix = key_prefix
 
+    @property
+    def redis_client(self) -> aioredis.Redis:
+        return self._client
+
+    @property
+    def ttl_seconds(self) -> int:
+        return self._ttl
+
+    @property
+    def key_prefix(self) -> str:
+        return self._prefix
+
     def _hdr_key(self, sid: str) -> str:
         return f"{self._prefix}session:{{{sid}}}:header"
 
@@ -140,7 +152,9 @@ class RedisSessionStore:
 
     async def get_events(self, session_id: str, *, since_seq: int = 0) -> list[SessionEvent]:
         """Read events from the Event Log, optionally since a given seq."""
-        raw = await resolve(self._client.lrange(self._events_key(session_id), 0, -1))
+        raw: list[bytes | str] = await resolve(
+            self._client.lrange(self._events_key(session_id), 0, -1)
+        )
         if not raw:
             return []
         events: list[SessionEvent] = []
@@ -166,7 +180,9 @@ class RedisSessionStore:
         Aligns with 时间对齐: events are filtered by time_ms
                and returned in seq order (monotonically increasing with time).
         """
-        raw = await resolve(self._client.lrange(self._events_key(session_id), 0, -1))
+        raw: list[bytes | str] = await resolve(
+            self._client.lrange(self._events_key(session_id), 0, -1)
+        )
         if not raw:
             return []
         events: list[SessionEvent] = []
@@ -185,7 +201,9 @@ class RedisSessionStore:
 
     async def get_event_count(self, session_id: str) -> int:
         """Return the total number of events for a session."""
-        raw = await resolve(self._client.lrange(self._events_key(session_id), 0, -1))
+        raw: list[bytes | str] = await resolve(
+            self._client.lrange(self._events_key(session_id), 0, -1)
+        )
         return len(raw) if raw else 0
 
     async def rebuild_tree(self, session_id: str) -> SessionTree | None:
@@ -438,7 +456,9 @@ class RedisSessionStore:
         # 「entries 有、order 无」的不可见消息。
         missing_order_ids: list[str] = []
         if message_update_ids:
-            existing_order = await resolve(self._client.lrange(self._order_key(session_id), 0, -1))
+            existing_order: list[bytes | str] = await resolve(
+                self._client.lrange(self._order_key(session_id), 0, -1)
+            )
             known_ids = {str(item) for item in existing_order} | set(order_ids)
             for entry_id in message_update_ids:
                 if entry_id not in known_ids:
@@ -542,7 +562,7 @@ class RedisSessionStore:
         if not raw:
             return []
 
-        session_ids = [sid.decode() if isinstance(sid, bytes) else sid for sid in raw]
+        session_ids = [sid.decode() if isinstance(sid, bytes) else str(sid) for sid in raw]
 
         async with self._client.pipeline(transaction=False) as pipe:
             for sid in session_ids:

@@ -219,11 +219,11 @@ def test_estimate_tokens_single_authoritative_source():
     assert wrapper(test_text) == estimate_tokens(test_text)
 
 
-# ──────────────────────────────────────── 7. 独立插件契约 ─────────────────────────────────────────
+# ──────────────────────────────────────── 7. 独立专家包契约 ─────────────────────────────────────────
 
 
 def test_heuristic_counter_honors_custom_coefficients():
-    """配置化系数生效：插件不再依赖散落的模块级魔法数。"""
+    """配置化系数生效：专家包不再依赖散落的模块级魔法数。"""
     from prismclaw.token_counting import HeuristicTokenCounter
 
     counter = HeuristicTokenCounter(

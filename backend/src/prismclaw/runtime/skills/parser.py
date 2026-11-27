@@ -9,10 +9,10 @@ import yaml
 
 from prismclaw.schema.agent.domains import (
     FM,
-    InvocationPolicy,
     SkillExecutionMode,
     _exe_mode_normalize,
     exe_mode_valid_values,
+    resolve_invocation_policy,
 )
 from prismclaw.schema.services.skills import (
     SkillAgentConfig,
@@ -26,14 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = ["parse_skill_file", "parse_skill_frontmatter", "_extract_frontmatter"]
-
-
-def _parse_invocation_policy(frontmatter: dict[str, Any]) -> InvocationPolicy:
-    """从 frontmatter 读 invocation_policy,返回规范枚举值。
-
-    兼容:frontmatter 里的 kebab-case(user-only) 会归一化,未写或空 → AUTO。
-    """
-    return InvocationPolicy.coerce(frontmatter.get(FM.INVOCATION_POLICY))
 
 
 def _parse_requirements(skill_meta: dict[str, Any]) -> SkillRequirements:
@@ -111,8 +103,6 @@ def _parse_agent_config(
     if raw_agent is not None and not isinstance(raw_agent, dict):
         return None
     agent = dict(raw_agent or {})
-    allowed_tools = _coerce_string_list(agent.get(FM.A__ALLOWED_TOOLS))
-    can_handoff_to = _coerce_string_list(agent.get(FM.A__CAN_HANDOFF_TO))
     name_val = agent.get(FM.A__NAME)
     desc_val = agent.get(FM.A__DESCRIPTION)
     model_val = agent.get(FM.A__MODEL)
@@ -126,8 +116,6 @@ def _parse_agent_config(
             model_val,
             max_turns_val,
             timeout_val,
-            allowed_tools,
-            can_handoff_to,
         )
     )
     if not has_explicit_agent_fields:
@@ -136,13 +124,11 @@ def _parse_agent_config(
         name=name_val if isinstance(name_val, str) else None,
         description=desc_val if isinstance(desc_val, str) else "",
         model=model_val if isinstance(model_val, str) else None,
-        allowed_tools=allowed_tools,
         max_turns=_coerce_optional_int(max_turns_val),
         timeout_seconds=_coerce_optional_float(timeout_val),
         # 语义分工:由外层 parse_skill_file 在拿到 declared_invoke_sequence 后同步赋值,
         # 不在此内部直接算,避免重复解析 body。空值仅为兜底占位。
         preload_skills=[],
-        can_handoff_to=can_handoff_to,
     )
 
 
@@ -244,7 +230,7 @@ def _build_manifest_from_frontmatter(
 
     requirements = _parse_requirements(skill_meta)
     emoji: str | None = skill_meta.get(FM.META__EMOJI)
-    invocation_policy = _parse_invocation_policy(frontmatter)
+    invocation_policy = resolve_invocation_policy(frontmatter)
     paths = _coerce_string_list(frontmatter.get(FM.PATHS))
     priority = _coerce_optional_int(frontmatter.get(FM.PRIORITY)) or 0
     _raw_editable = frontmatter.get(FM.EDITABLE)

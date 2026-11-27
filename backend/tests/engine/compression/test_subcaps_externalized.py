@@ -16,7 +16,6 @@ def test_subcaps_defaults():
     caps = settings.agent.context.budget.subcaps
     assert caps.runtime_status == 500
     assert caps.l1_snapshot == 500
-    assert caps.skill_attachment == 6000
     assert caps.doc_inline_min_chars == 2500
     assert caps.doc_inline_max_chars == 7500
     assert caps.max_constraints == 4

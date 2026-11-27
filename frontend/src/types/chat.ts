@@ -315,18 +315,10 @@ export interface SubagentProgressItem {
   active_skill_name?: string | null
   invoked_skill_names?: string[]
   duration_so_far: number
-  handoff_chain_id?: string | null
-  from_subagent?: string | null
   /** 当前工具的紧凑参数摘要（如 "file_path=src/app.ts"），仅展示用。 */
   current_tool_summary?: string | null
   /** 有界最近动作（≤5 条），由后端 emitter 在工具切换时追加。 */
   recent_activity?: string[]
-}
-
-/** 右栏展示用：在进度项上补全 sub_agent 调用参数里的任务描述 / 模型覆盖。 */
-export interface SubagentPanelItem extends SubagentProgressItem {
-  task_hint: string | null
-  model_hint: string | null
 }
 
 export interface WSServerPing {

@@ -47,7 +47,7 @@ def _estimator_v2_enabled() -> bool:
 class HeuristicTokenCounter:
     """CJK-weighted/byte-weighted local estimator.
 
-    This is the behavior the codebase shipped before the plugin extraction;
+    This is the behavior the codebase shipped before the expert extraction;
     defaults preserve it exactly.
     """
 

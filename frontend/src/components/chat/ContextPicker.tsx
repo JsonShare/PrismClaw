@@ -158,7 +158,7 @@ const ContextPicker = forwardRef<ContextPickerHandle, ContextPickerProps>(functi
           + (blocked ? "opacity-40 cursor-not-allowed " : "cursor-pointer ")
           + (index === safeIndex
             ? "bg-[var(--c-surface-3)] text-[var(--c-text)]"
-            : "text-[var(--c-text)] hover:bg-[var(--c-surface-2)]")}
+            : "text-[var(--c-text)] hover:bg-[var(--c-hover-bg)]")}
       >
         <span className="shrink-0 w-5 h-5 rounded-[var(--radius-control)] bg-[var(--c-surface-2)] grid place-items-center mt-0.5">
           {item.type === 'image'
@@ -182,7 +182,7 @@ const ContextPicker = forwardRef<ContextPickerHandle, ContextPickerProps>(functi
     <div
       ref={panelRef}
       className={"overlay-panel absolute bottom-full mb-2 w-80 flex flex-col rounded-[var(--radius-card)] overflow-hidden z-50 "
-        + (position === 'flyout' ? 'left-[15.5rem]' : 'left-0')}
+        + (position === 'flyout' ? 'left-[248px]' : 'left-0')}
       style={{ maxWidth: 'min(calc(100vw - 2rem), 20rem)', maxHeight: 'min(20rem, 60vh)' }}
     >
       {!triggerMode && (

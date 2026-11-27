@@ -1,0 +1,154 @@
+{
+  "name": "med-quality-team",
+  "version": "1.0.0",
+  "description": "Chinese medical quality team covering clinical review, health-data quality and compliance review.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "license": "Apache-2.0",
+  "expertType": "team",
+  "agentName": "med-quality-lead",
+  "teamInfo": {
+    "leadAgent": "med-quality-lead",
+    "memberAgents": [
+      "clinical-reviewer",
+      "compliance-auditor",
+      "informatics-analyst"
+    ]
+  },
+  "agents": [
+    "./agents/med-quality-lead.md",
+    "./agents/clinical-reviewer.md",
+    "./agents/compliance-auditor.md",
+    "./agents/informatics-analyst.md"
+  ],
+  "skills": [
+    "./skills/clinical-case-review",
+    "./skills/clinical-documentation",
+    "./skills/clinical-med-playbook",
+    "./skills/clinical-note-extract",
+    "./skills/compliance-med-playbook",
+    "./skills/data-privacy-workflow",
+    "./skills/doc-extract",
+    "./skills/fhir",
+    "./skills/fhir-developer",
+    "./skills/hipaa-compliance-workflow",
+    "./skills/quality-workflows"
+  ],
+  "displayName": {
+    "en": "Medical Quality Expert Team",
+    "zh": "医疗质控专家团"
+  },
+  "profession": {
+    "en": "Medical Quality Expert Team",
+    "zh": "医疗质控专家团"
+  },
+  "displayDescription": {
+    "zh": "面向医疗质量与合规的多角色专家团，覆盖临床复核、健康数据质量、监管要求核对及合规审查。",
+    "en": "Chinese medical quality team covering clinical review, health-data quality and compliance review."
+  },
+  "avatar": "avatars/team.png",
+  "categoryId": "12-IndustryConsultant",
+  "defaultInitPrompt": {
+    "zh": "帮我复盘这起医疗质量事件，先临床复核再做合规审查。",
+    "en": "Help me review this medical quality incident, starting with clinical review and ending with compliance review."
+  },
+  "tags": [
+    {
+      "zh": "医疗质量",
+      "en": "Medical Quality"
+    },
+    {
+      "zh": "合规审查",
+      "en": "Compliance Review"
+    },
+    {
+      "zh": "数据质量",
+      "en": "Data Quality"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "帮我复盘这起医疗质量事件，先临床复核再做合规审查。",
+      "en": "Help me review this medical quality incident, starting with clinical review and ending with compliance review."
+    },
+    {
+      "zh": "审查这批病案与数据质量，标出风险点。",
+      "en": "Review this batch of medical records for data quality and flag the risk points."
+    },
+    {
+      "zh": "这个流程变更是否符合监管要求？给出合规风险清单。",
+      "en": "Does this process change meet regulatory requirements? Give me a compliance risk list."
+    }
+  ],
+  "members": [
+    {
+      "id": "med-quality-lead",
+      "name": {
+        "en": "Quality Coordination Expert",
+        "zh": "质控统筹专家"
+      },
+      "profession": {
+        "zh": "质控指标与整改统筹",
+        "en": "Quality Metrics & Remediation"
+      },
+      "avatar": "avatars/med-quality-lead.png",
+      "role": "lead",
+      "displayName": {
+        "en": "Quality Coordination Expert",
+        "zh": "质控统筹专家"
+      }
+    },
+    {
+      "id": "clinical-reviewer",
+      "name": {
+        "en": "Clinical Quality Reviewer",
+        "zh": "临床质控专家"
+      },
+      "profession": {
+        "zh": "病历质控与诊疗规范",
+        "en": "Record Quality & Care Standards"
+      },
+      "avatar": "avatars/clinical-reviewer.png",
+      "role": "member",
+      "displayName": {
+        "en": "Clinical Quality Reviewer",
+        "zh": "临床质控专家"
+      }
+    },
+    {
+      "id": "compliance-auditor",
+      "name": {
+        "en": "Compliance Auditor Expert",
+        "zh": "合规审计专家"
+      },
+      "profession": {
+        "zh": "隐私与合规审计",
+        "en": "Privacy & Compliance Audit"
+      },
+      "avatar": "avatars/compliance-auditor.png",
+      "role": "member",
+      "displayName": {
+        "en": "Compliance Auditor Expert",
+        "zh": "合规审计专家"
+      }
+    },
+    {
+      "id": "informatics-analyst",
+      "name": {
+        "en": "Data Quality Analyst",
+        "zh": "数据质控专家"
+      },
+      "profession": {
+        "zh": "数据标准与系统集成",
+        "en": "Data Standards & Integration"
+      },
+      "avatar": "avatars/informatics-analyst.png",
+      "role": "member",
+      "displayName": {
+        "en": "Data Quality Analyst",
+        "zh": "数据质控专家"
+      }
+    }
+  ]
+}

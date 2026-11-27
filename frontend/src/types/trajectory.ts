@@ -70,8 +70,6 @@ export interface HeartbeatPayload {
 export type TimelinePatch =
   | { op: 'upsert_node'; node: TimelineNode }
   | { op: 'set_phase'; phase: HeartbeatPayload }
-  /** 后端 IterationBoundary(llm_start) 时发：上一轮已完整推完，前端清空 streamingText */
-  | { op: 'iteration_boundary'; segmentId: number }
 
 export interface TaskTimelinePayload {
   conversationId: string
@@ -177,7 +175,10 @@ export interface RunProjection {
   conversation_id: string
   /** 恒 "active"：非运行中会话不返回该投影（sync.run 为 null） */
   state: string
+  /** 当前未结束轮次已流出的自然语言文本（正文候选，切段清空重计） */
   streaming_text: string
+  /** streaming_text 所属轮次（segmentId） */
+  streaming_segment: number | null
   timeline_nodes: TimelineNode[]
   task_runtime: TaskRuntimeProjection | null
   phase: string | null

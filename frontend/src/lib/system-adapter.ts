@@ -13,6 +13,20 @@ export const apiUrl = (path: string): string => {
   return path
 }
 
+/**
+ * 为受保护资源 URL 附加 `_token` 查询参数。
+ *
+ * `<img>` / `<video>` 等标签无法携带 Authorization 头，只能靠查询参数鉴权
+ * （后端 get_current_user 两种方式都接受）。这是前端**唯一**的 token 拼装方式，
+ * 避免各组件各写一遍分隔符判断。
+ */
+export const authedUrl = (path: string, token: string | null | undefined): string => {
+  const url = apiUrl(path)
+  if (!url || !token) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return `${url}${sep}_token=${encodeURIComponent(token)}`
+}
+
 /** 在新标签页打开外链。 */
 export const openExternal = (url: string): void => {
   window.open(url, '_blank', 'noopener,noreferrer')

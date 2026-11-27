@@ -34,48 +34,36 @@ class LoopMixin(_InstanceBase):
 
     def _settle_tool_surface(
         self,
-        allowed_tools: set[str] | None,
         *,
         sub_ctx: ToolContext,
     ) -> SettledSubagentToolSurface:
         from prismclaw.engine.security.gate.types import AllowedToolsPolicy
+        from prismclaw.engine.subagent.tool_surface import SUBAGENT_TOOL_SURFACE
         from prismclaw.engine.toolkit.registry.governance import (
             resolve_registry_tool_governance,
         )
 
+        # 唯一规则：子代理工具面固定为内置专家面（不含 TEAM_LEAD_TOOLS）；
+        # 同一份 surface 同时驱动 LLM 可见 schema 与治理 reducer。
+        tool_surface = SUBAGENT_TOOL_SURFACE
+
         skill_invocation = _coerce_skill_invocation(sub_ctx.invoked_skill_state)
         allowed_policy: AllowedToolsPolicy | None = None
-        if allowed_tools is not None:
-            manifest_allowed: set[str] = set()
+        if skill_invocation is not None and skill_invocation.allowed_tools_override is not None:
             registered = self._tools.names()
             lower_map: dict[str, str] = {n.lower(): n for n in registered}
-            for raw_name in allowed_tools:
+            active_allowed: set[str] = set()
+            for raw_name in skill_invocation.allowed_tools_override:
                 tool = self._tools.get(raw_name)
                 if tool is not None:
-                    manifest_allowed.add(tool.name)
+                    active_allowed.add(tool.name)
                 else:
                     canonical = lower_map.get(raw_name.lower())
                     if canonical is not None:
-                        manifest_allowed.add(canonical)
-            active_allowed: set[str] | None = None
-            if skill_invocation is not None and skill_invocation.allowed_tools_override is not None:
-                active_allowed = set()
-                for raw_name in skill_invocation.allowed_tools_override:
-                    tool = self._tools.get(raw_name)
-                    if tool is not None:
-                        active_allowed.add(tool.name)
-                    else:
-                        canonical = lower_map.get(raw_name.lower())
-                        if canonical is not None:
-                            active_allowed.add(canonical)
-            effective_allowed = (
-                manifest_allowed
-                if active_allowed is None
-                else manifest_allowed.intersection(active_allowed)
-            )
+                        active_allowed.add(canonical)
             allowed_policy = AllowedToolsPolicy(
                 allow_all=False,
-                allowed_names=tuple(sorted(effective_allowed)),
+                allowed_names=tuple(sorted(active_allowed)),
             )
             skill_invocation = None
         discovered_tools: set[str] | None = None
@@ -95,6 +83,7 @@ class LoopMixin(_InstanceBase):
                     discovered = restored_turn_state.discovered_tool_names()
                     discovered_tools = discovered or None
 
+        _scope = sub_ctx.session_scope
         resolved_toolset = resolve_registry_tool_governance(
             self._tools,
             skill_invocation=skill_invocation,
@@ -104,7 +93,8 @@ class LoopMixin(_InstanceBase):
             # 子代理结构上不持有会话队列，无法暂停等用户回答，
             # 因此对需要交互用户的工具恒为无头。
             headless=True,
-            tool_scope=sub_ctx.tool_scope,
+            allowed_tool_owners=_scope.tool_owners if _scope is not None else None,
+            tool_surface=tool_surface,
         )
         return SettledSubagentToolSurface(
             visible_tool_names=tuple(resolved_toolset.visible_tools_for_llm),
@@ -199,14 +189,6 @@ class LoopMixin(_InstanceBase):
             # 包级导入会抛 ImportError 并被本 try 吞掉（进度上报静默失效）。
             from prismclaw.schema.content.streaming import SubagentProgressItem
 
-            handoff_chain_id = sub_ctx.task_runtime_ctx.handoff_chain_id
-            from_subagent: str | None = None
-            if handoff_chain_id is not None:
-                pending = sub_ctx.pending_handoff_dispatch_extras.get(
-                    "pending_handoff_source_subagent"
-                )
-                if pending is not None:
-                    from_subagent = pending
             active_skill_name = sub_ctx.active_skill_name
             raw_invoked_skill_names = sub_ctx.invoked_skill_names
             invoked_skill_names = (
@@ -233,8 +215,6 @@ class LoopMixin(_InstanceBase):
                 ),
                 invoked_skill_names=list(dict.fromkeys(invoked_skill_names)),
                 duration_so_far=max(0.0, time.monotonic() - started_at),
-                handoff_chain_id=handoff_chain_id,
-                from_subagent=from_subagent,
                 current_tool_summary=current_tool_summary,
             )
             emitter.update(item)

@@ -46,7 +46,7 @@ export default function Login() {
   return (
     <View className={useThemeClass('page')}>
       <View className='login'>
-        <Text className='login-title'>登录 PrismClaw</Text>
+        <Text className='login-title'>登录 PrismWork</Text>
 
         <View className='field'>
           <Text className='field-label'>账号</Text>

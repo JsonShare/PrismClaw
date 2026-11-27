@@ -7,9 +7,6 @@ export interface LibraryItem {
   id: string
   label: string
   desc?: string
-  section?: string
-  /** 选中后写入输入框 chip 的类型（专家=plugin，技能=skill） */
-  chipKind?: 'plugin' | 'skill'
   emoji?: string | null
 }
 
@@ -22,11 +19,7 @@ interface LibrarySheetProps {
   onClose: () => void
 }
 
-/** 专家 / 技能两个页签，各自对应后端返回的 section */
-const TABS = ['专家', '技能'] as const
-type Tab = (typeof TABS)[number]
-
-/** 技能与专家列表：搜索、页签切换并连续选择，选中结果写入输入框 chips */
+/** 技能列表：搜索并连续选择，选中结果写入输入框 chips */
 export default function LibrarySheet({
   open,
   selectedIds,
@@ -35,17 +28,14 @@ export default function LibrarySheet({
   onClose,
 }: LibrarySheetProps) {
   const [keyword, setKeyword] = useState('')
-  const [tab, setTab] = useState<Tab>(TABS[0])
   const [items, setItems] = useState<LibraryItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const seqRef = useRef(0)
-  const visibleItems = items.filter((item) => item.section === tab)
 
   useEffect(() => {
     if (!open) {
       setKeyword('')
-      setTab(TABS[0])
       setError('')
       return
     }
@@ -79,7 +69,7 @@ export default function LibrarySheet({
     <View className='sheet-layer' onClick={onClose}>
       <View className='library-sheet' onClick={(event) => event.stopPropagation()}>
         <View className='library-head'>
-          <Text className='library-title'>选择专家或技能</Text>
+          <Text className='library-title'>选择技能</Text>
           <View className='library-close' onClick={onClose}>
             <Icon name='x' size={20} color='#8A9099' strokeWidth={2} />
           </View>
@@ -90,21 +80,9 @@ export default function LibrarySheet({
           <Input
             className='library-input'
             value={keyword}
-            placeholder={`搜索${tab}`}
+            placeholder='搜索技能'
             onInput={(event) => setKeyword(event.detail.value)}
           />
-        </View>
-
-        <View className='library-tabs'>
-          {TABS.map((item) => (
-            <View
-              key={item}
-              className={`library-tab${item === tab ? ' is-active' : ''}`}
-              onClick={() => setTab(item)}
-            >
-              <Text>{item}</Text>
-            </View>
-          ))}
         </View>
 
         <ScrollView scrollY className='library-list'>
@@ -119,18 +97,17 @@ export default function LibrarySheet({
                 <Text>{error}</Text>
               </View>
             ) : null}
-            {!loading && !error && !visibleItems.length ? (
+            {!loading && !error && !items.length ? (
               <View className='library-hint'>
-                <Text>{items.length ? `没有匹配的${tab}` : '没有可用的专家或技能'}</Text>
+                <Text>{keyword.trim() ? '没有匹配的技能' : '没有可用的技能'}</Text>
               </View>
             ) : null}
 
-            {visibleItems.map((item, index) => {
-              const sameSectionAsNext = visibleItems[index + 1]?.section === item.section
-              const chipId = `${item.chipKind ?? 'skill'}:${item.id}`
+            {items.map((item, index) => {
+              const chipId = `skill:${item.id}`
               const selected = selectedIds.includes(chipId)
               return (
-                <Fragment key={`${item.section ?? ''}:${item.id}`}>
+                <Fragment key={item.id}>
                   <View
                     className={`library-row${selected ? ' is-selected' : ''}`}
                     onClick={() => onPick(item)}
@@ -139,12 +116,7 @@ export default function LibrarySheet({
                       {item.emoji ? (
                         <Text className='library-emoji'>{item.emoji}</Text>
                       ) : (
-                        <Icon
-                          name={item.chipKind === 'plugin' ? 'puzzle' : 'hammer'}
-                          size={22}
-                          color='#575B62'
-                          strokeWidth={1.7}
-                        />
+                        <Icon name='hammer' size={22} color='#575B62' strokeWidth={1.7} />
                       )}
                     </View>
                     <View className='library-main'>
@@ -157,7 +129,7 @@ export default function LibrarySheet({
                       </View>
                     ) : null}
                   </View>
-                  {sameSectionAsNext ? <View className='library-line' /> : null}
+                  {index < items.length - 1 ? <View className='library-line' /> : null}
                 </Fragment>
               )
             })}

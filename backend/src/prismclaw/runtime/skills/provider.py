@@ -41,7 +41,7 @@ class DefaultSkillProvider:
         self._tracked_file_paths: set[str] = set()
         self._workspace_root: Path | None = None
         self._cached_root_paths: list[Path] = []
-        self._plugin_skill_dirs: list[Path] = []
+        self._expert_skill_dirs: list[Path] = []
 
     def reset_dynamic_state(self) -> None:
         self._dynamic_state.reset()
@@ -49,9 +49,9 @@ class DefaultSkillProvider:
         self._workspace_root = None
         self._cached_root_paths = []
 
-    def set_plugin_skill_dirs(self, dirs: list[Path]) -> None:
-        """Configure plugin skill directories for discovery via file system scan."""
-        self._plugin_skill_dirs = [d.resolve() for d in dirs]
+    def set_expert_skill_dirs(self, dirs: list[Path]) -> None:
+        """Configure expert skill directories for discovery via file system scan."""
+        self._expert_skill_dirs = [d.resolve() for d in dirs]
 
     def _resolve_project_locations(
         self, workspace_path: str | Path
@@ -117,7 +117,7 @@ class DefaultSkillProvider:
 
         all_skills = discover_skills(
             project_locations=self._resolve_project_locations(workspace_path),
-            plugin_locations=self._plugin_skill_dirs,
+            expert_locations=self._expert_skill_dirs,
             settings=self._settings,
             dynamic_state=self._dynamic_state,
         )

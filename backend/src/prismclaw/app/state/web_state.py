@@ -86,9 +86,9 @@ def sync_web_runtime_state(
         from prismclaw.runtime.facade.review import get_review_registry
 
         web_deps.review_registry_fn = get_review_registry
-        from prismclaw.assembly.plugins.reload_service import reload_app_plugin_runtime
+        from prismclaw.assembly.experts.reload_service import reload_app_expert_runtime
 
-        web_deps.reload_plugin_fn = reload_app_plugin_runtime
+        web_deps.reload_expert_fn = reload_app_expert_runtime
         from prismclaw.app.gateway import takeover as _takeover_mod
 
         web_deps.takeover_fns = {

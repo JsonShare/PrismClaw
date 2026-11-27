@@ -1,4 +1,4 @@
-"""Independent token-counting plugin.
+"""Independent token-counting expert.
 
 Extracted from schema/engine call sites so token accounting has a single
 authority and can be swapped (heuristic → endpoint/anchored) without touching

@@ -44,13 +44,7 @@ class TaskRuntimeContext:
     parallel_task_id: str | None = None
     managed_task_id: str | None = None
     is_fork: bool = False
-    handoff_chain_id: str | None = None
-    handoff_hop_index: int | None = None
-    effective_hop_index: int | None = None
     progress_batch_id: str | None = None
-    source_skill_origin: str | None = None
-    source_preload_skills: tuple[str, ...] = ()
-    merged_from_chains: tuple[str, ...] = ()
 
 
 class SubagentProgressSink(Protocol):

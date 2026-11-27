@@ -47,7 +47,7 @@ export default function InlineChips({ text }: { text: string }) {
         seg.type === 'text' ? (
           <Fragment key={i}>{seg.text}</Fragment>
         ) : (
-          <span key={i} className="msg-chip" title={seg.chip.value}>
+          <span key={i} className="msg-chip" data-kind={seg.chip.kind} title={seg.chip.value}>
             <span className="msg-chip-label">{chipLabel(seg.chip)}</span>
             <ChipIcon chip={seg.chip} />
           </span>

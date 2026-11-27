@@ -108,6 +108,11 @@ class SessionHeader(BaseModel):
     model_override: str | None = None
     title: str | None = None
     message_count: int = 0  # 冗余字段：会话中 message 类型 entry 的数量，写入时递增
+    expert_id: str | None = None
+    expert_runtime_identity: str | None = None
+    last_user_prompt_expert_selection: str | None = None
+    expert_activation_source: str | None = None
+    selected_skill_ids: list[str] = Field(default_factory=list)
 
 
 class SessionHistorySummary(BaseModel):

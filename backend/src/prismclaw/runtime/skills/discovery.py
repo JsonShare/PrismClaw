@@ -270,7 +270,7 @@ def _scan_skills_directory_frontmatter_only(
 ) -> list[SkillManifest]:
     """与 _scan_skills_directory 相同的扫描逻辑，但仅解析 frontmatter。
 
-    v5 渐进式披露：插件加载时只读 frontmatter（body=""），
+    v5 渐进式披露：专家包加载时只读 frontmatter（body=""），
     body 在 SkillRuntime._ensure_body_loaded() 按需加载。
     """
     return _scan_directory_v2(
@@ -311,18 +311,18 @@ def _coerce_existing_dirs(
 def discover_skills(
     *,
     project_locations: Iterable[CapabilityLocation | Path] = (),
-    plugin_locations: Iterable[CapabilityLocation | Path] = (),
+    expert_locations: Iterable[CapabilityLocation | Path] = (),
     settings: SkillSettings | None = None,
     dynamic_state: SkillCatalogState | None = None,
 ) -> list[SkillManifest]:
-    """扫描项目级 + 插件级技能目录并合并（纯发现，不做路径定位）。
+    """扫描项目级 + 专家包级技能目录并合并（纯发现，不做路径定位）。
 
     目录的解析、root 去重、相对目录展开与 exists 判定统一由
     :func:`prismclaw.infra.paths.build_project_capability_layout` 完成，
     调用方把 ``layout.existing_locations_of(...)`` 传入即可。本函数不再接收
     project_root，也不自行拼接 ``root / asset_skills_dir``。
 
-    合并顺序：project 首见胜出 → plugin 只补空缺（不覆盖同名 project）→
+    合并顺序：project 首见胜出 → expert 只补空缺（不覆盖同名 project）→
     dynamic_state 动态技能最高优先级。
 
     带 ``paths`` 条件的技能不直接进入清单，而是挂到
@@ -369,8 +369,8 @@ def discover_skills(
             if skill.name not in merged:
                 merged[skill.name] = skill
 
-    # Phase C: 插件技能（仅补空缺，同名 project 保留用户可见版本）
-    for candidate in _coerce_existing_dirs(plugin_locations):
+    # Phase C: 专家包技能（仅补空缺，同名 project 保留用户可见版本）
+    for candidate in _coerce_existing_dirs(expert_locations):
         skills = _scan_skills_directory_frontmatter_only(
             candidate,
             max_file_bytes=settings.max_skill_file_bytes,
@@ -379,13 +379,13 @@ def discover_skills(
         )
         for skill in skills:
             if not skill.source or skill.source is SkillSource.BUNDLED:
-                skill.source = SkillSource.PLUGIN
+                skill.source = SkillSource.EXPERT
             skill.loaded_from = str(candidate)
             if dynamic_state is not None:
                 dynamic_state.skill_sources[skill.name] = candidate
             if skill.name in project_names:
                 logger.info(
-                    "skill.name_conflict name=%s project=%s plugin_ignored=%s",
+                    "skill.name_conflict name=%s project=%s expert_ignored=%s",
                     skill.name,
                     merged[skill.name].file_path if skill.name in merged else "<conditional>",
                     candidate,

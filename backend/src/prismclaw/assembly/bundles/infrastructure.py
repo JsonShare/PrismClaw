@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from prismclaw.assembly.bundles_data import AppInfrastructureBundle
 from prismclaw.engine.runtime.mode import redis_is_required
 from prismclaw.infra.settings import Settings
+from prismclaw.schema.services.mcp_settings import McpSettings
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -35,6 +36,7 @@ async def build_app_infrastructure_bundle(
     create_memory_store_fn: Callable[..., Any] | None = None,
     dream_dispatch_queue_factory: Callable[..., Any] | None = None,
     mcp_manager_factory: Callable[..., Any] | None = None,
+    mcp_settings: McpSettings | None = None,
     run_ownership_factory: Callable[..., Any] | None = None,
 ) -> AppInfrastructureBundle:
     if sandbox_policy is None:
@@ -112,8 +114,8 @@ async def build_app_infrastructure_bundle(
     mcp_manager = None
     mcp_death_handler = None
     external_tool_registrar = None
-    if mcp_manager_factory is not None and settings.mcp.enabled:
-        mcp_manager = mcp_manager_factory(settings.mcp, task_manager=task_manager)
+    if mcp_manager_factory is not None and mcp_settings is not None and mcp_settings.enabled:
+        mcp_manager = mcp_manager_factory(mcp_settings, task_manager=task_manager)
         mcp_manager.set_sandbox_policy(sandbox_policy)
         mcp_manager._emit_sandbox_startup_advisories()
         mcp_manager.start_background()

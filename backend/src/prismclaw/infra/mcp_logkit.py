@@ -1,7 +1,7 @@
 """Self-contained logging bootstrap for PrismClaw-managed MCP servers.
 
 Zero-dependency (stdlib only) so self-built MCP servers (standalone uv
-packages / runtime plugins) can import this module without the prismclaw
+packages / runtime experts) can import this module without the prismclaw
 package installed. The client injects PRISMCLAW_MCP_SERVER_LOG_DIR before
 spawning the server process; call :func:`install_from_env` early at startup.
 

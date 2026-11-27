@@ -1,3 +1,12 @@
+"""进程内 hook 通道。
+
+- ``HookRegistry`` / ``AgentHook``：Agent Loop 生命周期回调（提示构建、响应、压缩、run 起止）。
+- ``HookDispatcher`` / ``HookHandler``：事件分发与 handler 执行，目前用于压缩等内部事件。
+- ``schema`` / ``handlers``：HookContext / HookResult 与 shell / http / callback handler 实现。
+
+专家包不携带 hooks；本包只是进程内基础设施。
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -9,8 +18,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from prismclaw.engine.plugins.hooks.handlers import HookHandler
-from prismclaw.engine.plugins.hooks.schema import (
+from prismclaw.engine.hooks.handlers import HookHandler
+from prismclaw.engine.hooks.schema import (
     HookContext,
     HookDecision,
     HookOutcome,
@@ -20,7 +29,6 @@ from prismclaw.engine.plugins.hooks.schema import (
 from prismclaw.schema.content.compaction import CompactResult
 
 if TYPE_CHECKING:
-    from prismclaw.engine.execution.capabilities.extension_manager import ExtensionManager
     from prismclaw.schema.agent.run_control_types import RunControl
     from prismclaw.schema.services.skills import SkillManifest
 
@@ -82,7 +90,7 @@ class SkillProvider(Protocol):
         self,
         workspace_path: str | None = None,
     ) -> list[SkillManifest]: ...
-    def set_plugin_skill_dirs(self, dirs: list[Path]) -> None: ...
+    def set_expert_skill_dirs(self, dirs: list[Path]) -> None: ...
     def track_file_paths(self, paths: Iterable[str | Path]) -> None: ...
 
 
@@ -241,7 +249,7 @@ class HookDispatcher:
     """
 
     def __init__(self, *, default_timeout: float = DEFAULT_DISPATCH_TIMEOUT) -> None:
-        # 每个 handler 携带归属插件名（None = 全局 handler）。
+        # 每个 handler 携带归属专家包名（None = 全局 handler）。
         self._hooks: dict[HookEvent, list[tuple[str | None, HookHandler]]] = {
             event: [] for event in HookEvent
         }
@@ -252,7 +260,7 @@ class HookDispatcher:
         event: HookEvent,
         handler: HookHandler,
         *,
-        plugin_name: str | None = None,
+        expert_name: str | None = None,
     ) -> None:
         """注册 HookHandler。"""
         if not isinstance(handler, HookHandler):
@@ -260,20 +268,20 @@ class HookDispatcher:
                 f"Hook handler must be HookHandler instance, got {type(handler).__name__}"
             )
         if event in self._hooks:
-            self._hooks[event].append((plugin_name, handler))
+            self._hooks[event].append((expert_name, handler))
 
     def register_named(
         self,
         event_name: str,
         handler: HookHandler,
         *,
-        plugin_name: str | None = None,
+        expert_name: str | None = None,
     ) -> bool:
         """按事件名注册。"""
         normalized = _normalize_hook_event_name(event_name)
         if normalized is None:
             return False
-        self.register(normalized, handler, plugin_name=plugin_name)
+        self.register(normalized, handler, expert_name=expert_name)
         return True
 
     def unregister(self, event: HookEvent, handler: HookHandler) -> None:
@@ -286,37 +294,21 @@ class HookDispatcher:
                     del handlers[idx]
                     break
 
-    def register_extension_hooks(self, extension_manager: ExtensionManager) -> None:
-        """从 ExtensionManager 注册所有 hook bindings。
-
-        保留 ``binding.plugin_name``：插件 hook 只在所属插件激活时执行
-        （见 :meth:`dispatch`），未激活的 hook 仍保持注册，重新激活即可恢复。
-        """
-        for binding in extension_manager.iter_hook_bindings():
-            event_name = binding.event_name
-            handler = binding.handler
-            if not isinstance(event_name, str):
-                continue
-            if not isinstance(handler, HookHandler):
-                logger.debug("Skipping non-HookHandler binding for event %s", event_name)
-                continue
-            self.register_named(event_name, handler, plugin_name=binding.plugin_name)
-
     async def dispatch(
         self,
         event: HookEvent,
         context: HookContext | object,
         *,
         timeout: float | None = None,  # noqa: ASYNC109 - 逐 handler 单独计时，需保留参数
-        active_plugins: frozenset[str] | set[str] | None = None,
+        active_experts: frozenset[str] | set[str] | None = None,
     ) -> HookResult:
         """分发事件，返回聚合 HookResult。
 
         聚合 decision / updated_input / additional_context 等字段，
         第一个 blocking 结果即停止后续 handler 执行。
 
-        ``active_plugins`` 为 None 表示无插件上下文，所有 handler 照常执行；
-        否则归属插件不在激活集的 handler 被静默跳过（全局 hook 恒执行）。
+        ``active_experts`` 为 None 表示无专家包上下文，所有 handler 照常执行；
+        否则归属专家包不在激活集的 handler 被静默跳过（全局 hook 恒执行）。
         """
         if event not in self._hooks or not self._hooks[event]:
             return HookResult.success()
@@ -326,8 +318,8 @@ class HookDispatcher:
 
         aggregated = HookResult.success()
         for owner, handler in self._hooks[event]:
-            if active_plugins is not None and owner is not None and owner not in active_plugins:
-                logger.debug("hook_scope_skipped: event=%s plugin=%s", event.value, owner)
+            if active_experts is not None and owner is not None and owner not in active_experts:
+                logger.debug("hook_scope_skipped: event=%s expert=%s", event.value, owner)
                 continue
             try:
                 result = await asyncio.wait_for(
@@ -423,6 +415,7 @@ def _coerce_context(context: object) -> HookContext:
             event=context.get("event", ""),
             session_id=context.get("session_id", ""),
             cwd=context.get("cwd", ""),
+            expert_id=context.get("expert_id"),
             tool_name=context.get("tool_name"),
             tool_input=context.get("tool_input"),
             skill_name=context.get("skill_name"),
@@ -433,6 +426,7 @@ def _coerce_context(context: object) -> HookContext:
         event=getattr(context, "event", getattr(context, "hook_event", "")),
         session_id=getattr(context, "session_id", ""),
         cwd=getattr(context, "cwd", ""),
+        expert_id=getattr(context, "expert_id", None),
         tool_name=getattr(context, "tool_name", None),
         tool_input=getattr(context, "tool_input", None),
         skill_name=getattr(context, "skill_name", None),
@@ -493,13 +487,14 @@ async def _dispatch_pre_tool_hooks(
     parsed_calls: list[Any],
     session_id: str,
     cwd: str,
+    expert_id: str | None = None,
     active_skill_name: str | None = None,
-    active_plugins: frozenset[str] | set[str] | None = None,
+    active_experts: frozenset[str] | set[str] | None = None,
 ) -> dict[str, str]:
-    """逐调用分发 PRE_TOOL hook，收集插件拒绝决策。
+    """逐调用分发 PRE_TOOL hook，收集专家包拒绝决策。
 
     PreToolUse 语义：每个工具调用单独分发，携带 tool_name/tool_input，
-    使插件 hook 的 matcher 过滤与按工具拒绝生效。返回 ``{call_id: reason}``，
+    使专家包 hook 的 matcher 过滤与按工具拒绝生效。返回 ``{call_id: reason}``，
     由调用方并入 ``denied_ids``——被拒调用经骨架 before_tool_call 拦截，
     结果与 assistant 消息一起落树（persist_denied_turn / execute_tools Step 0）。
 
@@ -518,19 +513,20 @@ async def _dispatch_pre_tool_hooks(
             event=HookEvent.PRE_TOOL.value,
             session_id=session_id,
             cwd=cwd,
+            expert_id=expert_id,
             tool_name=parsed.name or None,
             tool_input=parsed.arguments or None,
             skill_name=active_skill_name,
         )
         result = await dispatcher.dispatch(
-            HookEvent.PRE_TOOL, context, active_plugins=active_plugins
+            HookEvent.PRE_TOOL, context, active_experts=active_experts
         )
         _log_hook_outcome(HookEvent.PRE_TOOL, result)
         reason: str | None = None
         if result.permission_decision == PermissionDecision.DENY:
-            reason = result.permission_decision_reason or "denied by plugin hook"
+            reason = result.permission_decision_reason or "denied by expert hook"
         elif result.decision == HookDecision.BLOCK:
-            reason = result.decision_reason or "blocked by plugin hook"
+            reason = result.decision_reason or "blocked by expert hook"
         if reason:
-            denied[call_id] = f"[plugin hook] {reason}"
+            denied[call_id] = f"[expert hook] {reason}"
     return denied

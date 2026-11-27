@@ -1,6 +1,6 @@
 """Global runtime root configuration.
 
-``server.yaml`` 里的 ``runtime`` 段——定义技能/插件共享的全局运行时根。
+``server.yaml`` 里的 ``runtime`` 段——定义技能/专家包共享的全局运行时根。
 所有用户共用，node_modules、pip --target 包、fonts 等重资产存这里，
 一次安装全 workspace 生效。
 """

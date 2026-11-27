@@ -41,8 +41,8 @@ if TYPE_CHECKING:
 class HookInvocationResult:
     """invoke_compaction_hooks 的统一返回类型。
 
-    把 plugins.hooks.schema.HookOutcome 枚举收敛为字符串，避免
-    compression 层 import plugins 模块。
+    把 experts.hooks.schema.HookOutcome 枚举收敛为字符串，避免
+    compression 层 import experts 模块。
     """
 
     outcome: str  # "SUCCESS" | "BLOCKING"
@@ -131,7 +131,7 @@ class ContextRuntimePorts(Protocol):
         """进程内 AgentHook 迭代：广播 before_compaction。
 
         委托给 hook_registry.notify_before_compaction(ctx)；registry
-        不可用时 no-op。与 invoke_compaction_hooks（插件 dispatcher）
+        不可用时 no-op。与 invoke_compaction_hooks（专家包 dispatcher）
         是两条独立 hook 通道，统一收敛到 ports 边界。"""
         ...
 

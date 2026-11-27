@@ -3,6 +3,7 @@ import { X, Trash2, Pencil, Check, Loader2 } from 'lucide-react'
 import type { Skill } from '../../types/skill'
 import MarkdownRenderer from '../chat/MarkdownRenderer'
 import { PrimaryButton } from '../ui/PrimaryButton'
+import ConfirmModal from './ConfirmModal'
 
 export interface SkillEditPatch {
   description?: string
@@ -21,6 +22,7 @@ interface Props {
 
 export default function SkillDetailModal({ open, skill, onClose, onDelete, onEdit }: Props) {
   const [deleting, setDeleting] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editDesc, setEditDesc] = useState('')
   const [editBody, setEditBody] = useState('')
@@ -77,7 +79,6 @@ export default function SkillDetailModal({ open, skill, onClose, onDelete, onEdi
 
   const handleDelete = async () => {
     if (!onDelete || deleting) return
-    if (!window.confirm(`确认删除「${displayName}」？此操作不可撤销。`)) return
     setDeleting(true)
     const ok = await onDelete(skill.id)
     setDeleting(false)
@@ -191,7 +192,7 @@ export default function SkillDetailModal({ open, skill, onClose, onDelete, onEdi
               {canDelete ? (
                 <button
                   type="button"
-                  onClick={() => void handleDelete()}
+                  onClick={() => setConfirmingDelete(true)}
                   disabled={deleting}
                   className="inline-flex items-center gap-1.5 h-9 px-3 -ml-1 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] font-medium transition-colors cursor-pointer text-[var(--c-error)] hover:bg-[var(--c-danger-soft)] disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="删除"
@@ -224,6 +225,19 @@ export default function SkillDetailModal({ open, skill, onClose, onDelete, onEdi
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmingDelete}
+        title={`删除「${displayName}」`}
+        message="删除后不可恢复，引用该技能的历史消息将无法再执行它。"
+        confirmLabel="删除"
+        destructive
+        onConfirm={() => {
+          setConfirmingDelete(false)
+          void handleDelete()
+        }}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   )
 }

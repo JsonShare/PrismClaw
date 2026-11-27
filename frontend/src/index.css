@@ -43,6 +43,13 @@ code, pre {
   font-family: var(--font-display);
 }
 
+/* 侧栏品牌字标：系统衬线艺术体 + 轻微字距（斜体衬线在小字号下会挤，别用负字距） */
+.brand-wordmark {
+  font-family: var(--font-brand);
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
 .font-mono {
   font-family: var(--font-mono);
 }
@@ -1189,9 +1196,54 @@ code, pre {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.rich-input .input-chip[data-kind='skill'] {
+  padding: 3px 24px 3px 25px;
+  border-color: transparent;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-text);
+  font-size: 13px;
+}
+.rich-input .input-chip[data-kind='skill'] > svg {
+  width: 14px;
+  height: 14px;
+}
+/* 技能胶囊静止态保持设计稿的纯净外观，悬停/聚焦时才露出移除按钮 */
+.rich-input .input-chip[data-kind='skill'] .input-chip-remove {
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.rich-input .input-chip[data-kind='skill']:hover .input-chip-remove,
+.rich-input .input-chip[data-kind='skill'] .input-chip-remove:focus-visible {
+  opacity: 1;
+}
+.rich-input .input-chip-remove {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.rich-input .input-chip-remove:hover,
+.rich-input .input-chip-remove:focus-visible {
+  background: color-mix(in srgb, var(--c-text) 10%, transparent);
+  color: var(--c-text);
+  outline: none;
+}
 
-/* 已发送气泡里的内联卡片：淡蓝底 + 主题蓝字 + 无描边（气泡本身是 accent/10%，
-   卡片用略高浓度确保仍能区分），尺寸与输入框卡片一致（--fs-md、5px 圆角）。
+/* 已发送气泡里的内联卡片：比雾蓝气泡略深一档的同源蓝灰底 + 正文墨色 + 无描边，
+   在气泡内仍能区分是卡片；尺寸与输入框卡片一致（--fs-md、5px 圆角）。
    结构与输入框相同：标签是唯一 flex item（决定基线），图标绝对定位居中。 */
 .msg-chip {
   position: relative;
@@ -1202,8 +1254,8 @@ code, pre {
   max-width: 240px;
   vertical-align: baseline;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--c-accent) 20%, transparent);
-  color: var(--c-accent);
+  background: color-mix(in srgb, #3A5C86 14%, transparent);
+  color: var(--c-text);
   font-size: var(--fs-md);
   line-height: 1.2;
   white-space: nowrap;
@@ -1219,6 +1271,14 @@ code, pre {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.msg-chip[data-kind='skill'] {
+  border-radius: 999px;
+  font-size: 13px;
+}
+.msg-chip[data-kind='skill'] > svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* 输入框蓝色呼吸灯：细蓝边 + 双层外发光（近浓 + 远大弥散）。
@@ -1287,6 +1347,33 @@ code, pre {
   box-shadow: var(--shadow-lg);
 }
 
+/* 深色气泡：输入区已选专家等胶囊的完整名称提示（带小三角） */
+.tooltip-bubble[data-tone='dark'] {
+  max-width: 320px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #2B2D31;
+  color: #F7F8FA;
+  box-shadow: 0 8px 24px rgba(15, 18, 24, 0.22);
+}
+.tooltip-bubble[data-tone='dark']::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #2B2D31;
+  transform: translateX(-50%) rotate(45deg);
+}
+.tooltip-bubble[data-tone='dark']:not([data-above])::after {
+  top: -4px;
+}
+.tooltip-bubble[data-tone='dark'][data-above='true']::after {
+  bottom: -4px;
+}
+
 /* ───────── 控件原语 ─────────
    按钮只有三档尺寸 + 一档图标；尺寸归组件所有，调用点不再传 h- / px- / rounded-。
    颜色由主题层按变体给值，这里只管结构。 */
@@ -1315,7 +1402,8 @@ code, pre {
   outline-offset: 2px;
 }
 
-/* 尺寸：sm 28 / md 36 / lg 40 / icon 28×28 */
+/* 尺寸：xs 32 / sm 28 / md 36 / lg 40 / icon 28×28 */
+.btn-xs   { height: 32px; padding: 0 22px; font-size: var(--fs-sm); }
 .btn-sm   { height: 28px; padding: 0 10px; font-size: var(--fs-sm); }
 .btn-md   { height: 36px; padding: 0 14px; font-size: var(--fs-sm); }
 .btn-lg   { height: 40px; padding: 0 16px; font-size: var(--fs-md); }

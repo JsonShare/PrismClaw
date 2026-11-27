@@ -2,7 +2,7 @@
 
 由 ``build_loop_config`` 绑定到 ExecutePort：
 - ``gate_tool_call``（原 before_tool_call）：冻结签名 + 安全门
-- ``execute_tools``：工具执行主流程（handoff dispatch → 执行 → 证据 → 投影 → 落树）
+- ``execute_tools``：工具执行主流程（执行 → 证据 → 投影 → 落树）
 
 所有运行期依赖通过 ``rt: LoopRuntime`` 显式访问。完成裁决全权由
 ``CompletionKernel`` 负责——契约 satisfied 直接终止循环，不再通过
@@ -72,20 +72,22 @@ async def gate_tool_call(
     if call is None:
         return None
 
-    # ── 0. 插件作用域（最便宜、最确定，故最先）──
-    # tool_scope 为 None 表示无插件上下文（headless/测试/装配未就绪），不限作用域。
-    _tool_ctx = rt.tool_ctx
-    _scope = getattr(_tool_ctx, "tool_scope", None) if _tool_ctx is not None else None
-    if _scope is not None:
-        _tool = deps.tools.get(call.name)
-        _owner = getattr(_tool, "plugin_name", None) if _tool is not None else None
-        if _owner is not None and _owner not in _scope:
-            from prismclaw.engine.execution.loop.types import BeforeToolCallResult
+    # ── 0. 工具归属（最便宜、最确定，故最先）──
+    # session_scope 为 None 表示无作用域上下文（headless/测试/装配未就绪），不限作用域。
+    from prismclaw.engine.toolkit.registry.tool_classification import (
+        denied_owner_reason,
+    )
 
-            return BeforeToolCallResult(
-                block=True,
-                reason=f"tool_scope_denied:{_owner}（该工具属于插件「{_owner}」，请先 @ 该插件）",
-            )
+    _tool_ctx = rt.tool_ctx
+    _scope = _tool_ctx.session_scope if _tool_ctx is not None else None
+    _denied = denied_owner_reason(
+        deps.tools.get(call.name),
+        _scope.tool_owners if _scope is not None else None,
+    )
+    if _denied is not None:
+        from prismclaw.engine.execution.loop.types import BeforeToolCallResult
+
+        return BeforeToolCallResult(block=True, reason=_denied)
 
     # ── 1. doom-loop 冻结检查（在安全门之前——冻结是确定性决策）──
     _args = before_ctx.args if isinstance(before_ctx.args, dict) else {}
@@ -195,7 +197,7 @@ async def execute_tools(
     response: LLMResponse,
     allowed_calls: list[ParsedToolCall],
 ) -> AsyncIterator[Any]:
-    """工具执行。B/S 架构有 handoff dispatch + subagent，因此提取为独立 callback。"""
+    """工具执行。B/S 架构有 subagent，因此提取为独立 callback。"""
     deps = rt.deps
     tree = rt.tree
     request = rt.request
@@ -209,10 +211,8 @@ async def execute_tools(
     from prismclaw.engine.execution.control.evidence import declared_paths, record_tool_evidence
     from prismclaw.engine.execution.dispatch.call_handling import parse_tool_calls
     from prismclaw.engine.execution.dispatch.execution import (
-        apply_handoff_dispatch_plan,
-        execute_tool_calls_with_handoff,
+        execute_tool_calls_for_turn,
         persist_projected_tool_result_entries,
-        plan_handoff_dispatch,
         postprocess_tool_results,
         project_tool_result_entries,
     )
@@ -232,9 +232,6 @@ async def execute_tools(
         _record_result_compaction_state,
     )
     from prismclaw.engine.toolkit.builtin.tool_helpers import _extract_file_paths_from_tool_calls
-    from prismclaw.engine.toolkit.subagent.subagent_progress_emitter import (
-        _emit_cap_exceeded_synthetic_progress,
-    )
     from prismclaw.schema.agent import HeartbeatEvent
 
     try:
@@ -263,25 +260,10 @@ async def execute_tools(
             )
             state.blocked_tool_results = []
 
-        # ── 1. Handoff dispatch ──
+        # ── 1. Artifact baseline ──
         _allowed_raw_calls = [c.call for c in allowed_calls]
-        handoff_result = await plan_handoff_dispatch(
-            deps=deps,
-            request=request,
-            tool_calls=_allowed_raw_calls,
-        )
-        await apply_handoff_dispatch_plan(
-            tool_ctx=tool_ctx,
-            handoff_plan=handoff_result,
-            subagent_progress_sink=deps.callbacks.on_subagent_progress
-            if deps.callbacks is not None
-            else None,
-            emit_cap_exceeded_progress=_emit_cap_exceeded_synthetic_progress,
-        )
-
-        # ── 1.5 Artifact baseline ──
         _artifact_scanner = ArtifactScanner(tool_workspace_path)
-        _parsed_calls = parse_tool_calls(handoff_result.tool_calls)
+        _parsed_calls = parse_tool_calls(_allowed_raw_calls)
         _declared = tuple(path for _call in _parsed_calls for path in declared_paths(_call))
         _artifacts_before = _artifact_scanner.stat_paths(_declared)
 
@@ -289,12 +271,11 @@ async def execute_tools(
         _exec_elapsed = _time.monotonic() - run_started if run_started > 0 else 0.0
         yield HeartbeatEvent(phase="executing", elapsed_s=_exec_elapsed)
 
-        execution_artifacts = await execute_tool_calls_with_handoff(
+        execution_artifacts = await execute_tool_calls_for_turn(
             deps=deps,
             request=request,
-            tool_calls=handoff_result.tool_calls,
+            tool_calls=_allowed_raw_calls,
             tool_ctx=tool_ctx,
-            cap_exceeded_call_ids=handoff_result.cap_exceeded_call_ids,
             finish_reason=(state.llm_response.finish_reason if state.llm_response else None),
         )
         execution_artifacts = await postprocess_tool_results(

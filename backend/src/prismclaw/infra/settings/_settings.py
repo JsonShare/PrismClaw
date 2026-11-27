@@ -7,11 +7,11 @@ from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from prismclaw.schema.config.domains import DomainSettings
-from prismclaw.schema.services.mcp_settings import McpSettings
 
 from ._agent import AgentSettings, ServerSettings
 from ._database import DatabaseSettings
 from ._dream import EvolutionSettings
+from ._experts import ExpertSettings, SchedulerSettings, SubAgentSettings
 from ._memory import MemorySettings
 from ._models import (
     EmbeddingSettings,
@@ -20,18 +20,12 @@ from ._models import (
     TokenCountingSettings,
     VisionSettings,
 )
-from ._plugins import PluginSettings, SchedulerSettings, SubAgentSettings
 from ._redis import RedisSettings
 from ._runtime import RuntimeSettings
 from ._sandbox import AffinitySettings, SandboxSettings
 from ._storage import StorageSettings
 from ._web import ChannelsSettings
 from ._workspace import BuiltinToolSettings, SkillSettings, WorkspaceSettings
-
-
-def _default_mcp_settings() -> McpSettings:
-    return McpSettings()
-
 
 _ENV_PLACEHOLDER_RE = re.compile(r"^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$")
 
@@ -71,8 +65,7 @@ class Settings(BaseSettings):
     sandbox: SandboxSettings = Field(default_factory=lambda: SandboxSettings())
     subagent: SubAgentSettings = Field(default_factory=lambda: SubAgentSettings())
     scheduler: SchedulerSettings = Field(default_factory=lambda: SchedulerSettings())
-    plugins: PluginSettings = Field(default_factory=lambda: PluginSettings())
-    mcp: McpSettings = Field(default_factory=_default_mcp_settings)
+    experts: ExpertSettings = Field(default_factory=lambda: ExpertSettings())
     builtin_tools: BuiltinToolSettings = Field(default_factory=lambda: BuiltinToolSettings())
     domains: DomainSettings = Field(default_factory=lambda: DomainSettings())
     # Graceful shutdown timeout in seconds.  Matches the default K8s

@@ -1,4 +1,4 @@
-"""Load plugin operating profiles from the filesystem.
+"""Load expert operating profiles from the filesystem.
 
 Moved from contracts.services.skills to break the contracts→engine
 dependency cycle. This is an I/O function (reads the filesystem) and
@@ -10,41 +10,41 @@ from __future__ import annotations
 from pathlib import Path as _Path
 
 
-def _join_plugins_dir(root: _Path, plugins_dir: str) -> _Path:
-    """拼接 plugins 根路径。
+def _join_experts_dir(root: _Path, experts_dir: str) -> _Path:
+    """拼接专家包根路径。
 
-    plugins_dir 可能是相对（拼到 project_root 上）
-    或绝对（``~/.prismclaw/assets/plugins``，直接用 expanduser 结果）。统一 expanduser
+    experts_dir 可能是相对（拼到 project_root 上）
+    或绝对（``~/.prismclaw/assets/experts``，直接用 expanduser 结果）。统一 expanduser
     再判断 is_absolute。
     """
-    expanded = _Path(plugins_dir).expanduser()
+    expanded = _Path(experts_dir).expanduser()
     if expanded.is_absolute():
         return expanded.resolve() if expanded.exists() else expanded
     return (root / expanded).resolve()
 
 
-def _load_plugin_profile(
-    plugin_name: str | None,
+def _load_expert_profile(
+    expert_name: str | None,
     *,
     project_root_hint: _Path | None = None,
 ) -> str | None:
-    """读插件下的 PLUGIN.md（回退 README.md）。
+    """读专家包下的 PLUGIN.md（回退 README.md）。
 
     启动时 sync_prismclaw_home 已把 backend/.prismclaw 同步到
-    ``~/.prismclaw/assets``，默认插件根 ``~/.prismclaw/assets/plugins/<plugin>/PLUGIN.md``
+    ``~/.prismclaw/assets``，默认专家包根 ``~/.prismclaw/assets/experts/<expert>/PLUGIN.md``
     直接命中；project_root 只作为部署期兜底。
     """
-    if not plugin_name:
+    if not expert_name:
         return None
 
-    # 1) 拿 plugins_dir 配置
-    plugins_dir = "~/.prismclaw/assets/plugins"
+    # 1) 拿 experts_dir 配置
+    experts_dir = "~/.prismclaw/assets/experts"
     try:
-        from prismclaw.infra.settings._plugins import PluginSettings
+        from prismclaw.infra.settings._experts import ExpertSettings
 
-        _configured = PluginSettings().asset_plugins_dir
+        _configured = ExpertSettings().asset_experts_dir
         if isinstance(_configured, str) and _configured.strip():
-            plugins_dir = _configured.strip()
+            experts_dir = _configured.strip()
     except Exception:
         pass
 
@@ -73,11 +73,11 @@ def _load_plugin_profile(
             continue
         seen.add(root_resolved)
 
-        plugins_root = _join_plugins_dir(root_resolved, plugins_dir)
-        plugin_root = plugins_root / plugin_name
+        experts_root = _join_experts_dir(root_resolved, experts_dir)
+        expert_root = experts_root / expert_name
 
         for fname in ("PLUGIN.md", "plugin.md", "README.md"):
-            candidate = plugin_root / fname
+            candidate = expert_root / fname
             if not candidate.is_file():
                 continue
             try:

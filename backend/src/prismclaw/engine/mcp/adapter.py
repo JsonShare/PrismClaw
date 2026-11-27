@@ -118,10 +118,10 @@ class MCPToolAdapter:
     group: ClientSessionGroup
     sdk_key: str
     runtime_observer: Any | None = None
-    # 归属插件。None 表示核心（非插件）MCP server，恒放行于插件作用域门控。
-    # 由 MCPClientManager 在构造适配器时注入——每个插件拥有独立的 manager，
+    # 归属专家包。None 表示核心（非专家包）MCP server，恒放行于专家包作用域门控。
+    # 由 MCPClientManager 在构造适配器时注入——每个专家包拥有独立的 manager，
     # 因此无需按 server 名反推归属。
-    plugin_name: str | None = None
+    expert_name: str | None = None
 
     name: str = field(init=False)
     description: str = field(init=False)

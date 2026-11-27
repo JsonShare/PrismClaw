@@ -1,0 +1,26 @@
+{
+  "mcpServers": {
+    "yuandian": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "yuandian-mcp-server"
+      ],
+      "env": {
+        "YUANDIAN_API_KEY": "<请在本地填入自己的元典 API Key>"
+      },
+      "title": "元典 MCP（示例占位，请自行配置）",
+      "description": "示例配置：本仓库不包含任何元典 API 凭据。使用前请在本地环境变量或私有配置中填入自己的元典开放平台凭据；不要把真实 API key、token 或 secret 提交到仓库。"
+    }
+  },
+  "recommendedCategories": [
+    "legal-research-cn",
+    "contract-management-cn",
+    "e-signature-cn",
+    "document-management",
+    "enterprise-verification",
+    "chat"
+  ],
+  "_notes": "外部 MCP 已全部替换为元典（yuandian）。元典通过本地 stdio 子进程运行，覆盖法律法规、案例和企业三个命名空间，替代原版 Ironclad / DocuSign / iManage / TopCounsel / Definely / Slack / Google Drive。企业协作集成通过全局 Enterprise Collaboration MCP（lark-im / lark-drive / lark-doc 等 skill）接入，无需在此单独配置。合同管理系统（法大大、简道云、泛微 OA 等）和电子签名平台（e签宝、契约锁、上上签等）目前无可用 MCP，由用户手动上传文件。"
+}

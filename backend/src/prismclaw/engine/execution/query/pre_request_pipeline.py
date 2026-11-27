@@ -28,6 +28,7 @@ from prismclaw.engine.execution.query.state import QueryLoopState
 from prismclaw.engine.execution.query.turn_planner import TurnPlanner
 from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
 from prismclaw.engine.state.turn_state import ToolGovernanceState, TurnState
+from prismclaw.infra.workspace_paths import session_dir_in
 from prismclaw.schema.agent.session import SystemReminderProjection
 from prismclaw.schema.llm.request import PackedLLMRequest
 from prismclaw.schema.session.types import SessionTree
@@ -221,6 +222,7 @@ class PreRequestPipeline:
             discovered_tools=turn_state.discovered_tool_names(),
             subagent_depth=subagent_depth,
             visible_tool_names=visible_tool_names,
+            session_scope=tool_ctx.session_scope,
         )
 
         # 减法：simple 路径仅跳过重管道（microcompact / reinjection），
@@ -300,13 +302,10 @@ class PreRequestPipeline:
         # working_dir 必须是 session 根（不是 workspace 根）—— 否则 microcompact
         # 会把 tool_results mkdir 到 workspace 根，与 session 级隔离冲突。
         _mc_ws = tool_workspace_path
-        _mc_sid = getattr(tool_ctx, "session_id", "") if tool_ctx else ""
-        mc_working_dir: str | None = None
-        if _mc_ws and _mc_sid:
-            _safe_sid = str(_mc_sid).replace("#", "-").replace(":", "-")
-            mc_working_dir = str(Path(str(_mc_ws)) / "sessions" / _safe_sid)
-        else:
-            mc_working_dir = str(_mc_ws) if _mc_ws else None
+        _mc_sid = str(getattr(tool_ctx, "session_id", "") or "")
+        mc_working_dir: str | None = (
+            str(session_dir_in(Path(str(_mc_ws)), _mc_sid)) if _mc_ws and _mc_sid else None
+        )
 
         _mc_mode = resolve_microcompact_mode()
         microcompact_result = None

@@ -377,10 +377,9 @@ def _build_display_messages(
             return
         # 正文 = 最后一条非空的自然语言答复（单一真相源）。
         # 中间迭代的过语已由 timeline projector._segment_texts 收集并在灰框展示，
-        # 不应同时拼进正文蓝框。终态轮次（complete_no_tool_turn）的完整答复
-        # 落 session tree assistant entry，是正文的唯一来源。
-        # 若 TERMINATE（预算耗尽等异常终止）导致最后一条 assistant 为空，
-        # 往前找到最近的非空 part，保证正文至少有内容可见。
+        # 不应同时拼进正文蓝框。终态轮次（运行结束时仍在进行的那一轮，
+        # 由 complete_no_tool_turn 落 session tree assistant entry）是正文的唯一来源；
+        # 前面的轮次 content 已在执行层置空，这里取最后一条非空 part 即为终态轮。
         all_texts = list(pending_assistant_text_parts)
         content = ""
         for part in reversed(all_texts):
@@ -494,16 +493,6 @@ def _build_display_messages(
             continue
 
         if entry.role == "user":
-            # 仅历史会话：旧版本把 HITL 答案落成独立 user entry。新会话不再
-            # 产生该形态；读取时仍抑制为气泡，避免旧会话出现重复用户消息。
-            _legacy_meta = getattr(entry, "metadata", None)
-            if (
-                isinstance(_legacy_meta, dict)
-                and _legacy_meta.get("kind") == "clarification_answer"
-            ):
-                flush_assistant()
-                last_user_ts_ms = _iso_to_ms(entry.timestamp)
-                continue
             flush_assistant()
             last_user_ts_ms = _iso_to_ms(entry.timestamp)
             out.append(

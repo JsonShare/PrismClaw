@@ -1,0 +1,20 @@
+# This file is a Chinese translation of the original by Anthropic PBC.
+# Original: https://github.com/anthropics/legal-chineselaw
+# Licensed under Apache License 2.0
+
+# 差距追踪器
+# 由 policy-diff 交接填充。追踪未结政策差距，直至关闭或接受风险。
+
+gaps: []
+
+# 示例：
+# - id: GAP-001
+#   requirement: "须在流程 Y 时间点披露 X"
+#   regulation: "州隐私法 § 4.2"
+#   policy_affected: "隐私政策 v3.1"
+#   gap_type: "partial"
+#   owner: "privacy-legal@company.com"
+#   opened: 2026-03-01
+#   due: 2026-06-01
+#   status: "open"
+#   resolution: ""

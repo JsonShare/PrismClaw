@@ -17,6 +17,8 @@ import { useEffect, useRef, useState } from 'react'
 import ThemeToggle from '../../components/ui/ThemeToggle'
 import { HairlineDivider } from '../../components/ui/HairlineDivider'
 import { SidebarNav } from '../../components/sidebar/SidebarNav'
+import { WorkbenchSwitcher } from '../../components/sidebar/WorkbenchSwitcher'
+import PromptModal from '../../components/modals/PromptModal'
 import type { Conversation, Theme } from '../../types'
 import type { AppSection } from '../../stores/ui'
 import iconHistory from '../../images/other_icon/history.png'
@@ -77,6 +79,8 @@ interface ChatSidebarProps {
 export function ChatSidebar(props: ChatSidebarProps) {
   // 会话项 ⋯ 操作菜单：同一时刻至多一个打开；外点 / Escape 关闭。
   const [menuConvId, setMenuConvId] = useState<string | null>(null)
+  // 会话重命名弹框：Electron 下 window.prompt 不可用，统一走应用内弹框。
+  const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null)
   const sessionMenuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (menuConvId === null) return
@@ -102,7 +106,17 @@ export function ChatSidebar(props: ChatSidebarProps) {
 
   return (
     <aside className={`shrink-0 app-sidebar app-sidebar flex flex-col h-full transition-[width] duration-300 ${props.sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-[240px]'}`}>
-      <div className="px-4 flex items-center shrink-0 h-6" />
+      {/* 品牌行：左右边界与下方菜单块对齐
+          左 22px = 菜单行 mx-3(10.5) + px-3(10.5) + 图标在 1.25rem 列内居中偏移(0.75)
+          右 10.5px（mx-3）= 菜单块右缘 */}
+      <div className="shrink-0 pl-[22px] pr-[10.5px] h-16 flex items-center justify-between gap-1">
+        <div className="flex items-center shrink-0 min-w-0">
+          <span className="brand-wordmark truncate text-[17px] font-bold text-[var(--c-text)]">
+            PrismWork
+          </span>
+        </div>
+        <WorkbenchSwitcher />
+      </div>
 
       <SidebarNav
         activeSection={props.activeSection}
@@ -130,7 +144,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                 props.setSessionSearchOpen(true)
                 props.setSessionSearchQuery('')
               }}
-              className="h-8 w-8 rounded-[var(--radius-control)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer grid place-items-center"
+              className="h-8 w-8 rounded-[var(--radius-control)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer grid place-items-center"
               title="搜索任务"
               aria-label="搜索任务"
             >
@@ -140,7 +154,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
               <button
                 type="button"
                 onClick={() => props.setHistorySortOpen((v) => !v)}
-                className={`h-8 w-8 rounded-[var(--radius-control)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer grid place-items-center ${props.historySortOpen ? 'bg-[var(--c-bg)]' : ''}`}
+                className={`h-8 w-8 rounded-[var(--radius-control)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer grid place-items-center ${props.historySortOpen ? 'bg-[var(--c-bg)]' : ''}`}
                 title="分组与排序"
                 aria-label="分组与排序"
                 aria-expanded={props.historySortOpen}
@@ -160,7 +174,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                           key={opt.key}
                           type="button"
                           onClick={() => props.setHistoryGroupBy(opt.key as 'workspace' | 'time')}
-                          className="w-full flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                          className="w-full flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                         >
                           <span>{opt.label}</span>
                           {props.historyGroupBy === opt.key && <Check size={14} className="text-[var(--c-accent)]" />}
@@ -180,7 +194,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                           key={opt.key}
                           type="button"
                           onClick={() => props.setHistorySortBy(opt.key as 'updatedAt' | 'name')}
-                          className="w-full flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                          className="w-full flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                         >
                           <span>{opt.label}</span>
                           {props.historySortBy === opt.key && <Check size={14} className="text-[var(--c-accent)]" />}
@@ -195,13 +209,13 @@ export function ChatSidebar(props: ChatSidebarProps) {
                       {[
                         { key: 'all', label: '全部任务' },
                         { key: 'manual', label: '手动任务' },
-                        { key: 'scheduled', label: '自动化任务' },
+                        { key: 'scheduled', label: '定时任务' },
                       ].map((opt) => (
                         <button
                           key={opt.key}
                           type="button"
                           onClick={() => props.setHistoryFilter(opt.key as 'all' | 'manual' | 'scheduled')}
-                          className="w-full flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                          className="w-full flex items-center justify-between rounded-[var(--radius-control)] px-2 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                         >
                           <span>{opt.label}</span>
                           {props.historyFilter === opt.key && <Check size={14} className="text-[var(--c-accent)]" />}
@@ -274,7 +288,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                       <button
                         type="button"
                         onClick={() => props.onNewSessionInWorkspace(group.id)}
-                        className="shrink-0 h-6 w-6 grid place-items-center rounded-[var(--radius-control)] text-[var(--c-text-secondary)] hover:text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                        className="shrink-0 h-6 w-6 grid place-items-center rounded-[var(--radius-control)] text-[var(--c-text-secondary)] hover:text-[var(--c-text)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                         title={`在「${group.label}」新建任务`}
                         aria-label={`在「${group.label}」新建任务`}
                       >
@@ -370,11 +384,9 @@ export function ChatSidebar(props: ChatSidebarProps) {
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         setMenuConvId(null)
-                                        const next = window.prompt('重命名会话', c.title)
-                                        if (next === null) return
-                                        props.onRenameSession(c.id, next.trim() || c.title)
+                                        setRenaming({ id: c.id, title: c.title })
                                       }}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-text)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                                     >
                                       <Pencil size={13} className="text-[var(--c-text-secondary)]" />
                                       重命名
@@ -387,7 +399,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                                         setMenuConvId(null)
                                         props.onDeleteSession(c.id)
                                       }}
-                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-danger)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[length:var(--fs-sm)] text-[var(--c-danger)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                                     >
                                       <Trash2 size={13} />
                                       删除
@@ -402,7 +414,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                         <button
                           type="button"
                           onClick={expandMore}
-                          className="w-[calc(100%-24px)] mx-3 flex items-center gap-1 px-3 py-1.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] text-left text-[var(--c-text-tertiary)] hover:text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                          className="w-[calc(100%-24px)] mx-3 flex items-center gap-1 px-3 py-1.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] text-left text-[var(--c-text-tertiary)] hover:text-[var(--c-text-secondary)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                         >
                           <ChevronDown size={12} />
                           查看更多（{hiddenCount}）
@@ -412,7 +424,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                         <button
                           type="button"
                           onClick={collapseList}
-                          className="w-[calc(100%-24px)] mx-3 flex items-center gap-1 px-3 py-1.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] text-left text-[var(--c-text-tertiary)] hover:text-[var(--c-text-secondary)] hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                          className="w-[calc(100%-24px)] mx-3 flex items-center gap-1 px-3 py-1.5 rounded-[var(--radius-control)] text-[length:var(--fs-sm)] text-left text-[var(--c-text-tertiary)] hover:text-[var(--c-text-secondary)] hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                         >
                           <ChevronUp size={12} />
                           收起
@@ -431,9 +443,9 @@ export function ChatSidebar(props: ChatSidebarProps) {
 
 
       <div className="mt-auto">
-        <HairlineDivider className="mx-3 mb-0.5" />
+        <HairlineDivider className="mx-3 mt-2 mb-2" />
 
-        <div className="px-3 pt-1 pb-2 relative">
+        <div className="px-3 pt-1.5 pb-2 relative">
           {props.userMenuOpen && (
             <div
               ref={props.userMenuRef}
@@ -446,7 +458,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                     props.setUserMenuOpen(false)
                     props.setSettingsPageOpen(true)
                   }}
-                  className="w-full px-2.5 py-1.5 flex items-center gap-2.5 rounded-[var(--radius-md)] text-left hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                  className="w-full px-2.5 py-1.5 flex items-center gap-2.5 rounded-[var(--radius-md)] text-left hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                 >
                   <Settings size={14} className="shrink-0 text-[var(--c-text-secondary)]" />
                   <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-text)]">设置</span>
@@ -454,7 +466,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
 
                 <button
                   type="button"
-                  className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2.5 rounded-[var(--radius-md)] text-left hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                  className="w-full px-2.5 py-1.5 flex items-center justify-between gap-2.5 rounded-[var(--radius-md)] text-left hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                 >
                   <span className="flex items-center gap-2.5">
                     <Monitor size={14} className="shrink-0 text-[var(--c-text-secondary)]" />
@@ -473,7 +485,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
                     props.setUserMenuOpen(false)
                     props.logout()
                   }}
-                  className="w-full px-2.5 py-1.5 flex items-center gap-2.5 rounded-[var(--radius-md)] text-left hover:bg-[var(--c-surface-3)] transition-colors cursor-pointer"
+                  className="w-full px-2.5 py-1.5 flex items-center gap-2.5 rounded-[var(--radius-md)] text-left hover:bg-[var(--c-hover-bg)] transition-colors cursor-pointer"
                 >
                   <LogOut size={14} className="shrink-0 text-[var(--c-error)]" />
                   <span className="text-[length:var(--fs-sm)] font-medium text-[var(--c-error)]">退出登录</span>
@@ -487,7 +499,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
             type="button"
             onClick={() => props.setUserMenuOpen((v) => !v)}
             className={`w-full flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-1 transition-colors cursor-pointer ${
-              props.userMenuOpen ? 'bg-[var(--c-surface-3)]' : 'hover:bg-[var(--c-surface-3)]'
+              props.userMenuOpen ? 'bg-[var(--c-select-bg)]' : 'hover:bg-[var(--c-hover-bg)]'
             }`}
           >
             <div className="w-6 h-6 rounded-full grid place-items-center text-[length:var(--fs-xs)] font-semibold bg-[var(--c-accent)]/10 text-[var(--c-accent)] ring-1 ring-[var(--c-accent)]/25">
@@ -503,6 +515,21 @@ export function ChatSidebar(props: ChatSidebarProps) {
           </button>
         </div>
       </div>
+
+      <PromptModal
+        open={renaming !== null}
+        title="重命名会话"
+        label="会话名称"
+        placeholder="请输入会话名称..."
+        initialValue={renaming?.title ?? ''}
+        maxLength={60}
+        confirmLabel="保存"
+        onConfirm={(value) => {
+          if (renaming) props.onRenameSession(renaming.id, value)
+          setRenaming(null)
+        }}
+        onCancel={() => setRenaming(null)}
+      />
     </aside>
   )
 }

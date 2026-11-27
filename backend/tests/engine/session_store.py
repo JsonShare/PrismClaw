@@ -1,18 +1,32 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from types import TracebackType
+from typing import Any, cast
+
+import redis.asyncio as aioredis
 
 from prismclaw.persistence.session.base import serialize_entry
 from prismclaw.persistence.session.redis import RedisSessionStore
+from prismclaw.schema.session.types import SessionTree
 
 
 class _FakeLockManager:
-    async def acquire(self, _key: str, *, ttl_ms: int) -> str:
-        _ = ttl_ms
+    async def acquire(
+        self, _key: str, ttl_ms: int = 30_000, *, owner: str = ""
+    ) -> str:
+        _ = ttl_ms, owner
         return "token"
 
-    async def release(self, _key: str, _token: str) -> None:
-        return
+    async def release(self, _key: str, _token: str) -> bool:
+        return True
+
+    async def renew(self, _key: str, _token: str, ttl_ms: int = 30_000) -> bool:
+        _ = ttl_ms
+        return True
+
+    async def owner_of(self, _key: str) -> str | None:
+        return None
 
 
 class _FakePipeline:
@@ -23,11 +37,16 @@ class _FakePipeline:
     async def __aenter__(self) -> _FakePipeline:
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self._ops.clear()
 
-    def __getattr__(self, name: str):
-        def _enqueue(*args, **kwargs):
+    def __getattr__(self, name: str) -> Callable[..., _FakePipeline]:
+        def _enqueue(*args: object, **kwargs: object) -> _FakePipeline:
             self._ops.append((name, args, kwargs))
             return self
 
@@ -53,12 +72,12 @@ class _FakeRedisClient:
         _ = transaction
         return _FakePipeline(self)
 
-    async def set(self, key: str, value: Any, ex: int | None = None) -> bool:
+    async def set(self, key: str, value: str | int, ex: int | None = None) -> bool:
         _ = ex
         self._kv[key] = value
         return True
 
-    async def get(self, key: str) -> Any:
+    async def get(self, key: str) -> str | int | None:
         return self._kv.get(key)
 
     async def incr(self, key: str, amount: int = 1) -> int:
@@ -77,7 +96,7 @@ class _FakeRedisClient:
         self,
         key: str,
         field: str | None = None,
-        value: Any = None,
+        value: str | int | None = None,
         *,
         mapping: dict[str, Any] | None = None,
     ) -> int:
@@ -85,8 +104,25 @@ class _FakeRedisClient:
         if mapping is not None:
             bucket.update(mapping)
             return len(mapping)
+        assert field is not None
         bucket[field] = value
         return 1
+
+    async def hsetnx(self, key: str, field: str, value: object) -> int:
+        bucket = self._hashes.setdefault(key, {})
+        if field in bucket:
+            return 0
+        bucket[field] = value
+        return 1
+
+    async def hget(self, key: str, field: str) -> object | None:
+        return self._hashes.get(key, {}).get(field)
+
+    async def hdel(self, key: str, field: str) -> int:
+        bucket = self._hashes.get(key, {})
+        existed = field in bucket
+        bucket.pop(field, None)
+        return int(existed)
 
     async def hvals(self, key: str) -> list[Any]:
         return list(self._hashes.get(key, {}).values())
@@ -97,7 +133,7 @@ class _FakeRedisClient:
             end = len(values) - 1
         return list(values[start : end + 1])
 
-    async def rpush(self, key: str, value: Any) -> int:
+    async def rpush(self, key: str, value: str) -> int:
         bucket = self._lists.setdefault(key, [])
         bucket.append(value)
         return len(bucket)
@@ -144,10 +180,13 @@ class _FakeRedisClient:
 class FakeRedisSessionStore(RedisSessionStore):
     def __init__(self) -> None:
         super().__init__(
-            _FakeRedisClient(), _FakeLockManager(), ttl_seconds=604_800, key_prefix="test:"
+            cast(aioredis.Redis, _FakeRedisClient()),
+            _FakeLockManager(),
+            ttl_seconds=604_800,
+            key_prefix="test:",
         )
 
-    async def save_header(self, tree) -> None:
+    async def save_header(self, tree: SessionTree) -> None:
         await super().save_header(tree)
         entries_key = self._entries_key(tree.header.id)
         order_key = self._order_key(tree.header.id)

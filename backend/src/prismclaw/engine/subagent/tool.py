@@ -24,7 +24,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
+from prismclaw.engine.experts.scope import RejectedScope
 from prismclaw.engine.security.gate.types import (
     ParallelTaskExtras,
     TaskRuntimeContext,
@@ -42,6 +43,8 @@ from prismclaw.engine.subagent.runtime.collaboration import (
     SubagentSpawnOutcome,
 )
 from prismclaw.engine.subagent.runtime.records import AgentLifecycle
+from prismclaw.engine.subagent.team_guard import TeamGuardError, guard_dispatch
+from prismclaw.engine.subagent.team_registry import TeamErrorCode, get_team_registry
 from prismclaw.engine.toolkit.registry.tool_runtime import ToolContext, error_result
 from prismclaw.schema.config.config import SubAgentConfig
 from prismclaw.schema.content.content_types import SubagentResultItem, TextBlock, ToolResult
@@ -58,7 +61,7 @@ def _coerce_lifecycle(value: object) -> AgentLifecycle:
 
 
 # Agent item schema（静态：不再动态注入 agent_name enum）。
-# 插件子代理名由 subagent_search 逐级披露；未知名由 execute 的校验给出最近邻提示。
+# 专家包子代理名由 subagent_search 逐级披露；未知名由 execute 的校验给出最近邻提示。
 # Each item supports optional model override for multi-LLM parallel scenarios.
 _AGENT_ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -165,7 +168,7 @@ class SubAgentTool:
         executor: SubAgentExecutor,
         registry: SubAgentRegistry,
         settings: SubAgentConfig,
-        capability_catalog: CapabilityCatalogService,
+        capability_catalog: RuntimeCatalog,
         audit_logger: logging.Logger | None = None,
         allow_background: bool = True,
         collaboration: SubagentCollaborationService | None = None,
@@ -179,7 +182,7 @@ class SubAgentTool:
         self._allow_background = allow_background
         self._collaboration = collaboration
         self._allow_persistent_background = allow_persistent_background
-        # 静态 schema：插件子代理名不再注入 enum —— 发现面是 subagent_search，
+        # 静态 schema：专家包子代理名不再注入 enum —— 发现面是 subagent_search，
         # 未知名由 execute 的校验给出最近邻提示，避免每轮请求携带全量名单。
         self.parameters = copy.deepcopy(_PARAMETERS_TEMPLATE)
         if not allow_background and not (collaboration is not None and allow_persistent_background):
@@ -196,7 +199,7 @@ class SubAgentTool:
         return self._settings
 
     @property
-    def capability_catalog(self) -> CapabilityCatalogService:
+    def capability_catalog(self) -> RuntimeCatalog:
         return self._capability_catalog
 
     def resolve_dispatch_timeout_seconds(self, args: dict[str, Any]) -> float:
@@ -218,6 +221,30 @@ class SubAgentTool:
 
     async def execute(self, args: dict[str, Any], context: ToolContext) -> ToolResult:
         call_id = args.get("_call_id", "")
+
+        scope = context.session_scope
+        # 父会话的专家被拒（未部署 / 策略禁用）时不允许派生：子代理有独立
+        # run_loop 入口，若不在此拒绝，RejectedScope 的不变量只在主循环成立。
+        if isinstance(scope, RejectedScope):
+            return error_result(
+                call_id,
+                f"sub_agent：当前会话的专家不可用（{scope.code.value}），已拒绝派发子代理。",
+            )
+        team_name = scope.team_name if scope is not None else None
+        if team_name and scope is not None and scope.member:
+            raw_agents = args.get("agents")
+            first_agent = raw_agents[0] if isinstance(raw_agents, list) and raw_agents else {}
+            agent_name = (
+                first_agent.get("agent_name", "") if isinstance(first_agent, dict) else ""
+            )
+            error = TeamGuardError(
+                TeamErrorCode.TEAM_SPAWN_BY_MEMBER,
+                team_name=team_name,
+                agent_name=agent_name,
+                caller=context.subagent_name or "unknown",
+                reason="team members cannot dispatch other agents",
+            )
+            return error_result(call_id, f"sub_agent：{error}", metadata=error.metadata)
 
         if context.subagent_depth >= self._settings.max_depth:
             return error_result(
@@ -251,6 +278,9 @@ class SubAgentTool:
         catalog = self.capability_catalog
         resolved_configs = []
         errors = []
+        team_errors: list[TeamGuardError] = []
+        team_name = context.session_scope.team_name if context.session_scope is not None else None
+        team_registry = get_team_registry(context) if team_name else None
         for i, agent_cfg in enumerate(agents_config):
             if not isinstance(agent_cfg, dict):
                 errors.append(f"agents[{i}]：必须是对象")
@@ -273,24 +303,42 @@ class SubAgentTool:
                 errors.append(f"agents[{i}]：persistent 生命周期需要协作运行时")
                 continue
             entry = catalog.get_agent_entry(agent_name)
-            if entry is None:
+            if team_name:
+                lead_agent = scope.lead_agent if scope is not None else None
+                is_member = scope.member if scope is not None else False
+                try:
+                    await guard_dispatch(
+                        context.subagent_name or lead_agent or "",
+                        agent_name,
+                        team_name,
+                        registry=team_registry,
+                        lead_agent=lead_agent or "",
+                        entry=entry,
+                        is_member=is_member,
+                    )
+                except TeamGuardError as exc:
+                    team_errors.append(exc)
+                    errors.append(f"agents[{i}]：{exc}")
+                    continue
+            elif entry is None:
                 all_entries = catalog.list_agent_entries()
                 registered_names = {e.name for e in all_entries}
                 suggestion = _closest_match(agent_name, registered_names, max_dist=2)
                 hint = f"（是否想用 '{suggestion}'？）" if suggestion else ""
                 errors.append(f"agents[{i}]：未找到子代理 '{agent_name}'{hint}")
                 continue
-            # 插件作用域门控：目录过滤只影响「模型看到什么」，
+            # 工具归属门控：目录过滤只影响「模型看到什么」，
             # 模型仍可能从历史消息中获知 agent 名直接派发，故派发处二次校验。
-            _owner = entry.plugin_name
+            assert entry is not None
+            _owner = entry.expert_name
             if (
                 _owner is not None
-                and context.tool_scope is not None
-                and _owner not in context.tool_scope
+                and scope is not None
+                and _owner not in scope.tool_owners
             ):
                 errors.append(
                     f"agents[{i}]：agent_scope_denied:{_owner}"
-                    f"（该子代理属于插件「{_owner}」，请先 @ 该插件）"
+                    f"（该子代理属于未启用的专家包「{_owner}」）"
                 )
                 continue
             resolved_configs.append(
@@ -315,9 +363,15 @@ class SubAgentTool:
                 errors.append("persistent 后台派发在当前部署下不可用")
 
         if errors:
+            metadata: dict[str, Any] | None = None
+            if team_errors:
+                metadata = dict(team_errors[0].metadata)
+                if len(team_errors) > 1:
+                    metadata["errors"] = [error.metadata for error in team_errors]
             return error_result(
                 call_id,
                 "sub_agent：参数校验失败：\n" + "\n".join(f"  - {e}" for e in errors),
+                metadata=metadata,
             )
 
         context.subagent_catalog = catalog
@@ -369,9 +423,16 @@ class SubAgentTool:
             context.task_runtime = parent_extras
 
         # hook_dispatcher 是运行时引用（Any 字段，deepcopy 自动排除），
-        # 按引用回填——子代理内部的 MCP 工具调用也要经过插件 PostToolUse 钩子
+        # 按引用回填——子代理内部的 MCP 工具调用也要经过专家包 PostToolUse 钩子
         # （POST_TOOL 派发点已下沉到 execute_tool_calls 公共汇聚层）。
         child_context.hook_dispatcher = context.hook_dispatcher
+        _parent_scope = context.session_scope
+        if _parent_scope is not None and _parent_scope.team_name:
+            # 人格仍取自该成员的 catalog manifest；团队身份只绑定本次 spawn。
+            # 父作用域存在时收窄为成员面（member=True）；为 None 表示无作用域上下文，
+            # 保持 None 语义＝不做限制，不凭空创建作用域。
+            child_context.session_scope = _parent_scope.with_member()
+            child_context.team_registry = context.team_registry
 
         if background:
             # 后台任务不在父 run 的调用栈内：共享父级 abort，使用户中止整轮时
@@ -391,13 +452,7 @@ class SubAgentTool:
             parallel_task_id=parent_task_ctx.parallel_task_id,
             managed_task_id=parent_task_ctx.managed_task_id,
             is_fork=child_is_fork,
-            handoff_chain_id=parent_task_ctx.handoff_chain_id,
-            handoff_hop_index=parent_task_ctx.handoff_hop_index,
-            effective_hop_index=parent_task_ctx.effective_hop_index,
             progress_batch_id=parent_task_ctx.progress_batch_id,
-            source_skill_origin=parent_task_ctx.source_skill_origin,
-            source_preload_skills=parent_task_ctx.source_preload_skills,
-            merged_from_chains=parent_task_ctx.merged_from_chains,
         )
         child_context.task_runtime = ParallelTaskExtras(
             task_runtime=child_task_ctx,
@@ -967,26 +1022,6 @@ class SubAgentTool:
             batch_id = context.progress_batch_id
             if batch_id is not None:
                 payload["progress_batch_id"] = batch_id
-            task_ctx = context.task_runtime_ctx
-            if task_ctx.handoff_chain_id is not None:
-                payload["handoff_chain_id"] = task_ctx.handoff_chain_id
-            if task_ctx.handoff_hop_index is not None:
-                payload["handoff_hop_index"] = task_ctx.handoff_hop_index
-            if task_ctx.effective_hop_index is not None:
-                payload["effective_hop_index"] = task_ctx.effective_hop_index
-            if task_ctx.merged_from_chains:
-                payload["merged_from_chains"] = task_ctx.merged_from_chains
-            dispatch_extras = context.pending_handoff_dispatch_extras
-            if dispatch_extras:
-                source_skill_origin = dispatch_extras.get("pending_handoff_source_skill_origin")
-                if source_skill_origin is not None:
-                    payload["source_skill_origin"] = source_skill_origin
-                source_preload_skills = dispatch_extras.get("pending_handoff_source_preload_skills")
-                if source_preload_skills is not None:
-                    payload["source_preload_skills"] = source_preload_skills
-                source_is_fork = dispatch_extras.get("pending_handoff_source_is_fork")
-                if source_is_fork is not None:
-                    payload["source_is_fork"] = source_is_fork
             if context.user_id is not None:
                 payload["user_id"] = context.user_id
             if error_message is not None:

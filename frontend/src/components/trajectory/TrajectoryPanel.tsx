@@ -7,7 +7,8 @@
  * 匹配的 RequestAuditRecord 显示 4 层调用快照。
  */
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { RefreshCw, BarChart3, Eye } from 'lucide-react'
+import { BarChart3, Eye } from 'lucide-react'
+import { RefreshIcon } from '../icons/SystemIcons'
 import { ModalShell } from '../modals/ModalShell'
 import { TrajectoryToolbar } from './TrajectoryToolbar'
 import { TrajectoryTimeline } from './TrajectoryTimeline'
@@ -249,7 +250,7 @@ export function TrajectoryPanel({
           title="刷新数据"
           aria-label="刷新"
         >
-          <RefreshCw size={14} className={(loading || cellsLoading) ? 'animate-spin' : ''} />
+          <RefreshIcon size={14} className={(loading || cellsLoading) ? 'animate-spin' : ''} />
         </button>
       }
     >
@@ -408,7 +409,7 @@ export function TrajectoryPanel({
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--c-surface)]/50">
           <div className="text-[length:var(--fs-sm)] text-[var(--c-text-secondary)] flex items-center gap-2">
-            <RefreshCw size={14} className="animate-spin" />
+            <RefreshIcon size={14} className="animate-spin" />
             加载中...
           </div>
         </div>

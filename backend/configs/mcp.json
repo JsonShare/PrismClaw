@@ -1,0 +1,15 @@
+{
+  "connectors": {
+    "web-search-mcp": {
+      "enabled": true,
+      "transport": "stdio",
+      "command": "uv",
+      "args": ["run", "--directory", "mcp_servers/web-search-mcp", "python", "-m", "web_search_mcp"],
+      "trust_annotations": true,
+      "deferred": false,
+      "connect_timeout_seconds": 30.0,
+      "call_timeout_seconds": 60.0,
+      "sandbox": { "enabled": false }
+    }
+  }
+}

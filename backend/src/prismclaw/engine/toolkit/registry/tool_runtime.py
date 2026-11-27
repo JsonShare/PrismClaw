@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from prismclaw.engine.hooks import HookRegistry
 from prismclaw.engine.security.gate.types import ParallelTaskExtras, TaskRuntimeContext
@@ -25,6 +25,9 @@ from prismclaw.schema.content.content_types import (
 from prismclaw.schema.content.workspace import SandboxTier
 from prismclaw.schema.services.env_types import ExecutionEnv
 
+if TYPE_CHECKING:
+    from prismclaw.engine.experts.scope import Scope
+
 
 @dataclass(frozen=True)
 class GoalBlockIntent:
@@ -44,6 +47,7 @@ class ToolContext:
     workspace_path: Path
     workspace_root: str = ""  # per-user 工作区根路径（BwrapPolicy 用于沙箱隔离）
     session_id: str = ""
+    expert_id: str | None = None
     sandbox_policy: SandboxPolicy | None = None
     abort: asyncio.Event = field(default_factory=asyncio.Event)
     user_id: str | None = None
@@ -56,19 +60,20 @@ class ToolContext:
     task_spec: TaskSpec | None = None
     system_prompt_sections: Any = None
     invoked_skill_state: Any = None
-    handoff_request_seen: bool = False
-    pending_handoff: Any = None
     should_break_after_results: bool = False
     # 任务阻塞申报意图（declare_blocked 写入、下一次 no-tool 回合消费）。
     # 运行级信号：子 agent 有独立循环与独立裁决，不继承父级意图。
     goal_block_intent: GoalBlockIntent | None = None
     error_fatigue_tracker: dict[str, int] = field(default_factory=dict)
-    pending_handoff_dispatch_extras: dict[str, Any] = field(default_factory=dict)
     progress_batch_id: str | None = None
     subagent_progress_emitter: Any = None
     hook_registry: HookRegistry | None = None
-    hook_dispatcher: Any = None  # 插件声明式钩子分发器；deepcopy 时排除，由 sub_agent 回填
+    hook_dispatcher: Any = None  # 专家包声明式钩子分发器；deepcopy 时排除，由 sub_agent 回填
     capability_catalog: Any = None
+    # 会话级能力作用域：专家包、能力包、人格来源、工具面、工具归属的唯一装配结果。
+    # None = 无作用域上下文（headless/测试/装配未就绪），表示不做任何作用域限制。
+    session_scope: Scope | None = None
+    team_registry: Any = None
     total_output_tokens: int = 0
     total_cache_creation_tokens: int = 0
 
@@ -91,10 +96,6 @@ class ToolContext:
     turn_state: Any = None
     active_skill_name: str | None = None
     invoked_skill_names: list[str] = field(default_factory=list)
-    # 本轮激活的插件集合（frozenset[str]）——插件作用域门控的唯一依据。
-    # None = 无插件上下文（headless/测试/装配未就绪），不做任何作用域限制。
-    # 子代理通过 deepcopy 继承（收窄不放大），因此必须是可 copy 的纯数据。
-    tool_scope: frozenset[str] | None = None
     decision_ledger_tail: list[Any] = field(default_factory=list)
     headless: bool = False
     parent_session_id: str | None = None
@@ -141,6 +142,7 @@ class ToolContext:
             "subagent_catalog",
             "subagent_manifest",
             "goal_block_intent",
+            "team_registry",
         }
     )
 

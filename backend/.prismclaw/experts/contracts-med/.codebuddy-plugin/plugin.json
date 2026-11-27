@@ -1,0 +1,65 @@
+{
+  "name": "contracts-med",
+  "version": "1.0.0",
+  "description": "Answers questions on medical and vendor agreements with clause-by-clause interpretation and source citations.",
+  "author": {
+    "name": "WorkBuddy Expert Conversion"
+  },
+  "agents": [
+    "./agents/contracts-med.md"
+  ],
+  "skills": [
+    "./skills/contracts",
+    "./skills/contracts-med-playbook"
+  ],
+  "expertType": "agent",
+  "agentName": "contracts-med",
+  "displayName": {
+    "en": "Medical Contracts Expert",
+    "zh": "医疗合同专家"
+  },
+  "profession": {
+    "zh": "供应商合同与临床协议",
+    "en": "Vendor & Clinical Agreements"
+  },
+  "displayDescription": {
+    "zh": "对医疗与采购协议做问答式分析，逐条给出带原文引用的解读与风险提示。",
+    "en": "Answers questions on medical and vendor agreements with clause-by-clause interpretation and source citations."
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "11-SecurityCompliance",
+  "defaultInitPrompt": {
+    "zh": "这份医疗合同的关键条款有哪些？逐条标注原文位置。",
+    "en": "What are the key clauses in this medical contract? Cite the source for each."
+  },
+  "plugin": "contracts-med",
+  "tags": [
+    {
+      "zh": "合同问答",
+      "en": "Contract Q&A"
+    },
+    {
+      "zh": "溯源引用",
+      "en": "Source Citation"
+    },
+    {
+      "zh": "批量扫描",
+      "en": "Batch Scan"
+    }
+  ],
+  "quickPrompts": [
+    {
+      "zh": "这份医疗合同的关键条款有哪些？逐条标注原文位置。",
+      "en": "What are the key clauses in this medical contract? Cite the source for each."
+    },
+    {
+      "zh": "批量扫描这几份采购合同，列出异常条款。",
+      "en": "Scan these vendor agreements and list unusual clauses."
+    },
+    {
+      "zh": "解释这条责任限制条款，并提示需确认的问题。",
+      "en": "Explain this liability limitation clause and flag open questions."
+    }
+  ],
+  "license": "Apache-2.0"
+}

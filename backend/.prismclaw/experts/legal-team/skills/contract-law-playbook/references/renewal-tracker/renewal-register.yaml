@@ -1,0 +1,29 @@
+# This file is a Chinese translation of the original by Anthropic PBC.
+# Original: https://github.com/anthropics/legal-chineselaw
+# Licensed under Apache License 2.0
+
+# 续约登记册
+#
+# 由 saas-msa-review（交接）和 renewal-tracker 模式 3（[CLM] 扫描）填充。
+# 每条记录追踪合同何时续约以及最晚何时必须取消。
+#
+# renewal-watcher agent 每周读取此文件并发布即将到来的续约信息。
+
+renewals: []
+
+# 示例条目（有真实数据后请删除）：
+#
+# - counterparty: "Acme SaaS Inc."
+#   agreement: "Acme 平台订阅协议"
+#   signed_date: 2025-06-15
+#   initial_term_end: 2026-06-15
+#   renewal_mechanism: "自动续约（年度）"
+#   notice_period_days: 60
+#   cancel_by: 2026-04-16
+#   price_on_renewal: "届时现行定价（无上限）"
+#   annual_value: 48000
+#   business_owner: "jane@company.com"
+#   clm_id: "IC-12345"
+#   docusign_envelope: "abc-123"
+#   status: "active"
+#   notes: "定价无上限——续约前须重新评估"

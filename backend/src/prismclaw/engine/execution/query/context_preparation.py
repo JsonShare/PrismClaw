@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -8,10 +10,11 @@ if TYPE_CHECKING:
     from prismclaw.engine.execution.loop.deps import AgentRunnerDeps
     from prismclaw.engine.execution.loop.runner import RunRequest
     from prismclaw.schema.agent.context import BootstrapContextProvider
+    from prismclaw.schema.agent.session import SessionHeader
     from prismclaw.schema.session import SessionTree
 
 from prismclaw.engine.compression.context_zones import zone_of
-from prismclaw.engine.execution.capabilities.catalog import CapabilityCatalogService
+from prismclaw.engine.execution.capabilities.catalog import RuntimeCatalog
 
 # --- extracted sub-modules ---
 from prismclaw.engine.execution.query._catalog_builder import (
@@ -30,17 +33,28 @@ from prismclaw.engine.execution.query._static_context_types import (
     _subagent_catalog_fingerprint,
 )
 from prismclaw.engine.execution.query._turn_helpers import _require_capability_catalog
-from prismclaw.engine.execution.request.model_fallback import resolve_model_max_output
+from prismclaw.engine.execution.request.model_fallback import (
+    UnknownModelError,
+    get_model_spec,
+    resolve_model_max_output,
+)
 from prismclaw.engine.execution.request.system_prompt import (
     PromptInputs,
     build_frozen_prefix,
+    build_frozen_prompt_sections,
     build_identity_text,
     build_preferences_text,
 )
+from prismclaw.engine.experts import prompt_slot
+from prismclaw.engine.experts.codes import ExpertErrorCode
+from prismclaw.engine.experts.prompt_slot import ExpertPromptSlotCollector
+from prismclaw.engine.experts.scope import ActiveScope, RejectedScope, Scope
 from prismclaw.engine.foundation.telemetry.hotpath import HotPathTelemetry
 from prismclaw.engine.security.gate.governance import runtime_notes_for
+from prismclaw.engine.subagent.definition.parser import parse_agent_md
 from prismclaw.schema.services.skills import SkillInvocationState
 from prismclaw.schema.session.types import now_iso
+from prismclaw.schema.shared.utils import estimate_tokens
 
 logger = logging.getLogger(__name__)
 _HOTPATH = HotPathTelemetry()
@@ -57,6 +71,7 @@ async def build_static_context_for_runner(
     discovered_tools: set[str] | None = None,
     subagent_depth: int = 0,
     visible_tool_names: set[str],
+    session_scope: Scope | None,
 ) -> StaticContextResult:
     builder = StaticContextBuilder()
     return await builder.build(
@@ -69,6 +84,7 @@ async def build_static_context_for_runner(
         discovered_tools=discovered_tools,
         subagent_depth=subagent_depth,
         visible_tool_names=visible_tool_names,
+        session_scope=session_scope,
     )
 
 
@@ -82,6 +98,7 @@ class StaticContextBuilder:
         tool_workspace_path: str | None,
         effective_model: str,
         visible_tool_names: set[str],
+        session_scope: Scope | None,
         skill_invocation: SkillInvocationState | None = None,
         discovered_tools: set[str] | None = None,
         subagent_depth: int = 0,
@@ -91,6 +108,21 @@ class StaticContextBuilder:
         try:
             capability_catalog = _require_capability_catalog(deps)
             shell_cache = _resolve_static_shell_cache(deps)
+            session = getattr(tree, "header", None)
+            expert_persona = ""
+            expert_id = ""
+            if session is not None:
+
+                async def resolve_expert_prompt(**_kwargs: object) -> str | None:
+                    return await self._read_expert_agent_markdown(session_scope)
+
+                expert_persona = await ExpertPromptSlotCollector(resolve_expert_prompt).collect(
+                    session
+                )
+                expert_id = session.expert_id or ""
+            expert_persona_digest = (
+                hashlib.sha256(expert_persona.encode("utf-8")).hexdigest() if expert_persona else ""
+            )
             cache_key = _shell_cache_key(
                 request=request,
                 tool_workspace_path=tool_workspace_path,
@@ -102,6 +134,8 @@ class StaticContextBuilder:
                 visible_tool_names=visible_tool_names,
                 skill_catalog_fingerprint=_skill_catalog_fingerprint(capability_catalog),
                 subagent_catalog_fingerprint=_subagent_catalog_fingerprint(capability_catalog),
+                expert_id=expert_id,
+                expert_persona_digest=expert_persona_digest,
             )
             shell_snapshot = shell_cache.get(cache_key)
             if shell_snapshot is None:
@@ -113,14 +147,36 @@ class StaticContextBuilder:
                     effective_model=effective_model,
                     subagent_depth=subagent_depth,
                     visible_tool_names=visible_tool_names,
+                    expert_persona=expert_persona,
+                    session=session,
                 )
                 shell_cache.put(cache_key, shell_snapshot)
             else:
                 result = "reused"
+                budgeted_persona = self._apply_expert_persona_budget(
+                    expert_persona,
+                    fixed_prompt_tokens=shell_snapshot.fixed_prompt_tokens,
+                    effective_model=effective_model,
+                    session=session,
+                )
+                if budgeted_persona != shell_snapshot.expert_persona:
+                    shell_snapshot = await self._build_shell_snapshot(
+                        request=request,
+                        deps=deps,
+                        capability_catalog=capability_catalog,
+                        tool_workspace_path=tool_workspace_path,
+                        effective_model=effective_model,
+                        subagent_depth=subagent_depth,
+                        visible_tool_names=visible_tool_names,
+                        expert_persona=expert_persona,
+                        session=session,
+                    )
+                    shell_cache.put(cache_key, shell_snapshot)
+                    result = "built"
             task_spec = getattr(request, "task_spec", None)
             strategy_notes = list(runtime_notes_for(task_spec))
             tool_summaries = list(shell_snapshot.tool_summaries)
-            # 冻结前缀只索引项目技能名、插件包计数与核心子代理；插件内的
+            # 冻结前缀只索引项目技能名、专家包计数与核心子代理；专家包内的
             # 技能/子代理由 skill_search / subagent_search 按需披露。
             available_skills = shell_snapshot.available_skills
             prompt_inputs = PromptInputs(
@@ -129,15 +185,13 @@ class StaticContextBuilder:
                 agent_id=request.agent_id,
                 identity=build_identity_text(),
                 preferences=build_preferences_text(),
+                expert_persona=shell_snapshot.expert_persona,
                 tools=tool_summaries,
                 project_skill_names=available_skills,
                 marketplace_summaries=shell_snapshot.marketplace_summaries,
                 available_subagents=shell_snapshot.available_subagents,
                 workspace_path=shell_snapshot.workspace_path,
                 subagent_registry_size=shell_snapshot.subagent_registry_size,
-                handoff_enabled=shell_snapshot.handoff_enabled,
-                any_manifest_has_can_handoff_to=shell_snapshot.any_manifest_has_can_handoff_to,
-                max_handoff_chain_length=shell_snapshot.max_handoff_chain_length,
                 task_spec=task_spec,
                 active_skill_name=skill_invocation.skill_name if skill_invocation else None,
                 allowed_tools_override=tuple(skill_invocation.allowed_tools_override or [])
@@ -184,11 +238,13 @@ class StaticContextBuilder:
         *,
         request: RunRequest,
         deps: AgentRunnerDeps,
-        capability_catalog: CapabilityCatalogService,
+        capability_catalog: RuntimeCatalog,
         tool_workspace_path: str | None,
         effective_model: str,
         subagent_depth: int,
         visible_tool_names: set[str],
+        expert_persona: str = "",
+        session: SessionHeader | None = None,
     ) -> StaticTurnShellSnapshot:
         tool_summaries = tuple(
             _tool_prompt_summaries(
@@ -199,17 +255,10 @@ class StaticContextBuilder:
         )
         sub_agent_tool = deps.tools.get("sub_agent")
         subagent_registry_size = 0
-        handoff_enabled = False
-        any_manifest_has_can_handoff_to = False
-        max_handoff_chain_length = 5
-        if sub_agent_tool is not None and deps.handoff_supervisor is not None:
-            handoff_enabled = True
-            max_handoff_chain_length = deps.handoff_supervisor.max_chain_length
-            subagent_registry_size, any_manifest_has_can_handoff_to = _subagent_catalog_state(
-                capability_catalog
-            )
+        if sub_agent_tool is not None:
+            subagent_registry_size = _subagent_catalog_state(capability_catalog)
         workspace_path = str(tool_workspace_path) if tool_workspace_path else None
-        # 冻结前缀只放项目技能名、插件包计数与核心子代理；插件内能力由
+        # 冻结前缀只放项目技能名、专家包计数与核心子代理；专家包内能力由
         # skill_search / subagent_search 披露。排序确定性保证跨轮字节稳定。
         # 静态壳是 (workspace 事实, model) 的纯函数：能力索引恒定构建，
         # 不随复杂度裁剪（SDD R1 / D1）。
@@ -239,16 +288,28 @@ class StaticContextBuilder:
             agent_id=request.agent_id,
             identity=build_identity_text(),
             preferences=build_preferences_text(),
+            expert_persona="",
             tools=tool_summaries,
             project_skill_names=available_skills,
             marketplace_summaries=marketplace_summaries,
             available_subagents=available_subagents,
             workspace_path=workspace_path,
             subagent_registry_size=subagent_registry_size,
-            handoff_enabled=handoff_enabled,
-            any_manifest_has_can_handoff_to=any_manifest_has_can_handoff_to,
-            max_handoff_chain_length=max_handoff_chain_length,
         )
+        fixed_prompt_tokens = sum(
+            estimate_tokens(section.text)
+            for section in build_frozen_prompt_sections(
+                frozen_prompt_inputs,
+                bootstrap=bootstrap_text,
+            )
+        )
+        expert_persona = self._apply_expert_persona_budget(
+            expert_persona,
+            fixed_prompt_tokens=fixed_prompt_tokens,
+            effective_model=effective_model,
+            session=session,
+        )
+        frozen_prompt_inputs.expert_persona = expert_persona
         # SDD R-A2 / W13: deduct the measured tool-schema wire cost (fingerprint
         # cached on the registry) from the history budget. Full-registry
         # measurement is an upper bound for governance-filtered request
@@ -294,9 +355,6 @@ class StaticContextBuilder:
             model=effective_model,
             tool_summaries=tool_summaries,
             subagent_registry_size=subagent_registry_size,
-            handoff_enabled=handoff_enabled,
-            any_manifest_has_can_handoff_to=any_manifest_has_can_handoff_to,
-            max_handoff_chain_length=max_handoff_chain_length,
             available_skills=available_skills,
             marketplace_summaries=marketplace_summaries,
             available_subagents=available_subagents,
@@ -308,7 +366,66 @@ class StaticContextBuilder:
             ),
             history_budget=history_budget,
             tools_wire_tokens=tools_wire_tokens,
+            expert_persona=expert_persona,
+            fixed_prompt_tokens=fixed_prompt_tokens,
         )
+
+    @staticmethod
+    async def _read_expert_agent_markdown(scope: Scope | None) -> str | None:
+        """只读作用域里已解析的人格源，不再自建 scope（每 run 只构建一次）。"""
+        if scope is None:
+            return None
+        if isinstance(scope, RejectedScope):
+            # 只有「未部署」把原因透出给调用方；禁用等状态由 run 入口早退处理。
+            if scope.code is ExpertErrorCode.EXPERT_UNAVAILABLE:
+                raise ValueError(scope.reason or "selected expert is unavailable")
+            return None
+        if not isinstance(scope, ActiveScope):
+            return None
+        if scope.persona_source is None:
+            raise ValueError("selected expert has no persona source")
+        agent = await asyncio.to_thread(parse_agent_md, scope.persona_source)
+        return agent.system_prompt
+
+    @staticmethod
+    def _apply_expert_persona_budget(
+        expert_persona: str,
+        *,
+        fixed_prompt_tokens: int,
+        effective_model: str,
+        session: SessionHeader | None,
+    ) -> str:
+        if not expert_persona:
+            return ""
+        try:
+            context_window = get_model_spec(effective_model).context_window
+        except UnknownModelError:
+            return expert_persona
+        estimated = fixed_prompt_tokens + estimate_tokens(expert_persona)
+        threshold = context_window * 0.5
+        if estimated < threshold:
+            return expert_persona
+        session_id = session.id if session is not None else ""
+        expert_id = (session.expert_id or "") if session is not None else ""
+        prompt_slot.emit_event(
+            ExpertErrorCode.EXPERT_PROMPT_TOO_LONG,
+            session_id=session_id,
+            expert_id=expert_id,
+            detail="expert persona and fixed sections reached half of the model context window",
+            estimated_tokens=estimated,
+            context_window=context_window,
+            threshold=threshold,
+        )
+        logger.warning(
+            "%s: expert_id=%s estimated_tokens=%d threshold=%s context_window=%d; "
+            "using empty expert persona",
+            ExpertErrorCode.EXPERT_PROMPT_TOO_LONG,
+            expert_id,
+            estimated,
+            threshold,
+            context_window,
+        )
+        return ""
 
     @staticmethod
     async def _load_bootstrap_text(

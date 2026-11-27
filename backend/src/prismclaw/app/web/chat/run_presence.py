@@ -60,7 +60,7 @@ class RunPresence:
         return f"{RUN_KEY_PREFIX}{conversation_id}"
 
     def set_on_abort(self, on_abort: Callable[[str], None] | None) -> None:
-        """热更新中止回调（插件热重载会重建 WebDeps，复用同一个 presence）。"""
+        """热更新中止回调（专家包热重载会重建 WebDeps，复用同一个 presence）。"""
         self._on_abort = on_abort
 
     async def touch(self, conversation_id: str) -> None:

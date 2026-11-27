@@ -1,14 +1,14 @@
 """Web command adapter — intercepts slash-command messages and routes them
-through the plugin command runtime before injecting into the chat session.
+through the expert command runtime before injecting into the chat session.
 
 This module bridges the gap between the WebSocket delivery layer and the
-engine-level PluginCommandRuntime, without requiring CommandContext or
+engine-level ExpertCommandRuntime, without requiring CommandContext or
 dispatch_user_message callbacks.
 
 Flow:
   1. _on_chat_send detects `/command_name args` pattern
   2. try_handle_slash_command() resolves the command via ExtensionManager
-  3. Builds the invocation prompt via PluginCommandRuntime.build_invocation_prompt()
+  3. Builds the invocation prompt via ExpertCommandRuntime.build_invocation_prompt()
   4. Replaces the user message content with the invocation prompt
   5. Injects pending_command_identity into tool_context_extras
   6. Returns the modified ChatSendMessage for normal _run_chat processing
@@ -60,7 +60,7 @@ async def try_handle_slash_command(
 ) -> ChatSendMessage | None | CommandHandled:
     """Attempt to intercept a slash-command message.
 
-    If the message matches a registered plugin command, builds the invocation
+    If the message matches a registered expert command, builds the invocation
     prompt and returns a *modified* ChatSendMessage with:
       - content replaced by the invocation prompt
       - pending_command_identity stored in msg._command_identity (picked up by _run_chat)
@@ -92,23 +92,23 @@ async def try_handle_slash_command(
     if runner_deps is None:
         return None
 
-    extension_manager = runner_deps.plugin.extension_manager
+    extension_manager = runner_deps.expert.extension_manager
     if extension_manager is None:
         return None
 
-    runtime = extension_manager.get_plugin_command_runtime(command_name)
+    runtime = extension_manager.get_expert_command_runtime(command_name)
     if runtime is None:
-        # Not a recognized plugin command — let it fall through to normal chat
+        # Not a recognized expert command — let it fall through to normal chat
         # (it might be a skill gesture like /pdf handled by _try_auto_activate_skill)
         return None
 
-    # Build invocation prompt via PluginCommandRuntime
+    # Build invocation prompt via ExpertCommandRuntime
     invocation_prompt = runtime.build_invocation_prompt(args)
 
     # Store command identity for runner to project
     command_identity = {
         "skill_name": runtime.name,
-        "plugin_name": runtime.plugin_name,
+        "expert_name": runtime.expert_name,
     }
 
     # Create modified message with invocation prompt as content
@@ -119,7 +119,7 @@ async def try_handle_slash_command(
         attachments=msg.attachments,
         confirmation_decision=msg.confirmation_decision,
         trajectory=msg.trajectory,
-        # 命令改写只替换执行内容；客户端气泡身份必须保留，否则 plugin 命令
+        # 命令改写只替换执行内容；客户端气泡身份必须保留，否则 expert 命令
         # 这一轮的 user 消息无法 re-key，刷新前后会出现两个提问气泡。
         client_message_id=msg.client_message_id,
     )
@@ -127,9 +127,9 @@ async def try_handle_slash_command(
     modified_msg._command_identity = command_identity  # type: ignore[attr-defined]
 
     logger.debug(
-        "command_adapter: intercepted /%s (plugin=%s), replacing user message",
+        "command_adapter: intercepted /%s (expert=%s), replacing user message",
         command_name,
-        runtime.plugin_name,
+        runtime.expert_name,
     )
     return modified_msg
 

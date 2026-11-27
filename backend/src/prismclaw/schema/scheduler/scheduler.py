@@ -56,6 +56,9 @@ class ScheduledTask:
     consecutive_failures: int = 0
     created_at: float = field(default_factory=time.time)
     max_age_days: int = 30
+    # 有效期区间（Unix 秒，本地时区自然日边界）。两者皆空 = 长期有效。
+    valid_from: float | None = None
+    valid_until: float | None = None
     missed_policy: MissedPolicy = "skip"
 
 
