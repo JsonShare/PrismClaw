@@ -150,14 +150,25 @@ def _expert_manifest(expert: ExpertPackage) -> ExpertPackageManifest:
         )
 
 
-def _expert_avatar_url(expert_name: str) -> str:
+def _expert_avatar_url(expert: ExpertPackage, manifest: ExpertPackageManifest) -> str:
     """专家头像 URL —— 头像资源的唯一定位方式。
 
     相对路径（``avatars/expert.png``）在前端无法直接请求：同源相对路径会落到
     站点根，被 SPA 兜底成 index.html。因此展示层一律只传 URL，由前端按既有
     ``?_token=`` 约定附加鉴权（``<img>`` 无法携带 Authorization 头）。
+
+    URL 附带头像文件的修改时间作为版本号：头像文件可被替换，而 URL 不带版本
+    会让浏览器缓存旧图（曾出现专家团换图后仍显示旧头像）。带版本号后即可放心
+    使用长缓存，换图时 URL 变化自动失效。
     """
-    return f"/api/experts/{expert_name}/avatar"
+    root = (expert.root_path or Path(expert.path)).resolve()
+    url = f"/api/experts/{expert.name}/avatar"
+    try:
+        stamp = int((root / manifest.avatar).stat().st_mtime_ns)
+    except OSError:
+        # 头像文件缺失时不附加版本号：请求本就返回 404，无需区分版本。
+        return url
+    return f"{url}?v={stamp}"
 
 
 def _summary(expert: ExpertPackage, manifest: ExpertPackageManifest) -> ExpertSummaryResponse:
@@ -167,7 +178,7 @@ def _summary(expert: ExpertPackage, manifest: ExpertPackageManifest) -> ExpertSu
         display_name=manifest.display_name,
         profession=manifest.profession,
         description=manifest.display_description,
-        avatar_url=_expert_avatar_url(expert.name),
+        avatar_url=_expert_avatar_url(expert, manifest),
         members=manifest.members or [],
     )
 
@@ -258,7 +269,9 @@ async def get_expert_avatar(
         raise HTTPException(status_code=404, detail="avatar not found") from None
     if not avatar.is_file():
         raise HTTPException(status_code=404, detail="avatar not found")
-    return FileResponse(avatar, headers={"Cache-Control": "public, max-age=3600"})
+    # URL 已带 ``?v=<mtime>`` 版本号（见 ``_expert_avatar_url``），换图会换 URL，
+    # 因此可安全长缓存；浏览器不会在换图后继续用旧图。
+    return FileResponse(avatar, headers={"Cache-Control": "public, max-age=86400"})
 
 
 async def _select_expert(

@@ -13,6 +13,7 @@ from tests.engine.session_store import FakeRedisSessionStore
 from prismclaw.app.auth.auth import get_current_user
 from prismclaw.app.session_router import SessionRouter
 from prismclaw.app.web import routes as web_routes
+from prismclaw.app.web.routers import skills as skills_router
 from prismclaw.engine.experts.loading.load_result import ExpertPackage
 from prismclaw.engine.experts.manifest import ExpertManifest
 from prismclaw.engine.experts.registry.expert_registry import (
@@ -299,6 +300,69 @@ def test_skill_list_is_grouped_by_package_and_filters_disabled(
     base = groups[2]
     assert [skill["id"] for skill in base["skills"]] == ["pdf"]
     assert base["skills"][0]["name_zh"] == "PDF 处理"
+
+
+def test_skill_list_carries_expert_category(
+    api_client: tuple[TestClient, FakeRedisSessionStore],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``/api/skills/list`` 需下发专家分组字段。
+
+    该接口从 ``ExpertPackage.manifest``（精简版 ExpertManifest）读取分组，
+    曾因该模型未保留 categoryId 而在运行时报 AttributeError；
+    本用例锁定字段可读且值正确。技能来源相关依赖在此打桩，
+    只验证分组字段这一条链路。
+    """
+    client, _ = api_client
+    builtin = ExpertRegistry(
+        [_expert_package(tmp_path, "category-probe", skills=("draft",))],
+    )
+    entry = SimpleNamespace(
+        manifest=SkillManifest(
+            name="draft",
+            name_zh="草稿",
+            description="draft skill",
+            category="文档处理",
+        ),
+        expert_name="category-probe",
+        expert_description="category-probe package description",
+    )
+
+    async def _fake_runtime_skills(*_args, **_kwargs):
+        return [entry], None
+
+    monkeypatch.setattr(skills_router, "_is_asset_skill", lambda *_a, **_kw: True)
+    monkeypatch.setattr(skills_router, "_resolve_workspace_root", lambda **_kw: tmp_path)
+    monkeypatch.setattr(skills_router, "_list_runtime_skills", _fake_runtime_skills)
+    monkeypatch.setattr(skills_router, "_skill_origin", lambda *_a, **_kw: "assets")
+    monkeypatch.setattr(skills_router, "_skill_source", lambda *_a, **_kw: "bundled")
+    monkeypatch.setattr(
+        skills_router,
+        "get_web_deps",
+        lambda _request: SimpleNamespace(
+            settings_full=SimpleNamespace(
+                skills=SimpleNamespace(asset_skills_dir=str(tmp_path))
+            ),
+            skill_origin_fns={
+                "classify_skill_group_path": lambda *_a, **_kw: ["assets"],
+                "classify_skill_group_label": lambda *_a, **_kw: "内置",
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        skills_router, "get_expert_registries", lambda _request: (builtin, None)
+    )
+
+    response = client.get("/api/skills/list")
+
+    assert response.status_code == 200
+    items = response.json()
+    assert len(items) == 1
+    assert items[0]["expert_name"] == "category-probe"
+    assert items[0]["expert_type"] == "agent"
+    assert items[0]["expert_category_id"] == "test"
+    assert items[0]["expert_category_name"] == "测试分组"
 
 
 def test_replace_and_remove_skill_selection(

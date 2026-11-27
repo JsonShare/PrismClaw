@@ -67,6 +67,10 @@ class ExpertManifest(BaseModel):
     dependencies: list[str] | None = None  # 非空字符串形式的包名列表
     expert_type: Literal["agent", "team"] | None = Field(default=None, alias="expertType")
     agent_name: str | None = Field(default=None, alias="agentName")
+    # 展示分组。完整校验由 ExpertPackageManifest 负责（含必填约束），
+    # 此处仅保留原值供展示层读取；缺失时为 None，不阻断加载。
+    category_id: str | None = Field(default=None, alias="categoryId")
+    category_name: str | None = Field(default=None, alias="categoryName")
 
     hooks: str | dict[str, Any] | list[Any] | None = None
     commands: str | list[str] | dict[str, CommandMetadata] | None = None
